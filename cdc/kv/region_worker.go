@@ -29,7 +29,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -59,6 +61,18 @@ const (
 	maxWorkerPoolSize      = 64
 	maxResolvedLockPerLoop = 64
 )
+
+// changefeedClient is a compatibility layer for Clients, used in regionWorker.
+type changefeedClient interface {
+	getStartTs() model.Ts
+	getPDClock() pdutil.Clock
+	getLockResolver() txnutil.LockResolver
+	getEventCh() chan<- model.RegionFeedEvent
+	onRegionFail(context.Context, regionErrorInfo)
+	getStreamCancel(string) context.CancelFunc
+	// Reuse *regionStatefulEvent, introduced in #7899.
+	recycleRegionStatefulEvents(...*regionStatefulEvent)
+}
 
 type regionWorkerMetrics struct {
 	// kv events related metrics
@@ -90,8 +104,9 @@ lock for each region state(each region state has one lock).
 for event processing to increase throughput.
 */
 type regionWorker struct {
-	parentCtx context.Context
-	session   *eventFeedSession
+	changefeed model.ChangeFeedID
+	parentCtx  context.Context
+	session    changefeedClient
 
 	inputCh  chan []*regionStatefulEvent
 	outputCh chan<- model.RegionFeedEvent
@@ -115,7 +130,10 @@ type regionWorker struct {
 }
 
 func newRegionWorker(
-	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+	changefeedID model.ChangeFeedID,
+	addr string,
+	concurrency int,
+	s changefeedClient,
 ) *regionWorker {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
@@ -138,15 +156,16 @@ func newRegionWorker(
 		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
 
 	return &regionWorker{
+		changefeed:    changefeedID,
 		session:       s,
 		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:      s.eventCh,
+		outputCh:      s.getEventCh(),
 		errorCh:       make(chan error, 1),
 		statesManager: newRegionStateManager(-1),
 		rtsManager:    newRegionTsManager(),
 		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
 		storeAddr:     addr,
-		concurrency:   s.client.config.WorkerConcurrent,
+		concurrency:   concurrency,
 		metrics:       metrics,
 		inputPending:  0,
 	}
@@ -195,8 +214,8 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	state.setRegionInfoResolvedTs()
 	regionID := state.getRegionID()
 	log.Info("single region event feed disconnected",
-		zap.String("namespace", w.session.client.changefeed.Namespace),
-		zap.String("changefeed", w.session.client.changefeed.ID),
+		zap.String("namespace", w.changefeed.Namespace),
+		zap.String("changefeed", w.changefeed.ID),
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", &state.sri.span),
@@ -266,12 +285,12 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				w.rtsManager.Upsert(regionID, resolvedTs, eventTime)
 			}
 		case <-advanceCheckTicker.C:
-			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
+			currentTimeFromPD, err := w.session.getPDClock().CurrentTime()
 			if err != nil {
 				log.Warn("failed to get current time from PD",
 					zap.Error(err),
-					zap.String("namespace", w.session.client.changefeed.Namespace),
-					zap.String("changefeed", w.session.client.changefeed.ID))
+					zap.String("namespace", w.changefeed.Namespace),
+					zap.String("changefeed", w.changefeed.ID))
 				continue
 			}
 			expired := make([]*regionTsInfo, 0)
@@ -306,8 +325,8 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					sinceLastEvent := time.Since(rts.ts.eventTime)
 					if sinceLastResolvedTs > reconnectInterval && sinceLastEvent > reconnectInterval {
 						log.Warn("kv client reconnect triggered",
-							zap.String("namespace", w.session.client.changefeed.Namespace),
-							zap.String("changefeed", w.session.client.changefeed.ID),
+							zap.String("namespace", w.changefeed.Namespace),
+							zap.String("changefeed", w.changefeed.ID),
 							zap.Duration("duration", sinceLastResolvedTs),
 							zap.Duration("sinceLastEvent", sinceLastResolvedTs))
 						return errReconnect
@@ -325,8 +344,8 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 					}
 					if resolveLockLogRateLimiter.Allow() {
 						log.Warn("region not receiving resolved event from tikv or resolved ts is not pushing for too long time, try to resolve lock",
-							zap.String("namespace", w.session.client.changefeed.Namespace),
-							zap.String("changefeed", w.session.client.changefeed.ID),
+							zap.String("namespace", w.changefeed.Namespace),
+							zap.String("changefeed", w.changefeed.ID),
 							zap.String("addr", w.storeAddr),
 							zap.Uint64("regionID", rts.regionID),
 							zap.Stringer("span", &state.sri.span),
@@ -335,12 +354,12 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							zap.Uint64("resolvedTs", lastResolvedTs),
 						)
 					}
-					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
+					err = w.session.getLockResolver().Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
 						log.Warn("failed to resolve lock",
 							zap.Uint64("regionID", rts.regionID),
-							zap.String("namespace", w.session.client.changefeed.Namespace),
-							zap.String("changefeed", w.session.client.changefeed.ID),
+							zap.String("namespace", w.changefeed.Namespace),
+							zap.String("changefeed", w.changefeed.ID),
 							zap.Error(err))
 						continue
 					}
@@ -369,8 +388,8 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 			}
 		case *cdcpb.Event_Admin_:
 			log.Info("receive admin event",
-				zap.String("namespace", w.session.client.changefeed.Namespace),
-				zap.String("changefeed", w.session.client.changefeed.ID),
+				zap.String("namespace", w.changefeed.Namespace),
+				zap.String("changefeed", w.changefeed.ID),
 				zap.Stringer("event", event.changeEvent))
 		case *cdcpb.Event_Error:
 			err = w.handleSingleRegionError(
@@ -424,8 +443,8 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		// all existing regions.
 		if !ok || event == nil {
 			log.Info("region worker closed by error",
-				zap.String("namespace", w.session.client.changefeed.Namespace),
-				zap.String("changefeed", w.session.client.changefeed.ID))
+				zap.String("namespace", w.changefeed.Namespace),
+				zap.String("changefeed", w.changefeed.ID))
 			exitEventHandler = true
 			return
 		}
@@ -516,12 +535,7 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				}
 			}
 		}
-		for _, ev := range events {
-			// resolved ts event has been consumed, it is safe to put back.
-			if ev.resolvedTsEvent != nil {
-				w.session.resolvedTsPool.Put(ev)
-			}
-		}
+		w.session.recycleRegionStatefulEvents(events...)
 	}
 }
 
@@ -557,8 +571,8 @@ func (w *regionWorker) checkErrorReconnect(err error) error {
 }
 
 func (w *regionWorker) cancelStream(delay time.Duration) {
-	cancel, ok := w.session.getStreamCancel(w.storeAddr)
-	if ok {
+	cancel := w.session.getStreamCancel(w.storeAddr)
+	if cancel != nil {
 		// cancel the stream to trigger strem.Recv with context cancel error
 		// Note use context cancel is the only way to terminate a gRPC stream
 		cancel()
@@ -569,8 +583,8 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	} else {
 		log.Warn("gRPC stream cancel func not found",
 			zap.String("addr", w.storeAddr),
-			zap.String("namespace", w.session.client.changefeed.Namespace),
-			zap.String("changefeed", w.session.client.changefeed.ID))
+			zap.String("namespace", w.changefeed.Namespace),
+			zap.String("changefeed", w.changefeed.ID))
 	}
 }
 
@@ -633,8 +647,8 @@ func (w *regionWorker) handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(startTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-					zap.String("namespace", w.session.client.changefeed.Namespace),
-					zap.String("changefeed", w.session.client.changefeed.ID),
+					zap.String("namespace", w.changefeed.Namespace),
+					zap.String("changefeed", w.changefeed.ID),
 					zap.Duration("duration", time.Since(startTime)),
 					zap.Uint64("regionID", regionID))
 			}
@@ -686,7 +700,7 @@ func (w *regionWorker) handleEventEntry(
 			// NOTE: state.getLastResolvedTs() will never less than session.startTs.
 			resolvedTs := state.getLastResolvedTs()
 			// TiKV can send events with StartTs/CommitTs less than startTs.
-			isStaleEvent := entry.CommitTs <= w.session.startTs
+			isStaleEvent := entry.CommitTs <= w.session.getStartTs()
 			if entry.CommitTs <= resolvedTs && !isStaleEvent {
 				logPanic("The CommitTs must be greater than the resolvedTs",
 					zap.String("EventType", "COMMIT"),
@@ -748,8 +762,8 @@ func (w *regionWorker) handleResolvedTs(
 		lastResolvedTs := state.getLastResolvedTs()
 		if resolvedTs < lastResolvedTs {
 			log.Debug("The resolvedTs is fallen back in kvclient",
-				zap.String("namespace", w.session.client.changefeed.Namespace),
-				zap.String("changefeed", w.session.client.changefeed.ID),
+				zap.String("namespace", w.changefeed.Namespace),
+				zap.String("changefeed", w.changefeed.ID),
 				zap.String("EventType", "RESOLVED"),
 				zap.Uint64("resolvedTs", resolvedTs),
 				zap.Uint64("lastResolvedTs", lastResolvedTs),

@@ -1003,7 +1003,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
-	worker := newRegionWorker(s.changefeed, s, addr)
+	worker := newRegionWorker(s.changefeed, addr, s.client.config.WorkerConcurrent, s)
 
 	defer worker.evictAllRegions()
 
@@ -1273,11 +1273,35 @@ func (s *eventFeedSession) getStream(storeAddr string) (stream *eventFeedStream,
 	return
 }
 
-func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.CancelFunc, ok bool) {
+func (s *eventFeedSession) getStartTs() model.Ts {
+	return s.startTs
+}
+
+func (s *eventFeedSession) getPDClock() pdutil.Clock {
+	return s.client.pdClock
+}
+
+func (s *eventFeedSession) getLockResolver() txnutil.LockResolver {
+	return s.lockResolver
+}
+
+func (s *eventFeedSession) getEventCh() chan<- model.RegionFeedEvent {
+	return s.eventCh
+}
+
+func (s *eventFeedSession) getStreamCancel(addr string) context.CancelFunc {
 	s.streamsLock.RLock()
 	defer s.streamsLock.RUnlock()
-	cancel, ok = s.streamsCanceller[storeAddr]
-	return
+	return s.streamsCanceller[addr]
+}
+
+func (s *eventFeedSession) recycleRegionStatefulEvents(events ...*regionStatefulEvent) {
+	for _, ev := range events {
+		// resolved ts event has been consumed, it is safe to put back.
+		if ev.resolvedTsEvent != nil {
+			s.resolvedTsPool.Put(ev)
+		}
+	}
 }
 
 func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row) (model.RegionFeedEvent, error) {

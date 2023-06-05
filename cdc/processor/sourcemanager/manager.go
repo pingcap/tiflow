@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -174,15 +173,15 @@ func (m *SourceManager) ReceivedEvents() int64 {
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	m.ctx = ctx
-	m.kvCli = kv.NewCDCKVClient(
-		m.changefeed,
-		config.GetGlobalServerConfig().KVClient,
-		m.bdrMode,
-		m.up.PDClient,
-		m.up.GrpcPool,
-		m.up.RegionCache,
-		m.up.PDClock,
-		nil)
+	// m.kvCli = kv.NewCDCKVClient(
+	// 	m.changefeed,
+	// 	config.GetGlobalServerConfig().KVClient,
+	// 	m.bdrMode,
+	// 	m.up.PDClient,
+	// 	m.up.GrpcPool,
+	// 	m.up.RegionCache,
+	// 	m.up.PDClock,
+	// 	nil)
 	close(m.ready)
 
 	select {
