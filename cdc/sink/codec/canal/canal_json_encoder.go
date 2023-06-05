@@ -31,25 +31,29 @@ import (
 
 // JSONBatchEncoder encodes Canal json messages in JSON format
 type JSONBatchEncoder struct {
-	builder *canalEntryBuilder
+	builder  *canalEntryBuilder
+	messages []*common.Message
 
-	// When it is true, canal-json would generate TiDB extension information
-	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
-	enableTiDBExtension bool
-	// the symbol separating two lines
-	terminator      []byte
-	maxMessageBytes int
-	messages        []*common.Message
+	config *common.Config
+}
+
+// newJSONRowEventEncoder creates a new JSONRowEventEncoder
+func newJSONRowEventEncoder(config *common.Config) codec.EventBatchEncoder {
+	encoder := &JSONBatchEncoder{
+		builder:  newCanalEntryBuilder(),
+		messages: make([]*common.Message, 0, 1),
+
+		config: config,
+	}
+	return encoder
 }
 
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
-		builder:             newCanalEntryBuilder(),
-		enableTiDBExtension: config.EnableTiDBExtension,
-		messages:            make([]*common.Message, 0, 1),
-		terminator:          []byte(config.Terminator),
-		maxMessageBytes:     config.MaxMessageBytes,
+		builder:  newCanalEntryBuilder(),
+		messages: make([]*common.Message, 0, 1),
+		config:   config,
 	}
 	return encoder
 }
@@ -58,7 +62,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
-	filling := func(columns []*model.Column, out *jwriter.Writer) error {
+	filling := func(columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool) error {
 		if len(columns) == 0 {
 			out.RawString("null")
 			return nil
@@ -68,6 +72,9 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		isFirst := true
 		for _, col := range columns {
 			if col != nil {
+				if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+					continue
+				}
 				if isFirst {
 					isFirst = false
 				} else {
@@ -165,6 +172,9 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
+				if isDelete && c.config.OnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+					continue
+				}
 				if emptyColumn {
 					out.RawByte('{')
 					emptyColumn = false
@@ -213,29 +223,29 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.PreColumns, out); err != nil {
+		if err := filling(e.PreColumns, out, c.config.OnlyHandleKeyColumns); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out); err != nil {
+		if err := filling(e.Columns, out, false); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
 		out.RawString(",\"old\":")
-		if err := filling(e.PreColumns, out); err != nil {
+		if err := filling(e.PreColumns, out, false); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out); err != nil {
+		if err := filling(e.Columns, out, false); err != nil {
 			return nil, err
 		}
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
-	if c.enableTiDBExtension {
+	if c.config.EnableTiDBExtension {
 		const prefix string = ",\"_tidb\":"
 		out.RawString(prefix)
 		out.RawByte('{')
@@ -270,7 +280,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMess
 		Query:         e.Query,
 	}
 
-	if !c.enableTiDBExtension {
+	if !c.config.EnableTiDBExtension {
 		return msg
 	}
 
@@ -295,7 +305,7 @@ func (c *JSONBatchEncoder) newJSONMessage4CheckpointEvent(ts uint64) *canalJSONM
 
 // EncodeCheckpointEvent implements the EventBatchEncoder interface
 func (c *JSONBatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	if !c.enableTiDBExtension {
+	if !c.config.EnableTiDBExtension {
 		return nil, nil
 	}
 
@@ -318,15 +328,15 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if len(c.terminator) > 0 {
-		value = append(value, c.terminator...)
+	if len(c.config.Terminator) > 0 {
+		value = append(value, c.config.Terminator...)
 	}
 
 	length := len(value) + common.MaxRecordOverhead
 	// for single message that is longer than max-message-bytes, do not send it.
-	if length > c.maxMessageBytes {
+	if length > c.config.MaxMessageBytes {
 		log.Warn("Single message is too large for canal-json",
-			zap.Int("maxMessageBytes", c.maxMessageBytes),
+			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table))
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()

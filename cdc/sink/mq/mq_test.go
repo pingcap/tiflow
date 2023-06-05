@@ -94,8 +94,6 @@ func TestKafkaSink(t *testing.T) {
 	encoder := sink.encoderBuilder.Build()
 
 	require.IsType(t, &open.BatchEncoder{}, encoder)
-	require.Equal(t, 1, encoder.(*open.BatchEncoder).MaxBatchSize)
-	require.Equal(t, 1048576, encoder.(*open.BatchEncoder).MaxMessageBytes)
 
 	// mock kafka broker processes 1 row changed event
 	tableID := model.TableID(1)

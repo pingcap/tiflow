@@ -18,6 +18,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -261,7 +262,7 @@ func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
 // VerifyAndComplete verifies changefeed info and may fill in some fields.
 // If a required field is not provided, return an error.
 // If some necessary filed is missing but can use a default value, fill in it.
-func (info *ChangeFeedInfo) VerifyAndComplete() error {
+func (info *ChangeFeedInfo) VerifyAndComplete() {
 	defaultConfig := config.GetDefaultReplicaConfig()
 	if info.Engine == "" {
 		info.Engine = SortUnified
@@ -278,8 +279,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent
 	}
-
-	return nil
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.
@@ -307,6 +306,14 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		log.Info("Start fixing incompatible memory quota", zap.String("changefeed", info.String()))
 		info.fixMemoryQuota()
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
+	}
+
+	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
+		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
+		info.fixEnableOldValue()
+		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
 	}
 }
 
@@ -376,6 +383,18 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 		query.Del(config.ProtocolKey)
 		info.updateSinkURIAndConfigProtocol(uri, "", query)
 	}
+}
+
+func (info *ChangeFeedInfo) fixEnableOldValue() {
+	uri, err := url.Parse(info.SinkURI)
+	if err != nil {
+		// this is impossible to happen, since the changefeed registered successfully.
+		log.Warn("parse sink URI failed", zap.Error(err))
+		return
+	}
+	scheme := strings.ToLower(uri.Scheme)
+	protocol := uri.Query().Get(config.ProtocolKey)
+	info.Config.AdjustEnableOldValue(scheme, protocol)
 }
 
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {

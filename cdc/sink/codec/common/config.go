@@ -31,6 +31,8 @@ const defaultMaxBatchSize int = 16
 type Config struct {
 	Protocol config.Protocol
 
+	OnlyHandleKeyColumns bool
+
 	// control batch behavior, only for `open-protocol` and `craft` at the moment.
 	MaxMessageBytes int
 	MaxBatchSize    int
@@ -134,6 +136,8 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
 		}
 	}
+
+	c.OnlyHandleKeyColumns = !config.EnableOldValue
 
 	return nil
 }

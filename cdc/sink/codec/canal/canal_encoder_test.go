@@ -20,6 +20,8 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/config"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +30,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 	t.Parallel()
 	s := defaultCanalBatchTester
 	for _, cs := range s.rowCases {
-		encoder := newBatchEncoder()
+		encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			require.Nil(t, err)
@@ -55,7 +57,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 	}
 
 	for _, cs := range s.ddlCases {
-		encoder := newBatchEncoder()
+		encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))
 		for _, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			require.Nil(t, err)
@@ -76,7 +78,7 @@ func TestCanalBatchEncoder(t *testing.T) {
 }
 
 func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newBatchEncoder()
+	encoder := newBatchEncoder(common.NewConfig(config.ProtocolCanal))
 	require.NotNil(t, encoder)
 
 	count := 0

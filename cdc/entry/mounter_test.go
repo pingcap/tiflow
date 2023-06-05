@@ -308,9 +308,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	config := config.GetDefaultReplicaConfig()
 	filter, err := filter.NewFilter(config, "")
 	require.Nil(t, err)
-	mounter := NewMounter(scheamStorage,
-		model.DefaultChangeFeedID("c1"),
-		time.UTC, filter, false).(*mounter)
+	mounter := NewMounter(scheamStorage, model.DefaultChangeFeedID("c1"), time.UTC, filter).(*mounter)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -1019,7 +1017,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(schemaStorage, cfID, time.Local, f, true).(*mounter)
+	mounter := NewMounter(schemaStorage, cfID, time.Local, f).(*mounter)
 
 	type testCase struct {
 		schema  string
@@ -1196,7 +1194,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
+		cols, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)

@@ -154,8 +154,7 @@ func TestVerifyAndComplete(t *testing.T) {
 		},
 	}
 
-	err := info.VerifyAndComplete()
-	require.Nil(t, err)
+	info.VerifyAndComplete()
 	require.Equal(t, SortUnified, info.Engine)
 
 	marshalConfig1, err := info.Config.Marshal()

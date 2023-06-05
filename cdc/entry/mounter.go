@@ -71,7 +71,6 @@ type Mounter interface {
 type mounter struct {
 	schemaStorage                SchemaStorage
 	tz                           *time.Location
-	enableOldValue               bool
 	changefeedID                 model.ChangeFeedID
 	filter                       pfilter.Filter
 	metricTotalRows              prometheus.Gauge
@@ -83,13 +82,11 @@ func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
 	tz *time.Location,
 	filter pfilter.Filter,
-	enableOldValue bool,
 ) Mounter {
 	return &mounter{
-		schemaStorage:  schemaStorage,
-		changefeedID:   changefeedID,
-		enableOldValue: enableOldValue,
-		filter:         filter,
+		schemaStorage: schemaStorage,
+		changefeedID:  changefeedID,
+		filter:        filter,
 		metricTotalRows: totalRowsCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
@@ -271,7 +268,7 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 }
 
 func datum2Column(
-	tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool,
+	tableInfo *model.TableInfo, datums map[int64]types.Datum,
 ) ([]*model.Column, []types.Datum, []rowcodec.ColInfo, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
@@ -288,19 +285,18 @@ func datum2Column(
 			continue
 		}
 		colName := colInfo.Name.O
-		colDatums, exist := datums[colInfo.ID]
-		var colValue interface{}
-		if !exist && !fillWithDefaultValue {
-			log.Debug("column value is not found",
-				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
-			continue
-		}
-		var err error
-		var warn string
-		var size int
+		colID := colInfo.ID
+		colDatums, exist := datums[colID]
+
+		var (
+			colValue interface{}
+			size     int
+			warn     string
+			err      error
+		)
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo)
-		} else if fillWithDefaultValue {
+		} else {
 			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
@@ -342,27 +338,16 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, preRawCols, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
-		}
-
-		// NOTICE: When the old Value feature is off,
-		// the Delete event only needs to keep the handle key column.
-		if row.Delete && !m.enableOldValue {
-			for i := range preCols {
-				col := preCols[i]
-				if col != nil && !col.Flag.IsHandleKey() {
-					preCols[i] = nil
-				}
-			}
 		}
 	}
 
 	var cols []*model.Column
 	var rawCols []types.Datum
 	if row.RowExist {
-		cols, rawCols, extendColumnInfos, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, extendColumnInfos, err = datum2Column(tableInfo, row.Row)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}

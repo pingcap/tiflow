@@ -20,6 +20,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,7 +34,7 @@ func TestMaxwellBatchCodec(t *testing.T) {
 		Columns:  []*model.Column{{Name: "col1", Type: 3, Value: 10}},
 	}}, {}}
 	for _, cs := range rowCases {
-		encoder := newEncoder()
+		encoder := newEncoder(&common.Config{})
 		for _, row := range cs {
 			err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 			require.Nil(t, err)
@@ -59,7 +60,7 @@ func TestMaxwellBatchCodec(t *testing.T) {
 		Type:  1,
 	}}}
 	for _, cs := range ddlCases {
-		encoder := newEncoder()
+		encoder := newEncoder(&common.Config{})
 		for _, ddl := range cs {
 			msg, err := encoder.EncodeDDLEvent(ddl)
 			require.Nil(t, err)
@@ -69,7 +70,7 @@ func TestMaxwellBatchCodec(t *testing.T) {
 }
 
 func TestMaxwellAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newBatchEncoder()
+	encoder := newBatchEncoder(&common.Config{})
 	require.NotNil(t, encoder)
 
 	count := 0

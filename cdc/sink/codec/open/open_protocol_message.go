@@ -76,7 +76,7 @@ func newResolvedMessage(ts uint64) *internal.MessageKey {
 	}
 }
 
-func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow) {
+func rowChangeToMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
@@ -91,10 +91,10 @@ func rowChangeToMsg(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow
 	}
 	value := &messageRow{}
 	if e.IsDelete() {
-		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns)
+		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, onlyHandleKeyColumns)
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, false)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, false)
 	}
 	return key, value
 }
@@ -123,10 +123,13 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	return e
 }
 
-func rowChangeColumns2CodecColumns(cols []*model.Column) map[string]internal.Column {
+func rowChangeColumns2CodecColumns(cols []*model.Column, onlyHandleKeyColumns bool) map[string]internal.Column {
 	jsonCols := make(map[string]internal.Column, len(cols))
 	for _, col := range cols {
 		if col == nil {
+			continue
+		}
+		if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
 			continue
 		}
 		c := internal.Column{}
