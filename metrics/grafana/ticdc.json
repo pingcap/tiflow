@@ -19840,10 +19840,10 @@
         "current": {
           "selected": true,
           "text": [
-            "All"
+            "default"
           ],
           "value": [
-            "$__all"
+            "default"
           ]
         },
         "datasource": "${DS_TEST-CLUSTER}",
