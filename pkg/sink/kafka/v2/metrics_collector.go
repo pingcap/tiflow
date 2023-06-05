@@ -70,7 +70,7 @@ func (m *MetricsCollector) collectMetrics() {
 
 	// batch related metrics
 	pkafka.BatchDurationGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
-		Set(statistics.BatchTime.Avg.Seconds())
+		Set(statistics.BatchQueueTime.Avg.Seconds())
 	pkafka.BatchMessageCountGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
 		Set(float64(statistics.BatchSize.Avg))
 	pkafka.BatchSizeGauge.WithLabelValues(m.changefeedID.Namespace, m.changefeedID.ID).
