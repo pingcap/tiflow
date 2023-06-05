@@ -157,6 +157,10 @@ func (s *dmlSink) Close() {
 		s.cancel()
 	}
 	s.wg.Wait()
+
+	s.alive.RLock()
+	s.alive.topicManager.Close()
+	s.alive.RUnlock()
 }
 
 // Dead checks whether it's dead or not.
