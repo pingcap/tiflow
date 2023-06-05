@@ -331,6 +331,11 @@ error = '''
 illegal parameter for sorter: %s
 '''
 
+["CDC:ErrIncompatibleConfig"]
+error = '''
+incompatible configuration
+'''
+
 ["CDC:ErrIncompatibleSinkConfig"]
 error = '''
 incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
@@ -406,9 +411,9 @@ error = '''
 kafka async send message failed
 '''
 
-["CDC:ErrKafkaBrokerConfigNotFound"]
+["CDC:ErrKafkaConfigNotFound"]
 error = '''
-kafka broker config item not found
+kafka config item not found
 '''
 
 ["CDC:ErrKafkaCreateTopic"]

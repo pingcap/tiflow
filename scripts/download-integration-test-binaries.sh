@@ -132,17 +132,22 @@ function download_binaries() {
 	etcd_download_url="${file_server_url}/download/builds/pingcap/cdc/etcd-v3.4.7-linux-amd64.tar.gz"
 	sync_diff_inspector_url="${file_server_url}/download/builds/pingcap/cdc/sync_diff_inspector_hash-00998a9a_linux-amd64.tar.gz"
 	jq_download_url="${file_server_url}/download/builds/pingcap/test/jq-1.6/jq-linux64"
+	schema_registry_url="${file_server_url}/download/builds/pingcap/cdc/schema-registry.tar.gz"
 
 	download "$tidb_download_url" "tidb-server.tar.gz" "tmp/tidb-server.tar.gz"
 	tar -xz -C third_bin bin/tidb-server -f tmp/tidb-server.tar.gz && mv third_bin/bin/tidb-server third_bin/
+
 	download "$pd_download_url" "pd-server.tar.gz" "tmp/pd-server.tar.gz"
 	tar -xz -C third_bin 'bin/*' -f tmp/pd-server.tar.gz && mv third_bin/bin/* third_bin/
+
 	download "$tikv_download_url" "tikv-server.tar.gz" "tmp/tikv-server.tar.gz"
 	tar -xz -C third_bin bin/tikv-server -f tmp/tikv-server.tar.gz && mv third_bin/bin/tikv-server third_bin/
+
 	download "$tiflash_download_url" "tiflash.tar.gz" "tmp/tiflash.tar.gz"
 	tar -xz -C third_bin -f tmp/tiflash.tar.gz
 	mv third_bin/tiflash third_bin/_tiflash
 	mv third_bin/_tiflash/* third_bin && rm -rf third_bin/_tiflash
+
 	download "$minio_download_url" "minio.tar.gz" "tmp/minio.tar.gz"
 	tar -xz -C third_bin -f tmp/minio.tar.gz
 
@@ -151,8 +156,14 @@ function download_binaries() {
 	download "$etcd_download_url" "etcd.tar.gz" "tmp/etcd.tar.gz"
 	tar -xz -C third_bin etcd-v3.4.7-linux-amd64/etcdctl -f tmp/etcd.tar.gz
 	mv third_bin/etcd-v3.4.7-linux-amd64/etcdctl third_bin/ && rm -rf third_bin/etcd-v3.4.7-linux-amd64
+
 	download "$sync_diff_inspector_url" "sync_diff_inspector.tar.gz" "tmp/sync_diff_inspector.tar.gz"
 	tar -xz -C third_bin -f tmp/sync_diff_inspector.tar.gz
+
+	download "$schema_registry_url" "schema-registry.tar.gz" "tmp/schema-registry.tar.gz"
+	tar -xz -C third_bin -f tmp/schema-registry.tar.gz
+	mv third_bin/schema-registry third_bin/_schema_registry
+	mv third_bin/_schema_registry/* third_bin && rm -rf third_bin/_schema_registry
 
 	chmod a+x third_bin/*
 }

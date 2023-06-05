@@ -23,4 +23,6 @@ type TopicManager interface {
 	GetPartitionNum(ctx context.Context, topic string) (int32, error)
 	// CreateTopicAndWaitUntilVisible creates the topic and wait for the topic completion.
 	CreateTopicAndWaitUntilVisible(ctx context.Context, topicName string) (int32, error)
+	// Close closes the topic manager.
+	Close()
 }

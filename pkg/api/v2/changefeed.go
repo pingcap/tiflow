@@ -36,17 +36,17 @@ type ChangefeedInterface interface {
 	VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error)
 	// Update updates a changefeed
 	Update(ctx context.Context, cfg *v2.ChangefeedConfig,
-		name string) (*v2.ChangeFeedInfo, error)
+		namespace string, name string) (*v2.ChangeFeedInfo, error)
 	// Resume resumes a changefeed with given config
-	Resume(ctx context.Context, cfg *v2.ResumeChangefeedConfig, name string) error
+	Resume(ctx context.Context, cfg *v2.ResumeChangefeedConfig, namespace string, name string) error
 	// Delete deletes a changefeed by name
-	Delete(ctx context.Context, name string) error
+	Delete(ctx context.Context, namespace string, name string) error
 	// Pause pauses a changefeed with given name
-	Pause(ctx context.Context, name string) error
+	Pause(ctx context.Context, namespace string, name string) error
 	// Get gets a changefeed detaail info
-	Get(ctx context.Context, name string) (*v2.ChangeFeedInfo, error)
+	Get(ctx context.Context, namespace string, name string) (*v2.ChangeFeedInfo, error)
 	// List lists all changefeeds
-	List(ctx context.Context, state string) ([]v2.ChangefeedCommonInfo, error)
+	List(ctx context.Context, namespace string, state string) ([]v2.ChangefeedCommonInfo, error)
 }
 
 // changefeeds implements ChangefeedInterface
@@ -85,10 +85,10 @@ func (c *changefeeds) VerifyTable(ctx context.Context,
 }
 
 func (c *changefeeds) Update(ctx context.Context,
-	cfg *v2.ChangefeedConfig, name string,
+	cfg *v2.ChangefeedConfig, namespace string, name string,
 ) (*v2.ChangeFeedInfo, error) {
 	result := &v2.ChangeFeedInfo{}
-	u := fmt.Sprintf("changefeeds/%s", name)
+	u := fmt.Sprintf("changefeeds/%s?namespace=%s", name, namespace)
 	err := c.client.Put().
 		WithURI(u).
 		WithBody(cfg).
@@ -99,9 +99,9 @@ func (c *changefeeds) Update(ctx context.Context,
 
 // Resume a changefeed
 func (c *changefeeds) Resume(ctx context.Context,
-	cfg *v2.ResumeChangefeedConfig, name string,
+	cfg *v2.ResumeChangefeedConfig, namespace string, name string,
 ) error {
-	u := fmt.Sprintf("changefeeds/%s/resume", name)
+	u := fmt.Sprintf("changefeeds/%s/resume?namespace=%s", name, namespace)
 	return c.client.Post().
 		WithURI(u).
 		WithBody(cfg).
@@ -110,9 +110,9 @@ func (c *changefeeds) Resume(ctx context.Context,
 
 // Delete a changefeed
 func (c *changefeeds) Delete(ctx context.Context,
-	name string,
+	namespace string, name string,
 ) error {
-	u := fmt.Sprintf("changefeeds/%s", name)
+	u := fmt.Sprintf("changefeeds/%s?namespace=%s", name, namespace)
 	return c.client.Delete().
 		WithURI(u).
 		Do(ctx).Error()
@@ -120,9 +120,9 @@ func (c *changefeeds) Delete(ctx context.Context,
 
 // Pause a changefeed
 func (c *changefeeds) Pause(ctx context.Context,
-	name string,
+	namespace string, name string,
 ) error {
-	u := fmt.Sprintf("changefeeds/%s/pause", name)
+	u := fmt.Sprintf("changefeeds/%s/pause?namespace=%s", name, namespace)
 	return c.client.Post().
 		WithURI(u).
 		Do(ctx).Error()
@@ -130,14 +130,14 @@ func (c *changefeeds) Pause(ctx context.Context,
 
 // Get gets a changefeed detaail info
 func (c *changefeeds) Get(ctx context.Context,
-	name string,
+	namespace string, name string,
 ) (*v2.ChangeFeedInfo, error) {
 	err := model.ValidateChangefeedID(name)
 	if err != nil {
 		return nil, err
 	}
 	result := new(v2.ChangeFeedInfo)
-	u := fmt.Sprintf("changefeeds/%s", name)
+	u := fmt.Sprintf("changefeeds/%s?namespace=%s", name, namespace)
 	err = c.client.Get().
 		WithURI(u).
 		Do(ctx).
@@ -147,11 +147,11 @@ func (c *changefeeds) Get(ctx context.Context,
 
 // List lists all changefeeds
 func (c *changefeeds) List(ctx context.Context,
-	state string,
+	namespace string, state string,
 ) ([]v2.ChangefeedCommonInfo, error) {
 	result := &v2.ListResponse[v2.ChangefeedCommonInfo]{}
 	err := c.client.Get().
-		WithURI("changefeeds").
+		WithURI("changefeeds?namespace="+namespace).
 		WithParam("state", state).
 		Do(ctx).
 		Into(result)

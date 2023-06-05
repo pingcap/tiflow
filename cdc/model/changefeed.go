@@ -18,6 +18,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -43,6 +44,11 @@ type ChangeFeedID struct {
 	// the default value of Namespace is "default"
 	Namespace string
 	ID        string
+}
+
+// String implements fmt.Stringer interface
+func (c ChangeFeedID) String() string {
+	return c.Namespace + "/" + c.ID
 }
 
 // DefaultChangeFeedID returns `ChangeFeedID` with default namespace
@@ -261,7 +267,7 @@ func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
 // VerifyAndComplete verifies changefeed info and may fill in some fields.
 // If a required field is not provided, return an error.
 // If some necessary filed is missing but can use a default value, fill in it.
-func (info *ChangeFeedInfo) VerifyAndComplete() error {
+func (info *ChangeFeedInfo) VerifyAndComplete() {
 	defaultConfig := config.GetDefaultReplicaConfig()
 	if info.Engine == "" {
 		info.Engine = SortUnified
@@ -287,8 +293,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	}
 
 	info.RmUnusedFields()
-
-	return nil
 }
 
 // RmUnusedFields removes unnecessary fields based on the downstream type and
@@ -385,6 +389,14 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
 	info.fixScheduler(inheritV66)
 	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
+
+	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
+		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
+		info.fixEnableOldValue()
+		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
+	}
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -453,6 +465,18 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 		query.Del(config.ProtocolKey)
 		info.updateSinkURIAndConfigProtocol(uri, "", query)
 	}
+}
+
+func (info *ChangeFeedInfo) fixEnableOldValue() {
+	uri, err := url.Parse(info.SinkURI)
+	if err != nil {
+		// this is impossible to happen, since the changefeed registered successfully.
+		log.Warn("parse sink URI failed", zap.Error(err))
+		return
+	}
+	scheme := strings.ToLower(uri.Scheme)
+	protocol := uri.Query().Get(config.ProtocolKey)
+	info.Config.AdjustEnableOldValue(scheme, protocol)
 }
 
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {

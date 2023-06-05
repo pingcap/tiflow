@@ -70,7 +70,7 @@ func testInsert(t *testing.T) {
 	}
 
 	builder := newCanalEntryBuilder()
-	entry, err := builder.fromRowEvent(testCaseInsert)
+	entry, err := builder.fromRowEvent(testCaseInsert, false)
 	require.Nil(t, err)
 	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 	header := entry.GetHeader()
@@ -146,7 +146,7 @@ func testUpdate(t *testing.T) {
 		},
 	}
 	builder := newCanalEntryBuilder()
-	entry, err := builder.fromRowEvent(testCaseUpdate)
+	entry, err := builder.fromRowEvent(testCaseUpdate, false)
 	require.Nil(t, err)
 	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 
@@ -219,7 +219,7 @@ func testDelete(t *testing.T) {
 	}
 
 	builder := newCanalEntryBuilder()
-	entry, err := builder.fromRowEvent(testCaseDelete)
+	entry, err := builder.fromRowEvent(testCaseDelete, false)
 	require.Nil(t, err)
 	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 	header := entry.GetHeader()

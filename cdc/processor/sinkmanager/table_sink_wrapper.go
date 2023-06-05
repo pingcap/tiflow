@@ -51,7 +51,7 @@ type tableSinkWrapper struct {
 	// tableSink is the underlying sink.
 	tableSink             tablesink.TableSink
 	tableSinkCheckpointTs model.ResolvedTs
-	tableSinkMu           sync.Mutex
+	tableSinkMu           sync.RWMutex
 
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
@@ -162,8 +162,8 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 }
 
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) error {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	// If it's nil it means it's closed.
 	if t.tableSink != nil {
 		t.tableSink.AppendRowChangedEvents(events...)
@@ -196,8 +196,8 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 }
 
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	if t.tableSink != nil {
 		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
 			return errors.Trace(err)
@@ -210,8 +210,8 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	if t.tableSink != nil {
 		checkpointTs := t.tableSink.GetCheckpointTs()
 		if t.tableSinkCheckpointTs.Less(checkpointTs) {
@@ -442,7 +442,7 @@ func convertRowChangedEvents(
 		// This indicates that it is an update event,
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
-		if !enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+		if e.Row.IsUpdate() && !enableOldValue {
 			if shouldSplitUpdateEvent(e) {
 				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {
@@ -507,13 +507,6 @@ func splitUpdateEvent(
 	deleteEvent.RawKV = &deleteEventRowKV
 
 	deleteEvent.Row.Columns = nil
-	for i := range deleteEvent.Row.PreColumns {
-		// NOTICE: Only the handle key pre column is retained in the delete event.
-		if deleteEvent.Row.PreColumns[i] != nil &&
-			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
-			deleteEvent.Row.PreColumns[i] = nil
-		}
-	}
 
 	insertEvent := *updateEvent
 	insertEventRow := *updateEvent.Row
