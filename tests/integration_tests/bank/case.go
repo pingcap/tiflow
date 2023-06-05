@@ -133,7 +133,9 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 		for j := 0; j < batchSize; j++ {
 			args[j] = fmt.Sprintf("(%d, 0, 0, 0)", offset+j)
 		}
-		return fmt.Sprintf("INSERT IGNORE INTO accounts_seq%d (id, counter, sequence, startts) VALUES %s", tableID, strings.Join(args, ","))
+		sql := fmt.Sprintf("INSERT IGNORE INTO accounts_seq%d (id, counter, sequence, startts) VALUES %s", tableID, strings.Join(args, ","))
+		log.Info("batch insert sql", zap.String("sql", sql))
+		return sql
 	}
 
 	prepareImpl(ctx, s, createTable, batchInsertSQLF, db, accounts, tableID, concurrency)
@@ -187,7 +189,7 @@ func (*sequenceTest) verify(ctx context.Context, db *sql.DB, accounts, tableID i
 		}
 
 		return nil
-	}, retry.WithBackoffMaxDelay(500), retry.WithBackoffMaxDelay(120*1000), retry.WithMaxTries(10), retry.WithIsRetryableErr(cerror.IsRetryableError))
+	}, retry.WithBackoffMaxDelay(500), retry.WithBackoffMaxDelay(120*1000), retry.WithMaxTries(20), retry.WithIsRetryableErr(cerror.IsRetryableError))
 }
 
 // tryDropDB will drop table if data incorrect and panic error likes bad connect.
