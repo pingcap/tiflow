@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:unused
 func initBroker(t *testing.T, withPartitionResponse int) (*sarama.MockBroker, string) {
 	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(t, 2)
@@ -52,6 +53,7 @@ func initBroker(t *testing.T, withPartitionResponse int) (*sarama.MockBroker, st
 	return leader, topic
 }
 
+//nolint:unused
 func getConfig(addr string) *kafkav1.Config {
 	config := kafkav1.NewConfig()
 	// Because the sarama mock broker is not compatible with version larger than 1.0.0.
@@ -67,6 +69,7 @@ func getConfig(addr string) *kafkav1.Config {
 }
 
 func TestSyncBroadcastMessage(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
@@ -97,6 +100,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 }
 
 func TestSyncSendMessage(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, topic := initBroker(t, 1)
@@ -125,6 +129,7 @@ func TestSyncSendMessage(t *testing.T) {
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, topic := initBroker(t, 0)
@@ -153,6 +158,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 }
 
 func TestProducerDoubleClose(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, _ := initBroker(t, 0)
