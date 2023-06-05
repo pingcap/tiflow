@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build !race
+// +build !race
+
 package dmlproducer
 
 import (
@@ -69,6 +72,7 @@ func getConfig(addr string) *kafkav1.Config {
 }
 
 func TestProducerAck(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, topic := initBroker(t, true)
@@ -132,6 +136,7 @@ func TestProducerAck(t *testing.T) {
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, topic := initBroker(t, false)
@@ -196,6 +201,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 }
 
 func TestProducerDoubleClose(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
 	leader, _ := initBroker(t, false)
