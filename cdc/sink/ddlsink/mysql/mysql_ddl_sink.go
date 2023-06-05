@@ -141,8 +141,6 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 func isReorgOrPartitionDDL(t timodel.ActionType) bool {
 	// partition related ddl
 	return t == timodel.ActionAddTablePartition ||
-		t == timodel.ActionDropTablePartition ||
-		t == timodel.ActionTruncateTablePartition ||
 		t == timodel.ActionExchangeTablePartition ||
 		t == timodel.ActionReorganizePartition ||
 		// reorg ddls
