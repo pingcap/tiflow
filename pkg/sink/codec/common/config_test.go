@@ -316,6 +316,7 @@ func TestMergeConfig(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abc")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(123),
@@ -348,6 +349,7 @@ func TestMergeConfig(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(false)
+	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abcd")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(1233),

@@ -139,6 +139,9 @@ type SinkConfig struct {
 	// OnlyOutputUpdatedColumns is only available when the downstream is MQ.
 	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
 
+	// LargeMessageOnlyHandleKeyColumns is only available when the downstream is MQ.
+	LargeMessageOnlyHandleKeyColumns *bool `toml:"large-message-only-handle-key-columns" json:"large-message-only-handle-key-columns,omitempty"`
+
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
