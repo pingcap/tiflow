@@ -260,7 +260,7 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 			resolvedTs := state.getLastResolvedTs()
 			// TiKV can send events with StartTs/CommitTs less than startTs.
 			// FIXME(qupeng): is `startTs` correct? No!
-			isStaleEvent := entry.CommitTs <= w.client.startTs
+			isStaleEvent := entry.CommitTs <= state.sri.requestedTable.startTs
 			if entry.CommitTs <= resolvedTs && !isStaleEvent {
 				logPanic("The CommitTs must be greater than the resolvedTs",
 					zap.String("EventType", "COMMIT"),

@@ -17,6 +17,7 @@ import "github.com/pingcap/tiflow/pkg/errors"
 
 // KVClientConfig represents config for kv client
 type KVClientConfig struct {
+	EnableMultiplexing bool `toml:"enable-multiplexing" json:"enable-multiplexing"`
 	// how many workers will be used for a single region worker
 	WorkerConcurrent int `toml:"worker-concurrent" json:"worker-concurrent"`
 	// how many grpc streams will be established to every TiKV node

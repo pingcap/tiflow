@@ -50,7 +50,6 @@ import (
 // SharedClient is shared in many tables. Methods are thread-safe.
 type SharedClient struct {
 	changefeed model.ChangeFeedID
-	startTs    model.Ts
 	config     *config.KVClientConfig
 
 	clusterID  uint64
@@ -63,10 +62,13 @@ type SharedClient struct {
 	tikvStorage  tidbkv.Storage
 	lockResolver txnutil.LockResolver
 
+	// requestRangeCh is used to retrieve subscribed table tasks.
 	requestRangeCh *chann.DrainableChann[rangeRequestTask]
-	regionCh       *chann.DrainableChann[singleRegionInfo]
-	regionRouter   *chann.DrainableChann[singleRegionInfo]
-	errCh          *chann.DrainableChann[regionErrorInfo]
+	// regionCh is used to cache region tasks after ranges locked.
+	regionCh *chann.DrainableChann[singleRegionInfo]
+	// regionRouter is used to cache region tasks with rpcCtx attached.
+	regionRouter *chann.DrainableChann[singleRegionInfo]
+	errCh        *chann.DrainableChann[regionErrorInfo]
 
 	workers []*sharedRegionWorker
 
@@ -104,9 +106,12 @@ type requestedRegion struct {
 }
 
 type requestedTable struct {
-	lock    *regionlock.RegionRangeLock
-	span    tablepb.Span
-	eventCh chan<- model.RegionFeedEvent
+	span      tablepb.Span
+	startTs   model.Ts
+	rangeLock *regionlock.RegionRangeLock
+	eventCh   chan<- model.RegionFeedEvent
+	requestID uint64
+	removed   atomic.Bool
 }
 
 func NewSharedClient(
@@ -122,32 +127,49 @@ func NewSharedClient(
 	s := &SharedClient{
 		changefeed: changefeed,
 		config:     cfg,
+		clusterID:  0, // Will be filled in `Run`.
 		filterLoop: filterLoop,
 
-		pd:          pd,
-		grpcPool:    grpcPool,
-		regionCache: regionCache,
-		pdClock:     pdClock,
-		tikvStorage: kvStorage,
+		pd:           pd,
+		grpcPool:     grpcPool,
+		regionCache:  regionCache,
+		pdClock:      pdClock,
+		tikvStorage:  kvStorage,
+		lockResolver: nil, // Will be filled in `Run`.
 
 		requestedStores: make(map[string]*requestedStore),
 	}
 	s.totalSpans.m = make(map[model.TableID]*requestedTable)
-
 	return s
 }
 
-func (s *SharedClient) Subscribe(span tablepb.Span, ts uint64, eventCh chan<- model.RegionFeedEvent) error {
+func (s *SharedClient) Subscribe(span tablepb.Span, startTs uint64, eventCh chan<- model.RegionFeedEvent) error {
 	s.totalSpans.Lock()
-	defer s.totalSpans.Unlock()
 	if _, ok := s.totalSpans.m[span.TableID]; !ok {
-		lock := regionlock.NewEmptyRegionRangeLock(s.changefeed.Namespace + "." + s.changefeed.ID)
-		requestedTable := &requestedTable{lock, span, eventCh}
+		requestedTable := s.newRequestedTable(span, startTs, eventCh)
 		s.totalSpans.m[span.TableID] = requestedTable
-		s.requestRangeCh.In() <- rangeRequestTask{span, ts, requestedTable}
+		s.totalSpans.Unlock()
+
+		s.preSubscribe(requestedTable)
+		s.requestRangeCh.In() <- rangeRequestTask{span: span, ts: startTs, requestedTable: requestedTable}
 		return nil
 	}
+	s.totalSpans.Unlock()
 	return errors.New("redundant table subscription")
+}
+
+func (s *SharedClient) Unsubscribe(span tablepb.Span) error {
+	s.totalSpans.Lock()
+	if rt, ok := s.totalSpans.m[span.TableID]; ok {
+		delete(s.totalSpans.m, span.TableID)
+		s.totalSpans.Unlock()
+
+		rt.removed.Store(true)
+		s.requestRangeCh.In() <- rangeRequestTask{span: rt.span, ts: rt.startTs, requestedTable: rt}
+		return nil
+	}
+	s.totalSpans.Unlock()
+	return errors.New("unexist table unsubscription")
 }
 
 func (s *SharedClient) Run(ctx context.Context) error {
@@ -171,16 +193,16 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	s.workers = make([]*sharedRegionWorker, 0, s.config.WorkerConcurrent)
-	metrics := newWorkerMetrics(s.changefeed)
+	workerMetrics := newWorkerMetrics(s.changefeed)
 	for i := 0; i < s.config.WorkerConcurrent; i++ {
-		worker := newSharedRegionWorker(s, metrics)
+		worker := newSharedRegionWorker(s, workerMetrics)
 		g.Go(func() error { return worker.run(ctx) })
 		s.workers = append(s.workers, worker)
 	}
 
+	g.Go(func() error { return s.handleRequestRanges(ctx, g) })
 	g.Go(func() error { return s.dispatchRequest(ctx) })
 	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
-	g.Go(func() error { return s.handleRequestRanges(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
 
 	log.Info("event feed started",
@@ -191,7 +213,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 }
 
 func (s *SharedClient) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) {
-	rangeLock := errorInfo.requestedTable.lock
+	rangeLock := errorInfo.requestedTable.rangeLock
 	rangeLock.UnlockRange(errorInfo.span.StartKey, errorInfo.span.EndKey,
 		errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.resolvedTs)
 	s.enqueueError(ctx, errorInfo)
@@ -205,34 +227,6 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case sri = <-s.regionCh.Out():
-		}
-
-		// Send a resolved ts to event channel first, for two reasons:
-		// 1. Since we have locked the region range, and have maintained correct
-		//    checkpoint ts for the range, it is safe to report the resolved ts
-		//    to puller at this moment.
-		// 2. Before the kv client gets region rpcCtx, sends request to TiKV and
-		//    receives the first kv event from TiKV, the region could split or
-		//    merge in advance, which should cause the change of resolved ts
-		//    distribution in puller, so this resolved ts event is needed.
-		// After this resolved ts event is sent, we don't need to send one more
-		// resolved ts event when the region starts to work.
-		resolvedEv := model.RegionFeedEvent{
-			Resolved: &model.ResolvedSpans{
-				Spans: []model.RegionComparableSpan{
-					{
-						Span:   sri.span,
-						Region: sri.verID.GetID(),
-					},
-				},
-				ResolvedTs: sri.resolvedTs,
-			},
-		}
-
-		select {
-		case sri.requestedTable.eventCh <- resolvedEv:
-		case <-ctx.Done():
-			return errors.Trace(ctx.Err())
 		}
 
 		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
@@ -377,7 +371,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 	rpcCtx := sri.rpcCtx
 	regionID := rpcCtx.Meta.GetId()
 	regionEpoch := rpcCtx.Meta.RegionEpoch
-	requestID := allocID()
+	requestID := sri.requestedTable.requestID
 
 	return &cdcpb.ChangeDataRequest{
 		Header:       &cdcpb.Header{ClusterId: s.clusterID, TicdcVersion: version.ReleaseSemver()},
@@ -389,6 +383,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 		EndKey:       sri.span.EndKey,
 		ExtraOp:      kvrpcpb.ExtraOp_ReadOldValue,
 		FilterLoop:   s.filterLoop,
+		Multiplexing: true,
 	}
 }
 
@@ -566,29 +561,26 @@ func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Grou
 		case <-ctx.Done():
 			return ctx.Err()
 		case task := <-s.requestRangeCh.Out():
-			if s.getRequestedTable(task.span.TableID) != nil {
-				// divideAndSendEventFeedToRegions could be blocked for some time,
-				// since it must wait for the region lock available. In order to
-				// consume region range request from `requestRangeCh` as soon as
-				// possible, we create a new goroutine to handle it.
-				// The sequence of region range we process is not matter, the
-				// region lock keeps the region access sequence.
-				// Besides the count or frequency of range request is limited,
-				// we use ephemeral goroutine instead of permanent goroutine.
-				g.Go(func() error {
-					return s.divideAndRequestRegions(ctx, task.span, task.ts)
-				})
-			}
+			// divideAndSendEventFeedToRegions could be blocked for some time,
+			// since it must wait for the region lock available. In order to
+			// consume region range request from `requestRangeCh` as soon as
+			// possible, we create a new goroutine to handle it.
+			// The sequence of region range we process is not matter, the
+			// region lock keeps the region access sequence.
+			// Besides the count or frequency of range request is limited,
+			// we use ephemeral goroutine instead of permanent goroutine.
+			g.Go(func() error {
+				return s.divideAndRequestRegions(ctx, task.span, task.ts, task.requestedTable)
+			})
 		}
 	}
 }
 
-func (s *SharedClient) divideAndRequestRegions(ctx context.Context, span tablepb.Span, ts uint64) (err error) {
-	rt := s.getRequestedTable(span.TableID)
-	if rt == nil {
-		return nil
-	}
-
+func (s *SharedClient) divideAndRequestRegions(
+	ctx context.Context,
+	span tablepb.Span, ts uint64,
+	requestedTable *requestedTable,
+) (err error) {
 	limit := 1024
 	nextSpan := span
 	var regions []*tikv.Region
@@ -614,14 +606,14 @@ func (s *SharedClient) divideAndRequestRegions(ctx context.Context, span tablepb
 
 		for _, region := range regions {
 			regionSpan := tablepb.Span{StartKey: region.GetMeta().StartKey, EndKey: region.GetMeta().EndKey}
-			partialSpan, err := spanz.Intersect(rt.span, regionSpan)
+			partialSpan, err := spanz.Intersect(requestedTable.span, regionSpan)
 			if err != nil {
 				return errors.Trace(err)
 			}
 			// NOTE: the End key return by the PD API will be nil to represent the biggest key.
 			partialSpan = spanz.HackSpan(partialSpan)
 			sri := newSingleRegionInfo(region.VerID(), partialSpan, ts, nil)
-			sri.requestedTable = rt
+			sri.requestedTable = requestedTable
 			s.scheduleRegionRequest(ctx, sri)
 
 			nextSpan.StartKey = region.GetMeta().EndKey
@@ -665,7 +657,7 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 		}
 	}
 
-	rangeLock := sri.requestedTable.lock
+	rangeLock := sri.requestedTable.rangeLock
 	res := rangeLock.LockRange(ctx, sri.span.StartKey, sri.span.EndKey, sri.verID.GetID(), sri.verID.GetVer())
 	if res.Status == regionlock.LockRangeStatusWait {
 		res = res.WaitFn()
@@ -763,10 +755,51 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 	}
 }
 
-func (s *SharedClient) recycleRegionStatefulEvents(_ ...*regionStatefulEvent) {}
+func (s *SharedClient) newRequestedTable(
+	span tablepb.Span, startTs uint64,
+	eventCh chan<- model.RegionFeedEvent,
+) *requestedTable {
+	name := s.changefeed.Namespace + "." + s.changefeed.ID
+	rangeLock := regionlock.NewRegionRangeLock(span.StartKey, span.EndKey, startTs, name)
+	return &requestedTable{
+		span:      span,
+		startTs:   startTs,
+		rangeLock: rangeLock,
+		eventCh:   eventCh,
+		requestID: requestIDGen.Add(1),
+	}
+}
+
+func (s *SharedClient) preSubscribe(requestedTable *requestedTable) {
+	// Send a resolved ts to event channel first, for two reasons:
+	// 1. Since we have locked the region range, and have maintained correct
+	//    checkpoint ts for the range, it is safe to report the resolved ts
+	//    to puller at this moment.
+	// 2. Before the kv client gets region rpcCtx, sends request to TiKV and
+	//    receives the first kv event from TiKV, the region could split or
+	//    merge in advance, which should cause the change of resolved ts
+	//    distribution in puller, so this resolved ts event is needed.
+	// After this resolved ts event is sent, we don't need to send one more
+	// resolved ts event when the region starts to work.
+	resolvedEv := model.RegionFeedEvent{
+		Resolved: &model.ResolvedSpans{
+			Spans: []model.RegionComparableSpan{
+				{
+					Span:   requestedTable.span,
+					Region: 0,
+				},
+			},
+			ResolvedTs: requestedTable.startTs,
+		},
+	}
+	requestedTable.eventCh <- resolvedEv
+}
 
 func hashRegionID(regionID uint64, slots uint64) uint64 {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, regionID)
 	return seahash.Sum64(b) % slots
 }
+
+// Used to generate a requestID in `newRequestedTable`.
+var requestIDGen atomic.Uint64

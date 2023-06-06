@@ -15,16 +15,19 @@ package sourcemanager
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
@@ -37,7 +40,8 @@ type SourceManager struct {
 	ctx   context.Context
 	ready chan struct{}
 
-	// kvCli *kv.SharedClient
+	kvCli *kv.SharedClient
+	wg    sync.WaitGroup
 
 	// changefeedID is the changefeed ID.
 	// We use it to create the puller and log.
@@ -110,7 +114,7 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
-	p.Start(m.ctx, m.up, m.engine, m.errChan)
+	p.Start(m.ctx, m.up, m.engine, m.errChan, m.kvCli)
 	m.pullers.Store(span, p)
 }
 
@@ -171,22 +175,33 @@ func (m *SourceManager) ReceivedEvents() int64 {
 
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
+	clientConfig := config.GetGlobalServerConfig().KVClient
+	if clientConfig.EnableMultiplexing {
+		m.kvCli = kv.NewSharedClient(
+			m.changefeedID,
+			clientConfig,
+			m.bdrMode,
+			m.up.PDClient,
+			m.up.GrpcPool,
+			m.up.RegionCache,
+			m.up.PDClock,
+			m.up.KVStorage,
+		)
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			m.kvCli.Run(ctx)
+		}()
+	}
+
 	m.ctx = ctx
-	// m.kvCli = kv.NewCDCKVClient(
-	// 	m.changefeed,
-	// 	config.GetGlobalServerConfig().KVClient,
-	// 	m.bdrMode,
-	// 	m.up.PDClient,
-	// 	m.up.GrpcPool,
-	// 	m.up.RegionCache,
-	// 	m.up.PDClock,
-	// 	nil)
 	close(m.ready)
 
 	select {
 	case err := <-m.errChan:
 		return err
 	case <-m.ctx.Done():
+		m.wg.Wait()
 		return m.ctx.Err()
 	}
 }
@@ -205,6 +220,11 @@ func (m *SourceManager) Close() {
 	log.Info("Closing source manager",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID))
+
+	if m.kvCli != nil {
+		m.wg.Wait()
+	}
+
 	start := time.Now()
 	m.pullers.Range(func(span tablepb.Span, value interface{}) bool {
 		value.(pullerwrapper.Wrapper).Close()
@@ -214,6 +234,7 @@ func (m *SourceManager) Close() {
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))
+
 	if err := m.engine.Close(); err != nil {
 		log.Panic("Fail to close sort engine",
 			zap.String("namespace", m.changefeedID.Namespace),
