@@ -144,7 +144,7 @@ func (suite *tableSinkWorkerSuite) addEventsToSortEngine(
 	events []*model.PolymorphicEvent,
 	sortEngine engine.SortEngine,
 ) {
-	sortEngine.AddTable(suite.testSpan)
+	sortEngine.AddTable(suite.testSpan, 0)
 	for _, event := range events {
 		sortEngine.Add(suite.testSpan, event)
 	}
