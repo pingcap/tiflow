@@ -346,26 +346,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	}
 
-	otherBarrierTs, err := c.handleBarrier(ctx)
+	err = c.handleBarrier(ctx, barrier)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	// If there are other barriers less than ddl barrier,
-	// we should wait for them.
-	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
-	// but we can ignore them because they will be handled in the processor.
-	if barrier.GlobalBarrierTs > otherBarrierTs {
-		log.Debug("There are other barriers less than ddl barrier, wait for them",
-			zap.Uint64("otherBarrierTs", otherBarrierTs),
-			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		barrier.GlobalBarrierTs = otherBarrierTs
-	}
-
-	if barrier.MinTableBarrierTs > otherBarrierTs {
-		log.Debug("There are other barriers less than min table barrier, wait for them",
-			zap.Uint64("otherBarrierTs", otherBarrierTs),
-			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		barrier.MinTableBarrierTs = otherBarrierTs
 	}
 
 	log.Debug("owner handles barrier",
@@ -384,15 +367,19 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
+	// fizz 这里算出当前轮次的 ResolvedTs，然后会写回到 etcd 中
+	// 我们可以直接用 Scheduler 内部算出来的 newResolvedTs 来限制 barrierTs，这样就可以不用
+	// 再在 redo 开启时候用 resolvedTs 限制 barrierTs 了
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
-		ctx, preCheckpointTs, allPhysicalTables, captures, barrier.BarrierWithMinTs)
+		ctx, preCheckpointTs, allPhysicalTables, captures,
+		barrier.BarrierWithMinTs, c.redoDDLMgr.Enabled())
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	pdTime, err := c.upstream.PDClock.CurrentTime()
 	if err != nil {
-		return errors.Trace(err)
+		log.Warn("There is error in pd clock, use local time as pd time", zap.Error(err))
 	}
 	currentTs := oracle.GetPhysical(pdTime)
 
@@ -926,7 +913,7 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 
 // handleBarrier calculates the barrierTs of the changefeed.
 // barrierTs is used to control the data that can be flush to downstream.
-func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
+func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *ddlBarrier) error {
 	barrierTp, barrierTs := c.barriers.Min()
 
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
@@ -935,26 +922,58 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
 	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
-	if !checkpointReachBarrier {
-		return barrierTs, nil
+	if checkpointReachBarrier {
+		switch barrierTp {
+		case syncPointBarrier:
+			nextSyncPointTs := oracle.GoTimeToTS(
+				oracle.GetTimeFromTS(barrierTs).
+					Add(util.GetOrZero(c.state.Info.Config.SyncPointInterval)),
+			)
+			if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
+				return errors.Trace(err)
+			}
+			c.barriers.Update(syncPointBarrier, nextSyncPointTs)
+		case finishBarrier:
+			c.feedStateManager.MarkFinished()
+		default:
+			log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
+		}
 	}
 
-	switch barrierTp {
-	case syncPointBarrier:
-		nextSyncPointTs := oracle.GoTimeToTS(
-			oracle.GetTimeFromTS(barrierTs).
-				Add(util.GetOrZero(c.state.Info.Config.SyncPointInterval)),
-		)
-		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
-			return 0, errors.Trace(err)
-		}
-		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
-	case finishBarrier:
-		c.feedStateManager.MarkFinished()
-	default:
-		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
+	// If there are other barriers less than ddl barrier,
+	// we should wait for them.
+	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
+	// but we can ignore them because they will be handled in the processor.
+	if barrier.GlobalBarrierTs > barrierTs {
+		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.Uint64("otherBarrierTs", barrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
+		barrier.GlobalBarrierTs = barrierTs
 	}
-	return barrierTs, nil
+
+	if barrier.MinTableBarrierTs > barrierTs {
+		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.Uint64("otherBarrierTs", barrierTs),
+			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
+		barrier.MinTableBarrierTs = barrierTs
+	}
+
+	if c.redoMetaMgr.Enabled() {
+		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
+		_, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
+		if flushedResolvedTs != 0 && flushedResolvedTs < barrier.GlobalBarrierTs {
+			// todo: remove this log after fully tested
+			log.Info("fizz redo meta resolved ts is less than barrier ts, use it as barrier ts",
+				zap.Uint64("globalBarrier", barrier.GlobalBarrierTs),
+				zap.Uint64("flushedResolvedTs", flushedResolvedTs))
+			barrier.GlobalBarrierTs = flushedResolvedTs
+		}
+		if barrier.GlobalBarrierTs > barrier.redoBarrierTs {
+			barrier.redoBarrierTs = barrier.GlobalBarrierTs
+		}
+	}
+
+	return nil
 }
 
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
