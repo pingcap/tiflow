@@ -29,10 +29,11 @@ const (
 )
 
 type singleRegionInfo struct {
-	verID      tikv.RegionVerID
-	span       tablepb.Span
-	resolvedTs uint64
-	rpcCtx     *tikv.RPCContext
+	verID          tikv.RegionVerID
+	span           tablepb.Span
+	resolvedTs     uint64
+	rpcCtx         *tikv.RPCContext
+	requestedTable *requestedTable
 }
 
 func newSingleRegionInfo(

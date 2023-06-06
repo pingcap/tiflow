@@ -19,6 +19,8 @@ import "github.com/pingcap/tiflow/pkg/errors"
 type KVClientConfig struct {
 	// how many workers will be used for a single region worker
 	WorkerConcurrent int `toml:"worker-concurrent" json:"worker-concurrent"`
+    // how many grpc streams will be established to every TiKV node
+    GrpcStreamConcurrent int `toml:"grpc-stream-concurrent" json:"grpc-stream-concurrent"`
 	// background workerpool size, the workrpool is shared by all goroutines in cdc server
 	WorkerPoolSize int `toml:"worker-pool-size" json:"worker-pool-size"`
 	// region incremental scan limit for one table in a single store
@@ -31,7 +33,11 @@ type KVClientConfig struct {
 func (c *KVClientConfig) ValidateAndAdjust() error {
 	if c.WorkerConcurrent <= 0 {
 		return errors.ErrInvalidServerOption.GenWithStackByArgs(
-			"region-scan-limit should be at least 1")
+			"worker-concurrent should be at least 1")
+	}
+	if c.GrpcStreamConcurrent <= 0 {
+		return errors.ErrInvalidServerOption.GenWithStackByArgs(
+			"grpc-stream-concurrent should be at least 1")
 	}
 	if c.RegionScanLimit <= 0 {
 		return errors.ErrInvalidServerOption.GenWithStackByArgs(

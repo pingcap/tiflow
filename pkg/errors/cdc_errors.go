@@ -140,6 +140,10 @@ var (
 		"version is incompatible: %s",
 		errors.RFCCodeText("CDC:ErrVersionIncompatible"),
 	)
+	ErrDuplicatedRegionRequest = errors.Normalize(
+		"duplicated region request %s",
+		errors.RFCCodeText("CDC:ErrDuplicatedRegionRequest"),
+	)
 	ErrClusterIDMismatch = errors.Normalize(
 		"cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d",
 		errors.RFCCodeText("CDC:ErrClusterIDMismatch"),
