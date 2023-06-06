@@ -49,6 +49,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -567,12 +568,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolCanalJSON:
 		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
 	case config.ProtocolAvro:
-		decoder = avro.NewDecoder(&avro.Options{
+		config := &common.Config{
 			EnableTiDBExtension: c.enableTiDBExtension,
 			EnableRowChecksum:   c.enableRowChecksum,
 			// avro must set this to true to make the consumer works.
-			EnableWatermarkEvent: true,
-		}, c.keySchemaM, c.valueSchemaM, kafkaTopic, c.tz)
+			AvroEnableWatermark: true,
+		}
+		decoder = avro.NewDecoder(config, c.keySchemaM, c.valueSchemaM, kafkaTopic, c.tz)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 	}
