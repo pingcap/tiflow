@@ -94,6 +94,30 @@ func newResolvedMessage(ts uint64) *internal.MessageKey {
 	}
 }
 
+func rowChangeToMsgLargeMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow) {
+	var partition *int64
+	if e.Table.IsPartition {
+		partition = &e.Table.TableID
+	}
+	key := &internal.MessageKey{
+		Ts:                               e.CommitTs,
+		Schema:                           e.Table.Schema,
+		Table:                            e.Table.Table,
+		RowID:                            e.RowID,
+		Partition:                        partition,
+		Type:                             model.MessageTypeRow,
+		LargeMessageOnlyHandleKeyColumns: true,
+	}
+	value := &messageRow{}
+	if e.IsDelete() {
+		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, true)
+	} else {
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, true)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, true)
+	}
+	return key, value
+}
+
 func rowChangeToMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow) {
 	var partition *int64
 	if e.Table.IsPartition {
