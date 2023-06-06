@@ -15,7 +15,6 @@ package kv
 
 import (
 	"context"
-	"encoding/hex"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -39,6 +38,30 @@ type workerMetrics struct {
 	metricSendEventCommittedCounter prometheus.Counter
 }
 
+// NOTE: eventBatch and resolvedTs shouldn't appear simultaneously.
+// All contents come from one same TiKV store.
+type statefulEvent struct {
+	eventBatch      eventBatch
+	resolvedTsBatch resolvedTsBatch
+	rs              *requestedStore
+}
+
+type eventBatch struct {
+	// All items come from one same region.
+	items []*cdcpb.Event
+	state *regionFeedState
+
+	// If sharedRegionWorker can ensure no more events from the region will be processed,
+	// it can close the channel to notify others. After that the region can be re-scheduled
+	// with a new `regionFeedState`.
+	noMoreHandling chan struct{}
+}
+
+type resolvedTsBatch struct {
+	ts      uint64
+	regions []*regionFeedState
+}
+
 type sharedRegionWorker struct {
 	changefeed model.ChangeFeedID
 
@@ -46,7 +69,7 @@ type sharedRegionWorker struct {
 
 	statesManager *regionStateManager
 
-	inputCh  chan []*regionStatefulEvent
+	inputCh  chan statefulEvent
 	outputCh chan<- model.RegionFeedEvent
 	errorCh  chan error
 
@@ -82,67 +105,108 @@ func newSharedRegionWorker(c *SharedClient, metrics *workerMetrics) *sharedRegio
 	return &sharedRegionWorker{
 		changefeed:    c.changefeed,
 		client:        c,
-		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
+		inputCh:       make(chan statefulEvent, regionWorkerInputChanSize),
 		outputCh:      nil, // FIXME(qupeng): from rs.
 		statesManager: newRegionStateManager(-1),
 		metrics:       metrics,
 	}
 }
 
-func (w *sharedRegionWorker) run(ctx context.Context) error {
-	preprocess := func(event *regionStatefulEvent) (skipEvent bool) {
-		if event.state != nil && event.state.isStopped() {
-			skipEvent = true
-		}
-		return
+func (w *sharedRegionWorker) sendEvent(ctx context.Context, event statefulEvent) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case w.inputCh <- event:
+		return nil
 	}
+}
 
+func (w *sharedRegionWorker) checkRegionStopped(
+	ctx context.Context, state *regionFeedState,
+) (<-chan struct{}, error) {
+	sfEvent := statefulEvent{eventBatch: eventBatch{state: state}}
+	ch := sfEvent.eventBatch.noMoreHandling
+	if err := w.sendEvent(ctx, sfEvent); err != nil {
+		return nil, err
+	}
+	return ch, nil
+}
+
+func (w *sharedRegionWorker) run(ctx context.Context) error {
 	for {
-		var events []*regionStatefulEvent
+		var event statefulEvent
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case events = <-w.inputCh:
+		case event = <-w.inputCh:
 		}
-
-		for _, event := range events {
-			if skip := preprocess(event); skip {
-				continue
-			}
-			if err := w.processEvent(ctx, event); err != nil {
-				return errors.Trace(err)
-			}
-		}
+		w.processEvent(ctx, event)
 	}
 }
 
-func (w *sharedRegionWorker) processEvent(ctx context.Context, event *regionStatefulEvent) (err error) {
-	if event.finishedCallbackCh != nil {
-		event.finishedCallbackCh <- struct{}{}
-		return nil
-	}
+func (w *sharedRegionWorker) handleSingleRegionError(
+	ctx context.Context, err error,
+	state *regionFeedState,
+	rs *requestedStore,
+) {
+	state.markStopped()
+	state.setRegionInfoResolvedTs()
 
-	if event.changeEvent != nil {
-		switch x := event.changeEvent.Event.(type) {
-		case *cdcpb.Event_Entries_:
-			return w.handleEventEntry(ctx, x, event.state)
-		case *cdcpb.Event_Admin_:
-		case *cdcpb.Event_Error:
-			// FIXME(qupeng): handle it correctly.
-		case *cdcpb.Event_ResolvedTs:
-			return w.handleResolvedTs(ctx, &resolvedTsEvent{
-				resolvedTs: x.ResolvedTs,
-				regions:    []*regionFeedState{event.state},
-			})
-		}
-	} else if event.resolvedTsEvent != nil {
-		return w.handleResolvedTs(ctx, event.resolvedTsEvent)
-	}
+	regionID := state.getRegionID()
+	rs.takeState(regionID, state.requestID)
 
-	return nil
+	log.Info("single region event feed disconnected",
+		zap.String("namespace", w.changefeed.Namespace),
+		zap.String("changefeed", w.changefeed.ID),
+		zap.Uint64("regionID", regionID),
+		zap.Uint64("requestID", state.requestID),
+		zap.Stringer("span", &state.sri.span),
+		zap.Uint64("resolvedTs", state.sri.resolvedTs),
+		zap.Error(err))
+
+	w.client.onRegionFail(ctx, newRegionErrorInfo(state.getRegionInfo(), err))
 }
 
+func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEvent) {
+	if event.eventBatch.state != nil {
+		state := event.eventBatch.state
+		if state.isStopped() {
+			close(event.eventBatch.noMoreHandling)
+			return
+		}
+		for _, item := range event.eventBatch.items {
+			switch x := item.Event.(type) {
+			case *cdcpb.Event_Entries_:
+				if err := w.handleEventEntry(ctx, x, state); err != nil {
+					w.handleSingleRegionError(ctx, err, state, event.rs)
+				}
+			case *cdcpb.Event_Admin_:
+			case *cdcpb.Event_Error:
+				err := cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+				w.handleSingleRegionError(ctx, err, state, event.rs)
+			case *cdcpb.Event_ResolvedTs:
+				w.handleResolvedTs(ctx, resolvedTsBatch{
+					ts:      x.ResolvedTs,
+					regions: []*regionFeedState{state},
+				})
+			}
+		}
+	} else if event.resolvedTsBatch.ts != 0 {
+		w.handleResolvedTs(ctx, event.resolvedTsBatch)
+	}
+}
+
+// NOTE: context.Canceled won't be treated as an error.
 func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Event_Entries_, state *regionFeedState) error {
+	emit := func(assembled model.RegionFeedEvent) bool {
+		select {
+		case w.outputCh <- assembled:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+
 	regionID, _, startTime, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
 		switch entry.Type {
@@ -154,30 +218,21 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 					zap.Duration("duration", time.Since(startTime)),
 					zap.Uint64("regionID", regionID))
 			}
-			w.metrics.metricPullEventInitializedCounter.Inc()
 
+			w.metrics.metricPullEventInitializedCounter.Inc()
 			state.setInitialized()
-			cachedEvents := state.matcher.matchCachedRow(true)
-			for _, cachedEvent := range cachedEvents {
+			for _, cachedEvent := range state.matcher.matchCachedRow(true) {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				select {
-				case w.outputCh <- revent:
-					w.metrics.metricSendEventCommitCounter.Inc()
-				case <-ctx.Done():
-					return ctx.Err()
+				if !emit(revent) {
+					break
 				}
+				w.metrics.metricSendEventCommitCounter.Inc()
 			}
 			state.matcher.matchCachedRollbackRow(true)
 		case cdcpb.Event_COMMITTED:
-			w.metrics.metricPullEventCommittedCounter.Inc()
-			revent, err := assembleRowEvent(regionID, entry)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
 			resolvedTs := state.getLastResolvedTs()
 			if entry.CommitTs <= resolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
@@ -187,11 +242,14 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
-			select {
-			case w.outputCh <- revent:
+
+			w.metrics.metricPullEventCommittedCounter.Inc()
+			revent, err := assembleRowEvent(regionID, entry)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if emit(revent) {
 				w.metrics.metricSendEventCommittedCounter.Inc()
-			case <-ctx.Done():
-				return ctx.Err()
 			}
 		case cdcpb.Event_PREWRITE:
 			w.metrics.metricPullEventPrewriteCounter.Inc()
@@ -217,10 +275,7 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 					state.matcher.cacheCommitRow(entry)
 					continue
 				}
-				return cerror.ErrPrewriteNotMatch.GenWithStackByArgs(
-					hex.EncodeToString(entry.GetKey()),
-					entry.GetStartTs(), entry.GetCommitTs(),
-					entry.GetType(), entry.GetOpType())
+				return errors.New("prewrite not match")
 			}
 
 			if !isStaleEvent {
@@ -228,11 +283,8 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 				if err != nil {
 					return errors.Trace(err)
 				}
-				select {
-				case w.outputCh <- revent:
+				if emit(revent) {
 					w.metrics.metricSendEventCommitCounter.Inc()
-				case <-ctx.Done():
-					return ctx.Err()
 				}
 			}
 		case cdcpb.Event_ROLLBACK:
@@ -247,50 +299,39 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 	return nil
 }
 
-func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, revents *resolvedTsEvent) error {
-	resolvedTs := revents.resolvedTs
-	resolvedSpans := make([]model.RegionComparableSpan, 0, len(revents.regions))
-	regions := make([]uint64, 0, len(revents.regions))
+func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, event resolvedTsBatch) {
+	if event.ts == 0 {
+		return
+	}
 
-	for _, state := range revents.regions {
+	resolvedSpans := make([]model.RegionComparableSpan, 0, len(event.regions))
+	for _, state := range event.regions {
 		if state.isStopped() || !state.isInitialized() {
 			continue
 		}
 		regionID := state.getRegionID()
-		regions = append(regions, regionID)
 		lastResolvedTs := state.getLastResolvedTs()
-		if resolvedTs < lastResolvedTs {
+		if event.ts < lastResolvedTs {
 			log.Debug("The resolvedTs is fallen back in kvclient",
 				zap.String("namespace", w.changefeed.Namespace),
 				zap.String("changefeed", w.changefeed.ID),
-				zap.String("EventType", "RESOLVED"),
-				zap.Uint64("resolvedTs", resolvedTs),
-				zap.Uint64("lastResolvedTs", lastResolvedTs),
-				zap.Uint64("regionID", regionID))
+				zap.Uint64("regionID", regionID),
+				zap.Uint64("resolvedTs", event.ts),
+				zap.Uint64("lastResolvedTs", lastResolvedTs))
 			continue
 		}
-		// emit a resolvedTs
+		state.updateResolvedTs(event.ts)
 		resolvedSpans = append(resolvedSpans, model.RegionComparableSpan{
 			Span:   state.sri.span,
 			Region: regionID,
 		})
 	}
-	if len(resolvedSpans) == 0 {
-		return nil
-	}
-	for _, state := range revents.regions {
-		if state.isStopped() || !state.isInitialized() {
-			continue
+	if len(resolvedSpans) > 0 {
+		revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{ResolvedTs: event.ts, Spans: resolvedSpans}}
+		select {
+		case w.outputCh <- revent:
+			w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
+		case <-ctx.Done():
 		}
-		state.updateResolvedTs(resolvedTs)
 	}
-	// emit a resolvedTs
-	revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{ResolvedTs: resolvedTs, Spans: resolvedSpans}}
-	select {
-	case w.outputCh <- revent:
-		w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	return nil
 }

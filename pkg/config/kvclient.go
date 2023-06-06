@@ -19,8 +19,8 @@ import "github.com/pingcap/tiflow/pkg/errors"
 type KVClientConfig struct {
 	// how many workers will be used for a single region worker
 	WorkerConcurrent int `toml:"worker-concurrent" json:"worker-concurrent"`
-    // how many grpc streams will be established to every TiKV node
-    GrpcStreamConcurrent int `toml:"grpc-stream-concurrent" json:"grpc-stream-concurrent"`
+	// how many grpc streams will be established to every TiKV node
+	GrpcStreamConcurrent int `toml:"grpc-stream-concurrent" json:"grpc-stream-concurrent"`
 	// background workerpool size, the workrpool is shared by all goroutines in cdc server
 	WorkerPoolSize int `toml:"worker-pool-size" json:"worker-pool-size"`
 	// region incremental scan limit for one table in a single store

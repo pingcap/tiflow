@@ -73,7 +73,6 @@ func New(
 	engine engine.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
-
 	return &SourceManager{
 		ready:                make(chan struct{}),
 		changefeedID:         changefeedID,

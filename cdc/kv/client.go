@@ -358,8 +358,9 @@ type eventFeedSession struct {
 }
 
 type rangeRequestTask struct {
-	span tablepb.Span
-	ts   uint64
+	span           tablepb.Span
+	ts             uint64
+	requestedTable *requestedTable
 }
 
 func newEventFeedSession(
