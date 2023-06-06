@@ -63,6 +63,12 @@ type Options struct {
 
 	DecimalHandlingMode        string
 	BigintUnsignedHandlingMode string
+
+	// LargeMessageOnlyHandleKeyColumns is true,
+	// For all event type, if the original message larger than the MaxMessageBytes,
+	// only encode Primary Key Columns.
+	LargeMessageOnlyHandleKeyColumns bool
+	MaxMessageBytes                  int
 }
 
 type avroEncodeInput struct {
@@ -144,6 +150,27 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	} else {
 		message.Key = nil
 	}
+
+	length := len(message.Key) + len(message.Value) + common.MaxRecordOverhead + 16 + 8
+	if length > a.MaxMessageBytes {
+		log.Warn("Single message is too large for avro",
+			zap.Int("maxMessageBytes", a.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("table", e.Table),
+			zap.Any("key", message.Key))
+
+		if !a.LargeMessageOnlyHandleKeyColumns {
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+
+		length = len(message.Key) + common.MaxRecordOverhead + 16 + 8
+		if length > a.MaxMessageBytes {
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+
+		message.Value = nil
+	}
+
 	message.IncRowsCount()
 	a.result = append(a.result, message)
 	return nil
@@ -1031,6 +1058,9 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 			EnableWatermarkEvent:       b.config.AvroEnableWatermark,
 			DecimalHandlingMode:        b.config.AvroDecimalHandlingMode,
 			BigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
+
+			LargeMessageOnlyHandleKeyColumns: b.config.LargeMessageOnlyHandleKeyColumns,
+			MaxMessageBytes:                  b.config.MaxMessageBytes,
 		},
 	}
 	return encoder
