@@ -17,7 +17,10 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,10 +43,10 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 
 	// enable the row level checksum
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = config.IntegrityCheckLevelCorrectness
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 
 	// avro, all requirement satisfied, should return no error
-	replicaConfig.Sink.SchemaRegistry = "some-schema-registry"
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("some-schema-registry")
 
 	uri := "kafka://127.0.0.1:9092/abc?protocol=avro&enable-tidb-extension=true&" +
 		"avro-decimal-handling-mode=string&avro-bigint-unsigned-handling-mode=string"
@@ -88,6 +91,25 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 		err = c.Validate()
 		require.Error(t, err)
 	}
+
+	// avro, enable tidb extension and enable watermark event.
+	uri = "kafka://127.0.0.1:9092/avro?protocol=avro&enable-tidb-extension=true&avro-enable-watermark=true"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	protocol = sinkURI.Query().Get("protocol")
+	p, err = config.ParseSinkProtocolFromString(protocol)
+	require.NoError(t, err)
+	c = NewConfig(p)
+
+	replicaConfig = config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("some-schema-registry")
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+
+	err = c.Validate()
+	require.NoError(t, err)
+	require.True(t, c.AvroEnableWatermark)
 }
 
 func TestConfigApplyValidate(t *testing.T) {
@@ -111,9 +133,15 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.True(t, c.EnableTiDBExtension)
+	require.False(t, c.OnlyHandleKeyColumns)
 
 	err = c.Validate()
 	require.NoError(t, err)
+
+	replicaConfig.EnableOldValue = false
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, c.OnlyHandleKeyColumns)
 
 	uri = "kafka://127.0.0.1:9092/abc?protocol=canal-json&enable-tidb-extension=a"
 	sinkURI, err = url.Parse(uri)
@@ -157,7 +185,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = c.Validate()
 	require.ErrorContains(t, err, `Avro protocol requires parameter "schema-registry"`)
 
-	replicaConfig.Sink.SchemaRegistry = "this-is-a-uri"
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("this-is-a-uri")
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, "this-is-a-uri", c.AvroSchemaRegistry)
@@ -259,4 +287,87 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Validate()
 	require.ErrorContains(t, err, "invalid max-batch-size -1")
+}
+
+func TestMergeConfig(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	uri := "kafka://127.0.0.1:9092/abc?" +
+		"protocol=avro&enable-tidb-extension=true&schema-registry=abc&" +
+		"only-output-updated-columns=true&avro-enable-watermark=true&" +
+		"avro-bigint-unsigned-handling-mode=ab&avro-decimal-handling-mode=cd&" +
+		"max-message-bytes=123&max-batch-size=456"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	c := NewConfig(config.ProtocolAvro)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, true, c.EnableTiDBExtension)
+	require.Equal(t, "abc", c.AvroSchemaRegistry)
+	require.True(t, c.OnlyOutputUpdatedColumns)
+	require.True(t, c.AvroEnableWatermark)
+	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
+	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
+	require.Equal(t, 123, c.MaxMessageBytes)
+	require.Equal(t, 456, c.MaxBatchSize)
+
+	// test override
+	uri = "kafka://127.0.0.1:9092/abc"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abc")
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		MaxMessageBytes: aws.Int(123),
+		CodecConfig: &config.CodecConfig{
+			EnableTiDBExtension:            aws.Bool(true),
+			MaxBatchSize:                   aws.Int(456),
+			AvroEnableWatermark:            aws.Bool(true),
+			AvroBigintUnsignedHandlingMode: aws.String("ab"),
+			AvroDecimalHandlingMode:        aws.String("cd"),
+		},
+	}
+	c = NewConfig(config.ProtocolAvro)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, true, c.EnableTiDBExtension)
+	require.Equal(t, "abc", c.AvroSchemaRegistry)
+	require.True(t, c.OnlyOutputUpdatedColumns)
+	require.True(t, c.AvroEnableWatermark)
+	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
+	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
+	require.Equal(t, 123, c.MaxMessageBytes)
+	require.Equal(t, 456, c.MaxBatchSize)
+
+	// test override
+	uri = "kafka://127.0.0.1:9092/abc?" +
+		"protocol=avro&enable-tidb-extension=true&schema-registry=abc&" +
+		"only-output-updated-columns=true&avro-enable-watermark=true&" +
+		"avro-bigint-unsigned-handling-mode=ab&avro-decimal-handling-mode=cd&" +
+		"max-message-bytes=123&max-batch-size=456"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(false)
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abcd")
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		MaxMessageBytes: aws.Int(1233),
+		CodecConfig: &config.CodecConfig{
+			EnableTiDBExtension:            aws.Bool(false),
+			MaxBatchSize:                   aws.Int(222),
+			AvroEnableWatermark:            aws.Bool(false),
+			AvroBigintUnsignedHandlingMode: aws.String("adb"),
+			AvroDecimalHandlingMode:        aws.String("cde"),
+		},
+	}
+	c = NewConfig(config.ProtocolAvro)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.Equal(t, true, c.EnableTiDBExtension)
+	require.Equal(t, "abc", c.AvroSchemaRegistry)
+	require.True(t, c.OnlyOutputUpdatedColumns)
+	require.True(t, c.AvroEnableWatermark)
+	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
+	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
+	require.Equal(t, 123, c.MaxMessageBytes)
+	require.Equal(t, 456, c.MaxBatchSize)
 }

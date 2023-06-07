@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -145,7 +146,7 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventCh := make(chan model.RegionFeedEvent, 2)
-	s := createFakeEventFeedSession(ctx)
+	s := createFakeEventFeedSession()
 	s.eventCh = eventCh
 	state := newRegionFeedState(newSingleRegionInfo(
 		tikv.RegionVerID{},
@@ -299,4 +300,54 @@ func TestRegionWorkerHandleResolvedTs(t *testing.T) {
 	require.Equal(t, uint64(10), event.Resolved.ResolvedTs)
 	require.Equal(t, 1, len(event.Resolved.Spans))
 	require.Equal(t, uint64(1), event.Resolved.Spans[0].Region)
+}
+
+func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
+	ctx := context.Background()
+	s := createFakeEventFeedSession()
+	s.eventCh = make(chan model.RegionFeedEvent, 2)
+	s1 := newRegionFeedState(newSingleRegionInfo(
+		tikv.RegionVerID{},
+		spanz.ToSpan([]byte{}, spanz.UpperBoundKey),
+		9, &tikv.RPCContext{}),
+		0)
+	s1.start()
+	w := newRegionWorker(model.ChangeFeedID{}, s, "")
+
+	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
+		resolvedTs: 5,
+		regions:    []*regionFeedState{s1},
+	})
+	require.Nil(t, err)
+	require.Equal(t, uint64(9), s1.lastResolvedTs)
+
+	timer := time.NewTimer(time.Second)
+	select {
+	case <-w.rtsUpdateCh:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		require.False(t, true, "should never get a ResolvedTs")
+	case <-timer.C:
+	}
+
+	events := &cdcpb.Event_Entries_{
+		Entries: &cdcpb.Event_Entries{
+			Entries: []*cdcpb.Event_Row{
+				{Type: cdcpb.Event_PREWRITE, StartTs: 7},
+			},
+		},
+	}
+	err = w.handleEventEntry(ctx, events, s1)
+	require.Nil(t, err)
+
+	events = &cdcpb.Event_Entries_{
+		Entries: &cdcpb.Event_Entries{
+			Entries: []*cdcpb.Event_Row{
+				{Type: cdcpb.Event_COMMIT, CommitTs: 8},
+			},
+		},
+	}
+	err = w.handleEventEntry(ctx, events, s1)
+	require.Nil(t, err)
 }

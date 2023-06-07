@@ -47,10 +47,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -69,6 +72,7 @@ var (
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
+	enableRowChecksum   bool
 
 	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
 	// which then can be used to check RowChangedEvent dispatched correctness
@@ -78,9 +82,13 @@ var (
 	logLevel      string
 	timezone      string
 	ca, cert, key string
+
+	// avro schema registry uri should be set if the encoding protocol is avro
+	schemaRegistryURI string
 )
 
 func init() {
+	version.LogVersionInfo("kafka consumer")
 	var (
 		upstreamURIStr string
 		configFile     string
@@ -88,6 +96,7 @@ func init() {
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
@@ -181,20 +190,33 @@ func init() {
 
 	s = upstreamURI.Query().Get("enable-tidb-extension")
 	if s != "" {
-		b, err := strconv.ParseBool(s)
+		enableTiDBExtension, err = strconv.ParseBool(s)
 		if err != nil {
 			log.Panic("invalid enable-tidb-extension of upstream-uri")
 		}
-		if protocol != config.ProtocolCanalJSON && b {
-			log.Panic("enable-tidb-extension only work with canal-json")
+		if enableTiDBExtension {
+			if protocol != config.ProtocolCanalJSON && protocol != config.ProtocolAvro {
+				log.Panic("enable-tidb-extension only work with canal-json / avro")
+			}
 		}
+	}
 
-		enableTiDBExtension = b
+	s = upstreamURI.Query().Get("enable-row-checksum")
+	if s != "" {
+		enableRowChecksum, err = strconv.ParseBool(s)
+		if err != nil {
+			log.Panic("invalid enable-row-checksum of upstream-uri")
+		}
+		if enableRowChecksum {
+			if protocol != config.ProtocolAvro {
+				log.Panic("enable-row-checksum only work with avro")
+			}
+		}
 	}
 
 	if configFile != "" {
 		eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
-		eventRouterReplicaConfig.Sink.Protocol = protocol.String()
+		eventRouterReplicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
 		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
 		if err != nil {
 			log.Panic("invalid config file for kafka consumer",
@@ -298,13 +320,15 @@ func main() {
 	/**
 	 * Setup a new Sarama consumer group
 	 */
-	log.Info("Starting a new TiCDC consumer", zap.String("GroupID", kafkaGroupID), zap.Any("protocol", protocol))
-	consumer, err := NewConsumer(context.TODO())
+	log.Info("Starting a new TiCDC consumer",
+		zap.String("GroupID", kafkaGroupID), zap.Any("protocol", protocol))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	consumer, err := NewConsumer(ctx)
 	if err != nil {
 		log.Panic("Error creating consumer", zap.Error(err))
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	client, err := sarama.NewConsumerGroup(kafkaAddrs, kafkaGroupID, config)
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
@@ -331,7 +355,9 @@ func main() {
 
 	go func() {
 		if err := consumer.Run(ctx); err != nil {
-			log.Panic("Error running consumer", zap.Error(err))
+			if err != context.Canceled {
+				log.Panic("Error running consumer", zap.Error(err))
+			}
 		}
 	}()
 
@@ -380,8 +406,16 @@ type Consumer struct {
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
+	enableRowChecksum   bool
 
 	eventRouter *dispatcher.EventRouter
+
+	// avro only
+	// key and value schema manager, only used by the avro protocol to fetch schema.
+	keySchemaM   *avro.SchemaManager
+	valueSchemaM *avro.SchemaManager
+
+	tz *time.Location
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -394,11 +428,23 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 
 	c := new(Consumer)
+	c.tz = tz
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
 	c.protocol = protocol
 	c.enableTiDBExtension = enableTiDBExtension
+	c.enableRowChecksum = enableRowChecksum
+
+	if c.protocol == config.ProtocolAvro {
+		keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
+			ctx, schemaRegistryURI, nil)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		c.keySchemaM = keySchemaM
+		c.valueSchemaM = valueSchemaM
+	}
 
 	// this means user has input config file to enable dispatcher check
 	// some protocol does not provide enough information to check the
@@ -512,21 +558,34 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
+	var (
+		decoder codec.RowEventDecoder
+		err     error
+	)
+	switch c.protocol {
+	case config.ProtocolOpen, config.ProtocolDefault:
+		decoder = open.NewBatchDecoder()
+	case config.ProtocolCanalJSON:
+		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
+	case config.ProtocolAvro:
+		config := &common.Config{
+			EnableTiDBExtension: c.enableTiDBExtension,
+			EnableRowChecksum:   c.enableRowChecksum,
+			// avro must set this to true to make the consumer works.
+			AvroEnableWatermark: true,
+		}
+		decoder = avro.NewDecoder(config, c.keySchemaM, c.valueSchemaM, kafkaTopic, c.tz)
+	default:
+		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		var (
-			decoder codec.RowEventDecoder
-			err     error
-		)
-		switch c.protocol {
-		case config.ProtocolOpen, config.ProtocolDefault:
-			decoder, err = open.NewBatchDecoder(message.Key, message.Value)
-		case config.ProtocolCanalJSON:
-			decoder = canal.NewBatchDecoder(message.Value, c.enableTiDBExtension, "")
-		default:
-			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
-		}
-		if err != nil {
+		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
+			log.Error("add key value to the decoder failed", zap.Error(err))
 			return errors.Trace(err)
 		}
 
@@ -557,7 +616,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				// but all DDL event messages should be consumed.
 				ddl, err := decoder.NextDDLEvent()
 				if err != nil {
-					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed",
+						zap.ByteString("value", message.Value),
+						zap.Error(err))
 				}
 				if partition == 0 {
 					c.appendDDL(ddl)
@@ -565,7 +626,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
-					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed",
+						zap.ByteString("value", message.Value),
+						zap.Error(err))
 				}
 
 				if c.eventRouter != nil {
@@ -606,7 +669,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
-					log.Panic("decode message value failed", zap.ByteString("value", message.Value))
+					log.Panic("decode message value failed",
+						zap.ByteString("value", message.Value),
+						zap.Error(err))
 				}
 				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.

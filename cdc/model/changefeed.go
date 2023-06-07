@@ -18,6 +18,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -43,6 +44,11 @@ type ChangeFeedID struct {
 	// the default value of Namespace is "default"
 	Namespace string
 	ID        string
+}
+
+// String implements fmt.Stringer interface
+func (c ChangeFeedID) String() string {
+	return c.Namespace + "/" + c.ID
 }
 
 // DefaultChangeFeedID returns `ChangeFeedID` with default namespace
@@ -141,9 +147,10 @@ type ChangeFeedInfo struct {
 	// but can be fetched for backward compatibility
 	SortDir string `json:"sort-dir"`
 
-	Config *config.ReplicaConfig `json:"config"`
-	State  FeedState             `json:"state"`
-	Error  *RunningError         `json:"error"`
+	Config  *config.ReplicaConfig `json:"config"`
+	State   FeedState             `json:"state"`
+	Error   *RunningError         `json:"error"`
+	Warning *RunningError         `json:"warning"`
 
 	CreatorVersion string `json:"creator-version"`
 	// Epoch is the epoch of a changefeed, changes on every restart.
@@ -260,7 +267,7 @@ func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
 // VerifyAndComplete verifies changefeed info and may fill in some fields.
 // If a required field is not provided, return an error.
 // If some necessary filed is missing but can use a default value, fill in it.
-func (info *ChangeFeedInfo) VerifyAndComplete() error {
+func (info *ChangeFeedInfo) VerifyAndComplete() {
 	defaultConfig := config.GetDefaultReplicaConfig()
 	if info.Engine == "" {
 		info.Engine = SortUnified
@@ -285,7 +292,70 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 		info.Config.Integrity = defaultConfig.Integrity
 	}
 
-	return nil
+	info.RmUnusedFields()
+}
+
+// RmUnusedFields removes unnecessary fields based on the downstream type and
+// the protocol. Since we utilize a common changefeed configuration template,
+// certain fields may not be utilized for certain protocols.
+func (info *ChangeFeedInfo) RmUnusedFields() {
+	uri, err := url.Parse(info.SinkURI)
+	if err != nil {
+		log.Warn(
+			"failed to parse the sink uri",
+			zap.Error(err),
+			zap.Any("sinkUri", info.SinkURI),
+		)
+		return
+	}
+	if !sink.IsMQScheme(uri.Scheme) {
+		info.rmMQOnlyFields()
+	} else {
+		// remove schema registry for MQ downstream with
+		// protocol other than avro
+		if util.GetOrZero(info.Config.Sink.Protocol) != config.ProtocolAvro.String() {
+			info.Config.Sink.SchemaRegistry = nil
+		}
+	}
+
+	if !sink.IsStorageScheme(uri.Scheme) {
+		info.rmStorageOnlyFields()
+	}
+
+	if !sink.IsMySQLCompatibleScheme(uri.Scheme) {
+		info.rmDBOnlyFields()
+	} else {
+		// remove fields only being used by MQ and Storage downstream
+		info.Config.Sink.Protocol = nil
+		info.Config.Sink.Terminator = nil
+	}
+}
+
+func (info *ChangeFeedInfo) rmMQOnlyFields() {
+	info.Config.Sink.DispatchRules = nil
+	info.Config.Sink.SchemaRegistry = nil
+	info.Config.Sink.EncoderConcurrency = nil
+	info.Config.Sink.EnableKafkaSinkV2 = nil
+	info.Config.Sink.OnlyOutputUpdatedColumns = nil
+	info.Config.Sink.KafkaConfig = nil
+}
+
+func (info *ChangeFeedInfo) rmStorageOnlyFields() {
+	info.Config.Sink.CSVConfig = nil
+	info.Config.Sink.DateSeparator = nil
+	info.Config.Sink.EnablePartitionSeparator = nil
+	info.Config.Sink.FileIndexWidth = nil
+	info.Config.Sink.CloudStorageConfig = nil
+}
+
+func (info *ChangeFeedInfo) rmDBOnlyFields() {
+	info.Config.EnableSyncPoint = nil
+	info.Config.BDRMode = nil
+	info.Config.SyncPointInterval = nil
+	info.Config.SyncPointRetention = nil
+	info.Config.Consistent = nil
+	info.Config.Sink.SafeMode = nil
+	info.Config.Sink.MySQLConfig = nil
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.
@@ -319,6 +389,14 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
 	info.fixScheduler(inheritV66)
 	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
+
+	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
+		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
+		info.fixEnableOldValue()
+		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
+	}
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -377,7 +455,7 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 
 	query := uri.Query()
 	protocolStr := query.Get(config.ProtocolKey)
-	if protocolStr != "" || info.Config.Sink.Protocol != "" {
+	if protocolStr != "" || info.Config.Sink.Protocol != nil {
 		maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
 		log.Warn("sink URI or sink config contains protocol, but scheme is not mq",
 			zap.String("sinkURI", maskedSinkURI),
@@ -387,6 +465,18 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 		query.Del(config.ProtocolKey)
 		info.updateSinkURIAndConfigProtocol(uri, "", query)
 	}
+}
+
+func (info *ChangeFeedInfo) fixEnableOldValue() {
+	uri, err := url.Parse(info.SinkURI)
+	if err != nil {
+		// this is impossible to happen, since the changefeed registered successfully.
+		log.Warn("parse sink URI failed", zap.Error(err))
+		return
+	}
+	scheme := strings.ToLower(uri.Scheme)
+	protocol := uri.Query().Get(config.ProtocolKey)
+	info.Config.AdjustEnableOldValue(scheme, protocol)
 }
 
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {
@@ -420,11 +510,11 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 		return
 	}
 
-	if needsFix(info.Config.Sink.Protocol) {
+	if needsFix(util.GetOrZero(info.Config.Sink.Protocol)) {
 		log.Info("handle incompatible protocol from sink config",
-			zap.String("oldProtocol", info.Config.Sink.Protocol),
+			zap.String("oldProtocol", util.GetOrZero(info.Config.Sink.Protocol)),
 			zap.String("fixedProtocol", openProtocol))
-		info.Config.Sink.Protocol = openProtocol
+		info.Config.Sink.Protocol = util.AddressOf(openProtocol)
 	}
 }
 
@@ -438,7 +528,7 @@ func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProt
 	uri.RawQuery = newRawQuery
 	fixedSinkURI := uri.String()
 	info.SinkURI = fixedSinkURI
-	info.Config.Sink.Protocol = newProtocol
+	info.Config.Sink.Protocol = util.AddressOf(newProtocol)
 }
 
 // DownstreamType returns the type of the downstream.

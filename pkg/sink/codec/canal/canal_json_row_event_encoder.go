@@ -31,13 +31,17 @@ import (
 
 func newJSONMessageForDML(
 	builder *canalEntryBuilder,
-	enableTiDBExtension bool,
 	e *model.RowChangedEvent,
+	config *common.Config,
 ) ([]byte, error) {
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
-	filling := func(columns []*model.Column, out *jwriter.Writer) error {
+	filling := func(columns []*model.Column, out *jwriter.Writer,
+		onlyOutputUpdatedColumn bool,
+		onlyHandleKeyColumns bool,
+		newColumnMap map[string]*model.Column,
+	) error {
 		if len(columns) == 0 {
 			out.RawString("null")
 			return nil
@@ -47,6 +51,13 @@ func newJSONMessageForDML(
 		isFirst := true
 		for _, col := range columns {
 			if col != nil {
+				// column equal, do not output it
+				if onlyOutputUpdatedColumn && shouldIgnoreColumn(col, newColumnMap) {
+					continue
+				}
+				if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+					continue
+				}
 				if isFirst {
 					isFirst = false
 				} else {
@@ -144,6 +155,9 @@ func newJSONMessageForDML(
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
+				if isDelete && config.OnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+					continue
+				}
 				if emptyColumn {
 					out.RawByte('{')
 					emptyColumn = false
@@ -192,29 +206,36 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.PreColumns, out); err != nil {
+		if err := filling(e.PreColumns, out, false, config.OnlyHandleKeyColumns, nil); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out); err != nil {
+		if err := filling(e.Columns, out, false, false, nil); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
+		var newColsMap map[string]*model.Column
+		if config.OnlyOutputUpdatedColumns {
+			newColsMap = make(map[string]*model.Column, len(e.Columns))
+			for _, col := range e.Columns {
+				newColsMap[col.Name] = col
+			}
+		}
 		out.RawString(",\"old\":")
-		if err := filling(e.PreColumns, out); err != nil {
+		if err := filling(e.PreColumns, out, config.OnlyOutputUpdatedColumns, false, newColsMap); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out); err != nil {
+		if err := filling(e.Columns, out, false, false, nil); err != nil {
 			return nil, err
 		}
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
-	if enableTiDBExtension {
+	if config.EnableTiDBExtension {
 		const prefix string = ",\"_tidb\":"
 		out.RawString(prefix)
 		out.RawByte('{')
@@ -239,22 +260,19 @@ func eventTypeString(e *model.RowChangedEvent) string {
 
 // JSONRowEventEncoder encodes row event in JSON format
 type JSONRowEventEncoder struct {
-	builder *canalEntryBuilder
+	builder  *canalEntryBuilder
+	messages []*common.Message
 
-	// When it is true, canal-json would generate TiDB extension information
-	// which, at the moment, only includes `tidbWaterMarkType` and `_tidb` fields.
-	enableTiDBExtension bool
-	maxMessageBytes     int
-	messages            []*common.Message
+	config *common.Config
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
-		builder:             newCanalEntryBuilder(),
-		enableTiDBExtension: config.EnableTiDBExtension,
-		messages:            make([]*common.Message, 0, 1),
-		maxMessageBytes:     config.MaxMessageBytes,
+		builder:  newCanalEntryBuilder(),
+		messages: make([]*common.Message, 0, 1),
+
+		config: config,
 	}
 	return encoder
 }
@@ -271,7 +289,7 @@ func (c *JSONRowEventEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONM
 		Query:         e.Query,
 	}
 
-	if !c.enableTiDBExtension {
+	if !c.config.EnableTiDBExtension {
 		return msg
 	}
 
@@ -298,7 +316,7 @@ func (c *JSONRowEventEncoder) newJSONMessage4CheckpointEvent(
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
 func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	if !c.enableTiDBExtension {
+	if !c.config.EnableTiDBExtension {
 		return nil, nil
 	}
 
@@ -317,19 +335,18 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	value, err := newJSONMessageForDML(c.builder, c.enableTiDBExtension, e)
+	value, err := newJSONMessageForDML(c.builder, e, c.config)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	length := len(value) + common.MaxRecordOverhead
 	// for single message that is longer than max-message-bytes, do not send it.
-	if length > c.maxMessageBytes {
+	if length > c.config.MaxMessageBytes {
 		log.Warn("Single message is too large for canal-json",
-			zap.Int("maxMessageBytes", c.maxMessageBytes),
+			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
 			zap.Int("length", length),
-			zap.Any("table", e.Table),
-			zap.Any("value", value))
+			zap.Any("table", e.Table))
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 	m := &common.Message{
@@ -381,4 +398,21 @@ func NewJSONRowEventEncoderBuilder(config *common.Config) codec.RowEventEncoderB
 // Build a `jsonRowEventEncoderBuilder`
 func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
 	return newJSONRowEventEncoder(b.config)
+}
+
+func shouldIgnoreColumn(col *model.Column,
+	newColumnMap map[string]*model.Column,
+) bool {
+	newCol, ok := newColumnMap[col.Name]
+	if ok && newCol != nil {
+		// sql type is not equal
+		if newCol.Type != col.Type {
+			return false
+		}
+		// value equal
+		if codec.IsColumnValueEqual(newCol.Value, col.Value) {
+			return true
+		}
+	}
+	return false
 }

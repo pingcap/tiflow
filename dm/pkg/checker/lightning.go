@@ -19,13 +19,14 @@ import (
 
 	"github.com/docker/go-units"
 	"github.com/pingcap/tidb/br/pkg/lightning/importer"
+	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 )
 
 func convertLightningPrecheck(
 	ctx context.Context,
 	dmResult *Result,
-	lightningPrechecker importer.PrecheckItem,
+	lightningPrechecker precheck.Checker,
 	failLevel State,
 	instruction string,
 ) {
@@ -45,11 +46,11 @@ func convertLightningPrecheck(
 
 // LightningEmptyRegionChecker checks whether there are too many empty regions in the cluster.
 type LightningEmptyRegionChecker struct {
-	inner importer.PrecheckItem
+	inner precheck.Checker
 }
 
 // NewLightningEmptyRegionChecker creates a new LightningEmptyRegionChecker.
-func NewLightningEmptyRegionChecker(lightningChecker importer.PrecheckItem) RealChecker {
+func NewLightningEmptyRegionChecker(lightningChecker precheck.Checker) RealChecker {
 	return &LightningEmptyRegionChecker{inner: lightningChecker}
 }
 
@@ -77,11 +78,11 @@ func (c *LightningEmptyRegionChecker) Check(ctx context.Context) *Result {
 
 // LightningRegionDistributionChecker checks whether the region distribution is balanced.
 type LightningRegionDistributionChecker struct {
-	inner importer.PrecheckItem
+	inner precheck.Checker
 }
 
 // NewLightningRegionDistributionChecker creates a new LightningRegionDistributionChecker.
-func NewLightningRegionDistributionChecker(lightningChecker importer.PrecheckItem) RealChecker {
+func NewLightningRegionDistributionChecker(lightningChecker precheck.Checker) RealChecker {
 	return &LightningRegionDistributionChecker{inner: lightningChecker}
 }
 
@@ -109,11 +110,11 @@ func (c *LightningRegionDistributionChecker) Check(ctx context.Context) *Result 
 
 // LightningClusterVersionChecker checks whether the cluster version is compatible with Lightning.
 type LightningClusterVersionChecker struct {
-	inner importer.PrecheckItem
+	inner precheck.Checker
 }
 
 // NewLightningClusterVersionChecker creates a new LightningClusterVersionChecker.
-func NewLightningClusterVersionChecker(lightningChecker importer.PrecheckItem) RealChecker {
+func NewLightningClusterVersionChecker(lightningChecker precheck.Checker) RealChecker {
 	return &LightningClusterVersionChecker{inner: lightningChecker}
 }
 
@@ -207,11 +208,11 @@ func (c *LightningFreeSpaceChecker) Check(ctx context.Context) *Result {
 
 // LightningCDCPiTRChecker checks whether the cluster has running CDC PiTR tasks.
 type LightningCDCPiTRChecker struct {
-	inner importer.PrecheckItem
+	inner precheck.Checker
 }
 
 // NewLightningCDCPiTRChecker creates a new LightningCDCPiTRChecker.
-func NewLightningCDCPiTRChecker(lightningChecker importer.PrecheckItem) RealChecker {
+func NewLightningCDCPiTRChecker(lightningChecker precheck.Checker) RealChecker {
 	c, ok := lightningChecker.(*importer.CDCPITRCheckItem)
 	if ok {
 		c.Instruction = "physical import mode is not compatible with them. Please switch to logical import mode then try again."

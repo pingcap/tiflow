@@ -57,6 +57,13 @@ type DDLManager interface {
 	GetResolvedTs() model.Ts
 }
 
+// NewDisabledDDLManager creates a disabled ddl Manager.
+func NewDisabledDDLManager() *ddlManager {
+	return &ddlManager{
+		logManager: &logManager{enabled: false},
+	}
+}
+
 // NewDDLManager creates a new ddl Manager.
 func NewDDLManager(
 	ctx context.Context, cfg *config.ConsistentConfig, ddlStartTs model.Ts,
@@ -252,7 +259,7 @@ func newLogManager(
 }
 
 // Run implements pkg/util.Runnable.
-func (m *logManager) Run(ctx context.Context) error {
+func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.Enabled() {
 		defer m.close()
 		return m.bgUpdateLog(ctx)

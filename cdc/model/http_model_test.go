@@ -16,6 +16,7 @@ package model
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,7 @@ func TestChangefeedCommonInfoMarshalJSON(t *testing.T) {
 	t.Parallel()
 
 	runningErr := &RunningError{
+		time.Now(),
 		"",
 		string(errors.ErrProcessorUnknown.RFCCode()),
 		errors.ErrProcessorUnknown.GetMsg(),
@@ -50,6 +52,7 @@ func TestChangefeedDetailMarshalJSON(t *testing.T) {
 	t.Parallel()
 
 	runningErr := &RunningError{
+		time.Now(),
 		"",
 		string(errors.ErrProcessorUnknown.RFCCode()),
 		errors.ErrProcessorUnknown.GetMsg(),

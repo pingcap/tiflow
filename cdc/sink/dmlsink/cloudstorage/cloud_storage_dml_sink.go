@@ -27,6 +27,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/cdc/sink/util"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -64,23 +66,28 @@ type eventFragment struct {
 // It will send the events to cloud storage systems.
 type DMLSink struct {
 	changefeedID model.ChangeFeedID
-	// msgCh is a channel to hold eventFragment.
-	msgCh chan eventFragment
-	// encodingWorkers defines a group of workers for encoding events.
-	encodingWorkers []*encodingWorker
-	// defragmenter is used to defragment the out-of-order encoded messages.
-	defragmenter *defragmenter
-	// writer is a dmlWriter which manages a group of dmlWorkers and
-	// sends encoded messages to individual dmlWorkers.
-	writer     *dmlWriter
-	statistics *metrics.Statistics
 	// last sequence number
 	lastSeqNum uint64
+	// encodingWorkers defines a group of workers for encoding events.
+	encodingWorkers []*encodingWorker
+	// defragmenter is used to defragment the out-of-order encoded messages and
+	// sends encoded messages to individual dmlWorkers.
+	defragmenter *defragmenter
+	// workers defines a group of workers for writing events to external storage.
+	workers []*dmlWorker
+
+	alive struct {
+		sync.RWMutex
+		// msgCh is a channel to hold eventFragment.
+		msgCh  chan eventFragment
+		isDead bool
+	}
+
+	statistics *metrics.Statistics
 
 	cancel func()
 	wg     sync.WaitGroup
 	dead   chan struct{}
-	isDead atomic.Bool
 }
 
 // NewDMLSink creates a cloud storage sink.
@@ -103,7 +110,9 @@ func NewDMLSink(ctx context.Context,
 	}
 
 	// fetch protocol from replicaConfig defined by changefeed config file.
-	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(
+		putil.GetOrZero(replicaConfig.Sink.Protocol),
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -124,28 +133,44 @@ func NewDMLSink(ctx context.Context,
 	wgCtx, wgCancel := context.WithCancel(ctx)
 	s := &DMLSink{
 		changefeedID:    contextutil.ChangefeedIDFromCtx(wgCtx),
-		msgCh:           make(chan eventFragment, defaultChannelSize),
-		encodingWorkers: make([]*encodingWorker, 0, defaultEncodingConcurrency),
-		defragmenter:    newDefragmenter(wgCtx),
+		encodingWorkers: make([]*encodingWorker, defaultEncodingConcurrency),
+		workers:         make([]*dmlWorker, cfg.WorkerCount),
 		statistics:      metrics.NewStatistics(wgCtx, sink.TxnSink),
 		cancel:          wgCancel,
 		dead:            make(chan struct{}),
 	}
+	s.alive.msgCh = make(chan eventFragment, defaultChannelSize)
+
+	encodedCh := make(chan eventFragment, defaultChannelSize)
+	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
+
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		w := newEncodingWorker(i, s.changefeedID, encoder, s.msgCh, s.defragmenter)
-		s.encodingWorkers = append(s.encodingWorkers, w)
+		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh, encodedCh)
 	}
-	orderedCh := s.defragmenter.orderedOut()
-	s.writer = newDMLWriter(s.changefeedID, storage, cfg, ext, s.statistics, orderedCh, errCh)
+	// create defragmenter.
+	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
+	// create a group of dml workers.
+	clock := clock.New()
+	for i := 0; i < cfg.WorkerCount; i++ {
+		inputCh := chann.NewAutoDrainChann[eventFragment]()
+		s.workers[i] = newDMLWorker(i, s.changefeedID, storage, cfg, ext,
+			inputCh, clock, s.statistics)
+		workerChannels[i] = inputCh
+	}
 
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
 		err := s.run(wgCtx)
-		s.isDead.Store(true)
+
+		s.alive.Lock()
+		s.alive.isDead = true
+		close(s.alive.msgCh)
+		s.alive.Unlock()
 		close(s.dead)
+
 		if err != nil && errors.Cause(err) != context.Canceled {
 			select {
 			case <-wgCtx.Done():
@@ -159,14 +184,23 @@ func NewDMLSink(ctx context.Context,
 
 func (s *DMLSink) run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
-	// run dml writer
-	eg.Go(func() error {
-		return s.writer.run(ctx)
-	})
 
 	// run the encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
-		worker := s.encodingWorkers[i]
+		encodingWorker := s.encodingWorkers[i]
+		eg.Go(func() error {
+			return encodingWorker.run(ctx)
+		})
+	}
+
+	// run the defragmenter.
+	eg.Go(func() error {
+		return s.defragmenter.run(ctx)
+	})
+
+	// run dml workers.
+	for i := 0; i < len(s.workers); i++ {
+		worker := s.workers[i]
 		eg.Go(func() error {
 			return worker.run(ctx)
 		})
@@ -177,7 +211,9 @@ func (s *DMLSink) run(ctx context.Context) error {
 
 // WriteEvents write events to cloud storage sink.
 func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
-	if s.isDead.Load() {
+	s.alive.RLock()
+	defer s.alive.RUnlock()
+	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
 
@@ -194,8 +230,10 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			TableInfoVersion:           txn.Event.TableInfoVersion,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
+
+		s.statistics.ObserveRows(txn.Event.Rows...)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
-		s.msgCh <- eventFragment{
+		s.alive.msgCh <- eventFragment{
 			seqNumber:      seq,
 			versionedTable: tbl,
 			event:          txn,
@@ -212,16 +250,12 @@ func (s *DMLSink) Close() {
 	}
 	s.wg.Wait()
 
-	if s.defragmenter != nil {
-		s.defragmenter.close()
+	for _, encodingWorker := range s.encodingWorkers {
+		encodingWorker.close()
 	}
 
-	for _, w := range s.encodingWorkers {
-		w.close()
-	}
-
-	if s.writer != nil {
-		s.writer.close()
+	for _, worker := range s.workers {
+		worker.close()
 	}
 
 	if s.statistics != nil {

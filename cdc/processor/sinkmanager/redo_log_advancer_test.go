@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -51,7 +50,7 @@ func (m *mockRedoDMLManager) Enabled() bool {
 	panic("unreachable")
 }
 
-func (m *mockRedoDMLManager) Run(ctx context.Context) error {
+func (m *mockRedoDMLManager) Run(ctx context.Context, _ ...chan<- error) error {
 	panic("unreachable")
 }
 
@@ -479,7 +478,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 			false,
 		)
 		require.False(suite.T(), advanced)
-		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
+		require.ErrorIs(suite.T(), err, context.Canceled)
 		down <- struct{}{}
 	}()
 

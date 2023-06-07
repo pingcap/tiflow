@@ -297,6 +297,7 @@ func TestProcessorError(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: &model.RunningError{
+			Time:    p.changefeed.TaskPositions[p.captureInfo.ID].Error.Time,
 			Addr:    "127.0.0.1:0000",
 			Code:    "CDC:ErrSinkURIInvalid",
 			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
@@ -417,6 +418,7 @@ func TestProcessorClose(t *testing.T) {
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
+		Time:    p.changefeed.TaskPositions[p.captureInfo.ID].Error.Time,
 		Addr:    "127.0.0.1:0000",
 		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
@@ -634,10 +636,9 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 	err = p.Tick(ctx)
 	require.Nil(t, err)
 
-	// Third tick for handle error.
+	// TODO(qupeng): third tick for handle a warning.
 	err = p.Tick(ctx)
-	require.NotNil(t, err)
-	require.Contains(t, err.Error(), "SinkManagerRunError")
+	require.Nil(t, err)
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()

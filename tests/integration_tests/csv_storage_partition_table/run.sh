@@ -9,9 +9,7 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function run() {
-	# Now, we run the storage tests in mysql sink tests.
-	# It's a temporary solution, we will move it to a new test pipeline later.
-	if [ "$SINK_TYPE" != "mysql" ]; then
+	if [ "$SINK_TYPE" != "storage" ]; then
 		return
 	fi
 
@@ -20,8 +18,6 @@ function run() {
 	cd $WORK_DIR
 
 	run_sql "set @@global.tidb_enable_exchange_partition=on" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	# TODO(CharlesCheung): remove this after schema level ddl is supported by storage sink
-	run_sql "create database partition_table;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --logsuffix 0
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8301" --logsuffix 1

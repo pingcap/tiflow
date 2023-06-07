@@ -210,8 +210,7 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 			zap.Stringer("span", &span))
 		return true
 	}
-	p.sinkManager.r.AsyncStopTable(span)
-	return true
+	return p.sinkManager.r.AsyncStopTable(span)
 }
 
 // IsAddTableSpanFinished implements TableExecutor interface.
@@ -282,15 +281,9 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 		return 0, false
 	}
 
-	var tableCheckpointTs uint64
-	state, alreadyExist := p.sinkManager.r.GetTableState(span)
-	if alreadyExist {
-		stats := p.sinkManager.r.GetTableStats(span)
-		tableCheckpointTs = stats.CheckpointTs
-	}
-
-	if !alreadyExist {
-		log.Warn("table should be removing but not found",
+	state, ok := p.sinkManager.r.GetTableState(span)
+	if !ok {
+		log.Warn("table has been stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
@@ -298,18 +291,18 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 		return 0, true
 	}
 
+	stats := p.sinkManager.r.GetTableStats(span)
 	if state != tablepb.TableStateStopped {
 		log.Debug("table is still not stopped",
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Uint64("checkpointTs", tableCheckpointTs),
+			zap.Uint64("checkpointTs", stats.CheckpointTs),
 			zap.Stringer("span", &span),
 			zap.Any("tableStatus", state))
 		return 0, false
 	}
 
-	stats := p.sinkManager.r.GetTableStats(span)
 	if p.redo.r.Enabled() {
 		p.redo.r.RemoveTable(span)
 	}
@@ -526,6 +519,7 @@ func (p *processor) handleErr(err error) error {
 				position = &model.TaskPosition{}
 			}
 			position.Error = &model.RunningError{
+				Time:    time.Now(),
 				Addr:    p.captureInfo.AdvertiseAddr,
 				Code:    code,
 				Message: err.Error(),
@@ -540,6 +534,38 @@ func (p *processor) handleErr(err error) error {
 	return err
 }
 
+func (p *processor) handleWarnings() {
+	var err error
+	select {
+	case err = <-p.ddlHandler.warnings:
+	case err = <-p.mg.warnings:
+	case err = <-p.redo.warnings:
+	case err = <-p.sourceManager.warnings:
+	case err = <-p.sinkManager.warnings:
+	default:
+		return
+	}
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Warning = &model.RunningError{
+				Time:    time.Now(),
+				Addr:    p.captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, true, nil
+		})
+}
+
 func (p *processor) tick(ctx cdcContext.Context) error {
 	if !p.checkChangefeedNormal() {
 		return cerror.ErrAdminStopProcessor.GenWithStackByArgs()
@@ -548,6 +574,9 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	if p.createTaskPosition() {
 		return nil
 	}
+
+	p.handleWarnings()
+
 	if err := p.handleErrorCh(); err != nil {
 		return errors.Trace(err)
 	}
@@ -631,7 +660,6 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
-		p.changefeed.Info.Config.EnableOldValue,
 		p.filter, tz, p.changefeedID, p.changefeed.Info.Config.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.spawn(stdCtx)
@@ -660,7 +688,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, p.changefeed.Info.Config.BDRMode)
+		sortEngine, util.GetOrZero(p.changefeed.Info.Config.BDRMode))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 
@@ -963,23 +991,25 @@ func (p *processor) calculateTableBarrierTs(
 }
 
 type component[R util.Runnable] struct {
-	r      R
-	name   string
-	ctx    context.Context
-	cancel context.CancelFunc
-	errors chan error
-	wg     sync.WaitGroup
+	r        R
+	name     string
+	ctx      context.Context
+	cancel   context.CancelFunc
+	errors   chan error
+	warnings chan error
+	wg       sync.WaitGroup
 }
 
 func (c *component[R]) spawn(ctx context.Context) {
 	c.ctx, c.cancel = context.WithCancel(ctx)
 	c.errors = make(chan error, 16)
+	c.warnings = make(chan error, 16)
 
 	changefeedID := contextutil.ChangefeedIDFromCtx(c.ctx)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		err := c.r.Run(c.ctx)
+		err := c.r.Run(c.ctx, c.warnings)
 		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("processor sub-component fails",
 				zap.String("namespace", changefeedID.Namespace),
@@ -1021,7 +1051,7 @@ type ddlHandler struct {
 	schemaStorage entry.SchemaStorage
 }
 
-func (d *ddlHandler) Run(ctx context.Context) error {
+func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
 	g, ctx := errgroup.WithContext(ctx)
 	// d.puller will update the schemaStorage.
 	g.Go(func() error { return d.puller.Run(ctx) })

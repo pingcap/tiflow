@@ -11,7 +11,7 @@ SINK_TYPE=$1
 function run() {
 	# Now, we run the storage tests in mysql sink tests.
 	# It's a temporary solution, we will move it to a new test pipeline later.
-	if [ "$SINK_TYPE" != "mysql" ]; then
+	if [ "$SINK_TYPE" != "storage" ]; then
 		return
 	fi
 
@@ -32,7 +32,6 @@ function run() {
 	cf_err1="test-error-1"
 	cf_err2="test-error-2"
 
-	run_sql "create database multi_tables_ddl_test" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	SINK_URI1="file://$WORK_DIR/storage_test/$TOPIC_NAME_1?flush-interval=5s&protocol=csv"
 	cdc cli changefeed create -c=$cf_normal --start-ts=$start_ts --sink-uri="$SINK_URI1" --config="$CUR/conf/normal.toml"
 
@@ -59,7 +58,7 @@ function run() {
 
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_normal "normal" "null" ""
 	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err1 "normal" "null" ""
-	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err2 "error" "ErrSyncRenameTableFailed" ""
+	check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" $cf_err2 "failed" "ErrSyncRenameTableFailed" ""
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 100
 

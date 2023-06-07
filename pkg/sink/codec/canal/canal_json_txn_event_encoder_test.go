@@ -30,13 +30,7 @@ func TestBuildCanalJSONTxnEventEncoder(t *testing.T) {
 	builder := NewJSONTxnEventEncoderBuilder(cfg)
 	encoder, ok := builder.Build().(*JSONTxnEventEncoder)
 	require.True(t, ok)
-	require.False(t, encoder.enableTiDBExtension)
-
-	cfg.EnableTiDBExtension = true
-	builder = NewJSONTxnEventEncoderBuilder(cfg)
-	encoder, ok = builder.Build().(*JSONTxnEventEncoder)
-	require.True(t, ok)
-	require.True(t, encoder.enableTiDBExtension)
+	require.NotNil(t, encoder.config)
 }
 
 func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {

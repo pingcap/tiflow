@@ -30,7 +30,7 @@ import (
 
 func TestTableOperations(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
+	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -41,10 +41,10 @@ func TestTableOperations(t *testing.T) {
 	require.True(t, s.IsTableBased())
 
 	span := spanz.TableIDToComparableSpan(1)
-	s.AddTable(span)
-	s.AddTable(span)
+	s.AddTable(span, 2)
+	s.AddTable(span, 1)
 
-	require.Equal(t, model.Ts(0), s.GetResolvedTs(span))
+	require.Equal(t, model.Ts(2), s.GetResolvedTs(span))
 
 	s.RemoveTable(span)
 	s.RemoveTable(span)
@@ -53,7 +53,7 @@ func TestTableOperations(t *testing.T) {
 // TestNoResolvedTs tests resolved timestamps shouldn't be emitted.
 func TestNoResolvedTs(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
+	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -64,7 +64,7 @@ func TestNoResolvedTs(t *testing.T) {
 	require.True(t, s.IsTableBased())
 
 	span := spanz.TableIDToComparableSpan(1)
-	s.AddTable(span)
+	s.AddTable(span, 0)
 	resolvedTs := make(chan model.Ts)
 	s.OnResolve(func(_ tablepb.Span, ts model.Ts) { resolvedTs <- ts })
 
@@ -84,7 +84,7 @@ func TestNoResolvedTs(t *testing.T) {
 // TestEventFetch tests events can be sorted correctly.
 func TestEventFetch(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
+	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -95,7 +95,7 @@ func TestEventFetch(t *testing.T) {
 	require.True(t, s.IsTableBased())
 
 	span := spanz.TableIDToComparableSpan(1)
-	s.AddTable(span)
+	s.AddTable(span, 1)
 	resolvedTs := make(chan model.Ts)
 	s.OnResolve(func(_ tablepb.Span, ts model.Ts) { resolvedTs <- ts })
 
@@ -128,6 +128,7 @@ func TestEventFetch(t *testing.T) {
 
 	s.Add(span, inputEvents...)
 	s.Add(span, model.NewResolvedPolymorphicEvent(0, 4))
+	require.Equal(t, model.Ts(4), s.GetResolvedTs(span))
 
 	sortedEvents := make([]*model.PolymorphicEvent, 0, len(inputEvents))
 	sortedPositions := make([]engine.Position, 0, len(inputEvents))
@@ -166,7 +167,7 @@ func TestEventFetch(t *testing.T) {
 
 func TestCleanData(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), t.Name())
-	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, 1024*1024*10)
+	db, err := OpenPebble(1, dbPath, &config.DBConfig{Count: 1}, nil)
 	require.Nil(t, err)
 	defer func() { _ = db.Close() }()
 
@@ -177,7 +178,7 @@ func TestCleanData(t *testing.T) {
 	require.True(t, s.IsTableBased())
 
 	span := spanz.TableIDToComparableSpan(1)
-	s.AddTable(span)
+	s.AddTable(span, 0)
 	require.Panics(t, func() {
 		s.CleanByTable(spanz.TableIDToComparableSpan(2), engine.Position{})
 	})

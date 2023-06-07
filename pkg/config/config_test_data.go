@@ -19,8 +19,10 @@ const (
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
+  "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -35,6 +37,7 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "terminator": "\r\n",
+	"date-separator": "day",
     "dispatch-rules": [
       {
         "db-name": "a",
@@ -53,7 +56,9 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol"
+    "protocol": "open-protocol",
+	"enable-kafka-sink-v2": false,
+	"only-output-updated-columns": false
   },
   "consistent": {
     "level": "none",
@@ -92,8 +97,9 @@ const (
   "owner-flush-interval": 50000000,
   "processor-flush-interval": 50000000,
   "sorter": {
-    "max-memory-percentage": 10,
     "sort-dir": "/tmp/sorter",
+    "cache-size-in-mb": 128,
+    "max-memory-percentage": 10,
     "max-memory-consumption": 0,
     "num-workerpool-goroutine": 0,
     "num-concurrent-worker": 0,
@@ -135,7 +141,9 @@ const (
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4,
-      "max-recv-msg-size": 268435456
+      "max-recv-msg-size": 268435456,
+      "keep-alive-time": 30000000000,
+      "keep-alive-timeout": 10000000000
     },
     "scheduler": {
       "heartbeat-tick": 2,
@@ -154,6 +162,7 @@ const (
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
+  "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
   "bdr-mode": false,
@@ -171,7 +180,6 @@ const (
   },
   "sink": {
   	"encoder-concurrency": 16,
-    "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [
       {
@@ -184,19 +192,77 @@ const (
         ]
       }
     ],
-    "schema-registry": "",
     "csv": {
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
       "include-commit-ts": true
     },
-    "transaction-atomicity": "",
-    "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
     "only-output-updated-columns": false,
-    "enable-kafka-sink-v2": true
+    "enable-kafka-sink-v2": true,
+    "only-output-updated-columns": true,
+    "safe-mode": true,
+	"terminator": "\r\n",
+	"transaction-atomicity": "",
+    "kafka-config": {
+      "partition-num": 1,
+      "replication-factor": 1,
+      "kafka-version": "version",
+      "max-message-bytes": 1,
+      "compression": "gzip",
+      "kafka-client-id": "client-id",
+      "auto-create-topic": true,
+      "dial-timeout": "1m",
+      "write-timeout": "1m",
+      "read-timeout": "1m",
+      "required-acks": 1,
+      "sasl-user": "user",
+      "sasl-password": "password",
+      "sasl-mechanism": "mechanism",
+      "sasl-gssapi-auth-type": "type",
+      "sasl-gssapi-keytab-path": "path",
+      "sasl-gssapi-kerberos-config-path": "path",
+      "sasl-gssapi-service-name": "service",
+      "sasl-gssapi-user": "user",
+      "sasl-gssapi-password": "password",
+      "sasl-gssapi-realm": "realm",
+      "sasl-gssapi-disable-pafxfast": true,
+      "enable-tls": true,
+      "ca": "ca",
+      "cert": "cert",
+      "key": "key",
+      "codec-config": {
+        "enable-tidb-extension": true,
+        "max-batch-size": 100000,
+        "avro-enable-watermark": true,
+        "avro-decimal-handling-mode": "string",
+        "avro-bigint-unsigned-handling-mode": "string"
+      }
+    },
+    "mysql-config": {
+      "worker-count": 8,
+      "max-txn-row": 100000,
+      "max-multi-update-row-size": 100000,
+      "max-multi-update-row": 100000,
+      "tidb-txn-mode": "pessimistic",
+      "ssl-ca": "ca",
+      "ssl-cert": "cert",
+      "ssl-key": "key",
+      "time-zone": "UTC",
+      "write-timeout": "1m",
+      "read-timeout": "1m",
+      "timeout": "1m",
+      "enable-batch-dml": true,
+      "enable-multi-statement": true,
+      "enable-cache-prepared-statement": true
+    },
+    "cloud-storage-config": {
+      "worker-count": 8,
+      "flush-interval": "1m",
+      "file-size": 1024
+    }
   },
   "consistent": {
     "level": "none",
@@ -223,6 +289,7 @@ const (
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
+  "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
   "bdr-mode": false,
@@ -258,11 +325,71 @@ const (
       "null": "\\N",
       "include-commit-ts": true
     },
-    "terminator": "",
+    "terminator": "\r\n",
+	"transaction-atomicity": "",
     "date-separator": "month",
     "enable-partition-separator": true,
     "only-output-updated-columns": false,
-	"enable-kafka-sink-v2": true
+	"enable-kafka-sink-v2": true,
+    "only-output-updated-columns": true,
+    "safe-mode": true,
+    "kafka-config": {
+      "partition-num": 1,
+      "replication-factor": 1,
+      "kafka-version": "version",
+      "max-message-bytes": 1,
+      "compression": "gzip",
+      "kafka-client-id": "client-id",
+      "auto-create-topic": true,
+      "dial-timeout": "1m",
+      "write-timeout": "1m",
+      "read-timeout": "1m",
+      "required-acks": 1,
+      "sasl-user": "user",
+      "sasl-password": "password",
+      "sasl-mechanism": "mechanism",
+      "sasl-gssapi-auth-type": "type",
+      "sasl-gssapi-keytab-path": "path",
+      "sasl-gssapi-kerberos-config-path": "path",
+      "sasl-gssapi-service-name": "service",
+      "sasl-gssapi-user": "user",
+      "sasl-gssapi-password": "password",
+      "sasl-gssapi-realm": "realm",
+      "sasl-gssapi-disable-pafxfast": true,
+      "enable-tls": true,
+      "ca": "ca",
+      "cert": "cert",
+      "key": "key",
+      "codec-config": {
+        "enable-tidb-extension": true,
+        "max-batch-size": 100000,
+        "avro-enable-watermark": true,
+        "avro-decimal-handling-mode": "string",
+        "avro-bigint-unsigned-handling-mode": "string"
+      }
+    },
+    "mysql-config": {
+      "worker-count": 8,
+      "max-txn-row": 100000,
+      "max-multi-update-row-size": 100000,
+      "max-multi-update-row": 100000,
+      "tidb-txn-mode": "pessimistic",
+      "ssl-ca": "ca",
+      "ssl-cert": "cert",
+      "ssl-key": "key",
+      "time-zone": "UTC",
+      "write-timeout": "1m",
+      "read-timeout": "1m",
+      "timeout": "1m",
+      "enable-batch-dml": true,
+      "enable-multi-statement": true,
+      "enable-cache-prepared-statement": true
+    },
+    "cloud-storage-config": {
+      "worker-count": 8,
+      "flush-interval": "1m",
+      "file-size": 1024
+    }
   },
   "consistent": {
     "level": "none",

@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -35,7 +34,7 @@ import (
 
 // testEventSize is the size of a test event.
 // It is used to calculate the memory quota.
-const testEventSize = 242
+const testEventSize = 226
 
 //nolint:unparam
 func genPolymorphicEventWithNilRow(startTs,
@@ -145,7 +144,7 @@ func (suite *tableSinkWorkerSuite) addEventsToSortEngine(
 	events []*model.PolymorphicEvent,
 	sortEngine engine.SortEngine,
 ) {
-	sortEngine.AddTable(suite.testSpan)
+	sortEngine.AddTable(suite.testSpan, 0)
 	for _, event := range events {
 		sortEngine.Add(suite.testSpan, event)
 	}
@@ -294,7 +293,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 	go func() {
 		defer wg.Done()
 		err := w.handleTasks(ctx, taskChan)
-		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
+		require.ErrorIs(suite.T(), err, context.Canceled)
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)

@@ -26,6 +26,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -42,15 +43,11 @@ import (
 // BatchEncoder converts the events to binary Avro data
 type BatchEncoder struct {
 	namespace          string
-	keySchemaManager   *schemaManager
-	valueSchemaManager *schemaManager
+	keySchemaManager   *SchemaManager
+	valueSchemaManager *SchemaManager
 	result             []*common.Message
 
-	enableTiDBExtension bool
-	enableRowChecksum   bool
-
-	decimalHandlingMode        string
-	bigintUnsignedHandlingMode string
+	config *common.Config
 }
 
 type avroEncodeInput struct {
@@ -72,8 +69,10 @@ func (r *avroEncodeInput) Swap(i, j int) {
 }
 
 type avroEncodeResult struct {
-	data       []byte
-	registryID int
+	data []byte
+	// schemaID is encoded into the avro message, consumer should use this to fetch the schema.
+	// it's the global schema id for all schema in the registry.
+	schemaID int
 }
 
 // AppendRowChangedEvent appends a row change event to the encoder
@@ -135,13 +134,57 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// EncodeCheckpointEvent is no-op for now
+// EncodeCheckpointEvent only encode checkpoint event if the watermark event is enabled
+// it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
+	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
+		buf := new(bytes.Buffer)
+		data := []interface{}{checkpointByte, ts}
+		for _, v := range data {
+			err := binary.Write(buf, binary.BigEndian, v)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
+			}
+		}
+
+		value := buf.Bytes()
+		return common.NewResolvedMsg(config.ProtocolAvro, nil, value, ts), nil
+	}
 	return nil, nil
 }
 
-// EncodeDDLEvent is no-op now
+type ddlEvent struct {
+	Query    string             `json:"query"`
+	Type     timodel.ActionType `json:"type"`
+	Schema   string             `json:"schema"`
+	Table    string             `json:"table"`
+	CommitTs uint64             `json:"commitTs"`
+}
+
+// EncodeDDLEvent only encode DDL event if the watermark event is enabled
+// it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
+	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
+		buf := new(bytes.Buffer)
+		_ = binary.Write(buf, binary.BigEndian, ddlByte)
+
+		event := &ddlEvent{
+			Query:    e.Query,
+			Type:     e.Type,
+			Schema:   e.TableInfo.TableName.Schema,
+			Table:    e.TableInfo.TableName.Table,
+			CommitTs: e.CommitTs,
+		}
+		bytes, err := json.Marshal(event)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
+		}
+		buf.Write(bytes)
+
+		value := buf.Bytes()
+		return common.NewDDLMsg(config.ProtocolAvro, nil, value, e), nil
+	}
+
 	return nil, nil
 }
 
@@ -170,7 +213,7 @@ func (a *BatchEncoder) avroEncode(
 		colInfos               []rowcodec.ColInfo
 		enableTiDBExtension    bool
 		enableRowLevelChecksum bool
-		schemaManager          *schemaManager
+		schemaManager          *SchemaManager
 		operation              string
 	)
 	if isKey {
@@ -188,8 +231,8 @@ func (a *BatchEncoder) avroEncode(
 			colInfos: e.ColInfos,
 		}
 
-		enableTiDBExtension = a.enableTiDBExtension
-		enableRowLevelChecksum = a.enableRowChecksum
+		enableTiDBExtension = a.config.EnableTiDBExtension
+		enableRowLevelChecksum = a.config.EnableRowChecksum
 		schemaManager = a.valueSchemaManager
 		if e.IsInsert() {
 			operation = insertOperation
@@ -214,8 +257,8 @@ func (a *BatchEncoder) avroEncode(
 			input,
 			enableTiDBExtension,
 			enableRowLevelChecksum,
-			a.decimalHandlingMode,
-			a.bigintUnsignedHandlingMode,
+			a.config.AvroDecimalHandlingMode,
+			a.config.AvroBigintUnsignedHandlingMode,
 		)
 		if err != nil {
 			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
@@ -224,7 +267,7 @@ func (a *BatchEncoder) avroEncode(
 		return schema, nil
 	}
 
-	avroCodec, registryID, err := schemaManager.GetCachedOrRegister(
+	avroCodec, schemaID, err := schemaManager.GetCachedOrRegister(
 		ctx,
 		topic,
 		e.TableInfo.Version,
@@ -239,18 +282,18 @@ func (a *BatchEncoder) avroEncode(
 		e.CommitTs,
 		operation,
 		enableTiDBExtension,
-		a.decimalHandlingMode,
-		a.bigintUnsignedHandlingMode,
+		a.config.AvroDecimalHandlingMode,
+		a.config.AvroBigintUnsignedHandlingMode,
 	)
 	if err != nil {
 		log.Error("AvroEventBatchEncoder: converting to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
-	if enableRowLevelChecksum && enableTiDBExtension {
-		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum), 10)
-		native[tidbCorrupted] = e.Corrupted
-		native[tidbChecksumVersion] = e.ChecksumVersion
+	if enableRowLevelChecksum && enableTiDBExtension && e.Checksum != nil {
+		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum.Current), 10)
+		native[tidbCorrupted] = e.Checksum.Corrupted
+		native[tidbChecksumVersion] = e.Checksum.Version
 	}
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
@@ -260,8 +303,8 @@ func (a *BatchEncoder) avroEncode(
 	}
 
 	return &avroEncodeResult{
-		data:       bin,
-		registryID: registryID,
+		data:     bin,
+		schemaID: schemaID,
 	}, nil
 }
 
@@ -320,6 +363,61 @@ func getTiDBTypeFromColumn(col *model.Column) string {
 		return "BLOB"
 	}
 	return tt
+}
+
+func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
+	var (
+		result byte
+		flag   model.ColumnFlagType
+	)
+	switch tp {
+	case "INT":
+		// maybe mysql.TypeTiny / mysql.TypeShort / mysql.TypeInt24 / mysql.TypeLong
+		// we don't know the exact type, so we use mysql.TypeLong
+		result = mysql.TypeLong
+	case "INT UNSIGNED":
+		flag.SetIsUnsigned()
+		result = mysql.TypeLong
+	case "BIGINT":
+		result = mysql.TypeLonglong
+	case "BIGINT UNSIGNED":
+		flag.SetIsUnsigned()
+		result = mysql.TypeLonglong
+	case "FLOAT":
+		result = mysql.TypeFloat
+	case "DOUBLE":
+		result = mysql.TypeDouble
+	case "BIT":
+		result = mysql.TypeBit
+	case "DECIMAL":
+		result = mysql.TypeNewDecimal
+	case "TEXT":
+		result = mysql.TypeVarchar
+	case "BLOB":
+		// maybe mysql.TypeTinyBlob / mysql.TypeMediumBlob / mysql.TypeBlob / mysql.TypeLongBlob
+		// we don't know the exact type, so we use mysql.TypeLongBlob
+		flag.SetIsBinary()
+		result = mysql.TypeLongBlob
+	case "ENUM":
+		result = mysql.TypeEnum
+	case "SET":
+		result = mysql.TypeSet
+	case "JSON":
+		result = mysql.TypeJSON
+	case "DATE":
+		result = mysql.TypeDate
+	case "DATETIME":
+		result = mysql.TypeDatetime
+	case "TIMESTAMP":
+		result = mysql.TypeTimestamp
+	case "TIME":
+		result = mysql.TypeDuration
+	case "YEAR":
+		result = mysql.TypeYear
+	default:
+		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tp))
+	}
+	return result, flag
 }
 
 const (
@@ -849,14 +947,23 @@ func columnToAvroData(
 	}
 }
 
-const magicByte = uint8(0)
+const (
+	// confluent avro wire format, the first byte is always 0
+	// https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format
+	magicByte = uint8(0)
+
+	// avro does not send ddl and checkpoint message, the following 2 field is used to distinguish
+	// TiCDC DDL event and checkpoint event, only used for testing purpose, not for production
+	ddlByte        = uint8(1)
+	checkpointByte = uint8(2)
+)
 
 // confluent avro wire format, confluent avro is not same as apache avro
 // https://rmoff.net/2020/07/03/why-json-isnt-the-same-as-json-schema-in-kafka-connect-converters \
 // -and-ksqldb-viewing-kafka-messages-bytes-as-hex/
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	data := []interface{}{magicByte, int32(r.registryID), r.data}
+	data := []interface{}{magicByte, int32(r.schemaID), r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
@@ -869,8 +976,8 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 type batchEncoderBuilder struct {
 	namespace          string
 	config             *common.Config
-	keySchemaManager   *schemaManager
-	valueSchemaManager *schemaManager
+	keySchemaManager   *SchemaManager
+	valueSchemaManager *SchemaManager
 }
 
 const (
@@ -882,22 +989,8 @@ const (
 func NewBatchEncoderBuilder(ctx context.Context,
 	config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
-	keySchemaManager, err := NewAvroSchemaManager(
-		ctx,
-		nil,
-		config.AvroSchemaRegistry,
-		keySchemaSuffix,
-	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	valueSchemaManager, err := NewAvroSchemaManager(
-		ctx,
-		nil,
-		config.AvroSchemaRegistry,
-		valueSchemaSuffix,
-	)
+	keySchemaManager, valueSchemaManager, err := NewKeyAndValueSchemaManagers(
+		ctx, config.AvroSchemaRegistry, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -912,15 +1005,12 @@ func NewBatchEncoderBuilder(ctx context.Context,
 
 // Build an AvroEventBatchEncoder.
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := &BatchEncoder{}
-	encoder.namespace = b.namespace
-	encoder.keySchemaManager = b.keySchemaManager
-	encoder.valueSchemaManager = b.valueSchemaManager
-	encoder.result = make([]*common.Message, 0, 1024)
-	encoder.enableTiDBExtension = b.config.EnableTiDBExtension
-	encoder.enableRowChecksum = b.config.EnableRowChecksum
-	encoder.decimalHandlingMode = b.config.AvroDecimalHandlingMode
-	encoder.bigintUnsignedHandlingMode = b.config.AvroBigintUnsignedHandlingMode
-
+	encoder := &BatchEncoder{
+		namespace:          b.namespace,
+		keySchemaManager:   b.keySchemaManager,
+		valueSchemaManager: b.valueSchemaManager,
+		result:             make([]*common.Message, 0, 1),
+		config:             b.config,
+	}
 	return encoder
 }

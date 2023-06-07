@@ -33,13 +33,7 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 	builder := &jsonRowEventEncoderBuilder{config: cfg}
 	encoder, ok := builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
-	require.False(t, encoder.enableTiDBExtension)
-
-	cfg.EnableTiDBExtension = true
-	builder = &jsonRowEventEncoderBuilder{config: cfg}
-	encoder, ok = builder.Build().(*JSONRowEventEncoder)
-	require.True(t, ok)
-	require.True(t, encoder.enableTiDBExtension)
+	require.NotNil(t, encoder.config)
 }
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
@@ -53,7 +47,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok := e.(*JSONRowEventEncoder)
 	require.True(t, ok)
 
-	data, err := newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseInsert)
+	data, err := newJSONMessageForDML(encoder.builder, testCaseInsert, encoder.config)
 	require.Nil(t, err)
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
@@ -67,6 +61,12 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Equal(t, "cdc", jsonMsg.Schema)
 	require.Equal(t, "person", jsonMsg.Table)
 	require.False(t, jsonMsg.IsDDL)
+
+	for _, col := range testCaseInsert.Columns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+		require.Contains(t, jsonMsg.SQLType, col.Name)
+		require.Contains(t, jsonMsg.MySQLType, col.Name)
+	}
 
 	// check data is enough
 	obtainedDataMap := jsonMsg.getData()
@@ -96,7 +96,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseUpdate)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -105,7 +105,16 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
 
-	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseDelete)
+	for _, col := range testCaseUpdate.Columns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+		require.Contains(t, jsonMsg.SQLType, col.Name)
+		require.Contains(t, jsonMsg.MySQLType, col.Name)
+	}
+	for _, col := range testCaseUpdate.PreColumns {
+		require.Contains(t, jsonMsg.Old[0], col.Name)
+	}
+
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, encoder.config)
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -114,15 +123,40 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
 
+	for _, col := range testCaseDelete.PreColumns {
+		require.Contains(t, jsonMsg.Data[0], col.Name)
+	}
+
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{OnlyHandleKeyColumns: true})
+	require.NoError(t, err)
+	jsonMsg = &JSONMessage{}
+	err = json.Unmarshal(data, jsonMsg)
+	require.NoError(t, err)
+	require.NotNil(t, jsonMsg.Data)
+	require.Nil(t, jsonMsg.Old)
+
+	for _, col := range testCaseDelete.PreColumns {
+		if col.Flag.IsHandleKey() {
+			require.Contains(t, jsonMsg.Data[0], col.Name)
+			require.Contains(t, jsonMsg.SQLType, col.Name)
+			require.Contains(t, jsonMsg.MySQLType, col.Name)
+		} else {
+			require.NotContains(t, jsonMsg.Data[0], col.Name)
+			require.NotContains(t, jsonMsg.SQLType, col.Name)
+			require.NotContains(t, jsonMsg.MySQLType, col.Name)
+		}
+	}
+
 	e = newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: true,
-		Terminator:          "",
+		EnableTiDBExtension:      true,
+		Terminator:               "",
+		OnlyOutputUpdatedColumns: true,
 	})
 	require.NotNil(t, e)
 
 	encoder, ok = e.(*JSONRowEventEncoder)
 	require.True(t, ok)
-	data, err = newJSONMessageForDML(encoder.builder, encoder.enableTiDBExtension, testCaseUpdate)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
 	require.Nil(t, err)
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}
@@ -131,12 +165,26 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
+
+	encoder, ok = e.(*JSONRowEventEncoder)
+	require.True(t, ok)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
+	require.Nil(t, err)
+
+	withExtension = &canalJSONMessageWithTiDBExtension{}
+	err = json.Unmarshal(data, withExtension)
+	require.Nil(t, err)
+	require.Equal(t, 0, len(withExtension.JSONMessage.Old[0]))
+
+	require.NotNil(t, withExtension.Extensions)
+	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
 }
 
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	t.Parallel()
-	encoder := &JSONRowEventEncoder{builder: newCanalEntryBuilder()}
-	require.NotNil(t, encoder)
+
+	encoder, ok := newJSONRowEventEncoder(&common.Config{}).(*JSONRowEventEncoder)
+	require.True(t, ok)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
@@ -150,8 +198,10 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	require.Equal(t, testCaseDDL.Query, msg.Query)
 	require.Equal(t, "CREATE", msg.EventType)
 
-	encoder = &JSONRowEventEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
-	require.NotNil(t, encoder)
+	encoder, ok = newJSONRowEventEncoder(&common.Config{
+		EnableTiDBExtension: true,
+	}).(*JSONRowEventEncoder)
+	require.True(t, ok)
 
 	message = encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
@@ -202,9 +252,12 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
+		config := &common.Config{
+			EnableTiDBExtension: enable,
+		}
 		encoder := &JSONRowEventEncoder{
-			builder:             newCanalEntryBuilder(),
-			enableTiDBExtension: enable,
+			builder: newCanalEntryBuilder(),
+			config:  config,
 		}
 
 		require.NotNil(t, encoder)
@@ -218,7 +271,10 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		}
 
 		require.NotNil(t, msg)
-		decoder := NewBatchDecoder(msg.Value, enable, "")
+		decoder := NewBatchDecoder(enable, "")
+
+		err = decoder.AddKeyValue(msg.Key, msg.Value)
+		require.NoError(t, err)
 
 		ty, hasNext, err := decoder.HasNext()
 		require.Nil(t, err)
@@ -244,8 +300,8 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 1024
 	encoder := &JSONRowEventEncoder{
-		builder:             newCanalEntryBuilder(),
-		enableTiDBExtension: true,
+		builder: newCanalEntryBuilder(),
+		config:  &common.Config{EnableTiDBExtension: true},
 	}
 	require.NotNil(t, encoder)
 	msg, err := encoder.EncodeCheckpointEvent(watermark)
@@ -290,7 +346,10 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
-	encoder := &JSONRowEventEncoder{builder: newCanalEntryBuilder(), enableTiDBExtension: true}
+	encoder := &JSONRowEventEncoder{
+		builder: newCanalEntryBuilder(),
+		config:  &common.Config{EnableTiDBExtension: true},
+	}
 	require.NotNil(t, encoder)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)

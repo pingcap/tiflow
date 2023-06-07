@@ -22,18 +22,18 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
-// DefaultMaxMessageBytes sets the default value for max-message-bytes.
-const DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
-
 const (
+	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
+	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+
 	// TxnAtomicityKey specifies the key of the transaction-atomicity in the SinkURI.
 	TxnAtomicityKey = "transaction-atomicity"
 	// defaultTxnAtomicity is the default atomicity level.
 	defaultTxnAtomicity = noneTxnAtomicity
-
 	// unknownTxnAtomicity is an invalid atomicity level and will be treated as
 	// defaultTxnAtomicity when initializing sink in processor.
 	unknownTxnAtomicity AtomicityLevel = ""
@@ -41,9 +41,7 @@ const (
 	noneTxnAtomicity AtomicityLevel = "none"
 	// tableTxnAtomicity means atomicity of single table transactions is guaranteed.
 	tableTxnAtomicity AtomicityLevel = "table"
-)
 
-const (
 	// Comma is a constant for ','
 	Comma = ","
 	// CR is an abbreviation for carriage return
@@ -58,6 +56,13 @@ const (
 	Backslash = '\\'
 	// NULL is a constant for '\N'
 	NULL = "\\N"
+
+	// MinFileIndexWidth is the minimum width of file index.
+	MinFileIndexWidth = 6 // enough for 2^19 files
+	// MaxFileIndexWidth is the maximum width of file index.
+	MaxFileIndexWidth = 20 // enough for 2^64 files
+	// DefaultFileIndexWidth is the default width of file index.
+	DefaultFileIndexWidth = MaxFileIndexWidth
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -90,35 +95,60 @@ func (l AtomicityLevel) validate(scheme string) error {
 }
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var ForceEnableOldValueProtocols = []string{
-	ProtocolCanal.String(),
-	ProtocolCanalJSON.String(),
-	ProtocolMaxwell.String(),
+var ForceEnableOldValueProtocols = map[string]struct{}{
+	ProtocolCanal.String():     {},
+	ProtocolCanalJSON.String(): {},
+	ProtocolMaxwell.String():   {},
+}
+
+// ForceDisableOldValueProtocols specifies protocols need to be forced to disable old value.
+var ForceDisableOldValueProtocols = map[string]struct{}{
+	ProtocolAvro.String(): {},
+	ProtocolCsv.String():  {},
 }
 
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
-	TxnAtomicity AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity"`
-	Protocol     string         `toml:"protocol" json:"protocol"`
+	TxnAtomicity *AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity,omitempty"`
+	// Protocol is NOT available when the downstream is DB.
+	Protocol *string `toml:"protocol" json:"protocol,omitempty"`
 
-	DispatchRules            []*DispatchRule   `toml:"dispatchers" json:"dispatchers"`
-	CSVConfig                *CSVConfig        `toml:"csv" json:"csv"`
-	ColumnSelectors          []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
-	SchemaRegistry           string            `toml:"schema-registry" json:"schema-registry"`
-	EncoderConcurrency       int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
-	Terminator               string            `toml:"terminator" json:"terminator"`
-	DateSeparator            string            `toml:"date-separator" json:"date-separator"`
-	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
+	// DispatchRules is only available when the downstream is MQ.
+	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
+	// CSVConfig is only available when the downstream is Storage.
+	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
+	// ColumnSelectors is Deprecated.
+	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
+	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
+	SchemaRegistry *string `toml:"schema-registry" json:"schema-registry,omitempty"`
+	// EncoderConcurrency is only available when the downstream is MQ.
+	EncoderConcurrency *int `toml:"encoder-concurrency" json:"encoder-concurrency,omitempty"`
+	// Terminator is NOT available when the downstream is DB.
+	Terminator *string `toml:"terminator" json:"terminator,omitempty"`
+	// DateSeparator is only available when the downstream is Storage.
+	DateSeparator *string `toml:"date-separator" json:"date-separator,omitempty"`
+	// EnablePartitionSeparator is only available when the downstream is Storage.
+	EnablePartitionSeparator *bool `toml:"enable-partition-separator" json:"enable-partition-separator,omitempty"`
+	// FileIndexWidth is only available when the downstream is Storage
+	FileIndexWidth *int `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
 
 	// EnableKafkaSinkV2 enabled then the kafka-go sink will be used.
-	EnableKafkaSinkV2 bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2"`
+	// It is only available when the downstream is MQ.
+	EnableKafkaSinkV2 *bool `toml:"enable-kafka-sink-v2" json:"enable-kafka-sink-v2,omitempty"`
 
-	OnlyOutputUpdatedColumns bool `toml:"only-output-updated-columns" json:"only-output-updated-columns"`
+	// OnlyOutputUpdatedColumns is only available when the downstream is MQ.
+	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
 	TiDBSourceID uint64 `toml:"-" json:"-"`
+
+	// SafeMode is only available when the downstream is DB.
+	SafeMode           *bool               `toml:"safe-mode" json:"safe-mode,omitempty"`
+	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
+	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
+	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -131,6 +161,42 @@ type CSVConfig struct {
 	NullString string `toml:"null" json:"null"`
 	// whether to include commit ts
 	IncludeCommitTs bool `toml:"include-commit-ts" json:"include-commit-ts"`
+}
+
+func (c *CSVConfig) validateAndAdjust() error {
+	if c == nil {
+		return nil
+	}
+
+	// validate quote
+	if len(c.Quote) > 1 {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config quote contains more than one character"))
+	}
+	if len(c.Quote) == 1 {
+		quote := c.Quote[0]
+		if quote == CR || quote == LF {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config quote cannot be line break character"))
+		}
+	}
+
+	// validate delimiter
+	if len(c.Delimiter) == 0 {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config delimiter cannot be empty"))
+	}
+	if strings.ContainsRune(c.Delimiter, CR) ||
+		strings.ContainsRune(c.Delimiter, LF) {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config delimiter contains line break characters"))
+	}
+	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config quote and delimiter cannot be the same"))
+	}
+
+	return nil
 }
 
 // DateSeparator specifies the date separator in storage destination path
@@ -194,21 +260,84 @@ type ColumnSelector struct {
 	Columns []string `toml:"columns" json:"columns"`
 }
 
-func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) error {
+// CodecConfig represents a MQ codec configuration
+type CodecConfig struct {
+	EnableTiDBExtension            *bool   `toml:"enable-tidb-extension" json:"enable-tidb-extension,omitempty"`
+	MaxBatchSize                   *int    `toml:"max-batch-size" json:"max-batch-size,omitempty"`
+	AvroEnableWatermark            *bool   `toml:"avro-enable-watermark" json:"avro-enable-watermark"`
+	AvroDecimalHandlingMode        *string `toml:"avro-decimal-handling-mode" json:"avro-decimal-handling-mode,omitempty"`
+	AvroBigintUnsignedHandlingMode *string `toml:"avro-bigint-unsigned-handling-mode" json:"avro-bigint-unsigned-handling-mode,omitempty"`
+}
+
+// KafkaConfig represents a kafka sink configuration
+type KafkaConfig struct {
+	PartitionNum                 *int32       `toml:"partition-num" json:"partition-num,omitempty"`
+	ReplicationFactor            *int16       `toml:"replication-factor" json:"replication-factor,omitempty"`
+	KafkaVersion                 *string      `toml:"kafka-version" json:"kafka-version,omitempty"`
+	MaxMessageBytes              *int         `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
+	Compression                  *string      `toml:"compression" json:"compression,omitempty"`
+	KafkaClientID                *string      `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
+	AutoCreateTopic              *bool        `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
+	DialTimeout                  *string      `toml:"dial-timeout" json:"dial-timeout,omitempty"`
+	WriteTimeout                 *string      `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string      `toml:"read-timeout" json:"read-timeout,omitempty"`
+	RequiredAcks                 *int         `toml:"required-acks" json:"required-acks,omitempty"`
+	SASLUser                     *string      `toml:"sasl-user" json:"sasl-user,omitempty"`
+	SASLPassword                 *string      `toml:"sasl-password" json:"sasl-password,omitempty"`
+	SASLMechanism                *string      `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
+	SASLGssAPIAuthType           *string      `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
+	SASLGssAPIKeytabPath         *string      `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string      `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
+	SASLGssAPIServiceName        *string      `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
+	SASLGssAPIUser               *string      `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
+	SASLGssAPIPassword           *string      `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
+	SASLGssAPIRealm              *string      `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool        `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
+	SASLOAuthClientID            *string      `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
+	SASLOAuthClientSecret        *string      `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
+	SASLOAuthTokenURL            *string      `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
+	SASLOAuthScopes              []string     `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
+	SASLOAuthGrantType           *string      `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
+	SASLOAuthAudience            *string      `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
+	EnableTLS                    *bool        `toml:"enable-tls" json:"enable-tls,omitempty"`
+	CA                           *string      `toml:"ca" json:"ca,omitempty"`
+	Cert                         *string      `toml:"cert" json:"cert,omitempty"`
+	Key                          *string      `toml:"key" json:"key,omitempty"`
+	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
+	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+}
+
+// MySQLConfig represents a MySQL sink configuration
+type MySQLConfig struct {
+	WorkerCount                  *int    `toml:"worker-count" json:"worker-count,omitempty"`
+	MaxTxnRow                    *int    `toml:"max-txn-row" json:"max-txn-row,omitempty"`
+	MaxMultiUpdateRowSize        *int    `toml:"max-multi-update-row-size" json:"max-multi-update-row-size,omitempty"`
+	MaxMultiUpdateRowCount       *int    `toml:"max-multi-update-row" json:"max-multi-update-row,omitempty"`
+	TiDBTxnMode                  *string `toml:"tidb-txn-mode" json:"tidb-txn-mode,omitempty"`
+	SSLCa                        *string `toml:"ssl-ca" json:"ssl-ca,omitempty"`
+	SSLCert                      *string `toml:"ssl-cert" json:"ssl-cert,omitempty"`
+	SSLKey                       *string `toml:"ssl-key" json:"ssl-key,omitempty"`
+	TimeZone                     *string `toml:"time-zone" json:"time-zone,omitempty"`
+	WriteTimeout                 *string `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string `toml:"read-timeout" json:"read-timeout,omitempty"`
+	Timeout                      *string `toml:"timeout" json:"timeout,omitempty"`
+	EnableBatchDML               *bool   `toml:"enable-batch-dml" json:"enable-batch-dml,omitempty"`
+	EnableMultiStatement         *bool   `toml:"enable-multi-statement" json:"enable-multi-statement,omitempty"`
+	EnableCachePreparedStatement *bool   `toml:"enable-cache-prepared-statement" json:"enable-cache-prepared-statement,omitempty"`
+}
+
+// CloudStorageConfig represents a cloud storage sink configuration
+type CloudStorageConfig struct {
+	WorkerCount   *int    `toml:"worker-count" json:"worker-count,omitempty"`
+	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
+	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
+}
+
+func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
 	}
 
-	if !enableOldValue {
-		for _, protocolStr := range ForceEnableOldValueProtocols {
-			if protocolStr == s.Protocol {
-				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-					"Please update changefeed config", s.Protocol))
-				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
-			}
-		}
-	}
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
@@ -225,58 +354,38 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 		}
 	}
 
-	if s.EncoderConcurrency < 0 {
+	if util.GetOrZero(s.EncoderConcurrency) < 0 {
 		return cerror.ErrSinkInvalidConfig.GenWithStack(
 			"encoder-concurrency should greater than 0, but got %d", s.EncoderConcurrency)
 	}
 
 	// validate terminator
-	if len(s.Terminator) == 0 {
-		s.Terminator = CRLF
+	if s.Terminator == nil {
+		s.Terminator = util.AddressOf(CRLF)
 	}
 
-	// validate date separator
-	if len(s.DateSeparator) > 0 {
-		var separator DateSeparator
-		if err := separator.FromString(s.DateSeparator); err != nil {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+	// validate storage sink related config
+	if sinkURI != nil && sink.IsStorageScheme(sinkURI.Scheme) {
+		// validate date separator
+		if len(util.GetOrZero(s.DateSeparator)) > 0 {
+			var separator DateSeparator
+			if err := separator.FromString(util.GetOrZero(s.DateSeparator)); err != nil {
+				return cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
+			}
 		}
-	}
 
-	if s.CSVConfig != nil {
-		return s.validateAndAdjustCSVConfig()
-	}
-
-	return nil
-}
-
-func (s *SinkConfig) validateAndAdjustCSVConfig() error {
-	// validate quote
-	if len(s.CSVConfig.Quote) > 1 {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config quote contains more than one character"))
-	}
-	if len(s.CSVConfig.Quote) == 1 {
-		quote := s.CSVConfig.Quote[0]
-		if quote == CR || quote == LF {
-			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-				errors.New("csv config quote cannot be line break character"))
+		// File index width should be in [minFileIndexWidth, maxFileIndexWidth].
+		// In most scenarios, the user does not need to change this configuration,
+		// so the default value of this parameter is not set and just make silent
+		// adjustments here.
+		if util.GetOrZero(s.FileIndexWidth) < MinFileIndexWidth ||
+			util.GetOrZero(s.FileIndexWidth) > MaxFileIndexWidth {
+			s.FileIndexWidth = util.AddressOf(DefaultFileIndexWidth)
 		}
-	}
 
-	// validate delimiter
-	if len(s.CSVConfig.Delimiter) == 0 {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter cannot be empty"))
-	}
-	if strings.ContainsRune(s.CSVConfig.Delimiter, CR) ||
-		strings.ContainsRune(s.CSVConfig.Delimiter, LF) {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains line break characters"))
-	}
-	if len(s.CSVConfig.Quote) > 0 && strings.Contains(s.CSVConfig.Delimiter, s.CSVConfig.Quote) {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config quote and delimiter cannot be the same"))
+		if err := s.CSVConfig.validateAndAdjust(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -300,25 +409,25 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 	}
 
 	// validate that TxnAtomicity is valid and compatible with the scheme.
-	if err := s.TxnAtomicity.validate(sinkURI.Scheme); err != nil {
+	if err := util.GetOrZero(s.TxnAtomicity).validate(sinkURI.Scheme); err != nil {
 		return err
 	}
 
 	// Validate that protocol is compatible with the scheme. For testing purposes,
 	// any protocol should be legal for blackhole.
 	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
-		_, err := ParseSinkProtocolFromString(s.Protocol)
+		_, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
 		if err != nil {
 			return err
 		}
-	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != "" {
+	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
-			"is incompatible with %s scheme", s.Protocol, sinkURI.Scheme))
+			"is incompatible with %s scheme", util.GetOrZero(s.Protocol), sinkURI.Scheme))
 	}
 
 	log.Info("succeed to parse parameter from sink uri",
-		zap.String("protocol", s.Protocol),
-		zap.String("txnAtomicity", string(s.TxnAtomicity)))
+		zap.String("protocol", util.GetOrZero(s.Protocol)),
+		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
 	return nil
 }
 
@@ -336,20 +445,20 @@ func (s *SinkConfig) applyParameterBySinkURI(sinkURI *url.URL) error {
 
 	txnAtomicityFromURI := AtomicityLevel(params.Get(TxnAtomicityKey))
 	if txnAtomicityFromURI != unknownTxnAtomicity {
-		if s.TxnAtomicity != unknownTxnAtomicity && s.TxnAtomicity != txnAtomicityFromURI {
+		if util.GetOrZero(s.TxnAtomicity) != unknownTxnAtomicity && util.GetOrZero(s.TxnAtomicity) != txnAtomicityFromURI {
 			cfgInSinkURI[TxnAtomicityKey] = string(txnAtomicityFromURI)
-			cfgInFile[TxnAtomicityKey] = string(s.TxnAtomicity)
+			cfgInFile[TxnAtomicityKey] = string(util.GetOrZero(s.TxnAtomicity))
 		}
-		s.TxnAtomicity = txnAtomicityFromURI
+		s.TxnAtomicity = util.AddressOf(txnAtomicityFromURI)
 	}
 
 	protocolFromURI := params.Get(ProtocolKey)
 	if protocolFromURI != "" {
-		if s.Protocol != "" && s.Protocol != protocolFromURI {
+		if s.Protocol != nil && util.GetOrZero(s.Protocol) != protocolFromURI {
 			cfgInSinkURI[ProtocolKey] = protocolFromURI
-			cfgInFile[ProtocolKey] = s.Protocol
+			cfgInFile[ProtocolKey] = util.GetOrZero(s.Protocol)
 		}
-		s.Protocol = protocolFromURI
+		s.Protocol = util.AddressOf(protocolFromURI)
 	}
 
 	getError := func() error {

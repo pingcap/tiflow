@@ -36,6 +36,7 @@ const (
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 30 * time.Minute
+	defaultBackoffMaxElapsedTime      = 90 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 
@@ -73,8 +74,8 @@ func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
 	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
 	f.errBackoff.Multiplier = defaultBackoffMultiplier
 	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
-	// MaxElapsedTime=0 means the backoff never stops
-	f.errBackoff.MaxElapsedTime = 0
+	// backoff will stop once the defaultBackoffMaxElapsedTime has elapsed.
+	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
 
 	f.resetErrBackoff()
 	f.lastErrorTime = time.Unix(0, 0)
@@ -135,11 +136,14 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	case model.StateError:
 		if m.state.Info.Error.IsChangefeedUnRetryableError() {
 			m.shouldBeRunning = false
+			m.patchState(model.StateFailed)
 			return
 		}
 	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
+	warnings := m.warningsReportedByProcessors()
+	m.handleWarning(warnings...)
 	return
 }
 
@@ -198,7 +202,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		jobsPending = true
 		m.patchState(model.StateStopped)
 	case model.AdminRemove:
-
 		switch m.state.Info.State {
 		case model.StateNormal, model.StateError, model.StateFailed,
 			model.StateStopped, model.StateFinished, model.StateRemoved:
@@ -397,10 +400,11 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 				runningErrors = make(map[string]*model.RunningError)
 			}
 			runningErrors[position.Error.Code] = position.Error
-			log.Error("processor report an error",
+			log.Error("processor reports an error",
 				zap.String("namespace", m.state.ID.Namespace),
 				zap.String("changefeed", m.state.ID.ID),
-				zap.String("captureID", captureID), zap.Any("error", position.Error))
+				zap.String("captureID", captureID),
+				zap.Any("error", position.Error))
 			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 				if position == nil {
 					return nil, false, nil
@@ -415,6 +419,38 @@ func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
 	}
 	result := make([]*model.RunningError, 0, len(runningErrors))
 	for _, err := range runningErrors {
+		result = append(result, err)
+	}
+	return result
+}
+
+func (m *feedStateManager) warningsReportedByProcessors() []*model.RunningError {
+	var runningWarnings map[string]*model.RunningError
+	for captureID, position := range m.state.TaskPositions {
+		if position.Warning != nil {
+			if runningWarnings == nil {
+				runningWarnings = make(map[string]*model.RunningError)
+			}
+			runningWarnings[position.Warning.Code] = position.Warning
+			log.Warn("processor reports a warning",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.String("captureID", captureID),
+				zap.Any("warning", position.Warning))
+			m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+				if position == nil {
+					return nil, false, nil
+				}
+				position.Warning = nil
+				return position, true, nil
+			})
+		}
+	}
+	if runningWarnings == nil {
+		return nil
+	}
+	result := make([]*model.RunningError, 0, len(runningWarnings))
+	for _, err := range runningWarnings {
 		result = append(result, err)
 	}
 	return result
@@ -502,11 +538,24 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		m.patchState(model.StateError)
 	} else {
 		oldBackoffInterval := m.backoffInterval
-		// NextBackOff will never return -1 because the backoff never stops
-		// with `MaxElapsedTime=0`
-		// ref: https://github.com/cenkalti/backoff/blob/v4/exponential.go#L121-L123
+
 		m.backoffInterval = m.errBackoff.NextBackOff()
 		m.lastErrorTime = time.Unix(0, 0)
+
+		// NextBackOff() will return -1 once the MaxElapsedTime has elapsed.
+		if m.backoffInterval == m.errBackoff.Stop {
+			log.Warn("The changefeed won't be restarted "+
+				"as it has been experiencing failures for "+
+				"an extended duration",
+				zap.Duration(
+					"maxElapsedTime",
+					m.errBackoff.MaxElapsedTime,
+				),
+			)
+			m.shouldBeRunning = false
+			m.patchState(model.StateFailed)
+			return
+		}
 
 		log.Info("changefeed restart backoff interval is changed",
 			zap.String("namespace", m.state.ID.Namespace),
@@ -514,6 +563,18 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			zap.Duration("oldInterval", oldBackoffInterval),
 			zap.Duration("newInterval", m.backoffInterval))
 	}
+}
+
+func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
+	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		if info == nil {
+			return nil, false, nil
+		}
+		for _, err := range errs {
+			info.Warning = err
+		}
+		return info, len(errs) > 0, nil
+	})
 }
 
 // GenerateChangefeedEpoch generates a unique changefeed epoch.

@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,7 +52,7 @@ const cleanMetaDuration = 10 * time.Second
 // information in etcd and schedules Task on it.
 type Capture interface {
 	Run(ctx context.Context) error
-	AsyncClose()
+	Close()
 	Drain() <-chan struct{}
 	Liveness() model.Liveness
 
@@ -189,6 +190,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("reset session successfully", zap.Any("session", sess))
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
@@ -307,7 +309,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	}()
 
 	defer func() {
-		c.AsyncClose()
+		c.Close()
 		c.grpcService.Reset(nil)
 	}()
 
@@ -403,11 +405,13 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Campaign to be the owner, it blocks until it been elected.
 		if err := c.campaign(ctx); err != nil {
-			switch errors.Cause(err) {
-			case context.Canceled:
+
+			rootErr := errors.Cause(err)
+			if rootErr == context.Canceled {
 				return nil
-			case mvcc.ErrCompacted:
-				// the revision we requested is compacted, just retry
+			} else if rootErr == mvcc.ErrCompacted || isErrCompacted(rootErr) {
+				log.Warn("campaign owner failed due to etcd revision "+
+					"has been compacted, retry later", zap.Error(err))
 				continue
 			}
 			log.Warn("campaign owner failed",
@@ -456,6 +460,15 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		})
 		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
 			c.MessageRouter.RemovePeer(captureID)
+			// If an owner is killed by "kill -19", other CDC nodes will remove that capture,
+			// but the peer in the message server will not be removed, so the message server still sends
+			// ack message to that peer, until the write buffer is full. So we need to deregister the peer
+			// when the capture is removed.
+			if err := c.MessageServer.ScheduleDeregisterPeerTask(ctx, captureID); err != nil {
+				log.Warn("deregister peer failed",
+					zap.String("captureID", captureID),
+					zap.Error(err))
+			}
 		})
 
 		err = c.runEtcdWorker(ownerCtx, owner,
@@ -550,9 +563,6 @@ func (c *captureImpl) GetOwner() (owner.Owner, error) {
 
 // campaign to be an owner.
 func (c *captureImpl) campaign(ctx context.Context) error {
-	failpoint.Inject("capture-campaign-compacted-error", func() {
-		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
-	})
 	// TODO: `Campaign` will get stuck when send SIGSTOP to pd leader.
 	// For `Campaign`, when send SIGSTOP to pd leader, cdc maybe call `cancel`
 	// (cause by `processor routine` exit). And inside `Campaign`, the routine
@@ -584,9 +594,10 @@ func (c *captureImpl) register(ctx context.Context) error {
 	return nil
 }
 
-// AsyncClose closes the capture by deregister it from etcd
+// Close closes the capture by deregister it from etcd,
+// it also closes the owner and processorManager
 // Note: this function should be reentrant
-func (c *captureImpl) AsyncClose() {
+func (c *captureImpl) Close() {
 	defer c.cancel()
 	// Safety: Here we mainly want to stop the owner
 	// and ignore it if the owner does not exist or is not set.
@@ -713,4 +724,8 @@ func (c *captureImpl) StatusProvider() owner.StatusProvider {
 
 func (c *captureImpl) IsReady() bool {
 	return c.migrator.IsMigrateDone()
+}
+
+func isErrCompacted(err error) bool {
+	return strings.Contains(err.Error(), "required revision has been compacted")
 }

@@ -33,6 +33,7 @@ type resumeChangefeedOptions struct {
 	apiClient apiv2client.APIV2Interface
 
 	changefeedID          string
+	namespace             string
 	changefeedDetail      *v2.ChangeFeedInfo
 	noConfirm             bool
 	overwriteCheckpointTs string
@@ -53,6 +54,7 @@ func newResumeChangefeedOptions() *resumeChangefeedOptions {
 // addFlags receives a *cobra.Command reference and binds
 // flags related to template printing to it.
 func (o *resumeChangefeedOptions) addFlags(cmd *cobra.Command) {
+	cmd.PersistentFlags().StringVarP(&o.namespace, "namespace", "n", "default", "Replication task (changefeed) Namespace")
 	cmd.PersistentFlags().StringVarP(&o.changefeedID, "changefeed-id", "c", "", "Replication task (changefeed) ID")
 	cmd.PersistentFlags().BoolVar(&o.noConfirm, "no-confirm", false, "Don't ask user whether to ignore ineligible table")
 	cmd.PersistentFlags().StringVar(&o.overwriteCheckpointTs, "overwrite-checkpoint-ts", "",
@@ -129,7 +131,7 @@ func (o *resumeChangefeedOptions) getTSO(ctx context.Context) (*v2.Tso, error) {
 func (o *resumeChangefeedOptions) getChangefeedInfo(ctx context.Context) (
 	*v2.ChangeFeedInfo, error,
 ) {
-	detail, err := o.apiClient.Changefeeds().Get(ctx, o.changefeedID)
+	detail, err := o.apiClient.Changefeeds().Get(ctx, o.namespace, o.changefeedID)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +205,7 @@ func (o *resumeChangefeedOptions) run(cmd *cobra.Command) error {
 	if err := o.confirmResumeChangefeedCheck(cmd); err != nil {
 		return err
 	}
-	err := o.apiClient.Changefeeds().Resume(ctx, cfg, o.changefeedID)
+	err := o.apiClient.Changefeeds().Resume(ctx, cfg, o.namespace, o.changefeedID)
 
 	return err
 }

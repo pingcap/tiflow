@@ -19,8 +19,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -34,12 +34,11 @@ type MounterGroup interface {
 }
 
 type mounterGroup struct {
-	schemaStorage  SchemaStorage
-	inputCh        chan *model.PolymorphicEvent
-	tz             *time.Location
-	filter         filter.Filter
-	enableOldValue bool
-	integrity      *config.IntegrityConfig
+	schemaStorage SchemaStorage
+	inputCh       chan *model.PolymorphicEvent
+	tz            *time.Location
+	filter        filter.Filter
+	integrity     *integrity.Config
 
 	workerNum int
 
@@ -56,21 +55,19 @@ const (
 func NewMounterGroup(
 	schemaStorage SchemaStorage,
 	workerNum int,
-	enableOldValue bool,
 	filter filter.Filter,
 	tz *time.Location,
 	changefeedID model.ChangeFeedID,
-	integrity *config.IntegrityConfig,
+	integrity *integrity.Config,
 ) *mounterGroup {
 	if workerNum <= 0 {
 		workerNum = defaultMounterWorkerNum
 	}
 	return &mounterGroup{
-		schemaStorage:  schemaStorage,
-		inputCh:        make(chan *model.PolymorphicEvent, defaultInputChanSize),
-		enableOldValue: enableOldValue,
-		filter:         filter,
-		tz:             tz,
+		schemaStorage: schemaStorage,
+		inputCh:       make(chan *model.PolymorphicEvent, defaultInputChanSize),
+		filter:        filter,
+		tz:            tz,
 
 		integrity: integrity,
 
@@ -80,7 +77,7 @@ func NewMounterGroup(
 	}
 }
 
-func (m *mounterGroup) Run(ctx context.Context) error {
+func (m *mounterGroup) Run(ctx context.Context, _ ...chan<- error) error {
 	defer func() {
 		mounterGroupInputChanSizeGauge.DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 	}()
@@ -111,8 +108,7 @@ func (m *mounterGroup) WaitForReady(_ context.Context) {}
 func (m *mounterGroup) Close() {}
 
 func (m *mounterGroup) runWorker(ctx context.Context) error {
-	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter,
-		m.enableOldValue, m.integrity)
+	mounter := NewMounter(m.schemaStorage, m.changefeedID, m.tz, m.filter, m.integrity)
 	for {
 		select {
 		case <-ctx.Done():
@@ -157,7 +153,7 @@ type MockMountGroup struct {
 }
 
 // Run implements util.Runnable.
-func (m *MockMountGroup) Run(ctx context.Context) error {
+func (m *MockMountGroup) Run(ctx context.Context, _ ...chan<- error) error {
 	return nil
 }
 

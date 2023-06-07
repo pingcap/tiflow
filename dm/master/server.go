@@ -511,7 +511,11 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	if err != nil {
 		return respWithErr(err)
 	}
-	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	stCfgsForCheck, err := s.generateSubTasksForCheck(stCfgs)
+	if err != nil {
+		return respWithErr(err)
+	}
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgsForCheck, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
 		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
@@ -729,8 +733,14 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		// nolint:nilerr
 		return resp, nil
 	}
+	stCfgsForCheck, err := s.generateSubTasksForCheck(stCfgs)
+	if err != nil {
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
 
-	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgsForCheck, ctlcommon.DefaultErrorCnt, ctlcommon.DefaultWarnCnt)
 	if err != nil {
 		resp.CheckResult = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
@@ -1274,13 +1284,13 @@ func (s *Server) getStatusFromWorkers(
 }
 
 // TODO: refine the call stack of this API, query worker configs that we needed only.
-func (s *Server) getSourceConfigs(sources []*config.MySQLInstance) map[string]*config.SourceConfig {
+func (s *Server) getSourceConfigs(sources []string) map[string]*config.SourceConfig {
 	cfgs := make(map[string]*config.SourceConfig)
 	for _, source := range sources {
-		if cfg := s.scheduler.GetSourceCfgByID(source.SourceID); cfg != nil {
+		if cfg := s.scheduler.GetSourceCfgByID(source); cfg != nil {
 			// check the password
 			cfg.DecryptPassword()
-			cfgs[source.SourceID] = cfg
+			cfgs[source] = cfg
 		}
 	}
 	return cfgs
@@ -1314,8 +1324,14 @@ func (s *Server) CheckTask(ctx context.Context, req *pb.CheckTaskRequest) (*pb.C
 		// nolint:nilerr
 		return resp, nil
 	}
+	stCfgsForCheck, err := s.generateSubTasksForCheck(stCfgs)
+	if err != nil {
+		resp.Msg = err.Error()
+		// nolint:nilerr
+		return resp, nil
+	}
 
-	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgs, req.ErrCnt, req.WarnCnt)
+	msg, err := checker.CheckSyncConfigFunc(ctx, stCfgsForCheck, req.ErrCnt, req.WarnCnt)
 	if err != nil {
 		resp.Msg = terror.WithClass(err, terror.ClassDMMaster).Error()
 		return resp, nil
@@ -1646,7 +1662,11 @@ func (s *Server) generateSubTask(
 		return nil, nil, terror.WithClass(err, terror.ClassDMMaster)
 	}
 
-	sourceCfgs := s.getSourceConfigs(cfg.MySQLInstances)
+	sourceIDs := make([]string, 0, len(cfg.MySQLInstances))
+	for _, inst := range cfg.MySQLInstances {
+		sourceIDs = append(sourceIDs, inst.SourceID)
+	}
+	sourceCfgs := s.getSourceConfigs(sourceIDs)
 	dbConfigs := make(map[string]dbconfig.DBConfig, len(sourceCfgs))
 	for _, sourceCfg := range sourceCfgs {
 		dbConfigs[sourceCfg.SourceID] = sourceCfg.From
@@ -1679,6 +1699,39 @@ func (s *Server) generateSubTask(
 		}
 	}
 	return cfg, stCfgs, nil
+}
+
+func (s *Server) generateSubTasksForCheck(stCfgs []*config.SubTaskConfig) ([]*config.SubTaskConfig, error) {
+	sourceIDs := make([]string, 0, len(stCfgs))
+	for _, stCfg := range stCfgs {
+		sourceIDs = append(sourceIDs, stCfg.SourceID)
+	}
+
+	sourceCfgs := s.getSourceConfigs(sourceIDs)
+	stCfgsForCheck := make([]*config.SubTaskConfig, 0, len(stCfgs))
+	for i, stCfg := range stCfgs {
+		stCfgForCheck, err := stCfg.Clone()
+		if err != nil {
+			return nil, err
+		}
+		stCfgsForCheck = append(stCfgsForCheck, stCfgForCheck)
+		if sourceCfg, ok := sourceCfgs[stCfgForCheck.SourceID]; ok {
+			stCfgsForCheck[i].Flavor = sourceCfg.Flavor
+			stCfgsForCheck[i].ServerID = sourceCfg.ServerID
+			stCfgsForCheck[i].EnableGTID = sourceCfg.EnableGTID
+
+			if sourceCfg.EnableRelay {
+				stCfgsForCheck[i].UseRelay = true
+				continue // skip the following check
+			}
+		}
+		workers, err := s.scheduler.GetRelayWorkers(stCfgForCheck.SourceID)
+		if err != nil {
+			return nil, err
+		}
+		stCfgsForCheck[i].UseRelay = len(workers) > 0
+	}
+	return stCfgsForCheck, nil
 }
 
 func setUseTLS(tlsCfg *security.Security) {

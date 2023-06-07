@@ -15,9 +15,12 @@ package sinkmanager
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -41,7 +44,7 @@ func addTableAndAddEventsToSortEngine(
 	engine engine.SortEngine,
 	span tablepb.Span,
 ) {
-	engine.AddTable(span)
+	engine.AddTable(span, 0)
 	events := []*model.PolymorphicEvent{
 		{
 			StartTs: 1,
@@ -149,7 +152,7 @@ func TestRemoveTable(t *testing.T) {
 	manager.schemaStorage.AdvanceResolvedTs(5)
 	// Check all the events are sent to sink and record the memory usage.
 	require.Eventually(t, func() bool {
-		return manager.sinkMemQuota.GetUsedBytes() == 968
+		return manager.sinkMemQuota.GetUsedBytes() == 904
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Call this function times to test the idempotence.
@@ -313,4 +316,43 @@ func TestUpdateReceivedSorterResolvedTsOfNonExistTable(t *testing.T) {
 	}()
 
 	manager.UpdateReceivedSorterResolvedTs(spanz.TableIDToComparableSpan(1), 1)
+}
+
+// Sink worker errors should cancel the sink manager correctly.
+func TestSinkManagerRunWithErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 16)
+	changefeedInfo := getChangefeedInfo()
+	manager, source, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	defer func() {
+		cancel()
+		manager.Close()
+	}()
+
+	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError", "return")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError")
+	}()
+
+	span := spanz.TableIDToComparableSpan(1)
+
+	source.AddTable(span, "test", 100)
+	manager.AddTable(span, 100, math.MaxUint64)
+	manager.StartTable(span, 100)
+	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
+	manager.UpdateReceivedSorterResolvedTs(span, 101)
+	manager.UpdateBarrierTs(101, nil)
+
+	timer := time.NewTimer(5 * time.Second)
+	select {
+	case <-errCh:
+		if !timer.Stop() {
+			<-timer.C
+		}
+		return
+	case <-timer.C:
+		log.Panic("must get an error instead of a timeout")
+	}
 }

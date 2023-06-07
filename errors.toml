@@ -31,6 +31,11 @@ error = '''
 encode to binray from native
 '''
 
+["CDC:ErrAvroInvalidMessage"]
+error = '''
+avro invalid message format
+'''
+
 ["CDC:ErrAvroMarshalFailed"]
 error = '''
 json marshal failed
@@ -301,11 +306,6 @@ error = '''
 flow controller is aborted
 '''
 
-["CDC:ErrGCTTLExceeded"]
-error = '''
-the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL
-'''
-
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed
@@ -331,6 +331,11 @@ error = '''
 illegal parameter for sorter: %s
 '''
 
+["CDC:ErrIncompatibleConfig"]
+error = '''
+incompatible configuration
+'''
+
 ["CDC:ErrIncompatibleSinkConfig"]
 error = '''
 incompatible configuration in sink uri(%s) and config file(%s), please try to update the configuration only through sink uri
@@ -349,6 +354,11 @@ span doesn't overlap: %+v vs %+v
 ["CDC:ErrInvalidChangefeedID"]
 error = '''
 bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-changefeed-task",
+'''
+
+["CDC:ErrInvalidCheckpointTs"]
+error = '''
+checkpointTs(%v) should not larger than resolvedTs(%v)
 '''
 
 ["CDC:ErrInvalidDDLJob"]
@@ -406,9 +416,9 @@ error = '''
 kafka async send message failed
 '''
 
-["CDC:ErrKafkaBrokerConfigNotFound"]
+["CDC:ErrKafkaConfigNotFound"]
 error = '''
-kafka broker config item not found
+kafka config item not found
 '''
 
 ["CDC:ErrKafkaCreateTopic"]

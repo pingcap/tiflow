@@ -14,7 +14,7 @@ SINK_TYPE=$1
 # 3. cdc can switch from batch mode to no-batch mode and vice versa and works well
 function run() {
 	# batch mode only supports mysql sink
-	if [ "$SINK_TYPE" == "kafka" ]; then
+	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi
 

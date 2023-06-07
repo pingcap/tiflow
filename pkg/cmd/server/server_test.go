@@ -124,7 +124,6 @@ func TestParseCfg(t *testing.T) {
 		"--cert", "bb",
 		"--key", "cc",
 		"--cert-allowed-cn", "dd,ee",
-		"--sorter-max-memory-percentage", "70",
 		"--sort-dir", "/tmp/just_a_test",
 	}))
 
@@ -152,8 +151,9 @@ func TestParseCfg(t *testing.T) {
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 70,
 			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       128,
+			MaxMemoryPercentage: 10,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -191,6 +191,8 @@ func TestParseCfg(t *testing.T) {
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
@@ -230,8 +232,9 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-max-memory-percentage = 3
 sort-dir = "/tmp/just_a_test"
+cache-size-in-mb = 8
+max-memory-percentage = 3
 
 [kv-client]
 region-retry-duration = "3s"
@@ -300,8 +303,9 @@ check-balance-interval = "10s"
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 3,
 			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       8,
+			MaxMemoryPercentage: 3,
 		},
 		Security: &config.SecurityConfig{},
 		KVClient: &config.KVClientConfig{
@@ -334,6 +338,8 @@ check-balance-interval = "10s"
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
 				MaxRecvMsgSize:               4,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        3,
@@ -373,8 +379,9 @@ max-days = 1
 max-backups = 1
 
 [sorter]
-max-memory-percentage = 3
 sort-dir = "/tmp/just_a_test"
+cache-size-in-mb = 8
+max-memory-percentage = 3
 
 [security]
 ca-path = "aa"
@@ -399,7 +406,6 @@ cert-allowed-cn = ["dd","ee"]
 		"--owner-flush-interval", "150ms",
 		"--processor-flush-interval", "150ms",
 		"--ca", "",
-		"--sorter-max-memory-percentage", "70",
 		"--config", configPath,
 	}))
 
@@ -427,8 +433,9 @@ cert-allowed-cn = ["dd","ee"]
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			MaxMemoryPercentage: 70,
 			SortDir:             config.DefaultSortDir,
+			CacheSizeInMB:       8,
+			MaxMemoryPercentage: 3,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -466,6 +473,8 @@ cert-allowed-cn = ["dd","ee"]
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 			Scheduler: &config.SchedulerConfig{
 				HeartbeatTick:        2,
@@ -527,6 +536,8 @@ unknown3 = 3
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
 			MaxRecvMsgSize:               256 * 1024 * 1024,
+			KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+			KeepAliveTime:                config.TomlDuration(time.Second * 30),
 		},
 		Scheduler: &config.SchedulerConfig{
 			HeartbeatTick:        2,

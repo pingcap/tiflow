@@ -492,7 +492,7 @@ func (s *mysqlBackend) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]
 	}
 	if size < s.cfg.MaxMultiUpdateRowSize*count {
 		// use multi update in one SQL
-		sql, value := sqlmodel.GenUpdateSQLFast(rows...)
+		sql, value := sqlmodel.GenUpdateSQL(rows...)
 		return []string{sql}, [][]interface{}{value}
 	}
 	// each row has one independent update SQL.
@@ -749,7 +749,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
-		failpoint.Inject("MySQLSinkHangLongTime", func() { util.Hang(pctx, time.Hour) })
+		failpoint.Inject("MySQLSinkHangLongTime", func() { _ = util.Hang(pctx, time.Hour) })
 
 		err := s.statistics.RecordBatchExecution(func() (int, error) {
 			tx, err := s.db.BeginTx(pctx, nil)

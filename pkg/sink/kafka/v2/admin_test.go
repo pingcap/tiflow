@@ -138,7 +138,7 @@ func TestGetBrokerConfig(t *testing.T) {
 			Resources: []kafka.DescribeConfigResponseResource{},
 		}, nil)
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
-	require.Error(t, err, errors.ErrKafkaBrokerConfigNotFound)
+	require.Error(t, err, errors.ErrKafkaConfigNotFound)
 	require.Equal(t, "", result)
 
 	// config is found
@@ -176,158 +176,8 @@ func TestGetBrokerConfig(t *testing.T) {
 			},
 		}, nil)
 	result, err = admin.GetBrokerConfig(ctx, "test-config-name")
-	require.Error(t, err, errors.ErrKafkaBrokerConfigNotFound)
+	require.Error(t, err, errors.ErrKafkaConfigNotFound)
 	require.Len(t, result, 0)
-}
-
-func TestGetAllTopicsMeta(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	admin, client := newClusterAdminClientWithMock(t)
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
-
-	result, err := admin.GetAllTopicsMeta(ctx)
-	require.Error(t, err)
-	require.Nil(t, result)
-
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(&kafka.MetadataResponse{}, nil)
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Client).DescribeConfigs"))
-
-	result, err = admin.GetAllTopicsMeta(ctx)
-	require.Error(t, err)
-	require.Nil(t, result)
-
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(&kafka.MetadataResponse{
-			Topics: []kafka.Topic{
-				{
-					Name: "topic-1",
-					Partitions: []kafka.Partition{
-						{
-							Replicas: []kafka.Broker{
-								{ID: 1},
-							},
-						},
-					},
-				},
-				{
-					Name: "topic-2",
-					Partitions: []kafka.Partition{
-						{
-							Replicas: []kafka.Broker{
-								{ID: 1},
-								{ID: 2},
-							},
-						},
-						{
-							Replicas: []kafka.Broker{
-								{ID: 1},
-								{ID: 2},
-							},
-						},
-					},
-				},
-				{
-					Name: "topic-3",
-					Partitions: []kafka.Partition{
-						{
-							Replicas: []kafka.Broker{
-								{ID: 1},
-								{ID: 2},
-							},
-						},
-						{
-							Replicas: []kafka.Broker{
-								{ID: 1},
-								{ID: 3},
-							},
-						},
-						{
-							Replicas: []kafka.Broker{
-								{ID: 2},
-								{ID: 3},
-							},
-						},
-					},
-				},
-			},
-		}, nil).AnyTimes()
-
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Client).DescribeConfigs"))
-
-	result, err = admin.GetAllTopicsMeta(ctx)
-	require.Error(t, err)
-	require.Nil(t, result)
-
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
-		Return(&kafka.DescribeConfigsResponse{}, nil)
-
-	result, err = admin.GetAllTopicsMeta(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 3, len(result))
-
-	require.Equal(t, "topic-1", result["topic-1"].Name)
-	require.Equal(t, int32(1), result["topic-1"].NumPartitions)
-	require.Equal(t, int16(1), result["topic-1"].ReplicationFactor)
-
-	require.Equal(t, "topic-2", result["topic-2"].Name)
-	require.Equal(t, int32(2), result["topic-2"].NumPartitions)
-	require.Equal(t, int16(2), result["topic-2"].ReplicationFactor)
-
-	require.Equal(t, "topic-3", result["topic-3"].Name)
-	require.Equal(t, int32(3), result["topic-3"].NumPartitions)
-	require.Equal(t, int16(2), result["topic-3"].ReplicationFactor)
-
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
-		Return(&kafka.DescribeConfigsResponse{
-			Resources: []kafka.DescribeConfigResponseResource{
-				{
-					ResourceName: "undesired-resource",
-				},
-			},
-		}, nil)
-
-	result, err = admin.GetAllTopicsMeta(ctx)
-	require.Error(t, err, "undesired topic found from the response")
-	require.Nil(t, result)
-
-	client.EXPECT().DescribeConfigs(gomock.Any(), gomock.Any()).
-		Return(&kafka.DescribeConfigsResponse{
-			Resources: []kafka.DescribeConfigResponseResource{
-				{
-					ResourceName: "topic-1",
-					ConfigEntries: []kafka.DescribeConfigResponseConfigEntry{
-						{
-							IsDefault: true,
-						},
-						{
-							IsSensitive: true,
-						},
-						{
-							ConfigName:  "config-1",
-							ConfigValue: "config-1-value",
-						},
-					},
-				},
-			},
-		}, nil)
-
-	result, err = admin.GetAllTopicsMeta(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 3, len(result))
-
-	require.Equal(t, "topic-1", result["topic-1"].Name)
-	require.Equal(t, int32(1), result["topic-1"].NumPartitions)
-	require.Equal(t, int16(1), result["topic-1"].ReplicationFactor)
-	require.Len(t, result["topic-1"].ConfigEntries, 1)
-	require.Contains(t, result["topic-1"].ConfigEntries, "config-1")
-	require.Equal(t, "config-1-value", result["topic-1"].ConfigEntries["config-1"])
 }
 
 func TestGetTopicMeta(t *testing.T) {
@@ -358,6 +208,12 @@ func TestGetTopicMeta(t *testing.T) {
 					Partitions: []kafka.Partition{
 						{}, {}, // 2 partitions
 					},
+				},
+				{
+					Name: "topic-2",
+					Partitions: []kafka.Partition{
+						{}, {}, // 2 partitions
+					},
 					Error: errors.New("topic error found"),
 				},
 			},
@@ -367,7 +223,7 @@ func TestGetTopicMeta(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result, 1)
 	require.Equal(t, "topic-1", result[targetTopic].Name)
-	require.Equal(t, int32(2), result["topic-1"].NumPartitions)
+	require.Equal(t, int32(2), result[targetTopic].NumPartitions)
 
 	// not ignore topic error
 	result, err = admin.GetTopicsMeta(ctx, []string{targetTopic}, false)
@@ -384,13 +240,13 @@ func TestGetTopicsPartitions(t *testing.T) {
 	// cannot get topics meta from kafka
 	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
-	result, err := admin.GetTopicsPartitions(ctx)
+	result, err := admin.GetTopicsMeta(ctx, []string{"test"}, false)
 	require.Error(t, err)
 	require.Nil(t, result)
 
 	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
 		Return(&kafka.MetadataResponse{}, nil)
-	result, err = admin.GetTopicsPartitions(ctx)
+	result, err = admin.GetTopicsMeta(ctx, []string{"test"}, false)
 	require.NoError(t, err)
 	require.Len(t, result, 0)
 
@@ -418,12 +274,11 @@ func TestGetTopicsPartitions(t *testing.T) {
 			},
 		}, nil)
 	// ignore topic error
-	result, err = admin.GetTopicsPartitions(ctx)
+	result, err = admin.GetTopicsMeta(ctx, []string{"topic-1", "topic-2", "topic-3"}, true)
 	require.NoError(t, err)
-	require.Len(t, result, 3)
-	require.Equal(t, int32(2), result["topic-1"])
-	require.Equal(t, int32(3), result["topic-2"])
-	require.Equal(t, int32(0), result["topic-3"])
+	require.Len(t, result, 2)
+	require.Equal(t, int32(3), result["topic-2"].NumPartitions)
+	require.Equal(t, int32(0), result["topic-3"].NumPartitions)
 }
 
 func TestCreateTopic(t *testing.T) {
@@ -438,7 +293,6 @@ func TestCreateTopic(t *testing.T) {
 		Name:              "topic-1",
 		NumPartitions:     1,
 		ReplicationFactor: 1,
-		ConfigEntries:     nil,
 	}, false)
 	require.Error(t, err)
 
@@ -453,7 +307,6 @@ func TestCreateTopic(t *testing.T) {
 		Name:              "topic-1",
 		NumPartitions:     1,
 		ReplicationFactor: 1,
-		ConfigEntries:     nil,
 	}, false)
 	require.Error(t, err, "topic-1 error")
 
@@ -463,7 +316,6 @@ func TestCreateTopic(t *testing.T) {
 		Name:              "topic-1",
 		NumPartitions:     1,
 		ReplicationFactor: 1,
-		ConfigEntries:     nil,
 	}, false)
 	require.NoError(t, err)
 }
