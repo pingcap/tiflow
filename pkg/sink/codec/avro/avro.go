@@ -75,6 +75,47 @@ type avroEncodeResult struct {
 	schemaID int
 }
 
+func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
+	result, err := a.avroEncode(ctx, e, topic, true)
+	if err != nil {
+		log.Error("avro encoding key failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	if result == nil {
+		return nil, nil
+	}
+
+	data, err := result.toEnvelope()
+	if err != nil {
+		log.Error("avro encoding key failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	return data, nil
+}
+
+func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
+	if e.IsDelete() {
+		return nil, nil
+	}
+
+	result, err := a.avroEncode(ctx, e, topic, false)
+	if err != nil {
+		log.Error("avro encoding value failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	if result == nil {
+		return nil, nil
+	}
+
+	data, err := result.toEnvelope()
+	if err != nil {
+		log.Error("avro encoding value failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	return data, nil
+}
+
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *BatchEncoder) AppendRowChangedEvent(
@@ -83,67 +124,43 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
+	topic = sanitizeTopic(topic)
+
+	key, err := a.encodeKey(ctx, topic, e)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	value, err := a.encodeValue(ctx, topic, e)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	message := common.NewMsg(
 		config.ProtocolAvro,
-		nil,
-		nil,
+		key,
+		value,
 		e.CommitTs,
 		model.MessageTypeRow,
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
 	message.Callback = callback
-	topic = sanitizeTopic(topic)
-
-	if !e.IsDelete() {
-		res, err := a.avroEncode(ctx, e, topic, false)
-		if err != nil {
-			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		message.Value = evlp
-	} else {
-		message.Value = nil
-	}
-
-	res, err := a.avroEncode(ctx, e, topic, true)
-	if err != nil {
-		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-		return errors.Trace(err)
-	}
-
-	if res != nil {
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-		message.Key = evlp
-	} else {
-		message.Key = nil
-	}
 
 	length := len(message.Key) + len(message.Value) + common.MaxRecordOverhead + 16 + 8
-	if length > a.MaxMessageBytes {
+	if length > a.config.MaxMessageBytes {
 		log.Warn("Single message is too large for avro",
-			zap.Int("maxMessageBytes", a.MaxMessageBytes),
+			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
 			zap.Any("key", message.Key))
 
-		if !a.LargeMessageOnlyHandleKeyColumns {
+		if !a.config.LargeMessageOnlyHandleKeyColumns {
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
 		length = len(message.Key) + common.MaxRecordOverhead + 16 + 8
-		if length > a.MaxMessageBytes {
+		if length > a.config.MaxMessageBytes {
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
