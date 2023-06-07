@@ -131,8 +131,9 @@ func (c *JSONMessage) pkNameSet() map[string]struct{} {
 }
 
 type tidbExtension struct {
-	CommitTs    uint64 `json:"commitTs,omitempty"`
-	WatermarkTs uint64 `json:"watermarkTs,omitempty"`
+	CommitTs     uint64 `json:"commitTs,omitempty"`
+	WatermarkTs  uint64 `json:"watermarkTs,omitempty"`
+	LargeMessage bool   `json:"largeMessage,omitempty"`
 }
 
 type canalJSONMessageWithTiDBExtension struct {
