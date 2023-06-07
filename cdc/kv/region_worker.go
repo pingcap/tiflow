@@ -200,7 +200,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", &state.sri.span),
-		zap.Uint64("resolvedTs", state.sri.resolvedTs),
+		zap.Uint64("resolvedTs", state.sri.resolvedTs()),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {

@@ -25,6 +25,7 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
 
@@ -116,6 +117,7 @@ type rangeLockEntry struct {
 	regionID uint64
 	version  uint64
 	waiters  []chan<- interface{}
+	state    LockedRange
 }
 
 func rangeLockEntryWithKey(key []byte) *rangeLockEntry {
@@ -148,13 +150,15 @@ func allocID() uint64 {
 // version number, which should comes from the Region's Epoch version. The version is used to compare which range is
 // new and which is old if two ranges are overlapping.
 type RegionRangeLock struct {
+	// ID to identify different RegionRangeLock instances, so logs of different instances can be distinguished.
+	id                uint64
+	totalSpan         tablepb.Span
 	changefeedLogInfo string
+
 	mu                sync.Mutex
 	rangeCheckpointTs *rangeTsMap
 	rangeLock         *btree.BTreeG[*rangeLockEntry]
 	regionIDLock      map[uint64]*rangeLockEntry
-	// ID to identify different RegionRangeLock instances, so logs of different instances can be distinguished.
-	id uint64
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
@@ -162,11 +166,12 @@ func NewRegionRangeLock(
 	startKey, endKey []byte, startTs uint64, changefeedLogInfo string,
 ) *RegionRangeLock {
 	return &RegionRangeLock{
+		id:                allocID(),
+		totalSpan:         tablepb.Span{StartKey: startKey, EndKey: endKey},
 		changefeedLogInfo: changefeedLogInfo,
 		rangeCheckpointTs: newRangeTsMap(startKey, endKey, startTs),
 		rangeLock:         btree.NewG(16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
-		id:                allocID(),
 	}
 }
 
@@ -219,6 +224,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			regionID: regionID,
 			version:  version,
 		}
+		newEntry.state.CheckpointTs.Store(checkpointTs)
 		l.rangeLock.ReplaceOrInsert(newEntry)
 		l.regionIDLock[regionID] = newEntry
 
@@ -233,6 +239,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		return LockRangeResult{
 			Status:       LockRangeStatusSuccess,
 			CheckpointTs: checkpointTs,
+			LockedRange:  &newEntry.state,
 		}, nil
 	}
 
@@ -410,15 +417,65 @@ const (
 )
 
 // LockRangeResult represents the result of LockRange method of RegionRangeLock.
-// If Status is LockRangeStatusSuccess, the CheckpointTs field will be the minimal checkpoint ts among the locked
-// range.
+// If Status is LockRangeStatusSuccess:
+//   - CheckpointTs will be the minimal checkpoint ts among the locked range;
+//   - LockedRange is for recording real-time state changes;
+//
 // If Status is LockRangeStatusWait, it means the lock cannot be acquired immediately. WaitFn must be invoked to
 // continue waiting and acquiring the lock.
+//
 // If Status is LockRangeStatusStale, it means the LockRange request is stale because there's already a overlapping
 // locked range, whose version is greater or equals to the requested one.
 type LockRangeResult struct {
 	Status       int
 	CheckpointTs uint64
+	LockedRange  *LockedRange
 	WaitFn       func() LockRangeResult
 	RetryRanges  []tablepb.Span
+}
+
+type LockedRange struct {
+	CheckpointTs atomic.Uint64
+	Initialzied  atomic.Bool
+}
+
+func (l *RegionRangeLock) CheckLockedRanges() (r CheckLockedRangesResult) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	r.FastestRegion.CheckpointTs = 0
+	r.SlowestRegion.CheckpointTs = math.MaxUint64
+
+	lastEnd := l.totalSpan.StartKey
+	l.rangeLock.AscendGreaterOrEqual(&rangeLockEntry{startKey: nil}, func(item *rangeLockEntry) bool {
+		r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, item.startKey) < 0
+		ckpt := item.state.CheckpointTs.Load()
+		if ckpt > r.FastestRegion.CheckpointTs {
+			r.FastestRegion.CheckpointTs = ckpt
+			r.FastestRegion.Initialized = item.state.Initialzied.Load()
+			r.FastestRegion.RegionID = item.regionID
+		}
+		if ckpt < r.SlowestRegion.CheckpointTs {
+			r.SlowestRegion.CheckpointTs = ckpt
+			r.SlowestRegion.Initialized = item.state.Initialzied.Load()
+			r.SlowestRegion.RegionID = item.regionID
+		}
+		lastEnd = item.endKey
+		return true
+	})
+	r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0
+
+	return
+}
+
+type CheckLockedRangesResult struct {
+	HoleExists    bool
+	FastestRegion LockedRangeValue
+	SlowestRegion LockedRangeValue
+}
+
+type LockedRangeValue struct {
+	RegionID     uint64
+	CheckpointTs uint64
+	Initialized  bool
 }

@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	kvclientv2 "github.com/tikv/client-go/v2/kv"
+	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -213,6 +214,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g.Go(func() error { return s.dispatchRequest(ctx) })
 	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
+	g.Go(func() error { return s.handleSlowTables(ctx) })
 
 	log.Info("event feed started",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -228,11 +230,11 @@ func (s *SharedClient) Close() {
 	s.errCh.CloseAndDrain()
 }
 
-func (s *SharedClient) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) {
-	rangeLock := errorInfo.requestedTable.rangeLock
-	rangeLock.UnlockRange(errorInfo.span.StartKey, errorInfo.span.EndKey,
-		errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.resolvedTs)
-	s.enqueueError(ctx, errorInfo)
+func (s *SharedClient) onRegionFail(ctx context.Context, errInfo regionErrorInfo) {
+	select {
+	case s.errCh.In() <- errInfo:
+	case <-ctx.Done():
+	}
 }
 
 func (s *SharedClient) dispatchRequest(ctx context.Context) error {
@@ -282,13 +284,6 @@ func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.Regio
 		return nil, cerror.WrapError(cerror.ErrGetTiKVRPCContext, err)
 	}
 	return rpcCtx, nil
-}
-
-func (s *SharedClient) enqueueError(ctx context.Context, errorInfo regionErrorInfo) {
-	select {
-	case s.errCh.In() <- errorInfo:
-	case <-ctx.Done():
-	}
 }
 
 func (s *SharedClient) requestStore(
@@ -372,7 +367,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 		RegionId:     regionID,
 		RequestId:    requestID,
 		RegionEpoch:  regionEpoch,
-		CheckpointTs: sri.resolvedTs,
+		CheckpointTs: sri.resolvedTs(),
 		StartKey:     sri.span.StartKey,
 		EndKey:       sri.span.EndKey,
 		ExtraOp:      kvrpcpb.ExtraOp_ReadOldValue,
@@ -444,22 +439,21 @@ func (s *SharedClient) receiveFromStream(ctx context.Context, rs *requestedStore
 	}
 }
 
-// All events will always come from one same Region.
 func (s *SharedClient) sendRegionChangeEvents(ctx context.Context, events []*cdcpb.Event, rs *requestedStore) error {
-	if len(events) == 0 {
-		return nil
+	for _, event := range events {
+		regionID := event.RegionId
+		requestID := event.RequestId
+		state := rs.getState(regionID, requestID)
+
+		var sfEvent statefulEvent
+		sfEvent.rs = rs
+		sfEvent.eventItem.state = state
+		sfEvent.eventItem.item = event
+		if err := s.workers[hashRegionID(regionID, len(s.workers))].sendEvent(ctx, sfEvent); err != nil {
+			return errors.Trace(err)
+		}
 	}
-
-	regionID := events[0].RegionId
-	requestID := events[0].RequestId
-	state := rs.getState(regionID, requestID)
-
-	var sfEvent statefulEvent
-	sfEvent.rs = rs
-	sfEvent.eventBatch.state = state
-	sfEvent.eventBatch.items = events
-
-	return s.workers[hashRegionID(regionID, len(s.workers))].sendEvent(ctx, sfEvent)
+	return nil
 }
 
 func (s *SharedClient) sendResolvedTs(ctx context.Context, resolvedTs *cdcpb.ResolvedTs, rs *requestedStore) error {
@@ -581,7 +575,7 @@ func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Grou
 			// Besides the count or frequency of range request is limited,
 			// we use ephemeral goroutine instead of permanent goroutine.
 			g.Go(func() error {
-				return s.divideAndRequestRegions(ctx, task.span, task.ts, task.requestedTable)
+				return s.divideAndRequestRegions(ctx, task.span, task.requestedTable)
 			})
 		}
 	}
@@ -589,7 +583,7 @@ func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Grou
 
 func (s *SharedClient) divideAndRequestRegions(
 	ctx context.Context,
-	span tablepb.Span, ts uint64,
+	span tablepb.Span,
 	requestedTable *requestedTable,
 ) (err error) {
 	limit := 1024
@@ -616,14 +610,14 @@ func (s *SharedClient) divideAndRequestRegions(
 		}
 
 		for _, region := range regions {
+			// NOTE: the End key return by the PD API will be nil to represent the biggest key.
 			regionSpan := tablepb.Span{StartKey: region.GetMeta().StartKey, EndKey: region.GetMeta().EndKey}
+			regionSpan = spanz.HackSpan(regionSpan)
 			partialSpan, err := spanz.Intersect(requestedTable.span, regionSpan)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			// NOTE: the End key return by the PD API will be nil to represent the biggest key.
-			partialSpan = spanz.HackSpan(partialSpan)
-			sri := newSingleRegionInfo(region.VerID(), partialSpan, ts, nil)
+			sri := newSingleRegionInfo(region.VerID(), partialSpan, nil)
 			sri.requestedTable = requestedTable
 			s.scheduleRegionRequest(ctx, sri)
 
@@ -645,7 +639,7 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 	handleResult := func(res regionlock.LockRangeResult) {
 		switch res.Status {
 		case regionlock.LockRangeStatusSuccess:
-			sri.resolvedTs = res.CheckpointTs
+			sri.lockedRange = res.LockedRange
 			select {
 			case s.regionCh.In() <- sri:
 			case <-ctx.Done():
@@ -656,10 +650,10 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Stringer("span", &sri.span),
-				zap.Uint64("resolvedTs", sri.resolvedTs),
+				zap.Uint64("resolvedTs", sri.resolvedTs()),
 				zap.Any("retrySpans", res.RetryRanges))
 			for _, r := range res.RetryRanges {
-				s.scheduleDivideRegionAndRequest(ctx, r, sri.resolvedTs, sri.requestedTable)
+				s.scheduleDivideRegionAndRequest(ctx, r, sri.requestedTable)
 			}
 		case regionlock.LockRangeStatusCancel:
 			return
@@ -677,11 +671,11 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 }
 
 func (s *SharedClient) scheduleDivideRegionAndRequest(
-	ctx context.Context, span tablepb.Span, ts uint64,
+	ctx context.Context, span tablepb.Span,
 	requestedTable *requestedTable,
 ) {
 	select {
-	case s.requestRangeCh.In() <- rangeRequestTask{span, ts, requestedTable}:
+	case s.requestRangeCh.In() <- rangeRequestTask{span: span, requestedTable: requestedTable}:
 	case <-ctx.Done():
 	}
 }
@@ -700,6 +694,10 @@ func (s *SharedClient) handleErrors(ctx context.Context) error {
 }
 
 func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo) error {
+	rangeLock := errInfo.requestedTable.rangeLock
+	rangeLock.UnlockRange(errInfo.span.StartKey, errInfo.span.EndKey,
+		errInfo.verID.GetID(), errInfo.verID.GetVer(), errInfo.resolvedTs())
+
 	err := errInfo.err
 	switch eerr := errors.Cause(err).(type) {
 	case *eventError:
@@ -717,12 +715,12 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		}
 		if innerErr.GetEpochNotMatch() != nil {
 			metricFeedEpochNotMatchCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs, errInfo.requestedTable)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.requestedTable)
 			return nil
 		}
 		if innerErr.GetRegionNotFound() != nil {
 			metricFeedRegionNotFoundCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs, errInfo.requestedTable)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.requestedTable)
 			return nil
 		}
 		if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
@@ -748,7 +746,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		return nil
 	case *rpcCtxUnavailableErr:
 		metricFeedRPCCtxUnavailable.Inc()
-		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs, errInfo.requestedTable)
+		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.requestedTable)
 		return nil
 	case *sendRequestToStoreErr:
 		metricStoreSendRequestErr.Inc()
@@ -763,6 +761,44 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 			zap.Error(err))
 		s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 		return nil
+
+	}
+}
+
+func (s *SharedClient) handleSlowTables(ctx context.Context) error {
+	timer := time.NewTicker(10 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+		}
+		rts := make([]*requestedTable, 0, 128)
+
+		s.totalSpans.Lock()
+		for _, rt := range s.totalSpans.m {
+			rts = append(rts, rt)
+		}
+		s.totalSpans.Unlock()
+
+		// TODO(qupeng): record time and do lock resovle.
+		currTime, err := s.pdClock.CurrentTime()
+		if err != nil {
+			continue
+		}
+		for _, rt := range rts {
+			res := rt.rangeLock.CheckLockedRanges()
+			ckptTime := oracle.GetTimeFromTS(res.SlowestRegion.CheckpointTs)
+			if currTime.After(ckptTime) && currTime.Sub(ckptTime) > 20*time.Second {
+				log.Warn("event feed finds slow locked ranges",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Int64("tableID", rt.span.TableID),
+					zap.Uint64("requestID", rt.requestID),
+					zap.Any("LockedRanges", res))
+			}
+		}
 	}
 }
 

@@ -187,12 +187,6 @@ func (p *multiplexingPullerImpl) Run(ctx context.Context) error {
 					if err != nil {
 						return errors.Trace(err)
 					}
-					log.Info("QPP puller advanced",
-						zap.String("namespace", p.changefeed.Namespace),
-						zap.String("changefeed", p.changefeed.ID),
-						zap.Int64("tableID", p.tableID),
-						zap.String("tableName", p.tableName),
-						zap.Uint64("resolvedTs", resolvedTs))
 				}
 			}
 		}

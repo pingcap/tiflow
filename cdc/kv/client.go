@@ -496,7 +496,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 	handleResult := func(res regionlock.LockRangeResult) {
 		switch res.Status {
 		case regionlock.LockRangeStatusSuccess:
-			sri.resolvedTs = res.CheckpointTs
+			sri.lockedRange = res.LockedRange
 			select {
 			case s.regionCh.In() <- sri:
 				s.regionChSizeGauge.Inc()
@@ -508,12 +508,12 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Stringer("span", &sri.span),
-				zap.Uint64("resolvedTs", sri.resolvedTs),
+				zap.Uint64("resolvedTs", sri.resolvedTs()),
 				zap.Any("retrySpans", res.RetryRanges))
 			for _, r := range res.RetryRanges {
 				// This call is always blocking, otherwise if scheduling in a new
 				// goroutine, it won't block the caller of `schedulerRegionRequest`.
-				s.scheduleDivideRegionAndRequest(ctx, r, sri.resolvedTs)
+				s.scheduleDivideRegionAndRequest(ctx, r, sri.resolvedTs())
 			}
 		case regionlock.LockRangeStatusCancel:
 			return
@@ -528,7 +528,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 		// short sleep to wait region has split
 		time.Sleep(time.Second)
 		s.rangeLock.UnlockRange(sri.span.StartKey, sri.span.EndKey,
-			sri.verID.GetID(), sri.verID.GetVer(), sri.resolvedTs)
+			sri.verID.GetID(), sri.verID.GetVer(), sri.resolvedTs())
 		regionNum := val.(int)
 		retryRanges := make([]tablepb.Span, 0, regionNum)
 		start := []byte("a")
@@ -556,7 +556,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 // CAUTION: Note that this should only be called in a context that the region has locked its range.
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) {
 	s.rangeLock.UnlockRange(errorInfo.span.StartKey, errorInfo.span.EndKey,
-		errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.resolvedTs)
+		errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.resolvedTs())
 	s.enqueueError(ctx, errorInfo)
 }
 
@@ -599,7 +599,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			RegionId:     regionID,
 			RequestId:    requestID,
 			RegionEpoch:  regionEpoch,
-			CheckpointTs: sri.resolvedTs,
+			CheckpointTs: sri.resolvedTs(),
 			StartKey:     sri.span.StartKey,
 			EndKey:       sri.span.EndKey,
 			ExtraOp:      extraOp,
@@ -770,7 +770,7 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 						Region: sri.verID.GetID(),
 					},
 				},
-				ResolvedTs: sri.resolvedTs,
+				ResolvedTs: sri.resolvedTs(),
 			},
 		}
 		select {
@@ -792,7 +792,7 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 				zap.String("tableName", s.tableName),
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Stringer("span", &sri.span),
-				zap.Uint64("resolvedTs", sri.resolvedTs))
+				zap.Uint64("resolvedTs", sri.resolvedTs()))
 			errInfo := newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID})
 			s.onRegionFail(ctx, errInfo)
 			continue
@@ -858,7 +858,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			// the End key return by the PD API will be nil to represent the biggest key,
 			partialSpan = spanz.HackSpan(partialSpan)
 
-			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, ts, nil)
+			sri := newSingleRegionInfo(tiRegion.VerID(), partialSpan, nil)
 			s.scheduleRegionRequest(ctx, sri)
 			// return if no more regions
 			if spanz.EndCompare(nextSpan.StartKey, span.EndKey) >= 0 {
@@ -893,11 +893,11 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		} else if innerErr.GetEpochNotMatch() != nil {
 			// TODO: If only confver is updated, we don't need to reload the region from region cache.
 			metricFeedEpochNotMatchCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs())
 			return nil
 		} else if innerErr.GetRegionNotFound() != nil {
 			metricFeedRegionNotFoundCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs)
+			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs())
 			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
@@ -927,7 +927,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 		}
 	case *rpcCtxUnavailableErr:
 		metricFeedRPCCtxUnavailable.Inc()
-		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs)
+		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.resolvedTs())
 		return nil
 	case *connectToStoreErr:
 		metricConnectToStoreErr.Inc()

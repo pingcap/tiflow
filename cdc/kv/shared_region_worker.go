@@ -38,23 +38,18 @@ type workerMetrics struct {
 	metricSendEventCommittedCounter prometheus.Counter
 }
 
-// NOTE: eventBatch and resolvedTs shouldn't appear simultaneously.
+// NOTE: eventItem and resolvedTs shouldn't appear simultaneously.
 // All contents come from one same TiKV store.
 type statefulEvent struct {
-	eventBatch      eventBatch
+	eventItem       eventItem
 	resolvedTsBatch resolvedTsBatch
 	rs              *requestedStore
 }
 
-type eventBatch struct {
+type eventItem struct {
 	// All items come from one same region.
-	items []*cdcpb.Event
+	item  *cdcpb.Event
 	state *regionFeedState
-
-	// If sharedRegionWorker can ensure no more events from the region will be processed,
-	// it can close the channel to notify others. After that the region can be re-scheduled
-	// with a new `regionFeedState`.
-	noMoreHandling chan struct{}
 }
 
 type resolvedTsBatch struct {
@@ -121,7 +116,7 @@ func (w *sharedRegionWorker) sendEvent(ctx context.Context, event statefulEvent)
 
 // An empty event can trigger a region state check.
 func (w *sharedRegionWorker) sendEmptyEvent(ctx context.Context, state *regionFeedState) error {
-	sfEvent := statefulEvent{eventBatch: eventBatch{state: state}}
+	sfEvent := statefulEvent{eventItem: eventItem{state: state}}
 	return w.sendEvent(ctx, sfEvent)
 }
 
@@ -154,37 +149,37 @@ func (w *sharedRegionWorker) handleSingleRegionError(
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", &state.sri.span),
-		zap.Uint64("resolvedTs", state.sri.resolvedTs),
+		zap.Uint64("resolvedTs", state.sri.resolvedTs()),
 		zap.Error(err))
 
 	w.client.onRegionFail(ctx, newRegionErrorInfo(state.getRegionInfo(), err))
 }
 
 func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEvent) {
-	if event.eventBatch.state != nil {
-		state := event.eventBatch.state
+	if event.eventItem.state != nil {
+		state := event.eventItem.state
 		if state.isStopped() {
 			if err := state.takeError(); err != nil {
 				w.handleSingleRegionError(ctx, err, state, event.rs)
 				return
 			}
 		}
-		for _, item := range event.eventBatch.items {
-			switch x := item.Event.(type) {
-			case *cdcpb.Event_Entries_:
-				if err := w.handleEventEntry(ctx, x, state); err != nil {
-					w.handleSingleRegionError(ctx, err, state, event.rs)
-				}
-			case *cdcpb.Event_Admin_:
-			case *cdcpb.Event_Error:
-				err := cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+		switch x := event.eventItem.item.Event.(type) {
+		case *cdcpb.Event_Entries_:
+			if err := w.handleEventEntry(ctx, x, state); err != nil {
 				w.handleSingleRegionError(ctx, err, state, event.rs)
-			case *cdcpb.Event_ResolvedTs:
-				w.handleResolvedTs(ctx, resolvedTsBatch{
-					ts:      x.ResolvedTs,
-					regions: []*regionFeedState{state},
-				})
+				return
 			}
+		case *cdcpb.Event_Admin_:
+		case *cdcpb.Event_Error:
+			err := cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
+			w.handleSingleRegionError(ctx, err, state, event.rs)
+			return
+		case *cdcpb.Event_ResolvedTs:
+			w.handleResolvedTs(ctx, resolvedTsBatch{
+				ts:      x.ResolvedTs,
+				regions: []*regionFeedState{state},
+			})
 		}
 	} else if event.resolvedTsBatch.ts != 0 {
 		w.handleResolvedTs(ctx, event.resolvedTsBatch)
@@ -222,7 +217,7 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 					return errors.Trace(err)
 				}
 				if !emit(revent) {
-					break
+					return nil
 				}
 				w.metrics.metricSendEventCommitCounter.Inc()
 			}
@@ -243,9 +238,10 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 			if err != nil {
 				return errors.Trace(err)
 			}
-			if emit(revent) {
-				w.metrics.metricSendEventCommittedCounter.Inc()
+			if !emit(revent) {
+				return nil
 			}
+			w.metrics.metricSendEventCommittedCounter.Inc()
 		case cdcpb.Event_PREWRITE:
 			w.metrics.metricPullEventPrewriteCounter.Inc()
 			state.matcher.putPrewriteRow(entry)
@@ -277,9 +273,10 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 				if err != nil {
 					return errors.Trace(err)
 				}
-				if emit(revent) {
-					w.metrics.metricSendEventCommitCounter.Inc()
+				if !emit(revent) {
+					return nil
 				}
+				w.metrics.metricSendEventCommitCounter.Inc()
 			}
 		case cdcpb.Event_ROLLBACK:
 			w.metrics.metricPullEventRollbackCounter.Inc()
