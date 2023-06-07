@@ -27,7 +27,7 @@ type SortEngine interface {
 	IsTableBased() bool
 
 	// AddTable adds the table into the engine.
-	AddTable(span tablepb.Span)
+	AddTable(span tablepb.Span, startTs model.Ts)
 
 	// RemoveTable removes the table from the engine.
 	RemoveTable(span tablepb.Span)

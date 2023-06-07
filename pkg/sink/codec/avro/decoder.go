@@ -31,13 +31,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
 type decoder struct {
-	*Options
-	topic string
-	sc    *stmtctx.StatementContext
+	config *common.Config
+	topic  string
+	sc     *stmtctx.StatementContext
 
 	keySchemaM   *SchemaManager
 	valueSchemaM *SchemaManager
@@ -48,14 +49,14 @@ type decoder struct {
 
 // NewDecoder return an avro decoder
 func NewDecoder(
-	o *Options,
+	config *common.Config,
 	keySchemaM *SchemaManager,
 	valueSchemaM *SchemaManager,
 	topic string,
 	tz *time.Location,
 ) codec.RowEventDecoder {
 	return &decoder{
-		Options:      o,
+		config:       config,
 		topic:        topic,
 		keySchemaM:   keySchemaM,
 		valueSchemaM: valueSchemaM,

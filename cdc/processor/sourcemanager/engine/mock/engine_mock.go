@@ -54,15 +54,15 @@ func (mr *MockSortEngineMockRecorder) Add(span interface{}, events ...interface{
 }
 
 // AddTable mocks base method.
-func (m *MockSortEngine) AddTable(span tablepb.Span) {
+func (m *MockSortEngine) AddTable(span tablepb.Span, startTs model.Ts) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddTable", span)
+	m.ctrl.Call(m, "AddTable", span, startTs)
 }
 
 // AddTable indicates an expected call of AddTable.
-func (mr *MockSortEngineMockRecorder) AddTable(span interface{}) *gomock.Call {
+func (mr *MockSortEngineMockRecorder) AddTable(span, startTs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTable", reflect.TypeOf((*MockSortEngine)(nil).AddTable), span)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTable", reflect.TypeOf((*MockSortEngine)(nil).AddTable), span, startTs)
 }
 
 // CleanAllTables mocks base method.
