@@ -341,6 +341,10 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		return err
 	}
 
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+		return nil
+	}
+
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
@@ -365,6 +369,13 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	// validate terminator
 	if s.Terminator == nil {
 		s.Terminator = util.AddressOf(CRLF)
+	}
+
+	protocol, _ := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
+	if util.GetOrZero(s.DeleteOnlyOutputHandleKeyColumns) && protocol == ProtocolCsv {
+		return cerror.ErrSinkInvalidConfig.GenWithStack(
+			"CSV protocol always output all columns for the delete event, " +
+				"do not set `delete-only-output-handle-key-columns` to true")
 	}
 
 	// validate storage sink related config
