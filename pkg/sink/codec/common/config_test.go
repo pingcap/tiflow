@@ -137,12 +137,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Validate()
 	require.NoError(t, err)
-
-	replicaConfig.EnableOldValue = false
-	err = c.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	require.True(t, c.DeleteOnlyHandleKeyColumns)
-
+	
 	uri = "kafka://127.0.0.1:9092/abc?protocol=canal-json&enable-tidb-extension=a"
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
@@ -287,6 +282,17 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Validate()
 	require.ErrorContains(t, err, "invalid max-batch-size -1")
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=open-protocol"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	c = NewConfig(config.ProtocolOpen)
+	replicaConfig = config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = util.AddressOf(true)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, c.DeleteOnlyHandleKeyColumns)
 }
 
 func TestMergeConfig(t *testing.T) {

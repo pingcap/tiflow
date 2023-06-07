@@ -78,7 +78,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroBigintUnsignedHandlingMode: "long",
 		AvroEnableWatermark:            false,
 
-		OnlyOutputUpdatedColumns: false,
+		OnlyOutputUpdatedColumns:   false,
+		DeleteOnlyHandleKeyColumns: false,
 	}
 }
 
