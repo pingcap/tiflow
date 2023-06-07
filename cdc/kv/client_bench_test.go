@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/testutils"
 	"github.com/tikv/client-go/v2/tikv"
@@ -189,7 +188,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	}
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)
@@ -283,7 +282,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	}
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed, util.RoleTester)
+	lockResolver := txnutil.NewLockerResolver(kvStorage, changefeed)
 	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
 	defer grpcPool.Close()
 	regionCache := tikv.NewRegionCache(pdClient)

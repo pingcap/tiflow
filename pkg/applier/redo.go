@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
@@ -33,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -426,7 +424,6 @@ func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, resol
 // Apply applies redo log to given target
 func (ra *RedoApplier) Apply(egCtx context.Context) (err error) {
 	eg, egCtx := errgroup.WithContext(egCtx)
-	egCtx = contextutil.PutRoleInCtx(egCtx, util.RoleRedoLogApplier)
 
 	if ra.rd, err = createRedoReader(egCtx, ra.cfg); err != nil {
 		return err

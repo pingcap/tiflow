@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util"
 )
 
 type ctxKey string
@@ -27,7 +26,6 @@ const (
 	ctxKeyCaptureAddr  = ctxKey("captureAddr")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
 	ctxKeyTimezone     = ctxKey("timezone")
-	ctxKeyRole         = ctxKey("role")
 )
 
 // CaptureAddrFromCtx returns a capture ID stored in the specified context.
@@ -72,19 +70,4 @@ func ChangefeedIDFromCtx(ctx context.Context) model.ChangeFeedID {
 // PutChangefeedIDInCtx returns a new child context with the specified changefeedID stored.
 func PutChangefeedIDInCtx(ctx context.Context, changefeedID model.ChangeFeedID) context.Context {
 	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
-}
-
-// RoleFromCtx returns a role stored in the specified context.
-// It returns RoleUnknown if there's no valid role found
-func RoleFromCtx(ctx context.Context) util.Role {
-	role, ok := ctx.Value(ctxKeyRole).(util.Role)
-	if !ok {
-		return util.RoleUnknown
-	}
-	return role
-}
-
-// PutRoleInCtx return a new child context with the specified role stored.
-func PutRoleInCtx(ctx context.Context, role util.Role) context.Context {
-	return context.WithValue(ctx, ctxKeyRole, role)
 }

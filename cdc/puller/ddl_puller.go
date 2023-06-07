@@ -26,7 +26,6 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -613,7 +612,6 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
 	g.Go(func() error {
 		return h.ddlJobPuller.Run(ctx)
 	})

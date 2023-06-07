@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -47,7 +46,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 		}
 	}
 
-	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
+	ctx, cancel := context.WithCancel(ctx)
 	s, err := factory.New(ctx, sinkURI, cfg, make(chan error))
 	if err != nil {
 		cancel()

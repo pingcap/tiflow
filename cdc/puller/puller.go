@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -130,7 +129,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
 
 	lockResolver := txnutil.NewLockerResolver(p.kvStorage,
-		p.changefeed, contextutil.RoleFromCtx(ctx))
+		p.changefeed)
 	for _, span := range p.spans {
 		span := span
 
