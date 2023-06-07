@@ -113,7 +113,7 @@ func (s *EventSorter) IsTableBased() bool {
 }
 
 // AddTable implements engine.SortEngine.
-func (s *EventSorter) AddTable(span tablepb.Span) {
+func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 	s.mu.Lock()
 	if _, exists := s.tables.Get(span); exists {
 		s.mu.Unlock()
@@ -123,10 +123,12 @@ func (s *EventSorter) AddTable(span tablepb.Span) {
 			zap.Stringer("span", &span))
 		return
 	}
-	s.tables.ReplaceOrInsert(span, &tableState{
+	state := &tableState{
 		uniqueID: genUniqueID(),
 		ch:       s.channs[getDB(span, len(s.dbs))],
-	})
+	}
+	state.maxReceivedResolvedTs.Store(startTs)
+	s.tables.ReplaceOrInsert(span, state)
 	s.mu.Unlock()
 }
 
