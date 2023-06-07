@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -27,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -148,7 +147,7 @@ func newAgent(
 
 	revision, err := etcdClient.GetOwnerRevision(etcdCliCtx, ownerCaptureID)
 	if err != nil {
-		if cerror.ErrOwnerNotFound.Equal(err) || cerror.ErrNotOwner.Equal(err) {
+		if errors.ErrOwnerNotFound.Equal(err) || errors.ErrNotOwner.Equal(err) {
 			// These are expected errors when no owner has been elected
 			log.Info("schedulerv3: no owner found when querying for the owner revision",
 				zap.String("ownerCaptureID", ownerCaptureID),
@@ -207,7 +206,10 @@ func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 		return nil, errors.Trace(err)
 	}
 
-	outboundMessages, barrier := a.handleMessage(inboundMessages)
+	outboundMessages, barrier, err := a.handleMessage(inboundMessages)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	responses, err := a.tableM.poll(ctx)
 	if err != nil {
@@ -236,10 +238,8 @@ func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 }
 
 func (a *agent) handleMessage(msg []*schedulepb.Message) (
-	[]*schedulepb.Message, *schedulepb.Barrier,
+	result []*schedulepb.Message, barrier *schedulepb.Barrier, err error,
 ) {
-	result := make([]*schedulepb.Message, 0)
-	var barrier *schedulepb.Barrier
 	for _, message := range msg {
 		ownerCaptureID := message.GetFrom()
 		header := message.GetHeader()
@@ -254,7 +254,10 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 		switch message.GetMsgType() {
 		case schedulepb.MsgHeartbeat:
 			var reMsg *schedulepb.Message
-			reMsg, barrier = a.handleMessageHeartbeat(message.GetHeartbeat())
+			reMsg, barrier, err = a.handleMessageHeartbeat(message.GetHeartbeat())
+			if err != nil {
+				return
+			}
 			result = append(result, reMsg)
 		case schedulepb.MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
@@ -266,22 +269,31 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 				zap.Any("message", message))
 		}
 	}
-	return result, barrier
+	return
 }
 
 func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (
-	*schedulepb.Message, *schedulepb.Barrier,
+	*schedulepb.Message, *schedulepb.Barrier, error,
 ) {
 	allTables := a.tableM.getAllTableSpans()
 	result := make([]tablepb.TableStatus, 0, allTables.Len())
+
+	isValidCheckpointTs := true
 	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
 		status := table.getTableSpanStatus(request.CollectStats)
+		isValidCheckpointTs = status.Checkpoint.CheckpointTs <= status.Checkpoint.ResolvedTs
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
 		result = append(result, status)
-		return true
+		return isValidCheckpointTs
 	})
+	if !isValidCheckpointTs {
+		status := result[len(result)-1]
+		checkpointTs := status.Checkpoint.CheckpointTs
+		resolvedTs := status.Checkpoint.ResolvedTs
+		return nil, nil, errors.ErrInvalidCheckpointTs.GenWithStackByArgs(checkpointTs, resolvedTs)
+	}
 	for _, span := range request.GetSpans() {
 		if _, ok := allTables.Get(span); !ok {
 			status := a.tableM.getTableSpanStatus(span, request.CollectStats)
@@ -308,7 +320,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (
 		zap.String("changefeed", a.ChangeFeedID.ID),
 		zap.Any("message", message))
 
-	return message, request.GetBarrier()
+	return message, request.GetBarrier(), nil
 }
 
 type dispatchTableTaskStatus int32

@@ -35,7 +35,7 @@ import (
 
 func setupEncoderAndSchemaRegistry(
 	ctx context.Context,
-	o *Options,
+	config *common.Config,
 ) (*BatchEncoder, error) {
 	startHTTPInterceptForTestingRegistry()
 	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, "http://127.0.0.1:8081", nil)
@@ -48,7 +48,7 @@ func setupEncoderAndSchemaRegistry(
 		valueSchemaManager: valueSchemaM,
 		keySchemaManager:   keySchemaM,
 		result:             make([]*common.Message, 0, 1),
-		Options:            o,
+		config:             config,
 	}, nil
 }
 
@@ -765,17 +765,17 @@ func TestRowToAvroData(t *testing.T) {
 }
 
 func TestAvroEncode4EnableChecksum(t *testing.T) {
-	o := &Options{
-		EnableTiDBExtension:        true,
-		EnableRowChecksum:          true,
-		DecimalHandlingMode:        "string",
-		BigintUnsignedHandlingMode: "string",
+	config := &common.Config{
+		EnableTiDBExtension:            true,
+		EnableRowChecksum:              true,
+		AvroDecimalHandlingMode:        "string",
+		AvroBigintUnsignedHandlingMode: "string",
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, config)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
@@ -865,16 +865,16 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 }
 
 func TestAvroEncode(t *testing.T) {
-	o := &Options{
-		EnableTiDBExtension:        true,
-		EnableRowChecksum:          false,
-		DecimalHandlingMode:        "precise",
-		BigintUnsignedHandlingMode: "long",
+	config := &common.Config{
+		EnableTiDBExtension:            true,
+		EnableRowChecksum:              false,
+		AvroDecimalHandlingMode:        "precise",
+		AvroBigintUnsignedHandlingMode: "long",
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, config)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
@@ -1065,16 +1065,16 @@ func TestGetAvroNamespace(t *testing.T) {
 }
 
 func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
-	o := &Options{
-		EnableTiDBExtension:        true,
-		EnableRowChecksum:          false,
-		DecimalHandlingMode:        "precise",
-		BigintUnsignedHandlingMode: "long",
+	config := &common.Config{
+		EnableTiDBExtension:            true,
+		EnableRowChecksum:              false,
+		AvroDecimalHandlingMode:        "precise",
+		AvroBigintUnsignedHandlingMode: "long",
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, config)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)

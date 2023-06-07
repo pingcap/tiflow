@@ -53,6 +53,10 @@ type Config struct {
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
 
+	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
+	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
+	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
+	// exposed to the outside users.
 	AvroEnableWatermark bool
 
 	// for sinking to cloud storage
