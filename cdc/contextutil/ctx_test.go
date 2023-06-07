@@ -17,7 +17,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -71,25 +70,4 @@ func TestTimezoneNotSet(t *testing.T) {
 	ctx := context.WithValue(context.Background(), ctxKeyTimezone, 1321)
 	tz = TimezoneFromCtx(ctx)
 	require.Nil(t, tz)
-}
-
-func TestShouldReturnKVStorage(t *testing.T) {
-	kvStorage, _ := mockstore.NewMockStore()
-	defer kvStorage.Close()
-	ctx := PutKVStorageInCtx(context.Background(), kvStorage)
-	kvStorage2, err := KVStorageFromCtx(ctx)
-	require.Equal(t, kvStorage, kvStorage2)
-	require.Nil(t, err)
-}
-
-func TestKVStorageNotSet(t *testing.T) {
-	// Context not set value
-	kvStorage, err := KVStorageFromCtx(context.Background())
-	require.Nil(t, kvStorage)
-	require.NotNil(t, err)
-	// Type of value is not kv.Storage
-	ctx := context.WithValue(context.Background(), ctxKeyKVStorage, 1321)
-	kvStorage, err = KVStorageFromCtx(ctx)
-	require.Nil(t, kvStorage)
-	require.NotNil(t, err)
 }

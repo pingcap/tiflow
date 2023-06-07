@@ -17,8 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -26,12 +24,9 @@ import (
 type ctxKey string
 
 const (
-	ctxKeyTableID      = ctxKey("tableID")
 	ctxKeyCaptureAddr  = ctxKey("captureAddr")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
-	ctxKeyIsOwner      = ctxKey("isOwner")
 	ctxKeyTimezone     = ctxKey("timezone")
-	ctxKeyKVStorage    = ctxKey("kvStorage")
 	ctxKeyRole         = ctxKey("role")
 )
 
@@ -55,16 +50,6 @@ func PutTimezoneInCtx(ctx context.Context, timezone *time.Location) context.Cont
 	return context.WithValue(ctx, ctxKeyTimezone, timezone)
 }
 
-// PutKVStorageInCtx returns a new child context with the given tikv store
-func PutKVStorageInCtx(ctx context.Context, store kv.Storage) context.Context {
-	return context.WithValue(ctx, ctxKeyKVStorage, store)
-}
-
-type tableinfo struct {
-	id   int64
-	name string
-}
-
 // TimezoneFromCtx returns a timezone
 func TimezoneFromCtx(ctx context.Context) *time.Location {
 	tz, ok := ctx.Value(ctxKeyTimezone).(*time.Location)
@@ -72,26 +57,6 @@ func TimezoneFromCtx(ctx context.Context) *time.Location {
 		return nil
 	}
 	return tz
-}
-
-// KVStorageFromCtx returns a tikv store
-func KVStorageFromCtx(ctx context.Context) (kv.Storage, error) {
-	store, ok := ctx.Value(ctxKeyKVStorage).(kv.Storage)
-	if !ok {
-		return nil, errors.Errorf("context can not find the value associated with key: %s", ctxKeyKVStorage)
-	}
-	return store, nil
-}
-
-// SetOwnerInCtx returns a new child context with the owner flag set.
-func SetOwnerInCtx(ctx context.Context) context.Context {
-	return context.WithValue(ctx, ctxKeyIsOwner, true)
-}
-
-// IsOwnerFromCtx returns true if this capture is owner
-func IsOwnerFromCtx(ctx context.Context) bool {
-	isOwner := ctx.Value(ctxKeyIsOwner)
-	return isOwner != nil && isOwner.(bool)
 }
 
 // ChangefeedIDFromCtx returns a changefeedID stored in the specified context.
