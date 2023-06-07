@@ -137,12 +137,19 @@ func NewSharedClient(
 		tikvStorage:  kvStorage,
 		lockResolver: nil, // Will be filled in `Run`.
 
+		requestRangeCh: chann.NewAutoDrainChann[rangeRequestTask](),
+		regionCh:       chann.NewAutoDrainChann[singleRegionInfo](),
+		regionRouter:   chann.NewAutoDrainChann[singleRegionInfo](),
+		errCh:          chann.NewAutoDrainChann[regionErrorInfo](),
+
 		requestedStores: make(map[string]*requestedStore),
 	}
 	s.totalSpans.m = make(map[model.TableID]*requestedTable)
 	return s
 }
 
+// Subscribe the given table span.
+// NOTE: `span.TableID` is used to check redundant subscriptions.
 func (s *SharedClient) Subscribe(span tablepb.Span, startTs uint64, eventCh chan<- model.RegionFeedEvent) error {
 	s.totalSpans.Lock()
 	if _, ok := s.totalSpans.m[span.TableID]; !ok {
@@ -152,12 +159,19 @@ func (s *SharedClient) Subscribe(span tablepb.Span, startTs uint64, eventCh chan
 
 		s.preSubscribe(requestedTable)
 		s.requestRangeCh.In() <- rangeRequestTask{span: span, ts: startTs, requestedTable: requestedTable}
+		log.Info("event feed subscribes table success",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", span.TableID),
+			zap.Uint64("requestID", requestedTable.requestID))
 		return nil
 	}
 	s.totalSpans.Unlock()
 	return errors.New("redundant table subscription")
 }
 
+// Unsubscribe the given table span.
+// NOTE: `span.TableID` determines whether the span is subscribed or not.
 func (s *SharedClient) Unsubscribe(span tablepb.Span) error {
 	s.totalSpans.Lock()
 	if rt, ok := s.totalSpans.m[span.TableID]; ok {
@@ -166,29 +180,24 @@ func (s *SharedClient) Unsubscribe(span tablepb.Span) error {
 
 		rt.removed.Store(true)
 		s.requestRangeCh.In() <- rangeRequestTask{span: rt.span, ts: rt.startTs, requestedTable: rt}
+		log.Info("event feed unsubscribes table success",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", rt.span.TableID),
+			zap.Uint64("requestID", rt.requestID))
 		return nil
 	}
 	s.totalSpans.Unlock()
 	return errors.New("unexist table unsubscription")
 }
 
+// Run the client.
 func (s *SharedClient) Run(ctx context.Context) error {
 	s.clusterID = s.pd.GetClusterID(ctx)
 
 	tikvStorage := s.tikvStorage.(tikv.Storage)
 	role := contextutil.RoleFromCtx(ctx)
 	s.lockResolver = txnutil.NewLockerResolver(tikvStorage, s.changefeed, role)
-
-	s.requestRangeCh = chann.NewAutoDrainChann[rangeRequestTask]()
-	s.regionCh = chann.NewAutoDrainChann[singleRegionInfo]()
-	s.regionRouter = chann.NewAutoDrainChann[singleRegionInfo]()
-	s.errCh = chann.NewAutoDrainChann[regionErrorInfo]()
-	defer func() {
-		s.requestRangeCh.CloseAndDrain()
-		s.regionCh.CloseAndDrain()
-		s.regionRouter.CloseAndDrain()
-		s.errCh.CloseAndDrain()
-	}()
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -210,6 +219,13 @@ func (s *SharedClient) Run(ctx context.Context) error {
 		zap.String("changefeed", s.changefeed.ID))
 
 	return g.Wait()
+}
+
+func (s *SharedClient) Close() {
+	s.requestRangeCh.CloseAndDrain()
+	s.regionCh.CloseAndDrain()
+	s.regionRouter.CloseAndDrain()
+	s.errCh.CloseAndDrain()
 }
 
 func (s *SharedClient) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) {
@@ -234,13 +250,6 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 		if rpcCtx == nil {
-			// The region info is invalid. Retry the span.
-			log.Info("get rpc context for region is nil, retry it",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("regionID", sri.verID.GetID()),
-				zap.Stringer("span", &sri.span),
-				zap.Uint64("resolvedTs", sri.resolvedTs))
 			// NOTE: The region hasn't be attached with a regionFeedState.
 			s.onRegionFail(ctx, newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID}))
 			continue
@@ -306,7 +315,7 @@ func (s *SharedClient) requestStore(
 		g.Go(func() (err error) {
 			selfStreamID := streamID.Add(1) - 1
 			for {
-				log.Info("going to create grpc stream",
+				log.Info("event feed going to create grpc stream",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("storeID", storeID),
@@ -314,7 +323,7 @@ func (s *SharedClient) requestStore(
 					zap.String("addr", storeAddr))
 
 				if err = rs.newStream(ctx, s, selfStreamID); err != nil {
-					log.Warn("create grpc stream failed",
+					log.Warn("event feed create grpc stream failed",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Uint64("storeID", storeID),
@@ -330,34 +339,19 @@ func (s *SharedClient) requestStore(
 					}
 				}
 
-				states := make([]*regionFeedState, 0)
-				chs := make([]<-chan struct{}, 0)
-				for _, rr := range rs.clearStream(s, selfStreamID) {
-					state := rs.takeState(rr.regionID, rr.requestID)
-					state.markStopped()
-					states = append(states, state)
-
-					slot := hashRegionID(rr.regionID, uint64(len(s.workers)))
-					ch, err := s.workers[slot].checkRegionStopped(ctx, state)
-					if err != nil {
-						return err
-					}
-					chs = append(chs, ch)
-				}
-				for _, ch := range chs {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-ch:
-					}
-				}
-
+				states := rs.takeStates(rs.clearStream(s, selfStreamID))
 				for _, state := range states {
-					state.setRegionInfoResolvedTs()
-					s.onRegionFail(ctx, newRegionErrorInfo(state.sri, &sendRequestToStoreErr{}))
+					state.setError(&sendRequestToStoreErr{})
+					state.markStopped()
+					slot := hashRegionID(state.sri.verID.GetID(), len(s.workers))
+					if err = s.workers[slot].sendEmptyEvent(ctx, state); err != nil {
+						return errors.Trace(err)
+					}
+
 				}
 
 				if err = util.Hang(ctx, 5*time.Second); err != nil {
+					// Re-establish the stream with a simple backoff.
 					return err
 				}
 			}
@@ -394,7 +388,7 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, off
 		var sri singleRegionInfo
 		var req *cdcpb.ChangeDataRequest
 		select {
-		case sri := <-rs.requests.Out():
+		case sri = <-rs.requests.Out():
 			req = s.createRegionRequest(sri)
 		case <-ctx.Done():
 			return ctx.Err()
@@ -405,7 +399,7 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, off
 		stream.regions = append(stream.regions, requestedRegion{regionID: req.RegionId, requestID: req.RequestId})
 
 		if err = stream.client.Send(req); err != nil {
-			log.Warn("send request to grpc stream failed",
+			log.Warn("event feed send request to grpc stream failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("storeID", rs.storeID),
@@ -426,7 +420,7 @@ func (s *SharedClient) receiveFromStream(ctx context.Context, rs *requestedStore
 		cevent, err := stream.client.Recv()
 		if err != nil {
 			if err.Error() != io.EOF.Error() && errors.Cause(err) != context.Canceled {
-				log.Warn("receive from grpc stream failed",
+				log.Warn("event feed receive from grpc stream failed",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("storeID", rs.storeID),
@@ -437,13 +431,15 @@ func (s *SharedClient) receiveFromStream(ctx context.Context, rs *requestedStore
 		}
 
 		if len(cevent.Events) > 0 {
-			err = s.sendRegionChangeEvents(ctx, cevent.Events, rs)
-		} else if cevent.ResolvedTs != nil {
-			metricBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			err = s.sendResolvedTs(ctx, cevent.ResolvedTs, rs)
+			if err = s.sendRegionChangeEvents(ctx, cevent.Events, rs); err != nil {
+				return err
+			}
 		}
-		if err != nil {
-			return err
+		if cevent.ResolvedTs != nil {
+			metricBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
+			if err = s.sendResolvedTs(ctx, cevent.ResolvedTs, rs); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -463,21 +459,23 @@ func (s *SharedClient) sendRegionChangeEvents(ctx context.Context, events []*cdc
 	sfEvent.eventBatch.state = state
 	sfEvent.eventBatch.items = events
 
-	slot := hashRegionID(regionID, uint64(len(s.workers)))
-	return s.workers[slot].sendEvent(ctx, sfEvent)
+	return s.workers[hashRegionID(regionID, len(s.workers))].sendEvent(ctx, sfEvent)
 }
 
 func (s *SharedClient) sendResolvedTs(ctx context.Context, resolvedTs *cdcpb.ResolvedTs, rs *requestedStore) error {
 	requestID := resolvedTs.RequestId
 	sfEvents := make([]statefulEvent, len(s.workers))
+	log.Debug("event feed get a ResolvedTs",
+		zap.String("namespace", s.changefeed.Namespace),
+		zap.String("changefeed", s.changefeed.ID),
+		zap.Uint64("ResolvedTs", resolvedTs.Ts),
+		zap.Uint64("requestID", resolvedTs.RequestId),
+		zap.Int("regionCount", len(resolvedTs.Regions)))
 
 	for _, regionID := range resolvedTs.Regions {
-		slot := hashRegionID(regionID, uint64(len(s.workers)))
-		state := rs.getState(regionID, requestID)
-
-		x := &sfEvents[slot].resolvedTsBatch
+		x := &sfEvents[hashRegionID(regionID, len(s.workers))].resolvedTsBatch
 		x.ts = resolvedTs.Ts
-		x.regions = append(x.regions, state)
+		x.regions = append(x.regions, rs.getState(regionID, requestID))
 	}
 
 	for i, sfEvent := range sfEvents {
@@ -488,7 +486,6 @@ func (s *SharedClient) sendResolvedTs(ctx context.Context, resolvedTs *cdcpb.Res
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -545,6 +542,20 @@ func (r *requestedStore) takeState(regionID, requestID uint64) *regionFeedState 
 	state := r.requestedRegions.m[key]
 	delete(r.requestedRegions.m, key)
 	return state
+}
+
+func (r *requestedStore) takeStates(rr []requestedRegion) []*regionFeedState {
+	r.requestedRegions.Lock()
+	defer r.requestedRegions.Unlock()
+
+	states := make([]*regionFeedState, 0, len(rr))
+	for _, key := range rr {
+		if state := r.requestedRegions.m[key]; state != nil {
+			states = append(states, state)
+			delete(r.requestedRegions.m, key)
+		}
+	}
+	return states
 }
 
 func (r *requestedStore) takeAllStates() map[requestedRegion]*regionFeedState {
@@ -795,10 +806,10 @@ func (s *SharedClient) preSubscribe(requestedTable *requestedTable) {
 	requestedTable.eventCh <- resolvedEv
 }
 
-func hashRegionID(regionID uint64, slots uint64) uint64 {
+func hashRegionID(regionID uint64, slots int) int {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, regionID)
-	return seahash.Sum64(b) % slots
+	return int(seahash.Sum64(b) % uint64(slots))
 }
 
 // Used to generate a requestID in `newRequestedTable`.

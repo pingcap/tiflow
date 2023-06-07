@@ -179,14 +179,20 @@ func (p *multiplexingPullerImpl) Run(ctx context.Context) error {
 						zap.String("changefeed", p.changefeed.ID),
 						zap.Int64("tableID", p.tableID),
 						zap.String("tableName", p.tableName),
-						zap.Uint64("resolvedTs", resolvedTs),
-						zap.Strings("spans", spans))
+						zap.Uint64("resolvedTs", resolvedTs))
 				}
 				if resolvedTs > p.resolvedTs {
+					p.resolvedTs = resolvedTs
 					err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
 					if err != nil {
 						return errors.Trace(err)
 					}
+					log.Info("QPP puller advanced",
+						zap.String("namespace", p.changefeed.Namespace),
+						zap.String("changefeed", p.changefeed.ID),
+						zap.Int64("tableID", p.tableID),
+						zap.String("tableName", p.tableName),
+						zap.Uint64("resolvedTs", resolvedTs))
 				}
 			}
 		}

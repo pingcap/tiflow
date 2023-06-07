@@ -64,8 +64,11 @@ type DDLJobPuller interface {
 // Note: All unexported methods of `ddlJobPullerImpl` should
 // be called in the same one goroutine.
 type ddlJobPullerImpl struct {
-	changefeedID  model.ChangeFeedID
-	puller        Puller
+	changefeedID model.ChangeFeedID
+
+	kvCli  *kv.SharedClient
+	puller Puller
+
 	kvStorage     tidbkv.Storage
 	schemaStorage entry.SchemaStorage
 	resolvedTs    uint64
@@ -87,6 +90,11 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	eg.Go(func() error {
 		return errors.Trace(p.puller.Run(ctx))
 	})
+	if p.kvCli != nil {
+		eg.Go(func() error {
+			return errors.Trace(p.kvCli.Run(ctx))
+		})
+	}
 
 	rawDDLCh := memorysorter.SortOutput(ctx, p.puller.Output())
 	eg.Go(
@@ -468,13 +476,39 @@ func NewDDLJobPuller(
 ) (DDLJobPuller, error) {
 	spans := spanz.GetAllDDLSpan()
 	for i := range spans {
-		spans[i].TableID = -1
+		// NOTE: different table IDs are required by kv.SharedClient.
+		spans[i].TableID = int64(-1) - int64(i)
 	}
-	return &ddlJobPullerImpl{
+
+	ddlPuller := &ddlJobPullerImpl{
 		changefeedID:  changefeed,
 		filter:        filter,
 		schemaStorage: schemaStorage,
-		puller: New(
+		kvStorage:     kvStorage,
+		outputCh:      make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
+		metricDiscardedDDLCounter: discardedDDLCounter.
+			WithLabelValues(changefeed.Namespace, changefeed.ID),
+	}
+
+	if cfg.EnableMultiplexing {
+		eventCh := make(chan model.RegionFeedEvent, defaultPullerEventChanSize)
+		ddlPuller.kvCli = kv.NewSharedClient(
+			changefeed,
+			cfg,
+			false, // bdrMode
+			pdCli,
+			grpcPool,
+			regionCache,
+			pdClock,
+			kvStorage,
+		)
+		ddlPuller.puller = NewMultiplexing(
+			changefeed, -1, DDLPullerTableName,
+			checkpointTs, spans, ddlPuller.kvCli,
+			eventCh, true,
+		)
+	} else {
+		ddlPuller.puller = New(
 			ctx,
 			pdCli,
 			grpcPool,
@@ -488,12 +522,10 @@ func NewDDLJobPuller(
 			-1, memorysorter.DDLPullerTableName,
 			ddLPullerFilterLoop,
 			true,
-		),
-		kvStorage: kvStorage,
-		outputCh:  make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
-		metricDiscardedDDLCounter: discardedDDLCounter.
-			WithLabelValues(changefeed.Namespace, changefeed.ID),
-	}, nil
+		)
+	}
+
+	return ddlPuller, nil
 }
 
 // DDLPuller is the interface for DDL Puller, used by owner only.

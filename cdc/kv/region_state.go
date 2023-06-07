@@ -51,21 +51,27 @@ func newSingleRegionInfo(
 }
 
 type regionFeedState struct {
-	sri       singleRegionInfo
-	requestID uint64
-	stopped   int32
-
-	initialized    atomic.Bool
+	sri            singleRegionInfo
+	requestID      uint64
 	matcher        *matcher
 	startFeedTime  time.Time
 	lastResolvedTs uint64
+
+	initialized atomic.Bool
+	stopped     atomic.Bool
+
+	// All region errors should be handled in region workers.
+	// `err` is used to retrieve errors generated outside.
+	err struct {
+		sync.Mutex
+		e error
+	}
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
 		sri:       sri,
 		requestID: requestID,
-		stopped:   0,
 	}
 }
 
@@ -76,11 +82,25 @@ func (s *regionFeedState) start() {
 }
 
 func (s *regionFeedState) markStopped() {
-	atomic.StoreInt32(&s.stopped, 1)
+	s.stopped.Store(true)
 }
 
 func (s *regionFeedState) isStopped() bool {
-	return atomic.LoadInt32(&s.stopped) > 0
+	return s.stopped.Load()
+}
+
+func (s *regionFeedState) setError(err error) {
+	s.err.Lock()
+	defer s.err.Unlock()
+	s.err.e = err
+}
+
+func (s *regionFeedState) takeError() (err error) {
+	s.err.Lock()
+	defer s.err.Unlock()
+	err = s.err.e
+	s.err.e = nil
+	return
 }
 
 func (s *regionFeedState) isInitialized() bool {

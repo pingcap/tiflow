@@ -69,9 +69,8 @@ type sharedRegionWorker struct {
 
 	statesManager *regionStateManager
 
-	inputCh  chan statefulEvent
-	outputCh chan<- model.RegionFeedEvent
-	errorCh  chan error
+	inputCh chan statefulEvent
+	errorCh chan error
 
 	metrics *workerMetrics
 	ctx     context.Context
@@ -106,7 +105,6 @@ func newSharedRegionWorker(c *SharedClient, metrics *workerMetrics) *sharedRegio
 		changefeed:    c.changefeed,
 		client:        c,
 		inputCh:       make(chan statefulEvent, regionWorkerInputChanSize),
-		outputCh:      nil, // FIXME(qupeng): from rs.
 		statesManager: newRegionStateManager(-1),
 		metrics:       metrics,
 	}
@@ -121,15 +119,10 @@ func (w *sharedRegionWorker) sendEvent(ctx context.Context, event statefulEvent)
 	}
 }
 
-func (w *sharedRegionWorker) checkRegionStopped(
-	ctx context.Context, state *regionFeedState,
-) (<-chan struct{}, error) {
+// An empty event can trigger a region state check.
+func (w *sharedRegionWorker) sendEmptyEvent(ctx context.Context, state *regionFeedState) error {
 	sfEvent := statefulEvent{eventBatch: eventBatch{state: state}}
-	ch := sfEvent.eventBatch.noMoreHandling
-	if err := w.sendEvent(ctx, sfEvent); err != nil {
-		return nil, err
-	}
-	return ch, nil
+	return w.sendEvent(ctx, sfEvent)
 }
 
 func (w *sharedRegionWorker) run(ctx context.Context) error {
@@ -171,8 +164,10 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 	if event.eventBatch.state != nil {
 		state := event.eventBatch.state
 		if state.isStopped() {
-			close(event.eventBatch.noMoreHandling)
-			return
+			if err := state.takeError(); err != nil {
+				w.handleSingleRegionError(ctx, err, state, event.rs)
+				return
+			}
 		}
 		for _, item := range event.eventBatch.items {
 			switch x := item.Event.(type) {
@@ -200,23 +195,23 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Event_Entries_, state *regionFeedState) error {
 	emit := func(assembled model.RegionFeedEvent) bool {
 		select {
-		case w.outputCh <- assembled:
+		case state.sri.requestedTable.eventCh <- assembled:
 			return true
 		case <-ctx.Done():
 			return false
 		}
 	}
 
-	regionID, _, startTime, _ := state.getRegionMeta()
+	regionID := state.sri.verID.GetID()
 	for _, entry := range x.Entries.GetEntries() {
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
-			if time.Since(startTime) > 20*time.Second {
+			if time.Since(state.startFeedTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
 					zap.String("namespace", w.changefeed.Namespace),
 					zap.String("changefeed", w.changefeed.ID),
-					zap.Duration("duration", time.Since(startTime)),
-					zap.Uint64("regionID", regionID))
+					zap.Uint64("regionID", regionID),
+					zap.Duration("duration", time.Since(state.startFeedTime)))
 			}
 
 			w.metrics.metricPullEventInitializedCounter.Inc()
@@ -259,7 +254,6 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 			// NOTE: state.getLastResolvedTs() will never less than session.startTs.
 			resolvedTs := state.getLastResolvedTs()
 			// TiKV can send events with StartTs/CommitTs less than startTs.
-			// FIXME(qupeng): is `startTs` correct? No!
 			isStaleEvent := entry.CommitTs <= state.sri.requestedTable.startTs
 			if entry.CommitTs <= resolvedTs && !isStaleEvent {
 				logPanic("The CommitTs must be greater than the resolvedTs",
@@ -304,9 +298,22 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, event resolve
 		return
 	}
 
-	resolvedSpans := make([]model.RegionComparableSpan, 0, len(event.regions))
+	resolvedSpans := make(map[uint64]*struct {
+		spans  []model.RegionComparableSpan
+		output chan<- model.RegionFeedEvent
+	})
+
 	for _, state := range event.regions {
-		if state.isStopped() || !state.isInitialized() {
+		spansAndChan := resolvedSpans[state.sri.requestedTable.requestID]
+		if spansAndChan == nil {
+			spansAndChan = &struct {
+				spans  []model.RegionComparableSpan
+				output chan<- model.RegionFeedEvent
+			}{output: state.sri.requestedTable.eventCh}
+			resolvedSpans[state.sri.requestedTable.requestID] = spansAndChan
+		}
+
+		if state == nil || state.isStopped() || !state.isInitialized() {
 			continue
 		}
 		regionID := state.getRegionID()
@@ -321,17 +328,23 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, event resolve
 			continue
 		}
 		state.updateResolvedTs(event.ts)
-		resolvedSpans = append(resolvedSpans, model.RegionComparableSpan{
-			Span:   state.sri.span,
-			Region: regionID,
-		})
+		spansAndChan.spans = append(spansAndChan.spans, model.RegionComparableSpan{Span: state.sri.span, Region: regionID})
 	}
-	if len(resolvedSpans) > 0 {
-		revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{ResolvedTs: event.ts, Spans: resolvedSpans}}
-		select {
-		case w.outputCh <- revent:
-			w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
-		case <-ctx.Done():
+
+	for requestID, spansAndChan := range resolvedSpans {
+		log.Debug("region worker get a ResolvedTs",
+			zap.String("namespace", w.changefeed.Namespace),
+			zap.String("changefeed", w.changefeed.ID),
+			zap.Uint64("ResolvedTs", event.ts),
+			zap.Uint64("requestID", requestID),
+			zap.Int("spanCount", len(spansAndChan.spans)))
+		if len(spansAndChan.spans) > 0 {
+			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{ResolvedTs: event.ts, Spans: spansAndChan.spans}}
+			select {
+			case spansAndChan.output <- revent:
+				w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
+			case <-ctx.Done():
+			}
 		}
 	}
 }

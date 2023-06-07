@@ -251,7 +251,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 
 		select {
 		case <-m.managerCtx.Done():
-			return errors.Trace(m.managerCtx.Err())
+			return m.managerCtx.Err()
 		case err = <-gcErrors:
 			return errors.Trace(err)
 		case err = <-sinkErrors:
