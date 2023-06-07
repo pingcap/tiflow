@@ -147,24 +147,21 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	)
 	message.Callback = callback
 
-	length := len(message.Key) + len(message.Value) + common.MaxRecordOverhead + 16 + 8
-	if length > a.config.MaxMessageBytes {
+	if message.Length() > a.config.MaxMessageBytes {
 		log.Warn("Single message is too large for avro",
 			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
-			zap.Int("length", length),
+			zap.Int("length", message.Length()),
 			zap.Any("table", e.Table),
-			zap.Any("key", message.Key))
+			zap.Any("key", key))
 
 		if !a.config.LargeMessageOnlyHandleKeyColumns {
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
-		length = len(message.Key) + common.MaxRecordOverhead + 16 + 8
-		if length > a.config.MaxMessageBytes {
+		message.Value = nil
+		if message.Length() > a.config.MaxMessageBytes {
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
-
-		message.Value = nil
 	}
 
 	message.IncRowsCount()

@@ -50,7 +50,7 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 	callback func(),
 ) error {
 	for _, row := range txn.Rows {
-		value, err := newJSONMessageForDML(j.builder, row, j.config)
+		value, err := newJSONMessageForDML(j.builder, row, j.config, false)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -61,8 +61,17 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 				zap.Int("maxMessageBytes", j.config.MaxMessageBytes),
 				zap.Int("length", length),
 				zap.Any("table", row.Table))
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+
+			if !j.config.LargeMessageOnlyHandleKeyColumns {
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
+
+			value, err = newJSONMessageForDML(j.builder, row, j.config, true)
+			if err != nil {
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
 		}
+
 		j.valueBuf.Write(value)
 		j.valueBuf.Write(j.terminator)
 		j.batchSize++

@@ -358,23 +358,6 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	length := len(value) + common.MaxRecordOverhead
-	// for single message that is longer than max-message-bytes, do not send it.
-	if length > c.config.MaxMessageBytes {
-		log.Warn("Single message is too large for canal-json",
-			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
-			zap.Int("length", length),
-			zap.Any("table", e.Table))
-
-		if !c.config.LargeMessageOnlyHandleKeyColumns {
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
-		}
-
-		value, err = newJSONMessageForDML(c.builder, e, c.config, true)
-		if err != nil {
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
-		}
-	}
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
@@ -386,6 +369,27 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		Callback: callback,
 	}
 	m.IncRowsCount()
+
+	// for single message that is longer than max-message-bytes, do not send it.
+	if m.Length() > c.config.MaxMessageBytes {
+		log.Warn("Single message is too large for canal-json",
+			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+			zap.Int("length", m.Length()),
+			zap.Any("table", e.Table))
+
+		if !c.config.LargeMessageOnlyHandleKeyColumns {
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+
+		value, err = newJSONMessageForDML(c.builder, e, c.config, true)
+		if err != nil {
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+		m.Value = value
+		if m.Length() > c.config.MaxMessageBytes {
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+	}
 
 	c.messages = append(c.messages, m)
 	return nil
