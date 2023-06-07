@@ -58,7 +58,8 @@ const (
     "enable-partition-separator": true,
     "protocol": "open-protocol",
 	"enable-kafka-sink-v2": false,
-	"only-output-updated-columns": false
+	"only-output-updated-columns": false,
+	"delete-only-output-handle-key-columns": false
   },
   "consistent": {
     "level": "none",
@@ -200,9 +201,9 @@ const (
     },
     "date-separator": "month",
     "enable-partition-separator": true,
-    "only-output-updated-columns": false,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
+	"delete-only-output-handle-key-columns": true,
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -329,9 +330,9 @@ const (
 	"transaction-atomicity": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "only-output-updated-columns": false,
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
+	"delete-only-output-handle-key-columns": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,

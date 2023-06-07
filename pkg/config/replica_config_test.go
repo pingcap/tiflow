@@ -124,11 +124,13 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	}
 
 	b, err := conf.Marshal()
-	require.Nil(t, err)
-	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	require.NoError(t, err)
+	b = mustIndentJSON(t, b)
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, b)
+
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, conf, conf2)
 }
 
@@ -149,7 +151,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	t.Parallel()
 	conf2 := new(ReplicaConfig)
 	err := conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigOutDated))
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	conf := GetDefaultReplicaConfig()
 	conf.CaseSensitive = false
