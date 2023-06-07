@@ -65,20 +65,6 @@ type tableinfo struct {
 	name string
 }
 
-// PutTableInfoInCtx returns a new child context with the specified table ID and name stored.
-func PutTableInfoInCtx(ctx context.Context, tableID int64, tableName string) context.Context {
-	return context.WithValue(ctx, ctxKeyTableID, tableinfo{id: tableID, name: tableName})
-}
-
-// TableIDFromCtx returns a table ID
-func TableIDFromCtx(ctx context.Context) (int64, string) {
-	info, ok := ctx.Value(ctxKeyTableID).(tableinfo)
-	if !ok {
-		return 0, ""
-	}
-	return info.id, info.name
-}
-
 // TimezoneFromCtx returns a timezone
 func TimezoneFromCtx(ctx context.Context) *time.Location {
 	tz, ok := ctx.Value(ctxKeyTimezone).(*time.Location)

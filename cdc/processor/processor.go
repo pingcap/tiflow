@@ -788,7 +788,6 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	}
 
 	kvCfg := config.GetGlobalServerConfig().KVClient
-	ctx = contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	ddlPuller, err := puller.NewDDLJobPuller(
 		ctx,
 		p.upstream.PDClient,

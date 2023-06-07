@@ -73,23 +73,6 @@ func TestTimezoneNotSet(t *testing.T) {
 	require.Nil(t, tz)
 }
 
-func TestShouldReturnTableInfo(t *testing.T) {
-	ctx := PutTableInfoInCtx(context.Background(), 1321, "ello")
-	tableID, tableName := TableIDFromCtx(ctx)
-	require.Equal(t, int64(1321), tableID)
-	require.Equal(t, "ello", tableName)
-}
-
-func TestTableInfoNotSet(t *testing.T) {
-	tableID, tableName := TableIDFromCtx(context.Background())
-	require.Equal(t, int64(0), tableID)
-	require.Equal(t, "", tableName)
-	ctx := context.WithValue(context.Background(), ctxKeyTableID, 1321)
-	tableID, tableName = TableIDFromCtx(ctx)
-	require.Equal(t, int64(0), tableID)
-	require.Equal(t, "", tableName)
-}
-
 func TestShouldReturnKVStorage(t *testing.T) {
 	kvStorage, _ := mockstore.NewMockStore()
 	defer kvStorage.Close()

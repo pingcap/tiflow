@@ -47,8 +47,6 @@ import (
 
 const (
 	ddlPullerStuckWarnDuration = 30 * time.Second
-	// DDLPullerTableName is the fake table name for ddl puller
-	DDLPullerTableName = "DDL_PULLER"
 	// ddl puller should never filter any DDL jobs even if
 	// the changefeed is in BDR mode, because the DDL jobs should
 	// be filtered before they are sent to the sink
@@ -488,7 +486,7 @@ func NewDDLJobPuller(
 			spans,
 			cfg,
 			changefeed,
-			-1, DDLPullerTableName,
+			-1, memorysorter.DDLPullerTableName,
 			ddLPullerFilterLoop,
 			true,
 		),
