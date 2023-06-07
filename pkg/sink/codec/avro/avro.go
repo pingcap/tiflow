@@ -247,12 +247,13 @@ func (a *BatchEncoder) avroEncode(
 	var (
 		input *avroEncodeInput
 
-		cols                   []*model.Column
-		colInfos               []rowcodec.ColInfo
-		enableTiDBExtension    bool
-		enableRowLevelChecksum bool
-		schemaManager          *SchemaManager
-		operation              string
+		cols                      []*model.Column
+		colInfos                  []rowcodec.ColInfo
+		enableTiDBExtension       bool
+		enableRowLevelChecksum    bool
+		largeMessageOnlyHandleKey bool
+		schemaManager             *SchemaManager
+		operation                 string
 	)
 	if isKey {
 		cols, colInfos = e.HandleKeyColInfos()
@@ -271,6 +272,7 @@ func (a *BatchEncoder) avroEncode(
 
 		enableTiDBExtension = a.config.EnableTiDBExtension
 		enableRowLevelChecksum = a.config.EnableRowChecksum
+		largeMessageOnlyHandleKey = a.config.LargeMessageOnlyHandleKeyColumns
 		schemaManager = a.valueSchemaManager
 		if e.IsInsert() {
 			operation = insertOperation
@@ -295,6 +297,7 @@ func (a *BatchEncoder) avroEncode(
 			input,
 			enableTiDBExtension,
 			enableRowLevelChecksum,
+			largeMessageOnlyHandleKey,
 			a.config.AvroDecimalHandlingMode,
 			a.config.AvroBigintUnsignedHandlingMode,
 		)
@@ -534,6 +537,7 @@ func rowToAvroSchema(
 	input *avroEncodeInput,
 	enableTiDBExtension bool,
 	enableRowLevelChecksum bool,
+	largeMessageOnlyHandleKey bool,
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
 ) (string, error) {
@@ -637,6 +641,15 @@ func rowToAvroSchema(
 					"name":    tidbChecksumVersion,
 					"type":    "int",
 					"default": 0,
+				})
+		}
+
+		if largeMessageOnlyHandleKey {
+			top.Fields = append(top.Fields,
+				map[string]interface{}{
+					"name":    "largeMessage",
+					"type":    "boolean",
+					"default": false,
 				})
 		}
 
