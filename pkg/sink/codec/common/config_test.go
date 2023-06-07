@@ -137,7 +137,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Validate()
 	require.NoError(t, err)
-	
+
 	uri = "kafka://127.0.0.1:9092/abc?protocol=canal-json&enable-tidb-extension=a"
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
