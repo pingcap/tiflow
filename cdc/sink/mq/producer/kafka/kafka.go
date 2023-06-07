@@ -434,7 +434,8 @@ func AdjustConfig(
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if exists {
 		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
-		topicMaxMessageBytesStr, err := getTopicConfig(admin, info.Name, kafka.TopicMaxMessageBytesConfigName,
+		topicMaxMessageBytesStr, err := getTopicConfig(admin,
+			info.Name, kafka.TopicMaxMessageBytesConfigName,
 			kafka.BrokerMessageMaxBytesConfigName)
 		if err != nil {
 			return errors.Trace(err)
@@ -580,7 +581,9 @@ func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (s
 // getTopicConfig gets topic config by name.
 // If the topic does not have this configuration, we will try to get it from the broker's configuration.
 // NOTICE: The configuration names of topic and broker may be different for the same configuration.
-func getTopicConfig(admin kafka.ClusterAdminClient, topicName string, topicConfigName string, brokerConfigName string) (string, error) {
+func getTopicConfig(admin kafka.ClusterAdminClient,
+	topicName string, topicConfigName string, brokerConfigName string,
+) (string, error) {
 	var configEntries []sarama.ConfigEntry
 	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
 		Type:        sarama.TopicResource,
