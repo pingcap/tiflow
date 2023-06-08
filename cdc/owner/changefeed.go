@@ -960,16 +960,15 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *ddlBarrier) 
 
 	if c.redoMetaMgr.Enabled() {
 		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
-		_, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
-		if flushedResolvedTs != 0 && flushedResolvedTs < barrier.GlobalBarrierTs {
+		if flushedMeta.ResolvedTs != 0 && flushedMeta.ResolvedTs < barrier.GlobalBarrierTs {
 			// todo: remove this log after fully tested
 			log.Info("fizz redo meta resolved ts is less than barrier ts, use it as barrier ts",
 				zap.Uint64("globalBarrier", barrier.GlobalBarrierTs),
-				zap.Uint64("flushedResolvedTs", flushedResolvedTs))
-			barrier.GlobalBarrierTs = flushedResolvedTs
+				zap.Uint64("flushedResolvedTs", flushedMeta.ResolvedTs))
+			barrier.GlobalBarrierTs = flushedMeta.ResolvedTs
 		}
 		if barrier.GlobalBarrierTs > barrier.redoBarrierTs {
-			barrier.redoBarrierTs = barrier.GlobalBarrierTs
+			barrier.GlobalBarrierTs = barrier.redoBarrierTs
 		}
 	}
 
