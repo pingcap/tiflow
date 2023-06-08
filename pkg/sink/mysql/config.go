@@ -26,7 +26,6 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -181,7 +180,7 @@ func (c *Config) Apply(
 		return err
 	}
 	getSafeMode(urlParameter, &c.SafeMode)
-	if err = getTimezone(ctx, urlParameter, &c.Timezone); err != nil {
+	if err = getTimezone(urlParameter, &c.Timezone); err != nil {
 		return err
 	}
 	if err = getDuration(urlParameter.ReadTimeout, &c.ReadTimeout); err != nil {
@@ -363,13 +362,16 @@ func getSafeMode(values *urlConfig, safeMode *bool) {
 	}
 }
 
-func getTimezone(ctxWithTimezone context.Context, values *urlConfig, timezone *string) error {
+func getTimezone(values *urlConfig, timezone *string) error {
 	const pleaseSpecifyTimezone = "We recommend that you specify the time-zone explicitly. " +
 		"Please make sure that the timezone of the TiCDC server, " +
 		"sink-uri and the downstream database are consistent. " +
 		"If the downstream database does not load the timezone information, " +
 		"you can refer to https://dev.mysql.com/doc/refman/8.0/en/mysql-tzinfo-to-sql.html."
-	serverTimezone := contextutil.TimezoneFromCtx(ctxWithTimezone)
+	serverTimezone, err := util.GetTimezone(config.GetGlobalServerConfig().TZ)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
+	}
 	if values.TimeZone == nil {
 		// If time-zone is not specified, use the timezone of the server.
 		log.Warn("Because time-zone is not specified, "+

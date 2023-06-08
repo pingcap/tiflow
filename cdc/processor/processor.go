@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -639,43 +638,39 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	prcCtx = cdcContext.WithChangefeedVars(prcCtx, etcdCtx.ChangefeedVars())
 	p.globalVars = prcCtx.GlobalVars()
 
-	// NOTE: We must call contextutil.Put* to put some variables into the new context.
-	// Maybe it's better to put all things into global vars or changefeed vars.
-	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
-
-	tz := contextutil.TimezoneFromCtx(stdCtx)
+	var tz *time.Location
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config, util.GetTimeZoneName(tz))
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	if err = p.initDDLHandler(stdCtx); err != nil {
+	if err = p.initDDLHandler(prcCtx); err != nil {
 		return err
 	}
 	p.ddlHandler.name = "ddlHandler"
 	p.ddlHandler.changefeedID = p.changefeedID
-	p.ddlHandler.spawn(stdCtx)
+	p.ddlHandler.spawn(prcCtx)
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.filter, tz, p.changefeedID, p.changefeed.Info.Config.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.changefeedID = p.changefeedID
-	p.mg.spawn(stdCtx)
+	p.mg.spawn(prcCtx)
 
-	sourceID, err := pdutil.GetSourceID(stdCtx, p.upstream.PDClient)
+	sourceID, err := pdutil.GetSourceID(prcCtx, p.upstream.PDClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
-	p.redo.r, err = redo.NewDMLManager(stdCtx, p.changefeedID, p.changefeed.Info.Config.Consistent)
+	p.redo.r, err = redo.NewDMLManager(prcCtx, p.changefeedID, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
 	}
 	p.redo.name = "RedoManager"
 	p.redo.changefeedID = p.changefeedID
-	p.redo.spawn(stdCtx)
+	p.redo.spawn(prcCtx)
 
 	sortEngine, err := p.globalVars.SortEngineFactory.Create(p.changefeedID)
 	log.Info("Processor creates sort engine",
@@ -691,19 +686,19 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		sortEngine, util.GetOrZero(p.changefeed.Info.Config.BDRMode))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
-	p.sourceManager.spawn(stdCtx)
+	p.sourceManager.spawn(prcCtx)
 
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.changefeed.Info, p.upstream,
 		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.changefeedID = p.changefeedID
-	p.sinkManager.spawn(stdCtx)
+	p.sinkManager.spawn(prcCtx)
 
 	// Bind them so that sourceManager can notify sinkManager.r.
 	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
 
-	p.agent, err = p.newAgent(stdCtx, p.liveness, p.changefeedEpoch, p.cfg)
+	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg)
 	if err != nil {
 		return err
 	}
