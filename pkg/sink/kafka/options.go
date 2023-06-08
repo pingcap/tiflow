@@ -255,7 +255,7 @@ func (o *Options) Apply(ctx context.Context,
 		kafkaClientID = *urlParameter.KafkaClientID
 	}
 	clientID, err := NewKafkaClientID(
-		contextutil.CaptureAddrFromCtx(ctx),
+		config.GetGlobalServerConfig().AdvertiseAddr,
 		contextutil.ChangefeedIDFromCtx(ctx),
 		kafkaClientID)
 	if err != nil {

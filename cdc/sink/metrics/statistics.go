@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -27,7 +28,7 @@ import (
 func NewStatistics(ctx context.Context, sinkType sink.Type) *Statistics {
 	statistics := &Statistics{
 		sinkType:     sinkType,
-		captureAddr:  contextutil.CaptureAddrFromCtx(ctx),
+		captureAddr:  config.GetGlobalServerConfig().AdvertiseAddr,
 		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
 	}
 

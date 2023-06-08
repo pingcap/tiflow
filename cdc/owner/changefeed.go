@@ -268,7 +268,7 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 	}
 	c.feedStateManager.handleError(&model.RunningError{
 		Time:    time.Now(),
-		Addr:    contextutil.CaptureAddrFromCtx(ctx),
+		Addr:    config.GetGlobalServerConfig().AdvertiseAddr,
 		Code:    code,
 		Message: err.Error(),
 	})
@@ -288,7 +288,7 @@ func (c *changefeed) handleWarning(ctx cdcContext.Context, err error) {
 
 	c.feedStateManager.handleWarning(&model.RunningError{
 		Time:    time.Now(),
-		Addr:    contextutil.CaptureAddrFromCtx(ctx),
+		Addr:    config.GetGlobalServerConfig().AdvertiseAddr,
 		Code:    code,
 		Message: err.Error(),
 	})

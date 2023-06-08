@@ -116,7 +116,7 @@ func NewMetaManager(ctx context.Context, cfg *config.ConsistentConfig) (*metaMan
 	}
 
 	m := &metaManager{
-		captureID:         contextutil.CaptureAddrFromCtx(ctx),
+		captureID:         config.GetGlobalServerConfig().AdvertiseAddr,
 		changeFeedID:      contextutil.ChangefeedIDFromCtx(ctx),
 		uuidGenerator:     uuid.NewGenerator(),
 		enabled:           true,

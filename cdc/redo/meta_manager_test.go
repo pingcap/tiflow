@@ -38,7 +38,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, captureID)
+	config.GetGlobalServerConfig().AdvertiseAddr = captureID
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	ctx = contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 
@@ -101,7 +101,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, captureID)
+	config.GetGlobalServerConfig().AdvertiseAddr = captureID
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	ctx = contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 
@@ -219,7 +219,7 @@ func TestGCAndCleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, captureID)
+	config.GetGlobalServerConfig().AdvertiseAddr = captureID
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	ctx = contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 
