@@ -509,7 +509,6 @@ func (r *Manager) AdvanceCheckpoint(
 	currentTables *TableRanges,
 	currentPDTime time.Time,
 	barrier schedulepb.BarrierWithMinTs,
-	enableRedo bool,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestRange := tablepb.Span{}
@@ -603,12 +602,6 @@ func (r *Manager) AdvanceCheckpoint(
 		// 	zap.Any("minTableBarrierTs", barrier.MinTableBarrierTs))
 	}
 
-	// if redo is enabled, global barrier ts should not exceeds newResolvedTs.
-	if enableRedo {
-		if barrier.GlobalBarrierTs > newResolvedTs {
-			barrier.GlobalBarrierTs = newResolvedTs
-		}
-	}
 	// If changefeed's checkpoint lag is larger than 30s,
 	// log the 4 slowlest table infos every minute, which can
 	// help us find the problematic tables.

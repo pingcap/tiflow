@@ -132,7 +132,6 @@ func (c *coordinator) Tick(
 	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 	barrier schedulepb.BarrierWithMinTs,
-	enableRedo bool,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	startTime := time.Now()
 	defer func() {
@@ -147,7 +146,7 @@ func (c *coordinator) Tick(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures, barrier, enableRedo)
+	return c.poll(ctx, checkpointTs, currentTables, aliveCaptures, barrier)
 }
 
 // MoveTable implement the scheduler interface
@@ -279,7 +278,6 @@ func (c *coordinator) poll(
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 	barrier schedulepb.BarrierWithMinTs,
-	enableRedo bool,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.maybeCollectMetrics()
 	if c.compat.UpdateCaptureInfo(aliveCaptures) {
@@ -319,7 +317,7 @@ func (c *coordinator) poll(
 	if !c.captureM.CheckAllCaptureInitialized() {
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
-		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, enableRedo)
+		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier)
 		return newCheckpointTs, newResolvedTs, c.sendMsgs(ctx, msgBuf)
 	}
 
@@ -349,8 +347,7 @@ func (c *coordinator) poll(
 	msgBuf = append(msgBuf, msgs...)
 
 	// Checkpoint calculation
-
-	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, enableRedo)
+	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier)
 
 	// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
 	// when redo is enabled
