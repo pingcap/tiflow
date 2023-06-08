@@ -16,7 +16,6 @@ package puller
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -40,9 +39,7 @@ func NewPullerWrapperForTest(
 }
 
 func (d *dummyPullerWrapper) Start(ctx context.Context, up *upstream.Upstream,
-	eventSortEngine engine.SortEngine, errCh chan<- error,
-	multiplexingCli *kv.SharedClient,
-) {
+	eventSortEngine engine.SortEngine, errCh chan<- error) {
 }
 
 func (d *dummyPullerWrapper) GetStats() puller.Stats {

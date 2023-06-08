@@ -15,6 +15,8 @@ package puller
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -24,181 +26,253 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
-type multiplexingPullerImpl struct {
+const (
+	resolveLockTickInterval time.Duration = 5 * time.Second
+	resolveLockInterval     time.Duration = 20 * time.Second
+
+	multiplexingPullerEventChanSize = 1024
+	resolvedSpanChanSize            = 128
+
+	// TODO(qupeng): use a changefeed configuration instead.
+	frontierConcurrent = 4
+)
+
+type tableProgress struct {
 	changefeed model.ChangeFeedID
-	tableID    model.TableID
-	tableName  string
-	startTs    model.Ts
-	spans      []tablepb.Span
 	pullerType string
+	tableName  string
+	spans      []tablepb.Span
+	startTs    model.Ts
 
-	client    *kv.SharedClient
-	tsTracker frontier.Frontier
-	inputCh   chan model.RegionFeedEvent
-	outputCh  chan *model.RawKVEntry
+	initialized bool
+	resolvedTs  model.Ts
 
-	// Only accessed in `Run`.
-	resolvedTs model.Ts
+	resolvedSpans chan *model.ResolvedSpans
+	tsTracker     frontier.Frontier
+	consume       func(context.Context, *model.RawKVEntry, []tablepb.Span) error
+
+	scheduled atomic.Bool
 }
 
-func NewMultiplexing(
-	changefeed model.ChangeFeedID,
-	tableID model.TableID,
-	tableName string,
-	startTs model.Ts,
-	spans []tablepb.Span,
-	client *kv.SharedClient,
-	inputCh chan model.RegionFeedEvent,
-	isDDLPuller bool,
-) *multiplexingPullerImpl {
-	pullerType := "dml"
-	if isDDLPuller {
-		pullerType = "ddl"
+// MultiplexingPuller works with `kv.SharedClient`. All tables share resources.
+type MultiplexingPuller struct {
+	changefeed model.ChangeFeedID
+
+	client  *kv.SharedClient
+	inputCh chan kv.MultiplexingEvent
+	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error
+
+	// NOTE: subscriptions can share one tableProgress if necessary.
+	subscriptions struct {
+		sync.RWMutex
+		m map[kv.SubscriptionID]*tableProgress
 	}
 
+	advanceCh chan *tableProgress
+}
+
+// NewMultiplexingPuller creates a MultiplexingPuller. Outputs are handled by `consume`.
+func NewMultiplexingPuller(
+	changefeed model.ChangeFeedID,
+	client *kv.SharedClient,
+	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error,
+) *MultiplexingPuller {
+	x := &MultiplexingPuller{
+		changefeed: changefeed,
+		client:     client,
+		inputCh:    make(chan kv.MultiplexingEvent, multiplexingPullerEventChanSize),
+		consume:    consume,
+		advanceCh:  make(chan *tableProgress, 128),
+	}
+	x.subscriptions.m = make(map[kv.SubscriptionID]*tableProgress)
+	return x
+}
+
+// Subscribe some spans. They will share one same resolved timestamp progress.
+func (p *MultiplexingPuller) Subscribe(
+	pullerType string, tableName string,
+	spans []tablepb.Span, startTs model.Ts,
+) error {
 	metricMissedRegionCollectCounter := missedRegionCollectCounter.
-		WithLabelValues(changefeed.Namespace, changefeed.ID, pullerType)
+		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, pullerType)
 	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, spans...)
 
-	return &multiplexingPullerImpl{
-		changefeed: changefeed,
-		tableID:    tableID,
-		tableName:  tableName,
-		startTs:    startTs,
-		spans:      spans,
+	progress := &tableProgress{
+		changefeed: p.changefeed,
 		pullerType: pullerType,
-		client:     client,
-		inputCh:    inputCh,
-		tsTracker:  tsTracker,
-		outputCh:   make(chan *model.RawKVEntry, defaultPullerOutputChanSize),
-		resolvedTs: startTs,
-	}
-}
+		tableName:  tableName,
+		spans:      spans,
+		startTs:    startTs,
 
-func (p *multiplexingPullerImpl) Run(ctx context.Context) error {
-	for _, span := range p.spans {
-		if err := p.client.Subscribe(span, p.startTs, p.inputCh); err != nil {
+		resolvedSpans: make(chan *model.ResolvedSpans, resolvedSpanChanSize),
+		tsTracker:     tsTracker,
+		consume:       p.consume,
+	}
+	for _, span := range spans {
+		subID := p.client.AllocSubscriptionID()
+		p.setProgress(subID, progress)
+		if err := p.client.Subscribe(subID, span, startTs, p.inputCh); err != nil {
 			return errors.Trace(err)
 		}
 	}
+	return nil
+}
 
-	metricOutputChanSize := outputChanSizeHistogram.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-	metricEventChanSize := eventChanSizeHistogram.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-	metricPullerResolvedTs := pullerResolvedTsGauge.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-	metricTxnCollectCounterKv := txnCollectCounter.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
+// Run the puller.
+func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
+	metricEventChanSize := eventChanSizeHistogram.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
+	metricCounterKv := txnCollectCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
+	metricCounterResolved := txnCollectCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	defer func() {
-		outputChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 		eventChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		memBufferSizeGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		pullerResolvedTsGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
 		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	}()
 
 	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		metricsTicker := time.NewTicker(15 * time.Second)
-		defer metricsTicker.Stop()
-		output := func(raw *model.RawKVEntry) error {
-			if raw.CRTs < p.resolvedTs || (raw.CRTs == p.resolvedTs && raw.OpType != model.OpTypeResolved) {
-				log.Warn("The CRTs is fallen back in puller",
-					zap.String("namespace", p.changefeed.Namespace),
-					zap.String("changefeed", p.changefeed.ID),
-					zap.Int64("tableID", p.tableID),
-					zap.String("tableName", p.tableName),
-					zap.Uint64("CRTs", raw.CRTs),
-					zap.Uint64("resolvedTs", p.resolvedTs))
-				return nil
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case p.outputCh <- raw:
-			}
-			return nil
-		}
+	for i := 0; i < frontierConcurrent; i++ {
+		g.Go(func() error { return p.advanceSpans(ctx) })
+	}
 
-		initialized := false
+	g.Go(func() error {
+		ticker := time.NewTicker(resolveLockInterval)
+		defer ticker.Stop()
+	LOOP:
 		for {
-			var e model.RegionFeedEvent
+			var e kv.MultiplexingEvent
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-metricsTicker.C:
+			case <-ticker.C:
 				metricEventChanSize.Observe(float64(len(p.inputCh)))
-				metricOutputChanSize.Observe(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(p.resolvedTs)))
-				continue
+				goto LOOP
 			case e = <-p.inputCh:
 			}
 
-			if e.Val != nil {
-				metricTxnCollectCounterKv.Inc()
-				if err := output(e.Val); err != nil {
-					return errors.Trace(err)
-				}
+			progress := p.getProgress(e.SubscriptionID)
+			if progress == nil {
 				continue
 			}
 
-			if e.Resolved != nil {
-				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved.Spans)))
-				for _, resolvedSpan := range e.Resolved.Spans {
-					if !spanz.IsSubSpan(resolvedSpan.Span, p.spans...) {
-						log.Panic("the resolved span is not in the total span",
-							zap.String("namespace", p.changefeed.Namespace),
-							zap.String("changefeed", p.changefeed.ID),
-							zap.Int64("tableID", p.tableID),
-							zap.String("tableName", p.tableName),
-							zap.Any("resolved", e.Resolved),
-							zap.Any("spans", p.spans))
-					}
-					// Forward is called in a single thread
-					p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.Resolved.ResolvedTs)
+			if e.Val != nil {
+				metricCounterKv.Inc()
+				err = p.consume(ctx, e.Val, progress.spans)
+			} else if e.Resolved != nil {
+				metricCounterResolved.Add(float64(len(e.Resolved.Spans)))
+				select {
+				case <-ctx.Done():
+					err = ctx.Err()
+				case progress.resolvedSpans <- e.Resolved:
+					p.schedule(ctx, progress)
 				}
-				resolvedTs := p.tsTracker.Frontier()
-				if resolvedTs > 0 && !initialized {
-					initialized = true
-
-					spans := make([]string, 0, len(p.spans))
-					for i := range p.spans {
-						spans = append(spans, p.spans[i].String())
-					}
-					log.Info("puller is initialized",
-						zap.String("namespace", p.changefeed.Namespace),
-						zap.String("changefeed", p.changefeed.ID),
-						zap.Int64("tableID", p.tableID),
-						zap.String("tableName", p.tableName),
-						zap.Uint64("resolvedTs", resolvedTs))
-				}
-				if resolvedTs > p.resolvedTs {
-					p.resolvedTs = resolvedTs
-					err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
-					if err != nil {
-						return errors.Trace(err)
-					}
-				}
+			}
+			if err != nil {
+				return errors.Trace(err)
 			}
 		}
 	})
 
+	log.Info("MultiplexingPuller starts",
+		zap.String("namespace", p.changefeed.Namespace),
+		zap.String("changefeed", p.changefeed.ID),
+		zap.Int("frontierConcurrent", frontierConcurrent))
+
 	return g.Wait()
 }
 
-func (p *multiplexingPullerImpl) Output() <-chan *model.RawKVEntry {
-	return p.outputCh
+func (p *MultiplexingPuller) setProgress(subID kv.SubscriptionID, progress *tableProgress) {
+	p.subscriptions.Lock()
+	defer p.subscriptions.Unlock()
+	p.subscriptions.m[subID] = progress
 }
 
-func (p *multiplexingPullerImpl) Stats() Stats {
+func (p *MultiplexingPuller) getProgress(subID kv.SubscriptionID) *tableProgress {
+	p.subscriptions.RLock()
+	defer p.subscriptions.RUnlock()
+	return p.subscriptions.m[subID]
+}
+
+func (p *MultiplexingPuller) schedule(ctx context.Context, progress *tableProgress) {
+	if progress.scheduled.CompareAndSwap(false, true) {
+		select {
+		case <-ctx.Done():
+		case p.advanceCh <- progress:
+		}
+	}
+}
+
+func (p *MultiplexingPuller) advanceSpans(ctx context.Context) error {
+	handleProgress := func(ctx context.Context, progress *tableProgress) error {
+		defer func() {
+			progress.scheduled.Store(false)
+			if len(progress.resolvedSpans) > 0 {
+				p.schedule(ctx, progress)
+			}
+		}()
+
+		var span *model.ResolvedSpans
+		for i := 0; i < 128; i++ {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case span = <-progress.resolvedSpans:
+			default:
+				return nil
+			}
+
+			if err := progress.handleResolvedSpan(ctx, span); err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	}
+
+	var progress *tableProgress
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case progress = <-p.advanceCh:
+			if err := handleProgress(ctx, progress); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+}
+
+func (p *tableProgress) handleResolvedSpan(ctx context.Context, e *model.ResolvedSpans) (err error) {
+	for _, resolvedSpan := range e.Spans {
+		if !spanz.IsSubSpan(resolvedSpan.Span, p.spans...) {
+			log.Panic("the resolved span is not in the table spans",
+				zap.String("namespace", p.changefeed.Namespace),
+				zap.String("changefeed", p.changefeed.ID),
+				zap.String("tableName", p.tableName),
+				zap.Any("spans", p.spans))
+		}
+		// Forward is called in a single thread
+		p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.ResolvedTs)
+	}
+	resolvedTs := p.tsTracker.Frontier()
+	if resolvedTs > 0 && !p.initialized {
+		p.initialized = true
+		log.Info("table puller is initialized",
+			zap.String("namespace", p.changefeed.Namespace),
+			zap.String("changefeed", p.changefeed.ID),
+			zap.String("tableName", p.tableName),
+			zap.Uint64("resolvedTs", resolvedTs))
+	}
+	if resolvedTs > p.resolvedTs {
+		p.resolvedTs = resolvedTs
+		raw := &model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved}
+		err = p.consume(ctx, raw, p.spans)
+	}
+	return
+}
+
+func (p *MultiplexingPuller) Stats() Stats {
 	return Stats{}
 }

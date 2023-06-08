@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -47,6 +46,13 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
+
+type SubscriptionID uint64
+
+type MultiplexingEvent struct {
+	model.RegionFeedEvent
+	SubscriptionID SubscriptionID
+}
 
 // SharedClient is shared in many tables. Methods are thread-safe.
 type SharedClient struct {
@@ -75,7 +81,7 @@ type SharedClient struct {
 
 	totalSpans struct {
 		sync.RWMutex
-		m map[model.TableID]*requestedTable
+		m *spanz.HashMap[*requestedTable]
 	}
 
 	// only modified in requestRegionToStore so lock is unnecessary.
@@ -110,11 +116,12 @@ type requestedTable struct {
 	span      tablepb.Span
 	startTs   model.Ts
 	rangeLock *regionlock.RegionRangeLock
-	eventCh   chan<- model.RegionFeedEvent
+	eventCh   chan<- MultiplexingEvent
 	requestID uint64
 	removed   atomic.Bool
 }
 
+// NewSharedClient creates a client.
 func NewSharedClient(
 	changefeed model.ChangeFeedID,
 	cfg *config.KVClientConfig,
@@ -145,20 +152,33 @@ func NewSharedClient(
 
 		requestedStores: make(map[string]*requestedStore),
 	}
-	s.totalSpans.m = make(map[model.TableID]*requestedTable)
+	s.totalSpans.m = spanz.NewHashMap[*requestedTable]()
 	return s
 }
 
+// AllocSubscriptionID gets an ID can be used in `Subscribe`.
+func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
+	return SubscriptionID(requestIDGen.Add(1))
+}
+
 // Subscribe the given table span.
-// NOTE: `span.TableID` is used to check redundant subscriptions.
-func (s *SharedClient) Subscribe(span tablepb.Span, startTs uint64, eventCh chan<- model.RegionFeedEvent) error {
+// NOTE: `span.TableID` must be set correctly.
+func (s *SharedClient) Subscribe(
+	subID SubscriptionID, span tablepb.Span, startTs uint64,
+	eventCh chan<- MultiplexingEvent,
+) error {
+	if span.TableID == 0 {
+		log.Panic("event feed subscribe with zero tablepb.Span.TableID",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID))
+	}
+
 	s.totalSpans.Lock()
-	if _, ok := s.totalSpans.m[span.TableID]; !ok {
-		requestedTable := s.newRequestedTable(span, startTs, eventCh)
-		s.totalSpans.m[span.TableID] = requestedTable
+	if _, ok := s.totalSpans.m.Get(span); !ok {
+		requestedTable := s.newRequestedTable(subID, span, startTs, eventCh)
+		s.totalSpans.m.ReplaceOrInsert(span, requestedTable)
 		s.totalSpans.Unlock()
 
-		s.preSubscribe(requestedTable)
 		s.requestRangeCh.In() <- rangeRequestTask{span: span, ts: startTs, requestedTable: requestedTable}
 		log.Info("event feed subscribes table success",
 			zap.String("namespace", s.changefeed.Namespace),
@@ -172,11 +192,17 @@ func (s *SharedClient) Subscribe(span tablepb.Span, startTs uint64, eventCh chan
 }
 
 // Unsubscribe the given table span.
-// NOTE: `span.TableID` determines whether the span is subscribed or not.
+// NOTE: `span.TableID` must be set correctly.
 func (s *SharedClient) Unsubscribe(span tablepb.Span) error {
+	if span.TableID == 0 {
+		log.Panic("event feed unsubscribe with zero tablepb.Span.TableID",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID))
+	}
+
 	s.totalSpans.Lock()
-	if rt, ok := s.totalSpans.m[span.TableID]; ok {
-		delete(s.totalSpans.m, span.TableID)
+	if rt, ok := s.totalSpans.m.Get(span); ok {
+		s.totalSpans.m.Delete(span)
 		s.totalSpans.Unlock()
 
 		rt.removed.Store(true)
@@ -195,16 +221,13 @@ func (s *SharedClient) Unsubscribe(span tablepb.Span) error {
 // Run the client.
 func (s *SharedClient) Run(ctx context.Context) error {
 	s.clusterID = s.pd.GetClusterID(ctx)
-
-	tikvStorage := s.tikvStorage.(tikv.Storage)
-	role := contextutil.RoleFromCtx(ctx)
-	s.lockResolver = txnutil.NewLockerResolver(tikvStorage, s.changefeed, role)
+	s.lockResolver = txnutil.NewLockerResolver(s.tikvStorage.(tikv.Storage), s.changefeed)
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	s.workers = make([]*sharedRegionWorker, 0, s.config.WorkerConcurrent)
 	workerMetrics := newWorkerMetrics(s.changefeed)
-	for i := 0; i < s.config.WorkerConcurrent; i++ {
+	for i := uint(0); i < s.config.WorkerConcurrent; i++ {
 		worker := newSharedRegionWorker(s, workerMetrics)
 		g.Go(func() error { return worker.run(ctx) })
 		s.workers = append(s.workers, worker)
@@ -223,11 +246,17 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
+// Close closes the client. Must be called after `Run` returns.
 func (s *SharedClient) Close() {
 	s.requestRangeCh.CloseAndDrain()
 	s.regionCh.CloseAndDrain()
 	s.regionRouter.CloseAndDrain()
 	s.errCh.CloseAndDrain()
+}
+
+// GetPDClock returns a pdutil.Clock.
+func (s *SharedClient) GetPDClock() pdutil.Clock {
+	return s.pdClock
 }
 
 func (s *SharedClient) onRegionFail(ctx context.Context, errInfo regionErrorInfo) {
@@ -306,7 +335,7 @@ func (s *SharedClient) requestStore(
 	s.requestedStores[storeAddr] = rs
 
 	streamID := atomic.Uint32{}
-	for i := 0; i < s.config.GrpcStreamConcurrent; i++ {
+	for i := uint(0); i < s.config.GrpcStreamConcurrent; i++ {
 		g.Go(func() (err error) {
 			selfStreamID := streamID.Add(1) - 1
 			for {
@@ -566,6 +595,7 @@ func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Grou
 		case <-ctx.Done():
 			return ctx.Err()
 		case task := <-s.requestRangeCh.Out():
+			s.preSubscribe(task.requestedTable)
 			// divideAndSendEventFeedToRegions could be blocked for some time,
 			// since it must wait for the region lock available. In order to
 			// consume region range request from `requestRangeCh` as soon as
@@ -627,12 +657,6 @@ func (s *SharedClient) divideAndRequestRegions(
 			}
 		}
 	}
-}
-
-func (s *SharedClient) getRequestedTable(tableID model.TableID) *requestedTable {
-	s.totalSpans.RLock()
-	defer s.totalSpans.RUnlock()
-	return s.totalSpans.m[tableID]
 }
 
 func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo) {
@@ -777,9 +801,10 @@ func (s *SharedClient) handleSlowTables(ctx context.Context) error {
 		rts := make([]*requestedTable, 0, 128)
 
 		s.totalSpans.Lock()
-		for _, rt := range s.totalSpans.m {
+		s.totalSpans.m.Range(func(_ tablepb.Span, rt *requestedTable) bool {
 			rts = append(rts, rt)
-		}
+			return true
+		})
 		s.totalSpans.Unlock()
 
 		// TODO(qupeng): record time and do lock resovle.
@@ -803,8 +828,8 @@ func (s *SharedClient) handleSlowTables(ctx context.Context) error {
 }
 
 func (s *SharedClient) newRequestedTable(
-	span tablepb.Span, startTs uint64,
-	eventCh chan<- model.RegionFeedEvent,
+	subID SubscriptionID, span tablepb.Span, startTs uint64,
+	eventCh chan<- MultiplexingEvent,
 ) *requestedTable {
 	name := s.changefeed.Namespace + "." + s.changefeed.ID
 	rangeLock := regionlock.NewRegionRangeLock(span.StartKey, span.EndKey, startTs, name)
@@ -813,21 +838,22 @@ func (s *SharedClient) newRequestedTable(
 		startTs:   startTs,
 		rangeLock: rangeLock,
 		eventCh:   eventCh,
-		requestID: requestIDGen.Add(1),
+		requestID: uint64(subID),
 	}
 }
 
+// Send a resolved ts to event channel first, for two reasons:
+//  1. Since we have locked the region range, and have maintained correct
+//     checkpoint ts for the range, it is safe to report the resolved ts
+//     to puller at this moment.
+//  2. Before the kv client gets region rpcCtx, sends request to TiKV and
+//     receives the first kv event from TiKV, the region could split or
+//     merge in advance, which should cause the change of resolved ts
+//     distribution in puller, so this resolved ts event is needed.
+//
+// After this resolved ts event is sent, we don't need to send one more
+// resolved ts event when the region starts to work.
 func (s *SharedClient) preSubscribe(requestedTable *requestedTable) {
-	// Send a resolved ts to event channel first, for two reasons:
-	// 1. Since we have locked the region range, and have maintained correct
-	//    checkpoint ts for the range, it is safe to report the resolved ts
-	//    to puller at this moment.
-	// 2. Before the kv client gets region rpcCtx, sends request to TiKV and
-	//    receives the first kv event from TiKV, the region could split or
-	//    merge in advance, which should cause the change of resolved ts
-	//    distribution in puller, so this resolved ts event is needed.
-	// After this resolved ts event is sent, we don't need to send one more
-	// resolved ts event when the region starts to work.
 	resolvedEv := model.RegionFeedEvent{
 		Resolved: &model.ResolvedSpans{
 			Spans: []model.RegionComparableSpan{
@@ -839,7 +865,14 @@ func (s *SharedClient) preSubscribe(requestedTable *requestedTable) {
 			ResolvedTs: requestedTable.startTs,
 		},
 	}
-	requestedTable.eventCh <- resolvedEv
+	requestedTable.eventCh <- requestedTable.associateSubscriptionID(resolvedEv)
+}
+
+func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) MultiplexingEvent {
+	return MultiplexingEvent{
+		RegionFeedEvent: event,
+		SubscriptionID:  SubscriptionID(r.requestID),
+	}
 }
 
 func hashRegionID(regionID uint64, slots int) int {

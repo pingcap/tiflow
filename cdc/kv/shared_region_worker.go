@@ -189,8 +189,9 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 // NOTE: context.Canceled won't be treated as an error.
 func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Event_Entries_, state *regionFeedState) error {
 	emit := func(assembled model.RegionFeedEvent) bool {
+		x := state.sri.requestedTable.associateSubscriptionID(assembled)
 		select {
-		case state.sri.requestedTable.eventCh <- assembled:
+		case state.sri.requestedTable.eventCh <- x:
 			return true
 		case <-ctx.Done():
 			return false
@@ -296,17 +297,17 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, event resolve
 	}
 
 	resolvedSpans := make(map[uint64]*struct {
-		spans  []model.RegionComparableSpan
-		output chan<- model.RegionFeedEvent
+		spans          []model.RegionComparableSpan
+		requestedTable *requestedTable
 	})
 
 	for _, state := range event.regions {
 		spansAndChan := resolvedSpans[state.sri.requestedTable.requestID]
 		if spansAndChan == nil {
 			spansAndChan = &struct {
-				spans  []model.RegionComparableSpan
-				output chan<- model.RegionFeedEvent
-			}{output: state.sri.requestedTable.eventCh}
+				spans          []model.RegionComparableSpan
+				requestedTable *requestedTable
+			}{requestedTable: state.sri.requestedTable}
 			resolvedSpans[state.sri.requestedTable.requestID] = spansAndChan
 		}
 
@@ -325,7 +326,10 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, event resolve
 			continue
 		}
 		state.updateResolvedTs(event.ts)
-		spansAndChan.spans = append(spansAndChan.spans, model.RegionComparableSpan{Span: state.sri.span, Region: regionID})
+
+		span := model.RegionComparableSpan{Span: state.sri.span, Region: regionID}
+		span.Span.TableID = state.sri.requestedTable.span.TableID
+		spansAndChan.spans = append(spansAndChan.spans, span)
 	}
 
 	for requestID, spansAndChan := range resolvedSpans {
@@ -336,9 +340,10 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, event resolve
 			zap.Uint64("requestID", requestID),
 			zap.Int("spanCount", len(spansAndChan.spans)))
 		if len(spansAndChan.spans) > 0 {
-			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{ResolvedTs: event.ts, Spans: spansAndChan.spans}}
+			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{spansAndChan.spans, event.ts}}
+			x := spansAndChan.requestedTable.associateSubscriptionID(revent)
 			select {
-			case spansAndChan.output <- revent:
+			case spansAndChan.requestedTable.eventCh <- x:
 				w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
 			case <-ctx.Done():
 			}

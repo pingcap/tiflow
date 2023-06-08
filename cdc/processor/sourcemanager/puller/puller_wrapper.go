@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -36,7 +35,6 @@ type Wrapper interface {
 		up *upstream.Upstream,
 		eventSortEngine engine.SortEngine,
 		errChan chan<- error,
-		multiplexingCli *kv.SharedClient,
 	)
 	GetStats() puller.Stats
 	Close()
@@ -81,7 +79,6 @@ func (n *WrapperImpl) Start(
 	up *upstream.Upstream,
 	eventSortEngine engine.SortEngine,
 	errChan chan<- error,
-	kvCli *kv.SharedClient,
 ) {
 	ctx, n.cancel = context.WithCancel(ctx)
 	errorHandler := func(err error) {
@@ -95,35 +92,24 @@ func (n *WrapperImpl) Start(
 		errorHandler(cerrors.New("processor add table injected error"))
 	})
 
-	if kvCli == nil {
-		n.p = puller.New(
-			ctx,
-			up.PDClient,
-			up.GrpcPool,
-			up.RegionCache,
-			up.KVStorage,
-			up.PDClock,
-			n.startTs,
-			[]tablepb.Span{n.span},
-			config.GetGlobalServerConfig().KVClient,
-			n.changefeed,
-			n.span.TableID,
-			n.tableName,
-			n.bdrMode,
-			false,
-		)
-	} else {
-		n.p = puller.NewMultiplexing(
-			n.changefeed,
-			n.span.TableID,
-			n.tableName,
-			n.startTs,
-			[]tablepb.Span{n.span},
-			kvCli,
-			make(chan model.RegionFeedEvent, 128), // TODO(qupeng): channel size.
-			false,
-		)
-	}
+	// NOTICE: always pull the old value internally
+	// See also: https://github.com/pingcap/tiflow/issues/2301.
+	n.p = puller.New(
+		ctx,
+		up.PDClient,
+		up.GrpcPool,
+		up.RegionCache,
+		up.KVStorage,
+		up.PDClock,
+		n.startTs,
+		[]tablepb.Span{n.span},
+		config.GetGlobalServerConfig().KVClient,
+		n.changefeed,
+		n.span.TableID,
+		n.tableName,
+		n.bdrMode,
+		false,
+	)
 
 	// Use errgroup to ensure all sub goroutines can exit without calling Close.
 	n.eg, ctx = errgroup.WithContext(ctx)

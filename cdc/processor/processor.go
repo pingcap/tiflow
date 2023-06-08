@@ -797,6 +797,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		ddlStartTs,
 		kvCfg,
 		p.changefeedID,
+		false, /* isOwner */
 		schemaStorage,
 		f,
 	)
