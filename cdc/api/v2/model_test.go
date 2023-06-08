@@ -47,10 +47,20 @@ var defaultAPIConfig = &ReplicaConfig{
 			Delimiter:  config.Comma,
 			NullString: config.NULL,
 		},
+<<<<<<< HEAD
 		EncoderConcurrency:       16,
 		Terminator:               config.CRLF,
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
+=======
+		EncoderConcurrency:               util.AddressOf(16),
+		Terminator:                       util.AddressOf(config.CRLF),
+		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
+		EnablePartitionSeparator:         util.AddressOf(true),
+		EnableKafkaSinkV2:                util.AddressOf(false),
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+>>>>>>> 896f4a479e (config(ticdc): expose changefeed level config delete_only_output_handle_key_columns (#9136))
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",

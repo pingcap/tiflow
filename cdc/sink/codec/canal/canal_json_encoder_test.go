@@ -127,6 +127,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Data[0], col.Name)
 	}
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
 	data, err = encoder.newJSONMessageForDML(testCaseDelete)
 	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
@@ -144,6 +145,9 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok = newJSONBatchEncoder(&common.Config{OnlyHandleKeyColumns: true}).(*JSONBatchEncoder)
 	require.True(t, ok)
 	data, err = encoder.newJSONMessageForDML(testCaseDelete)
+=======
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{DeleteOnlyHandleKeyColumns: true})
+>>>>>>> 896f4a479e (config(ticdc): expose changefeed level config delete_only_output_handle_key_columns (#9136)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)

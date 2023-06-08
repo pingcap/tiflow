@@ -44,7 +44,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	keyMsg, valueMsg := rowChangeToMsg(e, d.config.OnlyHandleKeyColumns)
+	keyMsg, valueMsg := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns)
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return errors.Trace(err)

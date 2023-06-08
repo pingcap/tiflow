@@ -1288,6 +1288,10 @@ var doc = `{
                 "date-separator": {
                     "type": "string"
                 },
+                "delete-only-output-handle-key-columns": {
+                    "description": "DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.",
+                    "type": "boolean"
+                },
                 "dispatchers": {
                     "type": "array",
                     "items": {
@@ -2004,6 +2008,9 @@ var doc = `{
                 },
                 "date_separator": {
                     "type": "string"
+                },
+                "delete_only_output_handle_key_columns": {
+                    "type": "boolean"
                 },
                 "dispatchers": {
                     "type": "array",

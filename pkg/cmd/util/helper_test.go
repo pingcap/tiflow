@@ -204,10 +204,20 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			Delimiter:  string(config.Comma),
 			NullString: config.NULL,
 		},
+<<<<<<< HEAD
 		Terminator:               "\r\n",
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		Protocol:                 "open-protocol",
+=======
+		Terminator:                       util.AddressOf("\r\n"),
+		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
+		EnablePartitionSeparator:         util.AddressOf(true),
+		EnableKafkaSinkV2:                util.AddressOf(false),
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		Protocol:                         util.AddressOf("open-protocol"),
+>>>>>>> 896f4a479e (config(ticdc): expose changefeed level config delete_only_output_handle_key_columns (#9136))
 	}, cfg.Sink)
 }
 
@@ -235,6 +245,11 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: false,
 		},
+<<<<<<< HEAD
+=======
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+>>>>>>> 896f4a479e (config(ticdc): expose changefeed level config delete_only_output_handle_key_columns (#9136))
 	}, cfg.Sink)
 }
 

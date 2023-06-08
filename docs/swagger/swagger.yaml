@@ -71,6 +71,10 @@ definitions:
         $ref: '#/definitions/config.CSVConfig'
       date-separator:
         type: string
+      delete-only-output-handle-key-columns:
+        description: DeleteOnlyOutputHandleKeyColumns is only available when the downstream
+          is MQ.
+        type: boolean
       dispatchers:
         items:
           $ref: '#/definitions/config.DispatchRule'
@@ -549,6 +553,8 @@ definitions:
         $ref: '#/definitions/v2.CSVConfig'
       date_separator:
         type: string
+      delete_only_output_handle_key_columns:
+        type: boolean
       dispatchers:
         items:
           $ref: '#/definitions/v2.DispatchRule'

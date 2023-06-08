@@ -51,16 +51,89 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		NullString:      `\N`,
 		IncludeCommitTs: true,
 	}
+<<<<<<< HEAD
 	conf.Sink.Terminator = ""
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
+=======
+	conf.Sink.TxnAtomicity = util.AddressOf(unknownTxnAtomicity)
+	conf.Sink.DateSeparator = util.AddressOf("month")
+	conf.Sink.EnablePartitionSeparator = util.AddressOf(true)
+	conf.Sink.EnableKafkaSinkV2 = util.AddressOf(true)
+	conf.Scheduler.EnableTableAcrossNodes = true
+	conf.Scheduler.RegionThreshold = 100001
+	conf.Scheduler.WriteKeyThreshold = 100001
+
+	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
+	conf.Sink.SafeMode = aws.Bool(true)
+	conf.Sink.KafkaConfig = &KafkaConfig{
+		PartitionNum:                 aws.Int32(1),
+		ReplicationFactor:            aws.Int16(1),
+		KafkaVersion:                 aws.String("version"),
+		MaxMessageBytes:              aws.Int(1),
+		Compression:                  aws.String("gzip"),
+		KafkaClientID:                aws.String("client-id"),
+		AutoCreateTopic:              aws.Bool(true),
+		DialTimeout:                  aws.String("1m"),
+		WriteTimeout:                 aws.String("1m"),
+		ReadTimeout:                  aws.String("1m"),
+		RequiredAcks:                 aws.Int(1),
+		SASLUser:                     aws.String("user"),
+		SASLPassword:                 aws.String("password"),
+		SASLMechanism:                aws.String("mechanism"),
+		SASLGssAPIAuthType:           aws.String("type"),
+		SASLGssAPIKeytabPath:         aws.String("path"),
+		SASLGssAPIKerberosConfigPath: aws.String("path"),
+		SASLGssAPIServiceName:        aws.String("service"),
+		SASLGssAPIUser:               aws.String("user"),
+		SASLGssAPIPassword:           aws.String("password"),
+		SASLGssAPIRealm:              aws.String("realm"),
+		SASLGssAPIDisablePafxfast:    aws.Bool(true),
+		EnableTLS:                    aws.Bool(true),
+		CA:                           aws.String("ca"),
+		Cert:                         aws.String("cert"),
+		Key:                          aws.String("key"),
+		CodecConfig: &CodecConfig{
+			EnableTiDBExtension:            aws.Bool(true),
+			MaxBatchSize:                   aws.Int(100000),
+			AvroEnableWatermark:            aws.Bool(true),
+			AvroDecimalHandlingMode:        aws.String("string"),
+			AvroBigintUnsignedHandlingMode: aws.String("string"),
+		},
+	}
+	conf.Sink.MySQLConfig = &MySQLConfig{
+		WorkerCount:                  aws.Int(8),
+		MaxTxnRow:                    aws.Int(100000),
+		MaxMultiUpdateRowSize:        aws.Int(100000),
+		MaxMultiUpdateRowCount:       aws.Int(100000),
+		TiDBTxnMode:                  aws.String("pessimistic"),
+		SSLCa:                        aws.String("ca"),
+		SSLCert:                      aws.String("cert"),
+		SSLKey:                       aws.String("key"),
+		TimeZone:                     aws.String("UTC"),
+		WriteTimeout:                 aws.String("1m"),
+		ReadTimeout:                  aws.String("1m"),
+		Timeout:                      aws.String("1m"),
+		EnableBatchDML:               aws.Bool(true),
+		EnableMultiStatement:         aws.Bool(true),
+		EnableCachePreparedStatement: aws.Bool(true),
+	}
+	conf.Sink.CloudStorageConfig = &CloudStorageConfig{
+		WorkerCount:   aws.Int(8),
+		FlushInterval: aws.String("1m"),
+		FileSize:      aws.Int(1024),
+	}
+>>>>>>> 896f4a479e (config(ticdc): expose changefeed level config delete_only_output_handle_key_columns (#9136))
 
 	b, err := conf.Marshal()
-	require.Nil(t, err)
-	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	require.NoError(t, err)
+	b = mustIndentJSON(t, b)
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, b)
+
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, conf, conf2)
 }
 
@@ -81,7 +154,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	t.Parallel()
 	conf2 := new(ReplicaConfig)
 	err := conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigOutDated))
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	conf := GetDefaultReplicaConfig()
 	conf.CaseSensitive = false

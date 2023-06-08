@@ -56,11 +56,22 @@ var defaultReplicaConfig = &ReplicaConfig{
 			Delimiter:  Comma,
 			NullString: NULL,
 		},
+<<<<<<< HEAD
 		EncoderConcurrency:       16,
 		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		TiDBSourceID:             1,
+=======
+		EncoderConcurrency:               util.AddressOf(16),
+		Terminator:                       util.AddressOf(CRLF),
+		DateSeparator:                    util.AddressOf(DateSeparatorDay.String()),
+		EnablePartitionSeparator:         util.AddressOf(true),
+		EnableKafkaSinkV2:                util.AddressOf(false),
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		TiDBSourceID:                     1,
+>>>>>>> 896f4a479e (config(ticdc): expose changefeed level config delete_only_output_handle_key_columns (#9136))
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",

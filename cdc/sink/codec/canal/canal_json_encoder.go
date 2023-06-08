@@ -172,7 +172,11 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 				if isDelete && c.config.OnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+=======
+				if isDelete && config.DeleteOnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+>>>>>>> 896f4a479e (config(ticdc): expose changefeed level config delete_only_output_handle_key_columns (#9136)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 					continue
 				}
 				if emptyColumn {
@@ -223,7 +227,11 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 		if err := filling(e.PreColumns, out, c.config.OnlyHandleKeyColumns); err != nil {
+=======
+		if err := filling(e.PreColumns, out, false, config.DeleteOnlyHandleKeyColumns, nil); err != nil {
+>>>>>>> 896f4a479e (config(ticdc): expose changefeed level config delete_only_output_handle_key_columns (#9136)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			return nil, err
 		}
 	} else if e.IsInsert() {
