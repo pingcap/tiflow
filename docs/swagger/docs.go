@@ -1617,6 +1617,10 @@ var doc = `{
                     "description": "DateSeparator is only available when the downstream is Storage.",
                     "type": "string"
                 },
+                "delete-only-output-handle-key-columns": {
+                    "description": "DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.",
+                    "type": "boolean"
+                },
                 "dispatchers": {
                     "description": "DispatchRules is only available when the downstream is MQ.",
                     "type": "array",
@@ -2670,6 +2674,9 @@ var doc = `{
                 },
                 "date_separator": {
                     "type": "string"
+                },
+                "delete_only_output_handle_key_columns": {
+                    "type": "boolean"
                 },
                 "dispatchers": {
                     "type": "array",

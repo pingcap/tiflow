@@ -63,6 +63,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Scheduler.WriteKeyThreshold = 100001
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
@@ -123,11 +124,13 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	}
 
 	b, err := conf.Marshal()
-	require.Nil(t, err)
-	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	require.NoError(t, err)
+	b = mustIndentJSON(t, b)
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, b)
+
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, conf, conf2)
 }
 
@@ -148,7 +151,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	t.Parallel()
 	conf2 := new(ReplicaConfig)
 	err := conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigOutDated))
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	conf := GetDefaultReplicaConfig()
 	conf.CaseSensitive = false
