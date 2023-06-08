@@ -157,15 +157,15 @@ func NewCapture4Test(o owner.Owner) *captureImpl {
 	return res
 }
 
-//// NewCaptureWithManager4Test returns a new Capture instance for test.
-//func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *captureImpl {
-//	res := &captureImpl{
-//		upstreamManager: m,
-//		migrator:        &migrate.NoOpMigrator{},
-//	}
-//	res.owner = o
-//	return res
-//}
+// NewCaptureWithManager4Test returns a new Capture instance for test.
+func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *captureImpl {
+	res := &captureImpl{
+		upstreamManager: m,
+		migrator:        &migrate.NoOpMigrator{},
+	}
+	res.owner = o
+	return res
+}
 
 // GetUpstreamManager is a Getter of capture's upstream manager
 func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
