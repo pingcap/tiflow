@@ -58,8 +58,8 @@ func (s *EventSorter) IsTableBased() bool {
 }
 
 // AddTable implements engine.SortEngine.
-func (s *EventSorter) AddTable(span tablepb.Span) {
-	resolvedTs := model.Ts(0)
+func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
+	resolvedTs := startTs
 	if _, exists := s.tables.LoadOrStore(span, &tableSorter{resolvedTs: &resolvedTs}); exists {
 		log.Panic("add an exist table", zap.Stringer("span", &span))
 	}

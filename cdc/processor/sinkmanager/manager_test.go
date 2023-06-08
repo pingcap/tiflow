@@ -44,7 +44,7 @@ func addTableAndAddEventsToSortEngine(
 	engine engine.SortEngine,
 	span tablepb.Span,
 ) {
-	engine.AddTable(span)
+	engine.AddTable(span, 0)
 	events := []*model.PolymorphicEvent{
 		{
 			StartTs: 1,

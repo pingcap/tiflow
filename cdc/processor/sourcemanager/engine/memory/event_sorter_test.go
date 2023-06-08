@@ -93,7 +93,7 @@ func TestEventSorter(t *testing.T) {
 
 	span := spanz.TableIDToComparableSpan(1)
 	es := New(context.Background())
-	es.AddTable(span)
+	es.AddTable(span, 0)
 	var nextToFetch engine.Position
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
