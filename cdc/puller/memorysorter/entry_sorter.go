@@ -29,6 +29,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// DDLPullerTableName is the fake table name for ddl puller
+const DDLPullerTableName = "DDL_PULLER"
+
 // EntrySorter accepts out-of-order raw kv entries and output sorted entries.
 // For now, it only uses for DDL puller and test.
 type EntrySorter struct {
@@ -52,7 +55,7 @@ func NewEntrySorter() *EntrySorter {
 // Run runs EntrySorter
 func (es *EntrySorter) Run(ctx context.Context) error {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	_, tableName := contextutil.TableIDFromCtx(ctx)
+	tableName := DDLPullerTableName
 	metricEntrySorterResolvedChanSizeGauge := entrySorterResolvedChanSizeGauge.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
 	metricEntrySorterOutputChanSizeGauge := entrySorterOutputChanSizeGauge.
