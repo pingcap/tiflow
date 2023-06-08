@@ -94,7 +94,9 @@ func newResolvedMessage(ts uint64) *internal.MessageKey {
 	}
 }
 
-func rowChangeToMsgLargeMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) (*internal.MessageKey, *messageRow) {
+func rowChangeToMsg(e *model.RowChangedEvent,
+	deleteOnlyHandleKeyColumns bool,
+	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
@@ -106,37 +108,15 @@ func rowChangeToMsgLargeMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) (*
 		RowID:                            e.RowID,
 		Partition:                        partition,
 		Type:                             model.MessageTypeRow,
-		LargeMessageOnlyHandleKeyColumns: true,
+		LargeMessageOnlyHandleKeyColumns: largeMessageOnlyHandleKeyColumns,
 	}
 	value := &messageRow{}
 	if e.IsDelete() {
-		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, true)
-	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns, true)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, true)
-	}
-	return key, value
-}
-
-func rowChangeToMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow) {
-	var partition *int64
-	if e.Table.IsPartition {
-		partition = &e.Table.TableID
-	}
-	key := &internal.MessageKey{
-		Ts:        e.CommitTs,
-		Schema:    e.Table.Schema,
-		Table:     e.Table.Table,
-		RowID:     e.RowID,
-		Partition: partition,
-		Type:      model.MessageTypeRow,
-	}
-	value := &messageRow{}
-	if e.IsDelete() {
+		onlyHandleKeyColumns := deleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
 		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, onlyHandleKeyColumns)
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns, false)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, false)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, largeMessageOnlyHandleKeyColumns)
 	}
 	return key, value
 }
