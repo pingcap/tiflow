@@ -47,7 +47,7 @@ func (e *BatchEncoder) AppendRowChangedEvent(
 	ev *model.RowChangedEvent,
 	callback func(),
 ) error {
-	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev, e.config.OnlyHandleKeyColumns)
+	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev, e.config.DeleteOnlyHandleKeyColumns)
 	if callback != nil {
 		e.callbackBuf = append(e.callbackBuf, callback)
 	}

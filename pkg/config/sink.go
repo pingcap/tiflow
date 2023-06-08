@@ -139,6 +139,9 @@ type SinkConfig struct {
 	// OnlyOutputUpdatedColumns is only available when the downstream is MQ.
 	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
 
+	// DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.
+	DeleteOnlyOutputHandleKeyColumns *bool `toml:"delete-only-output-handle-key-columns" json:"delete-only-output-handle-key-columns,omitempty"`
+
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
@@ -338,6 +341,10 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		return err
 	}
 
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+		return nil
+	}
+
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
@@ -362,6 +369,13 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	// validate terminator
 	if s.Terminator == nil {
 		s.Terminator = util.AddressOf(CRLF)
+	}
+
+	protocol, _ := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
+	if util.GetOrZero(s.DeleteOnlyOutputHandleKeyColumns) && protocol == ProtocolCsv {
+		return cerror.ErrSinkInvalidConfig.GenWithStack(
+			"CSV protocol always output all columns for the delete event, " +
+				"do not set `delete-only-output-handle-key-columns` to true")
 	}
 
 	// validate storage sink related config
