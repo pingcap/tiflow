@@ -307,6 +307,8 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	return nil
 }
 
+var tickCount = 0
+
 func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	adminJobPending := c.feedStateManager.Tick(c.state)
 	preCheckpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
@@ -911,6 +913,9 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 	return
 }
 
+// TODO: remove this variable after test is done.
+var RedoResolvedTs = uint64(0)
+
 // handleBarrier calculates the barrierTs of the changefeed.
 // barrierTs is used to control the data that can be flush to downstream.
 func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *ddlBarrier) error {
@@ -958,8 +963,23 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *ddlBarrier) 
 		barrier.MinTableBarrierTs = barrierTs
 	}
 
+	// TODO: fizz remove this log
+	if tickCount <= 5 {
+		log.Info("fizz changefeed tick",
+			zap.Any("tickCount", tickCount),
+			zap.String("changefeed", c.id.ID),
+			zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
+			zap.Uint64("barrierTs", barrierTs),
+			zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
+			zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
+			zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
+			zap.Any("redoTs", c.redoMetaMgr.GetFlushedMeta()),
+		)
+	}
+
 	if c.redoMetaMgr.Enabled() {
 		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
+		RedoResolvedTs = flushedMeta.ResolvedTs
 		if flushedMeta.ResolvedTs != 0 && flushedMeta.ResolvedTs < barrier.GlobalBarrierTs {
 			// todo: remove this log after fully tested
 			log.Info("fizz redo meta resolved ts is less than barrier ts, use it as barrier ts",
