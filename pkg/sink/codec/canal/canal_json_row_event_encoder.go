@@ -155,7 +155,7 @@ func newJSONMessageForDML(
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
-				if isDelete && config.OnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+				if isDelete && config.DeleteOnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
 					continue
 				}
 				if emptyColumn {
@@ -206,7 +206,7 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.PreColumns, out, false, config.OnlyHandleKeyColumns, nil); err != nil {
+		if err := filling(e.PreColumns, out, false, config.DeleteOnlyHandleKeyColumns, nil); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {

@@ -127,7 +127,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Data[0], col.Name)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{OnlyHandleKeyColumns: true})
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{DeleteOnlyHandleKeyColumns: true})
 	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
