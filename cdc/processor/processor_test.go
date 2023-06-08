@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -62,14 +61,15 @@ func newProcessor4Test(
 			return nil
 		}
 
-		stdCtx := contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 		p.agent = &mockAgent{executor: p, liveness: liveness}
 		p.sinkManager.r, p.sourceManager.r, _ = sinkmanager.NewManagerWithMemEngine(
 			t, changefeedID, state.Info)
 		p.sinkManager.name = "SinkManager"
-		p.sinkManager.spawn(stdCtx)
+		p.sinkManager.changefeedID = changefeedID
+		p.sinkManager.spawn(ctx)
 		p.sourceManager.name = "SourceManager"
-		p.sourceManager.spawn(stdCtx)
+		p.sourceManager.changefeedID = changefeedID
+		p.sourceManager.spawn(ctx)
 
 		// NOTICE: we have to bind the sourceManager to the sinkManager
 		// otherwise the sinkManager will not receive the resolvedTs.
@@ -77,7 +77,8 @@ func newProcessor4Test(
 
 		p.redo.r = redo.NewDisabledDMLManager()
 		p.redo.name = "RedoManager"
-		p.redo.spawn(stdCtx)
+		p.redo.changefeedID = changefeedID
+		p.redo.spawn(ctx)
 
 		p.initialized = true
 		return nil

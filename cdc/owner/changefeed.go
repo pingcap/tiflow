@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/errno"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -141,7 +140,9 @@ type changefeed struct {
 	) (scheduler.Scheduler, error)
 
 	newDownstreamObserver func(
-		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		ctx context.Context,
+		changefeedID model.ChangeFeedID,
+		sinkURIStr string, replCfg *config.ReplicaConfig,
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error)
 
@@ -194,7 +195,9 @@ func newChangefeed4Test(
 		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		ctx context.Context,
+		changefeedID model.ChangeFeedID,
+		sinkURIStr string, replCfg *config.ReplicaConfig,
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error),
 ) *changefeed {
@@ -632,14 +635,13 @@ LOOP2:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, c.state.Info.SinkURI, c.state.Info.Config)
 	if err != nil {
 		return err
 	}
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
-	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
-	c.redoDDLMgr, err = redo.NewDDLManager(stdCtx, c.state.Info.Config.Consistent, ddlStartTs)
+	c.redoDDLMgr, err = redo.NewDDLManager(cancelCtx, c.id, c.state.Info.Config.Consistent, ddlStartTs)
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
 		err = errors.New("changefeed new redo manager injected error")
 	})
@@ -650,11 +652,12 @@ LOOP2:
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			ctx.Throw(c.redoDDLMgr.Run(stdCtx))
+			ctx.Throw(c.redoDDLMgr.Run(cancelCtx))
 		}()
 	}
 
-	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(stdCtx,
+	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(cancelCtx,
+		c.id,
 		c.state.Info.Config.Consistent, checkpointTs)
 	if err != nil {
 		return err
@@ -663,7 +666,7 @@ LOOP2:
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			ctx.Throw(c.redoMetaMgr.Run(stdCtx))
+			ctx.Throw(c.redoMetaMgr.Run(cancelCtx))
 		}()
 	}
 	log.Info("owner creates redo manager",
@@ -823,7 +826,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
-			redoMetaMgr, err := redo.NewMetaManager(ctx, c.state.Info.Config.Consistent)
+			redoMetaMgr, err := redo.NewMetaManager(ctx, c.id, c.state.Info.Config.Consistent)
 			if err != nil {
 				log.Info("owner creates redo manager for clean fail",
 					zap.String("namespace", c.id.Namespace),

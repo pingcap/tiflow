@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -25,11 +24,14 @@ import (
 )
 
 // NewStatistics creates a statistics
-func NewStatistics(ctx context.Context, sinkType sink.Type) *Statistics {
+func NewStatistics(ctx context.Context,
+	changefeed model.ChangeFeedID,
+	sinkType sink.Type,
+) *Statistics {
 	statistics := &Statistics{
 		sinkType:     sinkType,
 		captureAddr:  config.GetGlobalServerConfig().AdvertiseAddr,
-		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
+		changefeedID: changefeed,
 	}
 
 	namespcae := statistics.changefeedID.Namespace

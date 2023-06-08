@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
@@ -54,9 +54,10 @@ type worker struct {
 	wantMoreCallbacks []func()
 }
 
-func newWorker(ctx context.Context, ID int, backend backend, workerCount int) *worker {
+func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
+	ID int, backend backend, workerCount int,
+) *worker {
 	wid := fmt.Sprintf("%d", ID)
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	return &worker{
 		ctx:         ctx,
 		changefeed:  fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),

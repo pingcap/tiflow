@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -54,6 +54,7 @@ func WithDBConnFactory(factory pmysql.Factory) NewObserverOption {
 // NewObserver creates a new Observer
 func NewObserver(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	sinkURIStr string,
 	replCfg *config.ReplicaConfig,
 	opts ...NewObserverOption,
@@ -74,7 +75,6 @@ func NewObserver(
 			return NewDummyObserver(), nil
 		}
 
-		changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 		cfg := pmysql.NewConfig()
 		err = cfg.Apply(ctx, changefeedID, sinkURI, replCfg)
 		if err != nil {
