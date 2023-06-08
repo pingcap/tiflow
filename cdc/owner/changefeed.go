@@ -372,7 +372,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// 再在 redo 开启时候用 resolvedTs 限制 barrierTs 了
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
-		barrier.BarrierWithMinTs, c.redoDDLMgr.Enabled())
+		barrier.BarrierWithMinTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
