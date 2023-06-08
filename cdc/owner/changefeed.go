@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -50,7 +51,7 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -58,14 +59,14 @@ func newSchedulerFromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewScheduler(
-		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRev, epoch, up, cfg)
+		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRev, epoch, up, cfg, redoMetaManager)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, up, epoch, cfg)
+	return newSchedulerFromCtx(ctx, up, epoch, cfg, redoMetaManager)
 }
 
 type changefeed struct {
@@ -137,7 +138,7 @@ type changefeed struct {
 	) DDLSink
 
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 	) (scheduler.Scheduler, error)
 
 	newDownstreamObserver func(
@@ -191,7 +192,7 @@ func newChangefeed4Test(
 		reportError func(err error), reportWarning func(err error),
 	) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
 		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
@@ -307,7 +308,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	return nil
 }
 
-var tickCount = 0
+var FizzTickCount = 0
 
 func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	adminJobPending := c.feedStateManager.Tick(c.state)
@@ -374,7 +375,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	// 再在 redo 开启时候用 resolvedTs 限制 barrierTs 了
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
-		barrier.BarrierWithMinTs)
+		barrier)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -397,42 +398,18 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	prevResolvedTs := c.state.Status.ResolvedTs
-	if c.redoMetaMgr.Enabled() {
-		if newResolvedTs > barrier.redoBarrierTs {
-			newResolvedTs = barrier.redoBarrierTs
-		}
-		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
-		// we can only upload it to etcd after it has been flushed into redo meta.
-		// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
-		c.redoMetaMgr.UpdateMeta(newCheckpointTs, newResolvedTs)
-		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
-		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
-		log.Debug("owner gets flushed meta",
-			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
-			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
-			zap.Uint64("newResolvedTs", newResolvedTs),
-			zap.Uint64("newCheckpointTs", newCheckpointTs),
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID))
-		if flushedResolvedTs != 0 {
-			// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
-			// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
-			newResolvedTs = flushedResolvedTs
-		} else {
-			newResolvedTs = prevResolvedTs
-		}
-		// If allPhysicalTables is empty, newCheckpointTs would advance to min table barrier ts, which may be larger
-		// than preResolvedTs. In this case, we need to set newCheckpointTs to preResolvedTs to guarantee that the
-		// checkpointTs will not cross the preResolvedTs.
-		if newCheckpointTs > prevResolvedTs {
-			newCheckpointTs = prevResolvedTs
-			if newCheckpointTs < preCheckpointTs {
-				log.Panic("checkpointTs should never regress",
-					zap.Uint64("newCheckpointTs", newCheckpointTs),
-					zap.Uint64("checkpointTs", preCheckpointTs))
-			}
+	// If allPhysicalTables is empty, newCheckpointTs would advance to min table barrier ts, which may be larger
+	// than preResolvedTs. In this case, we need to set newCheckpointTs to preResolvedTs to guarantee that the
+	// checkpointTs will not cross the preResolvedTs.
+	if newCheckpointTs > prevResolvedTs {
+		newCheckpointTs = prevResolvedTs
+		if newCheckpointTs < preCheckpointTs {
+			log.Panic("checkpointTs should never regress",
+				zap.Uint64("newCheckpointTs", newCheckpointTs),
+				zap.Uint64("checkpointTs", preCheckpointTs))
 		}
 	}
+
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", prevResolvedTs),
 		zap.Uint64("newResolvedTs", newResolvedTs),
@@ -681,7 +658,7 @@ LOOP2:
 	cfg := *c.cfg
 	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
 	epoch := c.state.Info.Epoch
-	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg)
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg, c.redoMetaMgr)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -913,12 +890,9 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 	return
 }
 
-// TODO: remove this variable after test is done.
-var RedoResolvedTs = uint64(0)
-
 // handleBarrier calculates the barrierTs of the changefeed.
 // barrierTs is used to control the data that can be flush to downstream.
-func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *ddlBarrier) error {
+func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.BarrierWithMinTs) error {
 	barrierTp, barrierTs := c.barriers.Min()
 
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
@@ -964,9 +938,9 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *ddlBarrier) 
 	}
 
 	// TODO: fizz remove this log
-	if tickCount <= 5 {
+	if FizzTickCount <= 5 {
 		log.Info("fizz changefeed tick",
-			zap.Any("tickCount", tickCount),
+			zap.Any("tickCount", FizzTickCount),
 			zap.String("changefeed", c.id.ID),
 			zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
 			zap.Uint64("barrierTs", barrierTs),
@@ -975,21 +949,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *ddlBarrier) 
 			zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
 			zap.Any("redoTs", c.redoMetaMgr.GetFlushedMeta()),
 		)
-	}
-
-	if c.redoMetaMgr.Enabled() {
-		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
-		RedoResolvedTs = flushedMeta.ResolvedTs
-		if flushedMeta.ResolvedTs != 0 && flushedMeta.ResolvedTs < barrier.GlobalBarrierTs {
-			// todo: remove this log after fully tested
-			log.Info("fizz redo meta resolved ts is less than barrier ts, use it as barrier ts",
-				zap.Uint64("globalBarrier", barrier.GlobalBarrierTs),
-				zap.Uint64("flushedResolvedTs", flushedMeta.ResolvedTs))
-			barrier.GlobalBarrierTs = flushedMeta.ResolvedTs
-		}
-		if barrier.GlobalBarrierTs > barrier.redoBarrierTs {
-			barrier.GlobalBarrierTs = barrier.redoBarrierTs
-		}
 	}
 
 	return nil
