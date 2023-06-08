@@ -465,7 +465,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	c.sinks = make([]*partitionSinks, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
 	errChan := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		c.sinks[i] = &partitionSinks{

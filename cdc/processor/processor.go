@@ -643,7 +643,6 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	// Maybe it's better to put all things into global vars or changefeed vars.
 	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
-	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 	stdCtx = contextutil.PutCaptureAddrInCtx(stdCtx, p.globalVars.CaptureInfo.AdvertiseAddr)
 
 	tz := contextutil.TimezoneFromCtx(stdCtx)
