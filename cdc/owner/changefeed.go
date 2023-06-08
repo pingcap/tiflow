@@ -398,18 +398,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	prevResolvedTs := c.state.Status.ResolvedTs
-	// If allPhysicalTables is empty, newCheckpointTs would advance to min table barrier ts, which may be larger
-	// than preResolvedTs. In this case, we need to set newCheckpointTs to preResolvedTs to guarantee that the
-	// checkpointTs will not cross the preResolvedTs.
-	if newCheckpointTs > prevResolvedTs {
-		newCheckpointTs = prevResolvedTs
-		if newCheckpointTs < preCheckpointTs {
-			log.Panic("checkpointTs should never regress",
-				zap.Uint64("newCheckpointTs", newCheckpointTs),
-				zap.Uint64("checkpointTs", preCheckpointTs))
-		}
-	}
-
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", prevResolvedTs),
 		zap.Uint64("newResolvedTs", newResolvedTs),

@@ -631,6 +631,11 @@ func (r *Manager) AdvanceCheckpoint(
 		if flushedResolvedTs != 0 && flushedResolvedTs < newResolvedTs {
 			newResolvedTs = flushedResolvedTs
 		}
+
+		if newCheckpointTs > newResolvedTs {
+			newCheckpointTs = newResolvedTs
+		}
+
 		if barrier.GlobalBarrierTs > newResolvedTs {
 			barrier.GlobalBarrierTs = newResolvedTs
 		}
