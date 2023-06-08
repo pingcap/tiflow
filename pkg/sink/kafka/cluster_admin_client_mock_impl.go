@@ -91,28 +91,6 @@ func NewClusterAdminClientMockImpl() *ClusterAdminClientMockImpl {
 	}
 }
 
-// GetTopicsPartitions all topics' number of partitions.
-func (c *ClusterAdminClientMockImpl) GetTopicsPartitions(
-	_ context.Context,
-) (map[string]int32, error) {
-	result := make(map[string]int32)
-	for topic, detail := range c.topics {
-		result[topic] = detail.NumPartitions
-	}
-	return result, nil
-}
-
-// GetAllTopicsMeta returns all topics directly.
-func (c *ClusterAdminClientMockImpl) GetAllTopicsMeta(
-	context.Context,
-) (map[string]TopicDetail, error) {
-	topicsDetailsMap := make(map[string]TopicDetail)
-	for topic, detail := range c.topics {
-		topicsDetailsMap[topic] = detail.TopicDetail
-	}
-	return topicsDetailsMap, nil
-}
-
 // GetAllBrokers implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, error) {
 	return nil, nil
