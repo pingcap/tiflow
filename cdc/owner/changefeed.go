@@ -524,7 +524,6 @@ LOOP2:
 
 	c.barriers = newBarriers()
 	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
-		log.Info("fizz sync point is enabled", zap.String("changefeed", c.id.String()))
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
