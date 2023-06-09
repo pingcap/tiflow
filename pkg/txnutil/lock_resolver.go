@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util"
 	tikverr "github.com/tikv/client-go/v2/error"
 	"github.com/tikv/client-go/v2/tikv"
 	"github.com/tikv/client-go/v2/tikvrpc"
@@ -37,17 +36,15 @@ type LockResolver interface {
 type resolver struct {
 	kvStorage  tikv.Storage
 	changefeed model.ChangeFeedID
-	role       util.Role
 }
 
 // NewLockerResolver returns a LockResolver.
 func NewLockerResolver(
-	kvStorage tikv.Storage, id model.ChangeFeedID, role util.Role,
+	kvStorage tikv.Storage, id model.ChangeFeedID,
 ) LockResolver {
 	return &resolver{
 		kvStorage:  kvStorage,
 		changefeed: id,
-		role:       role,
 	}
 }
 
@@ -136,7 +133,6 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		zap.Int("lockCount", lockCount),
 		zap.Uint64("maxVersion", maxVersion),
 		zap.String("namespace", r.changefeed.Namespace),
-		zap.String("changefeed", r.changefeed.ID),
-		zap.Any("role", r.role))
+		zap.String("changefeed", r.changefeed.ID))
 	return nil
 }

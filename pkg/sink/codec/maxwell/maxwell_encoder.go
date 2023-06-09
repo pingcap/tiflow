@@ -49,7 +49,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	_, valueMsg := rowChangeToMaxwellMsg(e, d.config.OnlyHandleKeyColumns)
+	_, valueMsg := rowChangeToMaxwellMsg(e, d.config.DeleteOnlyHandleKeyColumns)
 	value, err := valueMsg.encode()
 	if err != nil {
 		return errors.Trace(err)
