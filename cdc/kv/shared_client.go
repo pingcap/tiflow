@@ -39,12 +39,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/prometheus/client_golang/prometheus"
 	kvclientv2 "github.com/tikv/client-go/v2/kv"
 	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	grpcerror "google.golang.org/grpc/codes"
 )
 
 type SubscriptionID uint64
@@ -58,6 +61,7 @@ type MultiplexingEvent struct {
 type SharedClient struct {
 	changefeed model.ChangeFeedID
 	config     *config.KVClientConfig
+	metrics    sharedClientMetrics
 
 	clusterID  uint64
 	filterLoop bool
@@ -140,7 +144,7 @@ func NewSharedClient(
 	s := &SharedClient{
 		changefeed: changefeed,
 		config:     cfg,
-		clusterID:  0, // Will be filled in `Run`.
+		clusterID:  0,
 		filterLoop: filterLoop,
 
 		pd:           pd,
@@ -148,7 +152,7 @@ func NewSharedClient(
 		regionCache:  regionCache,
 		pdClock:      pdClock,
 		tikvStorage:  kvStorage,
-		lockResolver: nil, // Will be filled in `Run`.
+		lockResolver: nil,
 
 		requestRangeCh: chann.NewAutoDrainChann[rangeTask](),
 		regionCh:       chann.NewAutoDrainChann[singleRegionInfo](),
@@ -158,6 +162,7 @@ func NewSharedClient(
 		requestedStores: make(map[string]*requestedStore),
 	}
 	s.totalSpans.m = spanz.NewHashMap[*requestedTable]()
+	s.initMetrics()
 	return s
 }
 
@@ -239,7 +244,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	}
 
 	g.Go(func() error { return s.handleRequestRanges(ctx, g) })
-	g.Go(func() error { return s.dispatchRequest(ctx) })
+	g.Go(func() error { return s.dispatchRequest(ctx, g) })
 	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
 	g.Go(func() error { return s.handleSlowTables(ctx) })
@@ -257,6 +262,7 @@ func (s *SharedClient) Close() {
 	s.regionCh.CloseAndDrain()
 	s.regionRouter.CloseAndDrain()
 	s.errCh.CloseAndDrain()
+	s.clearMetrics()
 }
 
 // GetPDClock returns a pdutil.Clock.
@@ -271,27 +277,32 @@ func (s *SharedClient) onRegionFail(ctx context.Context, errInfo regionErrorInfo
 	}
 }
 
-func (s *SharedClient) dispatchRequest(ctx context.Context) error {
+func (s *SharedClient) dispatchRequest(ctx context.Context, g *errgroup.Group) error {
+	attatchRpcCtx := func(ctx context.Context, sri singleRegionInfo) {
+		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
+		if rpcCtx != nil {
+			sri.rpcCtx = rpcCtx
+			s.metrics.regionLocateDuration.Observe(float64(time.Since(sri.createTime).Milliseconds()))
+			s.regionRouter.In() <- sri
+			return
+		}
+		if err != nil {
+			// NOTE: retry later instead of failing the changefeed.
+			log.Warn("event feed get RPC context fail",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Error(err))
+		}
+		s.onRegionFail(ctx, newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID}))
+	}
+
 	for {
-		// Note that when a region is received from the channel, it's range has been already locked.
-		var sri singleRegionInfo
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case sri = <-s.regionCh.Out():
+		case sri := <-s.regionCh.Out():
+			attatchRpcCtx(ctx, sri)
 		}
-
-		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if rpcCtx == nil {
-			// NOTE: The region hasn't be attached with a regionFeedState.
-			s.onRegionFail(ctx, newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID}))
-			continue
-		}
-		sri.rpcCtx = rpcCtx
-		s.regionRouter.In() <- sri
 	}
 }
 
@@ -311,7 +322,6 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 }
 
 func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.RegionVerID) (*tikv.RPCContext, error) {
-	// todo: add metrics to track rpc cost
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, id, kvclientv2.ReplicaReadLeader, 0)
 	if err != nil {
@@ -438,23 +448,23 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, off
 			return err
 		}
 		state.start()
+		s.metrics.regionConnectDuration.Observe(float64(time.Since(state.sri.createTime).Milliseconds()))
 	}
 }
 
 func (s *SharedClient) receiveFromStream(ctx context.Context, rs *requestedStore, offset uint32) (err error) {
-	metricBatchResolvedSize := batchResolvedEventSize.WithLabelValues(s.changefeed.Namespace, s.changefeed.ID)
-
 	stream := rs.streams[offset]
 	for {
 		cevent, err := stream.client.Recv()
 		if err != nil {
-			if err.Error() != io.EOF.Error() && errors.Cause(err) != context.Canceled {
+			if err.Error() != io.EOF.Error() && grpc.Code(err) != grpcerror.Canceled {
 				log.Warn("event feed receive from grpc stream failed",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("storeID", rs.storeID),
 					zap.String("addr", rs.storeAddr),
 					zap.Error(err))
+				return errors.Trace(err)
 			}
 			return context.Canceled
 		}
@@ -465,7 +475,7 @@ func (s *SharedClient) receiveFromStream(ctx context.Context, rs *requestedStore
 			}
 		}
 		if cevent.ResolvedTs != nil {
-			metricBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
+			s.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
 			if err = s.sendResolvedTs(ctx, cevent.ResolvedTs, rs); err != nil {
 				return err
 			}
@@ -669,25 +679,17 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 		switch res.Status {
 		case regionlock.LockRangeStatusSuccess:
 			sri.lockedRange = res.LockedRange
+			s.metrics.regionLockDuration.Observe(float64(time.Since(sri.createTime).Milliseconds()))
 			select {
 			case s.regionCh.In() <- sri:
 			case <-ctx.Done():
 			}
 		case regionlock.LockRangeStatusStale:
-			log.Info("request expired",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("regionID", sri.verID.GetID()),
-				zap.Stringer("span", &sri.span),
-				zap.Uint64("resolvedTs", sri.resolvedTs()),
-				zap.Any("retrySpans", res.RetryRanges))
 			for _, r := range res.RetryRanges {
 				s.scheduleDivideRegionAndRequest(ctx, r, sri.requestedTable)
 			}
-		case regionlock.LockRangeStatusCancel:
-			return
 		default:
-			panic("unreachable")
+			return
 		}
 	}
 
@@ -878,6 +880,29 @@ func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) Mu
 		RegionFeedEvent: event,
 		SubscriptionID:  SubscriptionID(r.requestID),
 	}
+}
+
+type sharedClientMetrics struct {
+	regionLockDuration    prometheus.Observer
+	regionLocateDuration  prometheus.Observer
+	regionConnectDuration prometheus.Observer
+	batchResolvedSize     prometheus.Observer
+}
+
+func (s *SharedClient) initMetrics() {
+	s.metrics.regionLockDuration = regionConnectDuration.
+		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID, "lock")
+	s.metrics.regionLocateDuration = regionConnectDuration.
+		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID, "locate")
+	s.metrics.regionConnectDuration = regionConnectDuration.
+		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID, "connect")
+
+	s.metrics.batchResolvedSize = batchResolvedEventSize.
+		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID)
+}
+
+func (s *SharedClient) clearMetrics() {
+	// TODO(qupeng): clearMetrics.
 }
 
 func hashRegionID(regionID uint64, slots int) int {

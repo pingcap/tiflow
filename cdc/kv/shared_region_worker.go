@@ -140,18 +140,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(
 	state.markStopped()
 	state.setRegionInfoResolvedTs()
 
-	regionID := state.getRegionID()
-	rs.takeState(regionID, state.requestID)
-
-	log.Info("single region event feed disconnected",
-		zap.String("namespace", w.changefeed.Namespace),
-		zap.String("changefeed", w.changefeed.ID),
-		zap.Uint64("regionID", regionID),
-		zap.Uint64("requestID", state.requestID),
-		zap.Stringer("span", &state.sri.span),
-		zap.Uint64("resolvedTs", state.sri.resolvedTs()),
-		zap.Error(err))
-
+	rs.takeState(state.getRegionID(), state.requestID)
 	w.client.onRegionFail(ctx, newRegionErrorInfo(state.getRegionInfo(), err))
 }
 

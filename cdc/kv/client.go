@@ -323,6 +323,7 @@ type eventFeedSession struct {
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
 	tableName  string
+	requestID  uint64
 
 	lockResolver txnutil.LockResolver
 
@@ -379,6 +380,7 @@ func newEventFeedSession(
 		changefeed: client.changefeed,
 		tableID:    client.tableID,
 		tableName:  client.tableName,
+		requestID:  allocID(),
 
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
@@ -588,7 +590,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			return errors.Trace(ctx.Err())
 		case sri = <-s.regionRouter.Out():
 		}
-		requestID := allocID()
+		requestID := s.requestID
 
 		rpcCtx := sri.rpcCtx
 		regionID := rpcCtx.Meta.GetId()

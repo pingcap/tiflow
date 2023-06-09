@@ -36,6 +36,7 @@ type singleRegionInfo struct {
 
 	requestedTable *requestedTable
 	lockedRange    *regionlock.LockedRange
+	createTime     time.Time
 }
 
 func newSingleRegionInfo(
@@ -44,9 +45,10 @@ func newSingleRegionInfo(
 	rpcCtx *tikv.RPCContext,
 ) singleRegionInfo {
 	return singleRegionInfo{
-		verID:  verID,
-		span:   span,
-		rpcCtx: rpcCtx,
+		verID:      verID,
+		span:       span,
+		rpcCtx:     rpcCtx,
+		createTime: time.Now(),
 	}
 }
 
