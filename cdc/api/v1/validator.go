@@ -15,6 +15,7 @@ package v1
 
 import (
 	"context"
+	"net/url"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -111,6 +112,15 @@ func verifyCreateChangefeedConfig(
 	}
 	if len(changefeedConfig.FilterRules) != 0 {
 		replicaConfig.Filter.Rules = changefeedConfig.FilterRules
+	}
+	// verify replicaConfig
+	sinkURIParsed, err := url.Parse(changefeedConfig.SinkURI)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	err = replicaConfig.ValidateAndAdjust(sinkURIParsed)
+	if err != nil {
+		return nil, err
 	}
 
 	captureInfos, err := capture.StatusProvider().GetCaptures(ctx)
