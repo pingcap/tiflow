@@ -41,6 +41,10 @@ type Config struct {
 	// DeleteOnlyHandleKeyColumns is true, for the delete event only output the handle key columns.
 	DeleteOnlyHandleKeyColumns bool
 
+	// LargeMessageOnlyHandleKeyColumns is true,
+	// for message large then the MaxMessageBytes only output the handle key columns.
+	LargeMessageOnlyHandleKeyColumns bool
+
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
 
@@ -189,6 +193,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
+	c.LargeMessageOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns)
 
 	return nil
 }
