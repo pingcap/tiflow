@@ -97,9 +97,8 @@ func (p *MultiplexingPuller) Subscribe(
 	pullerType string, tableName string,
 	spans []tablepb.Span, startTs model.Ts,
 ) error {
-	metricMissedRegionCollectCounter := missedRegionCollectCounter.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, pullerType)
-	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, spans...)
+	metrics := missedRegionCollectCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, pullerType)
+	tsTracker := frontier.NewFrontier(0, metrics, spans...)
 
 	progress := &tableProgress{
 		changefeed: p.changefeed,
