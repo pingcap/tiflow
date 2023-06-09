@@ -70,7 +70,7 @@ type SharedClient struct {
 	lockResolver txnutil.LockResolver
 
 	// requestRangeCh is used to retrieve subscribed table tasks.
-	requestRangeCh *chann.DrainableChann[rangeRequestTask]
+	requestRangeCh *chann.DrainableChann[rangeTask]
 	// regionCh is used to cache region tasks after ranges locked.
 	regionCh *chann.DrainableChann[singleRegionInfo]
 	// regionRouter is used to cache region tasks with rpcCtx attached.
@@ -86,6 +86,11 @@ type SharedClient struct {
 
 	// only modified in requestRegionToStore so lock is unnecessary.
 	requestedStores map[string]*requestedStore
+}
+
+type rangeTask struct {
+	span           tablepb.Span
+	requestedTable *requestedTable
 }
 
 type requestedStore struct {
@@ -145,7 +150,7 @@ func NewSharedClient(
 		tikvStorage:  kvStorage,
 		lockResolver: nil, // Will be filled in `Run`.
 
-		requestRangeCh: chann.NewAutoDrainChann[rangeRequestTask](),
+		requestRangeCh: chann.NewAutoDrainChann[rangeTask](),
 		regionCh:       chann.NewAutoDrainChann[singleRegionInfo](),
 		regionRouter:   chann.NewAutoDrainChann[singleRegionInfo](),
 		errCh:          chann.NewAutoDrainChann[regionErrorInfo](),
@@ -179,7 +184,7 @@ func (s *SharedClient) Subscribe(
 		s.totalSpans.m.ReplaceOrInsert(span, requestedTable)
 		s.totalSpans.Unlock()
 
-		s.requestRangeCh.In() <- rangeRequestTask{span: span, ts: startTs, requestedTable: requestedTable}
+		s.requestRangeCh.In() <- rangeTask{span: span, requestedTable: requestedTable}
 		log.Info("event feed subscribes table success",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -206,7 +211,7 @@ func (s *SharedClient) Unsubscribe(span tablepb.Span) error {
 		s.totalSpans.Unlock()
 
 		rt.removed.Store(true)
-		s.requestRangeCh.In() <- rangeRequestTask{span: rt.span, ts: rt.startTs, requestedTable: rt}
+		s.requestRangeCh.In() <- rangeTask{span: rt.span, requestedTable: rt}
 		log.Info("event feed unsubscribes table success",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -699,7 +704,7 @@ func (s *SharedClient) scheduleDivideRegionAndRequest(
 	requestedTable *requestedTable,
 ) {
 	select {
-	case s.requestRangeCh.In() <- rangeRequestTask{span: span, requestedTable: requestedTable}:
+	case s.requestRangeCh.In() <- rangeTask{span: span, requestedTable: requestedTable}:
 	case <-ctx.Done():
 	}
 }

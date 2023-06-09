@@ -30,12 +30,12 @@ const (
 )
 
 type singleRegionInfo struct {
-	verID          tikv.RegionVerID
-	span           tablepb.Span
-	rpcCtx         *tikv.RPCContext
-	requestedTable *requestedTable
+	verID  tikv.RegionVerID
+	span   tablepb.Span
+	rpcCtx *tikv.RPCContext
 
-	lockedRange *regionlock.LockedRange
+	requestedTable *requestedTable
+	lockedRange    *regionlock.LockedRange
 }
 
 func newSingleRegionInfo(
