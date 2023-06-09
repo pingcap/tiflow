@@ -39,6 +39,9 @@ type BatchEncoder struct {
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
 	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, true)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return nil, nil, errors.Trace(err)
@@ -72,6 +75,9 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	callback func(),
 ) error {
 	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, false)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return errors.Trace(err)
