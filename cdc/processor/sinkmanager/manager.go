@@ -991,15 +991,10 @@ func (m *SinkManager) Close() {
 
 	start := time.Now()
 	m.waitSubroutines()
-	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
-		sink := value.(*tableSinkWrapper)
-		sink.close()
-		if m.eventCache != nil {
-			m.eventCache.removeTable(sink.span)
-		}
-		return true
-	})
 	m.clearSinkFactory()
+	if m.eventCache != nil {
+		m.eventCache.clear()
+	}
 
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),

@@ -139,8 +139,9 @@ func (w *sharedRegionWorker) handleSingleRegionError(
 ) {
 	state.markStopped()
 	state.setRegionInfoResolvedTs()
-
-	rs.takeState(state.getRegionID(), state.requestID)
+	if rs != nil {
+		rs.takeState(state.getRegionID(), state.requestID)
+	}
 	w.client.onRegionFail(ctx, newRegionErrorInfo(state.getRegionInfo(), err))
 }
 

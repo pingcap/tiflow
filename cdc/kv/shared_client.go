@@ -16,7 +16,6 @@ package kv
 import (
 	"context"
 	"encoding/binary"
-	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -291,6 +290,7 @@ func (s *SharedClient) dispatchRequest(ctx context.Context, g *errgroup.Group) e
 			log.Warn("event feed get RPC context fail",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
+				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Error(err))
 		}
 		s.onRegionFail(ctx, newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID}))
@@ -457,7 +457,8 @@ func (s *SharedClient) receiveFromStream(ctx context.Context, rs *requestedStore
 	for {
 		cevent, err := stream.client.Recv()
 		if err != nil {
-			if err.Error() != io.EOF.Error() && grpc.Code(err) != grpcerror.Canceled {
+			code := grpc.Code(err)
+			if code != grpcerror.OK && code != grpcerror.Canceled {
 				log.Warn("event feed receive from grpc stream failed",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
@@ -638,12 +639,14 @@ func (s *SharedClient) divideAndRequestRegions(
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
 		if err != nil {
-			log.Warn("load regions failed",
+			log.Warn("event feed load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("span", nextSpan),
 				zap.Error(err))
-			return cerror.WrapError(cerror.ErrPDBatchLoadRegions, err)
+			util.Hang(ctx, 3*time.Second)
+			s.scheduleDivideRegionAndRequest(ctx, nextSpan, requestedTable)
+			return
 		}
 
 		metas := make([]*metapb.Region, 0, len(regions))
@@ -651,7 +654,9 @@ func (s *SharedClient) divideAndRequestRegions(
 			metas = append(metas, region.GetMeta())
 		}
 		if !regionlock.CheckRegionsLeftCover(metas, nextSpan) {
-			return cerror.ErrRegionsNotCoverSpan.FastGenByArgs(nextSpan, metas)
+			log.Panic("event feed check span left cover shouldn't fail",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID))
 		}
 
 		for _, region := range regions {
@@ -660,7 +665,9 @@ func (s *SharedClient) divideAndRequestRegions(
 			regionSpan = spanz.HackSpan(regionSpan)
 			partialSpan, err := spanz.Intersect(requestedTable.span, regionSpan)
 			if err != nil {
-				return errors.Trace(err)
+				log.Panic("event feed check spans intersect shouldn't fail",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID))
 			}
 			sri := newSingleRegionInfo(region.VerID(), partialSpan, nil)
 			sri.requestedTable = requestedTable
