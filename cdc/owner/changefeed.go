@@ -524,7 +524,7 @@ LOOP2:
 
 	c.barriers = newBarriers()
 	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
-		// preResolvedTs model.Ts
+		log.Info("fizz sync point is enabled", zap.String("changefeed", c.id.String()))
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
@@ -877,7 +877,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 // barrierTs is used to control the data that can be flush to downstream.
 func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.BarrierWithMinTs) error {
 	barrierTp, barrierTs := c.barriers.Min()
-
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
 
 	// It means:
@@ -909,14 +908,14 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.B
 	if barrier.GlobalBarrierTs > barrierTs {
 		log.Debug("There are other barriers less than ddl barrier, wait for them",
 			zap.Uint64("otherBarrierTs", barrierTs),
-			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
+			zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs))
 		barrier.GlobalBarrierTs = barrierTs
 	}
 
 	if barrier.MinTableBarrierTs > barrierTs {
 		log.Debug("There are other barriers less than min table barrier, wait for them",
 			zap.Uint64("otherBarrierTs", barrierTs),
-			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
+			zap.Uint64("minTableBarrierTs", barrier.GlobalBarrierTs))
 		barrier.MinTableBarrierTs = barrierTs
 	}
 
