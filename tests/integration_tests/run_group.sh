@@ -38,10 +38,10 @@ groups=(
 	["G04"]='foreign_key ddl_puller_lag ddl_only_block_related_table changefeed_auto_stop'
 	["G05"]='charset_gbk ddl_manager multi_source multi_capture'
 	["G06"]='sink_retry changefeed_error ddl_sequence resourcecontrol'
-	["G07"]='kv_client_stream_reconnect cdc default_value split_region'
-	["G08"]='tidb_mysql_test server_config_compatibility changefeed_reconstruct'
+	["G07"]='kv_client_stream_reconnect cdc split_region'
+	["G08"]='server_config_compatibility processor_err_chan changefeed_reconstruct'
 	["G09"]='gc_safepoint changefeed_pause_resume cli savepoint'
-	["G10"]='simple cdc_server_tips processor_err_chan event_filter'
+	["G10"]='default_value simple cdc_server_tips event_filter'
 	["G11"]='resolve_lock move_table autorandom generate_column'
 	["G12"]='many_pk_or_uk capture_session_done_during_task ddl_attributes'
 	["G13"]='tiflash new_ci_collation_without_old_value region_merge common_1'
@@ -53,7 +53,7 @@ groups=(
 	# only run the following tests in mysql pipeline
 	["G18"]='availability http_proxies sequence'
 	["G19"]='changefeed_fast_fail batch_update_to_no_batch changefeed_resume_with_checkpoint_ts'
-	["G20"]='ddl_reentrant multi_cdc_cluster multi_changefeed'
+	["G20"]='tidb_mysql_test ddl_reentrant multi_cdc_cluster multi_changefeed'
 	["G21"]='bank kill_owner_with_ddl owner_remove_table_error'
 )
 

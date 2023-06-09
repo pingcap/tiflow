@@ -36,10 +36,10 @@ function prepare() {
 	esac
 }
 
-# kafka test is not supported yet.
+# kafka and storage test is not supported yet.
 # Because:(1) most cases has no pk/uk, consumer will receive more than one same DML
 #         (2) kafka consumer need support force_replicate
-if [ "$SINK_TYPE" = "kafka" ]; then
+if [ "$SINK_TYPE" != "mysql" ]; then
 	echo "[$(date)] <<<<<< skip test case $TEST_NAME for kafka! >>>>>>"
 	exit 0
 fi
