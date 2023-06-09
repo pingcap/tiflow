@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/format"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
