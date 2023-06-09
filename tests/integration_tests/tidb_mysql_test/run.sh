@@ -24,20 +24,22 @@ function prepare() {
 	TOPIC_NAME="ticdc-default-value-test-$RANDOM"
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	storage) SINK_URI="file://$WORK_DIR/storage_test/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
 	#run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 	SINK_PARA="{\"force_replicate\":true, \"changefeed_id\":\"tidb-mysql-test\", \"sink_uri\":\"$SINK_URI\", \"start_ts\":$start_ts}"
 	curl -X POST -H "'Content-type':'application/json'" http://127.0.0.1:8300/api/v1/changefeeds -d "$SINK_PARA"
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-	fi
+	case $SINK_TYPE in
+	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
+	esac
 }
 
-# kafka test is not supported yet.
+# kafka and storage test is not supported yet.
 # Because:(1) most cases has no pk/uk, consumer will receive more than one same DML
 #         (2) kafka consumer need support force_replicate
-if [ "$SINK_TYPE" = "kafka" ]; then
+if [ "$SINK_TYPE" != "mysql" ]; then
 	echo "[$(date)] <<<<<< skip test case $TEST_NAME for kafka! >>>>>>"
 	exit 0
 fi
