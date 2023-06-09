@@ -308,8 +308,6 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 	return nil
 }
 
-var FizzTickCount = 0
-
 func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	adminJobPending := c.feedStateManager.Tick(c.state)
 	preCheckpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
@@ -370,9 +368,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	// fizz 这里算出当前轮次的 ResolvedTs，然后会写回到 etcd 中
-	// 我们可以直接用 Scheduler 内部算出来的 newResolvedTs 来限制 barrierTs，这样就可以不用
-	// 再在 redo 开启时候用 resolvedTs 限制 barrierTs 了
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
 		barrier)
@@ -923,20 +918,6 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.B
 			zap.Uint64("otherBarrierTs", barrierTs),
 			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
 		barrier.MinTableBarrierTs = barrierTs
-	}
-
-	// TODO: fizz remove this log
-	if FizzTickCount <= 5 {
-		log.Info("fizz changefeed tick",
-			zap.Any("tickCount", FizzTickCount),
-			zap.String("changefeed", c.id.ID),
-			zap.Uint64("checkpointTs", c.state.Status.CheckpointTs),
-			zap.Uint64("barrierTs", barrierTs),
-			zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
-			zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
-			zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
-			zap.Any("redoTs", c.redoMetaMgr.GetFlushedMeta()),
-		)
 	}
 
 	return nil
