@@ -233,7 +233,7 @@ func newLogManager(
 		cfg: &writer.LogWriterConfig{
 			ConsistentConfig:   *cfg,
 			LogType:            logType,
-			CaptureID:          contextutil.CaptureAddrFromCtx(ctx),
+			CaptureID:          config.GetGlobalServerConfig().AdvertiseAddr,
 			ChangeFeedID:       changefeedID,
 			URI:                *uri,
 			UseExternalStorage: redo.IsExternalStorage(uri.Scheme),

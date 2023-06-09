@@ -23,25 +23,9 @@ import (
 type ctxKey string
 
 const (
-	ctxKeyCaptureAddr  = ctxKey("captureAddr")
 	ctxKeyChangefeedID = ctxKey("changefeedID")
 	ctxKeyTimezone     = ctxKey("timezone")
 )
-
-// CaptureAddrFromCtx returns a capture ID stored in the specified context.
-// It returns an empty string if there's no valid capture ID found.
-func CaptureAddrFromCtx(ctx context.Context) string {
-	captureAddr, ok := ctx.Value(ctxKeyCaptureAddr).(string)
-	if !ok {
-		return ""
-	}
-	return captureAddr
-}
-
-// PutCaptureAddrInCtx returns a new child context with the specified capture ID stored.
-func PutCaptureAddrInCtx(ctx context.Context, captureAddr string) context.Context {
-	return context.WithValue(ctx, ctxKeyCaptureAddr, captureAddr)
-}
 
 // PutTimezoneInCtx returns a new child context with the given timezone
 func PutTimezoneInCtx(ctx context.Context, timezone *time.Location) context.Context {
