@@ -23,12 +23,14 @@ function run() {
 	TOPIC_NAME="ticdc-clustered-index-test-$RANDOM"
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	storage) SINK_URI="file://$WORK_DIR/storage_test/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
 	cdc cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-	if [ "$SINK_TYPE" == "kafka" ]; then
-		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
-	fi
+	case $SINK_TYPE in
+	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
+	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
+	esac
 	run_sql "set global tidb_enable_clustered_index=1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	# TiDB global variables cache 2 seconds at most
 	sleep 2
@@ -46,8 +48,14 @@ function run() {
 
 # kafka is not supported yet.
 # ref to issue: https://github.com/pingcap/tiflow/issues/3421
+<<<<<<< HEAD
 if [ "$SINK_TYPE" = "kafka" ]; then
 	echo "[$(date)] <<<<<< skip test case $TEST_NAME for kafka! >>>>>>"
+=======
+# TODO: enable this test for kafka and storage sink.
+if [ "$SINK_TYPE" != "mysql" ]; then
+	echo "[$(date)] <<<<<< skip test case $TEST_NAME for $SINK_TYPE! >>>>>>"
+>>>>>>> c5a537403b (sink(ticdc): add some integration tests for storage sink (#9124))
 	exit 0
 fi
 trap stop_tidb_cluster EXIT

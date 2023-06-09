@@ -10,9 +10,14 @@ SINK_TYPE=$1
 MAX_RETRIES=20
 
 function run() {
+<<<<<<< HEAD
 	# it is no need to test kafka
 	# the logic are all the same
 	if [ "$SINK_TYPE" == "kafka" ]; then
+=======
+	# No need to test kafka and storage sink, since the logic are all the same.
+	if [ "$SINK_TYPE" != "mysql" ]; then
+>>>>>>> c5a537403b (sink(ticdc): add some integration tests for storage sink (#9124))
 		return
 	fi
 

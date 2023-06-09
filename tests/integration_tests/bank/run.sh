@@ -29,8 +29,13 @@ function prepare() {
 }
 
 trap stop_tidb_cluster EXIT
+<<<<<<< HEAD
 # kafka is not supported yet.
 if [ "$SINK_TYPE" != "kafka" ]; then
+=======
+# No need to support kafka and storage sink.
+if [ "$SINK_TYPE" == "mysql" ]; then
+>>>>>>> c5a537403b (sink(ticdc): add some integration tests for storage sink (#9124))
 	prepare $*
 
 	cd "$(dirname "$0")"
