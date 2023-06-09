@@ -82,7 +82,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, factory)
+	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
 	require.NoError(t, err)
 
 	err = p.SyncBroadcastMessage(ctx, topic,
@@ -110,7 +110,7 @@ func TestSyncSendMessage(t *testing.T) {
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, factory)
+	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
 	require.NoError(t, err)
 
 	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
@@ -140,7 +140,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, factory)
+	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
 	require.NoError(t, err)
 	defer p.Close()
 
@@ -163,7 +163,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, factory)
+	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
 	require.NoError(t, err)
 
 	p.Close()
