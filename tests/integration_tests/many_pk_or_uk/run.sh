@@ -35,13 +35,16 @@ function prepare() {
 }
 
 trap stop_tidb_cluster EXIT
-prepare $*
 
-cd "$(dirname "$0")"
-set -o pipefail
-GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
-check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-check_sync_diff $WORK_DIR $CUR/diff_config.toml
-cleanup_process $CDC_BINARY
-check_logs $WORK_DIR
+# storage is not supported yet.
+if [ "$SINK_TYPE" != "storage" ]; then
+	prepare $*
+	cd "$(dirname "$0")"
+	set -o pipefail
+	GO111MODULE=on go run main.go -config ./config.toml 2>&1 | tee $WORK_DIR/tester.log
+	check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_sync_diff $WORK_DIR $CUR/diff_config.toml
+	cleanup_process $CDC_BINARY
+	check_logs $WORK_DIR
+fi
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
