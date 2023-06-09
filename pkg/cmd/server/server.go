@@ -112,7 +112,6 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	config.StoreGlobalServerConfig(o.serverConfig)
 	ctx := contextutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
 
 	version.LogVersionInfo("Change Data Capture (CDC)")
 	if ticdcutil.FailpointBuild {

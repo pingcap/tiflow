@@ -22,19 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestShouldReturnCaptureID(t *testing.T) {
-	ctx := PutCaptureAddrInCtx(context.Background(), "ello")
-	require.Equal(t, "ello", CaptureAddrFromCtx(ctx))
-}
-
-func TestCaptureIDNotSet(t *testing.T) {
-	require.Equal(t, "", CaptureAddrFromCtx(context.Background()))
-	captureAddr := CaptureAddrFromCtx(context.Background())
-	require.Equal(t, "", captureAddr)
-	ctx := context.WithValue(context.Background(), ctxKeyCaptureAddr, 1321)
-	require.Equal(t, "", CaptureAddrFromCtx(ctx))
-}
-
 func TestShouldReturnChangefeedID(t *testing.T) {
 	ctx := PutChangefeedIDInCtx(context.Background(), model.DefaultChangeFeedID("ello"))
 	require.Equal(t, model.DefaultChangeFeedID("ello"), ChangefeedIDFromCtx(ctx))

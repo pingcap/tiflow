@@ -215,7 +215,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	for !noMoreWarnings {
 		select {
 		case err := <-c.warningCh:
-			c.handleWarning(ctx, err)
+			c.handleWarning(err)
 		default:
 			noMoreWarnings = true
 		}
@@ -268,14 +268,14 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 	}
 	c.feedStateManager.handleError(&model.RunningError{
 		Time:    time.Now(),
-		Addr:    contextutil.CaptureAddrFromCtx(ctx),
+		Addr:    config.GetGlobalServerConfig().AdvertiseAddr,
 		Code:    code,
 		Message: err.Error(),
 	})
 	c.releaseResources(ctx)
 }
 
-func (c *changefeed) handleWarning(ctx cdcContext.Context, err error) {
+func (c *changefeed) handleWarning(err error) {
 	log.Warn("an warning occurred in Owner",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID), zap.Error(err))
@@ -288,7 +288,7 @@ func (c *changefeed) handleWarning(ctx cdcContext.Context, err error) {
 
 	c.feedStateManager.handleWarning(&model.RunningError{
 		Time:    time.Now(),
-		Addr:    contextutil.CaptureAddrFromCtx(ctx),
+		Addr:    config.GetGlobalServerConfig().AdvertiseAddr,
 		Code:    code,
 		Message: err.Error(),
 	})
