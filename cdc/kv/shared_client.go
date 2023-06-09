@@ -488,14 +488,15 @@ func (s *SharedClient) sendRegionChangeEvents(ctx context.Context, events []*cdc
 	for _, event := range events {
 		regionID := event.RegionId
 		requestID := event.RequestId
-		state := rs.getState(regionID, requestID)
-
-		var sfEvent statefulEvent
-		sfEvent.rs = rs
-		sfEvent.eventItem.state = state
-		sfEvent.eventItem.item = event
-		if err := s.workers[hashRegionID(regionID, len(s.workers))].sendEvent(ctx, sfEvent); err != nil {
-			return errors.Trace(err)
+		if state := rs.getState(regionID, requestID); state != nil {
+			var sfEvent statefulEvent
+			sfEvent.rs = rs
+			sfEvent.eventItem.state = state
+			sfEvent.eventItem.item = event
+			slot := hashRegionID(regionID, len(s.workers))
+			if err := s.workers[slot].sendEvent(ctx, sfEvent); err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 	return nil
@@ -512,9 +513,12 @@ func (s *SharedClient) sendResolvedTs(ctx context.Context, resolvedTs *cdcpb.Res
 		zap.Int("regionCount", len(resolvedTs.Regions)))
 
 	for _, regionID := range resolvedTs.Regions {
-		x := &sfEvents[hashRegionID(regionID, len(s.workers))].resolvedTsBatch
+		slot := hashRegionID(regionID, len(s.workers))
+		x := &sfEvents[slot].resolvedTsBatch
 		x.ts = resolvedTs.Ts
-		x.regions = append(x.regions, rs.getState(regionID, requestID))
+		if state := rs.getState(regionID, requestID); state != nil {
+			x.regions = append(x.regions, state)
+		}
 	}
 
 	for i, sfEvent := range sfEvents {
