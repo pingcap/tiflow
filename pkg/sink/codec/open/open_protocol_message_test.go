@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -174,9 +175,30 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
 		},
 	}
-	_, value := rowChangeToMsg(insertEvent, true)
+	_, value, err := rowChangeToMsg(insertEvent, true, false)
+	require.NoError(t, err)
 	_, ok := value.Update["a"]
 	require.True(t, ok)
+
+	key, value, err := rowChangeToMsg(insertEvent, false, true)
+	require.NoError(t, err)
+	require.True(t, key.LargeMessageOnlyHandleKeyColumns)
+	_, ok = value.Update["a"]
+	require.False(t, ok)
+
+	insertEventNoHandleKey := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, _, err = rowChangeToMsg(insertEventNoHandleKey, false, true)
+	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 
 	updateEvent := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
@@ -193,9 +215,36 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
 		},
 	}
-	_, value = rowChangeToMsg(updateEvent, true)
+	_, value, err = rowChangeToMsg(updateEvent, true, false)
+	require.NoError(t, err)
 	_, ok = value.PreColumns["a"]
 	require.True(t, ok)
+
+	key, value, err = rowChangeToMsg(updateEvent, false, true)
+	require.NoError(t, err)
+	require.True(t, key.LargeMessageOnlyHandleKeyColumns)
+	_, ok = value.PreColumns["a"]
+	require.False(t, ok)
+	_, ok = value.Update["a"]
+	require.False(t, ok)
+
+	updateEventNoHandleKey := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, _, err = rowChangeToMsg(updateEventNoHandleKey, false, true)
+	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 
 	deleteEvent := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
@@ -208,11 +257,34 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
 		},
 	}
-	_, value = rowChangeToMsg(deleteEvent, true)
+	_, value, err = rowChangeToMsg(deleteEvent, true, false)
+	require.NoError(t, err)
 	_, ok = value.Delete["a"]
 	require.False(t, ok)
 
-	_, value = rowChangeToMsg(deleteEvent, false)
+	_, value, err = rowChangeToMsg(deleteEvent, false, false)
+	require.NoError(t, err)
 	_, ok = value.Delete["a"]
 	require.True(t, ok)
+
+	key, value, err = rowChangeToMsg(deleteEvent, false, true)
+	require.NoError(t, err)
+	require.True(t, key.LargeMessageOnlyHandleKeyColumns)
+	_, ok = value.Delete["a"]
+	require.False(t, ok)
+
+	deleteEventNoHandleKey := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+	}
+
+	_, _, err = rowChangeToMsg(deleteEventNoHandleKey, false, true)
+	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 }

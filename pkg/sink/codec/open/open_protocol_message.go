@@ -94,27 +94,44 @@ func newResolvedMessage(ts uint64) *internal.MessageKey {
 	}
 }
 
-func rowChangeToMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow) {
+func rowChangeToMsg(
+	e *model.RowChangedEvent,
+	deleteOnlyHandleKeyColumns bool,
+	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow, error) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
 	}
 	key := &internal.MessageKey{
-		Ts:        e.CommitTs,
-		Schema:    e.Table.Schema,
-		Table:     e.Table.Table,
-		RowID:     e.RowID,
-		Partition: partition,
-		Type:      model.MessageTypeRow,
+		Ts:                               e.CommitTs,
+		Schema:                           e.Table.Schema,
+		Table:                            e.Table.Table,
+		RowID:                            e.RowID,
+		Partition:                        partition,
+		Type:                             model.MessageTypeRow,
+		LargeMessageOnlyHandleKeyColumns: largeMessageOnlyHandleKeyColumns,
 	}
 	value := &messageRow{}
 	if e.IsDelete() {
+		onlyHandleKeyColumns := deleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
 		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, onlyHandleKeyColumns)
+		if onlyHandleKeyColumns && len(value.Delete) == 0 {
+			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the delete event")
+		}
+	} else if e.IsUpdate() {
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, largeMessageOnlyHandleKeyColumns)
+		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
+			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
+		}
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns, false)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, false)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
+		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {
+			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the insert event")
+		}
 	}
-	return key, value
+
+	return key, value, nil
 }
 
 func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChangedEvent {
