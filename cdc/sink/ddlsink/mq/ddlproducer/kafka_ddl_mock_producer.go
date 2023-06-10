@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
@@ -29,7 +30,7 @@ type MockDDLProducer struct {
 }
 
 // NewMockDDLProducer creates a mock producer.
-func NewMockDDLProducer(_ context.Context, _ kafka.Factory) (DDLProducer, error) {
+func NewMockDDLProducer(_ context.Context, _ model.ChangeFeedID, _ kafka.Factory) (DDLProducer, error) {
 	return &MockDDLProducer{
 		events: make(map[string][]*common.Message),
 	}, nil

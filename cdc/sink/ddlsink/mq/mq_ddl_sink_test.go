@@ -51,6 +51,7 @@ func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
 func TestNewKafkaDDLSinkFailed(t *testing.T) {
 	t.Parallel()
 
+	changefeedID := model.DefaultChangeFeedID("test")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -66,7 +67,7 @@ func TestNewKafkaDDLSinkFailed(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
 		kafka.NewMockFactory, ddlproducer.NewMockDDLProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
 		"should report error when protocol is avro but schema-registry is not set")
@@ -76,6 +77,7 @@ func TestNewKafkaDDLSinkFailed(t *testing.T) {
 func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	t.Parallel()
 
+	changefeedID := model.DefaultChangeFeedID("test")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -91,7 +93,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
@@ -134,7 +136,8 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, replicaConfig,
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
@@ -178,7 +181,8 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, replicaConfig,
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
@@ -222,7 +226,8 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 		},
 	}
 
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, replicaConfig,
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
@@ -283,7 +288,8 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, replicaConfig,
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)

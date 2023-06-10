@@ -37,7 +37,8 @@ func TestInitAndWriteMeta(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	config.GetGlobalServerConfig().AdvertiseAddr = captureID
+	nConfig := config.GetGlobalServerConfig().Clone()
+	config.StoreGlobalServerConfig(nConfig)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 
 	extStorage, uri, err := util.GetTestExtStorage(ctx, t.TempDir())
@@ -99,7 +100,8 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	config.GetGlobalServerConfig().AdvertiseAddr = captureID
+	nConfig := config.GetGlobalServerConfig().Clone()
+	config.StoreGlobalServerConfig(nConfig)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 
 	extStorage, uri, err := util.GetTestExtStorage(ctx, t.TempDir())
@@ -216,7 +218,8 @@ func TestGCAndCleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	config.GetGlobalServerConfig().AdvertiseAddr = captureID
+	nConfig := config.GetGlobalServerConfig().Clone()
+	config.StoreGlobalServerConfig(nConfig)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 
 	extStorage, uri, err := util.GetTestExtStorage(ctx, t.TempDir())
