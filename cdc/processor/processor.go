@@ -910,6 +910,7 @@ func (p *processor) Close() error {
 	p.wg.Wait()
 	p.upStream.Release()
 
+<<<<<<< HEAD
 	if p.agent == nil {
 		return nil
 	}
@@ -917,6 +918,19 @@ func (p *processor) Close() error {
 		return errors.Trace(err)
 	}
 	p.agent = nil
+=======
+	// clean up metrics first to avoid some metrics are not cleaned up
+	// when error occurs during closing the processor
+	p.cleanupMetrics()
+
+	p.sinkManager.stop()
+	p.sinkManager.r = nil
+	p.sourceManager.stop()
+	p.sourceManager.r = nil
+	p.redo.stop()
+	p.mg.stop()
+	p.ddlHandler.stop()
+>>>>>>> a6939c3156 (changefeed (ticdc): remove status of a changefeed after it is removed (#9174))
 
 	// sink close might be time-consuming, do it the last.
 	if p.sink != nil {
@@ -941,10 +955,22 @@ func (p *processor) Close() error {
 	}
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
+<<<<<<< HEAD
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	checkpointTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+=======
+
+	log.Info("processor closed",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID))
+
+	return nil
+}
+
+func (p *processor) cleanupMetrics() {
+>>>>>>> a6939c3156 (changefeed (ticdc): remove status of a changefeed after it is removed (#9174))
 	syncTableNumGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorErrorCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)

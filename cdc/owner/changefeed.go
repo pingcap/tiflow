@@ -553,8 +553,14 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	changefeedBarrierTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedBarrierTsGauge = nil
 
+<<<<<<< HEAD
 	c.isReleased = true
 	c.initialized = false
+=======
+	if c.isRemoved {
+		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	}
+>>>>>>> a6939c3156 (changefeed (ticdc): remove status of a changefeed after it is removed (#9174))
 }
 
 // redoManagerCleanup cleanups redo logs if changefeed is removed and redo log is enabled
