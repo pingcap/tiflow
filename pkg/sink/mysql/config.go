@@ -362,7 +362,8 @@ func getSafeMode(values *urlConfig, safeMode *bool) {
 }
 
 func getTimezone(serverTimezoneStr string,
-	values *urlConfig, timezone *string) error {
+	values *urlConfig, timezone *string,
+) error {
 	const pleaseSpecifyTimezone = "We recommend that you specify the time-zone explicitly. " +
 		"Please make sure that the timezone of the TiCDC server, " +
 		"sink-uri and the downstream database are consistent. " +
