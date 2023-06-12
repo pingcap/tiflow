@@ -369,7 +369,6 @@ func getTimezone(serverTimezoneStr string,
 		"sink-uri and the downstream database are consistent. " +
 		"If the downstream database does not load the timezone information, " +
 		"you can refer to https://dev.mysql.com/doc/refman/8.0/en/mysql-tzinfo-to-sql.html."
-	config.GetGlobalServerConfig()
 	serverTimezone, err := util.GetTimezone(serverTimezoneStr)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
