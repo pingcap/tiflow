@@ -100,13 +100,9 @@ func (s *messageRouterTestSuite) close() {
 	for _, cancel := range s.cancels {
 		cancel()
 	}
+	s.wg.Wait()
 
 	s.messageRouter.Close()
-}
-
-func (s *messageRouterTestSuite) wait() {
-	s.wg.Wait()
-	s.messageRouter.Wait()
 }
 
 func TestMessageRouterBasic(t *testing.T) {
@@ -184,7 +180,6 @@ func TestMessageRouterBasic(t *testing.T) {
 
 	suite.close()
 	suite.close() // double close: should not panic
-	suite.wait()
 	suite.close() // triple close: should not panic
 }
 
@@ -257,7 +252,6 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 
 	wg.Wait()
 	suite.close()
-	suite.wait()
 }
 
 func TestMessageRouterClientFailure(t *testing.T) {
@@ -287,5 +281,4 @@ func TestMessageRouterClientFailure(t *testing.T) {
 	}
 
 	suite.close()
-	suite.wait()
 }
