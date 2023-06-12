@@ -674,14 +674,16 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				// `resolvedTs` should be monotonically increasing, it's allowed to receive redundant one.
-				if ts < resolvedTs {
+
+				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
+				if ts < globalResolvedTs {
 					log.Panic("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
-						zap.Uint64("resolvedTs", resolvedTs),
+						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Int32("partition", partition))
 				}
+
+				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
 				if ts > resolvedTs {
 					for tableID, group := range eventGroups {
 						events := group.Resolve(ts)
@@ -708,8 +710,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("ts", ts),
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
-				} else {
-					log.Info("redundant sink resolved ts", zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				}
 			}
 			session.MarkMessage(message, "")
