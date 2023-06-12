@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -89,12 +90,14 @@ func GetEncoderConfig(
 // GetTopicManagerAndTryCreateTopic returns the topic manager and try to create the topic.
 func GetTopicManagerAndTryCreateTopic(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
 	adminClient kafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager, err := manager.NewKafkaTopicManager(
 		ctx,
+		changefeedID,
 		adminClient,
 		topicCfg,
 	)

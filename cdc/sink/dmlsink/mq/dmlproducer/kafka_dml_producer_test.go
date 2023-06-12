@@ -89,7 +89,8 @@ func TestProducerAck(t *testing.T) {
 	adminClient, err := factory.AdminClient(ctx)
 	require.NoError(t, err)
 
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, changefeed,
+		factory, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 
@@ -156,7 +157,8 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	adminClient, err := factory.AdminClient(ctx)
 	require.NoError(t, err)
 
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, changefeed,
+		factory, adminClient, errCh)
 	defer func() {
 		producer.Close()
 
@@ -219,7 +221,8 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, changefeed,
+		factory, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 

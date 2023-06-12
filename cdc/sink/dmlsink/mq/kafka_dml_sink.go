@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/util"
@@ -33,6 +33,7 @@ import (
 // NewKafkaDMLSink will verify the config and create a KafkaSink.
 func NewKafkaDMLSink(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
@@ -45,12 +46,11 @@ func NewKafkaDMLSink(
 	}
 
 	options := kafka.NewOptions()
-	if err := options.Apply(ctx, sinkURI, replicaConfig); err != nil {
+	if err := options.Apply(changefeedID, sinkURI, replicaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	changefeed := contextutil.ChangefeedIDFromCtx(ctx)
-	factory, err := factoryCreator(options, changefeed)
+	factory, err := factoryCreator(options, changefeedID)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
@@ -82,7 +82,7 @@ func NewKafkaDMLSink(
 
 	log.Info("Try to create a DML sink producer",
 		zap.Any("options", options))
-	p, err := producerCreator(ctx, factory, adminClient, errCh)
+	p, err := producerCreator(ctx, changefeedID, factory, adminClient, errCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
@@ -96,6 +96,7 @@ func NewKafkaDMLSink(
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
+		changefeedID,
 		topic,
 		options.DeriveTopicConfig(),
 		adminClient,
@@ -116,7 +117,7 @@ func NewKafkaDMLSink(
 	}
 
 	s, err := newDMLSink(
-		ctx, p, adminClient, topicManager,
+		ctx, changefeedID, p, adminClient, topicManager,
 		eventRouter, encoderConfig,
 		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency),
 		errCh,

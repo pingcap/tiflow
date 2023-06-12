@@ -219,7 +219,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		return false
 	}
 
-	globalResolvedTs := p.changefeed.Status.ResolvedTs
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	var tableResolvedTs, tableCheckpointTs uint64
@@ -253,7 +252,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
-			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("state", state),
@@ -267,7 +265,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Stringer("span", &span),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
-		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("state", state),
@@ -642,7 +639,6 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	// NOTE: We must call contextutil.Put* to put some variables into the new context.
 	// Maybe it's better to put all things into global vars or changefeed vars.
 	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
-	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
 
 	tz := contextutil.TimezoneFromCtx(stdCtx)
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config, util.GetTimeZoneName(tz))
@@ -654,12 +650,14 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return err
 	}
 	p.ddlHandler.name = "ddlHandler"
+	p.ddlHandler.changefeedID = p.changefeedID
 	p.ddlHandler.spawn(stdCtx)
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.filter, tz, p.changefeedID, p.changefeed.Info.Config.Integrity)
 	p.mg.name = "MounterGroup"
+	p.mg.changefeedID = p.changefeedID
 	p.mg.spawn(stdCtx)
 
 	sourceID, err := pdutil.GetSourceID(stdCtx, p.upstream.PDClient)
@@ -668,11 +666,12 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
-	p.redo.r, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
+	p.redo.r, err = redo.NewDMLManager(stdCtx, p.changefeedID, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
 	}
 	p.redo.name = "RedoManager"
+	p.redo.changefeedID = p.changefeedID
 	p.redo.spawn(stdCtx)
 
 	sortEngine, err := p.globalVars.SortEngineFactory.Create(p.changefeedID)
@@ -688,12 +687,14 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		p.changefeedID, p.upstream, p.mg.r,
 		sortEngine, util.GetOrZero(p.changefeed.Info.Config.BDRMode))
 	p.sourceManager.name = "SourceManager"
+	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(stdCtx)
 
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.changefeed.Info, p.upstream,
 		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
 	p.sinkManager.name = "SinkManager"
+	p.sinkManager.changefeedID = p.changefeedID
 	p.sinkManager.spawn(stdCtx)
 
 	// Bind them so that sourceManager can notify sinkManager.r.
@@ -759,13 +760,13 @@ func (p *processor) handleErrorCh() (err error) {
 
 func (p *processor) initDDLHandler(ctx context.Context) error {
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	resolvedTs := p.changefeed.Status.ResolvedTs
+	minTableBarrierTs := p.changefeed.Status.MinTableBarrierTs
 	forceReplicate := p.changefeed.Info.Config.ForceReplicate
 
-	// if resolvedTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
+	// if minTableBarrierTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
 	// been executed or not. So the DDL puller must start at checkpointTs-1.
 	var ddlStartTs uint64
-	if resolvedTs > checkpointTs {
+	if minTableBarrierTs > checkpointTs {
 		ddlStartTs = checkpointTs
 	} else {
 		ddlStartTs = checkpointTs - 1
@@ -811,12 +812,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 	tableBarrier := p.calculateTableBarrierTs(barrier)
 	globalBarrierTs := barrier.GetGlobalBarrierTs()
-	// when redo is enable, globalBarrierTs must less than or equal to global resolvedTs
-	if p.redo.r.Enabled() {
-		if globalBarrierTs > p.changefeed.Status.ResolvedTs {
-			globalBarrierTs = p.changefeed.Status.ResolvedTs
-		}
-	}
+
 	schemaResolvedTs := p.ddlHandler.r.schemaStorage.ResolvedTs()
 	if schemaResolvedTs < globalBarrierTs {
 		// Do not update barrier ts that is larger than
@@ -909,13 +905,17 @@ func (p *processor) Close() error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 
-	p.sinkManager.stop(p.changefeedID)
+	// clean up metrics first to avoid some metrics are not cleaned up
+	// when error occurs during closing the processor
+	p.cleanupMetrics()
+
+	p.sinkManager.stop()
 	p.sinkManager.r = nil
-	p.sourceManager.stop(p.changefeedID)
+	p.sourceManager.stop()
 	p.sourceManager.r = nil
-	p.redo.stop(p.changefeedID)
-	p.mg.stop(p.changefeedID)
-	p.ddlHandler.stop(p.changefeedID)
+	p.redo.stop()
+	p.mg.stop()
+	p.ddlHandler.stop()
 
 	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
 		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
@@ -946,7 +946,6 @@ func (p *processor) Close() error {
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 
-	p.cleanupMetrics()
 	log.Info("processor closed",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -989,13 +988,14 @@ func (p *processor) calculateTableBarrierTs(
 }
 
 type component[R util.Runnable] struct {
-	r        R
-	name     string
-	ctx      context.Context
-	cancel   context.CancelFunc
-	errors   chan error
-	warnings chan error
-	wg       sync.WaitGroup
+	r            R
+	name         string
+	ctx          context.Context
+	cancel       context.CancelFunc
+	errors       chan error
+	warnings     chan error
+	wg           sync.WaitGroup
+	changefeedID model.ChangeFeedID
 }
 
 func (c *component[R]) spawn(ctx context.Context) {
@@ -1003,7 +1003,7 @@ func (c *component[R]) spawn(ctx context.Context) {
 	c.errors = make(chan error, 16)
 	c.warnings = make(chan error, 16)
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(c.ctx)
+	changefeedID := c.changefeedID
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -1027,17 +1027,17 @@ func (c *component[R]) spawn(ctx context.Context) {
 		zap.String("name", c.name))
 }
 
-func (c *component[R]) stop(changefeedID model.ChangeFeedID) {
+func (c *component[R]) stop() {
 	if c.cancel == nil {
 		log.Info("processor sub-component isn't started",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID),
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("name", c.name))
 		return
 	}
 	log.Info("processor sub-component is in stopping",
-		zap.String("namespace", changefeedID.Namespace),
-		zap.String("changefeed", changefeedID.ID),
+		zap.String("namespace", c.changefeedID.Namespace),
+		zap.String("changefeed", c.changefeedID.ID),
 		zap.String("name", c.name))
 	c.cancel()
 	c.wg.Wait()

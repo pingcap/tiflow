@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/keyspan"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
@@ -201,7 +202,7 @@ func TestCoordinatorTransportCompat(t *testing.T) {
 }
 
 func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.MockTrans) {
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg)
+	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg, redo.NewDisabledMetaManager())
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 	coord.reconciler = keyspan.NewReconcilerForTests(

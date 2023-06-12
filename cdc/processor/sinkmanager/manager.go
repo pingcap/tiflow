@@ -300,7 +300,7 @@ func (m *SinkManager) initSinkFactory(errCh chan error) error {
 		return errors.Trace(err)
 	}
 
-	if m.sinkFactory, err = factory.New(m.managerCtx, uri, cfg, errCh); err == nil {
+	if m.sinkFactory, err = factory.New(m.managerCtx, m.changefeedID, uri, cfg, errCh); err == nil {
 		log.Info("Sink manager inits sink factory success",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID))

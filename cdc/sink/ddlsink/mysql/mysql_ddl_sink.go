@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -66,10 +65,10 @@ type DDLSink struct {
 // NewDDLSink creates a new DDLSink.
 func NewDDLSink(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 ) (*DDLSink, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	cfg := pmysql.NewConfig()
 	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
@@ -90,7 +89,7 @@ func NewDDLSink(
 		id:         changefeedID,
 		db:         db,
 		cfg:        cfg,
-		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
+		statistics: metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
 	}
 
 	log.Info("MySQL DDL sink is created",

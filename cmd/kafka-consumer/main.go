@@ -473,6 +473,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	f, err := eventsinkfactory.New(
 		ctx,
+		model.DefaultChangeFeedID("test"),
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errChan,
@@ -495,6 +496,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	ddlSink, err := ddlsinkfactory.New(
 		ctx,
+		model.DefaultChangeFeedID("test"),
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 	)
