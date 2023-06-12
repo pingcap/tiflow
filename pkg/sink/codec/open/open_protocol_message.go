@@ -109,7 +109,7 @@ func rowChangeToMsg(
 		RowID:         e.RowID,
 		Partition:     partition,
 		Type:          model.MessageTypeRow,
-		OnlyHandleKey: largeMessaggeOnlyHandleKeyColumns,
+		OnlyHandleKey: largeMessageOnlyHandleKeyColumns,
 	}
 	value := &messageRow{}
 	if e.IsDelete() {

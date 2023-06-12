@@ -177,14 +177,14 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	}
 	_, value, err := rowChangeToMsg(insertEvent, true, false)
 	require.NoError(t, err)
-	_, ok := value.Update["a"]
-	require.True(t, ok)
+	require.Contains(t, value.Update, "id")
+	require.Contains(t, value.Update, "a")
 
 	key, value, err := rowChangeToMsg(insertEvent, false, true)
 	require.NoError(t, err)
 	require.True(t, key.OnlyHandleKey)
-	_, ok = value.Update["a"]
-	require.False(t, ok)
+	require.Contains(t, value.Update, "id")
+	require.NotContains(t, value.Update, "a")
 
 	insertEventNoHandleKey := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
@@ -217,16 +217,13 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	}
 	_, value, err = rowChangeToMsg(updateEvent, true, false)
 	require.NoError(t, err)
-	_, ok = value.PreColumns["a"]
-	require.True(t, ok)
+	require.Contains(t, value.PreColumns, "a")
 
 	key, value, err = rowChangeToMsg(updateEvent, false, true)
 	require.NoError(t, err)
 	require.True(t, key.OnlyHandleKey)
-	_, ok = value.PreColumns["a"]
-	require.False(t, ok)
-	_, ok = value.Update["a"]
-	require.False(t, ok)
+	require.NotContains(t, value.PreColumns, "a")
+	require.NotContains(t, value.Update, "a")
 
 	updateEventNoHandleKey := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
@@ -259,19 +256,16 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 	}
 	_, value, err = rowChangeToMsg(deleteEvent, true, false)
 	require.NoError(t, err)
-	_, ok = value.Delete["a"]
-	require.False(t, ok)
+	require.NotContains(t, value.Delete, "a")
 
 	_, value, err = rowChangeToMsg(deleteEvent, false, false)
 	require.NoError(t, err)
-	_, ok = value.Delete["a"]
-	require.True(t, ok)
+	require.Contains(t, value.Delete, "a")
 
 	key, value, err = rowChangeToMsg(deleteEvent, false, true)
 	require.NoError(t, err)
 	require.True(t, key.OnlyHandleKey)
-	_, ok = value.Delete["a"]
-	require.False(t, ok)
+	require.NotContains(t, value.Delete, "a")
 
 	deleteEventNoHandleKey := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
