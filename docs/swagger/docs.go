@@ -1472,6 +1472,27 @@ var doc = `{
                 "sasl-mechanism": {
                     "type": "string"
                 },
+                "sasl-oauth-audience": {
+                    "type": "string"
+                },
+                "sasl-oauth-client-id": {
+                    "type": "string"
+                },
+                "sasl-oauth-client-secret": {
+                    "type": "string"
+                },
+                "sasl-oauth-grant-type": {
+                    "type": "string"
+                },
+                "sasl-oauth-scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sasl-oauth-token-url": {
+                    "type": "string"
+                },
                 "sasl-password": {
                     "type": "string"
                 },
@@ -2327,6 +2348,27 @@ var doc = `{
                     "type": "string"
                 },
                 "sasl_mechanism": {
+                    "type": "string"
+                },
+                "sasl_oauth_audience": {
+                    "type": "string"
+                },
+                "sasl_oauth_client_id": {
+                    "type": "string"
+                },
+                "sasl_oauth_client_secret": {
+                    "type": "string"
+                },
+                "sasl_oauth_grant_type": {
+                    "type": "string"
+                },
+                "sasl_oauth_scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sasl_oauth_token_url": {
                     "type": "string"
                 },
                 "sasl_password": {

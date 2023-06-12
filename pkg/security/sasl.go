@@ -35,6 +35,8 @@ const (
 	SCRAM512Mechanism SASLMechanism = sarama.SASLTypeSCRAMSHA512
 	// GSSAPIMechanism means the SASL mechanism is GSSAPI.
 	GSSAPIMechanism SASLMechanism = sarama.SASLTypeGSSAPI
+	// OAuthMechanism means the SASL mechanism is OAuth2.
+	OAuthMechanism SASLMechanism = sarama.SASLTypeOAuth
 )
 
 // SASLMechanismFromString converts the string to SASL mechanism.
@@ -48,6 +50,8 @@ func SASLMechanismFromString(s string) (SASLMechanism, error) {
 		return SCRAM512Mechanism, nil
 	case "gssapi":
 		return GSSAPIMechanism, nil
+	case "oauthbearer":
+		return OAuthMechanism, nil
 	default:
 		return UnknownMechanism, errors.Errorf("unknown %s SASL mechanism", s)
 	}
@@ -55,10 +59,47 @@ func SASLMechanismFromString(s string) (SASLMechanism, error) {
 
 // SASL holds necessary path parameter to support sasl-scram
 type SASL struct {
-	SASLUser      string        `toml:"sasl-user" json:"sasl-user"`
-	SASLPassword  string        `toml:"sasl-password" json:"sasl-password"`
-	SASLMechanism SASLMechanism `toml:"sasl-mechanism" json:"sasl-mechanism"`
-	GSSAPI        GSSAPI        `toml:"sasl-gssapi" json:"sasl-gssapi"`
+	SASLUser      string
+	SASLPassword  string
+	SASLMechanism SASLMechanism
+	GSSAPI        GSSAPI
+	OAuth2        OAuth2
+}
+
+// OAuth2 holds necessary parameters to support sasl-oauth2.
+type OAuth2 struct {
+	ClientID     string
+	ClientSecret string
+	TokenURL     string
+	Scopes       []string
+	GrantType    string
+	Audience     string
+}
+
+// Validate validates the parameters of OAuth2.
+// Some parameters are required, some are optional.
+func (o *OAuth2) Validate() error {
+	if len(o.ClientID) == 0 {
+		return errors.New("OAuth2 client id is empty")
+	}
+	if len(o.ClientSecret) == 0 {
+		return errors.New("OAuth2 client secret is empty")
+	}
+	if len(o.TokenURL) == 0 {
+		return errors.New("OAuth2 token url is empty")
+	}
+	return nil
+}
+
+// SetDefault sets the default value of OAuth2.
+func (o *OAuth2) SetDefault() {
+	o.GrantType = "client_credentials"
+}
+
+// IsEnable checks whether the OAuth2 is enabled.
+// One of values of ClientID, ClientSecret and TokenURL is not empty means enabled.
+func (o *OAuth2) IsEnable() bool {
+	return len(o.ClientID) > 0 || len(o.ClientSecret) > 0 || len(o.TokenURL) > 0
 }
 
 // GSSAPIAuthType defines the type of GSSAPI authentication.
