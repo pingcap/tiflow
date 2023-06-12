@@ -664,7 +664,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
-	p.redo.r, err = redo.NewDMLManager(prcCtx, p.changefeedID, p.changefeed.Info.Config.Consistent)
+	p.redo.r, err = redo.NewDMLManager(prcCtx, p.changefeedID, p.changefeedID, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
 	}
