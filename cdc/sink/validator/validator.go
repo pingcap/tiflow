@@ -116,7 +116,7 @@ func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.R
 	}
 	cfg := pmysql.NewConfig()
 	id := model.ChangeFeedID{Namespace: "default", ID: "sink-verify"}
-	err = cfg.Apply(ctx, id, sinkURI, replicaConfig)
+	err = cfg.Apply(config.GetGlobalServerConfig().TZ, id, sinkURI, replicaConfig)
 	if err != nil {
 		return err
 	}

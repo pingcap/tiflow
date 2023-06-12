@@ -70,7 +70,7 @@ func NewDDLSink(
 	replicaConfig *config.ReplicaConfig,
 ) (*DDLSink, error) {
 	cfg := pmysql.NewConfig()
-	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
+	err := cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
 		return nil, err
 	}

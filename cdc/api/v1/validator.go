@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -175,11 +174,10 @@ func verifyCreateChangefeedConfig(
 		}
 	}
 
-	tz, err := util.GetTimezone(changefeedConfig.TimeZone)
+	_, err = util.GetTimezone(changefeedConfig.TimeZone)
 	if err != nil {
 		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
-	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
 	if err := validator.Validate(ctx,
 		model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
 		info.SinkURI, info.Config); err != nil {
