@@ -97,7 +97,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
-func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 	var (
 		valueMap  map[string]interface{}
 		rawSchema string
@@ -107,7 +107,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	ctx := context.Background()
 	key, rawSchema, err := d.decodeKey(ctx)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, false, errors.Trace(err)
 	}
 
 	isDelete := len(d.value) == 0
@@ -116,25 +116,25 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	} else {
 		valueMap, rawSchema, err = d.decodeValue(ctx)
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, false, errors.Trace(err)
 		}
 	}
 
 	schema := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(rawSchema), &schema); err != nil {
-		return nil, errors.Trace(err)
+		return nil, false, errors.Trace(err)
 	}
 
 	fields, ok := schema["fields"].([]interface{})
 	if !ok {
-		return nil, errors.New("schema fields should be a map")
+		return nil, false, errors.New("schema fields should be a map")
 	}
 
 	columns := make([]*model.Column, 0, len(valueMap))
 	for _, value := range fields {
 		field, ok := value.(map[string]interface{})
 		if !ok {
-			return nil, errors.New("schema field should be a map")
+			return nil, false, errors.New("schema field should be a map")
 		}
 
 		// `tidbOp` is the first extension field in the schema, so we can break here.
@@ -167,7 +167,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 		value, ok := valueMap[colName]
 		if !ok {
-			return nil, errors.New("value not found")
+			return nil, false, errors.New("value not found")
 		}
 
 		switch t := value.(type) {
@@ -188,7 +188,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			case string:
 				enum, err := types.ParseEnum(allowed, t, "")
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, false, errors.Trace(err)
 				}
 				value = enum.Value
 			case nil:
@@ -202,7 +202,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			case string:
 				s, err := types.ParseSet(elems, t, "")
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, false, errors.Trace(err)
 				}
 				value = s.Value
 			case nil:
@@ -223,7 +223,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if !isDelete {
 		o, ok := valueMap[tidbCommitTs]
 		if !ok {
-			return nil, errors.New("commit ts not found")
+			return nil, false, errors.New("commit ts not found")
 		}
 		commitTs = o.(int64)
 
@@ -234,7 +234,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			if checksum != "" {
 				expected, err = strconv.ParseUint(checksum, 10, 64)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, false, errors.Trace(err)
 				}
 				if o, ok := valueMap[tidbCorrupted]; ok {
 					corrupted := o.(bool)
@@ -256,7 +256,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 				}
 
 				if err := d.verifyChecksum(columns, expected); err != nil {
-					return nil, errors.Trace(err)
+					return nil, false, errors.Trace(err)
 				}
 			}
 		}
@@ -275,7 +275,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 	event.Columns = columns
 
-	return event, nil
+	return event, false, nil
 }
 
 // NextResolvedEvent returns the next resolved event if exists

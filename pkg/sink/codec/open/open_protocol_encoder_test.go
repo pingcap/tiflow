@@ -113,7 +113,7 @@ func TestMaxBatchSize(t *testing.T) {
 			}
 
 			require.Equal(t, model.MessageTypeRow, v)
-			_, err = decoder.NextRowChangedEvent()
+			_, _, err = decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 			count++
 		}

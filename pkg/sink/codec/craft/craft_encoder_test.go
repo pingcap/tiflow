@@ -87,7 +87,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 			}
 
 			require.Equal(t, model.MessageTypeRow, v)
-			_, err = decoder.NextRowChangedEvent()
+			_, _, err = decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 			count++
 		}
@@ -121,7 +121,7 @@ func testBatchCodec(
 				break
 			}
 			require.Equal(t, model.MessageTypeRow, tp)
-			row, err := decoder.NextRowChangedEvent()
+			row, _, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 			require.Equal(t, cs[index], row)
 			index++

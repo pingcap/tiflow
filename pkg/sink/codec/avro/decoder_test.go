@@ -132,7 +132,7 @@ func TestDecodeEvent(t *testing.T) {
 	require.True(t, exist)
 	require.Equal(t, model.MessageTypeRow, messageType)
 
-	decodedEvent, err := decoder.NextRowChangedEvent()
+	decodedEvent, _, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
 	require.NotNil(t, decodedEvent)
 }

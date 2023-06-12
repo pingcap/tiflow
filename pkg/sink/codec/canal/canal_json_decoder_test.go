@@ -51,7 +51,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeRow, ty)
 
-			consumed, err := decoder.NextRowChangedEvent()
+			consumed, _, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 
 			require.Equal(t, testCaseInsert.Table, consumed.Table)
@@ -76,7 +76,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 			_, hasNext, _ = decoder.HasNext()
 			require.False(t, hasNext)
 
-			consumed, err = decoder.NextRowChangedEvent()
+			consumed, _, err = decoder.NextRowChangedEvent()
 			require.NotNil(t, err)
 			require.Nil(t, consumed)
 		}
@@ -147,7 +147,7 @@ func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, model.MessageTypeRow, tp)
 		cnt++
-		event, err := decoder.NextRowChangedEvent()
+		event, _, err := decoder.NextRowChangedEvent()
 		require.Nil(t, err)
 		require.NotNil(t, event)
 	}

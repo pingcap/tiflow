@@ -60,26 +60,27 @@ func (b *BatchMixedDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the RowEventDecoder interface
-func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	b.mixedBytes = b.mixedBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MessageTypeRow {
-		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
+		return nil, false, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.mixedBytes[:8])
 	value := b.mixedBytes[8 : valueLen+8]
 	b.mixedBytes = b.mixedBytes[valueLen+8:]
 	rowMsg := new(messageRow)
 	if err := rowMsg.decode(value); err != nil {
-		return nil, errors.Trace(err)
+		return nil, false, errors.Trace(err)
 	}
 	rowEvent := msgToRowChange(b.nextKey, rowMsg)
+	onlyHandleKey := b.nextKey.OnlyHandleKey
 	b.nextKey = nil
-	return rowEvent, nil
+	return rowEvent, onlyHandleKey, nil
 }
 
 // NextDDLEvent implements the RowEventDecoder interface
@@ -161,26 +162,27 @@ func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the RowEventDecoder interface
-func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 	if b.nextKey == nil {
 		if err := b.decodeNextKey(); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
 	if b.nextKey.Type != model.MessageTypeRow {
-		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
+		return nil, false, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
 	b.valueBytes = b.valueBytes[valueLen+8:]
 	rowMsg := new(messageRow)
 	if err := rowMsg.decode(value); err != nil {
-		return nil, errors.Trace(err)
+		return nil, false, errors.Trace(err)
 	}
 	rowEvent := msgToRowChange(b.nextKey, rowMsg)
+	onlyHandleKey := b.nextKey.OnlyHandleKey
 	b.nextKey = nil
-	return rowEvent, nil
+	return rowEvent, onlyHandleKey, nil
 }
 
 // NextDDLEvent implements the RowEventDecoder interface

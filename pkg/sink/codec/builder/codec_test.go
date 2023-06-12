@@ -291,7 +291,7 @@ func BenchmarkCraftDecoding(b *testing.B) {
 					if _, hasNext, err := decoder.HasNext(); err != nil {
 						panic(err)
 					} else if hasNext {
-						_, _ = decoder.NextRowChangedEvent()
+						_, _, _ = decoder.NextRowChangedEvent()
 					} else {
 						break
 					}
@@ -312,7 +312,7 @@ func BenchmarkJsonDecoding(b *testing.B) {
 					if _, hasNext, err := decoder.HasNext(); err != nil {
 						panic(err)
 					} else if hasNext {
-						_, _ = decoder.NextRowChangedEvent()
+						_, _, _ = decoder.NextRowChangedEvent()
 					} else {
 						break
 					}
