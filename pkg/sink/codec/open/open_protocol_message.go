@@ -103,13 +103,13 @@ func rowChangeToMsg(
 		partition = &e.Table.TableID
 	}
 	key := &internal.MessageKey{
-		Ts:                               e.CommitTs,
-		Schema:                           e.Table.Schema,
-		Table:                            e.Table.Table,
-		RowID:                            e.RowID,
-		Partition:                        partition,
-		Type:                             model.MessageTypeRow,
-		LargeMessageOnlyHandleKeyColumns: largeMessageOnlyHandleKeyColumns,
+		Ts:            e.CommitTs,
+		Schema:        e.Table.Schema,
+		Table:         e.Table.Table,
+		RowID:         e.RowID,
+		Partition:     partition,
+		Type:          model.MessageTypeRow,
+		OnlyHandleKey: largeMessaggeOnlyHandleKeyColumns,
 	}
 	value := &messageRow{}
 	if e.IsDelete() {

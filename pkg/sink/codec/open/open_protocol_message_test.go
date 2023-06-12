@@ -182,7 +182,7 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 
 	key, value, err := rowChangeToMsg(insertEvent, false, true)
 	require.NoError(t, err)
-	require.True(t, key.LargeMessageOnlyHandleKeyColumns)
+	require.True(t, key.OnlyHandleKey)
 	_, ok = value.Update["a"]
 	require.False(t, ok)
 
@@ -222,7 +222,7 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 
 	key, value, err = rowChangeToMsg(updateEvent, false, true)
 	require.NoError(t, err)
-	require.True(t, key.LargeMessageOnlyHandleKeyColumns)
+	require.True(t, key.OnlyHandleKey)
 	_, ok = value.PreColumns["a"]
 	require.False(t, ok)
 	_, ok = value.Update["a"]
@@ -269,7 +269,7 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 
 	key, value, err = rowChangeToMsg(deleteEvent, false, true)
 	require.NoError(t, err)
-	require.True(t, key.LargeMessageOnlyHandleKeyColumns)
+	require.True(t, key.OnlyHandleKey)
 	_, ok = value.Delete["a"]
 	require.False(t, ok)
 

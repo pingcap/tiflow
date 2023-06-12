@@ -22,13 +22,14 @@ import (
 
 // MessageKey defines the key for a message.
 type MessageKey struct {
-	Ts                               uint64            `json:"ts"`
-	Schema                           string            `json:"scm,omitempty"`
-	Table                            string            `json:"tbl,omitempty"`
-	RowID                            int64             `json:"rid,omitempty"`
-	Partition                        *int64            `json:"ptn,omitempty"`
-	Type                             model.MessageType `json:"t"`
-	LargeMessageOnlyHandleKeyColumns bool              `json:"loh,omitempty"`
+	Ts        uint64            `json:"ts"`
+	Schema    string            `json:"scm,omitempty"`
+	Table     string            `json:"tbl,omitempty"`
+	RowID     int64             `json:"rid,omitempty"`
+	Partition *int64            `json:"ptn,omitempty"`
+	Type      model.MessageType `json:"t"`
+	// Only Handle Key Columns encoded in the message's value part.
+	OnlyHandleKey bool `json:"ohk,omitempty"`
 }
 
 // Encode encodes the message key to a byte slice.
