@@ -16,15 +16,12 @@ package contextutil
 import (
 	"context"
 	"time"
-
-	"github.com/pingcap/tiflow/cdc/model"
 )
 
 type ctxKey string
 
 const (
-	ctxKeyChangefeedID = ctxKey("changefeedID")
-	ctxKeyTimezone     = ctxKey("timezone")
+	ctxKeyTimezone = ctxKey("timezone")
 )
 
 // PutTimezoneInCtx returns a new child context with the given timezone
@@ -39,19 +36,4 @@ func TimezoneFromCtx(ctx context.Context) *time.Location {
 		return nil
 	}
 	return tz
-}
-
-// ChangefeedIDFromCtx returns a changefeedID stored in the specified context.
-// It returns an empty model.changefeedID if there's no changefeedID found.
-func ChangefeedIDFromCtx(ctx context.Context) model.ChangeFeedID {
-	changefeedID, ok := ctx.Value(ctxKeyChangefeedID).(model.ChangeFeedID)
-	if !ok {
-		return model.ChangeFeedID{}
-	}
-	return changefeedID
-}
-
-// PutChangefeedIDInCtx returns a new child context with the specified changefeedID stored.
-func PutChangefeedIDInCtx(ctx context.Context, changefeedID model.ChangeFeedID) context.Context {
-	return context.WithValue(ctx, ctxKeyChangefeedID, changefeedID)
 }

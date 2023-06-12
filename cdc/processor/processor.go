@@ -642,7 +642,6 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	// NOTE: We must call contextutil.Put* to put some variables into the new context.
 	// Maybe it's better to put all things into global vars or changefeed vars.
 	stdCtx := contextutil.PutTimezoneInCtx(prcCtx, contextutil.TimezoneFromCtx(etcdCtx))
-	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
 
 	tz := contextutil.TimezoneFromCtx(stdCtx)
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config, util.GetTimeZoneName(tz))
@@ -654,12 +653,14 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return err
 	}
 	p.ddlHandler.name = "ddlHandler"
+	p.ddlHandler.changefeedID = p.changefeedID
 	p.ddlHandler.spawn(stdCtx)
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
 		p.filter, tz, p.changefeedID, p.changefeed.Info.Config.Integrity)
 	p.mg.name = "MounterGroup"
+	p.mg.changefeedID = p.changefeedID
 	p.mg.spawn(stdCtx)
 
 	sourceID, err := pdutil.GetSourceID(stdCtx, p.upstream.PDClient)
@@ -668,11 +669,12 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
-	p.redo.r, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
+	p.redo.r, err = redo.NewDMLManager(stdCtx, p.changefeedID, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
 	}
 	p.redo.name = "RedoManager"
+	p.redo.changefeedID = p.changefeedID
 	p.redo.spawn(stdCtx)
 
 	sortEngine, err := p.globalVars.SortEngineFactory.Create(p.changefeedID)
@@ -688,12 +690,14 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		p.changefeedID, p.upstream, p.mg.r,
 		sortEngine, util.GetOrZero(p.changefeed.Info.Config.BDRMode))
 	p.sourceManager.name = "SourceManager"
+	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(stdCtx)
 
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.changefeed.Info, p.upstream,
 		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
 	p.sinkManager.name = "SinkManager"
+	p.sinkManager.changefeedID = p.changefeedID
 	p.sinkManager.spawn(stdCtx)
 
 	// Bind them so that sourceManager can notify sinkManager.r.
@@ -908,13 +912,13 @@ func (p *processor) Close() error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 
-	p.sinkManager.stop(p.changefeedID)
+	p.sinkManager.stop()
 	p.sinkManager.r = nil
-	p.sourceManager.stop(p.changefeedID)
+	p.sourceManager.stop()
 	p.sourceManager.r = nil
-	p.redo.stop(p.changefeedID)
-	p.mg.stop(p.changefeedID)
-	p.ddlHandler.stop(p.changefeedID)
+	p.redo.stop()
+	p.mg.stop()
+	p.ddlHandler.stop()
 
 	if p.globalVars != nil && p.globalVars.SortEngineFactory != nil {
 		if err := p.globalVars.SortEngineFactory.Drop(p.changefeedID); err != nil {
@@ -988,13 +992,14 @@ func (p *processor) calculateTableBarrierTs(
 }
 
 type component[R util.Runnable] struct {
-	r        R
-	name     string
-	ctx      context.Context
-	cancel   context.CancelFunc
-	errors   chan error
-	warnings chan error
-	wg       sync.WaitGroup
+	r            R
+	name         string
+	ctx          context.Context
+	cancel       context.CancelFunc
+	errors       chan error
+	warnings     chan error
+	wg           sync.WaitGroup
+	changefeedID model.ChangeFeedID
 }
 
 func (c *component[R]) spawn(ctx context.Context) {
@@ -1002,7 +1007,7 @@ func (c *component[R]) spawn(ctx context.Context) {
 	c.errors = make(chan error, 16)
 	c.warnings = make(chan error, 16)
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(c.ctx)
+	changefeedID := c.changefeedID
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -1026,17 +1031,17 @@ func (c *component[R]) spawn(ctx context.Context) {
 		zap.String("name", c.name))
 }
 
-func (c *component[R]) stop(changefeedID model.ChangeFeedID) {
+func (c *component[R]) stop() {
 	if c.cancel == nil {
 		log.Info("processor sub-component isn't started",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID),
+			zap.String("namespace", c.changefeedID.Namespace),
+			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("name", c.name))
 		return
 	}
 	log.Info("processor sub-component is in stopping",
-		zap.String("namespace", changefeedID.Namespace),
-		zap.String("changefeed", changefeedID.ID),
+		zap.String("namespace", c.changefeedID.Namespace),
+		zap.String("changefeed", c.changefeedID.ID),
 		zap.String("name", c.name))
 	c.cancel()
 	c.wg.Wait()

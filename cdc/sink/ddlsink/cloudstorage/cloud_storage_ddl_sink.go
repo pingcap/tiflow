@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -45,17 +44,19 @@ type DDLSink struct {
 }
 
 // NewDDLSink creates a ddl sink for cloud storage.
-func NewDDLSink(ctx context.Context, sinkURI *url.URL) (*DDLSink, error) {
+func NewDDLSink(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+) (*DDLSink, error) {
 	storage, err := util.GetExternalStorageFromURI(ctx, sinkURI.String())
 	if err != nil {
 		return nil, err
 	}
 
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	d := &DDLSink{
 		id:         changefeedID,
 		storage:    storage,
-		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
+		statistics: metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
 	}
 
 	return d, nil

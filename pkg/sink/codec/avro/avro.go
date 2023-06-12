@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -987,6 +986,7 @@ const (
 
 // NewBatchEncoderBuilder creates an avro batchEncoderBuilder.
 func NewBatchEncoderBuilder(ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
 	keySchemaManager, valueSchemaManager, err := NewKeyAndValueSchemaManagers(
@@ -996,7 +996,7 @@ func NewBatchEncoderBuilder(ctx context.Context,
 	}
 
 	return &batchEncoderBuilder{
-		namespace:          contextutil.ChangefeedIDFromCtx(ctx).Namespace,
+		namespace:          changefeedID.Namespace,
 		config:             config,
 		keySchemaManager:   keySchemaManager,
 		valueSchemaManager: valueSchemaManager,

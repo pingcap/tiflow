@@ -180,7 +180,9 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.Wrap(errors.Annotatef(err, "invalid timezone:%s", changefeedConfig.TimeZone))
 	}
 	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
-	if err := validator.Validate(ctx, info.SinkURI, info.Config); err != nil {
+	if err := validator.Validate(ctx,
+		model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
+		info.SinkURI, info.Config); err != nil {
 		return nil, err
 	}
 
@@ -238,7 +240,9 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+		if err := validator.Validate(ctx,
+			model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
+			newInfo.SinkURI, newInfo.Config); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

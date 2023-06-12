@@ -101,7 +101,7 @@ func TestEntrySorter(t *testing.T) {
 			},
 		},
 	}
-	es := NewEntrySorter()
+	es := NewEntrySorter(model.ChangeFeedID4Test("test", "test-cf"))
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -126,7 +126,7 @@ func TestEntrySorter(t *testing.T) {
 
 func TestEntrySorterRandomly(t *testing.T) {
 	t.Parallel()
-	es := NewEntrySorter()
+	es := NewEntrySorter(model.ChangeFeedID4Test("test", "test-cf"))
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
@@ -358,7 +358,7 @@ func TestMergeEvents(t *testing.T) {
 }
 
 func BenchmarkSorter(b *testing.B) {
-	es := NewEntrySorter()
+	es := NewEntrySorter(model.ChangeFeedID4Test("test", "test-cf"))
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)

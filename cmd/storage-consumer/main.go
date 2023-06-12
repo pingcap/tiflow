@@ -186,10 +186,10 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	errCh := make(chan error, 1)
-	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
-		model.DefaultChangeFeedID(defaultChangefeedName))
+	stdCtx := ctx
 	sinkFactory, err := dmlfactory.New(
 		stdCtx,
+		model.DefaultChangeFeedID(defaultChangefeedName),
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errCh,
@@ -199,7 +199,8 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
+	ddlSink, err := ddlfactory.New(ctx, model.DefaultChangeFeedID(defaultChangefeedName),
+		downstreamURIStr, config.GetDefaultReplicaConfig())
 	if err != nil {
 		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err

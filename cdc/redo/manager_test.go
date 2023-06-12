@@ -121,7 +121,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 			FlushIntervalInMs: redo.MinFlushIntervalInMs,
 			UseFileBackend:    useFileBackend,
 		}
-		dmlMgr, err := NewDMLManager(ctx, cfg)
+		dmlMgr, err := NewDMLManager(ctx, model.DefaultChangeFeedID("test"), cfg)
 		require.NoError(t, err)
 		wg := sync.WaitGroup{}
 		wg.Add(1)
@@ -233,7 +233,7 @@ func TestLogManagerInOwner(t *testing.T) {
 			UseFileBackend:    useFileBackend,
 		}
 		startTs := model.Ts(10)
-		ddlMgr, err := NewDDLManager(ctx, cfg, startTs)
+		ddlMgr, err := NewDDLManager(ctx, model.DefaultChangeFeedID("test"), cfg, startTs)
 		require.NoError(t, err)
 		wg := sync.WaitGroup{}
 		wg.Add(1)
@@ -278,7 +278,7 @@ func TestLogManagerError(t *testing.T) {
 		Storage:           "blackhole://",
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	logMgr, err := NewDMLManager(ctx, cfg)
+	logMgr, err := NewDMLManager(ctx, model.DefaultChangeFeedID("test"), cfg)
 	require.NoError(t, err)
 	err = logMgr.writer.Close()
 	require.NoError(t, err)
@@ -336,7 +336,7 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 		UseFileBackend:    useFileBackend,
 	}
-	dmlMgr, err := NewDMLManager(ctx, cfg)
+	dmlMgr, err := NewDMLManager(ctx, model.DefaultChangeFeedID("test"), cfg)
 	require.Nil(b, err)
 	eg := errgroup.Group{}
 	eg.Go(func() error {
