@@ -711,8 +711,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Int32("partition", partition))
 					atomic.StoreUint64(&sink.resolvedTs, ts)
 				}
+				session.MarkMessage(message, "")
 			}
-			session.MarkMessage(message, "")
+
 		}
 
 		if counter > kafkaMaxBatchSize {
