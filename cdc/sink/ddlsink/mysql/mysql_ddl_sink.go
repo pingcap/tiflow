@@ -144,12 +144,16 @@ func isReorgOrPartitionDDL(t timodel.ActionType) bool {
 		t == timodel.ActionExchangeTablePartition ||
 		t == timodel.ActionReorganizePartition ||
 		// reorg ddls
+		t == timodel.ActionAddPrimaryKey ||
 		t == timodel.ActionAddIndex ||
+		t == timodel.ActionModifyColumn ||
+		// following ddls can be fast when the downstream is TiDB, we must
+		// still take them into consideration to ensure compatibility with all
+		// MySQL-compatible databases.
 		t == timodel.ActionAddColumn ||
 		t == timodel.ActionAddColumns ||
 		t == timodel.ActionDropColumn ||
-		t == timodel.ActionDropColumns ||
-		t == timodel.ActionModifyColumn
+		t == timodel.ActionDropColumns
 }
 
 func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
