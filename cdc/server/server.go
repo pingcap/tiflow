@@ -277,9 +277,6 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 		Handler:      router,
 		ReadTimeout:  httpConnectionTimeout,
 		WriteTimeout: httpConnectionTimeout,
-		BaseContext: func(listener net.Listener) context.Context {
-			return context.Background()
-		},
 	}
 
 	go func() {
