@@ -639,6 +639,11 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	p.globalVars = prcCtx.GlobalVars()
 
 	var tz *time.Location
+	// todo: get the timezone from the global config or the changefeed config?
+	tz, err = util.GetTimezone(config.GetGlobalServerConfig().TZ)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	p.filter, err = filter.NewFilter(p.changefeed.Info.Config, util.GetTimeZoneName(tz))
 	if err != nil {
 		return errors.Trace(err)
@@ -664,7 +669,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
-	p.redo.r, err = redo.NewDMLManager(prcCtx, p.changefeedID, p.changefeedID, p.changefeed.Info.Config.Consistent)
+	p.redo.r, err = redo.NewDMLManager(prcCtx, p.changefeedID, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
 	}
