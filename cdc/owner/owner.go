@@ -508,7 +508,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			if cfReactor.state.Status == nil {
 				continue
 			}
-			ret[cfID].ResolvedTs = cfReactor.state.Status.ResolvedTs
+			ret[cfID].ResolvedTs = cfReactor.resolvedTs
 			ret[cfID].CheckpointTs = cfReactor.state.Status.CheckpointTs
 			ret[cfID].AdminJobType = cfReactor.state.Status.AdminJobType
 		}
