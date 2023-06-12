@@ -92,7 +92,7 @@ func NewMySQLBackends(
 	changefeed := fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)
 
 	cfg := pmysql.NewConfig()
-	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
+	err := cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
 		return nil, err
 	}

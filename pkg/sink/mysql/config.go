@@ -14,7 +14,6 @@
 package mysql
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -142,7 +141,7 @@ func NewConfig() *Config {
 
 // Apply applies the sink URI parameters to the config.
 func (c *Config) Apply(
-	ctx context.Context,
+	serverTimezone string,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
@@ -180,7 +179,7 @@ func (c *Config) Apply(
 		return err
 	}
 	getSafeMode(urlParameter, &c.SafeMode)
-	if err = getTimezone(urlParameter, &c.Timezone); err != nil {
+	if err = getTimezone(serverTimezone, urlParameter, &c.Timezone); err != nil {
 		return err
 	}
 	if err = getDuration(urlParameter.ReadTimeout, &c.ReadTimeout); err != nil {
@@ -362,13 +361,15 @@ func getSafeMode(values *urlConfig, safeMode *bool) {
 	}
 }
 
-func getTimezone(values *urlConfig, timezone *string) error {
+func getTimezone(serverTimezoneStr string,
+	values *urlConfig, timezone *string) error {
 	const pleaseSpecifyTimezone = "We recommend that you specify the time-zone explicitly. " +
 		"Please make sure that the timezone of the TiCDC server, " +
 		"sink-uri and the downstream database are consistent. " +
 		"If the downstream database does not load the timezone information, " +
 		"you can refer to https://dev.mysql.com/doc/refman/8.0/en/mysql-tzinfo-to-sql.html."
-	serverTimezone, err := util.GetTimezone(config.GetGlobalServerConfig().TZ)
+	config.GetGlobalServerConfig()
+	serverTimezone, err := util.GetTimezone(serverTimezoneStr)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrMySQLInvalidConfig, err)
 	}

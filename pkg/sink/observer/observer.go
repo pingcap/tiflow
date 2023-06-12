@@ -76,7 +76,7 @@ func NewObserver(
 		}
 
 		cfg := pmysql.NewConfig()
-		err = cfg.Apply(ctx, changefeedID, sinkURI, replCfg)
+		err = cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, sinkURI, replCfg)
 		if err != nil {
 			return nil, err
 		}
