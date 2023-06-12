@@ -62,7 +62,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 	}
 
 	log.Warn("open-protocol: message too large, only send handle key columns",
-		zap.Any("keyMsg", keyMsg), zap.Any("valueMsg", valueMsg))
+		zap.Any("table", e.Table), zap.Uint64("commitTs", e.CommitTs))
 
 	return key, value, nil
 }
