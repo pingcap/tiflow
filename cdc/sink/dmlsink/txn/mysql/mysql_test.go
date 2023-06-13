@@ -46,6 +46,12 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func init() {
+	serverConfig := config.GetGlobalServerConfig().Clone()
+	serverConfig.TZ = "UTC"
+	config.StoreGlobalServerConfig(serverConfig)
+}
+
 func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
 	cfg := pmysql.NewConfig()
 	cfg.BatchDMLEnable = false
