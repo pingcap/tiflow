@@ -269,10 +269,8 @@ func (p ProcessorsInfos) String() string {
 }
 
 // ChangeFeedStatus stores information about a ChangeFeed
+// It is stored in etcd.
 type ChangeFeedStatus struct {
-	// do not marshal ResolvedTs, so that will not be store in etcd
-	// keep it for Open API usage only
-	ResolvedTs   uint64 `json:"-"`
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 	// minTableBarrierTs is the minimum commitTs of all DDL events and is only
 	// used to check whether there is a pending DDL job at the checkpointTs when

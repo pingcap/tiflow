@@ -499,9 +499,9 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 func (o *ownerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
 	case QueryAllChangeFeedStatuses:
-		ret := map[model.ChangeFeedID]*model.ChangeFeedStatus{}
+		ret := map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI{}
 		for cfID, cfReactor := range o.changefeeds {
-			ret[cfID] = &model.ChangeFeedStatus{}
+			ret[cfID] = &model.ChangeFeedStatusForAPI{}
 			if cfReactor.state == nil {
 				continue
 			}
@@ -510,7 +510,6 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			}
 			ret[cfID].ResolvedTs = cfReactor.resolvedTs
 			ret[cfID].CheckpointTs = cfReactor.state.Status.CheckpointTs
-			ret[cfID].AdminJobType = cfReactor.state.Status.AdminJobType
 		}
 		query.Data = ret
 	case QueryAllChangeFeedInfo:

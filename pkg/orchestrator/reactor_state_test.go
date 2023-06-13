@@ -98,7 +98,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 			},
 			updateValue: []string{
 				changefeedInfo,
-				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
 			},
@@ -123,7 +123,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
 					},
 				},
-				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 				},
@@ -147,7 +147,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 			},
 			updateValue: []string{
 				changefeedInfo,
-				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
 				`{"checkpoint-ts":11332244,"resolved-ts":312321,"count":8,"error":null}`,
@@ -174,7 +174,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
 					},
 				},
-				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 					"666777888":                            {CheckPointTs: 11332244, ResolvedTs: 312321, Count: 8},
@@ -202,7 +202,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 			},
 			updateValue: []string{
 				changefeedInfo,
-				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
+				`{"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"checkpoint-ts":421980720003809281,"resolved-ts":421980720003809281,"count":0,"error":null}`,
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
 				`fake value`,
@@ -230,7 +230,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
 					},
 				},
-				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713, ResolvedTs: 421980720003809281},
+				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
 				TaskPositions: map[model.CaptureID]*model.TaskPosition{
 					"6bbc01c8-0605-4f86-a0f9-b3119109b225": {CheckPointTs: 421980720003809281, ResolvedTs: 421980720003809281},
 				},
@@ -365,11 +365,11 @@ func TestPatchStatus(t *testing.T) {
 	stateTester.MustApplyPatches()
 	require.Equal(t, state.Status, &model.ChangeFeedStatus{CheckpointTs: 5})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.ResolvedTs = 6
+		status.CheckpointTs = 6
 		return status, true, nil
 	})
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status, &model.ChangeFeedStatus{CheckpointTs: 5, ResolvedTs: 6})
+	require.Equal(t, state.Status, &model.ChangeFeedStatus{CheckpointTs: 6})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return nil, true, nil
 	})
@@ -613,29 +613,29 @@ func TestCheckChangefeedNormal(t *testing.T) {
 		return &model.ChangeFeedInfo{SinkURI: "123", AdminJobType: model.AdminNone, Config: &config.ReplicaConfig{}}, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		return &model.ChangeFeedStatus{ResolvedTs: 1, AdminJobType: model.AdminNone}, true, nil
+		return &model.ChangeFeedStatus{CheckpointTs: 1, AdminJobType: model.AdminNone}, true, nil
 	})
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status.ResolvedTs, uint64(1))
+	require.Equal(t, state.Status.CheckpointTs, uint64(1))
 
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		info.AdminJobType = model.AdminStop
 		return info, true, nil
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.ResolvedTs = 2
+		status.CheckpointTs = 2
 		return status, true, nil
 	})
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status.ResolvedTs, uint64(1))
+	require.Equal(t, state.Status.CheckpointTs, uint64(1))
 
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.ResolvedTs = 2
+		status.CheckpointTs = 2
 		return status, true, nil
 	})
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
-	require.Equal(t, state.Status.ResolvedTs, uint64(2))
+	require.Equal(t, state.Status.CheckpointTs, uint64(2))
 }

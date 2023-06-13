@@ -202,7 +202,6 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	tester.MustApplyPatches()
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.CheckpointTs = 20
-		status.ResolvedTs = 20
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
@@ -373,7 +372,6 @@ func TestProcessorClose(t *testing.T) {
 
 	// push the resolvedTs and checkpointTs
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.ResolvedTs = 100
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
@@ -506,7 +504,6 @@ func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTes
 	keyStr := key.String()
 
 	cfStatus := &model.ChangeFeedStatus{
-		ResolvedTs:   resolvedTs,
 		CheckpointTs: checkpointTs,
 	}
 	valueBytes, err := json.Marshal(cfStatus)
@@ -539,7 +536,6 @@ func TestUpdateBarrierTs(t *testing.T) {
 	p, tester := initProcessor4Test(ctx, t, &liveness)
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.CheckpointTs = 5
-		status.ResolvedTs = 10
 		return status, true, nil
 	})
 	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
@@ -565,7 +561,6 @@ func TestUpdateBarrierTs(t *testing.T) {
 
 	// Global resolved ts has advanced while schema storage stalls.
 	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
-		status.ResolvedTs = 20
 		return status, true, nil
 	})
 	err = p.Tick(ctx)

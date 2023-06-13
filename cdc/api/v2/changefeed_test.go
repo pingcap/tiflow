@@ -294,7 +294,7 @@ func TestGetChangeFeed(t *testing.T) {
 			Code: string(cerrors.ErrStartTsBeforeGC.RFCCode()),
 		},
 	}
-	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
+	statusProvider.changefeedStatus = &model.ChangeFeedStatusForAPI{
 		CheckpointTs: 1,
 	}
 	w = httptest.NewRecorder()
@@ -451,7 +451,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
 		Times(1)
 
-	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
+	statusProvider.changefeedStatus = &model.ChangeFeedStatusForAPI{
 		CheckpointTs: 1,
 	}
 	w = httptest.NewRecorder()
@@ -547,7 +547,7 @@ func TestListChangeFeeds(t *testing.T) {
 				State: model.StateStopped,
 			},
 		},
-		changefeedStatuses: map[model.ChangeFeedID]*model.ChangeFeedStatus{
+		changefeedStatuses: map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI{
 			model.DefaultChangeFeedID("cf1"): {},
 			model.DefaultChangeFeedID("cf2"): {},
 			model.DefaultChangeFeedID("cf3"): {},
