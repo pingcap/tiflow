@@ -154,7 +154,8 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask1Config.Meta.BinLogPos, check.Equals, uint32(*task.SourceConfig.SourceConf[0].BinlogPos))
 
 	// check shard config
-	c.Assert(subTask1Config.ShardMode, check.Equals, string(openapi.TaskShardModePessimistic))
+	c.Assert(subTask1Config.ShardMode, check.Equals, string(openapi.TaskShardModeOptimistic))
+	c.Assert(subTask1Config.StrictOptimisticShardMode, check.IsTrue)
 	// check online schema change
 	c.Assert(subTask1Config.OnlineDDL, check.Equals, true)
 	// check case sensitive
@@ -218,7 +219,7 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask2Config.Meta.BinLogName, check.Equals, *task.SourceConfig.SourceConf[1].BinlogName)
 	c.Assert(subTask2Config.Meta.BinLogPos, check.Equals, uint32(*task.SourceConfig.SourceConf[1].BinlogPos))
 	// check shard config
-	c.Assert(subTask2Config.ShardMode, check.Equals, string(openapi.TaskShardModePessimistic))
+	c.Assert(subTask2Config.ShardMode, check.Equals, string(openapi.TaskShardModeOptimistic))
 	// check online schema change
 	c.Assert(subTask2Config.OnlineDDL, check.Equals, true)
 	// check case sensitive
