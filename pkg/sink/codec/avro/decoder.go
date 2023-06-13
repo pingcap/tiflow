@@ -96,6 +96,10 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
 }
 
+func assembleEvent(values, schema map[string]interface{}) (*model.RowChangedEvent, error) {
+
+}
+
 // NextRowChangedEvent returns the next row changed event if exists
 func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 	var (
