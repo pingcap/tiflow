@@ -15,65 +15,28 @@ package p2p
 
 import (
 	"context"
+	"sync"
 	"time"
 
-<<<<<<< HEAD
-	"github.com/edwingeng/deque"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/container/queue"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/p2p/internal"
-=======
->>>>>>> 94b57db7e2 (pkg/p2p(ticdc): refactor p2p message client (#9192))
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/proto/p2p"
+	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
+	gRPCPeer "google.golang.org/grpc/peer"
 )
 
-var _ MessageClient = &grpcMessageClient{}
-
-// MessageClient is an interface for sending messages to a remote peer.
-type MessageClient interface {
-	// Run should be executed in a dedicated goroutine and it would block unless an irrecoverable error has been encountered.
-	Run(ctx context.Context, network string, addr string, receiverID NodeID, credential *security.Credential) (ret error)
-
-	// SendMessage sends a message of a given topic. It would block if the inner channel is congested.
-	SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error)
-
-	// TrySendMessage tries to send a message of a given topic. It will return an error if the inner channel is congested.
-	TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error)
-
-	// CurrentAck is used to query the latest sequence number for a topic that is acknowledged by the server.
-	CurrentAck(topic Topic) (Seq, bool)
-}
-
-// MessageClientConfig is used to configure MessageClient
-type MessageClientConfig struct {
-	// The size of the sending channel used to buffer
-	// messages before they go to gRPC.
-	SendChannelSize int
-	// The maximum duration for which messages wait to be batched.
-	BatchSendInterval time.Duration
-	// The maximum size in bytes of a batch.
-	MaxBatchBytes int
-	// The maximum number of messages in a batch.
-	MaxBatchCount int
-	// The limit of the rate at which the connection to the server is retried.
-	RetryRateLimitPerSecond float64
-	// The dial timeout for the gRPC client
-	DialTimeout time.Duration
-	// The advertised address of this node. Used for logging and monitoring purposes.
-	AdvertisedAddr string
-	// The version of the client for compatibility check.
-	// It should be in semver format. Empty string means no check.
-	ClientVersion string
-	// MaxRecvMsgSize is the maximum message size in bytes TiCDC can receive.
-	MaxRecvMsgSize int
-}
-<<<<<<< HEAD
-
-// MessageClient is a client used to send peer messages.
+// grpcMessageClient is a client used to send peer messages.
 // `Run` must be running before sending any message.
-type MessageClient struct {
+type grpcMessageClient struct {
 	sendCh *internal.SendChan
 
 	topicMu sync.RWMutex
@@ -96,7 +59,7 @@ type MessageClient struct {
 
 type topicEntry struct {
 	sentMessageMu sync.Mutex
-	sentMessages  deque.Deque
+	sentMessages  queue.ChunkQueue[*p2p.MessageEntry]
 
 	nextSeq  atomic.Int64
 	ack      atomic.Int64
@@ -105,8 +68,8 @@ type topicEntry struct {
 
 // NewMessageClient creates a new MessageClient
 // senderID is an identifier for the local node.
-func NewMessageClient(senderID NodeID, config *MessageClientConfig) *MessageClient {
-	return &MessageClient{
+func NewMessageClient(senderID NodeID, config *MessageClientConfig) *grpcMessageClient {
+	return &grpcMessageClient{
 		sendCh:   internal.NewSendChan(int64(config.SendChannelSize)),
 		topics:   make(map[string]*topicEntry),
 		senderID: senderID,
@@ -120,7 +83,7 @@ func NewMessageClient(senderID NodeID, config *MessageClientConfig) *MessageClie
 }
 
 // Run launches background goroutines for MessageClient to work.
-func (c *MessageClient) Run(
+func (c *grpcMessageClient) Run(
 	ctx context.Context, network, addr string,
 	receiverID NodeID,
 	credential *security.Credential,
@@ -187,7 +150,7 @@ func (c *MessageClient) Run(
 	}
 }
 
-func (c *MessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDCPeerToPeerClient, meta *p2p.StreamMeta) error {
+func (c *grpcMessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDCPeerToPeerClient, meta *p2p.StreamMeta) error {
 	failpoint.Inject("InjectClientPermanentFailure", func() {
 		failpoint.Return(cerrors.ErrPeerMessageClientPermanentFail.GenWithStackByArgs())
 	})
@@ -208,7 +171,7 @@ func (c *MessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDCPeer
 	return errors.Trace(c.run(ctx, clientStream, cancelStream))
 }
 
-func (c *MessageClient) run(ctx context.Context, stream clientStream, cancel func()) error {
+func (c *grpcMessageClient) run(ctx context.Context, stream clientStream, cancel func()) error {
 	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
@@ -224,7 +187,7 @@ func (c *MessageClient) run(ctx context.Context, stream clientStream, cancel fun
 	return errors.Trace(errg.Wait())
 }
 
-func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
+func (c *grpcMessageClient) runTx(ctx context.Context, stream clientStream) error {
 	if err := c.retrySending(ctx, stream); err != nil {
 		return errors.Trace(err)
 	}
@@ -275,7 +238,7 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 		}
 
 		tpk.sentMessageMu.Lock()
-		tpk.sentMessages.PushBack(msg)
+		tpk.sentMessages.Push(msg)
 		tpk.sentMessageMu.Unlock()
 
 		metricsClientMessageCount.Inc()
@@ -290,7 +253,7 @@ func (c *MessageClient) runTx(ctx context.Context, stream clientStream) error {
 }
 
 // retrySending retries sending messages when the gRPC stream is re-established.
-func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) error {
+func (c *grpcMessageClient) retrySending(ctx context.Context, stream clientStream) error {
 	topicsCloned := make(map[string]*topicEntry)
 	c.topicMu.RLock()
 	for k, v := range c.topics {
@@ -308,15 +271,15 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 
 		tpk.sentMessageMu.Lock()
 
-		if !tpk.sentMessages.Empty() {
-			retryFromSeq := tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence
+		if queueHead, ok := tpk.sentMessages.Head(); ok {
+			retryFromSeq := queueHead.Sequence
 			log.Info("peer-to-peer client retrying",
 				zap.String("topic", topic),
 				zap.Int64("fromSeq", retryFromSeq))
 		}
 
-		for i := 0; i < tpk.sentMessages.Len(); i++ {
-			msg := tpk.sentMessages.Peek(i).(*p2p.MessageEntry)
+		for it := tpk.sentMessages.Begin(); it.Valid(); it.Next() {
+			msg := it.Value()
 			log.Debug("retry sending msg",
 				zap.String("topic", msg.Topic),
 				zap.Int64("seq", msg.Sequence))
@@ -343,7 +306,7 @@ func (c *MessageClient) retrySending(ctx context.Context, stream clientStream) e
 	return nil
 }
 
-func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
+func (c *grpcMessageClient) runRx(ctx context.Context, stream clientStream) error {
 	peerAddr := unknownPeerLabel
 	peer, ok := gRPCPeer.FromContext(stream.Context())
 	if ok {
@@ -386,9 +349,9 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 
 			tpk.ack.Store(ack.GetLastSeq())
 			tpk.sentMessageMu.Lock()
-			for !tpk.sentMessages.Empty() && tpk.sentMessages.Front().(*p2p.MessageEntry).Sequence <= ack.GetLastSeq() {
-				tpk.sentMessages.PopFront()
-			}
+			tpk.sentMessages.RangeAndPop(func(msg *p2p.MessageEntry) bool {
+				return msg.Sequence <= ack.GetLastSeq()
+			})
 			tpk.sentMessageMu.Unlock()
 		}
 	}
@@ -397,13 +360,13 @@ func (c *MessageClient) runRx(ctx context.Context, stream clientStream) error {
 // SendMessage sends a message. It will block if the client is not ready to
 // accept the message for now. Once the function returns without an error,
 // the client will try its best to send the message, until `Run` is canceled.
-func (c *MessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+func (c *grpcMessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
 	return c.sendMessage(ctx, topic, value, false)
 }
 
 // TrySendMessage tries to send a message. It will return ErrPeerMessageSendTryAgain
 // if the client is not ready to accept the message.
-func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+func (c *grpcMessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
 	// FIXME (zixiong): This is a temporary way for testing client congestion.
 	// This failpoint will be removed once we abstract the MessageClient as an interface.
 	failpoint.Inject("ClientInjectSendMessageTryAgain", func() {
@@ -418,7 +381,7 @@ func (c *MessageClient) TrySendMessage(ctx context.Context, topic Topic, value i
 	return c.sendMessage(ctx, topic, value, true)
 }
 
-func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value interface{}, nonblocking bool) (seq Seq, ret error) {
+func (c *grpcMessageClient) sendMessage(ctx context.Context, topic Topic, value interface{}, nonblocking bool) (seq Seq, ret error) {
 	if c.isClosed.Load() {
 		return 0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs()
 	}
@@ -429,7 +392,7 @@ func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value inte
 
 	if !ok {
 		tpk = &topicEntry{
-			sentMessages: deque.NewDeque(),
+			sentMessages: *queue.NewChunkQueue[*p2p.MessageEntry](),
 		}
 		tpk.nextSeq.Store(0)
 		c.topicMu.Lock()
@@ -464,7 +427,7 @@ func (c *MessageClient) sendMessage(ctx context.Context, topic Topic, value inte
 // CurrentAck returns (s, true) if all messages with sequence less than or
 // equal to s have been processed by the receiver. It returns (0, false) if
 // no message for `topic` has been sent.
-func (c *MessageClient) CurrentAck(topic Topic) (Seq, bool) {
+func (c *grpcMessageClient) CurrentAck(topic Topic) (Seq, bool) {
 	c.topicMu.RLock()
 	defer c.topicMu.RUnlock()
 
@@ -475,5 +438,3 @@ func (c *MessageClient) CurrentAck(topic Topic) (Seq, bool) {
 
 	return tpk.ack.Load(), true
 }
-=======
->>>>>>> 94b57db7e2 (pkg/p2p(ticdc): refactor p2p message client (#9192))

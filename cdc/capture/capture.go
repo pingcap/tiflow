@@ -174,7 +174,6 @@ func (c *Capture) reset(ctx context.Context) error {
 
 	if c.MessageRouter != nil {
 		c.MessageRouter.Close()
-		c.MessageRouter.Wait()
 		c.MessageRouter = nil
 	}
 	messageServerConfig := conf.Debug.Messages.ToMessageServerConfig()
@@ -531,7 +530,6 @@ func (c *Capture) AsyncClose() {
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
 		c.MessageRouter.Close()
-		c.MessageRouter.Wait()
 		c.MessageRouter = nil
 	}
 	log.Info("message router closed")

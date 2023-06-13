@@ -263,26 +263,31 @@ func (s *Server) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	wg, cctx := errgroup.WithContext(ctx)
+	eg, egCtx := errgroup.WithContext(ctx)
 
-	wg.Go(func() error {
-		return s.capture.Run(cctx)
+	eg.Go(func() error {
+		return s.capture.Run(egCtx)
 	})
 
-	wg.Go(func() error {
-		return s.etcdHealthChecker(cctx)
+	eg.Go(func() error {
+		return s.etcdHealthChecker(egCtx)
 	})
 
+<<<<<<< HEAD:cdc/server.go
 	wg.Go(func() error {
 		return unified.RunWorkerPool(cctx)
 	})
 
 	wg.Go(func() error {
 		return kv.RunWorkerPool(cctx)
+=======
+	eg.Go(func() error {
+		return kv.RunWorkerPool(egCtx)
+>>>>>>> 94b57db7e2 (pkg/p2p(ticdc): refactor p2p message client (#9192)):cdc/server/server.go
 	})
 
-	wg.Go(func() error {
-		return s.tcpServer.Run(cctx)
+	eg.Go(func() error {
+		return s.tcpServer.Run(egCtx)
 	})
 
 	conf := config.GetGlobalServerConfig()
@@ -290,6 +295,7 @@ func (s *Server) run(ctx context.Context) (err error) {
 		grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
 		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
+<<<<<<< HEAD:cdc/server.go
 		wg.Go(func() error {
 			return grpcServer.Serve(s.tcpServer.GrpcListener())
 		})
@@ -299,8 +305,18 @@ func (s *Server) run(ctx context.Context) (err error) {
 			return nil
 		})
 	}
+=======
+	eg.Go(func() error {
+		return grpcServer.Serve(s.tcpServer.GrpcListener())
+	})
+	eg.Go(func() error {
+		<-egCtx.Done()
+		grpcServer.Stop()
+		return nil
+	})
+>>>>>>> 94b57db7e2 (pkg/p2p(ticdc): refactor p2p message client (#9192)):cdc/server/server.go
 
-	return wg.Wait()
+	return eg.Wait()
 }
 
 // Close closes the server.
