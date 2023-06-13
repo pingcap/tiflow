@@ -22,6 +22,7 @@ import (
 
 var _ MessageClient = &grpcMessageClient{}
 
+// MessageClient is an interface for sending messages to a remote peer.
 type MessageClient interface {
 	// Run should be executed in a dedicated goroutine and it would block unless an irrecoverable error has been encountered.
 	Run(ctx context.Context, network string, addr string, receiverID NodeID, credential *security.Credential) (ret error)
