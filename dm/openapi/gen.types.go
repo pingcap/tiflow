@@ -75,7 +75,7 @@ type ClusterWorker struct {
 	// address of the current master node
 	Addr string `json:"addr"`
 
-	// source name bound to this worker node
+	// bound source name of this worker node
 	BoundSourceName string `json:"bound_source_name"`
 
 	// bound stage of this worker node
