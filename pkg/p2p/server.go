@@ -655,17 +655,21 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 	streamHandle := newStreamHandle(packet.Meta, sendCh)
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
-	errg, ctx := errgroup.WithContext(ctx)
+	errg, egCtx := errgroup.WithContext(ctx)
 
 	// receive messages from the sender
 	errg.Go(func() error {
 		defer streamHandle.Close()
-		if err := m.receive(stream, streamHandle); err != nil {
+		clientSocketAddr := unknownPeerLabel
+		if p, ok := gRPCPeer.FromContext(egCtx); ok {
+			clientSocketAddr = p.Addr.String()
+		}
+		if err := m.receive(egCtx, clientSocketAddr, stream, streamHandle); err != nil {
 			log.Warn("peer-to-peer message handler error", zap.Error(err))
 			select {
-			case <-ctx.Done():
-				log.Warn("error receiving from peer", zap.Error(ctx.Err()))
-				return errors.Trace(ctx.Err())
+			case <-egCtx.Done():
+				log.Warn("error receiving from peer", zap.Error(egCtx.Err()))
+				return errors.Trace(egCtx.Err())
 			case sendCh <- errorToRPCResponse(err):
 			default:
 				log.Warn("sendCh congested, could not send error", zap.Error(err))
@@ -717,17 +721,18 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 	// namely this function.
 }
 
-func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, streamHandle *streamHandle) error {
-	clientIP := unknownPeerLabel
-	if p, ok := gRPCPeer.FromContext(stream.Context()); ok {
-		clientIP = p.Addr.String()
-	}
+func (m *MessageServer) receive(
+	ctx context.Context,
+	clientSocketAddr string,
+	stream serverStream,
+	streamHandle *streamHandle,
+) error {
 	// We use scheduleTaskBlocking because blocking here is acceptable.
 	// Blocking here will cause grpc-go to back propagate the pressure
 	// to the client, which is what we want.
-	if err := m.scheduleTaskBlocking(stream.Context(), taskOnRegisterPeer{
+	if err := m.scheduleTaskBlocking(ctx, taskOnRegisterPeer{
 		sender:     streamHandle,
-		clientAddr: clientIP,
+		clientAddr: clientSocketAddr,
 	}); err != nil {
 		return errors.Trace(err)
 	}
@@ -780,7 +785,7 @@ func (m *MessageServer) receive(stream p2p.CDCPeerToPeer_SendMessageServer, stre
 			}
 
 			// See the comment above on why use scheduleTaskBlocking.
-			if err := m.scheduleTaskBlocking(stream.Context(), taskOnMessageBatch{
+			if err := m.scheduleTaskBlocking(ctx, taskOnMessageBatch{
 				streamMeta:     streamHandle.GetStreamMeta(),
 				messageEntries: packet.GetEntries(),
 			}); err != nil {
