@@ -657,6 +657,7 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
 
+	// receive messages from the sender
 	errg.Go(func() error {
 		defer streamHandle.Close()
 		if err := m.receive(stream, streamHandle); err != nil {
@@ -673,6 +674,8 @@ func (m *MessageServer) SendMessage(stream p2p.CDCPeerToPeer_SendMessageServer) 
 		}
 		return nil
 	})
+
+	// send acks to the sender
 	errg.Go(func() error {
 		rl := rate.NewLimiter(rate.Limit(m.config.SendRateLimitPerStream), 1)
 		for {
