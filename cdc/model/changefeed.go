@@ -587,8 +587,6 @@ func (t DownstreamType) String() string {
 
 // ChangeFeedStatusForAPI uses to transfer the status of changefeed for API.
 type ChangeFeedStatusForAPI struct {
-	// do not marshal ResolvedTs, so that will not be store in etcd
-	// keep it for Open API usage only
 	ResolvedTs   uint64 `json:"resolved-ts"`
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 	// minTableBarrierTs is the minimum commitTs of all DDL events and is only

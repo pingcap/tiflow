@@ -396,18 +396,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	prevResolvedTs := c.resolvedTs
 	log.Debug("owner prepares to update status",
-		zap.Uint64("prevResolvedTs", prevResolvedTs),
+		zap.Uint64("prevResolvedTs", c.resolvedTs),
 		zap.Uint64("newResolvedTs", newResolvedTs),
 		zap.Uint64("newCheckpointTs", newCheckpointTs),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 	// resolvedTs should never regress.
-	if newResolvedTs < prevResolvedTs {
-		newResolvedTs = prevResolvedTs
+	if newResolvedTs > c.resolvedTs {
+		c.resolvedTs = newResolvedTs
 	}
-	c.resolvedTs = newResolvedTs
 
 	// MinTableBarrierTs should never regress
 	if barrier.MinTableBarrierTs < c.state.Status.MinTableBarrierTs {
