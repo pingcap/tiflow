@@ -97,3 +97,8 @@ func (s *streamHandle) Close() {
 func (s *streamHandle) GetStreamMeta() *p2p.StreamMeta {
 	return s.streamMeta
 }
+
+type serverStream interface {
+	Send(*p2p.SendMessageResponse) error
+	Recv() (*p2p.MessagePacket, error)
+}

@@ -339,37 +339,37 @@ func (s *server) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	wg, cctx := errgroup.WithContext(ctx)
+	eg, egCtx := errgroup.WithContext(ctx)
 
-	wg.Go(func() error {
-		return s.capture.Run(cctx)
+	eg.Go(func() error {
+		return s.capture.Run(egCtx)
 	})
 
-	wg.Go(func() error {
-		return s.etcdHealthChecker(cctx)
+	eg.Go(func() error {
+		return s.etcdHealthChecker(egCtx)
 	})
 
-	wg.Go(func() error {
-		return kv.RunWorkerPool(cctx)
+	eg.Go(func() error {
+		return kv.RunWorkerPool(egCtx)
 	})
 
-	wg.Go(func() error {
-		return s.tcpServer.Run(cctx)
+	eg.Go(func() error {
+		return s.tcpServer.Run(egCtx)
 	})
 
 	grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
 	p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
-	wg.Go(func() error {
+	eg.Go(func() error {
 		return grpcServer.Serve(s.tcpServer.GrpcListener())
 	})
-	wg.Go(func() error {
-		<-cctx.Done()
+	eg.Go(func() error {
+		<-egCtx.Done()
 		grpcServer.Stop()
 		return nil
 	})
 
-	return wg.Wait()
+	return eg.Wait()
 }
 
 // Drain removes tables in the current TiCDC instance.
