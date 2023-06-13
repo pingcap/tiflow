@@ -38,6 +38,7 @@ type BatchEncoder struct {
 }
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
+	// set the `largeMessageOnlyHandleKeyColumns` to true to only encode handle key columns.
 	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, true)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
