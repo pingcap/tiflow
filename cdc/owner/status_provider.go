@@ -84,7 +84,9 @@ type ownerStatusProvider struct {
 	owner Owner
 }
 
-func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI, error) {
+func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI, error,
+) {
 	query := &Query{
 		Tp: QueryAllChangeFeedStatuses,
 	}
@@ -94,7 +96,9 @@ func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map
 	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI), nil
 }
 
-func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error) {
+func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedStatusForAPI, error) {
 	statuses, err := p.GetAllChangeFeedStatuses(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -106,7 +110,9 @@ func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context, changefee
 	return status, nil
 }
 
-func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+) {
 	query := &Query{
 		Tp: QueryAllChangeFeedInfo,
 	}
@@ -116,7 +122,9 @@ func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[mod
 	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
 }
 
-func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
+func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedInfo, error) {
 	infos, err := p.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -128,7 +136,9 @@ func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedI
 	return info, nil
 }
 
-func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
+func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (map[model.CaptureID]*model.TaskStatus, error) {
 	query := &Query{
 		Tp:           QueryAllTaskStatuses,
 		ChangeFeedID: changefeedID,

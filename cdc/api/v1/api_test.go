@@ -53,28 +53,38 @@ type testCase struct {
 	method string
 }
 
-func (p *mockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI, error) {
+func (p *mockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI, error,
+) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error) {
+func (p *mockStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (
+	*model.ChangeFeedStatusForAPI, error,
+) {
 	args := p.Called(ctx, changefeedID)
 	log.Info("err", zap.Error(args.Error(1)))
 	return args.Get(0).(*model.ChangeFeedStatusForAPI), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
+func (p *mockStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (
+	map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.ChangeFeedID]*model.ChangeFeedInfo), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error) {
+func (p *mockStatusProvider) GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (
+	*model.ChangeFeedInfo, error,
+) {
 	args := p.Called(ctx)
 	return args.Get(0).(*model.ChangeFeedInfo), args.Error(1)
 }
 
-func (p *mockStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (map[model.CaptureID]*model.TaskStatus, error) {
+func (p *mockStatusProvider) GetAllTaskStatuses(ctx context.Context, changefeedID model.ChangeFeedID) (
+	map[model.CaptureID]*model.TaskStatus, error,
+) {
 	args := p.Called(ctx)
 	return args.Get(0).(map[model.CaptureID]*model.TaskStatus), args.Error(1)
 }
