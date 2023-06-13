@@ -406,21 +406,36 @@ func kafkaClientID(role, captureAddr string,
 func AdjustConfig(
 	admin kafka.ClusterAdminClient, config *Config, saramaConfig *sarama.Config, topic string,
 ) error {
-	topics, err := admin.ListTopics()
+	topics, err := admin.DescribeTopics([]string{topic})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	var info *sarama.TopicMetadata
+	var exists bool
+	for _, t := range topics {
+		if t.Err == sarama.ErrNoError {
+			if t.Name == topic {
+				info = t
+				exists = true
+				log.Info("topic already exists", zap.String("topic", topic))
+				break
+			}
+		} else if t.Err != sarama.ErrUnknownTopicOrPartition {
+			log.Warn("failed to describe topic", zap.String("topic", topic), zap.Error(t.Err))
+			return errors.Trace(t.Err)
+		}
+	}
+
+	err = validateMinInsyncReplicas(admin, topic, exists, int(config.ReplicationFactor))
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	err = validateMinInsyncReplicas(admin, topics, topic, int(config.ReplicationFactor))
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	info, exists := topics[topic]
 	// once we have found the topic, no matter `auto-create-topic`, make sure user input parameters are valid.
 	if exists {
 		// make sure that producer's `MaxMessageBytes` smaller than topic's `max.message.bytes`
-		topicMaxMessageBytesStr, err := getTopicConfig(admin, info, kafka.TopicMaxMessageBytesConfigName,
+		topicMaxMessageBytesStr, err := getTopicConfig(admin,
+			info.Name, kafka.TopicMaxMessageBytesConfigName,
 			kafka.BrokerMessageMaxBytesConfigName)
 		if err != nil {
 			return errors.Trace(err)
@@ -444,7 +459,7 @@ func AdjustConfig(
 				zap.String("topic", topic), zap.Any("detail", info))
 		}
 
-		if err := config.setPartitionNum(info.NumPartitions); err != nil {
+		if err := config.setPartitionNum(int32(len(info.Partitions))); err != nil {
 			return errors.Trace(err)
 		}
 
@@ -484,12 +499,11 @@ func AdjustConfig(
 
 func validateMinInsyncReplicas(
 	admin kafka.ClusterAdminClient,
-	topics map[string]sarama.TopicDetail, topic string, replicationFactor int,
+	topic string, topicExists bool, replicationFactor int,
 ) error {
 	minInsyncReplicasConfigGetter := func() (string, bool, error) {
-		info, exists := topics[topic]
-		if exists {
-			minInsyncReplicasStr, err := getTopicConfig(admin, info,
+		if topicExists {
+			minInsyncReplicasStr, err := getTopicConfig(admin, topic,
 				kafka.MinInsyncReplicasConfigName,
 				kafka.MinInsyncReplicasConfigName)
 			if err != nil {
@@ -555,22 +569,53 @@ func getBrokerConfig(admin kafka.ClusterAdminClient, brokerConfigName string) (s
 		return "", err
 	}
 
-	if len(configEntries) == 0 || configEntries[0].Name != brokerConfigName {
-		log.Warn("Kafka config item not found", zap.String("configName", brokerConfigName))
-		return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
-			"cannot find the `%s` from the broker's configuration", brokerConfigName)
+	// For compatibility with KOP, we checked all return values.
+	// 1. Kafka only returns requested configs.
+	// 2. Kop returns all configs.
+	for _, entry := range configEntries {
+		if entry.Name == brokerConfigName {
+			return entry.Value, nil
+		}
 	}
-
-	return configEntries[0].Value, nil
+	log.Warn("Kafka config item not found",
+		zap.String("configName", brokerConfigName))
+	return "", cerror.ErrKafkaBrokerConfigNotFound.GenWithStack(
+		"cannot find the `%s` from the broker's configuration", brokerConfigName)
 }
 
 // getTopicConfig gets topic config by name.
 // If the topic does not have this configuration, we will try to get it from the broker's configuration.
 // NOTICE: The configuration names of topic and broker may be different for the same configuration.
-func getTopicConfig(admin kafka.ClusterAdminClient, detail sarama.TopicDetail, topicConfigName string, brokerConfigName string) (string, error) {
-	if a, ok := detail.ConfigEntries[topicConfigName]; ok {
-		return *a, nil
+func getTopicConfig(admin kafka.ClusterAdminClient,
+	topicName string, topicConfigName string, brokerConfigName string,
+) (string, error) {
+	var configEntries []sarama.ConfigEntry
+	configEntries, err := admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.TopicResource,
+		Name:        topicName,
+		ConfigNames: []string{topicConfigName},
+	})
+	if err != nil {
+		log.Warn("Get topic config failed",
+			zap.String("topicName", topicName),
+			zap.String("configName", topicConfigName),
+			zap.Error(err))
 	}
+	// For compatibility with KOP, we checked all return values.
+	// 1. Kafka only returns requested configs.
+	// 2. Kop returns all configs.
+	for _, entry := range configEntries {
+		if entry.Name == topicConfigName {
+			log.Info("Kafka config item found",
+				zap.String("topicName", topicName),
+				zap.String("configName", topicConfigName),
+				zap.String("configValue", entry.Value))
+			return entry.Value, nil
+		}
+	}
+	log.Warn("Kafka config item not found",
+		zap.String("topicName", topicName),
+		zap.String("configName", topicConfigName))
 
 	return getBrokerConfig(admin, brokerConfigName)
 }

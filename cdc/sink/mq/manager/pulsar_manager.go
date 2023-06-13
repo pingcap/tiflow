@@ -38,3 +38,7 @@ func (m *pulsarTopicManager) GetPartitionNum(_ string) (int32, error) {
 func (m *pulsarTopicManager) CreateTopicAndWaitUntilVisible(_ string) (int32, error) {
 	return m.partitionNum, nil
 }
+
+// Close do nothing.
+func (m *pulsarTopicManager) Close() {
+}
