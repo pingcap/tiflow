@@ -63,7 +63,7 @@ func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
 	}
 	m := &Dumpling{
 		cfg:    cfg,
-		logger: logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "dump")),
+		logger: logger.WithFields(zap.String("task", cfg.Name), zap.String("source", cfg.SourceID), zap.String("unit", "dump")),
 	}
 	return m
 }

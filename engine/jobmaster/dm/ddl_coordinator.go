@@ -28,6 +28,8 @@ import (
 	frameModel "github.com/pingcap/tiflow/engine/framework/model"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	metaModel "github.com/pingcap/tiflow/engine/pkg/meta/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -148,22 +150,24 @@ type DDLCoordinator struct {
 	shardGroups map[metadata.TargetTable]*shardGroup
 	logger      *zap.Logger
 
-	kvClient   metaModel.KVClient
-	tableAgent TableAgent
-	jobID      string
-	jobStore   *metadata.JobStore
+	kvClient     metaModel.KVClient
+	tableAgent   TableAgent
+	messageAgent message.Agent
+	jobID        string
+	jobStore     *metadata.JobStore
 }
 
 // NewDDLCoordinator creates a new DDLCoordinator.
-func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent TableAgent, jobStore *metadata.JobStore, pLogger *zap.Logger) *DDLCoordinator {
+func NewDDLCoordinator(jobID string, kvClient metaModel.KVClient, tableAgent TableAgent, jobStore *metadata.JobStore, pLogger *zap.Logger, messageAgent message.Agent) *DDLCoordinator {
 	return &DDLCoordinator{
-		tableAgent:  tableAgent,
-		tables:      make(map[metadata.TargetTable]map[metadata.SourceTable]struct{}),
-		jobID:       jobID,
-		kvClient:    kvClient,
-		shardGroups: make(map[metadata.TargetTable]*shardGroup),
-		jobStore:    jobStore,
-		logger:      pLogger.With(zap.String("component", "ddl_coordinator")),
+		tableAgent:   tableAgent,
+		tables:       make(map[metadata.TargetTable]map[metadata.SourceTable]struct{}),
+		jobID:        jobID,
+		kvClient:     kvClient,
+		messageAgent: messageAgent,
+		shardGroups:  make(map[metadata.TargetTable]*shardGroup),
+		jobStore:     jobStore,
+		logger:       pLogger.With(zap.String("component", "ddl_coordinator")),
 	}
 }
 
@@ -207,6 +211,7 @@ func (c *DDLCoordinator) Reset(ctx context.Context) error {
 func (c *DDLCoordinator) Coordinate(ctx context.Context, item *metadata.DDLItem) ([]string, optimism.ConflictStage, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.logger.Info("receive a ddl item", zap.Any("item", item))
 	jobCfg, err := c.jobStore.GetJobCfg(ctx)
 	if err != nil {
 		return nil, optimism.ConflictError, err
@@ -254,6 +259,9 @@ func (c *DDLCoordinator) ShowDDLLocks(ctx context.Context) ShowDDLLocksResponse 
 	defer c.mu.RUnlock()
 	ddlLocks := make(map[metadata.TargetTable]DDLLock)
 	for targetTable, g := range c.shardGroups {
+		if g.allShardTablesSame() {
+			continue
+		}
 		tbs := g.showTables()
 		ddlLocks[targetTable] = DDLLock{ShardTables: tbs}
 	}
@@ -265,7 +273,7 @@ func (c *DDLCoordinator) loadOrCreateShardGroup(ctx context.Context, targetTable
 		return g, nil
 	}
 
-	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent)
+	newGroup, err := newShardGroup(ctx, c.jobID, jobCfg, targetTable, c.tables[targetTable], c.kvClient, c.tableAgent, c.messageAgent, c.logger)
 	if err != nil {
 		return nil, err
 	}
@@ -287,20 +295,30 @@ type shardGroup struct {
 	normalTables map[metadata.SourceTable]string
 	// conflictTables represents upstream table info after executing conflict DDL.
 	conflictTables      map[metadata.SourceTable]string
+	targetTable         metadata.TargetTable
 	tableAgent          TableAgent
 	droppedColumnsStore *metadata.DroppedColumnsStore
 	id                  frameModel.MasterID
 	cfg                 *config.JobCfg
+	inRedirect          bool
+	messageAgent        message.Agent
+	logger              *zap.Logger
 }
 
-func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobCfg, targetTable metadata.TargetTable, sourceTables map[metadata.SourceTable]struct{}, kvClient metaModel.KVClient, tableAgent TableAgent) (*shardGroup, error) {
+func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobCfg,
+	targetTable metadata.TargetTable, sourceTables map[metadata.SourceTable]struct{},
+	kvClient metaModel.KVClient, tableAgent TableAgent, messageAgent message.Agent, logger *zap.Logger,
+) (*shardGroup, error) {
 	g := &shardGroup{
 		tableAgent:          tableAgent,
+		targetTable:         targetTable,
 		normalTables:        make(map[metadata.SourceTable]string),
 		conflictTables:      make(map[metadata.SourceTable]string),
 		droppedColumnsStore: metadata.NewDroppedColumnsStore(kvClient, targetTable),
 		id:                  id,
 		cfg:                 cfg,
+		messageAgent:        messageAgent,
+		logger:              logger,
 	}
 	for sourceTable := range sourceTables {
 		stmt, err := g.tableAgent.FetchTableStmt(ctx, id, cfg, sourceTable)
@@ -318,7 +336,13 @@ func newShardGroup(ctx context.Context, id frameModel.MasterID, cfg *config.JobC
 
 func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]string, optimism.ConflictStage, error) {
 	// nolint:errcheck
-	g.gcDroppedColumns(ctx)
+	if err := g.gcDroppedColumns(ctx); err != nil {
+		g.logger.Error("failed to gc dropped columns", zap.Error(err))
+	}
+	// nolint:errcheck
+	if err := g.gcInRedirect(ctx); err != nil {
+		g.logger.Error("failed to gc in-redirect shard group", zap.Error(err))
+	}
 
 	var (
 		ddls          []string
@@ -347,7 +371,7 @@ func (g *shardGroup) handle(ctx context.Context, item *metadata.DDLItem) ([]stri
 func (g *shardGroup) handleCreateTable(item *metadata.DDLItem) {
 	stmt, ok := g.normalTables[item.SourceTable]
 	if ok && stmt != "" {
-		log.L().Warn("create table already exists", zap.Any("source table", item.SourceTable))
+		g.logger.Warn("create table already exists", zap.Any("source table", item.SourceTable))
 	}
 
 	g.normalTables[item.SourceTable] = item.Tables[0]
@@ -359,7 +383,7 @@ func (g *shardGroup) handleCreateTable(item *metadata.DDLItem) {
 func (g *shardGroup) handleDropTable(ctx context.Context, item *metadata.DDLItem) {
 	_, ok := g.normalTables[item.SourceTable]
 	if !ok {
-		log.L().Warn("drop table does not exist", zap.Any("source table", item.SourceTable))
+		g.logger.Warn("drop table does not exist", zap.Any("source table", item.SourceTable))
 		return
 	}
 
@@ -373,16 +397,23 @@ func (g *shardGroup) handleDropTable(ctx context.Context, item *metadata.DDLItem
 func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (newDDLs []string, conflictStage optimism.ConflictStage, err error) {
 	stmt, ok := g.normalTables[item.SourceTable]
 	if !ok || stmt == "" {
-		log.L().Warn("table does not exist", zap.Any("source table", item.SourceTable))
+		g.logger.Warn("table does not exist", zap.Any("source table", item.SourceTable))
 		g.normalTables[item.SourceTable] = item.Tables[0]
 	}
+	defer func() {
+		// only update table info if no error
+		if err != nil {
+			g.normalTables[item.SourceTable] = item.Tables[0]
+			delete(g.conflictTables, item.SourceTable)
+		}
+	}()
 
 	dropCols := make([]string, 0, len(item.DDLs))
 
 	// handle ddls one by one
 	for idx, ddl := range item.DDLs {
 		prevTableStmt, postTableStmt := g.getTableForOneDDL(item, idx)
-		schemaChanged, conflictStage := g.handleDDL(item.SourceTable, prevTableStmt, postTableStmt)
+		schemaChanged, conflictStage := g.handleDDL(ctx, item.SourceTable, prevTableStmt, postTableStmt)
 
 		switch conflictStage {
 		case optimism.ConflictDetected:
@@ -395,6 +426,8 @@ func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (ne
 			} else if len(col) != 0 {
 				dropCols = append(dropCols, col)
 			}
+		case optimism.ConflictNeedRestart:
+			return nil, optimism.ConflictNeedRestart, errors.Errorf("need restart when coordinate table %v", item.SourceTable)
 		case optimism.ConflictResolved:
 		}
 		if schemaChanged {
@@ -411,7 +444,7 @@ func (g *shardGroup) handleDDLs(ctx context.Context, item *metadata.DDLItem) (ne
 	return newDDLs, optimism.ConflictNone, nil
 }
 
-func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, postTableStmt string) (bool, optimism.ConflictStage) {
+func (g *shardGroup) handleDDL(ctx context.Context, sourceTable metadata.SourceTable, prevTableStmt, postTableStmt string) (bool, optimism.ConflictStage) {
 	// for a new ddl, we ignore the original conflict table, just use the normal table and new ddl to calculate the ConfictStage.
 	delete(g.conflictTables, sourceTable)
 
@@ -426,7 +459,7 @@ func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, 
 			idempotent = true
 		}
 		// this usually happened when worker restarts and the shard group is not reset.
-		log.L().Warn("prev-table not equal table saved in master", zap.Stringer("master-table", currTable), zap.Stringer("prev-table", prevTable))
+		g.logger.Warn("prev-table not equal table saved in master", zap.Stringer("master-table", currTable), zap.Stringer("prev-table", prevTable))
 		g.normalTables[sourceTable] = prevTableStmt
 	}
 
@@ -442,7 +475,11 @@ func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, 
 			// if a normal DDL let all final tables become no conflict
 			// return ConflictNone
 			if len(g.conflictTables) > 0 && g.noConflictForTables(final) {
-				log.L().Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+				g.logger.Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+				if err := g.redirectDDLs(ctx, sourceTable); err != nil {
+					g.logger.Error("redirect DDLs failed", zap.Error(err))
+					return false, optimism.ConflictNeedRestart
+				}
 				g.resolveTables()
 				return true, optimism.ConflictNone
 			}
@@ -459,10 +496,10 @@ func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, 
 		}
 	}
 
-	log.L().Info("found conflict for DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt), log.ShortError(tableErr))
+	g.logger.Info("found conflict for DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt), log.ShortError(tableErr))
 
 	if idempotent || g.noConflictWithOneNormalTable(sourceTable, prevTable, postTable) {
-		log.L().Info("directly return conflict DDL", zap.Bool("idempotent", idempotent), zap.Any("source", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+		g.logger.Info("directly return conflict DDL", zap.Bool("idempotent", idempotent), zap.Any("source", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 		g.normalTables[sourceTable] = postTableStmt
 		return true, optimism.ConflictNone
 	}
@@ -474,16 +511,20 @@ func (g *shardGroup) handleDDL(sourceTable metadata.SourceTable, prevTableStmt, 
 	// if any conflict happened between conflict DDLs, return error
 	// e.g. tb1: "ALTER TABLE RENAME a TO b", tb2: "ALTER TABLE RENAME c TO d"
 	if !g.noConflictForTables(conflict) {
-		log.L().Error("conflict happened with other conflict tables", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+		g.logger.Error("conflict happened with other conflict tables", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
 		return false, optimism.ConflictDetected
 	}
 
 	if g.noConflictForTables(final) {
-		log.L().Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+		g.logger.Info("all conflict resolved for the DDL", zap.Any("source table", sourceTable), zap.String("prevTable", prevTableStmt), zap.String("postTable", postTableStmt))
+		if err := g.redirectDDLs(ctx, sourceTable); err != nil {
+			g.logger.Error("redirect DDLs failed", zap.Error(err))
+			return false, optimism.ConflictNeedRestart
+		}
 		g.resolveTables()
 		return true, optimism.ConflictNone
 	}
-	log.L().Info("conflict hasn't been resolved", zap.Any("source table", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+	g.logger.Info("conflict hasn't been resolved", zap.Any("source table", sourceTable), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 	return false, optimism.ConflictSkipWaitRedirect
 }
 
@@ -622,7 +663,6 @@ func (g *shardGroup) resolveTables() {
 		g.normalTables[sourceTable] = conflictStmt
 	}
 	g.conflictTables = make(map[metadata.SourceTable]string)
-	// TODO: redirect for conflict worker.
 }
 
 func (g *shardGroup) getTableForOneDDL(item *metadata.DDLItem, idx int) (string, string) {
@@ -745,18 +785,35 @@ OutLoop:
 	return nil
 }
 
-// isResolved means all tables in the group are resolved.
-// 1. no conflict ddls waiting
-// 2. all dropped column has done
-// 3. all shard tables stmts are same.
-func (g *shardGroup) isResolved(ctx context.Context) bool {
+func (g *shardGroup) gcInRedirect(ctx context.Context) error {
+	if !g.inRedirect {
+		return nil
+	}
+
+	// if any table alreay finish redirect(checkpoint==normaltable)
+	// we can mark the inRedirect to false
+	for sourceTable, stmt := range g.normalTables {
+		tbStmt, err := g.tableAgent.FetchTableStmt(ctx, g.id, g.cfg, sourceTable)
+		if err != nil {
+			if strings.HasPrefix(err.Error(), "table info not found") {
+				continue
+			}
+			return err
+		}
+		lhs := genCmpTable(stmt)
+		rhs := genCmpTable(tbStmt)
+		if cmp, err := lhs.Compare(rhs); err != nil && cmp == 0 {
+			g.inRedirect = false
+			return nil
+		}
+	}
+	return nil
+}
+
+func (g *shardGroup) allShardTablesSame() bool {
 	if len(g.conflictTables) != 0 {
 		return false
 	}
-	if _, err := g.droppedColumnsStore.Get(ctx); errors.Cause(err) != metadata.ErrStateNotFound {
-		return false
-	}
-
 	var (
 		prevTable schemacmp.Table
 		first     = true
@@ -779,6 +836,25 @@ func (g *shardGroup) isResolved(ctx context.Context) bool {
 	return true
 }
 
+// isResoved means all tables in the group are resolved.
+// 1. no conflict ddls waiting
+// 2. all dropped column has done
+// 3. all shard tables stmts are same.
+// 4. non in-redirect
+func (g *shardGroup) isResolved(ctx context.Context) bool {
+	if len(g.conflictTables) != 0 {
+		return false
+	}
+	if g.inRedirect {
+		return false
+	}
+	if _, err := g.droppedColumnsStore.Get(ctx); errors.Cause(err) != metadata.ErrStateNotFound {
+		return false
+	}
+
+	return g.allShardTablesSame()
+}
+
 func (g *shardGroup) clear(ctx context.Context) error {
 	return g.droppedColumnsStore.Delete(ctx)
 }
@@ -793,6 +869,32 @@ func (g *shardGroup) showTables() map[metadata.SourceTable]ShardTable {
 	}
 	// show dropped columns if needed.
 	return tables
+}
+
+func (g *shardGroup) redirectDDLs(ctx context.Context, sourceTable metadata.SourceTable) (err error) {
+	for tb := range g.conflictTables {
+		if tb == sourceTable {
+			// no redirect for caller table
+			continue
+		}
+		g.logger.Info("put redirect operation for table", zap.Any("source_table", tb))
+		req := &dmproto.RedirectDDLRequest{
+			SourceTable:   tb,
+			TargetTable:   g.targetTable,
+			ConflictStage: optimism.ConflictResolved,
+		}
+
+		resp, err := g.messageAgent.SendRequest(ctx, tb.Source, dmproto.RedirectDDL, req)
+		if err != nil {
+			return err
+		}
+		errMsg := resp.(*dmproto.CommonTaskResponse).ErrorMsg
+		if len(errMsg) != 0 {
+			return errors.New(errMsg)
+		}
+	}
+	g.inRedirect = true
+	return nil
 }
 
 func genCmpTable(createStmt string) schemacmp.Table {

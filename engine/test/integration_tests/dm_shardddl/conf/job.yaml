@@ -1,0 +1,42 @@
+task-mode: all
+shard-mode: "optimistic"
+target-database:
+  host: host.docker.internal
+  port: 4000
+  user: root
+  password: ''
+upstreams:
+  - db-config:
+      host: host.docker.internal
+      port: 3306
+      user: root
+      password: ''
+    source-id: mysql-01
+    block-allow-list: global
+    route-rules: ["sharding-table-rule-1","sharding-schema-rule-1","sharding-table-rule-2"]
+  - db-config:
+      host: host.docker.internal
+      port: 3307
+      user: root
+      password: ''
+    source-id: mysql-02
+    block-allow-list: global
+    route-rules: ["sharding-table-rule-1","sharding-schema-rule-1","sharding-table-rule-2"]
+block-allow-list:
+  global:
+    do-dbs:
+    - "dm_shardddl*"
+routes:
+  sharding-table-rule-1:
+    schema-pattern: "dm_shardddl*"
+    target-schema: "dm_shardddl"
+    table-pattern: "t*"
+    target-table: "tb"
+  sharding-schema-rule-1:
+    schema-pattern: "dm_shardddl*"
+    target-schema: "dm_shardddl"
+  sharding-table-rule-2:
+    schema-pattern: "dm_shardddl*"
+    target-schema: "dm_shardddl"
+    table-pattern: "new_t*"
+    target-table: "new_tb"

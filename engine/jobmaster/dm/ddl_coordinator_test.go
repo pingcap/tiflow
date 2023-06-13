@@ -24,8 +24,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
+	tmock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -34,7 +37,7 @@ func TestDDLCoordinator(t *testing.T) {
 		checkpointAgent = &MockCheckpointAgent{}
 		metaClient      = mock.NewMetaMock()
 		jobStore        = metadata.NewJobStore(metaClient, log.L())
-		ddlCoordinator  = NewDDLCoordinator("", metaClient, checkpointAgent, jobStore, log.L())
+		ddlCoordinator  = NewDDLCoordinator("", metaClient, checkpointAgent, jobStore, log.L(), nil)
 
 		tb1         = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
 		tb2         = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
@@ -135,6 +138,7 @@ func TestDDLCoordinator(t *testing.T) {
 		TargetTable: targetTable,
 		Type:        metadata.OtherDDL,
 	}
+	checkpointAgent.On("FetchTableStmt").Return(genCreateStmt("col1 int", "col2 int"), nil).Once()
 	ddls, conflictStage, err = ddlCoordinator.Coordinate(context.Background(), item)
 	require.NoError(t, err)
 	require.Equal(t, item.DDLs, ddls)
@@ -236,6 +240,7 @@ func TestHandle(t *testing.T) {
 		tb         = metadata.TargetTable{Schema: "schema", Table: "tb"}
 		tableAgent = &MockCheckpointAgent{}
 		g          = &shardGroup{
+			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{
 				tb1: "",
 			},
@@ -316,6 +321,7 @@ func TestHandleCreateTable(t *testing.T) {
 	var (
 		tb1 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
 		g   = &shardGroup{
+			logger:       log.L(),
 			normalTables: make(map[metadata.SourceTable]string),
 		}
 	)
@@ -346,6 +352,7 @@ func TestHandleDropTable(t *testing.T) {
 		tb1 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
 		tb2 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
 		g   = &shardGroup{
+			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{
 				tb1: genCreateStmt("col1 int", "col2 int"),
 				tb2: "",
@@ -381,6 +388,7 @@ func TestHandleDDLs(t *testing.T) {
 		tb3 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb3"}
 		tb  = metadata.TargetTable{Schema: "schema", Table: "tb"}
 		g   = &shardGroup{
+			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{
 				tb1: "",
 				tb3: genCreateStmt("col1 int", "col2 int"),
@@ -424,71 +432,77 @@ func TestHandleDDLs(t *testing.T) {
 
 func TestHandleDDL(t *testing.T) {
 	var (
-		tb1 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
-		tb2 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
-		tb3 = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb3"}
-		g   = &shardGroup{
+		tb1          = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb1"}
+		tb2          = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb2"}
+		tb3          = metadata.SourceTable{Source: "source", Schema: "schema", Table: "tb3"}
+		messageAgent = &message.MockAgent{}
+		g            = &shardGroup{
+			logger: log.L(),
 			normalTables: map[metadata.SourceTable]string{
 				tb1: "",
 				tb2: genCreateStmt("col1 int"),
 				tb3: genCreateStmt("col1 int", "col2 int"),
 			},
 			conflictTables: make(map[metadata.SourceTable]string),
+			messageAgent:   messageAgent,
 		}
+		ctx = context.Background()
 	)
 
 	// tb2 add col2
-	schemaChanged, conflictStage := g.handleDDL(tb2, genCreateStmt("col1 int"), genCreateStmt("col1 int", "col2 int"))
+	schemaChanged, conflictStage := g.handleDDL(ctx, tb2, genCreateStmt("col1 int"), genCreateStmt("col1 int", "col2 int"))
 	require.True(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictNone)
 	// idempotent
-	schemaChanged, conflictStage = g.handleDDL(tb2, genCreateStmt("col1 int"), genCreateStmt("col1 int", "col2 int"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb2, genCreateStmt("col1 int"), genCreateStmt("col1 int", "col2 int"))
 	require.True(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictNone)
 
 	// tb2 modify col1
-	schemaChanged, conflictStage = g.handleDDL(tb2, genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 varchar(255), col2 int"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb2, genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 varchar(255), col2 int"))
 	require.False(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictSkipWaitRedirect)
 	// idempotent
-	schemaChanged, conflictStage = g.handleDDL(tb2, genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 varchar(255), col2 int"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb2, genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 varchar(255), col2 int"))
 	require.False(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictSkipWaitRedirect)
 
 	// tb3 modify col1
-	schemaChanged, conflictStage = g.handleDDL(tb3, genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 varchar(255), col2 int"))
+	messageAgent.On("SendRequest", tmock.Anything, tb2.Source, dmproto.RedirectDDL, tmock.Anything).Return(&dmproto.CommonTaskResponse{}, nil).Once()
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb3, genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 varchar(255), col2 int"))
 	require.True(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictNone)
 	// tb2 idempotent
-	schemaChanged, conflictStage = g.handleDDL(tb2, genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 varchar(255), col2 int"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb2, genCreateStmt("col1 int", "col2 int"), genCreateStmt("col1 varchar(255), col2 int"))
 	require.True(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictNone)
 
 	// tb3 add column with wrong name
-	schemaChanged, conflictStage = g.handleDDL(tb3, genCreateStmt("col1 varchar(255), col2 int"), genCreateStmt("col1 varchar(255), col2 int, col3 int"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb3, genCreateStmt("col1 varchar(255), col2 int"), genCreateStmt("col1 varchar(255), col2 int, col3 int"))
 	require.True(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictNone)
 	// tb3 rename column
-	schemaChanged, conflictStage = g.handleDDL(tb3, genCreateStmt("col1 varchar(255), col2 int, col3 int"), genCreateStmt("col1 varchar(255), col2 int, col4 int"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb3, genCreateStmt("col1 varchar(255), col2 int, col3 int"), genCreateStmt("col1 varchar(255), col2 int, col4 int"))
 	require.False(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictSkipWaitRedirect)
 	// tb2 add column with true name directly
-	schemaChanged, conflictStage = g.handleDDL(tb2, genCreateStmt("col1 varchar(255), col2 int"), genCreateStmt("col1 varchar(255), col2 int, col4 int"))
+	messageAgent.On("SendRequest", tmock.Anything, tb3.Source, dmproto.RedirectDDL, tmock.Anything).Return(&dmproto.CommonTaskResponse{}, nil).Once()
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb2, genCreateStmt("col1 varchar(255), col2 int"), genCreateStmt("col1 varchar(255), col2 int, col4 int"))
 	require.True(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictNone)
 	// tb3 idempotent
 	// NOTE: rename column will be executed but retrun column already exists
 	// data may insistent
-	schemaChanged, conflictStage = g.handleDDL(tb3, genCreateStmt("col1 varchar(255), col2 int, col3 int"), genCreateStmt("col1 varchar(255), col2 int, col4 int"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb3, genCreateStmt("col1 varchar(255), col2 int, col3 int"), genCreateStmt("col1 varchar(255), col2 int, col4 int"))
 	require.True(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictNone)
 
 	// tb3 add column not null no default
-	schemaChanged, conflictStage = g.handleDDL(tb3, genCreateStmt("col1 varchar(255), col2 int, col4 int"), genCreateStmt("col1 varchar(255), col2 int, col4 int, col5 int not null"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb3, genCreateStmt("col1 varchar(255), col2 int, col4 int"), genCreateStmt("col1 varchar(255), col2 int, col4 int, col5 int not null"))
 	require.False(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictSkipWaitRedirect)
 	// tb2 rename column
-	schemaChanged, conflictStage = g.handleDDL(tb2, genCreateStmt("col1 varchar(255), col2 int, col4 int"), genCreateStmt("col1 varchar(255), col3 int, col4 int"))
+	schemaChanged, conflictStage = g.handleDDL(ctx, tb2, genCreateStmt("col1 varchar(255), col2 int, col4 int"), genCreateStmt("col1 varchar(255), col3 int, col4 int"))
 	require.False(t, schemaChanged)
 	require.Equal(t, conflictStage, optimism.ConflictDetected)
 }

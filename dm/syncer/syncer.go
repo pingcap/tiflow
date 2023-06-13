@@ -67,6 +67,7 @@ import (
 	sm "github.com/pingcap/tiflow/dm/syncer/safe-mode"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
 	"github.com/pingcap/tiflow/dm/unit"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -131,7 +132,7 @@ type Syncer struct {
 	osgk *OptShardingGroupKeeper // optimistic ddl's keeper to keep all sharding (sub) group in this syncer
 
 	pessimist *shardddl.Pessimist // shard DDL pessimist
-	optimist  *shardddl.Optimist  // shard DDL optimist
+	optimist  shardddl.Optimist   // shard DDL optimist
 	cli       *clientv3.Client
 
 	binlogType         binlogstream.BinlogType
@@ -244,6 +245,7 @@ type Syncer struct {
 func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay relay.Process) *Syncer {
 	logFields := []zap.Field{
 		zap.String("task", cfg.Name),
+		zap.String("source", cfg.SourceID),
 		zap.String("unit", "binlog replication"),
 	}
 	var logger log.Logger
@@ -255,7 +257,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 
 	syncer := &Syncer{
 		pessimist: shardddl.NewPessimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
-		optimist:  shardddl.NewOptimist(&logger, etcdClient, cfg.Name, cfg.SourceID),
+		optimist:  shardddl.NewOptimist(&logger, etcdClient, cfg.MessageAgent, cfg.Name, cfg.SourceID, cfg.Name),
 	}
 	syncer.cfg = cfg
 	syncer.tctx = tcontext.Background().WithLogger(logger)
@@ -1803,7 +1805,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
-		if err = storage.RemoveAll(ctx, s.cfg.Dir, nil); err != nil {
+		if err = storage.RemoveAll(ctx, s.cfg.Dir, s.cfg.ExtStorage); err != nil {
 			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
 		}
 	}
@@ -2881,7 +2883,7 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
-	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
+	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, s.cfg.ExtStorage)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
 		return err
@@ -2929,7 +2931,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 
 	for _, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		content, err2 := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, file, nil)
+		content, err2 := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, file, s.cfg.ExtStorage)
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
@@ -3560,4 +3562,12 @@ func (s *Syncer) getDownStreamTableInfo(tctx *tcontext.Context, tableID string, 
 
 func (s *Syncer) getTableInfoFromCheckpoint(table *filter.Table) *model.TableInfo {
 	return s.checkpoint.GetTableInfo(table.Schema, table.Name)
+}
+
+func (s *Syncer) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) error {
+	optimistEngine, ok := s.optimist.(*shardddl.OptimistEngine)
+	if !ok {
+		return errors.New("syncer is not run for tiflow")
+	}
+	return optimistEngine.RedirectDDL(req)
 }

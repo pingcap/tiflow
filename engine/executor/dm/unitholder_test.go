@@ -30,7 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	dmproto "github.com/pingcap/tiflow/engine/pkg/dm/proto"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -131,13 +131,13 @@ func TestUnitHolderBinlog(t *testing.T) {
 	unitHolder.unit = &dumpling.Dumpling{}
 
 	// wrong type
-	msg, err := unitHolder.Binlog(context.Background(), &dmpkg.BinlogTaskRequest{})
+	msg, err := unitHolder.Binlog(context.Background(), &dmproto.BinlogTaskRequest{})
 	require.Error(t, err)
 	require.Equal(t, "", msg)
 	// no binlog error
 	unitHolder.unit = syncer.NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	unitHolder.runCtx = context.Background()
-	msg, err = unitHolder.Binlog(context.Background(), &dmpkg.BinlogTaskRequest{})
+	msg, err = unitHolder.Binlog(context.Background(), &dmproto.BinlogTaskRequest{})
 	require.EqualError(t, err, "source '' has no error")
 	require.Equal(t, "", msg)
 }
@@ -147,18 +147,18 @@ func TestUnitHolderBinlogSchema(t *testing.T) {
 	unitHolder.unit = &dumpling.Dumpling{}
 
 	// wrong type
-	msg, err := unitHolder.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaTaskRequest{})
+	msg, err := unitHolder.BinlogSchema(context.Background(), &dmproto.BinlogSchemaTaskRequest{})
 	require.Error(t, err)
 	require.Equal(t, "", msg)
 	// wrong stage
 	unitHolder.unit = syncer.NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	unitHolder.runCtx = context.Background()
-	msg, err = unitHolder.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaTaskRequest{})
+	msg, err = unitHolder.BinlogSchema(context.Background(), &dmproto.BinlogSchemaTaskRequest{})
 	require.EqualError(t, err, fmt.Sprintf("current stage is %s but not paused, invalid", metadata.StageRunning))
 	require.Equal(t, "", msg)
 	// binlog schema list
 	unitHolder.result = &pb.ProcessResult{Errors: []*pb.ProcessError{{ErrCode: 1}}}
-	msg, err = unitHolder.BinlogSchema(context.Background(), &dmpkg.BinlogSchemaTaskRequest{Op: pb.SchemaOp_RemoveSchema})
+	msg, err = unitHolder.BinlogSchema(context.Background(), &dmproto.BinlogSchemaTaskRequest{Op: pb.SchemaOp_RemoveSchema})
 	require.Nil(t, err)
 	require.Equal(t, "", msg)
 }
@@ -336,7 +336,7 @@ func (m *mockUnitHolder) CheckAndUpdateStatus() {
 }
 
 // Binlog implement Holder.Binlog
-func (m *mockUnitHolder) Binlog(ctx context.Context, req *dmpkg.BinlogTaskRequest) (string, error) {
+func (m *mockUnitHolder) Binlog(ctx context.Context, req *dmproto.BinlogTaskRequest) (string, error) {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
@@ -344,9 +344,17 @@ func (m *mockUnitHolder) Binlog(ctx context.Context, req *dmpkg.BinlogTaskReques
 }
 
 // BinlogSchema implement Holder.BinlogSchema
-func (m *mockUnitHolder) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaTaskRequest) (string, error) {
+func (m *mockUnitHolder) BinlogSchema(ctx context.Context, req *dmproto.BinlogSchemaTaskRequest) (string, error) {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
 	return args.Get(0).(string), args.Error(1)
+}
+
+// RedirectDDL implement Holder.RedirectDDL
+func (m *mockUnitHolder) RedirectDDL(ctx context.Context, req *dmproto.RedirectDDLRequest) error {
+	m.Lock()
+	defer m.Unlock()
+	args := m.Called()
+	return args.Error(0)
 }

@@ -49,6 +49,9 @@ const (
 	// ConflictError indicates an error happened when we try to sync the DDLs
 	// in this stage, DM-worker should retry and can skip ddls for this error.
 	ConflictError ConflictStage = "error"
+	// ConflictNeedRestart indicates an error happened when we try to redirect the DDLs
+	// in this stage, DM-worker should restart the task.
+	ConflictNeedRestart ConflictStage = "need restart"
 )
 
 // Operation represents a shard DDL coordinate operation.

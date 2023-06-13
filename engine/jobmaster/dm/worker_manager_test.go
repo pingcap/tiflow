@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/config"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/metadata"
 	"github.com/pingcap/tiflow/engine/jobmaster/dm/runtime"
-	dmpkg "github.com/pingcap/tiflow/engine/pkg/dm"
+	"github.com/pingcap/tiflow/engine/pkg/dm/message"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	kvmock "github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -130,7 +130,7 @@ func (t *testDMJobmasterSuite) TestUpdateWorkerStatus() {
 }
 
 func (t *testDMJobmasterSuite) TestClearWorkerStatus() {
-	messageAgent := &dmpkg.MockMessageAgent{}
+	messageAgent := &message.MockAgent{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	source1 := "source1"
@@ -468,7 +468,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	unitStore := metadata.NewUnitStateStore(kvmock.NewMetaMock())
 	checkpointAgent := &MockCheckpointAgent{}
 	workerAgent := &MockWorkerAgent{}
-	messageAgent := &dmpkg.MockMessageAgent{}
+	messageAgent := &message.MockAgent{}
 	workerManager := NewWorkerManager("job_id", nil, jobStore, unitStore, workerAgent, messageAgent, checkpointAgent, log.L(), resModel.ResourceTypeLocalFile)
 	source1 := jobCfg.Upstreams[0].SourceID
 	source2 := jobCfg.Upstreams[1].SourceID
