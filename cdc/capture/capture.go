@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -114,6 +115,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("reset session successfully", zap.Any("session", sess))
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
@@ -355,11 +357,12 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Campaign to be an owner, it blocks until it becomes the owner
 		if err := c.campaign(ctx); err != nil {
-			switch errors.Cause(err) {
-			case context.Canceled:
+			rootErr := errors.Cause(err)
+			if rootErr == context.Canceled {
 				return nil
-			case mvcc.ErrCompacted:
-				// the revision we requested is compacted, just retry
+			} else if rootErr == mvcc.ErrCompacted || isErrCompacted(rootErr) {
+				log.Warn("campaign owner failed due to etcd revision "+
+					"has been compacted, retry later", zap.Error(err))
 				continue
 			}
 			log.Warn("campaign owner failed", zap.Error(err))
@@ -607,4 +610,8 @@ func (c *Capture) StatusProvider() owner.StatusProvider {
 		return nil
 	}
 	return owner.NewStatusProvider(c.owner)
+}
+
+func isErrCompacted(err error) bool {
+	return strings.Contains(err.Error(), "required revision has been compacted")
 }

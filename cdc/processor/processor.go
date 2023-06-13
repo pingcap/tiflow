@@ -900,6 +900,11 @@ func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
+
+	// clean up metrics first to avoid some metrics are not cleaned up
+	// when error occurs during closing the processor
+	p.cleanupMetrics()
+
 	for _, tbl := range p.tables {
 		tbl.Cancel()
 	}
@@ -941,6 +946,11 @@ func (p *processor) Close() error {
 	}
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
+
+	return nil
+}
+
+func (p *processor) cleanupMetrics() {
 	resolvedTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	resolvedTsLagGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	checkpointTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
@@ -952,7 +962,6 @@ func (p *processor) Close() error {
 
 	pipeline.SorterBatchReadSize.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	pipeline.SorterBatchReadDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	return nil
 }
 
 // WriteDebugInfo write the debug info to Writer
