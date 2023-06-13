@@ -14,20 +14,19 @@
 package manager
 
 import (
+	"context"
 	"testing"
-	"time"
 
 	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
-	kafkamock "github.com/pingcap/tiflow/pkg/kafka"
+	"github.com/pingcap/tiflow/pkg/kafka"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPartitions(t *testing.T) {
 	t.Parallel()
 
-	client := kafkamock.NewClientMockImpl()
-	adminClient := kafkamock.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
 	cfg := &kafkaconfig.AutoCreateTopicConfig{
@@ -36,56 +35,21 @@ func TestPartitions(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(context.TODO(), adminClient, cfg)
 	require.Nil(t, err)
+	defer manager.Close()
 	partitionsNum, err := manager.GetPartitionNum(
-		kafkamock.DefaultMockTopicName)
+		kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionsNum)
-}
-
-func TestTryRefreshMeta(t *testing.T) {
-	t.Parallel()
-
-	client := kafkamock.NewClientMockImpl()
-	adminClient := kafkamock.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
-		_ = adminClient.Close()
-	}(adminClient)
-	cfg := &kafkaconfig.AutoCreateTopicConfig{
-		AutoCreate:        true,
-		PartitionNum:      2,
-		ReplicationFactor: 1,
-	}
-
-	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
-	require.Nil(t, err)
-	partitionsNum, err := manager.GetPartitionNum(
-		kafkamock.DefaultMockTopicName)
-	require.Nil(t, err)
-	require.Equal(t, int32(3), partitionsNum)
-
-	// Mock create a topic.
-	client.AddTopic("test", 4)
-	manager.lastMetadataRefresh.Store(time.Now().Add(-2 * time.Minute).Unix())
-	partitionsNum, err = manager.GetPartitionNum("test")
-	require.Nil(t, err)
-	require.Equal(t, int32(4), partitionsNum)
-
-	// Mock delete a topic.
-	// NOTICE: we do not refresh metadata for the deleted topic.
-	client.DeleteTopic("test")
-	partitionsNum, err = manager.GetPartitionNum("test")
-	require.Nil(t, err)
-	require.Equal(t, int32(4), partitionsNum)
 }
 
 func TestCreateTopic(t *testing.T) {
 	t.Parallel()
 
-	client := kafkamock.NewClientMockImpl()
-	adminClient := kafkamock.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+	ctx := context.Background()
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
 
@@ -95,13 +59,14 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(ctx, adminClient, cfg)
 	require.Nil(t, err)
-	partitionNum, err := manager.createTopic(kafkamock.DefaultMockTopicName)
+	defer manager.Close()
+	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionNum)
 
-	partitionNum, err = manager.createTopic("new-topic")
+	partitionNum, err = manager.CreateTopicAndWaitUntilVisible("new-topic")
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
 	partitionsNum, err := manager.GetPartitionNum("new-topic")
@@ -110,9 +75,10 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager, err = NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err = NewKafkaTopicManager(ctx, adminClient, cfg)
 	require.Nil(t, err)
-	_, err = manager.createTopic("new-topic2")
+	defer manager.Close()
+	_, err = manager.CreateTopicAndWaitUntilVisible("new-topic2")
 	require.Regexp(
 		t,
 		"`auto-create-topic` is false, and new-topic2 not found",
@@ -126,9 +92,10 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager, err = NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err = NewKafkaTopicManager(ctx, adminClient, cfg)
 	require.Nil(t, err)
-	_, err = manager.createTopic("new-topic-failed")
+	defer manager.Close()
+	_, err = manager.CreateTopicAndWaitUntilVisible("new-topic-failed")
 	require.Regexp(
 		t,
 		"new sarama producer: kafka server: Replication-factor is invalid",
@@ -139,9 +106,8 @@ func TestCreateTopic(t *testing.T) {
 func TestCreateTopicWithDelay(t *testing.T) {
 	t.Parallel()
 
-	client := kafkamock.NewClientMockImpl()
-	adminClient := kafkamock.NewClusterAdminClientMockImpl()
-	defer func(adminClient *kafkamock.ClusterAdminClientMockImpl) {
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer func(adminClient *kafka.ClusterAdminClientMockImpl) {
 		_ = adminClient.Close()
 	}(adminClient)
 	cfg := &kafkaconfig.AutoCreateTopicConfig{
@@ -150,8 +116,9 @@ func TestCreateTopicWithDelay(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager, err := NewKafkaTopicManager(client, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(context.TODO(), adminClient, cfg)
 	require.Nil(t, err)
+	defer manager.Close()
 	partitionNum, err := manager.createTopic("new_topic")
 	require.Nil(t, err)
 	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)

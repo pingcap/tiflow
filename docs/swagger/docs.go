@@ -741,6 +741,35 @@ var doc = `{
                 }
             }
         },
+        "config.KafkaConfig": {
+            "type": "object",
+            "properties": {
+                "sasl-mechanism": {
+                    "type": "string"
+                },
+                "sasl-oauth-audience": {
+                    "type": "string"
+                },
+                "sasl-oauth-client-id": {
+                    "type": "string"
+                },
+                "sasl-oauth-client-secret": {
+                    "type": "string"
+                },
+                "sasl-oauth-grant-type": {
+                    "type": "string"
+                },
+                "sasl-oauth-scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sasl-oauth-token-url": {
+                    "type": "string"
+                }
+            }
+        },
         "config.SinkConfig": {
             "type": "object",
             "properties": {
@@ -758,6 +787,9 @@ var doc = `{
                 },
                 "encoder-concurrency": {
                     "type": "integer"
+                },
+                "kafka-config": {
+                    "$ref": "#/definitions/config.KafkaConfig"
                 },
                 "protocol": {
                     "type": "string"

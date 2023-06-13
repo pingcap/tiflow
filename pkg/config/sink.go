@@ -88,6 +88,19 @@ type SinkConfig struct {
 	ColumnSelectors    []*ColumnSelector `toml:"column-selectors" json:"column-selectors"`
 	SchemaRegistry     string            `toml:"schema-registry" json:"schema-registry"`
 	EncoderConcurrency int               `toml:"encoder-concurrency" json:"encoder-concurrency"`
+
+	KafkaConfig *KafkaConfig `toml:"kafka-config" json:"kafka-config,omitempty"`
+}
+
+// KafkaConfig represents a kafka sink configuration
+type KafkaConfig struct {
+	SASLMechanism         *string  `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
+	SASLOAuthClientID     *string  `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
+	SASLOAuthClientSecret *string  `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
+	SASLOAuthTokenURL     *string  `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
+	SASLOAuthScopes       []string `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
+	SASLOAuthGrantType    *string  `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
+	SASLOAuthAudience     *string  `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
 }
 
 // DispatchRule represents partition rule for a table.
