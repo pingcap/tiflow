@@ -103,17 +103,17 @@ func newRouter(c capture.Capture, p owner.StatusProvider) *gin.Engine {
 func newStatusProvider() *mockStatusProvider {
 	statusProvider := &mockStatusProvider{}
 	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
-		Return(&model.ChangeFeedStatus{CheckpointTs: 1}, nil)
+		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil)
 
 	statusProvider.On("GetChangeFeedStatus", mock.Anything, nonExistChangefeedID).
-		Return(new(model.ChangeFeedStatus),
+		Return(new(model.ChangeFeedStatusForAPI),
 			cerror.ErrChangeFeedNotExists.GenWithStackByArgs(nonExistChangefeedID))
 
 	statusProvider.On("GetAllTaskStatuses", mock.Anything).
 		Return(map[model.CaptureID]*model.TaskStatus{captureID: {}}, nil)
 
 	statusProvider.On("GetAllChangeFeedStatuses", mock.Anything).
-		Return(map[model.ChangeFeedID]*model.ChangeFeedStatus{
+		Return(map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI{
 			model.ChangeFeedID4Test("ab", "123"):  {CheckpointTs: 1},
 			model.ChangeFeedID4Test("ab", "13"):   {CheckpointTs: 2},
 			model.ChangeFeedID4Test("abc", "123"): {CheckpointTs: 1},
@@ -352,9 +352,9 @@ func TestRemoveChangefeed(t *testing.T) {
 
 	statusProvider := &mockStatusProvider{}
 	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
-		Return(&model.ChangeFeedStatus{CheckpointTs: 1}, nil).Once()
+		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil).Once()
 	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
-		Return(new(model.ChangeFeedStatus),
+		Return(new(model.ChangeFeedStatusForAPI),
 			cerror.ErrChangeFeedNotExists.FastGenByArgs(changeFeedID)).Once()
 
 	router1 := newRouter(cp, statusProvider)
