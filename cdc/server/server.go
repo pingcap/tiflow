@@ -390,26 +390,27 @@ func (s *server) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	wg, cctx := errgroup.WithContext(ctx)
+	eg, egCtx := errgroup.WithContext(ctx)
 
-	wg.Go(func() error {
-		return s.capture.Run(cctx)
+	eg.Go(func() error {
+		return s.capture.Run(egCtx)
 	})
 
-	wg.Go(func() error {
-		return s.etcdHealthChecker(cctx)
+	eg.Go(func() error {
+		return s.etcdHealthChecker(egCtx)
 	})
 
-	wg.Go(func() error {
-		return kv.RunWorkerPool(cctx)
+	eg.Go(func() error {
+		return kv.RunWorkerPool(egCtx)
 	})
 
-	wg.Go(func() error {
-		return s.tcpServer.Run(cctx)
+	eg.Go(func() error {
+		return s.tcpServer.Run(egCtx)
 	})
 
 	conf := config.GetGlobalServerConfig()
 
+<<<<<<< HEAD
 	if !conf.Debug.EnableDBSorter {
 		wg.Go(func() error {
 			return unified.RunWorkerPool(cctx)
@@ -429,8 +430,18 @@ func (s *server) run(ctx context.Context) (err error) {
 			return nil
 		})
 	}
+=======
+	eg.Go(func() error {
+		return grpcServer.Serve(s.tcpServer.GrpcListener())
+	})
+	eg.Go(func() error {
+		<-egCtx.Done()
+		grpcServer.Stop()
+		return nil
+	})
+>>>>>>> 94b57db7e2 (pkg/p2p(ticdc): refactor p2p message client (#9192))
 
-	return wg.Wait()
+	return eg.Wait()
 }
 
 // Drain removes tables in the current TiCDC instance.
