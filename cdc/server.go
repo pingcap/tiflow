@@ -46,6 +46,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -124,6 +125,8 @@ func (s *Server) Run(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
+	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
+
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints:        s.pdEndpoints,
 		TLS:              tlsConfig,
@@ -142,6 +145,10 @@ func (s *Server) Run(ctx context.Context) error {
 					MaxDelay:   3 * time.Second,
 				},
 				MinConnectTimeout: 3 * time.Second,
+			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    10 * time.Second,
+				Timeout: 20 * time.Second,
 			}),
 		},
 	})
@@ -240,6 +247,13 @@ func (s *Server) etcdHealthChecker(ctx context.Context) error {
 					metrics[pdEndpoint].Observe(float64(time.Since(start)) / float64(time.Second))
 				}
 				cancel()
+			}
+
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			_, err = s.etcdClient.Client.Unwrap().MemberList(ctx)
+			cancel()
+			if err != nil {
+				log.Warn("etcd health check error, fail to list etcd members", zap.Error(err))
 			}
 		}
 	}

@@ -115,6 +115,7 @@ func (c *Capture) reset(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("reset session successfully", zap.Any("session", sess))
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
