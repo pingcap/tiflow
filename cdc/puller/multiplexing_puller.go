@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,7 +54,12 @@ type tableProgress struct {
 
 	resolvedSpans chan *model.ResolvedSpans
 	tsTracker     frontier.Frontier
-	consume       func(context.Context, *model.RawKVEntry, []tablepb.Span) error
+
+	consume struct {
+		sync.RWMutex
+		removed bool
+		f       func(context.Context, *model.RawKVEntry, []tablepb.Span) error
+	}
 
 	scheduled atomic.Bool
 }
@@ -96,7 +102,7 @@ func NewMultiplexingPuller(
 func (p *MultiplexingPuller) Subscribe(
 	pullerType string, tableName string,
 	spans []tablepb.Span, startTs model.Ts,
-) error {
+) {
 	metrics := missedRegionCollectCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, pullerType)
 	tsTracker := frontier.NewFrontier(0, metrics, spans...)
 
@@ -109,16 +115,59 @@ func (p *MultiplexingPuller) Subscribe(
 
 		resolvedSpans: make(chan *model.ResolvedSpans, resolvedSpanChanSize),
 		tsTracker:     tsTracker,
-		consume:       p.consume,
 	}
+
+	progress.consume.f = func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
+		progress.consume.RLock()
+		defer progress.consume.RUnlock()
+		if !progress.consume.removed {
+			return p.consume(ctx, raw, spans)
+		}
+		return nil
+	}
+
 	for _, span := range spans {
 		subID := p.client.AllocSubscriptionID()
 		p.setProgress(subID, progress)
-		if err := p.client.Subscribe(subID, span, startTs, p.inputCh); err != nil {
-			return errors.Trace(err)
+		if _, ok := p.client.Subscribe(subID, span, startTs, p.inputCh); !ok {
+			log.Panic("redundant subscription",
+				zap.String("namespace", p.changefeed.Namespace),
+				zap.String("changefeed", p.changefeed.ID),
+				zap.String("span", span.String()))
 		}
 	}
-	return nil
+}
+
+// Unsubscribe some spans, which must be subscribed in one call.
+func (p *MultiplexingPuller) Unsubscribe(spans []tablepb.Span) {
+	subIDs := make([]kv.SubscriptionID, 0, len(spans))
+	for _, span := range spans {
+		if subID, ok := p.client.Unsubscribe(span); ok {
+			subIDs = append(subIDs, subID)
+		} else {
+			log.Panic("unexist unsubscription",
+				zap.String("namespace", p.changefeed.Namespace),
+				zap.String("changefeed", p.changefeed.ID),
+				zap.String("span", span.String()))
+		}
+	}
+	sort.Slice(subIDs, func(i, j int) bool { return subIDs[i] < subIDs[j] })
+	if subIDs[0] != subIDs[len(subIDs)-1] {
+		log.Panic("unsubscribe spans with different ID",
+			zap.String("namespace", p.changefeed.Namespace),
+			zap.String("changefeed", p.changefeed.ID))
+	}
+
+	progress := p.delProgress(subIDs[0])
+	if progress == nil || len(progress.spans) != len(subIDs) {
+		log.Panic("unsubscribe spans different from subscription",
+			zap.String("namespace", p.changefeed.Namespace),
+			zap.String("changefeed", p.changefeed.ID))
+	}
+
+	progress.consume.Lock()
+	progress.consume.removed = true
+	progress.consume.Unlock()
 }
 
 // Run the puller.
@@ -159,7 +208,7 @@ func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
 
 			if e.Val != nil {
 				metricCounterKv.Inc()
-				err = p.consume(ctx, e.Val, progress.spans)
+				err = progress.consume.f(ctx, e.Val, progress.spans)
 			} else if e.Resolved != nil {
 				metricCounterResolved.Add(float64(len(e.Resolved.Spans)))
 				select {
@@ -187,6 +236,16 @@ func (p *MultiplexingPuller) setProgress(subID kv.SubscriptionID, progress *tabl
 	p.subscriptions.Lock()
 	defer p.subscriptions.Unlock()
 	p.subscriptions.m[subID] = progress
+}
+
+func (p *MultiplexingPuller) delProgress(subID kv.SubscriptionID) *tableProgress {
+	p.subscriptions.Lock()
+	defer p.subscriptions.Unlock()
+	if progress, ok := p.subscriptions.m[subID]; ok {
+		delete(p.subscriptions.m, subID)
+		return progress
+	}
+	return nil
 }
 
 func (p *MultiplexingPuller) getProgress(subID kv.SubscriptionID) *tableProgress {
@@ -267,7 +326,7 @@ func (p *tableProgress) handleResolvedSpan(ctx context.Context, e *model.Resolve
 	if resolvedTs > p.resolvedTs {
 		p.resolvedTs = resolvedTs
 		raw := &model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved}
-		err = p.consume(ctx, raw, p.spans)
+		err = p.consume.f(ctx, raw, p.spans)
 	}
 	return
 }

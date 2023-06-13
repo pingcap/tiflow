@@ -556,11 +556,8 @@ func NewDDLJobPuller(
 		}
 		jobPuller.multiplexingPuller.MultiplexingPuller = NewMultiplexingPuller(changefeed, client, consume)
 		jobPuller.multiplexingPuller.client = client
-		jobPuller.multiplexingPuller.sortedDDLCh = memorysorter.SortOutput(ctx, rawDDLCh)
-		err := jobPuller.multiplexingPuller.Subscribe("ddl", memorysorter.DDLPullerTableName, spans, checkpointTs)
-		if err != nil {
-			return nil, err
-		}
+		jobPuller.multiplexingPuller.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
+		jobPuller.multiplexingPuller.Subscribe("ddl", memorysorter.DDLPullerTableName, spans, checkpointTs)
 	} else {
 		jobPuller.puller.Puller = New(
 			ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock,

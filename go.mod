@@ -60,7 +60,7 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20221009092201-b66cddb77c32
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
-	github.com/pingcap/kvproto v0.0.0-20230601080418-b8e6dcdd1030
+	github.com/pingcap/kvproto v0.0.0-20230613054447-ed3345879d08
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/tidb v1.1.0-beta.0.20230505070356-cb609bb39c80
 	github.com/pingcap/tidb-tools v7.0.0+incompatible
@@ -317,4 +317,4 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
 
-replace github.com/pingcap/kvproto v0.0.0-20230601080418-b8e6dcdd1030 => github.com/hicqu/kvproto v0.0.0-20230606043629-9b709080baa4
+replace github.com/pingcap/kvproto v0.0.0-20230613054447-ed3345879d08 => github.com/hicqu/kvproto v0.0.0-20230613053646-0ca144fd022d

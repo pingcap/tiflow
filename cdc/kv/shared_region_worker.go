@@ -43,7 +43,7 @@ type workerMetrics struct {
 type statefulEvent struct {
 	eventItem       eventItem
 	resolvedTsBatch resolvedTsBatch
-	rs              *requestedStore
+	rs              *requestedStream
 }
 
 type eventItem struct {
@@ -135,7 +135,7 @@ func (w *sharedRegionWorker) run(ctx context.Context) error {
 func (w *sharedRegionWorker) handleSingleRegionError(
 	ctx context.Context, err error,
 	state *regionFeedState,
-	rs *requestedStore,
+	rs *requestedStream,
 ) {
 	state.markStopped()
 	state.setRegionInfoResolvedTs()

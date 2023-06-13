@@ -131,14 +131,7 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 	if m.multiplexing {
-		err := m.multiplexingPuller.puller.Subscribe("dml", tableName, []tablepb.Span{span}, startTs)
-		if err != nil {
-			log.Panic("AddTable fail",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span),
-				zap.Error(err))
-		}
+		m.multiplexingPuller.puller.Subscribe("dml", tableName, []tablepb.Span{span}, startTs)
 	} else {
 		p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
 		p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
@@ -149,6 +142,7 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
 func (m *SourceManager) RemoveTable(span tablepb.Span) {
 	if m.multiplexing {
+		m.multiplexingPuller.puller.Unsubscribe([]tablepb.Span{span})
 	} else if wrapper, ok := m.tablePullers.LoadAndDelete(span); ok {
 		wrapper.(pullerwrapper.Wrapper).Close()
 	}
