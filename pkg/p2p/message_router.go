@@ -35,7 +35,7 @@ type MessageRouter interface {
 	// GetClient returns a MessageClient for `target`. It returns
 	// nil if the target peer does not exist. The returned client
 	// is canceled if RemovePeer is called on `target`.
-	GetClient(target NodeID) *MessageClient
+	GetClient(target NodeID) MessageClient
 	// Close cancels all clients maintained internally and waits for all clients to exit.
 	Close()
 	// Err returns a channel to receive errors from.
@@ -70,7 +70,7 @@ func NewMessageRouter(selfID NodeID, credentials *security.Credential, clientCon
 }
 
 type clientWrapper struct {
-	*MessageClient
+	MessageClient
 	cancelFn context.CancelFunc
 }
 
@@ -97,7 +97,7 @@ func (m *messageRouterImpl) RemovePeer(id NodeID) {
 
 // GetClient implements MessageRouter. The client will be created lazily.
 // It returns nil if the target peer does not exist.
-func (m *messageRouterImpl) GetClient(target NodeID) *MessageClient {
+func (m *messageRouterImpl) GetClient(target NodeID) MessageClient {
 	m.mu.RLock()
 	// fast path
 	if cliWrapper, ok := m.clients[target]; ok {
