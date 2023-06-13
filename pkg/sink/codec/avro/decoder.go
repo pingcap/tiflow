@@ -96,57 +96,72 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
 }
 
-func assembleEvent(values, schema map[string]interface{}) (*model.RowChangedEvent, error) {
-
-}
-
-// NextRowChangedEvent returns the next row changed event if exists
-func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
-	var (
-		valueMap  map[string]interface{}
-		rawSchema string
-		err       error
-	)
-
-	ctx := context.Background()
-	key, rawSchema, err := d.decodeKey(ctx)
-	if err != nil {
-		return nil, false, errors.Trace(err)
-	}
-
-	isDelete := len(d.value) == 0
-	if isDelete {
-		valueMap = key
-	} else {
-		valueMap, rawSchema, err = d.decodeValue(ctx)
-		if err != nil {
-			return nil, false, errors.Trace(err)
+func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType byte) (interface{}, error) {
+	switch t := value.(type) {
+	// for nullable columns, the value is encoded as a map with one pair.
+	// key is the encoded type, value is the encoded value, only care about the value here.
+	case map[string]interface{}:
+		for _, v := range t {
+			value = v
 		}
 	}
 
-	schema := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(rawSchema), &schema); err != nil {
-		return nil, false, errors.Trace(err)
+	switch mysqlType {
+	case mysql.TypeEnum:
+		// enum type is encoded as string,
+		// we need to convert it to int by the order of the enum values definition.
+		allowed := strings.Split(holder["allowed"].(string), ",")
+		switch t := value.(type) {
+		case string:
+			enum, err := types.ParseEnum(allowed, t, "")
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			value = enum.Value
+		case nil:
+			value = nil
+		}
+	case mysql.TypeSet:
+		// set type is encoded as string,
+		// we need to convert it to the binary format.
+		elems := strings.Split(holder["allowed"].(string), ",")
+		switch t := value.(type) {
+		case string:
+			s, err := types.ParseSet(elems, t, "")
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			value = s.Value
+		case nil:
+			value = nil
+		}
 	}
+	return value, nil
+}
 
+func assembleEvent(keyMap, valueMap, schema map[string]interface{}) (*model.RowChangedEvent, error) {
 	fields, ok := schema["fields"].([]interface{})
 	if !ok {
-		return nil, false, errors.New("schema fields should be a map")
+		return nil, errors.New("schema fields should be a map")
 	}
 
 	columns := make([]*model.Column, 0, len(valueMap))
-	for _, value := range fields {
-		field, ok := value.(map[string]interface{})
+	// fields is ordered by the column id, so iterate over it to build columns
+	// it's also the order to calculate the checksum.
+	for _, item := range fields {
+		field, ok := item.(map[string]interface{})
 		if !ok {
-			return nil, false, errors.New("schema field should be a map")
+			return nil, errors.New("schema field should be a map")
 		}
 
-		// `tidbOp` is the first extension field in the schema, so we can break here.
+		// `tidbOp` is the first extension field in the schema,
+		// it's not real columns, so break here.
 		colName := field["name"].(string)
 		if colName == tidbOp {
 			break
 		}
 
+		// query the field to get `tidbType`, and get the mysql type from it.
 		var holder map[string]interface{}
 		switch ty := field["type"].(type) {
 		case []interface{}:
@@ -165,53 +180,18 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 		tidbType := holder["tidb_type"].(string)
 
 		mysqlType, flag := mysqlAndFlagTypeFromTiDBType(tidbType)
-		if _, ok := key[colName]; ok {
+		if _, ok := keyMap[colName]; ok {
 			flag.SetIsHandleKey()
 		}
 
+		// value is an interface, need to convert it to the real value.
 		value, ok := valueMap[colName]
 		if !ok {
-			return nil, false, errors.New("value not found")
+			return nil, errors.New("value not found")
 		}
-
-		switch t := value.(type) {
-		// for nullable columns, the value is encoded as a map with one pair.
-		// key is the encoded type, value is the encoded value, only care about the value here.
-		case map[string]interface{}:
-			for _, v := range t {
-				value = v
-			}
-		}
-
-		switch mysqlType {
-		case mysql.TypeEnum:
-			// enum type is encoded as string,
-			// we need to convert it to int by the order of the enum values definition.
-			allowed := strings.Split(holder["allowed"].(string), ",")
-			switch t := value.(type) {
-			case string:
-				enum, err := types.ParseEnum(allowed, t, "")
-				if err != nil {
-					return nil, false, errors.Trace(err)
-				}
-				value = enum.Value
-			case nil:
-				value = nil
-			}
-		case mysql.TypeSet:
-			// set type is encoded as string,
-			// we need to convert it to the binary format.
-			elems := strings.Split(holder["allowed"].(string), ",")
-			switch t := value.(type) {
-			case string:
-				s, err := types.ParseSet(elems, t, "")
-				if err != nil {
-					return nil, false, errors.Trace(err)
-				}
-				value = s.Value
-			case nil:
-				value = nil
-			}
+		value, err := getColumnValue(value, holder, mysqlType)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 
 		col := &model.Column{
@@ -223,53 +203,21 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 		columns = append(columns, col)
 	}
 
-	var commitTs int64
-	if !isDelete {
-		o, ok := valueMap[tidbCommitTs]
-		if !ok {
-			return nil, false, errors.New("commit ts not found")
-		}
-		commitTs = o.(int64)
-
-		o, ok = valueMap[tidbRowLevelChecksum]
-		if ok {
-			var expected uint64
-			checksum := o.(string)
-			if checksum != "" {
-				expected, err = strconv.ParseUint(checksum, 10, 64)
-				if err != nil {
-					return nil, false, errors.Trace(err)
-				}
-				if o, ok := valueMap[tidbCorrupted]; ok {
-					corrupted := o.(bool)
-					if corrupted {
-						log.Warn("row data is corrupted",
-							zap.String("topic", d.topic),
-							zap.String("checksum", checksum))
-						for _, col := range columns {
-							log.Info("data corrupted, print each column for debugging",
-								zap.String("name", col.Name),
-								zap.Any("type", col.Type),
-								zap.Any("charset", col.Charset),
-								zap.Any("flag", col.Flag),
-								zap.Any("value", col.Value),
-								zap.Any("default", col.Default),
-							)
-						}
-					}
-				}
-
-				if err := d.verifyChecksum(columns, expected); err != nil {
-					return nil, false, errors.Trace(err)
-				}
-			}
-		}
-	}
-
 	// "namespace.schema"
 	namespace := schema["namespace"].(string)
 	schemaName := strings.Split(namespace, ".")[1]
 	tableName := schema["name"].(string)
+
+	var commitTs int64
+
+	isDelete := len(valueMap) > 0
+	if isDelete {
+		o, ok := valueMap[tidbCommitTs]
+		if !ok {
+			return nil, errors.New("commit ts not found")
+		}
+		commitTs = o.(int64)
+	}
 
 	event := new(model.RowChangedEvent)
 	event.CommitTs = uint64(commitTs)
@@ -277,9 +225,112 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 		Schema: schemaName,
 		Table:  tableName,
 	}
-	event.Columns = columns
+
+	if isDelete {
+		event.PreColumns = columns
+	} else {
+		event.Columns = columns
+	}
+
+	return event, nil
+}
+
+// NextRowChangedEvent returns the next row changed event if exists
+func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
+	var (
+		valueMap  map[string]interface{}
+		rawSchema string
+		err       error
+	)
+
+	ctx := context.Background()
+	keyMap, rawSchema, err := d.decodeKey(ctx)
+	if err != nil {
+		return nil, false, errors.Trace(err)
+	}
+
+	valueMap = keyMap
+	if len(d.value) != 0 {
+		valueMap, rawSchema, err = d.decodeValue(ctx)
+		if err != nil {
+			return nil, false, errors.Trace(err)
+		}
+	}
+
+	schema := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(rawSchema), &schema); err != nil {
+		return nil, false, errors.Trace(err)
+	}
+
+	event, err := assembleEvent(keyMap, valueMap, schema)
+	if err != nil {
+		return nil, false, errors.Trace(err)
+	}
+
+	// Delete event only has PreColumns, but the checksum is calculated based on the whole row columns,
+	// checksum verification cannot be done here, so skip it.
+	if event.IsDelete() {
+		return event, false, nil
+	}
+
+	expectedChecksum, found, err := extractExpectedChecksum(valueMap)
+	if err != nil {
+		return nil, false, errors.Trace(err)
+	}
+
+	if isCorrupted(valueMap) {
+		log.Warn("row data is corrupted",
+			zap.String("topic", d.topic), zap.Uint64("checksum", expectedChecksum))
+		for _, col := range event.Columns {
+			log.Info("data corrupted, print each column for debugging",
+				zap.String("name", col.Name),
+				zap.Any("type", col.Type),
+				zap.Any("charset", col.Charset),
+				zap.Any("flag", col.Flag),
+				zap.Any("value", col.Value),
+				zap.Any("default", col.Default))
+		}
+
+	}
+
+	if found {
+		if err := d.verifyChecksum(event.Columns, expectedChecksum); err != nil {
+			return nil, false, errors.Trace(err)
+		}
+	}
 
 	return event, false, nil
+}
+
+func isCorrupted(valueMap map[string]interface{}) bool {
+	o, ok := valueMap[tidbCorrupted]
+	if !ok {
+		return false
+	}
+
+	corrupted := o.(bool)
+	if !corrupted {
+		return false
+	}
+	return true
+}
+
+// extract the checksum from the received value map
+// return true if the checksum found, and return error if the checksum is not valid
+func extractExpectedChecksum(valueMap map[string]interface{}) (uint64, bool, error) {
+	o, ok := valueMap[tidbRowLevelChecksum]
+	if !ok {
+		return 0, false, nil
+	}
+	checksum := o.(string)
+	if checksum == "" {
+		return 0, false, nil
+	}
+	result, err := strconv.ParseUint(checksum, 10, 64)
+	if err != nil {
+		return 0, true, errors.Trace(err)
+	}
+	return result, true, nil
 }
 
 // NextResolvedEvent returns the next resolved event if exists
