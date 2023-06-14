@@ -377,8 +377,8 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 		ResolvedTs:   sortStats.ReceivedMaxResolvedTs,
 	}
 	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
-		CheckpointTs: sinkStats.ReceivedMaxCommitTs,
-		ResolvedTs:   sinkStats.ReceivedMaxCommitTs,
+		CheckpointTs: sinkStats.ResolvedTs,
+		ResolvedTs:   sinkStats.ResolvedTs,
 	}
 
 	return stats
