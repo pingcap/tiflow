@@ -177,7 +177,6 @@ func (ch *Chann[T]) Close() {
 func (ch *Chann[T]) unboundedProcessing() {
 	var nilT T
 
-	ch.q = make([]T, 0, 1<<10)
 	for {
 		select {
 		case e, ok := <-ch.in:
@@ -207,9 +206,6 @@ func (ch *Chann[T]) unboundedProcessing() {
 				ch.unboundedTerminate()
 				return
 			}
-		}
-		if cap(ch.q) < 1<<5 {
-			ch.q = make([]T, 0, 1<<10)
 		}
 	}
 }

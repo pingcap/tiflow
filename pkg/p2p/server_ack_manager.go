@@ -27,6 +27,7 @@ import "sync"
 // ackManager is used to track the progress of Acks.
 // It is thread-safe to use.
 type ackManager struct {
+	// peers is a map from senderID to peerAckList.
 	peers sync.Map
 }
 
