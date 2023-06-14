@@ -5,10 +5,21 @@ on:
     branches:
       - master
       - "release-[0-9].[0-9]*"
+    paths-ignore:
+      - '**/*.md'
+      - '**/OWNERS'
+      - 'OWNERS'
+      - 'OWNERS_ALIASES'
+
   pull_request:
     branches:
       - master
       - "release-[0-9].[0-9]*"
+    paths-ignore:
+      - '**/*.md'
+      - '**/OWNERS'
+      - 'OWNERS'
+      - 'OWNERS_ALIASES'
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
