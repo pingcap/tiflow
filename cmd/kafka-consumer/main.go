@@ -624,7 +624,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					c.appendDDL(ddl)
 				}
 			case model.MessageTypeRow:
-				row, err := decoder.NextRowChangedEvent()
+				row, _, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Panic("decode message value failed",
 						zap.ByteString("value", message.Value),

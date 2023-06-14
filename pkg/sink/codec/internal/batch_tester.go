@@ -239,8 +239,9 @@ func (s *BatchTester) TestBatchCodec(
 				break
 			}
 			require.Equal(t, model.MessageTypeRow, tp)
-			row, err := decoder.NextRowChangedEvent()
-			require.Nil(t, err)
+			row, onlyHandleKey, err := decoder.NextRowChangedEvent()
+			require.NoError(t, err)
+			require.False(t, onlyHandleKey)
 			sortColumnArrays(row.Columns, row.PreColumns, cs[index].Columns, cs[index].PreColumns)
 			require.Equal(t, cs[index], row)
 			index++
