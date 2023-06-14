@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/pingcap/tiflow/pkg/txnutil"
-	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -94,6 +93,7 @@ func New(ctx context.Context,
 	if !ok {
 		log.Panic("can't create puller for non-tikv storage")
 	}
+<<<<<<< HEAD
 	comparableSpans := make([]regionspan.ComparableSpan, len(spans))
 	for i := range spans {
 		comparableSpans[i] = regionspan.ToComparableSpan(spans[i])
@@ -108,6 +108,13 @@ func New(ctx context.Context,
 	metricMissedRegionCollectCounter := missedRegionCollectCounter.
 		WithLabelValues(changefeed.Namespace, changefeed.ID, pullerType)
 	tsTracker := frontier.NewFrontier(0, metricMissedRegionCollectCounter, comparableSpans...)
+=======
+
+	// To make puller level resolved ts initialization distinguishable, we set
+	// the initial ts for frontier to 0. Once the puller level resolved ts
+	// initialized, the ts should advance to a non-zero value.
+	tsTracker := frontier.NewFrontier(0, spans...)
+>>>>>>> 20cc93b7a3 (puller (ticdc): Clean up puller metrics (#9044))
 	kvCli := kv.NewCDCKVClient(
 		ctx, pdCli, grpcPool, regionCache, pdClock, cfg, changefeed, tableID, tableName, filterLoop)
 	p := &pullerImpl{
@@ -142,24 +149,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		})
 	}
 
-	metricOutputChanSize := outputChanSizeHistogram.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-	metricEventChanSize := eventChanSizeHistogram.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-	metricPullerResolvedTs := pullerResolvedTsGauge.
-		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-	metricTxnCollectCounterKv := txnCollectCounter.
+	metricPullerEventCounterKv := PullerEventCounter.
 		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
-	metricTxnCollectCounterResolved := txnCollectCounter.
+	metricPullerEventCounterResolved := PullerEventCounter.
 		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
-	defer func() {
-		outputChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		eventChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		memBufferSizeGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		pullerResolvedTsGauge.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
-		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
-	}()
 
 	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
@@ -201,16 +194,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-			case <-metricsTicker.C:
-				metricEventChanSize.Observe(float64(len(eventCh)))
-				metricOutputChanSize.Observe(float64(len(p.outputCh)))
-				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-				continue
 			case e = <-eventCh:
 			}
 
 			if e.Val != nil {
-				metricTxnCollectCounterKv.Inc()
+				metricPullerEventCounterKv.Inc()
 				if err := output(e.Val); err != nil {
 					return errors.Trace(err)
 				}
@@ -218,7 +206,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			}
 
 			if e.Resolved != nil {
-				metricTxnCollectCounterResolved.Add(float64(len(e.Resolved.Spans)))
+				metricPullerEventCounterResolved.Add(float64(len(e.Resolved.Spans)))
 				for _, resolvedSpan := range e.Resolved.Spans {
 					if !regionspan.IsSubSpan(resolvedSpan.Span, p.spans...) {
 						log.Panic("the resolved span is not in the total span",

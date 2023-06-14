@@ -125,8 +125,6 @@ func newMockDDLJobPuller(
 		outputCh: make(
 			chan *model.DDLJobEntry,
 			defaultPullerOutputChanSize),
-		metricDiscardedDDLCounter: discardedDDLCounter.
-			WithLabelValues("ddl", "test"),
 	}
 	var helper *entry.SchemaTestHelper
 	if needSchemaStorage {

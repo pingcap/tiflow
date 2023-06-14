@@ -1343,6 +1343,7 @@ func (p *processor) cleanupMetrics() {
 	tableMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
+<<<<<<< HEAD
 	remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
 	sinkmetric.TableSinkTotalRowsCountCounter.
@@ -1350,6 +1351,29 @@ func (p *processor) cleanupMetrics() {
 
 	pipeline.SorterBatchReadSize.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	pipeline.SorterBatchReadDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+=======
+	ok := remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	if !ok {
+		log.Warn("delete remain kv events gauge metrics failed",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+	}
+
+	ok = puller.PullerEventCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID, "kv")
+	if !ok {
+		log.Warn("delete puller event counter metrics failed",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("type", "kv"))
+	}
+	ok = puller.PullerEventCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID, "resolved")
+	if !ok {
+		log.Warn("delete puller event counter metrics failed",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("type", "resolved"))
+	}
+>>>>>>> 20cc93b7a3 (puller (ticdc): Clean up puller metrics (#9044))
 }
 
 // WriteDebugInfo write the debug info to Writer

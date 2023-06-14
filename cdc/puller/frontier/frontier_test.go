@@ -19,8 +19,13 @@ import (
 	"sort"
 	"testing"
 
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/prometheus/client_golang/prometheus"
+=======
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/spanz"
+>>>>>>> 20cc93b7a3 (puller (ticdc): Clean up puller metrics (#9044))
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,7 +43,7 @@ func TestSpanFrontier(t *testing.T) {
 	spBD := regionspan.ComparableSpan{Start: keyB, End: keyD}
 	spCD := regionspan.ComparableSpan{Start: keyC, End: keyD}
 
-	f := NewFrontier(5, c, spAD).(*spanFrontier)
+	f := NewFrontier(5, spAD).(*spanFrontier)
 
 	require.Equal(t, uint64(5), f.Frontier())
 	require.Equal(t, `[a @ 5] [d @ Max] `, f.String())
@@ -170,7 +175,7 @@ func TestSpanFrontierFallback(t *testing.T) {
 	spCD := regionspan.ComparableSpan{Start: keyC, End: keyD}
 	spDE := regionspan.ComparableSpan{Start: keyD, End: keyE}
 
-	f := NewFrontier(20, c, spAB).(*spanFrontier)
+	f := NewFrontier(20, spAB).(*spanFrontier)
 	f.Forward(0, spBC, 20)
 	f.Forward(0, spCD, 10)
 	f.Forward(0, spDE, 20)
@@ -212,7 +217,7 @@ func TestMinMax(t *testing.T) {
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
 	spMinMax = spMinMax.Hack()
 
-	f := NewFrontier(0, c, spMinMax)
+	f := NewFrontier(0, spMinMax)
 	require.Equal(t, uint64(0), f.Frontier())
 	require.Equal(t, "[ @ 0] [\xff\xff\xff\xff\xff @ Max] ", f.String())
 	checkFrontier(t, f)
@@ -257,7 +262,7 @@ func TestSpanFrontierDisjoinSpans(t *testing.T) {
 	sp12 := regionspan.ComparableSpan{Start: key1, End: key2}
 	sp1F := regionspan.ComparableSpan{Start: key1, End: keyF}
 
-	f := NewFrontier(0, c, spAB, spCE)
+	f := NewFrontier(0, spAB, spCE)
 	require.Equal(t, uint64(0), f.Frontier())
 	require.Equal(t, `[a @ 0] [b @ Max] [c @ 0] [e @ Max] `, f.String())
 	checkFrontier(t, f)
@@ -303,14 +308,17 @@ func TestSpanFrontierDisjoinSpans(t *testing.T) {
 	checkFrontier(t, f)
 }
 
-var c = prometheus.NewCounterVec(prometheus.CounterOpts{}, []string{"type"}).WithLabelValues("a")
-
 func TestSpanFrontierRandomly(t *testing.T) {
 	t.Parallel()
 	var keyMin []byte
 	var keyMax []byte
+<<<<<<< HEAD
 	spMinMax := regionspan.ComparableSpan{Start: keyMin, End: keyMax}
 	f := NewFrontier(0, c, spMinMax)
+=======
+	spMinMax := tablepb.Span{StartKey: keyMin, EndKey: keyMax}
+	f := NewFrontier(0, spMinMax)
+>>>>>>> 20cc93b7a3 (puller (ticdc): Clean up puller metrics (#9044))
 
 	var spans []regionspan.ComparableSpan
 	for len(spans) < 500000 {
@@ -364,7 +372,7 @@ func TestMinMaxWithRegionSplitMerge(t *testing.T) {
 	ef := regionspan.ComparableSpan{Start: []byte("e"), End: []byte("f")}
 	af := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("f")}
 
-	f := NewFrontier(0, c, af)
+	f := NewFrontier(0, af)
 	require.Equal(t, uint64(0), f.Frontier())
 	f.Forward(1, ab, 1)
 	require.Equal(t, uint64(0), f.Frontier())
