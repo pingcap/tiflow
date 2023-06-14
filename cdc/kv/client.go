@@ -323,7 +323,6 @@ type eventFeedSession struct {
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
 	tableName  string
-	requestID  uint64
 
 	lockResolver txnutil.LockResolver
 
@@ -380,7 +379,6 @@ func newEventFeedSession(
 		changefeed: client.changefeed,
 		tableID:    client.tableID,
 		tableName:  client.tableName,
-		requestID:  allocID(),
 
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
@@ -443,7 +441,7 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 				// Besides the count or frequency of range request is limited,
 				// we use ephemeral goroutine instead of permanent goroutine.
 				g.Go(func() error {
-					return s.divideAndSendEventFeedToRegions(ctx, task.span, task.ts)
+					return s.divideAndSendEventFeedToRegions(ctx, task.span)
 				})
 			}
 		}
@@ -590,7 +588,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			return errors.Trace(ctx.Err())
 		case sri = <-s.regionRouter.Out():
 		}
-		requestID := s.requestID
+		requestID := allocID()
 
 		rpcCtx := sri.rpcCtx
 		regionID := rpcCtx.Meta.GetId()
@@ -807,7 +805,7 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 // to region boundaries. When region merging happens, it's possible that it
 // will produce some overlapping spans.
 func (s *eventFeedSession) divideAndSendEventFeedToRegions(
-	ctx context.Context, span tablepb.Span, ts uint64,
+	ctx context.Context, span tablepb.Span,
 ) error {
 	limit := 20
 	nextSpan := span

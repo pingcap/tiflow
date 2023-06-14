@@ -434,11 +434,15 @@ type LockRangeResult struct {
 	RetryRanges  []tablepb.Span
 }
 
+// LockedRange is returned by `RegionRangeLock.LockRange`, which can be used to
+// collect informations for the range. And collected informations can be accessed
+// by iterating `RegionRangeLock`.
 type LockedRange struct {
 	CheckpointTs atomic.Uint64
 	Initialzied  atomic.Bool
 }
 
+// CheckLockedRanges do some checks.
 func (l *RegionRangeLock) CheckLockedRanges() (r CheckLockedRangesResult) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -468,12 +472,14 @@ func (l *RegionRangeLock) CheckLockedRanges() (r CheckLockedRangesResult) {
 	return
 }
 
+// CheckLockedRangesResult returns by `RegionRangeLock.CheckLockedRanges`.
 type CheckLockedRangesResult struct {
 	HoleExists    bool
 	FastestRegion LockedRangeValue
 	SlowestRegion LockedRangeValue
 }
 
+// LockedRangeValue is like `LockedRange`.
 type LockedRangeValue struct {
 	RegionID     uint64
 	CheckpointTs uint64

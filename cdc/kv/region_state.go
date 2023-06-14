@@ -34,9 +34,8 @@ type singleRegionInfo struct {
 	span   tablepb.Span
 	rpcCtx *tikv.RPCContext
 
-	requestedTable *requestedTable
-	lockedRange    *regionlock.LockedRange
-	createTime     time.Time
+	lockedRange *regionlock.LockedRange
+	createTime  time.Time
 }
 
 func newSingleRegionInfo(
@@ -64,13 +63,6 @@ type regionFeedState struct {
 	lastResolvedTs uint64
 
 	stopped atomic.Bool
-
-	// All region errors should be handled in region workers.
-	// `err` is used to retrieve errors generated outside.
-	err struct {
-		sync.Mutex
-		e error
-	}
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
@@ -92,20 +84,6 @@ func (s *regionFeedState) markStopped() {
 
 func (s *regionFeedState) isStopped() bool {
 	return s.stopped.Load()
-}
-
-func (s *regionFeedState) setError(err error) {
-	s.err.Lock()
-	defer s.err.Unlock()
-	s.err.e = err
-}
-
-func (s *regionFeedState) takeError() (err error) {
-	s.err.Lock()
-	defer s.err.Unlock()
-	err = s.err.e
-	s.err.e = nil
-	return
 }
 
 func (s *regionFeedState) isInitialized() bool {

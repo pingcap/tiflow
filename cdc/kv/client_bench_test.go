@@ -73,6 +73,10 @@ func (s *mockChangeDataService2) EventFeed(server cdcpb.ChangeData_EventFeedServ
 	return nil
 }
 
+func (s *mockChangeDataService2) MultiplexingEventFeed(server cdcpb.ChangeData_MultiplexingEventFeedServer) error {
+	return s.EventFeed(server)
+}
+
 func newMockService2(
 	ctx context.Context,
 	b *testing.B,

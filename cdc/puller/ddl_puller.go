@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -70,11 +69,6 @@ type ddlJobPullerImpl struct {
 	puller       struct {
 		Puller
 	}
-	multiplexingPuller struct {
-		*MultiplexingPuller
-		client      *kv.SharedClient
-		sortedDDLCh <-chan *model.RawKVEntry
-	}
 
 	kvStorage     tidbkv.Storage
 	schemaStorage entry.SchemaStorage
@@ -93,9 +87,8 @@ type ddlJobPullerImpl struct {
 func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 	if p.multiplexing {
 		return p.runMultiplexing(ctx)
-	} else {
-		return p.run(ctx)
 	}
+	return p.run(ctx)
 }
 
 func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model.RawKVEntry) error {
@@ -167,23 +160,7 @@ func (p *ddlJobPullerImpl) run(ctx context.Context) error {
 }
 
 func (p *ddlJobPullerImpl) runMultiplexing(ctx context.Context) error {
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.Go(func() error { return p.multiplexingPuller.client.Run(ctx) })
-	eg.Go(func() error { return p.multiplexingPuller.Run(ctx) })
-	eg.Go(func() error {
-		for {
-			var ddlRawKV *model.RawKVEntry
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case ddlRawKV = <-p.multiplexingPuller.sortedDDLCh:
-			}
-			if err := p.handleRawKVEntry(ctx, ddlRawKV); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	})
-	return eg.Wait()
+	return nil
 }
 
 // WaitForReady implements util.Runnable.
@@ -529,24 +506,6 @@ func NewDDLJobPuller(
 		outputCh:      make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
 	}
 	if jobPuller.multiplexing {
-		client := kv.NewSharedClient(
-			changefeed, cfg, ddlPullerFilterLoop,
-			pdCli, grpcPool, regionCache, pdClock, kvStorage,
-		)
-
-		rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)
-		consume := func(ctx context.Context, raw *model.RawKVEntry, _ []tablepb.Span) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case rawDDLCh <- raw:
-				return nil
-			}
-		}
-		jobPuller.multiplexingPuller.MultiplexingPuller = NewMultiplexingPuller(changefeed, client, consume)
-		jobPuller.multiplexingPuller.client = client
-		jobPuller.multiplexingPuller.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
-		jobPuller.multiplexingPuller.Subscribe("ddl", memorysorter.DDLPullerTableName, spans, checkpointTs)
 	} else {
 		jobPuller.puller.Puller = New(
 			ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock,

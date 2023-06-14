@@ -120,11 +120,13 @@ func newMockDDLJobPuller(
 	needSchemaStorage bool,
 ) (DDLJobPuller, *entry.SchemaTestHelper) {
 	res := &ddlJobPullerImpl{
-		puller: puller,
 		outputCh: make(
 			chan *model.DDLJobEntry,
 			defaultPullerOutputChanSize),
 	}
+	res.multiplexing = false
+	res.puller.Puller = puller
+
 	var helper *entry.SchemaTestHelper
 	if needSchemaStorage {
 		helper = entry.NewSchemaTestHelper(t)

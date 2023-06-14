@@ -228,6 +228,10 @@ loop:
 	return nil
 }
 
+func (s *mockChangeDataService) MultiplexingEventFeed(server cdcpb.ChangeData_MultiplexingEventFeedServer) error {
+	return s.EventFeed(server)
+}
+
 func newMockService(
 	ctx context.Context,
 	t *testing.T,
