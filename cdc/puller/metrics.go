@@ -17,6 +17,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// PullerEventCounter is the counter of puller's received events
+// There are two types of events: kv (row changed event), resolved (resolved ts event).
 var PullerEventCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Namespace: "ticdc",

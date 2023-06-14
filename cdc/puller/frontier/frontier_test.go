@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -303,8 +302,6 @@ func TestSpanFrontierDisjoinSpans(t *testing.T) {
 	require.Equal(t, `[1 @ 6] [2 @ 5] [f @ Max] `, f.String())
 	checkFrontier(t, f)
 }
-
-var c = prometheus.NewCounterVec(prometheus.CounterOpts{}, []string{"type"}).WithLabelValues("a")
 
 func TestSpanFrontierRandomly(t *testing.T) {
 	t.Parallel()
