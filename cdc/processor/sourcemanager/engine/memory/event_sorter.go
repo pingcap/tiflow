@@ -214,12 +214,6 @@ func (s *tableSorter) add(events ...*model.PolymorphicEvent) (resolvedTs model.T
 	return
 }
 
-func (s *tableSorter) getResolvedTs() model.Ts {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return *s.resolvedTs
-}
-
 func (s *tableSorter) fetch(
 	span tablepb.Span, lowerBound, upperBound engine.Position,
 ) engine.EventIterator {
