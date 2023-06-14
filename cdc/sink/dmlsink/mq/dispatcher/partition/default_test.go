@@ -193,13 +193,13 @@ func TestDefaultDispatcher(t *testing.T) {
 			IndexColumns: [][]int{{0}, {1}},
 		}, expectPartition: 3},
 	}
-	p := NewDefaultDispatcher(false)
+	p := NewDefaultDispatcher()
 	for _, tc := range testCases {
 		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row, 16))
 	}
 }
 
-func TestDefaultDispatcherWithOldValue(t *testing.T) {
+func TestDefaultDispatcherMultipleIndexColumns(t *testing.T) {
 	t.Parallel()
 
 	row := &model.RowChangedEvent{
@@ -221,6 +221,6 @@ func TestDefaultDispatcherWithOldValue(t *testing.T) {
 		IndexColumns: [][]int{{0}, {1}},
 	}
 
-	p := NewDefaultDispatcher(true)
+	p := NewDefaultDispatcher()
 	require.Equal(t, int32(3), p.DispatchRowChangedEvent(row, 16))
 }

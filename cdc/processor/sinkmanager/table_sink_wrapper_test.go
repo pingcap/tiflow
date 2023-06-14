@@ -247,7 +247,6 @@ func TestConvertRowChangedEventsNonHandleKeyColumnUpdated(t *testing.T) {
 			},
 		},
 	}
-	
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 	result, size, err := convertRowChangedEvents(changefeedID, span, events...)
