@@ -220,9 +220,8 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	p.sinkManager.r.UpdateBarrierTs(20, nil)
 	stats := p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
+	require.Equal(t, model.Ts(20), stats.ResolvedTs)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
-	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
-	require.Equal(t, model.Ts(20), stats.ReceivedMaxResolvedTs)
 	require.Len(t, p.sinkManager.r.GetAllCurrentTableSpans(), 1)
 	require.Equal(t, 1, p.sinkManager.r.GetAllCurrentTableSpansCount())
 
@@ -259,9 +258,8 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, ok)
 	stats = p.sinkManager.r.GetTableStats(span)
 	require.Equal(t, model.Ts(20), stats.CheckpointTs)
+	require.Equal(t, model.Ts(101), stats.ResolvedTs)
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
-	require.Equal(t, model.Ts(0), stats.ReceivedMaxCommitTs)
-	require.Equal(t, model.Ts(101), stats.ReceivedMaxResolvedTs)
 
 	// Start to replicate table-1.
 	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
