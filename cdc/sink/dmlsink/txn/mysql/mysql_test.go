@@ -1149,7 +1149,6 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 	defer cancel()
 	ms := newMySQLBackendWithoutDB(ctx)
 	ms.cfg.SafeMode = false
-	ms.cfg.EnableOldValue = true
 	for _, tc := range testCases {
 		ms.events = make([]*dmlsink.TxnCallbackableEvent, 1)
 		ms.events[0] = &dmlsink.TxnCallbackableEvent{
@@ -1621,7 +1620,6 @@ func TestPrepareBatchDMLs(t *testing.T) {
 	ms := newMySQLBackendWithoutDB(ctx)
 	ms.cfg.BatchDMLEnable = true
 	ms.cfg.SafeMode = false
-	ms.cfg.EnableOldValue = true
 	for _, tc := range testCases {
 		ms.cfg.IsTiDB = tc.isTiDB
 		ms.events = make([]*dmlsink.TxnCallbackableEvent, 1)

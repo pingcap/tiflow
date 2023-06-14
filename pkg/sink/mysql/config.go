@@ -112,7 +112,6 @@ type Config struct {
 	Timezone               string
 	TLS                    string
 	ForceReplicate         bool
-	EnableOldValue         bool
 
 	IsTiDB          bool // IsTiDB is true if the downstream is TiDB
 	SourceID        uint64
@@ -194,7 +193,6 @@ func (c *Config) Apply(
 	getBatchDMLEnable(urlParameter, &c.BatchDMLEnable)
 	getMultiStmtEnable(urlParameter, &c.MultiStmtEnable)
 	getCachePrepStmts(urlParameter, &c.CachePrepStmts)
-	c.EnableOldValue = replicaConfig.EnableOldValue
 	c.ForceReplicate = replicaConfig.ForceReplicate
 	c.SourceID = replicaConfig.Sink.TiDBSourceID
 

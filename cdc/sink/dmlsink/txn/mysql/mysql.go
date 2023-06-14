@@ -190,8 +190,7 @@ func NewMySQLBackends(
 	log.Info("MySQL backends is created",
 		zap.String("changefeed", changefeed),
 		zap.Int("workerCount", cfg.WorkerCount),
-		zap.Bool("forceReplicate", cfg.ForceReplicate),
-		zap.Bool("enableOldValue", cfg.EnableOldValue))
+		zap.Bool("forceReplicate", cfg.ForceReplicate))
 	return backends, nil
 }
 
@@ -527,7 +526,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 
 	// translateToInsert control the update and insert behavior
 	// we only translate into insert when old value is enabled and safe mode is disabled
-	translateToInsert := s.cfg.EnableOldValue && !s.cfg.SafeMode
+	translateToInsert := !s.cfg.SafeMode
 
 	rowCount := 0
 	approximateSize := int64(0)
@@ -550,7 +549,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			zap.Bool("translateToInsert", translateToInsert),
 			zap.Uint64("firstRowCommitTs", firstRow.CommitTs),
 			zap.Uint64("firstRowReplicatingTs", firstRow.ReplicatingTs),
-			zap.Bool("enableOldValue", s.cfg.EnableOldValue),
 			zap.Bool("safeMode", s.cfg.SafeMode))
 
 		if event.Callback != nil {
