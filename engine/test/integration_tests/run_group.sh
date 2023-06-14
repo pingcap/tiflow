@@ -13,7 +13,7 @@ group=$1
 # Putting multiple light tests together and heavy tests in a separate group.
 declare -A groups
 groups=(
-	["G00"]='dm_basic dm_case_sensitive dm_collation'
+	["G00"]='dm_basic dm_case_sensitive dm_collation dm_dump_sync_mode'
 	["G01"]='dm_full_mode dm_lightning_checkpoint dm_many_tables'
 	["G02"]="dm_many_tables_local dm_new_collation_off dm_sql_mode"
 	["G03"]="dm_tls e2e_fast_finished e2e_node_failure e2e_with_selectors"
