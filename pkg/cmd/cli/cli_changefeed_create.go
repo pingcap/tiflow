@@ -16,7 +16,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/fatih/color"
@@ -151,16 +150,6 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 		if err := o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 			return err
 		}
-	}
-
-	uri, err := url.Parse(o.commonChangefeedOptions.sinkURI)
-	if err != nil {
-		return err
-	}
-
-	err = cfg.AdjustEnableOldValueAndVerifyForceReplicate(uri)
-	if err != nil {
-		return err
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {
