@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -47,29 +46,39 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func init() {
+	serverConfig := config.GetGlobalServerConfig().Clone()
+	serverConfig.TZ = "UTC"
+	config.StoreGlobalServerConfig(serverConfig)
+}
+
 func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
 	cfg := pmysql.NewConfig()
 	cfg.BatchDMLEnable = false
 	return &mysqlBackend{
-		statistics: metrics.NewStatistics(ctx, sink.TxnSink),
-		cfg:        cfg,
+		statistics: metrics.NewStatistics(ctx,
+			model.DefaultChangeFeedID("test"),
+			sink.TxnSink),
+		cfg: cfg,
 	}
 }
 
 func newMySQLBackend(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	dbConnFactory pmysql.Factory,
 ) (*mysqlBackend, error) {
 	ctx1, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx1, sink.TxnSink)
+	statistics := metrics.NewStatistics(ctx1, changefeedID, sink.TxnSink)
 	cancel() // Cancel background goroutines in returned metrics.Statistics.
 	raw := sinkURI.Query()
 	raw.Set("batch-dml-enable", "true")
 	sinkURI.RawQuery = raw.Encode()
 
-	backends, err := NewMySQLBackends(ctx, sinkURI, replicaConfig, dbConnFactory, statistics)
+	backends, err := NewMySQLBackends(ctx, changefeedID,
+		sinkURI, replicaConfig, dbConnFactory, statistics)
 	if err != nil {
 		return nil, err
 	}
@@ -191,11 +200,11 @@ func TestAdjustSQLMode(t *testing.T) {
 	}
 
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1" +
 		"&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI, config.GetDefaultReplicaConfig(), mockGetDBConn)
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed),
+		sinkURI, config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
 }
@@ -255,10 +264,9 @@ func TestNewMySQLTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=1s&timeout=1s", addr))
 	require.Nil(t, err)
-	_, err = newMySQLBackend(ctx, sinkURI,
+	_, err = newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), pmysql.CreateMySQLDBConn)
 	require.Equal(t, driver.ErrBadConn, errors.Cause(err))
 }
@@ -290,7 +298,6 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	// TODO: Need to test txn sink behavior when cache-prep-stmts is true
 	// I did some attempts to write tests when cache-prep-stmts is true, but failed.
 	// The reason is that I can't find a way to prepare a statement in sqlmock connection,
@@ -298,7 +305,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 
@@ -417,11 +424,10 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
 
@@ -489,11 +495,10 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
 
@@ -563,11 +568,10 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConnErrDatabaseNotExists)
 	require.Nil(t, err)
 	sink.setDMLMaxRetry(2)
@@ -626,12 +630,11 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&safe-mode=false" +
 			"&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockDBInsertDupEntry)
 	require.Nil(t, err)
 	sink.setDMLMaxRetry(1)
@@ -674,11 +677,10 @@ func TestNewMySQLBackend(t *testing.T) {
 	defer cancel()
 
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1" +
 		"&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 
 	require.Nil(t, err)
@@ -709,12 +711,11 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	// See https://www.ietf.org/rfc/rfc2732.txt, we have to use brackets to wrap IPv6 address.
 	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=1" +
 		"&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
@@ -747,11 +748,10 @@ func TestGBKSupported(t *testing.T) {
 
 	ctx := context.Background()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1" +
 		"&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 
@@ -805,11 +805,10 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changefeed := "test-changefeed"
-	contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID(changefeed))
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
 	require.Nil(t, err)
-	sink, err := newMySQLBackend(ctx, sinkURI,
+	sink, err := newMySQLBackend(ctx, model.DefaultChangeFeedID(changefeed), sinkURI,
 		config.GetDefaultReplicaConfig(), mockGetDBConn)
 	require.Nil(t, err)
 

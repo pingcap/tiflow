@@ -190,7 +190,7 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 	cp.EtcdClient = etcdClient
 	server.capture = cp
 	require.Nil(t, err)
-	err = server.startStatusHTTP(context.TODO(), server.tcpServer.HTTP1Listener())
+	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	require.Nil(t, err)
 	defer func() {
 		require.Nil(t, server.statusServer.Close())
@@ -277,7 +277,7 @@ func TestServerTLSWithCommonNameAndRotate(t *testing.T) {
 	cp.EtcdClient = etcdClient
 	server.capture = cp
 	require.Nil(t, err)
-	err = server.startStatusHTTP(context.TODO(), server.tcpServer.HTTP1Listener())
+	err = server.startStatusHTTP(server.tcpServer.HTTP1Listener())
 	require.Nil(t, err)
 	defer func() {
 		require.Nil(t, server.statusServer.Close())

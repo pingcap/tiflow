@@ -79,6 +79,10 @@ type RedoApplier struct {
 	appliedLogCount    uint64
 
 	errCh chan error
+
+	// changefeedID is used to identify the changefeed that this applier belongs to.
+	// not used for now.
+	changefeedID model.ChangeFeedID
 }
 
 // NewRedoApplier creates a new RedoApplier instance
@@ -120,11 +124,11 @@ func (ra *RedoApplier) catchError(ctx context.Context) error {
 
 func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
 	replicaConfig := config.GetDefaultReplicaConfig()
-	ra.sinkFactory, err = dmlfactory.New(ctx, ra.cfg.SinkURI, replicaConfig, ra.errCh)
+	ra.sinkFactory, err = dmlfactory.New(ctx, ra.changefeedID, ra.cfg.SinkURI, replicaConfig, ra.errCh)
 	if err != nil {
 		return err
 	}
-	ra.ddlSink, err = ddlfactory.New(ctx, ra.cfg.SinkURI, replicaConfig)
+	ra.ddlSink, err = ddlfactory.New(ctx, ra.changefeedID, ra.cfg.SinkURI, replicaConfig)
 	if err != nil {
 		return err
 	}

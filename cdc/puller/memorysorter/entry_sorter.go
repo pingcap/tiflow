@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/notify"
 	"go.uber.org/zap"
@@ -42,19 +41,21 @@ type EntrySorter struct {
 
 	outputCh         chan *model.PolymorphicEvent
 	resolvedNotifier *notify.Notifier
+	changeFeedID     model.ChangeFeedID
 }
 
 // NewEntrySorter creates a new EntrySorter
-func NewEntrySorter() *EntrySorter {
+func NewEntrySorter(changeFeedID model.ChangeFeedID) *EntrySorter {
 	return &EntrySorter{
 		resolvedNotifier: new(notify.Notifier),
 		outputCh:         make(chan *model.PolymorphicEvent, 128000),
+		changeFeedID:     changeFeedID,
 	}
 }
 
 // Run runs EntrySorter
 func (es *EntrySorter) Run(ctx context.Context) error {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	changefeedID := es.changeFeedID
 	tableName := DDLPullerTableName
 	metricEntrySorterResolvedChanSizeGauge := entrySorterResolvedChanSizeGauge.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID, tableName)
@@ -182,9 +183,12 @@ func mergeEvents(kvsA []*model.PolymorphicEvent, kvsB []*model.PolymorphicEvent,
 
 // SortOutput receives a channel from a puller, then sort event and output to the channel returned.
 // Only for DDL puller.
-func SortOutput(ctx context.Context, input <-chan *model.RawKVEntry) <-chan *model.RawKVEntry {
+func SortOutput(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	input <-chan *model.RawKVEntry,
+) <-chan *model.RawKVEntry {
 	ctx, cancel := context.WithCancel(ctx)
-	sorter := NewEntrySorter()
+	sorter := NewEntrySorter(changefeedID)
 	outputCh := make(chan *model.RawKVEntry, 128)
 	output := func(rawKV *model.RawKVEntry) {
 		select {

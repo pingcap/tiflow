@@ -16,6 +16,7 @@ package ddlproducer
 import (
 	"context"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
@@ -35,4 +36,5 @@ type DDLProducer interface {
 }
 
 // Factory is a function to create a producer.
-type Factory func(ctx context.Context, factory kafka.Factory) (DDLProducer, error)
+type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
+	factory kafka.Factory) (DDLProducer, error)

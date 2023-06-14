@@ -112,7 +112,7 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 	log.Info("Try to create ddlSink based on sink",
 		zap.String("namespace", a.changefeedID.Namespace),
 		zap.String("changefeed", a.changefeedID.ID))
-	s, err := factory.New(ctx, a.info.SinkURI, a.info.Config)
+	s, err := factory.New(ctx, a.changefeedID, a.info.SinkURI, a.info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -88,7 +88,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 		return errors.Trace(p.puller.Run(ctx))
 	})
 
-	rawDDLCh := memorysorter.SortOutput(ctx, p.puller.Output())
+	rawDDLCh := memorysorter.SortOutput(ctx, p.changefeedID, p.puller.Output())
 	eg.Go(
 		func() error {
 			for {

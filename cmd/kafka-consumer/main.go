@@ -33,7 +33,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	ddlsinkfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -425,7 +424,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
-	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
+	config.GetGlobalServerConfig().TZ = timezone
 
 	c := new(Consumer)
 	c.tz = tz
@@ -473,6 +472,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	f, err := eventsinkfactory.New(
 		ctx,
+		model.DefaultChangeFeedID("test"),
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errChan,
@@ -495,6 +495,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	ddlSink, err := ddlsinkfactory.New(
 		ctx,
+		model.DefaultChangeFeedID("test"),
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 	)

@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	ddlfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -136,11 +135,13 @@ type consumer struct {
 }
 
 func newConsumer(ctx context.Context) (*consumer, error) {
-	tz, err := putil.GetTimezone(timezone)
+	_, err := putil.GetTimezone(timezone)
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
-	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
+	serverCfg := config.GetGlobalServerConfig().Clone()
+	serverCfg.TZ = timezone
+	config.StoreGlobalServerConfig(serverCfg)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	if len(configFile) > 0 {
 		err := util.StrictDecodeFile(configFile, "storage consumer", replicaConfig)
@@ -186,10 +187,10 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	errCh := make(chan error, 1)
-	stdCtx := contextutil.PutChangefeedIDInCtx(ctx,
-		model.DefaultChangeFeedID(defaultChangefeedName))
+	stdCtx := ctx
 	sinkFactory, err := dmlfactory.New(
 		stdCtx,
+		model.DefaultChangeFeedID(defaultChangefeedName),
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errCh,
@@ -199,7 +200,8 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		return nil, err
 	}
 
-	ddlSink, err := ddlfactory.New(ctx, downstreamURIStr, config.GetDefaultReplicaConfig())
+	ddlSink, err := ddlfactory.New(ctx, model.DefaultChangeFeedID(defaultChangefeedName),
+		downstreamURIStr, config.GetDefaultReplicaConfig())
 	if err != nil {
 		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err

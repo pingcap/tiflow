@@ -22,14 +22,16 @@ type BarrierWithMinTs struct {
 	// used to check whether there is a pending DDL job at the checkpointTs when
 	// initializing the changefeed.
 	MinTableBarrierTs model.Ts
+	RedoBarrierTs     model.Ts
 }
 
 // NewBarrierWithMinTs creates a new BarrierWithMinTs.
-func NewBarrierWithMinTs(ts model.Ts) BarrierWithMinTs {
-	return BarrierWithMinTs{
+func NewBarrierWithMinTs(ts model.Ts) *BarrierWithMinTs {
+	return &BarrierWithMinTs{
 		Barrier: &Barrier{
 			GlobalBarrierTs: ts,
 		},
 		MinTableBarrierTs: ts,
+		RedoBarrierTs:     ts,
 	}
 }

@@ -29,7 +29,10 @@ import (
 // Validate sink if given valid parameters.
 // TODO: For now, we create a real sink instance and validate it.
 // Maybe we should support the dry-run mode to validate sink.
-func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
+func Validate(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI string, cfg *config.ReplicaConfig,
+) error {
 	uri, err := preCheckSinkURI(sinkURI)
 	if err != nil {
 		return err
@@ -47,7 +50,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	s, err := factory.New(ctx, sinkURI, cfg, make(chan error))
+	s, err := factory.New(ctx, changefeedID, sinkURI, cfg, make(chan error))
 	if err != nil {
 		cancel()
 		return err
@@ -113,7 +116,7 @@ func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.R
 	}
 	cfg := pmysql.NewConfig()
 	id := model.ChangeFeedID{Namespace: "default", ID: "sink-verify"}
-	err = cfg.Apply(ctx, id, sinkURI, replicaConfig)
+	err = cfg.Apply(config.GetGlobalServerConfig().TZ, id, sinkURI, replicaConfig)
 	if err != nil {
 		return err
 	}

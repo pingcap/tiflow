@@ -38,6 +38,7 @@ type BatchEncoder struct {
 }
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
+	// set the `largeMessageOnlyHandleKeyColumns` to true to only encode handle key columns.
 	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, true)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
@@ -62,7 +63,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 	}
 
 	log.Warn("open-protocol: message too large, only send handle key columns",
-		zap.Any("keyMsg", keyMsg), zap.Any("valueMsg", valueMsg))
+		zap.Any("table", e.Table), zap.Uint64("commitTs", e.CommitTs))
 
 	return key, value, nil
 }

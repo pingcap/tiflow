@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -69,10 +70,10 @@ func newOwner4Test(
 	newSink func(model.ChangeFeedID, *model.ChangeFeedInfo, func(error), func(error)) DDLSink,
 	newScheduler func(
 		ctx cdcContext.Context, up *upstream.Upstream, changefeedEpoch uint64,
-		cfg *config.SchedulerConfig,
+		cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		ctx context.Context, changefeedID model.ChangeFeedID, sinkURIStr string, replCfg *config.ReplicaConfig,
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error),
 	pdClient pd.Client,
@@ -119,13 +120,14 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		// new scheduler
 		func(
 			ctx cdcContext.Context, up *upstream.Upstream, changefeedEpoch uint64,
-			cfg *config.SchedulerConfig,
+			cfg *config.SchedulerConfig, redoMetaAManager redo.MetaManager,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
 		},
 		// new downstream observer
 		func(
-			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			ctx context.Context, chnagefeedID model.ChangeFeedID,
+			sinkURIStr string, replCfg *config.ReplicaConfig,
 			opts ...observer.NewObserverOption,
 		) (observer.Observer, error) {
 			return observer.NewDummyObserver(), nil
