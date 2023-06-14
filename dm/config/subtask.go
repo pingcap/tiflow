@@ -51,6 +51,8 @@ const (
 	ModeAll       = "all"
 	ModeFull      = "full"
 	ModeIncrement = "incremental"
+	ModeDump      = "dump"
+	ModeLoadSync  = "load&sync"
 
 	DefaultShadowTableRules = "^_(.+)_(?:new|gho)$"
 	DefaultTrashTableRules  = "^_(.+)_(?:ghc|del|old)$"
@@ -324,7 +326,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	}
 
 	// adjust dir
-	if c.Mode == ModeAll || c.Mode == ModeFull {
+	if c.Mode != ModeIncrement {
 		// check
 		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
 		if isS3 && c.ImportMode == LoadModeLoader {

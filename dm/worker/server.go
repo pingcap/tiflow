@@ -925,7 +925,7 @@ func getMinLocInAllSubTasks(ctx context.Context, subTaskCfgs map[string]config.S
 }
 
 func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (minLoc *binlog.Location, err error) {
-	if subTaskCfg.Mode == config.ModeFull {
+	if subTaskCfg.Mode == config.ModeFull || subTaskCfg.Mode == config.ModeDump {
 		return nil, nil
 	}
 	subTaskCfg2, err := subTaskCfg.DecryptPassword()
