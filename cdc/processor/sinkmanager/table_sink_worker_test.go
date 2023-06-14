@@ -137,7 +137,7 @@ func (suite *tableSinkWorkerSuite) createWorker(
 	quota.ForceAcquire(testEventSize)
 	quota.AddTable(suite.testSpan)
 
-	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
+	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil, splitTxn), sortEngine
 }
 
 func (suite *tableSinkWorkerSuite) addEventsToSortEngine(

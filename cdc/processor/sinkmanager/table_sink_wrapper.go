@@ -408,7 +408,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
 func convertRowChangedEvents(
-	changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool,
+	changefeed model.ChangeFeedID, span tablepb.Span,
 	events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0
@@ -442,7 +442,7 @@ func convertRowChangedEvents(
 		// This indicates that it is an update event,
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
-		if e.Row.IsUpdate() && !enableOldValue {
+		if e.Row.IsUpdate() {
 			if shouldSplitUpdateEvent(e) {
 				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {
