@@ -44,8 +44,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	ctx := context.Background()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 	require.Equal(t, int32(1), options.PartitionNum)
 	require.Equal(t, int16(3), options.ReplicationFactor)
@@ -58,7 +57,8 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"),
+		sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 	require.Len(t, options.BrokerEndpoints, 3)
 
@@ -67,7 +67,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal max-message-bytes.
@@ -75,7 +75,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal partition-num.
@@ -83,7 +83,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Out of range partition-num.
@@ -91,7 +91,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
 
 	// Unknown required-acks.
@@ -99,7 +99,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid required acks 3.*", errors.Cause(err))
 
 	// invalid kafka client id
@@ -107,7 +107,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 }
 
@@ -183,8 +183,7 @@ func TestTimeout(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	ctx := context.Background()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 
 	require.Equal(t, 5*time.Second, options.DialTimeout)
@@ -203,7 +202,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 	// topic not exist, `max-message-bytes` = `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes()
 	ctx := context.Background()
-	saramaConfig, err := NewSaramaConfig(options)
+	saramaConfig, err := NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, "create-random1")
@@ -213,7 +212,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 
 	// topic not exist, `max-message-bytes` > `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 	err = AdjustOptions(ctx, adminClient, options, "create-random2")
 	require.Nil(t, err)
@@ -222,7 +221,7 @@ func TestAdjustConfigTopicNotExist(t *testing.T) {
 
 	// topic not exist, `max-message-bytes` < `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 	err = AdjustOptions(ctx, adminClient, options, "create-random3")
 	require.Nil(t, err)
@@ -241,7 +240,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes()
 
 	ctx := context.Background()
-	saramaConfig, err := NewSaramaConfig(options)
+	saramaConfig, err := NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -252,7 +251,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 	// topic exists, `max-message-bytes` > `max.message.bytes`
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() + 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -263,7 +262,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 
 	// topic exists, `max-message-bytes` < `max.message.bytes`
 	options.MaxMessageBytes = adminClient.GetTopicMaxMessageBytes() - 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, adminClient.GetDefaultMockTopicName())
@@ -278,14 +277,12 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	detail := &TopicDetail{
 		Name:          topicName,
 		NumPartitions: 3,
-		// Does not contain `max.message.bytes`.
-		ConfigEntries: make(map[string]string),
 	}
 	err = adminClient.CreateTopic(context.Background(), detail, false)
 	require.Nil(t, err)
 
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() - 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, topicName)
@@ -298,7 +295,7 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	// When the topic exists, but the topic doesn't have `max.message.bytes`
 	// `max-message-bytes` > `message.max.bytes`
 	options.MaxMessageBytes = adminClient.GetBrokerMessageMaxBytes() + 1
-	saramaConfig, err = NewSaramaConfig(options)
+	saramaConfig, err = NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 
 	err = AdjustOptions(ctx, adminClient, options, topicName)
@@ -387,7 +384,7 @@ func TestSkipAdjustConfigMinInsyncReplicasWhenRequiredAcksIsNotWailAll(t *testin
 func TestCreateProducerFailed(t *testing.T) {
 	options := NewOptions()
 	options.Version = "invalid"
-	saramaConfig, err := NewSaramaConfig(options)
+	saramaConfig, err := NewSaramaConfig(context.Background(), options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
 	require.Nil(t, saramaConfig)
 }
@@ -595,14 +592,14 @@ func TestConfigurationCombinations(t *testing.T) {
 
 		ctx := context.Background()
 		options := NewOptions()
-		err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+		err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 		require.Nil(t, err)
 
 		changefeed := model.DefaultChangeFeedID("changefeed-test")
 		factory, err := NewMockFactory(options, changefeed)
 		require.NoError(t, err)
 
-		adminClient, err := factory.AdminClient()
+		adminClient, err := factory.AdminClient(ctx)
 		require.NoError(t, err)
 
 		topic, ok := a.uriParams[0].(string)
@@ -612,7 +609,9 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Nil(t, err)
 
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
-		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{})
+		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{
+			Sink: &config.SinkConfig{},
+		})
 		require.Nil(t, err)
 		encoderConfig.WithMaxMessageBytes(options.MaxMessageBytes)
 
@@ -662,7 +661,7 @@ func TestMerge(t *testing.T) {
 		Key:                       aws.String("key.pem"),
 	}
 	c := NewOptions()
-	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
+	err = c.Apply(model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, int32(12), c.PartitionNum)
 	require.Equal(t, int16(5), c.ReplicationFactor)
@@ -743,7 +742,7 @@ func TestMerge(t *testing.T) {
 		Key:                       aws.String("key2.pem"),
 	}
 	c = NewOptions()
-	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
+	err = c.Apply(model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, int32(12), c.PartitionNum)
 	require.Equal(t, int16(5), c.ReplicationFactor)

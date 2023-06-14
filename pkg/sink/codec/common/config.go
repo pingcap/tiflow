@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +38,13 @@ type Config struct {
 	MaxMessageBytes int
 	MaxBatchSize    int
 
+	// DeleteOnlyHandleKeyColumns is true, for the delete event only output the handle key columns.
+	DeleteOnlyHandleKeyColumns bool
+
+	// LargeMessageOnlyHandleKeyColumns is true,
+	// for message large then the MaxMessageBytes only output the handle key columns.
+	LargeMessageOnlyHandleKeyColumns bool
+
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
 
@@ -45,6 +53,10 @@ type Config struct {
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
 
+	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
+	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
+	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
+	// exposed to the outside users.
 	AvroEnableWatermark bool
 
 	// for sinking to cloud storage
@@ -74,7 +86,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroBigintUnsignedHandlingMode: "long",
 		AvroEnableWatermark:            false,
 
-		OnlyOutputUpdatedColumns: false,
+		OnlyOutputUpdatedColumns:   false,
+		DeleteOnlyHandleKeyColumns: false,
 	}
 }
 
@@ -157,7 +170,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	if replicaConfig.Sink != nil {
-		c.Terminator = replicaConfig.Sink.Terminator
+		c.Terminator = util.GetOrZero(replicaConfig.Sink.Terminator)
 		if replicaConfig.Sink.CSVConfig != nil {
 			c.Delimiter = replicaConfig.Sink.CSVConfig.Delimiter
 			c.Quote = replicaConfig.Sink.CSVConfig.Quote
@@ -179,6 +192,14 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
 
+	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
+	c.LargeMessageOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns)
+	if c.LargeMessageOnlyHandleKeyColumns {
+		log.Warn("large message only handle key columns is enabled, "+
+			"if the full message's size is larger than max-message-bytes, only send the handle key columns",
+			zap.Any("protocol", c.Protocol))
+	}
+
 	return nil
 }
 
@@ -188,7 +209,7 @@ func mergeConfig(
 ) (*urlConfig, error) {
 	dest := &urlConfig{}
 	if replicaConfig.Sink != nil {
-		dest.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
+		dest.AvroSchemaRegistry = util.GetOrZero(replicaConfig.Sink.SchemaRegistry)
 		dest.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
 		if replicaConfig.Sink.KafkaConfig != nil {
 			dest.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes

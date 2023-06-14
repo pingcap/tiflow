@@ -23,6 +23,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
@@ -37,12 +38,13 @@ const (
 
 // TableCol denotes the column info for a table definition.
 type TableCol struct {
-	Name      string `json:"ColumnName" `
-	Tp        string `json:"ColumnType"`
-	Precision string `json:"ColumnPrecision,omitempty"`
-	Scale     string `json:"ColumnScale,omitempty"`
-	Nullable  string `json:"ColumnNullable,omitempty"`
-	IsPK      string `json:"ColumnIsPk,omitempty"`
+	Name      string      `json:"ColumnName" `
+	Tp        string      `json:"ColumnType"`
+	Default   interface{} `json:"ColumnDefault,omitempty"`
+	Precision string      `json:"ColumnPrecision,omitempty"`
+	Scale     string      `json:"ColumnScale,omitempty"`
+	Nullable  string      `json:"ColumnNullable,omitempty"`
+	IsPK      string      `json:"ColumnIsPk,omitempty"`
 }
 
 // FromTiColumnInfo converts from TiDB ColumnInfo to TableCol.
@@ -71,6 +73,7 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	if mysql.HasNotNullFlag(col.GetFlag()) {
 		t.Nullable = "false"
 	}
+	t.Default = entry.GetDDLDefaultDefinition(col)
 
 	switch col.GetType() {
 	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDuration:
@@ -110,6 +113,7 @@ func (t *TableCol) ToTiColumnInfo() (*timodel.ColumnInfo, error) {
 	if t.Nullable == "false" {
 		col.AddFlag(mysql.NotNullFlag)
 	}
+	col.DefaultValue = t.Default
 	if strings.Contains(t.Tp, "BLOB") || strings.Contains(t.Tp, "BINARY") {
 		col.SetCharset(charset.CharsetBin)
 	} else {

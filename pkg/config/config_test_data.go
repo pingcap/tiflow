@@ -19,8 +19,10 @@ const (
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
+  "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
   "filter": {
@@ -35,6 +37,7 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "terminator": "\r\n",
+	"date-separator": "day",
     "dispatch-rules": [
       {
         "db-name": "a",
@@ -53,7 +56,11 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol"
+    "protocol": "open-protocol",
+	"enable-kafka-sink-v2": false,
+	"only-output-updated-columns": false,
+	"delete-only-output-handle-key-columns": false,
+	"large-message-only-handle-key-columns": false
   },
   "consistent": {
     "level": "none",
@@ -92,8 +99,9 @@ const (
   "owner-flush-interval": 50000000,
   "processor-flush-interval": 50000000,
   "sorter": {
-    "max-memory-percentage": 10,
     "sort-dir": "/tmp/sorter",
+    "cache-size-in-mb": 128,
+    "max-memory-percentage": 10,
     "max-memory-consumption": 0,
     "num-workerpool-goroutine": 0,
     "num-concurrent-worker": 0,
@@ -156,6 +164,7 @@ const (
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
+  "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
   "bdr-mode": false,
@@ -173,7 +182,6 @@ const (
   },
   "sink": {
   	"encoder-concurrency": 16,
-    "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [
       {
@@ -186,21 +194,21 @@ const (
         ]
       }
     ],
-    "schema-registry": "",
     "csv": {
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
       "include-commit-ts": true
     },
-    "transaction-atomicity": "",
-    "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "only-output-updated-columns": false,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
+	"delete-only-output-handle-key-columns": true,
+	"large-message-only-handle-key-columns": true,
     "safe-mode": true,
+	"terminator": "\r\n",
+	"transaction-atomicity": "",
     "kafka-config": {
       "partition-num": 1,
       "replication-factor": 1,
@@ -284,6 +292,7 @@ const (
   "case-sensitive": false,
   "enable-old-value": true,
   "force-replicate": true,
+  "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
   "bdr-mode": false,
@@ -319,12 +328,14 @@ const (
       "null": "\\N",
       "include-commit-ts": true
     },
-    "terminator": "",
+    "terminator": "\r\n",
+	"transaction-atomicity": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "only-output-updated-columns": false,
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
+	"delete-only-output-handle-key-columns": true,
+	"large-message-only-handle-key-columns": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,

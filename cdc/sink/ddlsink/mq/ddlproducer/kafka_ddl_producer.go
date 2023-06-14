@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -45,10 +44,11 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory) (DDLProducer, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
-	syncProducer, err := factory.SyncProducer()
+func NewKafkaDDLProducer(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	factory kafka.Factory,
+) (DDLProducer, error) {
+	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}

@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -30,7 +29,10 @@ import (
 // Validate sink if given valid parameters.
 // TODO: For now, we create a real sink instance and validate it.
 // Maybe we should support the dry-run mode to validate sink.
-func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
+func Validate(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI string, cfg *config.ReplicaConfig,
+) error {
 	uri, err := preCheckSinkURI(sinkURI)
 	if err != nil {
 		return err
@@ -40,15 +42,15 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 		return err
 	}
 
-	if cfg.BDRMode {
+	if util.GetOrZero(cfg.BDRMode) {
 		err := checkBDRMode(ctx, uri, cfg)
 		if err != nil {
 			return err
 		}
 	}
 
-	ctx, cancel := context.WithCancel(contextutil.PutRoleInCtx(ctx, util.RoleClient))
-	s, err := factory.New(ctx, sinkURI, cfg, make(chan error))
+	ctx, cancel := context.WithCancel(ctx)
+	s, err := factory.New(ctx, changefeedID, sinkURI, cfg, make(chan error))
 	if err != nil {
 		cancel()
 		return err
@@ -65,7 +67,8 @@ func checkSyncPointSchemeCompatibility(
 	uri *url.URL,
 	cfg *config.ReplicaConfig,
 ) error {
-	if cfg.EnableSyncPoint && !sink.IsMySQLCompatibleScheme(uri.Scheme) {
+	if util.GetOrZero(cfg.EnableSyncPoint) &&
+		!sink.IsMySQLCompatibleScheme(uri.Scheme) {
 		return cerror.ErrSinkURIInvalid.
 			GenWithStack(
 				"sink uri scheme is not supported with syncpoint enabled"+
@@ -112,8 +115,8 @@ func checkBDRMode(ctx context.Context, sinkURI *url.URL, replicaConfig *config.R
 			GenWithStack("sink uri scheme is not supported in BDR mode, sink uri: %s", maskSinkURI)
 	}
 	cfg := pmysql.NewConfig()
-	id := model.DefaultChangeFeedID("sink-verify")
-	err = cfg.Apply(ctx, id, sinkURI, replicaConfig)
+	id := model.ChangeFeedID{Namespace: "default", ID: "sink-verify"}
+	err = cfg.Apply(config.GetGlobalServerConfig().TZ, id, sinkURI, replicaConfig)
 	if err != nil {
 		return err
 	}

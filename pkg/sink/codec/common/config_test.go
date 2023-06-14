@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,7 +46,7 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 
 	// avro, all requirement satisfied, should return no error
-	replicaConfig.Sink.SchemaRegistry = "some-schema-registry"
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("some-schema-registry")
 
 	uri := "kafka://127.0.0.1:9092/abc?protocol=avro&enable-tidb-extension=true&" +
 		"avro-decimal-handling-mode=string&avro-bigint-unsigned-handling-mode=string"
@@ -102,7 +103,7 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 	c = NewConfig(p)
 
 	replicaConfig = config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.SchemaRegistry = "some-schema-registry"
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("some-schema-registry")
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 
@@ -132,6 +133,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.True(t, c.EnableTiDBExtension)
+	require.False(t, c.DeleteOnlyHandleKeyColumns)
 
 	err = c.Validate()
 	require.NoError(t, err)
@@ -178,7 +180,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = c.Validate()
 	require.ErrorContains(t, err, `Avro protocol requires parameter "schema-registry"`)
 
-	replicaConfig.Sink.SchemaRegistry = "this-is-a-uri"
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("this-is-a-uri")
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, "this-is-a-uri", c.AvroSchemaRegistry)
@@ -280,6 +282,18 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Validate()
 	require.ErrorContains(t, err, "invalid max-batch-size -1")
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=open-protocol"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	c = NewConfig(config.ProtocolOpen)
+	replicaConfig = config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = util.AddressOf(true)
+	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = util.AddressOf(true)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, c.DeleteOnlyHandleKeyColumns)
 }
 
 func TestMergeConfig(t *testing.T) {
@@ -309,7 +323,9 @@ func TestMergeConfig(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
-	replicaConfig.Sink.SchemaRegistry = "abc"
+	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
+	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abc")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(123),
 		CodecConfig: &config.CodecConfig{
@@ -341,7 +357,9 @@ func TestMergeConfig(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(false)
-	replicaConfig.Sink.SchemaRegistry = "abcd"
+	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
+	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abcd")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(1233),
 		CodecConfig: &config.CodecConfig{

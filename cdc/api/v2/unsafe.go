@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 )
@@ -87,8 +86,8 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 	}
 
 	txnResolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage),
-		model.DefaultChangeFeedID("changefeed-client"),
-		util.RoleClient)
+		// a fake changefeed id and namespace
+		model.ChangeFeedID{ID: "changefeed-client", Namespace: "default"})
 	err = txnResolver.Resolve(c, resolveLockReq.RegionID, resolveLockReq.Ts)
 	if err != nil {
 		_ = c.Error(err)

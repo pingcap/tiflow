@@ -155,7 +155,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	cfStatus, err := statusProvider.GetChangeFeedStatus(ctx,
-		model.DefaultChangeFeedID(cfg.ID))
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		ctx,
 		pdClient,
 		ensureGCServiceID,
-		model.DefaultChangeFeedID(cfg.ID),
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
 		ensureTTL, cfg.StartTs); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
@@ -205,32 +205,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, err
 	}
-	if !replicaCfg.EnableOldValue {
-		sinkURIParsed, err := url.Parse(cfg.SinkURI)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-		}
 
-		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
-		if protocol != "" {
-			replicaCfg.Sink.Protocol = protocol
-		}
-		for _, fp := range config.ForceEnableOldValueProtocols {
-			if replicaCfg.Sink.Protocol == fp {
-				log.Warn(
-					"Attempting to replicate without old value enabled. "+
-						"CDC will enable old value and continue.",
-					zap.String("protocol", replicaCfg.Sink.Protocol))
-				replicaCfg.EnableOldValue = true
-				break
-			}
-		}
-
-		if replicaCfg.ForceReplicate {
-			return nil, cerror.ErrOldValueNotEnabled.GenWithStackByArgs(
-				"if use force replicate, old value feature must be enabled")
-		}
-	}
 	f, err := filter.NewFilter(replicaCfg, "")
 	if err != nil {
 		return nil, errors.Cause(err)
@@ -253,7 +228,9 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := validator.Validate(ctx, cfg.SinkURI, replicaCfg); err != nil {
+	if err := validator.Validate(ctx,
+		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
+		cfg.SinkURI, replicaCfg); err != nil {
 		return nil, err
 	}
 
@@ -377,7 +354,9 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		if err := validator.Validate(ctx, newInfo.SinkURI, newInfo.Config); err != nil {
+		if err := validator.Validate(ctx,
+			model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
+			newInfo.SinkURI, newInfo.Config); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
@@ -428,7 +407,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 		ctx,
 		pdClient,
 		gcServiceID,
-		model.DefaultChangeFeedID(changefeedID.ID),
+		changefeedID,
 		gcTTL, checkpointTs)
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {

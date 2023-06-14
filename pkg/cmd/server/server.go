@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/server"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
@@ -79,23 +78,7 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().DurationVar((*time.Duration)(&o.serverConfig.ProcessorFlushInterval), "processor-flush-interval", time.Duration(o.serverConfig.ProcessorFlushInterval), "processor flushes task status interval")
 	_ = cmd.Flags().MarkHidden("processor-flush-interval")
 
-	// sorter related parameters, hidden them since cannot be configured by TiUP easily.
-	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter-num-workerpool-goroutine", o.serverConfig.Sorter.NumWorkerPoolGoroutine, "sorter workerpool size")
-	_ = cmd.Flags().MarkHidden("sorter-num-workerpool-goroutine")
-
-	cmd.Flags().IntVar(&o.serverConfig.Sorter.NumConcurrentWorker, "sorter-num-concurrent-worker", o.serverConfig.Sorter.NumConcurrentWorker, "sorter concurrency level")
-	_ = cmd.Flags().MarkHidden("sorter-num-concurrent-worker")
-
-	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.ChunkSizeLimit, "sorter-chunk-size-limit", o.serverConfig.Sorter.ChunkSizeLimit, "size of heaps for sorting")
-	_ = cmd.Flags().MarkHidden("sorter-chunk-size-limit")
-
 	// 80 is safe on most systems.
-	cmd.Flags().IntVar(&o.serverConfig.Sorter.MaxMemoryPercentage, "sorter-max-memory-percentage", o.serverConfig.Sorter.MaxMemoryPercentage, "system memory usage threshold for forcing in-disk sort")
-	_ = cmd.Flags().MarkHidden("sorter-max-memory-percentage")
-	// We use 8GB as a safe default before we support local configuration file.
-	cmd.Flags().Uint64Var(&o.serverConfig.Sorter.MaxMemoryConsumption, "sorter-max-memory-consumption", o.serverConfig.Sorter.MaxMemoryConsumption, "maximum memory consumption of in-memory sort")
-	_ = cmd.Flags().MarkHidden("sorter-max-memory-consumption")
-
 	// sort-dir id deprecate, hidden it.
 	cmd.Flags().StringVar(&o.serverConfig.Sorter.SortDir, "sort-dir", o.serverConfig.Sorter.SortDir, "sorter's temporary file directory")
 	_ = cmd.Flags().MarkHidden("sort-dir")
@@ -121,14 +104,13 @@ func (o *options) run(cmd *cobra.Command) error {
 	})
 	defer cancel()
 
-	tz, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
+	_, err := ticdcutil.GetTimezone(o.serverConfig.TZ)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
 
 	config.StoreGlobalServerConfig(o.serverConfig)
-	ctx := contextutil.PutTimezoneInCtx(cmdcontext.GetDefaultContext(), tz)
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, o.serverConfig.AdvertiseAddr)
+	ctx := cmdcontext.GetDefaultContext()
 
 	version.LogVersionInfo("Change Data Capture (CDC)")
 	if ticdcutil.FailpointBuild {
@@ -205,16 +187,6 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.OwnerFlushInterval = o.serverConfig.OwnerFlushInterval
 		case "processor-flush-interval":
 			cfg.ProcessorFlushInterval = o.serverConfig.ProcessorFlushInterval
-		case "sorter-num-workerpool-goroutine":
-			cfg.Sorter.NumWorkerPoolGoroutine = o.serverConfig.Sorter.NumWorkerPoolGoroutine
-		case "sorter-num-concurrent-worker":
-			cfg.Sorter.NumConcurrentWorker = o.serverConfig.Sorter.NumConcurrentWorker
-		case "sorter-chunk-size-limit":
-			cfg.Sorter.ChunkSizeLimit = o.serverConfig.Sorter.ChunkSizeLimit
-		case "sorter-max-memory-percentage":
-			cfg.Sorter.MaxMemoryPercentage = o.serverConfig.Sorter.MaxMemoryPercentage
-		case "sorter-max-memory-consumption":
-			cfg.Sorter.MaxMemoryConsumption = o.serverConfig.Sorter.MaxMemoryConsumption
 		case "ca":
 			cfg.Security.CAPath = o.serverConfig.Security.CAPath
 		case "cert":

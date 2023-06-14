@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -77,9 +76,10 @@ func NewDisabledMetaManager() *metaManager {
 
 // NewMetaManagerWithInit creates a new Manager and initializes the meta.
 func NewMetaManagerWithInit(
-	ctx context.Context, cfg *config.ConsistentConfig, startTs model.Ts,
+	ctx context.Context, changefeedID model.ChangeFeedID,
+	cfg *config.ConsistentConfig, startTs model.Ts,
 ) (*metaManager, error) {
-	m, err := NewMetaManager(ctx, cfg)
+	m, err := NewMetaManager(ctx, changefeedID, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -109,15 +109,17 @@ func NewMetaManagerWithInit(
 }
 
 // NewMetaManager creates a new meta Manager.
-func NewMetaManager(ctx context.Context, cfg *config.ConsistentConfig) (*metaManager, error) {
+func NewMetaManager(ctx context.Context, changefeedID model.ChangeFeedID,
+	cfg *config.ConsistentConfig,
+) (*metaManager, error) {
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
 		return &metaManager{enabled: false}, nil
 	}
 
 	m := &metaManager{
-		captureID:         contextutil.CaptureAddrFromCtx(ctx),
-		changeFeedID:      contextutil.ChangefeedIDFromCtx(ctx),
+		captureID:         config.GetGlobalServerConfig().AdvertiseAddr,
+		changeFeedID:      changefeedID,
 		uuidGenerator:     uuid.NewGenerator(),
 		enabled:           true,
 		flushIntervalInMs: cfg.FlushIntervalInMs,

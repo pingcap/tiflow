@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
@@ -69,6 +68,7 @@ type dmlSink struct {
 
 func newDMLSink(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	producer dmlproducer.DMLProducer,
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
@@ -77,15 +77,13 @@ func newDMLSink(
 	encoderConcurrency int,
 	errCh chan error,
 ) (*dmlSink, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
 
@@ -164,6 +162,12 @@ func (s *dmlSink) Close() {
 		s.cancel()
 	}
 	s.wg.Wait()
+
+	s.alive.RLock()
+	if s.alive.topicManager != nil {
+		s.alive.topicManager.Close()
+	}
+	s.alive.RUnlock()
 
 	if s.adminClient != nil {
 		s.adminClient.Close()

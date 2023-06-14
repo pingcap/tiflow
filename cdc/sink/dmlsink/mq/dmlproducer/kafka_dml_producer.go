@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -50,16 +49,18 @@ type kafkaDMLProducer struct {
 	// failpointCh is used to inject failpoints to the run loop.
 	// Only used in test.
 	failpointCh chan error
+
+	cancel context.CancelFunc
 }
 
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	factory kafka.Factory,
 	adminClient kafka.ClusterAdminClient,
 	errCh chan error,
 ) (DMLProducer, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting kafka DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
@@ -74,6 +75,8 @@ func NewKafkaDMLProducer(
 	metricsCollector := factory.MetricsCollector(
 		util.RoleProcessor,
 		adminClient)
+
+	ctx, cancel := context.WithCancel(ctx)
 	k := &kafkaDMLProducer{
 		id:               changefeedID,
 		asyncProducer:    asyncProducer,
@@ -81,6 +84,7 @@ func NewKafkaDMLProducer(
 		closed:           false,
 		closedChan:       closeCh,
 		failpointCh:      failpointCh,
+		cancel:           cancel,
 	}
 
 	// Start collecting metrics.
@@ -146,6 +150,10 @@ func (k *kafkaDMLProducer) Close() {
 			zap.String("changefeed", k.id.ID))
 		return
 	}
+	if k.cancel != nil {
+		k.cancel()
+	}
+
 	close(k.failpointCh)
 	// Notify the run loop to exit.
 	close(k.closedChan)

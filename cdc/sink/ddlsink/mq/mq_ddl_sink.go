@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
@@ -61,15 +60,14 @@ type DDLSink struct {
 }
 
 func newDDLSink(ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	producer ddlproducer.DDLProducer,
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
 ) (*DDLSink, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -81,7 +79,7 @@ func newDDLSink(ctx context.Context,
 		topicManager:   topicManager,
 		encoderBuilder: encoderBuilder,
 		producer:       producer,
-		statistics:     metrics.NewStatistics(ctx, sink.RowSink),
+		statistics:     metrics.NewStatistics(ctx, changefeedID, sink.RowSink),
 		admin:          adminClient,
 	}
 
@@ -183,6 +181,9 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 func (k *DDLSink) Close() {
 	if k.producer != nil {
 		k.producer.Close()
+	}
+	if k.topicManager != nil {
+		k.topicManager.Close()
 	}
 	if k.admin != nil {
 		k.admin.Close()

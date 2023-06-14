@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -25,12 +24,12 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/errno"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -41,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/atomic"
@@ -50,7 +50,7 @@ import (
 // newSchedulerFromCtx creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newSchedulerFromCtx(
-	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -58,14 +58,14 @@ func newSchedulerFromCtx(
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	ret, err = scheduler.NewScheduler(
-		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRev, epoch, up, cfg)
+		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRev, epoch, up, cfg, redoMetaManager)
 	return ret, errors.Trace(err)
 }
 
 func newScheduler(
-	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 ) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, up, epoch, cfg)
+	return newSchedulerFromCtx(ctx, up, epoch, cfg, redoMetaManager)
 }
 
 type changefeed struct {
@@ -137,11 +137,13 @@ type changefeed struct {
 	) DDLSink
 
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 	) (scheduler.Scheduler, error)
 
 	newDownstreamObserver func(
-		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		ctx context.Context,
+		changefeedID model.ChangeFeedID,
+		sinkURIStr string, replCfg *config.ReplicaConfig,
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error)
 
@@ -191,10 +193,12 @@ func newChangefeed4Test(
 		reportError func(err error), reportWarning func(err error),
 	) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig,
+		ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 	) (scheduler.Scheduler, error),
 	newDownstreamObserver func(
-		ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+		ctx context.Context,
+		changefeedID model.ChangeFeedID,
+		sinkURIStr string, replCfg *config.ReplicaConfig,
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error),
 ) *changefeed {
@@ -215,7 +219,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	for !noMoreWarnings {
 		select {
 		case err := <-c.warningCh:
-			c.handleWarning(ctx, err)
+			c.handleWarning(err)
 		default:
 			noMoreWarnings = true
 		}
@@ -268,14 +272,14 @@ func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 	}
 	c.feedStateManager.handleError(&model.RunningError{
 		Time:    time.Now(),
-		Addr:    contextutil.CaptureAddrFromCtx(ctx),
+		Addr:    config.GetGlobalServerConfig().AdvertiseAddr,
 		Code:    code,
 		Message: err.Error(),
 	})
 	c.releaseResources(ctx)
 }
 
-func (c *changefeed) handleWarning(ctx cdcContext.Context, err error) {
+func (c *changefeed) handleWarning(err error) {
 	log.Warn("an warning occurred in Owner",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID), zap.Error(err))
@@ -288,7 +292,7 @@ func (c *changefeed) handleWarning(ctx cdcContext.Context, err error) {
 
 	c.feedStateManager.handleWarning(&model.RunningError{
 		Time:    time.Now(),
-		Addr:    contextutil.CaptureAddrFromCtx(ctx),
+		Addr:    config.GetGlobalServerConfig().AdvertiseAddr,
 		Code:    code,
 		Message: err.Error(),
 	})
@@ -309,10 +313,10 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs
 
 func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
 	adminJobPending := c.feedStateManager.Tick(c.state)
-	checkpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
+	preCheckpointTs := c.state.Info.GetCheckpointTs(c.state.Status)
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure all changefeeds, no matter whether they are running or not, will be checked.
-	if err := c.checkStaleCheckpointTs(ctx, checkpointTs); err != nil {
+	if err := c.checkStaleCheckpointTs(ctx, preCheckpointTs); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -341,63 +345,43 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	// TODO: pass table checkpointTs when we support concurrent process ddl
-	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, checkpointTs, nil)
+	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	otherBarrierTs, err := c.handleBarrier(ctx)
+	err = c.handleBarrier(ctx, barrier)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	// If there are other barriers less than ddl barrier,
-	// we should wait for them.
-	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
-	// but we can ignore them because they will be handled in the processor.
-	if barrier.GlobalBarrierTs > otherBarrierTs {
-		log.Debug("There are other barriers less than ddl barrier, wait for them",
-			zap.Uint64("otherBarrierTs", otherBarrierTs),
-			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		barrier.GlobalBarrierTs = otherBarrierTs
-	}
-
-	if barrier.minDDLBarrierTs > otherBarrierTs {
-		log.Debug("There are other barriers less than min table barrier, wait for them",
-			zap.Uint64("otherBarrierTs", otherBarrierTs),
-			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		barrier.minDDLBarrierTs = otherBarrierTs
 	}
 
 	log.Debug("owner handles barrier",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
-		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
+		zap.Uint64("preCheckpointTs", preCheckpointTs),
+		zap.Uint64("preResolvedTs", c.state.Status.ResolvedTs),
 		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
-		zap.Uint64("minTableBarrierTs", barrier.minDDLBarrierTs),
+		zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
 		zap.Any("tableBarrier", barrier.TableBarriers))
 
-	if barrier.GlobalBarrierTs < checkpointTs {
+	if barrier.GlobalBarrierTs < preCheckpointTs {
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
 		return nil
 	}
 
-	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
-		ctx, checkpointTs, allPhysicalTables, captures, barrier.Barrier)
-	costTime := time.Since(startTime)
-	if costTime > schedulerLogsWarnDuration {
-		log.Warn("scheduler tick took too long",
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID), zap.Duration("duration", costTime))
-	}
+		ctx, preCheckpointTs, allPhysicalTables, captures,
+		barrier)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	pdTime, _ := c.upstream.PDClock.CurrentTime()
+	pdTime, err := c.upstream.PDClock.CurrentTime()
+	if err != nil {
+		log.Warn("There is error in pd clock, use local time as pd time", zap.Error(err))
+	}
 	currentTs := oracle.GetPhysical(pdTime)
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
@@ -411,45 +395,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	// If the owner is just initialized, the newResolvedTs may be max uint64.
-	// In this case, we should not update the resolved ts.
-	if newResolvedTs == math.MaxUint64 {
-		newResolvedTs = c.state.Status.ResolvedTs
-	}
-
-	// If the owner is just initialized, minTableBarrierTs can be `checkpointTs-1`.
-	// In such case the `newCheckpointTs` may be larger than the minTableBarrierTs,
-	// but it shouldn't be, so we need to handle it here.
-	if newCheckpointTs > barrier.minDDLBarrierTs {
-		newCheckpointTs = barrier.minDDLBarrierTs
-	}
-
 	prevResolvedTs := c.state.Status.ResolvedTs
-	if c.redoMetaMgr.Enabled() {
-		if newResolvedTs > barrier.redoBarrierTs {
-			newResolvedTs = barrier.redoBarrierTs
-		}
-		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
-		// we can only upload it to etcd after it has been flushed into redo meta.
-		// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
-		c.redoMetaMgr.UpdateMeta(newCheckpointTs, newResolvedTs)
-		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
-		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
-		log.Debug("owner gets flushed meta",
-			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
-			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
-			zap.Uint64("newResolvedTs", newResolvedTs),
-			zap.Uint64("newCheckpointTs", newCheckpointTs),
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID))
-		if flushedResolvedTs != 0 {
-			// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
-			// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
-			newResolvedTs = flushedResolvedTs
-		} else {
-			newResolvedTs = prevResolvedTs
-		}
-	}
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", prevResolvedTs),
 		zap.Uint64("newResolvedTs", newResolvedTs),
@@ -463,8 +409,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	// MinTableBarrierTs should never regress
-	if barrier.minDDLBarrierTs < c.state.Status.MinTableBarrierTs {
-		barrier.minDDLBarrierTs = c.state.Status.MinTableBarrierTs
+	if barrier.MinTableBarrierTs < c.state.Status.MinTableBarrierTs {
+		barrier.MinTableBarrierTs = c.state.Status.MinTableBarrierTs
 	}
 
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
@@ -478,7 +424,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
-	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.minDDLBarrierTs)
+	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.MinTableBarrierTs)
 	c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
 	c.tickDownstreamObserver(ctx)
 
@@ -580,8 +526,7 @@ LOOP2:
 	}
 
 	c.barriers = newBarriers()
-	if c.state.Info.Config.EnableSyncPoint { // preResolvedTs model.Ts
-
+	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
 		c.barriers.Update(syncPointBarrier, resolvedTs)
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
@@ -638,14 +583,13 @@ LOOP2:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.state.Info.SinkURI, c.state.Info.Config)
+	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, c.state.Info.SinkURI, c.state.Info.Config)
 	if err != nil {
 		return err
 	}
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
-	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
-	c.redoDDLMgr, err = redo.NewDDLManager(stdCtx, c.state.Info.Config.Consistent, ddlStartTs)
+	c.redoDDLMgr, err = redo.NewDDLManager(cancelCtx, c.id, c.state.Info.Config.Consistent, ddlStartTs)
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
 		err = errors.New("changefeed new redo manager injected error")
 	})
@@ -656,11 +600,12 @@ LOOP2:
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			ctx.Throw(c.redoDDLMgr.Run(stdCtx))
+			ctx.Throw(c.redoDDLMgr.Run(cancelCtx))
 		}()
 	}
 
-	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(stdCtx,
+	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(cancelCtx,
+		c.id,
 		c.state.Info.Config.Consistent, checkpointTs)
 	if err != nil {
 		return err
@@ -669,7 +614,7 @@ LOOP2:
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			ctx.Throw(c.redoMetaMgr.Run(stdCtx))
+			ctx.Throw(c.redoMetaMgr.Run(cancelCtx))
 		}()
 	}
 	log.Info("owner creates redo manager",
@@ -680,6 +625,7 @@ LOOP2:
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
@@ -690,13 +636,14 @@ LOOP2:
 		c.redoDDLMgr,
 		c.redoMetaMgr,
 		downstreamType,
-		c.state.Info.Config.BDRMode)
+		util.GetOrZero(c.state.Info.Config.BDRMode),
+	)
 
 	// create scheduler
 	cfg := *c.cfg
 	cfg.ChangefeedSettings = c.state.Info.Config.Scheduler
 	epoch := c.state.Info.Epoch
-	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg)
+	c.scheduler, err = c.newScheduler(ctx, c.upstream, epoch, &cfg, c.redoMetaMgr)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -816,6 +763,10 @@ func (c *changefeed) cleanupMetrics() {
 	// NOTE: shall we delete the puller event counter metrics?
 	puller.PullerEventCounter.DeleteLabelValues(c.id.Namespace, c.id.ID, "kv")
 	puller.PullerEventCounter.DeleteLabelValues(c.id.Namespace, c.id.ID, "resolved")
+
+	if c.isRemoved {
+		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	}
 }
 
 // cleanup redo logs if changefeed is removed and redo log is enabled
@@ -831,7 +782,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
-			redoMetaMgr, err := redo.NewMetaManager(ctx, c.state.Info.Config.Consistent)
+			redoMetaMgr, err := redo.NewMetaManager(ctx, c.id, c.state.Info.Config.Consistent)
 			if err != nil {
 				log.Info("owner creates redo manager for clean fail",
 					zap.String("namespace", c.id.Namespace),
@@ -934,32 +885,51 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 
 // handleBarrier calculates the barrierTs of the changefeed.
 // barrierTs is used to control the data that can be flush to downstream.
-func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
+func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.BarrierWithMinTs) error {
 	barrierTp, barrierTs := c.barriers.Min()
-
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
 
 	// It means:
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
 	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
-	if !checkpointReachBarrier {
-		return barrierTs, nil
+	if checkpointReachBarrier {
+		switch barrierTp {
+		case syncPointBarrier:
+			nextSyncPointTs := oracle.GoTimeToTS(
+				oracle.GetTimeFromTS(barrierTs).
+					Add(util.GetOrZero(c.state.Info.Config.SyncPointInterval)),
+			)
+			if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
+				return errors.Trace(err)
+			}
+			c.barriers.Update(syncPointBarrier, nextSyncPointTs)
+		case finishBarrier:
+			c.feedStateManager.MarkFinished()
+		default:
+			log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
+		}
 	}
 
-	switch barrierTp {
-	case syncPointBarrier:
-		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
-		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
-			return 0, errors.Trace(err)
-		}
-		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
-	case finishBarrier:
-		c.feedStateManager.MarkFinished()
-	default:
-		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
+	// If there are other barriers less than ddl barrier,
+	// we should wait for them.
+	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
+	// but we can ignore them because they will be handled in the processor.
+	if barrier.GlobalBarrierTs > barrierTs {
+		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.Uint64("otherBarrierTs", barrierTs),
+			zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs))
+		barrier.GlobalBarrierTs = barrierTs
 	}
-	return barrierTs, nil
+
+	if barrier.MinTableBarrierTs > barrierTs {
+		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.Uint64("otherBarrierTs", barrierTs),
+			zap.Uint64("minTableBarrierTs", barrier.GlobalBarrierTs))
+		barrier.MinTableBarrierTs = barrierTs
+	}
+
+	return nil
 }
 
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
@@ -981,6 +951,11 @@ func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs mod
 }
 
 func (c *changefeed) updateStatus(checkpointTs, resolvedTs, minTableBarrierTs model.Ts) {
+	if checkpointTs > resolvedTs {
+		log.Panic("checkpointTs is greater than resolvedTs",
+			zap.Uint64("checkpointTs", checkpointTs),
+			zap.Uint64("resolvedTs", resolvedTs))
+	}
 	c.state.PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			changed := false

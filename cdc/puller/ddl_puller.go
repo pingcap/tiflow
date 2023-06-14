@@ -26,7 +26,6 @@ import (
 	tidbkv "github.com/pingcap/tidb/kv"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -46,8 +45,6 @@ import (
 
 const (
 	ddlPullerStuckWarnDuration = 30 * time.Second
-	// DDLPullerTableName is the fake table name for ddl puller
-	DDLPullerTableName = "DDL_PULLER"
 	// ddl puller should never filter any DDL jobs even if
 	// the changefeed is in BDR mode, because the DDL jobs should
 	// be filtered before they are sent to the sink
@@ -89,7 +86,7 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 		return errors.Trace(p.puller.Run(ctx))
 	})
 
-	rawDDLCh := memorysorter.SortOutput(ctx, p.puller.Output())
+	rawDDLCh := memorysorter.SortOutput(ctx, p.changefeedID, p.puller.Output())
 	eg.Go(
 		func() error {
 			for {
@@ -484,7 +481,7 @@ func NewDDLJobPuller(
 			spans,
 			cfg,
 			changefeed,
-			-1, DDLPullerTableName,
+			-1, memorysorter.DDLPullerTableName,
 			ddLPullerFilterLoop,
 			true,
 		),
@@ -609,7 +606,6 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	h.cancel = cancel
 
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
 	g.Go(func() error {
 		return h.ddlJobPuller.Run(ctx)
 	})

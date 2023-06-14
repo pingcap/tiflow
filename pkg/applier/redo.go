@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
@@ -33,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -81,6 +79,10 @@ type RedoApplier struct {
 	appliedLogCount    uint64
 
 	errCh chan error
+
+	// changefeedID is used to identify the changefeed that this applier belongs to.
+	// not used for now.
+	changefeedID model.ChangeFeedID
 }
 
 // NewRedoApplier creates a new RedoApplier instance
@@ -122,11 +124,11 @@ func (ra *RedoApplier) catchError(ctx context.Context) error {
 
 func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
 	replicaConfig := config.GetDefaultReplicaConfig()
-	ra.sinkFactory, err = dmlfactory.New(ctx, ra.cfg.SinkURI, replicaConfig, ra.errCh)
+	ra.sinkFactory, err = dmlfactory.New(ctx, ra.changefeedID, ra.cfg.SinkURI, replicaConfig, ra.errCh)
 	if err != nil {
 		return err
 	}
-	ra.ddlSink, err = ddlfactory.New(ctx, ra.cfg.SinkURI, replicaConfig)
+	ra.ddlSink, err = ddlfactory.New(ctx, ra.changefeedID, ra.cfg.SinkURI, replicaConfig)
 	if err != nil {
 		return err
 	}
@@ -426,7 +428,6 @@ func (ra *RedoApplier) ReadMeta(ctx context.Context) (checkpointTs uint64, resol
 // Apply applies redo log to given target
 func (ra *RedoApplier) Apply(egCtx context.Context) (err error) {
 	eg, egCtx := errgroup.WithContext(egCtx)
-	egCtx = contextutil.PutRoleInCtx(egCtx, util.RoleRedoLogApplier)
 
 	if ra.rd, err = createRedoReader(egCtx, ra.cfg); err != nil {
 		return err

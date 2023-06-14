@@ -78,7 +78,7 @@ func TestProducerAck(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	config, err := kafka.NewSaramaConfig(options)
+	config, err := kafka.NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 	require.Equal(t, 1, config.Producer.Flush.MaxMessages)
 
@@ -86,10 +86,11 @@ func TestProducerAck(t *testing.T) {
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	adminClient, err := factory.AdminClient()
+	adminClient, err := factory.AdminClient(ctx)
 	require.NoError(t, err)
 
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, changefeed,
+		factory, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 
@@ -144,7 +145,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	_, err := kafka.NewSaramaConfig(options)
+	_, err := kafka.NewSaramaConfig(ctx, options)
 	require.Nil(t, err)
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
@@ -153,10 +154,11 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	adminClient, err := factory.AdminClient()
+	adminClient, err := factory.AdminClient(ctx)
 	require.NoError(t, err)
 
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, changefeed,
+		factory, adminClient, errCh)
 	defer func() {
 		producer.Close()
 
@@ -215,11 +217,12 @@ func TestProducerDoubleClose(t *testing.T) {
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	adminClient, err := factory.AdminClient()
+	adminClient, err := factory.AdminClient(ctx)
 	require.NoError(t, err)
 
 	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
+	producer, err := NewKafkaDMLProducer(ctx, changefeed,
+		factory, adminClient, errCh)
 	require.Nil(t, err)
 	require.NotNil(t, producer)
 

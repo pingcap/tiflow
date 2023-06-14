@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo/common"
@@ -66,9 +65,10 @@ func NewDisabledDDLManager() *ddlManager {
 
 // NewDDLManager creates a new ddl Manager.
 func NewDDLManager(
-	ctx context.Context, cfg *config.ConsistentConfig, ddlStartTs model.Ts,
+	ctx context.Context, changefeedID model.ChangeFeedID,
+	cfg *config.ConsistentConfig, ddlStartTs model.Ts,
 ) (*ddlManager, error) {
-	logManager, err := newLogManager(ctx, cfg, redo.RedoDDLLogFileType)
+	logManager, err := newLogManager(ctx, changefeedID, cfg, redo.RedoDDLLogFileType)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +114,10 @@ type DMLManager interface {
 }
 
 // NewDMLManager creates a new dml Manager.
-func NewDMLManager(ctx context.Context, cfg *config.ConsistentConfig) (*dmlManager, error) {
-	logManager, err := newLogManager(ctx, cfg, redo.RedoRowLogFileType)
+func NewDMLManager(ctx context.Context, changefeedID model.ChangeFeedID,
+	cfg *config.ConsistentConfig,
+) (*dmlManager, error) {
+	logManager, err := newLogManager(ctx, changefeedID, cfg, redo.RedoRowLogFileType)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +218,9 @@ type logManager struct {
 }
 
 func newLogManager(
-	ctx context.Context, cfg *config.ConsistentConfig, logType string,
+	ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	cfg *config.ConsistentConfig, logType string,
 ) (*logManager, error) {
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
@@ -227,13 +231,12 @@ func newLogManager(
 	if err != nil {
 		return nil, err
 	}
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	m := &logManager{
 		enabled: true,
 		cfg: &writer.LogWriterConfig{
 			ConsistentConfig:   *cfg,
 			LogType:            logType,
-			CaptureID:          contextutil.CaptureAddrFromCtx(ctx),
+			CaptureID:          config.GetGlobalServerConfig().AdvertiseAddr,
 			ChangeFeedID:       changefeedID,
 			URI:                *uri,
 			UseExternalStorage: redo.IsExternalStorage(uri.Scheme),

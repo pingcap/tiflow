@@ -38,7 +38,7 @@ func TestChangefeedQueryCli(t *testing.T) {
 	o.complete(f)
 	cmd := newCmdQueryChangefeed(f)
 
-	cfV2.EXPECT().List(gomock.Any(), "all").Return([]v2.ChangefeedCommonInfo{
+	cfV2.EXPECT().List(gomock.Any(), gomock.Any(), "all").Return([]v2.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
@@ -51,7 +51,7 @@ func TestChangefeedQueryCli(t *testing.T) {
 	o.simplified = true
 	o.changefeedID = "abc"
 	require.Nil(t, o.run(cmd))
-	cfV2.EXPECT().List(gomock.Any(), "all").Return([]v2.ChangefeedCommonInfo{
+	cfV2.EXPECT().List(gomock.Any(), gomock.Any(), "all").Return([]v2.ChangefeedCommonInfo{
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
@@ -65,13 +65,13 @@ func TestChangefeedQueryCli(t *testing.T) {
 	o.changefeedID = "abcd"
 	require.NotNil(t, o.run(cmd))
 
-	cfV2.EXPECT().List(gomock.Any(), "all").Return(nil, errors.New("test"))
+	cfV2.EXPECT().List(gomock.Any(), gomock.Any(), "all").Return(nil, errors.New("test"))
 	o.simplified = true
 	o.changefeedID = "abcd"
 	require.NotNil(t, o.run(cmd))
 
 	// query success
-	cfV2.EXPECT().Get(gomock.Any(), "bcd").Return(&v2.ChangeFeedInfo{}, nil)
+	cfV2.EXPECT().Get(gomock.Any(), gomock.Any(), "bcd").Return(&v2.ChangeFeedInfo{}, nil)
 
 	o.simplified = false
 	o.changefeedID = "bcd"
@@ -84,7 +84,7 @@ func TestChangefeedQueryCli(t *testing.T) {
 	require.Contains(t, string(out), "config")
 
 	// query failed
-	cfV2.EXPECT().Get(gomock.Any(), "bcd").Return(nil, errors.New("test"))
+	cfV2.EXPECT().Get(gomock.Any(), gomock.Any(), "bcd").Return(nil, errors.New("test"))
 	os.Args = []string{"query", "--simple=false", "--changefeed-id=bcd"}
 	require.NotNil(t, o.run(cmd))
 }

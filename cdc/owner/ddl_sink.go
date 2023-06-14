@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/format"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -110,26 +109,25 @@ func newDDLSink(
 type ddlSinkInitHandler func(ctx context.Context, a *ddlSinkImpl) error
 
 func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleOwner)
 	log.Info("Try to create ddlSink based on sink",
 		zap.String("namespace", a.changefeedID.Namespace),
 		zap.String("changefeed", a.changefeedID.ID))
-	s, err := factory.New(ctx, a.info.SinkURI, a.info.Config)
+	s, err := factory.New(ctx, a.changefeedID, a.info.SinkURI, a.info.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	a.sink = s
 
-	if !a.info.Config.EnableSyncPoint {
+	if !util.GetOrZero(a.info.Config.EnableSyncPoint) {
 		return nil
 	}
 	return nil
 }
 
 func (s *ddlSinkImpl) makeSyncPointStoreReady(ctx context.Context) error {
-	if s.info.Config.EnableSyncPoint && s.syncPointStore == nil {
+	if util.GetOrZero(s.info.Config.EnableSyncPoint) && s.syncPointStore == nil {
 		syncPointStore, err := syncpointstore.NewSyncPointStore(
-			ctx, s.changefeedID, s.info.SinkURI, s.info.Config.SyncPointRetention)
+			ctx, s.changefeedID, s.info.SinkURI, util.GetOrZero(s.info.Config.SyncPointRetention))
 		if err != nil {
 			return errors.Trace(err)
 		}

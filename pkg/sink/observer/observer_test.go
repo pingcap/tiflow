@@ -19,6 +19,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/stretchr/testify/require"
@@ -58,7 +59,8 @@ func TestNewObserver(t *testing.T) {
 
 	ctx := context.Background()
 	sinkURI := "mysql://127.0.0.1:21347/"
-	obs, err := NewObserver(ctx, sinkURI, config.GetDefaultReplicaConfig(),
+	obs, err := NewObserver(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, config.GetDefaultReplicaConfig(),
 		WithDBConnFactory(mockGetDBConn))
 	require.NoError(t, err)
 	for i := 0; i < 10; i++ {

@@ -58,7 +58,7 @@ func TestSyncProducer(t *testing.T) {
 	o := newOptions4Test()
 	factory := newFactory4Test(o, t)
 
-	sync, err := factory.SyncProducer()
+	sync, err := factory.SyncProducer(context.Background())
 	require.NoError(t, err)
 
 	p, ok := sync.(*syncWriter)
@@ -295,6 +295,15 @@ func TestCompleteSASLConfig(t *testing.T) {
 	require.Equal(t, pkafka.SASLTypePlaintext, m.Name())
 	require.Equal(t, "user", pm.Username)
 	require.Equal(t, "pass", pm.Password)
+
+	// Unsupported OAUTHBEARER mechanism
+	m, err = completeSASLConfig(&pkafka.Options{
+		SASL: &security.SASL{
+			SASLMechanism: security.OAuthMechanism,
+		},
+	})
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "OAuth is not yet supported in Kafka sink v2")
 }
 
 func TestSyncWriterSendMessage(t *testing.T) {

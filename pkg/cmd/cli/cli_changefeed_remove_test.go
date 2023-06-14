@@ -33,20 +33,21 @@ func TestChangefeedRemoveCli(t *testing.T) {
 
 	cmd := newCmdRemoveChangefeed(f)
 
-	cf.EXPECT().Get(gomock.Any(), "abc").Return(&v2.ChangeFeedInfo{}, nil)
-	cf.EXPECT().Delete(gomock.Any(), "abc").Return(nil)
-	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil,
+	cf.EXPECT().Get(gomock.Any(), "test", "abc").Return(&v2.ChangeFeedInfo{}, nil)
+	cf.EXPECT().Delete(gomock.Any(), "test", "abc").Return(nil)
+	cf.EXPECT().Get(gomock.Any(), "test", "abc").Return(nil,
 		cerror.ErrChangeFeedNotExists.GenWithStackByArgs("abc"))
-	os.Args = []string{"remove", "--changefeed-id=abc"}
+	os.Args = []string{"remove", "--changefeed-id=abc", "--namespace=test"}
 	require.Nil(t, cmd.Execute())
-	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil,
+	cf.EXPECT().Get(gomock.Any(), "default", "abc").Return(nil,
 		cerror.ErrChangeFeedNotExists.GenWithStackByArgs("abc"))
-	os.Args = []string{"remove", "--changefeed-id=abc"}
+	os.Args = []string{"remove", "--changefeed-id=abc", "--namespace=default"}
 	require.Nil(t, cmd.Execute())
 
 	o := newRemoveChangefeedOptions()
 	o.complete(f)
 	o.changefeedID = "abc"
-	cf.EXPECT().Get(gomock.Any(), "abc").Return(nil, errors.New("abc"))
+	o.namespace = "test"
+	cf.EXPECT().Get(gomock.Any(), "test", "abc").Return(nil, errors.New("abc"))
 	require.NotNil(t, o.run(cmd))
 }

@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/blackhole"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/cloudstorage"
@@ -29,11 +30,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	kafkav2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // New creates a new ddlsink.Sink by scheme.
 func New(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 ) (ddlsink.Sink, error) {
@@ -45,17 +48,17 @@ func New(
 	switch scheme {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory
-		if cfg.Sink.EnableKafkaSinkV2 {
+		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
 			factoryCreator = kafkav2.NewFactory
 		}
-		return mq.NewKafkaDDLSink(ctx, sinkURI, cfg,
+		return mq.NewKafkaDDLSink(ctx, changefeedID, sinkURI, cfg,
 			factoryCreator, ddlproducer.NewKafkaDDLProducer)
 	case sink.BlackHoleScheme:
 		return blackhole.NewDDLSink(), nil
 	case sink.MySQLSSLScheme, sink.MySQLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
-		return mysql.NewDDLSink(ctx, sinkURI, cfg)
+		return mysql.NewDDLSink(ctx, changefeedID, sinkURI, cfg)
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
-		return cloudstorage.NewDDLSink(ctx, sinkURI)
+		return cloudstorage.NewDDLSink(ctx, changefeedID, sinkURI)
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", scheme)

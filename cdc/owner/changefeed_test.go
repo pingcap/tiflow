@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
+	credo "github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -163,10 +164,10 @@ func (m *mockScheduler) Tick(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
-	barrier *schedulepb.Barrier,
+	barrier *schedulepb.BarrierWithMinTs,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	m.currentTables = currentTables
-	return model.Ts(math.MaxUint64), model.Ts(math.MaxUint64), nil
+	return barrier.MinTableBarrierTs, barrier.GlobalBarrierTs, nil
 }
 
 // MoveTable is used to trigger manual table moves.
@@ -201,7 +202,6 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
-
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, state, up,
 		// new ddl puller
 		func(ctx context.Context,
@@ -224,13 +224,14 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		// new scheduler
 		func(
 			ctx cdcContext.Context, up *upstream.Upstream, epoch uint64,
-			cfg *config.SchedulerConfig,
+			cfg *config.SchedulerConfig, redoMetaManager credo.MetaManager,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
 		},
 		// new downstream observer
 		func(
-			ctx context.Context, sinkURIStr string, replCfg *config.ReplicaConfig,
+			ctx context.Context, id model.ChangeFeedID,
+			sinkURIStr string, replCfg *config.ReplicaConfig,
 			opts ...observer.NewObserverOption,
 		) (observer.Observer, error) {
 			return observer.NewDummyObserver(), nil
@@ -452,8 +453,10 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 func TestSyncPoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = true
-	ctx.ChangefeedVars().Info.Config.SyncPointInterval = 1 * time.Second
+	ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
+	ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(1 * time.Second)
+	// SyncPoint option is only available for MySQL compatible database.
+	ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 	cf, captures, tester := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 
@@ -513,6 +516,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	ctx := cdcContext.NewContext4Test(baseCtx, true)
 	info := ctx.ChangefeedVars().Info
 	dir := t.TempDir()
+	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),
@@ -531,6 +535,9 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	info := ctx.ChangefeedVars().Info
 	info.State = model.StateStopped
 	dir := t.TempDir()
+	// Field `Consistent` is valid only when the downstream
+	// is MySQL compatible  Database
+	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
 		Storage:           filepath.Join("nfs://", dir),
@@ -587,9 +594,10 @@ func TestBarrierAdvance(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		ctx := cdcContext.NewBackendContext4Test(true)
 		if i == 1 {
-			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = true
-			ctx.ChangefeedVars().Info.Config.SyncPointInterval = 100 * time.Second
+			ctx.ChangefeedVars().Info.Config.EnableSyncPoint = util.AddressOf(true)
+			ctx.ChangefeedVars().Info.Config.SyncPointInterval = util.AddressOf(100 * time.Second)
 		}
+		ctx.ChangefeedVars().Info.SinkURI = "mysql://"
 
 		cf, captures, tester := createChangefeed4Test(ctx, t)
 		defer cf.Close(ctx)
@@ -598,22 +606,28 @@ func TestBarrierAdvance(t *testing.T) {
 		cf.state.Status = &model.ChangeFeedStatus{
 			ResolvedTs:        cf.state.Info.StartTs + 10,
 			CheckpointTs:      cf.state.Info.StartTs,
-			MinTableBarrierTs: cf.state.Info.StartTs,
+			MinTableBarrierTs: cf.state.Info.StartTs + 5,
 		}
-
 		// Do the preflightCheck and initialize the changefeed.
 		cf.Tick(ctx, captures)
 		tester.MustApplyPatches()
+		if i == 1 {
+			cf.ddlManager.ddlResolvedTs += 10
+		}
+		_, barrier, err := cf.ddlManager.tick(ctx, cf.state.Status.CheckpointTs, nil)
 
-		barrier, err := cf.handleBarrier(ctx)
+		require.Nil(t, err)
+
+		err = cf.handleBarrier(ctx, barrier)
 		require.Nil(t, err)
 
 		if i == 0 {
-			require.Equal(t, uint64(math.MaxUint64), barrier)
+			require.Equal(t, cf.state.Info.StartTs, barrier.GlobalBarrierTs)
 		}
+
 		// sync-point is enabled, sync point barrier is ticked
 		if i == 1 {
-			require.Equal(t, cf.state.Info.StartTs+10, barrier)
+			require.Equal(t, cf.state.Info.StartTs+10, barrier.GlobalBarrierTs)
 		}
 
 		// Suppose tableCheckpoint has been advanced.
@@ -621,14 +635,25 @@ func TestBarrierAdvance(t *testing.T) {
 
 		// Need more 1 tick to advance barrier if sync-point is enabled.
 		if i == 1 {
-			barrier, err := cf.handleBarrier(ctx)
+			err = cf.handleBarrier(ctx, barrier)
 			require.Nil(t, err)
-			require.Equal(t, cf.state.Info.StartTs+10, barrier)
-		}
+			require.Equal(t, cf.state.Info.StartTs+10, barrier.GlobalBarrierTs)
 
-		// Then the last tick barrier must be advanced correctly.
-		barrier, err = cf.handleBarrier(ctx)
-		require.Nil(t, err)
-		require.Less(t, cf.state.Info.StartTs+10, barrier)
+			// Then the last tick barrier must be advanced correctly.
+			cf.ddlManager.ddlResolvedTs += 1000000000000
+			_, barrier, err = cf.ddlManager.tick(ctx, cf.state.Status.CheckpointTs+10, nil)
+			require.Nil(t, err)
+			err = cf.handleBarrier(ctx, barrier)
+
+			nextSyncPointTs := oracle.GoTimeToTS(
+				oracle.GetTimeFromTS(cf.state.Status.CheckpointTs + 10).
+					Add(util.GetOrZero(ctx.ChangefeedVars().Info.Config.SyncPointInterval)),
+			)
+
+			require.Nil(t, err)
+			require.Equal(t, nextSyncPointTs, barrier.GlobalBarrierTs)
+			require.Less(t, cf.state.Status.CheckpointTs+10, barrier.GlobalBarrierTs)
+			require.Less(t, barrier.GlobalBarrierTs, cf.ddlManager.ddlResolvedTs)
+		}
 	}
 }

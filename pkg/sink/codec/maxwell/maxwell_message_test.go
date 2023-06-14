@@ -54,7 +54,7 @@ func TestEncodeBinaryToMaxwell(t *testing.T) {
 		Columns: []*model.Column{column},
 	}
 
-	key, msg := rowChangeToMaxwellMsg(e)
+	key, msg := rowChangeToMaxwellMsg(e, false)
 	require.NotNil(t, key)
 	require.NotNil(t, msg)
 }

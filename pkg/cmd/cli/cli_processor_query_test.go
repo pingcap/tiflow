@@ -31,7 +31,7 @@ func TestProcessorQueryCli(t *testing.T) {
 	o.complete(f)
 	cmd := newCmdQueryProcessor(f)
 
-	f.processors.EXPECT().Get(gomock.Any(), "a", "b").
+	f.processors.EXPECT().Get(gomock.Any(), gomock.Any(), "a", "b").
 		Return(nil, errors.New("test"))
 	o.changefeedID = "a"
 	o.captureID = "b"
@@ -39,7 +39,7 @@ func TestProcessorQueryCli(t *testing.T) {
 
 	cmd = newCmdQueryProcessor(f)
 	os.Args = []string{"query", "-c", "a", "-p", "b"}
-	f.processors.EXPECT().Get(gomock.Any(), "a", "b").
+	f.processors.EXPECT().Get(gomock.Any(), gomock.Any(), "a", "b").
 		Return(&v2.ProcessorDetail{
 			Tables: []int64{1, 2},
 		}, nil)

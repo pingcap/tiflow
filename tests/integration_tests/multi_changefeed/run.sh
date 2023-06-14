@@ -38,17 +38,8 @@ function check_old_value_enabled() {
 	# When old value is turned on, the pre-column in our delete will include all the columns.
 	# So here we have 1 (id) and 3 (val).
 	delete_with_old_value_count=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep 'value\\\":1' | grep -c 'value\\\":3')
-	if [[ "$delete_with_old_value_count" -ne 1 ]]; then
-		echo "can't found delete row with old value"
-		exit 1
-	fi
-
-	# check if exist a delete row without a complete `pre-column`
-	# When old value is turned off, the pre-column in our delete will only include the handle columns.
-	# So here we only have 1 (id).
-	delete_without_old_value_count=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep 'columns\\\":null' | grep -c 'value\\\":1,\\\"default\\\":null},null')
-	if [[ "$delete_without_old_value_count" -ne 1 ]]; then
-		echo "can't found delete row without old value"
+	if [[ "$delete_with_old_value_count" -ne 2 ]]; then
+		echo "can't found delete row with old value, not 2 found"
 		exit 1
 	fi
 }
@@ -56,7 +47,6 @@ function check_old_value_enabled() {
 export -f check_old_value_enabled
 
 function run() {
-	# kafka is not supported yet.
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi

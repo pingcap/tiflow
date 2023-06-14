@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // EmptyResponse return empty {} to http client
@@ -159,16 +160,16 @@ type ReplicaConfig struct {
 	ForceReplicate        bool   `json:"force_replicate"`
 	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
-	EnableSyncPoint       bool   `json:"enable_sync_point"`
-	BDRMode               bool   `json:"bdr_mode"`
+	EnableSyncPoint       *bool  `json:"enable_sync_point,omitempty"`
+	BDRMode               *bool  `json:"bdr_mode,omitempty"`
 
-	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
-	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
+	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
+	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`
 
 	Filter     *FilterConfig              `json:"filter"`
 	Mounter    *MounterConfig             `json:"mounter"`
 	Sink       *SinkConfig                `json:"sink"`
-	Consistent *ConsistentConfig          `json:"consistent"`
+	Consistent *ConsistentConfig          `json:"consistent,omitempty"`
 	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
 	Integrity  *IntegrityConfig           `json:"integrity"`
 }
@@ -188,11 +189,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
+	res.IgnoreIneligibleTable = c.IgnoreIneligibleTable
 	if c.SyncPointInterval != nil {
-		res.SyncPointInterval = c.SyncPointInterval.duration
+		res.SyncPointInterval = &c.SyncPointInterval.duration
 	}
 	if c.SyncPointRetention != nil {
-		res.SyncPointRetention = c.SyncPointRetention.duration
+		res.SyncPointRetention = &c.SyncPointRetention.duration
 	}
 	res.BDRMode = c.BDRMode
 
@@ -306,6 +308,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				SASLGssAPIPassword:           c.Sink.KafkaConfig.SASLGssAPIPassword,
 				SASLGssAPIRealm:              c.Sink.KafkaConfig.SASLGssAPIRealm,
 				SASLGssAPIDisablePafxfast:    c.Sink.KafkaConfig.SASLGssAPIDisablePafxfast,
+				SASLOAuthClientID:            c.Sink.KafkaConfig.SASLOAuthClientID,
+				SASLOAuthClientSecret:        c.Sink.KafkaConfig.SASLOAuthClientSecret,
+				SASLOAuthTokenURL:            c.Sink.KafkaConfig.SASLOAuthTokenURL,
+				SASLOAuthScopes:              c.Sink.KafkaConfig.SASLOAuthScopes,
+				SASLOAuthGrantType:           c.Sink.KafkaConfig.SASLOAuthGrantType,
+				SASLOAuthAudience:            c.Sink.KafkaConfig.SASLOAuthAudience,
 				EnableTLS:                    c.Sink.KafkaConfig.EnableTLS,
 				CA:                           c.Sink.KafkaConfig.CA,
 				Cert:                         c.Sink.KafkaConfig.Cert,
@@ -344,24 +352,30 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 
 		res.Sink = &config.SinkConfig{
-			DispatchRules:            dispatchRules,
-			Protocol:                 c.Sink.Protocol,
-			CSVConfig:                csvConfig,
-			TxnAtomicity:             config.AtomicityLevel(c.Sink.TxnAtomicity),
-			ColumnSelectors:          columnSelectors,
-			SchemaRegistry:           c.Sink.SchemaRegistry,
-			EncoderConcurrency:       c.Sink.EncoderConcurrency,
-			Terminator:               c.Sink.Terminator,
-			DateSeparator:            c.Sink.DateSeparator,
-			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
-			FileIndexWidth:           c.Sink.FileIndexWidth,
-			EnableKafkaSinkV2:        c.Sink.EnableKafkaSinkV2,
-			OnlyOutputUpdatedColumns: c.Sink.OnlyOutputUpdatedColumns,
-			KafkaConfig:              kafkaConfig,
-			MySQLConfig:              mysqlConfig,
-			CloudStorageConfig:       cloudStorageConfig,
-			SafeMode:                 c.Sink.SafeMode,
+			DispatchRules:                    dispatchRules,
+			Protocol:                         c.Sink.Protocol,
+			CSVConfig:                        csvConfig,
+			ColumnSelectors:                  columnSelectors,
+			SchemaRegistry:                   c.Sink.SchemaRegistry,
+			EncoderConcurrency:               c.Sink.EncoderConcurrency,
+			Terminator:                       c.Sink.Terminator,
+			DateSeparator:                    c.Sink.DateSeparator,
+			EnablePartitionSeparator:         c.Sink.EnablePartitionSeparator,
+			FileIndexWidth:                   c.Sink.FileIndexWidth,
+			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
+			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
+			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
+			LargeMessageOnlyHandleKeyColumns: c.Sink.LargeMessageOnlyHandleKeyColumns,
+			KafkaConfig:                      kafkaConfig,
+			MySQLConfig:                      mysqlConfig,
+			CloudStorageConfig:               cloudStorageConfig,
+			SafeMode:                         c.Sink.SafeMode,
 		}
+
+		if c.Sink.TxnAtomicity != nil {
+			res.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(*c.Sink.TxnAtomicity))
+		}
+
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -387,17 +401,24 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 // ToAPIReplicaConfig coverts *config.ReplicaConfig into *v2.ReplicaConfig
 func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	cloned := c.Clone()
+
 	res := &ReplicaConfig{
 		MemoryQuota:           cloned.MemoryQuota,
 		CaseSensitive:         cloned.CaseSensitive,
 		EnableOldValue:        cloned.EnableOldValue,
 		ForceReplicate:        cloned.ForceReplicate,
-		IgnoreIneligibleTable: false,
+		IgnoreIneligibleTable: cloned.IgnoreIneligibleTable,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
-		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
+	}
+
+	if cloned.SyncPointInterval != nil {
+		res.SyncPointInterval = &JSONDuration{*cloned.SyncPointInterval}
+	}
+
+	if cloned.SyncPointRetention != nil {
+		res.SyncPointRetention = &JSONDuration{*cloned.SyncPointRetention}
 	}
 
 	if cloned.Filter != nil {
@@ -502,6 +523,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				SASLGssAPIPassword:           cloned.Sink.KafkaConfig.SASLGssAPIPassword,
 				SASLGssAPIRealm:              cloned.Sink.KafkaConfig.SASLGssAPIRealm,
 				SASLGssAPIDisablePafxfast:    cloned.Sink.KafkaConfig.SASLGssAPIDisablePafxfast,
+				SASLOAuthClientID:            cloned.Sink.KafkaConfig.SASLOAuthClientID,
+				SASLOAuthClientSecret:        cloned.Sink.KafkaConfig.SASLOAuthClientSecret,
+				SASLOAuthTokenURL:            cloned.Sink.KafkaConfig.SASLOAuthTokenURL,
+				SASLOAuthScopes:              cloned.Sink.KafkaConfig.SASLOAuthScopes,
+				SASLOAuthGrantType:           cloned.Sink.KafkaConfig.SASLOAuthGrantType,
+				SASLOAuthAudience:            cloned.Sink.KafkaConfig.SASLOAuthAudience,
 				EnableTLS:                    cloned.Sink.KafkaConfig.EnableTLS,
 				CA:                           cloned.Sink.KafkaConfig.CA,
 				Cert:                         cloned.Sink.KafkaConfig.Cert,
@@ -540,23 +567,28 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		res.Sink = &SinkConfig{
-			Protocol:                 cloned.Sink.Protocol,
-			SchemaRegistry:           cloned.Sink.SchemaRegistry,
-			DispatchRules:            dispatchRules,
-			CSVConfig:                csvConfig,
-			ColumnSelectors:          columnSelectors,
-			TxnAtomicity:             string(cloned.Sink.TxnAtomicity),
-			EncoderConcurrency:       cloned.Sink.EncoderConcurrency,
-			Terminator:               cloned.Sink.Terminator,
-			DateSeparator:            cloned.Sink.DateSeparator,
-			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
-			FileIndexWidth:           cloned.Sink.FileIndexWidth,
-			EnableKafkaSinkV2:        cloned.Sink.EnableKafkaSinkV2,
-			OnlyOutputUpdatedColumns: cloned.Sink.OnlyOutputUpdatedColumns,
-			KafkaConfig:              kafkaConfig,
-			MySQLConfig:              mysqlConfig,
-			CloudStorageConfig:       cloudStorageConfig,
-			SafeMode:                 cloned.Sink.SafeMode,
+			Protocol:                         cloned.Sink.Protocol,
+			SchemaRegistry:                   cloned.Sink.SchemaRegistry,
+			DispatchRules:                    dispatchRules,
+			CSVConfig:                        csvConfig,
+			ColumnSelectors:                  columnSelectors,
+			EncoderConcurrency:               cloned.Sink.EncoderConcurrency,
+			Terminator:                       cloned.Sink.Terminator,
+			DateSeparator:                    cloned.Sink.DateSeparator,
+			EnablePartitionSeparator:         cloned.Sink.EnablePartitionSeparator,
+			FileIndexWidth:                   cloned.Sink.FileIndexWidth,
+			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
+			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
+			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
+			LargeMessageOnlyHandleKeyColumns: cloned.Sink.LargeMessageOnlyHandleKeyColumns,
+			KafkaConfig:                      kafkaConfig,
+			MySQLConfig:                      mysqlConfig,
+			CloudStorageConfig:               cloudStorageConfig,
+			SafeMode:                         cloned.Sink.SafeMode,
+		}
+
+		if cloned.Sink.TxnAtomicity != nil {
+			res.Sink.TxnAtomicity = util.AddressOf(string(*cloned.Sink.TxnAtomicity))
 		}
 	}
 	if cloned.Consistent != nil {
@@ -602,7 +634,7 @@ type FilterConfig struct {
 	*MySQLReplicationRules
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
-	EventFilters     []EventFilterRule `json:"event_filters"`
+	EventFilters     []EventFilterRule `json:"event_filters,omitempty"`
 }
 
 // MounterConfig represents mounter config for a changefeed
@@ -691,23 +723,25 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 string              `json:"protocol"`
-	SchemaRegistry           string              `json:"schema_registry"`
-	CSVConfig                *CSVConfig          `json:"csv"`
-	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector   `json:"column_selectors"`
-	TxnAtomicity             string              `json:"transaction_atomicity"`
-	EncoderConcurrency       int                 `json:"encoder_concurrency"`
-	Terminator               string              `json:"terminator"`
-	DateSeparator            string              `json:"date_separator"`
-	EnablePartitionSeparator bool                `json:"enable_partition_separator"`
-	FileIndexWidth           int                 `json:"file_index_width"`
-	EnableKafkaSinkV2        bool                `json:"enable_kafka_sink_v2"`
-	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns"`
-	SafeMode                 *bool               `json:"safe_mode,omitempty"`
-	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
-	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
-	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	Protocol                         *string             `json:"protocol,omitempty"`
+	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
+	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
+	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
+	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
+	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
+	Terminator                       *string             `json:"terminator,omitempty"`
+	DateSeparator                    *string             `json:"date_separator,omitempty"`
+	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
+	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
+	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
+	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
+	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
+	LargeMessageOnlyHandleKeyColumns *bool               `json:"large_message_only_handle_key_columns"`
+	SafeMode                         *bool               `json:"safe_mode,omitempty"`
+	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
+	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
+	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -737,10 +771,10 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-	Level             string `json:"level"`
+	Level             string `json:"level,omitempty"`
 	MaxLogSize        int64  `json:"max_log_size"`
 	FlushIntervalInMs int64  `json:"flush_interval"`
-	Storage           string `json:"storage"`
+	Storage           string `json:"storage,omitempty"`
 	UseFileBackend    bool   `json:"use_file_backend"`
 }
 
@@ -916,6 +950,12 @@ type KafkaConfig struct {
 	SASLGssAPIPassword           *string      `json:"sasl_gssapi_password,omitempty"`
 	SASLGssAPIRealm              *string      `json:"sasl_gssapi_realm,omitempty"`
 	SASLGssAPIDisablePafxfast    *bool        `json:"sasl_gssapi_disable_pafxfast,omitempty"`
+	SASLOAuthClientID            *string      `json:"sasl_oauth_client_id,omitempty"`
+	SASLOAuthClientSecret        *string      `json:"sasl_oauth_client_secret,omitempty"`
+	SASLOAuthTokenURL            *string      `json:"sasl_oauth_token_url,omitempty"`
+	SASLOAuthScopes              []string     `json:"sasl_oauth_scopes,omitempty"`
+	SASLOAuthGrantType           *string      `json:"sasl_oauth_grant_type,omitempty"`
+	SASLOAuthAudience            *string      `json:"sasl_oauth_audience,omitempty"`
 	EnableTLS                    *bool        `json:"enable_tls,omitempty"`
 	CA                           *string      `json:"ca,omitempty"`
 	Cert                         *string      `json:"cert,omitempty"`
