@@ -49,7 +49,7 @@ func BenchmarkSpanFrontier(b *testing.B) {
 				spans = append(spans, span)
 			}
 
-			f := NewFrontier(0, c, spans...)
+			f := NewFrontier(0, spans...)
 
 			b.ResetTimer()
 
@@ -91,7 +91,7 @@ func BenchmarkSpanFrontierOverlap(b *testing.B) {
 					})
 				}
 
-				f := NewFrontier(0, c, spans...)
+				f := NewFrontier(0, spans...)
 
 				b.ResetTimer()
 

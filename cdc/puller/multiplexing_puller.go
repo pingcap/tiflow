@@ -103,8 +103,6 @@ func (p *MultiplexingPuller) Subscribe(
 	pullerType string, tableName string,
 	spans []tablepb.Span, startTs model.Ts,
 ) {
-	metrics := missedRegionCollectCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, pullerType)
-	tsTracker := frontier.NewFrontier(0, metrics, spans...)
 
 	progress := &tableProgress{
 		changefeed: p.changefeed,
@@ -114,7 +112,7 @@ func (p *MultiplexingPuller) Subscribe(
 		startTs:    startTs,
 
 		resolvedSpans: make(chan *model.ResolvedSpans, resolvedSpanChanSize),
-		tsTracker:     tsTracker,
+		tsTracker:     frontier.NewFrontier(0, spans...),
 	}
 
 	progress.consume.f = func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
@@ -172,15 +170,6 @@ func (p *MultiplexingPuller) Unsubscribe(spans []tablepb.Span) {
 
 // Run the puller.
 func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
-	metricEventChanSize := eventChanSizeHistogram.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-	metricCounterKv := txnCollectCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
-	metricCounterResolved := txnCollectCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
-	defer func() {
-		eventChanSizeHistogram.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID)
-		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
-		txnCollectCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
-	}()
-
 	g, ctx := errgroup.WithContext(ctx)
 	for i := 0; i < frontierConcurrent; i++ {
 		g.Go(func() error { return p.advanceSpans(ctx) })
@@ -196,7 +185,6 @@ func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-ticker.C:
-				metricEventChanSize.Observe(float64(len(p.inputCh)))
 				goto LOOP
 			case e = <-p.inputCh:
 			}
@@ -207,10 +195,8 @@ func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
 			}
 
 			if e.Val != nil {
-				metricCounterKv.Inc()
 				err = progress.consume.f(ctx, e.Val, progress.spans)
 			} else if e.Resolved != nil {
-				metricCounterResolved.Add(float64(len(e.Resolved.Spans)))
 				select {
 				case <-ctx.Done():
 					err = ctx.Err()

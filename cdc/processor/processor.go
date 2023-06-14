@@ -797,9 +797,9 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		ddlStartTs,
 		kvCfg,
 		p.changefeedID,
-		false, /* isOwner */
 		schemaStorage,
 		f,
+		false, /* isOwner */
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -959,7 +959,28 @@ func (p *processor) cleanupMetrics() {
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorTickDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+
+	ok := remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
+	if !ok {
+		log.Warn("delete remain kv events gauge metrics failed",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID))
+	}
+
+	ok = puller.PullerEventCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID, "kv")
+	if !ok {
+		log.Warn("delete puller event counter metrics failed",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("type", "kv"))
+	}
+	ok = puller.PullerEventCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID, "resolved")
+	if !ok {
+		log.Warn("delete puller event counter metrics failed",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("type", "resolved"))
+	}
 }
 
 // WriteDebugInfo write the debug info to Writer

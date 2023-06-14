@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -66,7 +65,6 @@ type DDLJobPuller interface {
 // be called in the same one goroutine.
 type ddlJobPullerImpl struct {
 	changefeedID model.ChangeFeedID
-	resolvedTs   uint64
 
 	multiplexing bool
 	puller       struct {
@@ -78,17 +76,17 @@ type ddlJobPullerImpl struct {
 		sortedDDLCh <-chan *model.RawKVEntry
 	}
 
-	schemaStorage entry.SchemaStorage
 	kvStorage     tidbkv.Storage
+	schemaStorage entry.SchemaStorage
+	resolvedTs    uint64
 	schemaVersion int64
 	filter        filter.Filter
 	// ddlJobsTable is initialized when receive the first concurrent DDL job.
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
 	ddlJobsTable *model.TableInfo
 	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
-	jobMetaColumnID           int64
-	outputCh                  chan *model.DDLJobEntry
-	metricDiscardedDDLCounter prometheus.Counter
+	jobMetaColumnID int64
+	outputCh        chan *model.DDLJobEntry
 }
 
 // Run starts the DDLJobPuller.
@@ -150,26 +148,21 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 
 func (p *ddlJobPullerImpl) run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
-
+	eg.Go(func() error { return errors.Trace(p.puller.Run(ctx)) })
 	eg.Go(func() error {
-		return errors.Trace(p.puller.Run(ctx))
-	})
-
-	rawDDLCh := memorysorter.SortOutput(ctx, p.changefeedID, p.puller.Output())
-	eg.Go(
-		func() error {
-			for {
-				var ddlRawKV *model.RawKVEntry
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case ddlRawKV = <-rawDDLCh:
-				}
-				if err := p.handleRawKVEntry(ctx, ddlRawKV); err != nil {
-					return errors.Trace(err)
-				}
+		rawDDLCh := memorysorter.SortOutput(ctx, p.changefeedID, p.puller.Output())
+		for {
+			var ddlRawKV *model.RawKVEntry
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ddlRawKV = <-rawDDLCh:
 			}
-		})
+			if err := p.handleRawKVEntry(ctx, ddlRawKV); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	})
 	return eg.Wait()
 }
 
@@ -403,7 +396,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
 			zap.String("job", job.String()))
-		p.metricDiscardedDDLCounter.Inc()
 		return true, nil
 	}
 
@@ -445,7 +437,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
 			zap.String("job", job.String()))
-		p.metricDiscardedDDLCounter.Inc()
 		return true, nil
 	}
 
@@ -513,9 +504,9 @@ func NewDDLJobPuller(
 	checkpointTs uint64,
 	cfg *config.KVClientConfig,
 	changefeed model.ChangeFeedID,
-	isOwner bool,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
+	isOwner bool,
 ) (DDLJobPuller, error) {
 	if isOwner {
 		changefeed.ID += "_owner_ddl_puller"
@@ -536,8 +527,6 @@ func NewDDLJobPuller(
 		kvStorage:     kvStorage,
 		filter:        filter,
 		outputCh:      make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
-		metricDiscardedDDLCounter: discardedDDLCounter.
-			WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}
 	if jobPuller.multiplexing {
 		client := kv.NewSharedClient(
@@ -613,9 +602,8 @@ func NewDDLPuller(ctx context.Context,
 		puller, err = NewDDLJobPuller(
 			ctx, up.PDClient, up.GrpcPool, up.RegionCache, up.KVStorage, up.PDClock,
 			startTs, config.GetGlobalServerConfig().KVClient,
-			changefeed, true, /* isOwner */
-			schemaStorage,
-			filter,
+			changefeed, schemaStorage, filter,
+			true, /* isOwner */
 		)
 		if err != nil {
 			return nil, errors.Trace(err)

@@ -282,15 +282,13 @@ func (m *ddlManager) tick(
 		}
 
 		if m.shouldExecDDL(nextDDL) {
-			log.Info("execute a ddl event",
-				zap.String("query", nextDDL.Query),
-				zap.Uint64("commitTs", nextDDL.CommitTs),
-				zap.Uint64("checkpointTs", m.checkpointTs))
-
 			if m.executingDDL == nil {
+				log.Info("execute a ddl event",
+					zap.String("query", nextDDL.Query),
+					zap.Uint64("commitTs", nextDDL.CommitTs),
+					zap.Uint64("checkpointTs", m.checkpointTs))
 				m.executingDDL = nextDDL
 			}
-
 			err := m.executeDDL(ctx)
 			if err != nil {
 				return nil, nil, err
