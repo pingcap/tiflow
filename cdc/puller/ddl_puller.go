@@ -661,6 +661,22 @@ func (h *ddlPullerImpl) Close() {
 	log.Info("close the ddl puller",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
+
+	ok := PullerEventCounter.DeleteLabelValues(h.changefeedID.Namespace, h.changefeedID.ID, "kv")
+	if !ok {
+		log.Warn("delete puller event counter metrics failed",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.String("type", "kv"))
+	}
+	ok = PullerEventCounter.DeleteLabelValues(h.changefeedID.Namespace, h.changefeedID.ID, "resolved")
+	if !ok {
+		log.Warn("delete puller event counter metrics failed",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.String("type", "resolved"))
+	}
+
 	h.cancel()
 }
 
