@@ -56,9 +56,6 @@ type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
 	BarrierTs    model.Ts
-	// From sorter.
-	ReceivedMaxCommitTs   model.Ts
-	ReceivedMaxResolvedTs model.Ts
 }
 
 // SinkManager is the implementation of SinkManager.
@@ -934,11 +931,11 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	if m.redoDMLMgr != nil {
 		resolvedTs = m.redoDMLMgr.GetResolvedTs(span)
 	} else {
-		resolvedTs = m.sourceManager.GetTableResolvedTs(span)
+		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
 	if resolvedTs < checkpointTs.ResolvedMark() {
-		log.Error("sinkManager: resolved ts should not less than checkpoint ts",
+		log.Panic("sinkManager: resolved ts should not less than checkpoint ts",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
@@ -946,11 +943,9 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 			zap.Any("checkpointTs", checkpointTs))
 	}
 	return TableStats{
-		CheckpointTs:          checkpointTs.ResolvedMark(),
-		ResolvedTs:            resolvedTs,
-		BarrierTs:             tableSink.barrierTs.Load(),
-		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
-		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
+		CheckpointTs: checkpointTs.ResolvedMark(),
+		ResolvedTs:   resolvedTs,
+		BarrierTs:    tableSink.barrierTs.Load(),
 	}
 }
 

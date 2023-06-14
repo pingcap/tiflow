@@ -162,11 +162,6 @@ func (m *SourceManager) CleanByTable(span tablepb.Span, upperBound engine.Positi
 	return m.engine.CleanByTable(span, upperBound)
 }
 
-// GetTableResolvedTs returns the resolved ts of the table.
-func (m *SourceManager) GetTableResolvedTs(span tablepb.Span) model.Ts {
-	return m.engine.GetResolvedTs(span)
-}
-
 // GetTablePullerStats returns the puller stats of the table.
 func (m *SourceManager) GetTablePullerStats(span tablepb.Span) puller.Stats {
 	if m.multiplexing {
