@@ -160,27 +160,22 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 			zap.Stringer("span", &span))
 	}
 
-	maxCommitTs := model.Ts(0)
-	maxResolvedTs := model.Ts(0)
+	maxCommitTs := state.maxReceivedCommitTs.Load()
+	maxResolvedTs := state.maxReceivedResolvedTs.Load()
 	for _, event := range events {
-		state.ch.In() <- eventWithTableID{uniqueID: state.uniqueID, span: span, event: event}
 		if event.IsResolved() {
 			if event.CRTs > maxResolvedTs {
 				maxResolvedTs = event.CRTs
+				state.maxReceivedResolvedTs.Store(maxResolvedTs)
 			}
 		} else {
 			state.receivedEvents.Add(1)
 			if event.CRTs > maxCommitTs {
 				maxCommitTs = event.CRTs
+				state.maxReceivedCommitTs.Store(maxCommitTs)
 			}
 		}
-	}
-
-	if maxCommitTs > state.maxReceivedCommitTs.Load() {
-		state.maxReceivedCommitTs.Store(maxCommitTs)
-	}
-	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
-		state.maxReceivedResolvedTs.Store(maxResolvedTs)
+		state.ch.In() <- eventWithTableID{uniqueID: state.uniqueID, span: span, event: event}
 	}
 }
 
