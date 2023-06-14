@@ -85,7 +85,6 @@ func TestMigration(t *testing.T) {
 	}
 	status2 := model.ChangeFeedStatus{ResolvedTs: 3, CheckpointTs: 2}
 	cfg := config.GetDefaultReplicaConfig()
-	cfg.EnableOldValue = false
 	cfg.CheckGCSafePoint = false
 	cfg.Sink = &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{

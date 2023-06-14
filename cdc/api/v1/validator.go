@@ -133,7 +133,6 @@ func verifyCreateChangefeedConfig(
 	}
 	sortEngine := model.SortUnified
 	if !cdcClusterVer.ShouldEnableOldValueByDefault() {
-		replicaConfig.EnableOldValue = false
 		log.Warn("The TiCDC cluster is built from unknown branch or less than 5.0.0-rc, the old-value are disabled by default.")
 		if !cdcClusterVer.ShouldEnableUnifiedSorterByDefault() {
 			sortEngine = model.SortInMemory

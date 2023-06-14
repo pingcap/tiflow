@@ -176,15 +176,6 @@ func TestReplicaConfigValidate(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, conf.ValidateAndAdjust(sinkURL))
 
-	// Incorrect sink configuration.
-	conf = GetDefaultReplicaConfig()
-	conf.Sink.Protocol = util.AddressOf("canal")
-	conf.EnableOldValue = false
-
-	err = conf.ValidateAndAdjust(sinkURL)
-	require.NoError(t, err)
-	require.True(t, conf.EnableOldValue)
-
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},

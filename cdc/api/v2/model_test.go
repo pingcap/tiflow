@@ -31,7 +31,6 @@ import (
 var defaultAPIConfig = &ReplicaConfig{
 	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
 	CaseSensitive:      true,
-	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	BDRMode:            util.AddressOf(false),
 	EnableSyncPoint:    util.AddressOf(false),
@@ -93,7 +92,6 @@ func TestDefaultReplicaConfig(t *testing.T) {
 
 func TestToAPIReplicaConfig(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
-	cfg.EnableOldValue = false
 	cfg.CheckGCSafePoint = false
 	cfg.Sink = &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{
