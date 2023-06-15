@@ -89,7 +89,6 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	cachedSize := uint64(0)
 
 	defer func() {
-		task.tableSink.updateReceivedSorterCommitTs(advancer.lastTxnCommitTs)
 		eventCount := newRangeEventCount(advancer.lastPos, allEventCount)
 		task.tableSink.updateRangeEventCounts(eventCount)
 

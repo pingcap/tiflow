@@ -154,7 +154,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 		// If eventCache is nil, update sorter commit ts and range event count.
 		if w.eventCache == nil {
-			task.tableSink.updateReceivedSorterCommitTs(advancer.currTxnCommitTs)
 			eventCount := newRangeEventCount(advancer.lastPos, allEventCount)
 			task.tableSink.updateRangeEventCounts(eventCount)
 		}
