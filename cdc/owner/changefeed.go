@@ -553,6 +553,9 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	changefeedBarrierTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedBarrierTsGauge = nil
 
+	if c.isRemoved {
+		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	}
 	c.isReleased = true
 	c.initialized = false
 }
