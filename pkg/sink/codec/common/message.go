@@ -40,6 +40,8 @@ type Message struct {
 	Protocol  config.Protocol   // protocol
 	rowsCount int               // rows in one Message
 	Callback  func()            // Callback function will be called when the message is sent to the sink.
+
+	TooLarge bool
 }
 
 // Length returns the expected size of the Kafka message

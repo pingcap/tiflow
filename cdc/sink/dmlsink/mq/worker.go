@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -79,6 +80,8 @@ type worker struct {
 	metricMQWorkerBatchDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
+
+	claimCheckEnabled bool
 }
 
 // newWorker creates a new flush worker.
@@ -89,6 +92,7 @@ func newWorker(
 	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
 	statistics *metrics.Statistics,
+	replicaConfig *config.ReplicaConfig,
 ) *worker {
 	w := &worker{
 		changeFeedID:                      id,
@@ -101,6 +105,7 @@ func newWorker(
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                        statistics,
+		claimCheckEnabled:                 replicaConfig.Sink.LargeMessageHandle.EnableClaimCheck(),
 	}
 
 	return w
@@ -297,6 +302,12 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			for _, message := range future.Messages {
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
+					if message.TooLarge {
+						if err := w.claimCheckSendMessage(message); err != nil {
+							return 0, err
+						}
+						return message.GetRowsCount(), nil
+					}
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 						return 0, err
 					}
@@ -308,6 +319,12 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (w *worker) claimCheckSendMessage(message *common.Message) error {
+	// 1. send message to the external storage
+	// 2. send one message to the MQ with external storage message location.
+	return nil
 }
 
 func (w *worker) close() {

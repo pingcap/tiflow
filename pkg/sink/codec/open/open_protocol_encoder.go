@@ -88,6 +88,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
+	messageTooLarge := false
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
@@ -97,13 +98,18 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
 			zap.Any("key", key))
-		if !d.config.LargeMessageOnlyHandleKeyColumns {
+
+		if d.config.LargeMessageHandle.Disabled() {
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
-		key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
-		if err != nil {
-			return errors.Trace(err)
+		if d.config.LargeMessageHandle.HandleKeyOnly() {
+			key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		} else {
+			messageTooLarge = true
 		}
 	}
 
@@ -135,6 +141,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	message.Ts = e.CommitTs
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
+	message.TooLarge = messageTooLarge
 	message.IncRowsCount()
 
 	if callback != nil {
