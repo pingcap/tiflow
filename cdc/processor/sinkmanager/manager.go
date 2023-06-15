@@ -935,7 +935,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 
 	if resolvedTs < checkpointTs.ResolvedMark() {
-		log.Panic("sinkManager: resolved ts should not less than checkpoint ts",
+		log.Error("sinkManager: resolved ts should not less than checkpoint ts",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
