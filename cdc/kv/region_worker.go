@@ -744,8 +744,8 @@ func (w *regionWorker) handleEventEntry(
 				return errUnreachable
 			}
 
-			if !state.matcher.matchRow(entry, state.isInitialized()) {
-				if !state.isInitialized() {
+			if !state.matcher.matchRow(entry, state.initialized) {
+				if !state.initialized {
 					state.matcher.cacheCommitRow(entry)
 					continue
 				}

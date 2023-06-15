@@ -436,12 +436,9 @@ func currentRequestID() uint64 {
 }
 
 type eventFeedSession struct {
-	client *CDCClient
 	client     *CDCClient
 	startTs    model.Ts
 	changefeed model.ChangeFeedID
-	tableID    model.TableID
-	tableName  string
 
 	lockResolver txnutil.LockResolver
 	isPullerInit PullerInitialization
@@ -499,8 +496,6 @@ func newEventFeedSession(
 		client:     client,
 		startTs:    startTs,
 		changefeed: client.changefeed,
-		tableID:    client.tableID,
-		tableName:  client.tableName,
 
 		totalSpan:         totalSpan,
 		eventCh:           eventCh,
