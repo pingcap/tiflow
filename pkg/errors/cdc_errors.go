@@ -871,4 +871,8 @@ var (
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
+	ErrInvalidLargeMessageHandleConfig = errors.Normalize(
+		"invalid large message handle config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidLargeMessageHandleConfig"),
+	)
 )

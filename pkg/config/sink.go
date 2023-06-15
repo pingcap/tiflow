@@ -138,9 +138,12 @@ type SinkConfig struct {
 
 	// OnlyOutputUpdatedColumns is only available when the downstream is MQ.
 	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
+	// LargeMessageHandleConfig is only available when the downstream is MQ.
+	LargeMessageHandleConfig *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 
 	// DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.
 	DeleteOnlyOutputHandleKeyColumns *bool `toml:"delete-only-output-handle-key-columns" json:"delete-only-output-handle-key-columns,omitempty"`
+
 	// LargeMessageOnlyHandleKeyColumns is only available when the downstream is MQ.
 	LargeMessageOnlyHandleKeyColumns *bool `toml:"large-message-only-handle-key-columns" json:"large-message-only-handle-key-columns,omitempty"`
 
@@ -526,4 +529,45 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 		return nil
 	}
 	return compatibilityError
+}
+
+const (
+	largeMessageHandleOptionNone          string = "none"
+	largeMessageHandleOptionClaimCheck    string = "claim-check"
+	largeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
+)
+
+type LargeMessageHandleConfig struct {
+	LargeMessageHandleOption string `toml:"large-message-handle-option" json:"large-message-handle-option"`
+	ClaimCheckStorageURI     string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
+}
+
+// Validate the LargeMessageHandleConfig.
+func (c *LargeMessageHandleConfig) Validate() error {
+	switch c.LargeMessageHandleOption {
+	case largeMessageHandleOptionNone, largeMessageHandleOptionHandleKeyOnly:
+	case largeMessageHandleOptionClaimCheck:
+		if c.ClaimCheckStorageURI == "" {
+			return cerror.ErrInvalidLargeMessageHandleConfig.GenWithStackByArgs("claim-check-storage-uri is required")
+		}
+	default:
+		return cerror.ErrInvalidLargeMessageHandleConfig.GenWithStackByArgs(c.LargeMessageHandleOption)
+	}
+	return nil
+}
+
+func (c *LargeMessageHandleConfig) GetClaimCheckStorageURI() string {
+	return c.ClaimCheckStorageURI
+}
+
+func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
+	return c.LargeMessageHandleOption == largeMessageHandleOptionHandleKeyOnly
+}
+
+func (c *LargeMessageHandleConfig) EnableClaimCheck() bool {
+	return c.LargeMessageHandleOption == largeMessageHandleOptionClaimCheck
+}
+
+func (c *LargeMessageHandleConfig) Disabled() bool {
+	return c.LargeMessageHandleOption == largeMessageHandleOptionNone
 }
