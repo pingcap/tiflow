@@ -137,20 +137,9 @@ const (
       "server-max-pending-message-count": 102400,
       "server-ack-interval": 100000000,
       "server-worker-pool-size": 4,
-<<<<<<< HEAD
-      "max-recv-msg-size": 268435456
-=======
       "max-recv-msg-size": 268435456,
       "keep-alive-time": 30000000000,
       "keep-alive-timeout": 10000000000
-    },
-    "scheduler": {
-      "heartbeat-tick": 2,
-      "collect-stats-tick": 200,
-      "max-task-concurrency": 10,
-      "check-balance-interval": 60000000000,
-      "add-table-batch-size": 50
->>>>>>> 328deb69e2 (p2p(ticdc): add keep alive configuration for p2p server (#8908))
     }
   }
 }`
