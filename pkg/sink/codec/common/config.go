@@ -193,7 +193,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
-	c.LargeMessageOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns)
+	c.LargeMessageOnlyHandleKeyColumns = replicaConfig.Sink.LargeMessageHandle.HandleKeyOnly()
 	if c.LargeMessageOnlyHandleKeyColumns {
 		log.Warn("large message only handle key columns is enabled, "+
 			"if the full message's size is larger than max-message-bytes, only send the handle key columns",

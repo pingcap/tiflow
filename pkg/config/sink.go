@@ -138,14 +138,11 @@ type SinkConfig struct {
 
 	// OnlyOutputUpdatedColumns is only available when the downstream is MQ.
 	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
-	// LargeMessageHandleConfig is only available when the downstream is MQ.
-	LargeMessageHandleConfig *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+	// LargeMessageHandle is only available when the downstream is MQ.
+	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 
 	// DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.
 	DeleteOnlyOutputHandleKeyColumns *bool `toml:"delete-only-output-handle-key-columns" json:"delete-only-output-handle-key-columns,omitempty"`
-
-	// LargeMessageOnlyHandleKeyColumns is only available when the downstream is MQ.
-	LargeMessageOnlyHandleKeyColumns *bool `toml:"large-message-only-handle-key-columns" json:"large-message-only-handle-key-columns,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
@@ -537,6 +534,7 @@ const (
 	largeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
 )
 
+// LargeMessageHandleConfig is the configuration for handling large message.
 type LargeMessageHandleConfig struct {
 	LargeMessageHandleOption string `toml:"large-message-handle-option" json:"large-message-handle-option"`
 	ClaimCheckStorageURI     string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
@@ -556,18 +554,22 @@ func (c *LargeMessageHandleConfig) Validate() error {
 	return nil
 }
 
+// GetClaimCheckStorageURI returns the claim check storage URI, should be called if use claim check.
 func (c *LargeMessageHandleConfig) GetClaimCheckStorageURI() string {
 	return c.ClaimCheckStorageURI
 }
 
+// HandleKeyOnly returns true if handle large message by encoding handle key only.
 func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
 	return c.LargeMessageHandleOption == largeMessageHandleOptionHandleKeyOnly
 }
 
+// EnableClaimCheck returns true if enable claim check.
 func (c *LargeMessageHandleConfig) EnableClaimCheck() bool {
 	return c.LargeMessageHandleOption == largeMessageHandleOptionClaimCheck
 }
 
+// Disabled returns true if disable large message handle.
 func (c *LargeMessageHandleConfig) Disabled() bool {
 	return c.LargeMessageHandleOption == largeMessageHandleOptionNone
 }

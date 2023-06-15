@@ -211,7 +211,6 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		LargeMessageOnlyHandleKeyColumns: util.AddressOf(false),
 		Protocol:                         util.AddressOf("open-protocol"),
 	}, cfg.Sink)
 }
@@ -244,7 +243,6 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		},
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		LargeMessageOnlyHandleKeyColumns: util.AddressOf(false),
 	}, cfg.Sink)
 }
 

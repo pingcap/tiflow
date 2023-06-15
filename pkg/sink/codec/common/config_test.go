@@ -290,7 +290,6 @@ func TestConfigApplyValidate(t *testing.T) {
 	c = NewConfig(config.ProtocolOpen)
 	replicaConfig = config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = util.AddressOf(true)
-	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = util.AddressOf(true)
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.True(t, c.DeleteOnlyHandleKeyColumns)
@@ -324,7 +323,6 @@ func TestMergeConfig(t *testing.T) {
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abc")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(123),
@@ -358,7 +356,6 @@ func TestMergeConfig(t *testing.T) {
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(false)
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abcd")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(1233),
