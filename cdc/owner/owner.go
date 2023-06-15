@@ -700,9 +700,9 @@ func (o *ownerImpl) updateGCSafepoint(
 	return nil
 }
 
-// ignoreFailedChangeFeedWhenGC checks if a failed changefeed should be ignored
+// ignoreChangeFeedWhenGC checks if a failed changefeed should be ignored
 // when calculating the gc safepoint of the associated upstream.
-func (o *ownerImpl) ignoreFailedChangeFeedWhenGC(
+func (o *ownerImpl) ignoreChangeFeedWhenGC(
 	state *orchestrator.ChangefeedReactorState,
 ) bool {
 	upID := state.Info.UpstreamID
@@ -717,7 +717,7 @@ func (o *ownerImpl) ignoreFailedChangeFeedWhenGC(
 	if state.Status != nil {
 		ts = state.Status.CheckpointTs
 	}
-	return us.GCManager.IgnoreFailedChangeFeed(ts)
+	return us.GCManager.IgnoreChangeFeed(ts)
 }
 
 // calculateGCSafepoint calculates GCSafepoint for different upstream.
@@ -736,9 +736,9 @@ func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState)
 		}
 
 		switch changefeedState.Info.State {
-		case model.StateNormal, model.StateStopped, model.StateError:
-		case model.StateFailed:
-			if o.ignoreFailedChangeFeedWhenGC(changefeedState) {
+		case model.StateNormal, model.StateStopped,
+			model.StateError, model.StateFailed:
+			if o.ignoreChangeFeedWhenGC(changefeedState) {
 				continue
 			}
 		default:

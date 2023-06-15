@@ -28,9 +28,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// gcTTL is the duration during which data related to a
-// failed feed will be retained, and beyond which point the data will be deleted
-// by garbage collection.
 const gcTTL = 24 * time.Hour
 
 // gcSafepointUpdateInterval is the minimum interval that CDC can update gc safepoint
@@ -43,9 +40,9 @@ type Manager interface {
 	// Set `forceUpdate` to force Manager update.
 	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
 	CheckStaleCheckpointTs(ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
-	// IgnoreFailedChangeFeed verifies whether a failed changefeed should be
+	// IgnoreChangeFeed verifies whether a failed changefeed should be
 	// disregarded. When calculating the GC safepoint of the related upstream,
-	IgnoreFailedChangeFeed(checkpointTs uint64) bool
+	IgnoreChangeFeed(checkpointTs uint64) bool
 }
 
 type gcManager struct {
@@ -123,7 +120,11 @@ func (m *gcManager) CheckStaleCheckpointTs(
 	return nil
 }
 
-func (m *gcManager) IgnoreFailedChangeFeed(
+// IgnoreChangeFeed verifies whether to exclude the changefeed from the
+// calculation of the global garbage collection (gc) safepoint. It does so by
+// comparing the lag of the checkpointTs to the m.gcTTL value, and if the lag
+// is greater, the changefeed will be disregarded.
+func (m *gcManager) IgnoreChangeFeed(
 	checkpointTs uint64,
 ) bool {
 	pdTime, err := m.pdClock.CurrentTime()
@@ -139,5 +140,5 @@ func (m *gcManager) IgnoreFailedChangeFeed(
 	gcSafepointUpperBound := checkpointTs - 1
 	return pdTime.Sub(
 		oracle.GetTimeFromTS(gcSafepointUpperBound),
-	) > gcTTL
+	) > time.Duration(m.gcTTL)
 }
