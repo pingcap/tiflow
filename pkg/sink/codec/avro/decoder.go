@@ -110,11 +110,11 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 		return nil, false, errors.Trace(err)
 	}
 
-	// for the delete event, only have key part, we treat it as the value part,
-	// it holds primary key or the unique key columns.
+	// for the delete event, only have key part, it holds primary key or the unique key columns.
 	// for the insert / update, extract the value part, it holds all columns.
 	isDelete := len(d.value) == 0
 	if isDelete {
+		// delete event only have key part, treat it as the value part also.
 		valueMap = keyMap
 		rawSchema = rawKeySchema
 	} else {
@@ -129,14 +129,14 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 		return nil, false, errors.Trace(err)
 	}
 
-	event, err := assembleEvent(keyMap, valueMap, schema)
+	event, err := assembleEvent(keyMap, valueMap, schema, isDelete)
 	if err != nil {
 		return nil, false, errors.Trace(err)
 	}
 
-	// Delete event only has PreColumns, but the checksum is calculated based on the whole row columns,
+	// Delete event only has Primary Key Columns, but the checksum is calculated based on the whole row columns,
 	// checksum verification cannot be done here, so skip it.
-	if event.IsDelete() {
+	if isDelete {
 		return event, false, nil
 	}
 
@@ -173,7 +173,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 // keyMap hold primary key or unique key columns
 // valueMap hold all columns information
 // schema is corresponding to the valueMap, it can be used to decode the valueMap to construct columns.
-func assembleEvent(keyMap, valueMap, schema map[string]interface{}) (*model.RowChangedEvent, error) {
+func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete bool) (*model.RowChangedEvent, error) {
 	fields, ok := schema["fields"].([]interface{})
 	if !ok {
 		return nil, errors.New("schema fields should be a map")
@@ -218,7 +218,6 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}) (*model.RowC
 			flag.SetIsHandleKey()
 		}
 
-		// value is an interface, need to convert it to the real value.
 		value, ok := valueMap[colName]
 		if !ok {
 			return nil, errors.New("value not found")
@@ -243,8 +242,6 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}) (*model.RowC
 	tableName := schema["name"].(string)
 
 	var commitTs int64
-
-	isDelete := len(valueMap) == 0
 	if !isDelete {
 		o, ok := valueMap[tidbCommitTs]
 		if !ok {
@@ -276,10 +273,7 @@ func isCorrupted(valueMap map[string]interface{}) bool {
 	}
 
 	corrupted := o.(bool)
-	if !corrupted {
-		return false
-	}
-	return true
+	return corrupted
 }
 
 // extract the checksum from the received value map
@@ -300,6 +294,8 @@ func extractExpectedChecksum(valueMap map[string]interface{}) (uint64, bool, err
 	return result, true, nil
 }
 
+// value is an interface, need to convert it to the real value with the help of type info.
+// holder has the value's column info.
 func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType byte) (interface{}, error) {
 	switch t := value.(type) {
 	// for nullable columns, the value is encoded as a map with one pair.
@@ -327,7 +323,7 @@ func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType 
 		}
 	case mysql.TypeSet:
 		// set type is encoded as string,
-		// we need to convert it to the binary format.
+		// we need to convert it to int by the order of the set values definition.
 		elems := strings.Split(holder["allowed"].(string), ",")
 		switch t := value.(type) {
 		case string:
