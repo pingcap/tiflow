@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -61,19 +60,18 @@ const (
 )
 
 type regionWorkerMetrics struct {
-	// kv events related metrics
-	metricReceivedEventSize           prometheus.Observer
-	metricDroppedEventSize            prometheus.Observer
+	metricReceivedEventSize prometheus.Observer
+	metricDroppedEventSize  prometheus.Observer
+
 	metricPullEventInitializedCounter prometheus.Counter
+	metricPullEventCommittedCounter   prometheus.Counter
 	metricPullEventPrewriteCounter    prometheus.Counter
 	metricPullEventCommitCounter      prometheus.Counter
-	metricPullEventCommittedCounter   prometheus.Counter
 	metricPullEventRollbackCounter    prometheus.Counter
-	metricSendEventResolvedCounter    prometheus.Counter
-	metricSendEventCommitCounter      prometheus.Counter
-	metricSendEventCommittedCounter   prometheus.Counter
 
-	// TODO: add region runtime related metrics
+	metricSendEventResolvedCounter  prometheus.Counter
+	metricSendEventCommitCounter    prometheus.Counter
+	metricSendEventCommittedCounter prometheus.Counter
 }
 
 /*
@@ -120,16 +118,18 @@ func newRegionWorker(
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
+
 	metrics.metricPullEventInitializedCounter = pullEventCounter.
 		WithLabelValues(cdcpb.Event_INITIALIZED.String(), changefeedID.Namespace, changefeedID.ID)
 	metrics.metricPullEventCommittedCounter = pullEventCounter.
 		WithLabelValues(cdcpb.Event_COMMITTED.String(), changefeedID.Namespace, changefeedID.ID)
-	metrics.metricPullEventCommitCounter = pullEventCounter.
-		WithLabelValues(cdcpb.Event_COMMIT.String(), changefeedID.Namespace, changefeedID.ID)
 	metrics.metricPullEventPrewriteCounter = pullEventCounter.
 		WithLabelValues(cdcpb.Event_PREWRITE.String(), changefeedID.Namespace, changefeedID.ID)
+	metrics.metricPullEventCommitCounter = pullEventCounter.
+		WithLabelValues(cdcpb.Event_COMMIT.String(), changefeedID.Namespace, changefeedID.ID)
 	metrics.metricPullEventRollbackCounter = pullEventCounter.
 		WithLabelValues(cdcpb.Event_ROLLBACK.String(), changefeedID.Namespace, changefeedID.ID)
+
 	metrics.metricSendEventResolvedCounter = sendEventCounter.
 		WithLabelValues("native-resolved", changefeedID.Namespace, changefeedID.ID)
 	metrics.metricSendEventCommitCounter = sendEventCounter.
@@ -617,52 +617,52 @@ func (w *regionWorker) handleEventEntry(
 	x *cdcpb.Event_Entries_,
 	state *regionFeedState,
 ) error {
-	regionID, regionSpan, startTime, _ := state.getRegionMeta()
-	for _, entry := range x.Entries.GetEntries() {
-		// if a region with kv range [a, z), and we only want the get [b, c) from this region,
-		// tikv will return all key events in the region, although specified [b, c) int the request.
-		// we can make tikv only return the events about the keys in the specified range.
-		comparableKey := spanz.ToComparableKey(entry.GetKey())
-		// key for initialized event is nil
-		if entry.Type != cdcpb.Event_INITIALIZED &&
-			!spanz.KeyInSpan(comparableKey, regionSpan) {
-			w.metrics.metricDroppedEventSize.Observe(float64(entry.Size()))
-			continue
+	emit := func(assembled model.RegionFeedEvent) bool {
+		select {
+		case w.outputCh <- assembled:
+			return true
+		case <-ctx.Done():
+			return false
 		}
+	}
+	return handleEventEntry(ctx, w.session.client.changefeed, x, w.session.startTs, state, w.metrics, emit)
+}
+
+func handleEventEntry(
+	ctx context.Context,
+	changefeed model.ChangeFeedID,
+	x *cdcpb.Event_Entries_,
+	startTs uint64,
+	state *regionFeedState,
+	metrics *regionWorkerMetrics,
+	emit func(assembled model.RegionFeedEvent) bool,
+) error {
+	regionID, _, startTime, _ := state.getRegionMeta()
+	for _, entry := range x.Entries.GetEntries() {
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(startTime) > 20*time.Second {
 				log.Warn("The time cost of initializing is too much",
-					zap.String("namespace", w.session.client.changefeed.Namespace),
-					zap.String("changefeed", w.session.client.changefeed.ID),
-					zap.Duration("duration", time.Since(startTime)),
-					zap.Uint64("regionID", regionID))
+					zap.String("namespace", changefeed.Namespace),
+					zap.String("changefeed", changefeed.ID),
+					zap.Uint64("regionID", regionID),
+					zap.Duration("duration", time.Since(startTime)))
 			}
-			w.metrics.metricPullEventInitializedCounter.Inc()
 
+			metrics.metricPullEventInitializedCounter.Inc()
 			state.setInitialized()
-			// state is just initialized, so we know this must be true
-			cachedEvents := state.matcher.matchCachedRow(true)
-			for _, cachedEvent := range cachedEvents {
+			for _, cachedEvent := range state.matcher.matchCachedRow(true) {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
 					return errors.Trace(err)
 				}
-				select {
-				case w.outputCh <- revent:
-					w.metrics.metricSendEventCommitCounter.Inc()
-				case <-ctx.Done():
-					return errors.Trace(ctx.Err())
+				if !emit(revent) {
+					return nil
 				}
+				metrics.metricSendEventCommitCounter.Inc()
 			}
 			state.matcher.matchCachedRollbackRow(true)
 		case cdcpb.Event_COMMITTED:
-			w.metrics.metricPullEventCommittedCounter.Inc()
-			revent, err := assembleRowEvent(regionID, entry)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
 			resolvedTs := state.getLastResolvedTs()
 			if entry.CommitTs <= resolvedTs {
 				logPanic("The CommitTs must be greater than the resolvedTs",
@@ -672,21 +672,25 @@ func (w *regionWorker) handleEventEntry(
 					zap.Uint64("regionID", regionID))
 				return errUnreachable
 			}
-			select {
-			case w.outputCh <- revent:
-				w.metrics.metricSendEventCommittedCounter.Inc()
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
+
+			metrics.metricPullEventCommittedCounter.Inc()
+			revent, err := assembleRowEvent(regionID, entry)
+			if err != nil {
+				return errors.Trace(err)
 			}
+			if !emit(revent) {
+				return nil
+			}
+			metrics.metricSendEventCommittedCounter.Inc()
 		case cdcpb.Event_PREWRITE:
-			w.metrics.metricPullEventPrewriteCounter.Inc()
+			metrics.metricPullEventPrewriteCounter.Inc()
 			state.matcher.putPrewriteRow(entry)
 		case cdcpb.Event_COMMIT:
-			w.metrics.metricPullEventCommitCounter.Inc()
-			// NOTE: state.getLastResolvedTs() will never less than session.startTs.
+			metrics.metricPullEventCommitCounter.Inc()
+			// NOTE: state.getLastResolvedTs() will never less than startTs.
 			resolvedTs := state.getLastResolvedTs()
 			// TiKV can send events with StartTs/CommitTs less than startTs.
-			isStaleEvent := entry.CommitTs <= w.session.startTs
+			isStaleEvent := entry.CommitTs <= startTs
 			if entry.CommitTs <= resolvedTs && !isStaleEvent {
 				logPanic("The CommitTs must be greater than the resolvedTs",
 					zap.String("EventType", "COMMIT"),
@@ -712,15 +716,13 @@ func (w *regionWorker) handleEventEntry(
 				if err != nil {
 					return errors.Trace(err)
 				}
-				select {
-				case w.outputCh <- revent:
-					w.metrics.metricSendEventCommitCounter.Inc()
-				case <-ctx.Done():
-					return errors.Trace(ctx.Err())
+				if !emit(revent) {
+					return nil
 				}
+				metrics.metricSendEventCommitCounter.Inc()
 			}
 		case cdcpb.Event_ROLLBACK:
-			w.metrics.metricPullEventRollbackCounter.Inc()
+			metrics.metricPullEventRollbackCounter.Inc()
 			if !state.isInitialized() {
 				state.matcher.cacheRollbackRow(entry)
 				continue
