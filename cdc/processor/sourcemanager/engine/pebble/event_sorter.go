@@ -156,21 +156,28 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 			zap.Int64("tableID", tableID))
 	}
 
-	maxCommitTs := model.Ts(0)
-	maxResolvedTs := model.Ts(0)
+	maxCommitTs := state.maxReceivedCommitTs.Load()
+	maxResolvedTs := state.maxReceivedResolvedTs.Load()
 	for _, event := range events {
+<<<<<<< HEAD
 		state.ch.In() <- eventWithTableID{tableID, event}
+=======
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 		if event.IsResolved() {
 			if event.CRTs > maxResolvedTs {
 				maxResolvedTs = event.CRTs
+				state.maxReceivedResolvedTs.Store(maxResolvedTs)
 			}
 		} else {
 			state.receivedEvents.Add(1)
 			if event.CRTs > maxCommitTs {
 				maxCommitTs = event.CRTs
+				state.maxReceivedCommitTs.Store(maxCommitTs)
 			}
 		}
+		state.ch.In() <- eventWithTableID{uniqueID: state.uniqueID, span: span, event: event}
 	}
+<<<<<<< HEAD
 
 	if maxCommitTs > state.maxReceivedCommitTs.Load() {
 		state.maxReceivedCommitTs.Store(maxCommitTs)
@@ -194,6 +201,8 @@ func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
 	}
 
 	return state.maxReceivedResolvedTs.Load()
+=======
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 }
 
 // OnResolve implements engine.SortEngine.

@@ -282,6 +282,16 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ok, err := p.AddTable(ctx, 1, 20, true)
 	require.NoError(t, err)
 	require.True(t, ok)
+<<<<<<< HEAD
+=======
+	p.sinkManager.r.UpdateBarrierTs(20, nil)
+	stats := p.sinkManager.r.GetTableStats(span)
+	require.Equal(t, model.Ts(20), stats.CheckpointTs)
+	require.Equal(t, model.Ts(20), stats.ResolvedTs)
+	require.Equal(t, model.Ts(20), stats.BarrierTs)
+	require.Len(t, p.sinkManager.r.GetAllCurrentTableSpans(), 1)
+	require.Equal(t, 1, p.sinkManager.r.GetAllCurrentTableSpansCount())
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 
 	table1 := p.tables[1].(*mockTablePipeline)
 	require.Equal(t, model.Ts(20), table1.resolvedTs)
@@ -308,7 +318,14 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ok, err = p.AddTable(ctx, 1, 30, true)
 	require.NoError(t, err)
 	require.True(t, ok)
+<<<<<<< HEAD
 	require.Equal(t, model.Ts(0), table1.sinkStartTs)
+=======
+	stats = p.sinkManager.r.GetTableStats(span)
+	require.Equal(t, model.Ts(20), stats.CheckpointTs)
+	require.Equal(t, model.Ts(101), stats.ResolvedTs)
+	require.Equal(t, model.Ts(20), stats.BarrierTs)
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 
 	ok, err = p.AddTable(ctx, 1, 30, false)
 	require.NoError(t, err)

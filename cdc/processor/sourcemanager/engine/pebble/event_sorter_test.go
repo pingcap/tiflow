@@ -41,7 +41,11 @@ func TestTableOperations(t *testing.T) {
 	s.AddTable(1)
 	s.AddTable(1)
 
+<<<<<<< HEAD
 	require.Equal(t, model.Ts(0), s.GetResolvedTs(1))
+=======
+	require.Equal(t, model.Ts(2), s.GetStatsByTable(span).ReceivedMaxResolvedTs)
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 
 	s.RemoveTable(1)
 	s.RemoveTable(1)
@@ -121,8 +125,14 @@ func TestEventFetch(t *testing.T) {
 		}),
 	}
 
+<<<<<<< HEAD
 	s.Add(1, inputEvents...)
 	s.Add(model.TableID(1), model.NewResolvedPolymorphicEvent(0, 4))
+=======
+	s.Add(span, inputEvents...)
+	s.Add(span, model.NewResolvedPolymorphicEvent(0, 4))
+	require.Equal(t, model.Ts(4), s.GetStatsByTable(span).ReceivedMaxResolvedTs)
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 
 	sortedEvents := make([]*model.PolymorphicEvent, 0, len(inputEvents))
 	sortedPositions := make([]engine.Position, 0, len(inputEvents))

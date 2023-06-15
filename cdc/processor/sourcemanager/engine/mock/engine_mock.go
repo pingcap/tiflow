@@ -134,6 +134,7 @@ func (mr *MockSortEngineMockRecorder) FetchByTable(tableID, lowerBound, upperBou
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByTable", reflect.TypeOf((*MockSortEngine)(nil).FetchByTable), tableID, lowerBound, upperBound)
 }
 
+<<<<<<< HEAD
 // GetResolvedTs mocks base method.
 func (m *MockSortEngine) GetResolvedTs(tableID model.TableID) model.Ts {
 	m.ctrl.T.Helper()
@@ -148,6 +149,8 @@ func (mr *MockSortEngineMockRecorder) GetResolvedTs(tableID interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolvedTs", reflect.TypeOf((*MockSortEngine)(nil).GetResolvedTs), tableID)
 }
 
+=======
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 // GetStatsByTable mocks base method.
 func (m *MockSortEngine) GetStatsByTable(tableID model.TableID) engine.TableStats {
 	m.ctrl.T.Helper()

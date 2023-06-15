@@ -86,6 +86,7 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	}
 }
 
+<<<<<<< HEAD
 // GetResolvedTs implements engine.SortEngine.
 func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
 	value, exists := s.tables.Load(tableID)
@@ -96,6 +97,8 @@ func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
 	return value.(*tableSorter).getResolvedTs()
 }
 
+=======
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 // OnResolve implements engine.SortEngine.
 func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 	s.mu.Lock()
@@ -221,6 +224,7 @@ func (s *tableSorter) add(events ...*model.PolymorphicEvent) (resolvedTs model.T
 	return
 }
 
+<<<<<<< HEAD
 func (s *tableSorter) getResolvedTs() model.Ts {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -228,6 +232,11 @@ func (s *tableSorter) getResolvedTs() model.Ts {
 }
 
 func (s *tableSorter) fetch(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {
+=======
+func (s *tableSorter) fetch(
+	span tablepb.Span, lowerBound, upperBound engine.Position,
+) engine.EventIterator {
+>>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
