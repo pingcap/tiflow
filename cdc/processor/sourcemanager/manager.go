@@ -162,11 +162,6 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 	return m.engine.GetStatsByTable(span)
 }
 
-// ReceivedEvents returns the number of events in the engine that have not been sent to the sink.
-func (m *SourceManager) ReceivedEvents() int64 {
-	return m.engine.ReceivedEvents()
-}
-
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	m.ctx = ctx
