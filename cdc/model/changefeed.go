@@ -339,6 +339,7 @@ func (info *ChangeFeedInfo) rmMQOnlyFields() {
 	info.Config.Sink.OnlyOutputUpdatedColumns = nil
 	info.Config.Sink.DeleteOnlyOutputHandleKeyColumns = nil
 	info.Config.Sink.KafkaConfig = nil
+	info.Config.Sink.LargeMessageHandle = nil
 }
 
 func (info *ChangeFeedInfo) rmStorageOnlyFields() {
