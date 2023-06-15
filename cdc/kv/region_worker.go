@@ -625,11 +625,10 @@ func (w *regionWorker) handleEventEntry(
 			return false
 		}
 	}
-	return handleEventEntry(ctx, w.session.client.changefeed, x, w.session.startTs, state, w.metrics, emit)
+	return handleEventEntry(w.session.client.changefeed, x, w.session.startTs, state, w.metrics, emit)
 }
 
 func handleEventEntry(
-	ctx context.Context,
 	changefeed model.ChangeFeedID,
 	x *cdcpb.Event_Entries_,
 	startTs uint64,
