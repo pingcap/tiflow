@@ -554,11 +554,6 @@ func (c *LargeMessageHandleConfig) Validate() error {
 	return nil
 }
 
-// GetClaimCheckStorageURI returns the claim check storage URI, should be called if use claim check.
-func (c *LargeMessageHandleConfig) GetClaimCheckStorageURI() string {
-	return c.ClaimCheckStorageURI
-}
-
 // HandleKeyOnly returns true if handle large message by encoding handle key only.
 func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
 	return c.LargeMessageHandleOption == largeMessageHandleOptionHandleKeyOnly

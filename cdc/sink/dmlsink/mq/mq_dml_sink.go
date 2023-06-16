@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
@@ -31,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -75,6 +77,7 @@ func newDMLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
 	encoderConcurrency int,
+	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 ) (*dmlSink, error) {
 	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
@@ -82,10 +85,18 @@ func newDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	var storage storage.ExternalStorage
+	if replicaConfig.Sink.LargeMessageHandle.EnableClaimCheck() {
+		storage, err = util.GetExternalStorageFromURI(ctx, replicaConfig.Sink.LargeMessageHandle.ClaimCheckStorageURI)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
-		encoderBuilder, encoderConcurrency, producer, statistics)
+		encoderBuilder, encoderConcurrency, producer, storage, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,

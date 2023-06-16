@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -81,7 +82,7 @@ type worker struct {
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
 
-	claimCheckEnabled bool
+	storage storage.ExternalStorage
 }
 
 // newWorker creates a new flush worker.
@@ -91,8 +92,8 @@ func newWorker(
 	builder codec.RowEventEncoderBuilder,
 	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
+	storage storage.ExternalStorage,
 	statistics *metrics.Statistics,
-	replicaConfig *config.ReplicaConfig,
 ) *worker {
 	w := &worker{
 		changeFeedID:                      id,
@@ -105,7 +106,7 @@ func newWorker(
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
 		statistics:                        statistics,
-		claimCheckEnabled:                 replicaConfig.Sink.LargeMessageHandle.EnableClaimCheck(),
+		storage:                           storage,
 	}
 
 	return w
@@ -324,6 +325,11 @@ func (w *worker) sendMessages(ctx context.Context) error {
 func (w *worker) claimCheckSendMessage(message *common.Message) error {
 	// 1. send message to the external storage
 	// 2. send one message to the MQ with external storage message location.
+
+	//if w.storage != nil {
+	//
+	//}
+
 	return nil
 }
 
