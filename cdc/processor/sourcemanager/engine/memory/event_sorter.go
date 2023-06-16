@@ -135,12 +135,6 @@ func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
 	return engine.TableStats{}
 }
 
-// ReceivedEvents implements engine.SortEngine.
-// Do not use this function, it is only used for testing.
-func (s *EventSorter) ReceivedEvents() int64 {
-	return 0
-}
-
 // Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.tables = spanz.SyncMap{}

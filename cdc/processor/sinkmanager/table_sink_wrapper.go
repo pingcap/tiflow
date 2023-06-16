@@ -64,8 +64,6 @@ type tableSinkWrapper struct {
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
-	// receivedEventCount is the number of events received from the sorter.
-	receivedEventCount atomic.Int64
 
 	// replicateTs is the ts that the table sink has started to replicate.
 	replicateTs    model.Ts
@@ -214,10 +212,6 @@ func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
 	return t.receivedSorterResolvedTs.Load()
-}
-
-func (t *tableSinkWrapper) getReceivedEventCount() int64 {
-	return t.receivedEventCount.Load()
 }
 
 func (t *tableSinkWrapper) getState() tablepb.TableState {
