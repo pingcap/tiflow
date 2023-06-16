@@ -74,9 +74,6 @@ type SortEngine interface {
 	// GetStatsByTable gets the statistics of the given table.
 	GetStatsByTable(span tablepb.Span) TableStats
 
-	// ReceivedEvents returns the number of events received by the sort engine.
-	ReceivedEvents() int64
-
 	// Close closes the engine. All data written by this instance can be deleted.
 	//
 	// NOTE: it leads an undefined behavior to close an engine with active iterators.

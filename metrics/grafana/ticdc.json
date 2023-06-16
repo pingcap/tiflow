@@ -3783,6 +3783,7 @@
         },
         {
           "aliasColors": {},
+<<<<<<< HEAD
           "bars": true,
           "dashLength": 10,
           "dashes": false,
@@ -4010,6 +4011,8 @@
         },
         {
           "aliasColors": {},
+=======
+>>>>>>> d9fa56f5ed (processor (ticdc): remove remain event metric (#9240))
           "bars": false,
           "dashLength": 10,
           "dashes": false,
