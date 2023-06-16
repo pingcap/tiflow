@@ -77,12 +77,12 @@ func TestMigration(t *testing.T) {
 		SinkURI: "test1",
 		StartTs: 1, TargetTs: 100, State: model.StateNormal,
 	}
-	status1 := model.ChangeFeedStatus{ResolvedTs: 2, CheckpointTs: 1}
+	status1 := model.ChangeFeedStatus{CheckpointTs: 1}
 	info2 := model.ChangeFeedInfo{
 		SinkURI: "test1",
 		StartTs: 2, TargetTs: 200, State: model.StateError,
 	}
-	status2 := model.ChangeFeedStatus{ResolvedTs: 3, CheckpointTs: 2}
+	status2 := model.ChangeFeedStatus{CheckpointTs: 2}
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.EnableOldValue = false
 	cfg.CheckGCSafePoint = false
@@ -134,7 +134,7 @@ func TestMigration(t *testing.T) {
 		StartTs: 3, TargetTs: 300, State: model.StateFailed,
 		Config: cfg,
 	}
-	status3 := model.ChangeFeedStatus{ResolvedTs: 4, CheckpointTs: 3}
+	status3 := model.ChangeFeedStatus{CheckpointTs: 3}
 
 	testCases := []struct {
 		id     string
@@ -356,17 +356,17 @@ func TestMigrationNonDefaultCluster(t *testing.T) {
 		SinkURI: "test1",
 		StartTs: 1, TargetTs: 100, State: model.StateNormal,
 	}
-	status1 := model.ChangeFeedStatus{ResolvedTs: 2, CheckpointTs: 1}
+	status1 := model.ChangeFeedStatus{CheckpointTs: 1}
 	info2 := model.ChangeFeedInfo{
 		SinkURI: "test1",
 		StartTs: 2, TargetTs: 200, State: model.StateError,
 	}
-	status2 := model.ChangeFeedStatus{ResolvedTs: 3, CheckpointTs: 2}
+	status2 := model.ChangeFeedStatus{CheckpointTs: 2}
 	info3 := model.ChangeFeedInfo{
 		SinkURI: "test1",
 		StartTs: 3, TargetTs: 300, State: model.StateFailed,
 	}
-	status3 := model.ChangeFeedStatus{ResolvedTs: 4, CheckpointTs: 3}
+	status3 := model.ChangeFeedStatus{CheckpointTs: 3}
 
 	testCases := []struct {
 		id     string
