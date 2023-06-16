@@ -586,7 +586,6 @@ func TestBarrierAdvance(t *testing.T) {
 
 		// The changefeed load the info from etcd.
 		cf.state.Status = &model.ChangeFeedStatus{
-			ResolvedTs:        cf.state.Info.StartTs + 10,
 			CheckpointTs:      cf.state.Info.StartTs,
 			MinTableBarrierTs: cf.state.Info.StartTs,
 		}
@@ -607,7 +606,7 @@ func TestBarrierAdvance(t *testing.T) {
 		}
 
 		// Suppose tableCheckpoint has been advanced.
-		cf.state.Status.CheckpointTs = cf.state.Status.ResolvedTs
+		cf.state.Status.CheckpointTs += 10
 
 		// Need more 1 tick to advance barrier if sync-point is enabled.
 		if i == 1 {
