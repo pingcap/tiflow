@@ -219,15 +219,15 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
-	var tableResolvedTs, tableCheckpointTs uint64
-	var state tablepb.TableState
+	var (
+		tableResolvedTs   uint64
+		tableCheckpointTs uint64
+		state             tablepb.TableState
+		alreadyExist      bool
+	)
 	done := func() bool {
-		state, alreadyExist := p.sinkManager.r.GetTableState(span)
-		if alreadyExist {
-			stats := p.sinkManager.r.GetTableStats(span)
-			tableResolvedTs = stats.ResolvedTs
-			tableCheckpointTs = stats.CheckpointTs
-		} else {
+		state, alreadyExist = p.sinkManager.r.GetTableState(span)
+		if !alreadyExist {
 			log.Panic("table which was added is not found",
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -235,6 +235,9 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 				zap.Stringer("span", &span),
 				zap.Bool("isPrepare", isPrepare))
 		}
+		stats := p.sinkManager.r.GetTableStats(span)
+		tableResolvedTs = stats.ResolvedTs
+		tableCheckpointTs = stats.CheckpointTs
 
 		if isPrepare {
 			return state == tablepb.TableStatePrepared
