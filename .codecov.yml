@@ -24,7 +24,7 @@ parsers:
       macro: no
 
 comment:
-  layout: "header, flags, diff"
+  layout: "header, components, flags, diff"
   behavior: default
   require_changes: no
 
@@ -41,20 +41,49 @@ ignore:
   - "mock/.*"
   - "*_mock.go"
 
-flags:
-  cdc:
-    carryforward: true
-    paths:
-      - "cdc/"
-      - "cmd/"
-      - "pkg/"
+component_management:
+  default_rules:  # default rules that will be inherited by all components
+    statuses:
+      - type: project # in this case every component that doens't have a status defined will have a project type one
+        target: auto
+  individual_components:
+    - component_id: component_cdc # this is an identifier that should not be changed
+      name: cdc # this is a display name, and can be changed freely
+      paths:
+        - "cdc/**"
+        - "cmd/**"
+        - "pkg/**"
+    - component_id: component_dm
+      name: dm
+      paths:
+        - dm/**
+    - component_id: component_engine
+      name: engine
+      paths:
+        - engine/**
+    # more components.
 
-  dm:
+flag_management:
+  default_rules: # the rules that will be followed for any flag added, generally
     carryforward: true
-    paths:
-      - "dm/"
+    statuses:
+      - type: project
+        target: 60%
+      - type: patch
+        target: 60%
 
-  engine:
-    carryforward: true
-    paths:
-      - "engine/"
+  individual_flags: # exceptions to the default rules above, stated flag by flag
+    - name: cdc  #fill in your own flag name
+      paths:
+        - cdc/** #fill in your own path. Note, accepts globs, not regexes
+        - cmd/**
+        - pkg/**
+      carryforward: true
+    - name: dm
+      paths:
+        - dm/**
+      carryforward: true
+    - name: engine
+      paths:
+        - engine/**
+      carryforward: true
