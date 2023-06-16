@@ -56,11 +56,10 @@ func (s singleRegionInfo) resolvedTs() uint64 {
 }
 
 type regionFeedState struct {
-	sri            singleRegionInfo
-	requestID      uint64
-	matcher        *matcher
-	startFeedTime  time.Time
-	lastResolvedTs uint64
+	sri           singleRegionInfo
+	requestID     uint64
+	matcher       *matcher
+	startFeedTime time.Time
 
 	stopped atomic.Bool
 }
@@ -74,7 +73,6 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 
 func (s *regionFeedState) start() {
 	s.startFeedTime = time.Now()
-	s.lastResolvedTs = s.sri.lockedRange.CheckpointTs.Load()
 	s.matcher = newMatcher()
 }
 
@@ -99,23 +97,17 @@ func (s *regionFeedState) getRegionID() uint64 {
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
-	return atomic.LoadUint64(&s.lastResolvedTs)
+	return s.sri.lockedRange.CheckpointTs.Load()
 }
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	if resolvedTs > s.getLastResolvedTs() {
-		atomic.StoreUint64(&s.lastResolvedTs, resolvedTs)
-		s.sri.lockedRange.CheckpointTs.Store(resolvedTs)
-	}
-}
-
-// setRegionInfoResolvedTs is only called when the region disconnect,
-// to update the `singleRegionInfo` which is reused by reconnect.
-func (s *regionFeedState) setRegionInfoResolvedTs() {
-	lastResolvedTs := s.getLastResolvedTs()
-	if s.sri.lockedRange.CheckpointTs.Load() < lastResolvedTs {
-		s.sri.lockedRange.CheckpointTs.Store(lastResolvedTs)
+	checkpointTs := &s.sri.lockedRange.CheckpointTs
+	for {
+		last := checkpointTs.Load()
+		if last >= resolvedTs || checkpointTs.CompareAndSwap(last, resolvedTs) {
+			return
+		}
 	}
 }
 

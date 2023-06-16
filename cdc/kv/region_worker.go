@@ -192,7 +192,6 @@ func (w *regionWorker) checkShouldExit() error {
 }
 
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
-	state.setRegionInfoResolvedTs()
 	regionID := state.getRegionID()
 	log.Info("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
@@ -816,7 +815,6 @@ func (w *regionWorker) evictAllRegions() {
 		})
 		for _, del := range deletes {
 			w.delRegionState(del.regionID)
-			del.regionState.setRegionInfoResolvedTs()
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.

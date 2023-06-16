@@ -50,7 +50,11 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 	for i := 0; i < regionCount; i++ {
 		regionID := uint64(1000 + i)
 		regionIDs[i] = regionID
-		rsm.setState(regionID, &regionFeedState{requestID: uint64(i + 1), lastResolvedTs: uint64(1000)})
+
+		state := &regionFeedState{requestID: uint64(i + 1)}
+		state.sri.lockedRange = &regionlock.LockedRange{}
+		state.updateResolvedTs(1000)
+		rsm.setState(regionID, state)
 	}
 
 	var wg sync.WaitGroup
@@ -92,8 +96,8 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 	for _, regionID := range regionIDs {
 		s, ok := rsm.getState(regionID)
 		require.True(t, ok)
-		require.Greater(t, s.lastResolvedTs, uint64(1000))
-		totalResolvedTs += s.lastResolvedTs
+		require.Greater(t, s.getLastResolvedTs(), uint64(1000))
+		totalResolvedTs += s.getLastResolvedTs()
 	}
 }
 
@@ -269,28 +273,30 @@ func TestRegionWorkerHandleResolvedTs(t *testing.T) {
 	s1 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(1, 1, 1),
 	}, 1)
+	s1.sri.lockedRange = &regionlock.LockedRange{}
 	s1.setInitialized()
-	s1.lastResolvedTs = 9
+	s1.updateResolvedTs(9)
 
 	s2 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(2, 2, 2),
 	}, 2)
-	s1.setInitialized()
-	s2.lastResolvedTs = 11
+	s2.sri.lockedRange = &regionlock.LockedRange{}
+	s2.setInitialized()
+	s2.updateResolvedTs(11)
 
 	s3 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(3, 3, 3),
 	}, 3)
-	s3.sri.lockedRange.Initialzied.Store(false)
-	s3.lastResolvedTs = 8
+	s3.sri.lockedRange = &regionlock.LockedRange{}
+	s3.updateResolvedTs(8)
 	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
 		resolvedTs: 10,
 		regions:    []*regionFeedState{s1, s2, s3},
 	})
 	require.Nil(t, err)
-	require.Equal(t, uint64(10), s1.lastResolvedTs)
-	require.Equal(t, uint64(11), s2.lastResolvedTs)
-	require.Equal(t, uint64(8), s3.lastResolvedTs)
+	require.Equal(t, uint64(10), s1.getLastResolvedTs())
+	require.Equal(t, uint64(11), s2.getLastResolvedTs())
+	require.Equal(t, uint64(8), s3.getLastResolvedTs())
 
 	re := <-w.rtsUpdateCh
 	require.Equal(t, uint64(10), re.resolvedTs)
@@ -322,7 +328,7 @@ func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 		regions:    []*regionFeedState{s1},
 	})
 	require.Nil(t, err)
-	require.Equal(t, uint64(9), s1.lastResolvedTs)
+	require.Equal(t, uint64(9), s1.getLastResolvedTs())
 
 	timer := time.NewTimer(time.Second)
 	select {
