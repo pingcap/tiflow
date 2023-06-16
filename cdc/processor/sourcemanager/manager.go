@@ -109,7 +109,8 @@ func newSourceManager(
 		bdrMode:      bdrMode,
 		multiplexing: config.GetGlobalServerConfig().KVClient.EnableMultiplexing,
 	}
-	if !mgr.multiplexing {
+	if pullerWrapperCreator == pullerwrapper.NewPullerWrapperForTest {
+		mgr.multiplexing = false
 		mgr.tablePullers.errChan = make(chan error, 16)
 		mgr.tablePullers.pullerWrapperCreator = pullerWrapperCreator
 	}
