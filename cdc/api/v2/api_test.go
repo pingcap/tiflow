@@ -62,19 +62,19 @@ func (c *mockPDClient) Close() {}
 
 type mockStatusProvider struct {
 	owner.StatusProvider
-	changefeedStatus   *model.ChangeFeedStatus
+	changefeedStatus   *model.ChangeFeedStatusForAPI
 	changefeedInfo     *model.ChangeFeedInfo
 	processors         []*model.ProcInfoSnap
 	taskStatus         map[model.CaptureID]*model.TaskStatus
 	changefeedInfos    map[model.ChangeFeedID]*model.ChangeFeedInfo
-	changefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatus
+	changefeedStatuses map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI
 	err                error
 }
 
 // GetChangeFeedStatus returns a changefeeds' runtime status.
 func (m *mockStatusProvider) GetChangeFeedStatus(ctx context.Context,
 	changefeedID model.ChangeFeedID,
-) (*model.ChangeFeedStatus, error) {
+) (*model.ChangeFeedStatusForAPI, error) {
 	return m.changefeedStatus, m.err
 }
 
@@ -114,7 +114,7 @@ func (m *mockStatusProvider) GetAllChangeFeedInfo(_ context.Context) (
 
 // GetAllChangeFeedStatuses returns a list of mock changefeed status.
 func (m *mockStatusProvider) GetAllChangeFeedStatuses(_ context.Context) (
-	map[model.ChangeFeedID]*model.ChangeFeedStatus,
+	map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI,
 	error,
 ) {
 	return m.changefeedStatuses, m.err
