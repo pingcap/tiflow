@@ -78,7 +78,8 @@ func New(
 	engine engine.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, pullerwrapper.NewPullerWrapper)
+	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper)
 }
 
 // NewForTest creates a new source manager for testing.
@@ -89,7 +90,7 @@ func NewForTest(
 	engine engine.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, pullerwrapper.NewPullerWrapperForTest)
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, pullerwrapper.NewPullerWrapperForTest)
 }
 
 func newSourceManager(
@@ -98,6 +99,7 @@ func newSourceManager(
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	bdrMode bool,
+	multiplexing bool,
 	pullerWrapperCreator pullerWrapperCreator,
 ) *SourceManager {
 	mgr := &SourceManager{
@@ -107,10 +109,9 @@ func newSourceManager(
 		mg:           mg,
 		engine:       engine,
 		bdrMode:      bdrMode,
-		multiplexing: config.GetGlobalServerConfig().KVClient.EnableMultiplexing,
+		multiplexing: multiplexing,
 	}
-	if pullerWrapperCreator == pullerwrapper.NewPullerWrapperForTest {
-		mgr.multiplexing = false
+	if !multiplexing {
 		mgr.tablePullers.errChan = make(chan error, 16)
 		mgr.tablePullers.pullerWrapperCreator = pullerWrapperCreator
 	}
