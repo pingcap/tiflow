@@ -129,3 +129,5 @@ else
 		run $script
 	done
 fi
+
+# add debug line just to trigger dm pipelines
