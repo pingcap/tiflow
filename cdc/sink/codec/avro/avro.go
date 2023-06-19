@@ -743,8 +743,11 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		enumVar, err := types.ParseEnumValue(ft.GetElems(), col.Value.(uint64))
+		elements := ft.GetElems()
+		number := col.Value.(uint64)
+		enumVar, err := types.ParseEnumValue(elements, number)
 		if err != nil {
+			log.Info("parse enum value failed", zap.Strings("elements", elements), zap.Uint64("number", number))
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
 		return enumVar.Name, "string", nil
