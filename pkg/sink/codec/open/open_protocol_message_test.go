@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -158,4 +159,126 @@ func TestOnlyOutputUpdatedColumn(t *testing.T) {
 		_, ok := row.PreColumns["test"]
 		assert.Equal(t, cs.output, ok)
 	}
+}
+
+func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
+	t.Parallel()
+
+	insertEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, value, err := rowChangeToMsg(insertEvent, true, false)
+	require.NoError(t, err)
+	require.Contains(t, value.Update, "id")
+	require.Contains(t, value.Update, "a")
+
+	key, value, err := rowChangeToMsg(insertEvent, false, true)
+	require.NoError(t, err)
+	require.True(t, key.OnlyHandleKey)
+	require.Contains(t, value.Update, "id")
+	require.NotContains(t, value.Update, "a")
+
+	insertEventNoHandleKey := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, _, err = rowChangeToMsg(insertEventNoHandleKey, false, true)
+	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
+
+	updateEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, value, err = rowChangeToMsg(updateEvent, true, false)
+	require.NoError(t, err)
+	require.Contains(t, value.PreColumns, "a")
+
+	key, value, err = rowChangeToMsg(updateEvent, false, true)
+	require.NoError(t, err)
+	require.True(t, key.OnlyHandleKey)
+	require.NotContains(t, value.PreColumns, "a")
+	require.NotContains(t, value.Update, "a")
+
+	updateEventNoHandleKey := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		Columns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
+		},
+	}
+	_, _, err = rowChangeToMsg(updateEventNoHandleKey, false, true)
+	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
+
+	deleteEvent := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Flag: model.HandleKeyFlag, Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+	}
+	_, value, err = rowChangeToMsg(deleteEvent, true, false)
+	require.NoError(t, err)
+	require.NotContains(t, value.Delete, "a")
+
+	_, value, err = rowChangeToMsg(deleteEvent, false, false)
+	require.NoError(t, err)
+	require.Contains(t, value.Delete, "a")
+
+	key, value, err = rowChangeToMsg(deleteEvent, false, true)
+	require.NoError(t, err)
+	require.True(t, key.OnlyHandleKey)
+	require.NotContains(t, value.Delete, "a")
+
+	deleteEventNoHandleKey := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "schema",
+			Table:  "table",
+		},
+		PreColumns: []*model.Column{
+			{Name: "id", Type: mysql.TypeLonglong, Value: 1},
+			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
+		},
+	}
+
+	_, _, err = rowChangeToMsg(deleteEventNoHandleKey, false, true)
+	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 }

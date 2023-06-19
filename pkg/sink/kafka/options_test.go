@@ -44,8 +44,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	ctx := context.Background()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 	require.Equal(t, int32(1), options.PartitionNum)
 	require.Equal(t, int16(3), options.ReplicationFactor)
@@ -58,7 +57,8 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"),
+		sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 	require.Len(t, options.BrokerEndpoints, 3)
 
@@ -67,7 +67,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal max-message-bytes.
@@ -75,7 +75,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Illegal partition-num.
@@ -83,7 +83,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
 
 	// Out of range partition-num.
@@ -91,7 +91,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid partition num.*", errors.Cause(err))
 
 	// Unknown required-acks.
@@ -99,7 +99,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid required acks 3.*", errors.Cause(err))
 
 	// invalid kafka client id
@@ -107,7 +107,7 @@ func TestCompleteOptions(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	options = NewOptions()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.True(t, cerror.ErrKafkaInvalidClientID.Equal(err))
 }
 
@@ -183,8 +183,7 @@ func TestTimeout(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
-	ctx := context.Background()
-	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 
 	require.Equal(t, 5*time.Second, options.DialTimeout)
@@ -278,8 +277,6 @@ func TestAdjustConfigTopicExist(t *testing.T) {
 	detail := &TopicDetail{
 		Name:          topicName,
 		NumPartitions: 3,
-		// Does not contain `max.message.bytes`.
-		ConfigEntries: make(map[string]string),
 	}
 	err = adminClient.CreateTopic(context.Background(), detail, false)
 	require.Nil(t, err)
@@ -595,7 +592,7 @@ func TestConfigurationCombinations(t *testing.T) {
 
 		ctx := context.Background()
 		options := NewOptions()
-		err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
+		err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
 		require.Nil(t, err)
 
 		changefeed := model.DefaultChangeFeedID("changefeed-test")
@@ -612,7 +609,9 @@ func TestConfigurationCombinations(t *testing.T) {
 		require.Nil(t, err)
 
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
-		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{})
+		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{
+			Sink: &config.SinkConfig{},
+		})
 		require.Nil(t, err)
 		encoderConfig.WithMaxMessageBytes(options.MaxMessageBytes)
 
@@ -662,7 +661,7 @@ func TestMerge(t *testing.T) {
 		Key:                       aws.String("key.pem"),
 	}
 	c := NewOptions()
-	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
+	err = c.Apply(model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, int32(12), c.PartitionNum)
 	require.Equal(t, int16(5), c.ReplicationFactor)
@@ -743,7 +742,7 @@ func TestMerge(t *testing.T) {
 		Key:                       aws.String("key2.pem"),
 	}
 	c = NewOptions()
-	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
+	err = c.Apply(model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, int32(12), c.PartitionNum)
 	require.Equal(t, int16(5), c.ReplicationFactor)

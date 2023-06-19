@@ -14,13 +14,16 @@
 package replication
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -575,9 +578,34 @@ func TestReplicationManagerMaxTaskConcurrency(t *testing.T) {
 	require.Len(t, msgs, 0)
 }
 
+type mockRedoMetaManager struct {
+	util.Runnable
+
+	checkpointTs model.Ts
+	resolvedTs   model.Ts
+	enable       bool
+}
+
+func (m *mockRedoMetaManager) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
+}
+
+func (m *mockRedoMetaManager) GetFlushedMeta() common.LogMeta {
+	return common.LogMeta{
+		CheckpointTs: m.checkpointTs,
+		ResolvedTs:   m.resolvedTs,
+	}
+}
+
+func (m *mockRedoMetaManager) Cleanup(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockRedoMetaManager) Enabled() bool {
+	return m.enable
+}
+
 func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
-
 	r := NewReplicationManager(1, model.ChangeFeedID{})
 	span := spanz.TableIDToComparableSpan(1)
 	rs, err := NewReplicationSet(span, model.Ts(10),
@@ -609,22 +637,24 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	r.spans.ReplaceOrInsert(span2, rs)
 
+	redoMetaManager := &mockRedoMetaManager{enable: false}
+
 	// no tables are replicating, resolvedTs should be advanced to globalBarrierTs and checkpoint
 	// should be advanced to minTableBarrierTs.
 	currentTables := &TableRanges{}
-	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(5))
+	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(5), redoMetaManager)
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(5), resolved)
 
 	// all tables are replicating
 	currentTables.UpdateTables([]model.TableID{1, 2})
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, model.Ts(10), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
 	// some table not exist yet.
 	currentTables.UpdateTables([]model.TableID{1, 2, 3})
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
@@ -650,7 +680,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.spans.ReplaceOrInsert(span3, rs)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
@@ -669,7 +699,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
 	r.spans.ReplaceOrInsert(span4, rs)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 
@@ -694,22 +724,46 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 		r.spans.ReplaceOrInsert(span, rs)
 	}
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 
 	// The start span is missing
 	rs5_1, _ := r.spans.Delete(span5_1)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
 	// The end span is missing
 	r.spans.ReplaceOrInsert(span5_1, rs5_1)
 	r.spans.Delete(span5_2)
-	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30))
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
+
+	// redo is enabled
+	currentTables.UpdateTables([]model.TableID{4})
+	spanRedo := spanz.TableIDToComparableSpan(4)
+	rs, err = NewReplicationSet(spanRedo, model.Ts(3),
+		map[model.CaptureID]*tablepb.TableStatus{
+			"1": {
+				Span:  spanz.TableIDToComparableSpan(4),
+				State: tablepb.TableStatePrepared,
+				Checkpoint: tablepb.Checkpoint{
+					CheckpointTs: model.Ts(10),
+					ResolvedTs:   model.Ts(15),
+				},
+			},
+		}, model.ChangeFeedID{})
+	require.NoError(t, err)
+	r.spans.ReplaceOrInsert(spanRedo, rs)
+	barrier := schedulepb.NewBarrierWithMinTs(30)
+	redoMetaManager.enable = true
+	redoMetaManager.resolvedTs = 9
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), barrier, redoMetaManager)
+	require.Equal(t, model.Ts(9), resolved)
+	require.Equal(t, model.Ts(9), checkpoint)
+	require.Equal(t, model.Ts(9), barrier.GetGlobalBarrierTs())
 }
 
 func TestReplicationManagerHandleCaptureChanges(t *testing.T) {

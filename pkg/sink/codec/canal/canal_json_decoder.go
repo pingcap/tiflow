@@ -92,17 +92,17 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 
 // NextRowChangedEvent implements the RowEventDecoder interface
 // `HasNext` should be called before this.
-func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeRow {
-		return nil, cerror.ErrCanalDecodeFailed.
+		return nil, false, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found row changed event message")
 	}
 	result, err := canalJSONMessage2RowChange(b.msg)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	b.msg = nil
-	return result, nil
+	return result, false, nil
 }
 
 // NextDDLEvent implements the RowEventDecoder interface

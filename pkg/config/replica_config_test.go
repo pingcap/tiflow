@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,8 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Scheduler.WriteKeyThreshold = 100001
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
+	conf.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
@@ -122,11 +125,13 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	}
 
 	b, err := conf.Marshal()
-	require.Nil(t, err)
-	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	require.NoError(t, err)
+	b = mustIndentJSON(t, b)
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, b)
+
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, conf, conf2)
 }
 
@@ -147,7 +152,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	t.Parallel()
 	conf2 := new(ReplicaConfig)
 	err := conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigOutDated))
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	conf := GetDefaultReplicaConfig()
 	conf.CaseSensitive = false
@@ -170,22 +175,23 @@ func TestReplicaConfigValidate(t *testing.T) {
 
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
-
-	require.Nil(t, conf.ValidateAndAdjust(sinkURL))
+	require.NoError(t, conf.ValidateAndAdjust(sinkURL))
 
 	// Incorrect sink configuration.
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.Protocol = util.AddressOf("canal")
 	conf.EnableOldValue = false
-	require.Regexp(t, ".*canal protocol requires old value to be enabled.*",
-		conf.ValidateAndAdjust(sinkURL))
+
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
+	require.True(t, conf.EnableOldValue)
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "d1", PartitionRule: "r1"},
 	}
-	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*",
-		conf.ValidateAndAdjust(sinkURL))
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.Regexp(t, ".*dispatcher and partition cannot be configured both.*", err)
 
 	// Correct sink configuration.
 	conf = GetDefaultReplicaConfig()
@@ -304,4 +310,76 @@ func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
 		compatible := isSinkCompatibleWithSpanReplication(u)
 		require.Equal(t, compatible, tt.compatible, tt.name)
 	}
+}
+
+func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {
+	t.Parallel()
+
+	config := GetDefaultReplicaConfig()
+	config.EnableOldValue = false
+
+	// mysql sink, do not adjust enable-old-value
+	sinkURI, err := url.Parse("mysql://")
+	require.NoError(t, err)
+	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	require.NoError(t, err)
+	require.False(t, config.EnableOldValue)
+
+	// mysql sink, `enable-old-value` false, `force-replicate` true, should return error
+	config.ForceReplicate = true
+	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	require.Error(t, cerror.ErrOldValueNotEnabled, err)
+
+	// canal, `enable-old-value` false, `force-replicate` false, no error, `enable-old-value` adjust to true
+	config.ForceReplicate = false
+	config.EnableOldValue = false
+	// canal require old value enabled
+	sinkURI, err = url.Parse("kafka://127.0.0.1:9092/test?protocol=canal")
+	require.NoError(t, err)
+
+	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	require.NoError(t, err)
+	require.True(t, config.EnableOldValue)
+
+	// canal, `force-replicate` true, `enable-old-value` true, no error
+	config.ForceReplicate = true
+	config.EnableOldValue = true
+	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	require.NoError(t, err)
+	require.True(t, config.ForceReplicate)
+	require.True(t, config.EnableOldValue)
+
+	// avro, `enable-old-value` false, `force-replicate` false, no error
+	config.ForceReplicate = false
+	config.EnableOldValue = false
+	sinkURI, err = url.Parse("kafka://127.0.0.1:9092/test?protocol=avro")
+	require.NoError(t, err)
+
+	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	require.NoError(t, err)
+	require.False(t, config.EnableOldValue)
+
+	// avro, `enable-old-value` true, no error, set to false. no matter `force-replicate`
+	config.EnableOldValue = true
+	config.ForceReplicate = true
+	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	require.NoError(t, err)
+	require.False(t, config.EnableOldValue)
+
+	// csv, `enable-old-value` false, `force-replicate` false, no error
+	config.EnableOldValue = false
+	config.ForceReplicate = false
+	sinkURI, err = url.Parse("s3://xxx/yyy?protocol=csv")
+	require.NoError(t, err)
+
+	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	require.NoError(t, err)
+	require.False(t, config.EnableOldValue)
+
+	// csv, `enable-old-value` true, no error, set to false. no matter `force-replicate`
+	config.EnableOldValue = true
+	config.ForceReplicate = true
+	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	require.NoError(t, err)
+	require.False(t, config.EnableOldValue)
 }

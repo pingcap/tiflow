@@ -27,7 +27,7 @@ type SortEngine interface {
 	IsTableBased() bool
 
 	// AddTable adds the table into the engine.
-	AddTable(span tablepb.Span)
+	AddTable(span tablepb.Span, startTs model.Ts)
 
 	// RemoveTable removes the table from the engine.
 	RemoveTable(span tablepb.Span)
@@ -37,9 +37,6 @@ type SortEngine interface {
 	// NOTE: it's an asynchronous interface. To get the notification of when
 	// events are available for fetching, OnResolve is what you want.
 	Add(span tablepb.Span, events ...*model.PolymorphicEvent)
-
-	// GetResolvedTs gets resolved timestamp of the given table.
-	GetResolvedTs(span tablepb.Span) model.Ts
 
 	// OnResolve pushes action into SortEngine's hook list, which
 	// will be called after any events are resolved.
@@ -73,9 +70,6 @@ type SortEngine interface {
 
 	// GetStatsByTable gets the statistics of the given table.
 	GetStatsByTable(span tablepb.Span) TableStats
-
-	// ReceivedEvents returns the number of events received by the sort engine.
-	ReceivedEvents() int64
 
 	// Close closes the engine. All data written by this instance can be deleted.
 	//

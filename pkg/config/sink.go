@@ -95,10 +95,16 @@ func (l AtomicityLevel) validate(scheme string) error {
 }
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var ForceEnableOldValueProtocols = []string{
-	ProtocolCanal.String(),
-	ProtocolCanalJSON.String(),
-	ProtocolMaxwell.String(),
+var ForceEnableOldValueProtocols = map[string]struct{}{
+	ProtocolCanal.String():     {},
+	ProtocolCanalJSON.String(): {},
+	ProtocolMaxwell.String():   {},
+}
+
+// ForceDisableOldValueProtocols specifies protocols need to be forced to disable old value.
+var ForceDisableOldValueProtocols = map[string]struct{}{
+	ProtocolAvro.String(): {},
+	ProtocolCsv.String():  {},
 }
 
 // SinkConfig represents sink config for a changefeed
@@ -132,6 +138,11 @@ type SinkConfig struct {
 
 	// OnlyOutputUpdatedColumns is only available when the downstream is MQ.
 	OnlyOutputUpdatedColumns *bool `toml:"only-output-updated-columns" json:"only-output-updated-columns,omitempty"`
+
+	// DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.
+	DeleteOnlyOutputHandleKeyColumns *bool `toml:"delete-only-output-handle-key-columns" json:"delete-only-output-handle-key-columns,omitempty"`
+	// LargeMessageOnlyHandleKeyColumns is only available when the downstream is MQ.
+	LargeMessageOnlyHandleKeyColumns *bool `toml:"large-message-only-handle-key-columns" json:"large-message-only-handle-key-columns,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
@@ -327,21 +338,15 @@ type CloudStorageConfig struct {
 	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
 }
 
-func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) error {
+func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
 	}
 
-	if !enableOldValue {
-		for _, protocolStr := range ForceEnableOldValueProtocols {
-			if protocolStr == util.GetOrZero(s.Protocol) {
-				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-					"Please update changefeed config", util.GetOrZero(s.Protocol)))
-				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", util.GetOrZero(s.Protocol))))
-			}
-		}
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+		return nil
 	}
+
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
@@ -366,6 +371,13 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) er
 	// validate terminator
 	if s.Terminator == nil {
 		s.Terminator = util.AddressOf(CRLF)
+	}
+
+	protocol, _ := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
+	if util.GetOrZero(s.DeleteOnlyOutputHandleKeyColumns) && protocol == ProtocolCsv {
+		return cerror.ErrSinkInvalidConfig.GenWithStack(
+			"CSV protocol always output all columns for the delete event, " +
+				"do not set `delete-only-output-handle-key-columns` to true")
 	}
 
 	// validate storage sink related config

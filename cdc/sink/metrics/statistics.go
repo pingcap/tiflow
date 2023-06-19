@@ -17,18 +17,21 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 // NewStatistics creates a statistics
-func NewStatistics(ctx context.Context, sinkType sink.Type) *Statistics {
+func NewStatistics(ctx context.Context,
+	changefeed model.ChangeFeedID,
+	sinkType sink.Type,
+) *Statistics {
 	statistics := &Statistics{
 		sinkType:     sinkType,
-		captureAddr:  contextutil.CaptureAddrFromCtx(ctx),
-		changefeedID: contextutil.ChangefeedIDFromCtx(ctx),
+		captureAddr:  config.GetGlobalServerConfig().AdvertiseAddr,
+		changefeedID: changefeed,
 	}
 
 	namespcae := statistics.changefeedID.Namespace

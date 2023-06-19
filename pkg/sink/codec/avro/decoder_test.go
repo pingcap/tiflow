@@ -30,16 +30,16 @@ import (
 )
 
 func TestDecodeEvent(t *testing.T) {
-	o := &Options{
-		EnableTiDBExtension:        true,
-		DecimalHandlingMode:        "precise",
-		BigintUnsignedHandlingMode: "long",
+	config := &common.Config{
+		EnableTiDBExtension:            true,
+		AvroDecimalHandlingMode:        "precise",
+		AvroBigintUnsignedHandlingMode: "long",
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, o)
+	encoder, err := setupEncoderAndSchemaRegistry(ctx, config)
 	defer teardownEncoderAndSchemaRegistry()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
@@ -123,7 +123,7 @@ func TestDecodeEvent(t *testing.T) {
 
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(o, keySchemaM, valueSchemaM, topic, tz)
+	decoder := NewDecoder(config, keySchemaM, valueSchemaM, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -132,23 +132,24 @@ func TestDecodeEvent(t *testing.T) {
 	require.True(t, exist)
 	require.Equal(t, model.MessageTypeRow, messageType)
 
-	decodedEvent, err := decoder.NextRowChangedEvent()
+	decodedEvent, onlyHandleKey, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
+	require.False(t, onlyHandleKey)
 	require.NotNil(t, decodedEvent)
 }
 
 func TestDecodeDDLEvent(t *testing.T) {
 	t.Parallel()
 
-	o := &Options{
-		EnableTiDBExtension:  true,
-		EnableWatermarkEvent: true,
+	config := &common.Config{
+		EnableTiDBExtension: true,
+		AvroEnableWatermark: true,
 	}
 
 	encoder := &BatchEncoder{
 		namespace: model.DefaultNamespace,
 		result:    make([]*common.Message, 0, 1),
-		Options:   o,
+		config:    config,
 	}
 
 	message, err := encoder.EncodeDDLEvent(&model.DDLEvent{
@@ -171,7 +172,7 @@ func TestDecodeDDLEvent(t *testing.T) {
 	topic := "test-topic"
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(o, nil, nil, topic, tz)
+	decoder := NewDecoder(config, nil, nil, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -195,14 +196,14 @@ func TestDecodeDDLEvent(t *testing.T) {
 func TestDecodeResolvedEvent(t *testing.T) {
 	t.Parallel()
 
-	o := &Options{
-		EnableTiDBExtension:  true,
-		EnableWatermarkEvent: true,
+	config := &common.Config{
+		EnableTiDBExtension: true,
+		AvroEnableWatermark: true,
 	}
 
 	encoder := &BatchEncoder{
 		namespace: model.DefaultNamespace,
-		Options:   o,
+		config:    config,
 		result:    make([]*common.Message, 0, 1),
 	}
 
@@ -214,7 +215,7 @@ func TestDecodeResolvedEvent(t *testing.T) {
 	topic := "test-topic"
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(o, nil, nil, topic, tz)
+	decoder := NewDecoder(config, nil, nil, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 

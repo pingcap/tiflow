@@ -28,9 +28,7 @@ type BatchEncoder struct {
 	messageBuf       []*common.Message
 	callbackBuf      []func()
 
-	// configs
-	MaxMessageBytes int
-	MaxBatchSize    int
+	config *common.Config
 
 	allocator *SliceAllocator
 }
@@ -49,11 +47,11 @@ func (e *BatchEncoder) AppendRowChangedEvent(
 	ev *model.RowChangedEvent,
 	callback func(),
 ) error {
-	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev)
+	rows, size := e.rowChangedBuffer.AppendRowChangedEvent(ev, e.config.DeleteOnlyHandleKeyColumns)
 	if callback != nil {
 		e.callbackBuf = append(e.callbackBuf, callback)
 	}
-	if size > e.MaxMessageBytes || rows >= e.MaxBatchSize {
+	if size > e.config.MaxMessageBytes || rows >= e.config.MaxBatchSize {
 		e.flush()
 	}
 	return nil
@@ -98,11 +96,11 @@ func (e *BatchEncoder) flush() {
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder() codec.RowEventEncoder {
+func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	// 64 is a magic number that come up with these assumptions and manual benchmark.
 	// 1. Most table will not have more than 64 columns
 	// 2. It only worth allocating slices in batch for slices that's small enough
-	return NewBatchEncoderWithAllocator(NewSliceAllocator(64))
+	return NewBatchEncoderWithAllocator(NewSliceAllocator(64), config)
 }
 
 type batchEncoderBuilder struct {
@@ -111,10 +109,7 @@ type batchEncoderBuilder struct {
 
 // Build a BatchEncoder
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := NewBatchEncoder()
-	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
-	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
-	return encoder
+	return NewBatchEncoder(b.config)
 }
 
 // NewBatchEncoderBuilder creates a craft batchEncoderBuilder.
@@ -123,11 +118,12 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 }
 
 // NewBatchEncoderWithAllocator creates a new BatchEncoder with given allocator.
-func NewBatchEncoderWithAllocator(allocator *SliceAllocator) codec.RowEventEncoder {
+func NewBatchEncoderWithAllocator(allocator *SliceAllocator, config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
 		allocator:        allocator,
 		messageBuf:       make([]*common.Message, 0, 2),
 		callbackBuf:      make([]func(), 0),
 		rowChangedBuffer: NewRowChangedEventBuffer(allocator),
+		config:           config,
 	}
 }

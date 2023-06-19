@@ -1617,6 +1617,10 @@ var doc = `{
                     "description": "DateSeparator is only available when the downstream is Storage.",
                     "type": "string"
                 },
+                "delete-only-output-handle-key-columns": {
+                    "description": "DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.",
+                    "type": "boolean"
+                },
                 "dispatchers": {
                     "description": "DispatchRules is only available when the downstream is MQ.",
                     "type": "array",
@@ -1642,6 +1646,10 @@ var doc = `{
                 },
                 "kafka-config": {
                     "$ref": "#/definitions/config.KafkaConfig"
+                },
+                "large-message-only-handle-key-columns": {
+                    "description": "LargeMessageOnlyHandleKeyColumns is only available when the downstream is MQ.",
+                    "type": "boolean"
                 },
                 "mysql-config": {
                     "$ref": "#/definitions/config.MySQLConfig"
@@ -2671,6 +2679,9 @@ var doc = `{
                 "date_separator": {
                     "type": "string"
                 },
+                "delete_only_output_handle_key_columns": {
+                    "type": "boolean"
+                },
                 "dispatchers": {
                     "type": "array",
                     "items": {
@@ -2691,6 +2702,9 @@ var doc = `{
                 },
                 "kafka_config": {
                     "$ref": "#/definitions/v2.KafkaConfig"
+                },
+                "large_message_only_handle_key_columns": {
+                    "type": "boolean"
                 },
                 "mysql_config": {
                     "$ref": "#/definitions/v2.MySQLConfig"

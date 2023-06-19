@@ -30,7 +30,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -42,27 +41,12 @@ import (
 
 // BatchEncoder converts the events to binary Avro data
 type BatchEncoder struct {
-	*Options
-
 	namespace          string
 	keySchemaManager   *SchemaManager
 	valueSchemaManager *SchemaManager
 	result             []*common.Message
-}
 
-// Options is used to initialize the encoder, control the encoding behavior.
-type Options struct {
-	EnableTiDBExtension bool
-	EnableRowChecksum   bool
-
-	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
-	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
-	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
-	// exposed to the outside users.
-	EnableWatermarkEvent bool
-
-	DecimalHandlingMode        string
-	BigintUnsignedHandlingMode string
+	config *common.Config
 }
 
 type avroEncodeInput struct {
@@ -152,7 +136,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 // EncodeCheckpointEvent only encode checkpoint event if the watermark event is enabled
 // it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
+	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
 		buf := new(bytes.Buffer)
 		data := []interface{}{checkpointByte, ts}
 		for _, v := range data {
@@ -179,7 +163,7 @@ type ddlEvent struct {
 // EncodeDDLEvent only encode DDL event if the watermark event is enabled
 // it's only used for the testing purpose.
 func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error) {
-	if a.EnableTiDBExtension && a.EnableWatermarkEvent {
+	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
 		buf := new(bytes.Buffer)
 		_ = binary.Write(buf, binary.BigEndian, ddlByte)
 
@@ -246,8 +230,8 @@ func (a *BatchEncoder) avroEncode(
 			colInfos: e.ColInfos,
 		}
 
-		enableTiDBExtension = a.EnableTiDBExtension
-		enableRowLevelChecksum = a.EnableRowChecksum
+		enableTiDBExtension = a.config.EnableTiDBExtension
+		enableRowLevelChecksum = a.config.EnableRowChecksum
 		schemaManager = a.valueSchemaManager
 		if e.IsInsert() {
 			operation = insertOperation
@@ -272,8 +256,8 @@ func (a *BatchEncoder) avroEncode(
 			input,
 			enableTiDBExtension,
 			enableRowLevelChecksum,
-			a.DecimalHandlingMode,
-			a.BigintUnsignedHandlingMode,
+			a.config.AvroDecimalHandlingMode,
+			a.config.AvroBigintUnsignedHandlingMode,
 		)
 		if err != nil {
 			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
@@ -297,8 +281,8 @@ func (a *BatchEncoder) avroEncode(
 		e.CommitTs,
 		operation,
 		enableTiDBExtension,
-		a.DecimalHandlingMode,
-		a.BigintUnsignedHandlingMode,
+		a.config.AvroDecimalHandlingMode,
+		a.config.AvroBigintUnsignedHandlingMode,
 	)
 	if err != nil {
 		log.Error("AvroEventBatchEncoder: converting to native failed", zap.Error(err))
@@ -1002,6 +986,7 @@ const (
 
 // NewBatchEncoderBuilder creates an avro batchEncoderBuilder.
 func NewBatchEncoderBuilder(ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
 	keySchemaManager, valueSchemaManager, err := NewKeyAndValueSchemaManagers(
@@ -1011,7 +996,7 @@ func NewBatchEncoderBuilder(ctx context.Context,
 	}
 
 	return &batchEncoderBuilder{
-		namespace:          contextutil.ChangefeedIDFromCtx(ctx).Namespace,
+		namespace:          changefeedID.Namespace,
 		config:             config,
 		keySchemaManager:   keySchemaManager,
 		valueSchemaManager: valueSchemaManager,
@@ -1025,13 +1010,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 		keySchemaManager:   b.keySchemaManager,
 		valueSchemaManager: b.valueSchemaManager,
 		result:             make([]*common.Message, 0, 1),
-		Options: &Options{
-			EnableTiDBExtension:        b.config.EnableTiDBExtension,
-			EnableRowChecksum:          b.config.EnableRowChecksum,
-			EnableWatermarkEvent:       b.config.AvroEnableWatermark,
-			DecimalHandlingMode:        b.config.AvroDecimalHandlingMode,
-			BigintUnsignedHandlingMode: b.config.AvroBigintUnsignedHandlingMode,
-		},
+		config:             b.config,
 	}
 	return encoder
 }

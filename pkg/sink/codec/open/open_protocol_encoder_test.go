@@ -32,8 +32,7 @@ func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 	builder := &batchEncoderBuilder{config: config}
 	encoder, ok := builder.Build().(*BatchEncoder)
 	require.True(t, ok)
-	require.Equal(t, config.MaxBatchSize, encoder.MaxBatchSize)
-	require.Equal(t, config.MaxMessageBytes, encoder.MaxMessageBytes)
+	require.NotNil(t, encoder.config)
 }
 
 func TestMaxMessageBytes(t *testing.T) {
@@ -114,8 +113,9 @@ func TestMaxBatchSize(t *testing.T) {
 			}
 
 			require.Equal(t, model.MessageTypeRow, v)
-			_, err = decoder.NextRowChangedEvent()
-			require.Nil(t, err)
+			_, onlyHandleKey, err := decoder.NextRowChangedEvent()
+			require.NoError(t, err)
+			require.False(t, onlyHandleKey)
 			count++
 		}
 		require.LessOrEqual(t, count, 64)
@@ -133,7 +133,6 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 	builder := &batchEncoderBuilder{config: cfg}
 	encoder, ok := builder.Build().(*BatchEncoder)
 	require.True(t, ok)
-	require.Equal(t, cfg.MaxBatchSize, encoder.MaxBatchSize)
 
 	count := 0
 

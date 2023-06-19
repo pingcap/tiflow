@@ -199,9 +199,9 @@ var (
 		"invalid topic expression",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
-	ErrKafkaBrokerConfigNotFound = errors.Normalize(
-		"kafka broker config item not found",
-		errors.RFCCodeText("CDC:ErrKafkaBrokerConfigNotFound"),
+	ErrKafkaConfigNotFound = errors.Normalize(
+		"kafka config item not found",
+		errors.RFCCodeText("CDC:ErrKafkaConfigNotFound"),
 	)
 	ErrRedoConfigInvalid = errors.Normalize(
 		"redo log config invalid",
@@ -323,6 +323,10 @@ var (
 	ErrOldValueNotEnabled = errors.Normalize(
 		"old value is not enabled",
 		errors.RFCCodeText("CDC:ErrOldValueNotEnabled"),
+	)
+	ErrIncompatibleConfig = errors.Normalize(
+		"incompatible configuration",
+		errors.RFCCodeText("CDC:ErrIncompatibleConfig"),
 	)
 	ErrSinkInvalidConfig = errors.Normalize(
 		"sink config invalid",
@@ -602,6 +606,10 @@ var (
 		"some tables are not eligible to replicate(%v), "+
 			"if you want to ignore these tables, please set ignore_ineligible_table to true",
 		errors.RFCCodeText("CDC:ErrTableIneligible"),
+	)
+	ErrInvalidCheckpointTs = errors.Normalize(
+		"checkpointTs(%v) should not larger than resolvedTs(%v)",
+		errors.RFCCodeText("CDC:ErrInvalidCheckpointTs"),
 	)
 
 	// EtcdWorker related errors. Internal use only.

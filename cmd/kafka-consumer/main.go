@@ -33,7 +33,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	ddlsinkfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -49,6 +48,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -424,7 +424,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
-	ctx = contextutil.PutTimezoneInCtx(ctx, tz)
+	config.GetGlobalServerConfig().TZ = timezone
 
 	c := new(Consumer)
 	c.tz = tz
@@ -464,7 +464,6 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	c.sinks = make([]*partitionSinks, kafkaPartitionNum)
 	ctx, cancel := context.WithCancel(ctx)
-	ctx = contextutil.PutRoleInCtx(ctx, util.RoleKafkaConsumer)
 	errChan := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
 		c.sinks[i] = &partitionSinks{
@@ -473,6 +472,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	}
 	f, err := eventsinkfactory.New(
 		ctx,
+		model.DefaultChangeFeedID("test"),
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errChan,
@@ -495,6 +495,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 
 	ddlSink, err := ddlsinkfactory.New(
 		ctx,
+		model.DefaultChangeFeedID("test"),
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 	)
@@ -567,12 +568,13 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolCanalJSON:
 		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
 	case config.ProtocolAvro:
-		decoder = avro.NewDecoder(&avro.Options{
+		config := &common.Config{
 			EnableTiDBExtension: c.enableTiDBExtension,
 			EnableRowChecksum:   c.enableRowChecksum,
 			// avro must set this to true to make the consumer works.
-			EnableWatermarkEvent: true,
-		}, c.keySchemaM, c.valueSchemaM, kafkaTopic, c.tz)
+			AvroEnableWatermark: true,
+		}
+		decoder = avro.NewDecoder(config, c.keySchemaM, c.valueSchemaM, kafkaTopic, c.tz)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
 	}
@@ -622,7 +624,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					c.appendDDL(ddl)
 				}
 			case model.MessageTypeRow:
-				row, err := decoder.NextRowChangedEvent()
+				row, _, err := decoder.NextRowChangedEvent()
 				if err != nil {
 					log.Panic("decode message value failed",
 						zap.ByteString("value", message.Value),

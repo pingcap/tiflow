@@ -68,7 +68,8 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	errCh := make(chan error, 1)
 
-	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
+	changefeedID := model.DefaultChangeFeedID("test")
+	s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
 		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
 		"should report error when protocol is avro but schema-registry is not set")
@@ -94,7 +95,8 @@ func TestWriteEvents(t *testing.T) {
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	errCh := make(chan error, 1)
 
-	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
+	changefeedID := model.DefaultChangeFeedID("test")
+	s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
 		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
 	require.Nil(t, err)
 	require.NotNil(t, s)

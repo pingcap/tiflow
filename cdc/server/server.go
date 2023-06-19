@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -51,6 +50,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -138,6 +138,7 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
+	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
 	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
@@ -163,6 +164,10 @@ func (s *server) prepare(ctx context.Context) error {
 					MaxDelay:   3 * time.Second,
 				},
 				MinConnectTimeout: 3 * time.Second,
+			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    10 * time.Second,
+				Timeout: 20 * time.Second,
 			}),
 		},
 	})
@@ -237,7 +242,7 @@ func (s *server) Run(serverCtx context.Context) error {
 		return err
 	}
 
-	err := s.startStatusHTTP(serverCtx, s.tcpServer.HTTP1Listener())
+	err := s.startStatusHTTP(s.tcpServer.HTTP1Listener())
 	if err != nil {
 		return err
 	}
@@ -248,7 +253,7 @@ func (s *server) Run(serverCtx context.Context) error {
 // startStatusHTTP starts the HTTP server.
 // `lis` is a listener that gives us plain-text HTTP requests.
 // TODO: can we decouple the HTTP server from the capture server?
-func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) error {
+func (s *server) startStatusHTTP(lis net.Listener) error {
 	// LimitListener returns a Listener that accepts at most n simultaneous
 	// connections from the provided Listener. Connections that exceed the
 	// limit will wait in a queue and no new goroutines will be created until
@@ -272,10 +277,6 @@ func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) er
 		Handler:      router,
 		ReadTimeout:  httpConnectionTimeout,
 		WriteTimeout: httpConnectionTimeout,
-		BaseContext: func(listener net.Listener) context.Context {
-			return contextutil.PutTimezoneInCtx(context.Background(),
-				contextutil.TimezoneFromCtx(serverCtx))
-		},
 	}
 
 	go func() {
@@ -289,9 +290,6 @@ func (s *server) startStatusHTTP(serverCtx context.Context, lis net.Listener) er
 }
 
 func (s *server) etcdHealthChecker(ctx context.Context) error {
-	ticker := time.NewTicker(time.Second * 3)
-	defer ticker.Stop()
-
 	conf := config.GetGlobalServerConfig()
 	grpcClient, err := pd.NewClientWithContext(ctx, s.pdEndpoints, conf.Security.PDSecurityOption())
 	if err != nil {
@@ -302,6 +300,9 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	defer pc.Close()
+
+	ticker := time.NewTicker(time.Second * 3)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -324,6 +325,12 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 					Observe(time.Since(start).Seconds())
 				cancel()
 			}
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			_, err = s.etcdClient.GetEtcdClient().Unwrap().MemberList(ctx)
+			cancel()
+			if err != nil {
+				log.Warn("etcd health check error, fail to list etcd members", zap.Error(err))
+			}
 		}
 	}
 }
@@ -332,37 +339,37 @@ func (s *server) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	wg, cctx := errgroup.WithContext(ctx)
+	eg, egCtx := errgroup.WithContext(ctx)
 
-	wg.Go(func() error {
-		return s.capture.Run(cctx)
+	eg.Go(func() error {
+		return s.capture.Run(egCtx)
 	})
 
-	wg.Go(func() error {
-		return s.etcdHealthChecker(cctx)
+	eg.Go(func() error {
+		return s.etcdHealthChecker(egCtx)
 	})
 
-	wg.Go(func() error {
-		return kv.RunWorkerPool(cctx)
+	eg.Go(func() error {
+		return kv.RunWorkerPool(egCtx)
 	})
 
-	wg.Go(func() error {
-		return s.tcpServer.Run(cctx)
+	eg.Go(func() error {
+		return s.tcpServer.Run(egCtx)
 	})
 
 	grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
 	p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 
-	wg.Go(func() error {
+	eg.Go(func() error {
 		return grpcServer.Serve(s.tcpServer.GrpcListener())
 	})
-	wg.Go(func() error {
-		<-cctx.Done()
+	eg.Go(func() error {
+		<-egCtx.Done()
 		grpcServer.Stop()
 		return nil
 	})
 
-	return wg.Wait()
+	return eg.Wait()
 }
 
 // Drain removes tables in the current TiCDC instance.

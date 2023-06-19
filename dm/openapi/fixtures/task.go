@@ -53,7 +53,8 @@ var (
 		  "security": null,
 		  "user": "root"
 		},
-		"task_mode": "all"
+		"task_mode": "all",
+		"strict_optimistic_shard_mode": false
 	}
 	`
 
@@ -103,7 +104,8 @@ var (
 		"meta_schema": "dm_meta",
 		"name": "test",
 		"on_duplicate": "error",
-		"shard_mode": "pessimistic",
+		"shard_mode": "optimistic",
+		"strict_optimistic_shard_mode": true,
 		"source_config": {
 		  "full_migrate_conf": {
 			"data_dir": "./exported_data",

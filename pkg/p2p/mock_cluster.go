@@ -114,7 +114,6 @@ func newMockNode(t *testing.T, id NodeID) *MockNode {
 // Close closes the mock node.
 func (n *MockNode) Close() {
 	n.Router.Close()
-	n.Router.Wait()
 	n.cancel()
 	n.wg.Wait()
 }

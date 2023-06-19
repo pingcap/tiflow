@@ -56,9 +56,6 @@ type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
 	BarrierTs    model.Ts
-	// From sorter.
-	ReceivedMaxCommitTs   model.Ts
-	ReceivedMaxResolvedTs model.Ts
 }
 
 // SinkManager is the implementation of SinkManager.
@@ -300,7 +297,7 @@ func (m *SinkManager) initSinkFactory(errCh chan error) error {
 		return errors.Trace(err)
 	}
 
-	if m.sinkFactory, err = factory.New(m.managerCtx, uri, cfg, errCh); err == nil {
+	if m.sinkFactory, err = factory.New(m.managerCtx, m.changefeedID, uri, cfg, errCh); err == nil {
 		log.Info("Sink manager inits sink factory success",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID))
@@ -934,26 +931,22 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	if m.redoDMLMgr != nil {
 		resolvedTs = m.redoDMLMgr.GetResolvedTs(span)
 	} else {
-		resolvedTs = m.sourceManager.GetTableResolvedTs(span)
+		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
+	if resolvedTs < checkpointTs.ResolvedMark() {
+		log.Error("sinkManager: resolved ts should not less than checkpoint ts",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Any("checkpointTs", checkpointTs))
+	}
 	return TableStats{
-		CheckpointTs:          checkpointTs.ResolvedMark(),
-		ResolvedTs:            resolvedTs,
-		BarrierTs:             tableSink.barrierTs.Load(),
-		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
-		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
+		CheckpointTs: checkpointTs.ResolvedMark(),
+		ResolvedTs:   resolvedTs,
+		BarrierTs:    tableSink.barrierTs.Load(),
 	}
-}
-
-// ReceivedEvents returns the number of events received by all table sinks.
-func (m *SinkManager) ReceivedEvents() int64 {
-	totalReceivedEvents := int64(0)
-	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
-		totalReceivedEvents += value.(*tableSinkWrapper).getReceivedEventCount()
-		return true
-	})
-	return totalReceivedEvents
 }
 
 // WaitForReady implements pkg/util.Runnable.
