@@ -934,7 +934,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeEnumNotNull},
 			// TypeEnum value will be a string and then translate to []byte
 			// NotNull && no default will choose first element
-			Res:     uint64(0),
+			Res:     uint64(1),
 			Default: nil,
 		},
 		// mysql.TypeEnum + notnull + default
@@ -976,10 +976,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		datum, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
-		if datum.Kind() == types.KindMysqlEnum {
-			require.Equal(t, uint64(1), datum.GetMysqlEnum().Value)
-		}
+		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
 		val = GetDDLDefaultDefinition(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
