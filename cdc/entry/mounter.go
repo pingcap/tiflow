@@ -729,13 +729,6 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 				return d, nil, 0, "", errors.Trace(err)
 			}
 			d = types.NewMysqlEnumDatum(enumValue)
-		case mysql.TypeSet:
-			name := col.FieldType.GetElem(0)
-			setValue, err := types.ParseSetName(col.FieldType.GetElems(), name, col.GetCollate())
-			if err != nil {
-				return d, nil, 0, "", errors.Trace(err)
-			}
-			d = types.NewMysqlSetDatum(setValue, col.GetCollate())
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 			return d, emptyBytes, sizeOfEmptyBytes, "", nil
 		default:
