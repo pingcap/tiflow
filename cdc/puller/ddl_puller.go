@@ -490,7 +490,6 @@ func NewDDLJobPuller(
 			changefeed,
 			-1, DDLPullerTableName,
 			ddLPullerFilterLoop,
-			true,
 		),
 		kvStorage: kvStorage,
 		outputCh:  make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
