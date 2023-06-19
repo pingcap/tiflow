@@ -124,7 +124,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v0.20.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v0.12.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v0.8.1 // indirect
-	github.com/DataDog/zstd v1.5.2 // indirect
+	github.com/DataDog/zstd v1.4.6-0.20210211175136-c6db21d202f4 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
