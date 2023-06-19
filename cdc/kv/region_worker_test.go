@@ -310,13 +310,13 @@ func TestRegionWorkerHandleResolvedTs(t *testing.T) {
 
 func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 	ctx := context.Background()
-	s := createFakeEventFeedSession()
+	s := createFakeEventFeedSession(ctx)
 	s.eventCh = make(chan model.RegionFeedEvent, 2)
-	s1 := newRegionFeedState(newSingleRegionInfo(
-		tikv.RegionVerID{},
-		spanz.ToSpan([]byte{}, spanz.UpperBoundKey),
-		9, &tikv.RPCContext{}),
-		0)
+	s1 := newRegionFeedState(singleRegionInfo{
+		verID:  tikv.RegionVerID{},
+		ts:     9,
+		rpcCtx: &tikv.RPCContext{},
+	}, 0)
 	s1.start()
 	w := newRegionWorker(model.ChangeFeedID{}, s, "")
 
