@@ -999,7 +999,10 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
+		datum, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
+		if datum.Kind() == types.KindMysqlEnum {
+			require.Equal(t, uint64(1), datum.GetMysqlEnum().Value)
+		}
 		require.Equal(t, tc.Res, val, tc.Name)
 		val = GetDDLDefaultDefinition(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
