@@ -723,11 +723,19 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 		case mysql.TypeEnum:
 			// For enum type, if no default value and not null is set,
 			// the default value is the first element of the enum list
-			enumValue := types.Enum{
-				Name:  col.FieldType.GetElem(0),
-				Value: 1,
+			name := col.FieldType.GetElem(0)
+			enumValue, err := types.ParseEnumName(col.FieldType.GetElems(), name, col.GetCollate())
+			if err != nil {
+				return d, nil, 0, "", errors.Trace(err)
 			}
 			d = types.NewMysqlEnumDatum(enumValue)
+		case mysql.TypeSet:
+			name := col.FieldType.GetElem(0)
+			setValue, err := types.ParseSetName(col.FieldType.GetElems(), name, col.GetCollate())
+			if err != nil {
+				return d, nil, 0, "", errors.Trace(err)
+			}
+			d = types.NewMysqlSetDatum(setValue, col.GetCollate())
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 			return d, emptyBytes, sizeOfEmptyBytes, "", nil
 		default:
