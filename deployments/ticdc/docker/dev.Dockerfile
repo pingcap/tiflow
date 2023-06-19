@@ -1,5 +1,5 @@
 FROM golang:1.20-alpine as builder
-RUN apk add --no-cache git make bash findutils gcc musl-dev
+RUN apk add --no-cache git make bash findutils
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
 
