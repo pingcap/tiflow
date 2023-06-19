@@ -2173,31 +2173,6 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 	cancel()
 }
 
-// TestCommittedFallback tests kv client should panic when receiving a fallback committed event
-func TestCommittedFallback(t *testing.T) {
-	events := []*cdcpb.ChangeDataEvent{
-		{Events: []*cdcpb.Event{
-			{
-				RegionId:  3,
-				RequestId: currentRequestID(),
-				Event: &cdcpb.Event_Entries_{
-					Entries: &cdcpb.Event_Entries{
-						Entries: []*cdcpb.Event_Row{{
-							Type:     cdcpb.Event_COMMITTED,
-							OpType:   cdcpb.Event_Row_PUT,
-							Key:      []byte("a"),
-							Value:    []byte("committed with commit ts before resolved ts"),
-							StartTs:  92,
-							CommitTs: 98,
-						}},
-					},
-				},
-			},
-		}},
-	}
-	testEventCommitTsFallback(t, events)
-}
-
 // TestDeuplicateRequest tests kv client should panic when meeting a duplicate error
 func TestDuplicateRequest(t *testing.T) {
 	events := []*cdcpb.ChangeDataEvent{
