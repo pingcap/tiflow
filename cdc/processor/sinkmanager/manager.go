@@ -949,16 +949,6 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 }
 
-// ReceivedEvents returns the number of events received by all table sinks.
-func (m *SinkManager) ReceivedEvents() int64 {
-	totalReceivedEvents := int64(0)
-	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
-		totalReceivedEvents += value.(*tableSinkWrapper).getReceivedEventCount()
-		return true
-	})
-	return totalReceivedEvents
-}
-
 // WaitForReady implements pkg/util.Runnable.
 func (m *SinkManager) WaitForReady(ctx context.Context) {
 	select {
