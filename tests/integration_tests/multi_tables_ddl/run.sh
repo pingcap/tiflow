@@ -41,6 +41,10 @@ stop() {
 s3cmd --access_key=$MINIO_ACCESS_KEY --secret_key=$MINIO_SECRET_KEY --host=$S3_ENDPOINT --host-bucket=$S3_ENDPOINT --no-ssl mb s3://logbucket
 
 function run() {
+	if [ "$SINK_TYPE" == "storage" ]; then
+		return
+	fi
+
 	start_tidb_cluster --workdir $WORK_DIR
 	cd $WORK_DIR
 

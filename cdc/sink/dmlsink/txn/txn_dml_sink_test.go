@@ -69,7 +69,8 @@ func TestTxnSinkNolocking(t *testing.T) {
 		bes = append(bes, &blackhole{blockOnEvents: 1})
 	}
 	errCh := make(chan error, 1)
-	sink := newSink(context.Background(), bes, errCh, DefaultConflictDetectorSlots)
+	sink := newSink(context.Background(),
+		model.DefaultChangeFeedID("test"), bes, errCh, DefaultConflictDetectorSlots)
 
 	// Test `WriteEvents` shouldn't be blocked by slow workers.
 	var handled uint32 = 0

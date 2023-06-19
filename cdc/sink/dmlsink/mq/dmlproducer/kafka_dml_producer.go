@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -57,11 +56,11 @@ type kafkaDMLProducer struct {
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	factory kafka.Factory,
 	adminClient kafka.ClusterAdminClient,
 	errCh chan error,
 ) (DMLProducer, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting kafka DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))

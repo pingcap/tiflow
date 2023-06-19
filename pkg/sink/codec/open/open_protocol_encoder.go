@@ -34,10 +34,38 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
-	// configs
-	MaxMessageBytes          int
-	MaxBatchSize             int
-	OnlyOutputUpdatedColumns bool
+	config *common.Config
+}
+
+func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
+	// set the `largeMessageOnlyHandleKeyColumns` to true to only encode handle key columns.
+	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, true)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	key, err := keyMsg.Encode()
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	value, err := valueMsg.encode(d.config.OnlyOutputUpdatedColumns)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
+	if length > d.config.MaxMessageBytes {
+		log.Warn("Single message is too large for open-protocol",
+			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("table", e.Table),
+			zap.Any("key", key))
+		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+	}
+
+	log.Warn("open-protocol: message too large, only send handle key columns",
+		zap.Any("table", e.Table), zap.Uint64("commitTs", e.CommitTs))
+
+	return key, value, nil
 }
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
@@ -47,36 +75,41 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	keyMsg, valueMsg := rowChangeToMsg(e)
+	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, false)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return errors.Trace(err)
 	}
-	value, err := valueMsg.encode(d.OnlyOutputUpdatedColumns)
+	value, err := valueMsg.encode(d.config.OnlyOutputUpdatedColumns)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	var keyLenByte [8]byte
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	var valueLenByte [8]byte
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
-	// for single message that is longer than max-message-bytes, do not send it.
+	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
-	if length > d.MaxMessageBytes {
+	if length > d.config.MaxMessageBytes {
 		log.Warn("Single message is too large for open-protocol",
-			zap.Int("maxMessageBytes", d.MaxMessageBytes),
+			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
 			zap.Any("key", key))
-		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		if !d.config.LargeMessageOnlyHandleKeyColumns {
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+
+		key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	if len(d.messageBuf) == 0 ||
-		d.curBatchSize >= d.MaxBatchSize ||
-		d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.MaxMessageBytes {
+		d.curBatchSize >= d.config.MaxBatchSize ||
+		d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.config.MaxMessageBytes {
 		// Before we create a new message, we should handle the previous callbacks.
 		d.tryBuildCallback()
 		versionHead := make([]byte, 8)
@@ -86,6 +119,13 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		d.messageBuf = append(d.messageBuf, msg)
 		d.curBatchSize = 0
 	}
+
+	var (
+		keyLenByte   [8]byte
+		valueLenByte [8]byte
+	)
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
 	message := d.messageBuf[len(d.messageBuf)-1]
 	message.Key = append(message.Key, keyLenByte[:]...)
@@ -192,12 +232,7 @@ type batchEncoderBuilder struct {
 
 // Build a BatchEncoder
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := NewBatchEncoder()
-	encoder.(*BatchEncoder).MaxMessageBytes = b.config.MaxMessageBytes
-	encoder.(*BatchEncoder).MaxBatchSize = b.config.MaxBatchSize
-	encoder.(*BatchEncoder).OnlyOutputUpdatedColumns = b.config.OnlyOutputUpdatedColumns
-
-	return encoder
+	return NewBatchEncoder(b.config)
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.
@@ -206,7 +241,8 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder() codec.RowEventEncoder {
-	batch := &BatchEncoder{}
-	return batch
+func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
+	return &BatchEncoder{
+		config: config,
+	}
 }

@@ -71,14 +71,14 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 		if len(cs) == 0 {
 			continue
 		}
-		craftEncoder := craft.NewBatchEncoder()
-		craftEncoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
-		craftEncoder.(*craft.BatchEncoder).MaxBatchSize = 64
+		config := &common.Config{
+			MaxMessageBytes: 8192,
+			MaxBatchSize:    64,
+		}
+		craftEncoder := craft.NewBatchEncoder(config)
 		craftMessages := encodeRowCase(t, craftEncoder, cs)
 
-		jsonEncoder := open.NewBatchEncoder()
-		jsonEncoder.(*open.BatchEncoder).MaxMessageBytes = 8192
-		jsonEncoder.(*open.BatchEncoder).MaxBatchSize = 64
+		jsonEncoder := open.NewBatchEncoder(config)
 		jsonMessages := encodeRowCase(t, jsonEncoder, cs)
 
 		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
@@ -226,16 +226,17 @@ func codecEncodeRowCase(encoder codec.RowEventEncoder,
 
 func init() {
 	var err error
-	encoder := craft.NewBatchEncoder()
-	encoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
-	encoder.(*craft.BatchEncoder).MaxBatchSize = 64
+
+	config := &common.Config{
+		MaxMessageBytes: 8192,
+		MaxBatchSize:    64,
+	}
+	encoder := craft.NewBatchEncoder(config)
 	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
 
-	encoder = open.NewBatchEncoder()
-	encoder.(*open.BatchEncoder).MaxMessageBytes = 8192
-	encoder.(*open.BatchEncoder).MaxBatchSize = 64
+	encoder = open.NewBatchEncoder(config)
 	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
@@ -244,19 +245,23 @@ func init() {
 }
 
 func BenchmarkCraftEncoding(b *testing.B) {
+	config := &common.Config{
+		MaxMessageBytes: 8192,
+		MaxBatchSize:    64,
+	}
 	allocator := craft.NewSliceAllocator(128)
-	encoder := craft.NewBatchEncoderWithAllocator(allocator)
-	encoder.(*craft.BatchEncoder).MaxMessageBytes = 8192
-	encoder.(*craft.BatchEncoder).MaxBatchSize = 64
+	encoder := craft.NewBatchEncoderWithAllocator(allocator, config)
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkJsonEncoding(b *testing.B) {
-	encoder := open.NewBatchEncoder()
-	encoder.(*open.BatchEncoder).MaxMessageBytes = 8192
-	encoder.(*open.BatchEncoder).MaxBatchSize = 64
+	config := &common.Config{
+		MaxMessageBytes: 8192,
+		MaxBatchSize:    64,
+	}
+	encoder := open.NewBatchEncoder(config)
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
@@ -286,7 +291,7 @@ func BenchmarkCraftDecoding(b *testing.B) {
 					if _, hasNext, err := decoder.HasNext(); err != nil {
 						panic(err)
 					} else if hasNext {
-						_, _ = decoder.NextRowChangedEvent()
+						_, _, _ = decoder.NextRowChangedEvent()
 					} else {
 						break
 					}
@@ -307,7 +312,7 @@ func BenchmarkJsonDecoding(b *testing.B) {
 					if _, hasNext, err := decoder.HasNext(); err != nil {
 						panic(err)
 					} else if hasNext {
-						_, _ = decoder.NextRowChangedEvent()
+						_, _, _ = decoder.NextRowChangedEvent()
 					} else {
 						break
 					}

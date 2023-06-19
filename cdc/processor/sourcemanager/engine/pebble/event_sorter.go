@@ -113,7 +113,7 @@ func (s *EventSorter) IsTableBased() bool {
 }
 
 // AddTable implements engine.SortEngine.
-func (s *EventSorter) AddTable(span tablepb.Span) {
+func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 	s.mu.Lock()
 	if _, exists := s.tables.Get(span); exists {
 		s.mu.Unlock()
@@ -123,10 +123,12 @@ func (s *EventSorter) AddTable(span tablepb.Span) {
 			zap.Stringer("span", &span))
 		return
 	}
-	s.tables.ReplaceOrInsert(span, &tableState{
+	state := &tableState{
 		uniqueID: genUniqueID(),
 		ch:       s.channs[getDB(span, len(s.dbs))],
-	})
+	}
+	state.maxReceivedResolvedTs.Store(startTs)
+	s.tables.ReplaceOrInsert(span, state)
 	s.mu.Unlock()
 }
 
@@ -158,44 +160,22 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 			zap.Stringer("span", &span))
 	}
 
-	maxCommitTs := model.Ts(0)
-	maxResolvedTs := model.Ts(0)
+	maxCommitTs := state.maxReceivedCommitTs.Load()
+	maxResolvedTs := state.maxReceivedResolvedTs.Load()
 	for _, event := range events {
-		state.ch.In() <- eventWithTableID{uniqueID: state.uniqueID, span: span, event: event}
 		if event.IsResolved() {
 			if event.CRTs > maxResolvedTs {
 				maxResolvedTs = event.CRTs
+				state.maxReceivedResolvedTs.Store(maxResolvedTs)
 			}
 		} else {
-			state.receivedEvents.Add(1)
 			if event.CRTs > maxCommitTs {
 				maxCommitTs = event.CRTs
+				state.maxReceivedCommitTs.Store(maxCommitTs)
 			}
 		}
+		state.ch.In() <- eventWithTableID{uniqueID: state.uniqueID, span: span, event: event}
 	}
-
-	if maxCommitTs > state.maxReceivedCommitTs.Load() {
-		state.maxReceivedCommitTs.Store(maxCommitTs)
-	}
-	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
-		state.maxReceivedResolvedTs.Store(maxResolvedTs)
-	}
-}
-
-// GetResolvedTs implements engine.SortEngine.
-func (s *EventSorter) GetResolvedTs(span tablepb.Span) model.Ts {
-	s.mu.RLock()
-	state, exists := s.tables.Get(span)
-	s.mu.RUnlock()
-
-	if !exists {
-		log.Panic("get resolved ts from an non-existent table",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span))
-	}
-
-	return state.maxReceivedResolvedTs.Load()
 }
 
 // OnResolve implements engine.SortEngine.
@@ -305,18 +285,6 @@ func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
 	}
 }
 
-// ReceivedEvents implements engine.SortEngine.
-func (s *EventSorter) ReceivedEvents() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	totalReceivedEvents := int64(0)
-	s.tables.Range(func(_ tablepb.Span, state *tableState) bool {
-		totalReceivedEvents += state.receivedEvents.Load()
-		return true
-	})
-	return totalReceivedEvents
-}
-
 // Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.mu.Lock()
@@ -398,7 +366,6 @@ type tableState struct {
 	// For statistics.
 	maxReceivedCommitTs   atomic.Uint64
 	maxReceivedResolvedTs atomic.Uint64
-	receivedEvents        atomic.Int64
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex

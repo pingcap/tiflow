@@ -187,6 +187,7 @@ type Optimist struct {
 	getTableInfo  func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
 	execError     *atomic.Error
 	optimist      *shardddl.Optimist // shard DDL optimist
+	strict        bool
 }
 
 func NewOptimistDDL(pLogger *log.Logger, syncer *Syncer) *Optimist {
@@ -203,6 +204,7 @@ func NewOptimistDDL(pLogger *log.Logger, syncer *Syncer) *Optimist {
 		getTableInfo:  syncer.getTableInfo,
 		execError:     &syncer.execError,
 		optimist:      syncer.optimist,
+		strict:        syncer.cfg.StrictOptimisticShardMode,
 	}
 }
 
@@ -861,6 +863,9 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	// To do this, we append this table to osgk to prevent the following ddl/dmls from being executed.
 	// conflict location must be the start location for current received ddl event.
 	case optimism.ConflictSkipWaitRedirect:
+		if ddl.strict {
+			return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, "")
+		}
 		// TODO: check if we don't need Clone for startLocation
 		first := ddl.osgk.appendConflictTable(upTable, downTable, qec.startLocation.Clone(), ddl.flavor, ddl.enableGTID)
 		if first {

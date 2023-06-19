@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +34,8 @@ func TestPartitions(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager, err := NewKafkaTopicManager(ctx, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(ctx,
+		model.DefaultChangeFeedID("test"), adminClient, cfg)
 	require.Nil(t, err)
 	defer manager.Close()
 
@@ -56,7 +58,9 @@ func TestCreateTopic(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager, err := NewKafkaTopicManager(ctx, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(ctx,
+		model.DefaultChangeFeedID("test"),
+		adminClient, cfg)
 	require.Nil(t, err)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
@@ -72,7 +76,9 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager, err = NewKafkaTopicManager(ctx, adminClient, cfg)
+	manager, err = NewKafkaTopicManager(ctx,
+		model.DefaultChangeFeedID("test"),
+		adminClient, cfg)
 	require.Nil(t, err)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
@@ -89,7 +95,9 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager, err = NewKafkaTopicManager(ctx, adminClient, cfg)
+	manager, err = NewKafkaTopicManager(ctx,
+		model.DefaultChangeFeedID("test"),
+		adminClient, cfg)
 	require.Nil(t, err)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic-failed")
@@ -112,7 +120,9 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager, err := NewKafkaTopicManager(ctx, adminClient, cfg)
+	manager, err := NewKafkaTopicManager(ctx,
+		model.DefaultChangeFeedID("test"),
+		adminClient, cfg)
 	require.Nil(t, err)
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(ctx, "new_topic")

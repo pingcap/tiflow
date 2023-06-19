@@ -64,11 +64,6 @@ type tableSinkWrapper struct {
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
-	// receivedSorterCommitTs is the commit ts received from the sorter.
-	// We use this to statistics the latency of the table sorter.
-	receivedSorterCommitTs atomic.Uint64
-	// receivedEventCount is the number of events received from the sorter.
-	receivedEventCount atomic.Int64
 
 	// replicateTs is the ts that the table sink has started to replicate.
 	replicateTs    model.Ts
@@ -189,12 +184,6 @@ func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
 	}
 }
 
-func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
-	if ts > t.receivedSorterCommitTs.Load() {
-		t.receivedSorterCommitTs.Store(ts)
-	}
-}
-
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	t.tableSinkMu.RLock()
 	defer t.tableSinkMu.RUnlock()
@@ -223,14 +212,6 @@ func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
 	return t.receivedSorterResolvedTs.Load()
-}
-
-func (t *tableSinkWrapper) getReceivedSorterCommitTs() model.Ts {
-	return t.receivedSorterCommitTs.Load()
-}
-
-func (t *tableSinkWrapper) getReceivedEventCount() int64 {
-	return t.receivedEventCount.Load()
 }
 
 func (t *tableSinkWrapper) getState() tablepb.TableState {
@@ -442,7 +423,7 @@ func convertRowChangedEvents(
 		// This indicates that it is an update event,
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
-		if !enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+		if e.Row.IsUpdate() && !enableOldValue {
 			if shouldSplitUpdateEvent(e) {
 				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {
@@ -507,13 +488,6 @@ func splitUpdateEvent(
 	deleteEvent.RawKV = &deleteEventRowKV
 
 	deleteEvent.Row.Columns = nil
-	for i := range deleteEvent.Row.PreColumns {
-		// NOTICE: Only the handle key pre column is retained in the delete event.
-		if deleteEvent.Row.PreColumns[i] != nil &&
-			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
-			deleteEvent.Row.PreColumns[i] = nil
-		}
-	}
 
 	insertEvent := *updateEvent
 	insertEventRow := *updateEvent.Row

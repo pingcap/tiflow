@@ -35,7 +35,7 @@ type testColumnTuple struct {
 var (
 	testColumnsTable = []*testColumnTuple{
 		{
-			&model.Column{Name: "tinyint", Type: mysql.TypeTiny, Value: int64(127)},
+			&model.Column{Name: "tinyint", Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Type: mysql.TypeTiny, Value: int64(127)},
 			"tinyint", internal.JavaSQLTypeTINYINT, "127", "127",
 		},
 

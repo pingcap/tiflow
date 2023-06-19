@@ -34,6 +34,8 @@ type BatchEncoder struct {
 	callbackBuf  []func()
 	packet       *canal.Packet
 	entryBuilder *canalEntryBuilder
+
+	config *common.Config
 }
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
@@ -50,7 +52,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	entry, err := d.entryBuilder.fromRowEvent(e)
+	entry, err := d.entryBuilder.fromRowEvent(e, d.config.DeleteOnlyHandleKeyColumns)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -156,25 +158,31 @@ func (d *BatchEncoder) resetPacket() {
 }
 
 // newBatchEncoder creates a new canalBatchEncoder.
-func newBatchEncoder() codec.RowEventEncoder {
+func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &BatchEncoder{
 		messages:     &canal.Messages{},
 		callbackBuf:  make([]func(), 0),
 		entryBuilder: newCanalEntryBuilder(),
+
+		config: config,
 	}
 
 	encoder.resetPacket()
 	return encoder
 }
 
-type batchEncoderBuilder struct{}
+type batchEncoderBuilder struct {
+	config *common.Config
+}
 
 // Build a `canalBatchEncoder`
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	return newBatchEncoder()
+	return newBatchEncoder(b.config)
 }
 
 // NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
-func NewBatchEncoderBuilder() codec.RowEventEncoderBuilder {
-	return &batchEncoderBuilder{}
+func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+	return &batchEncoderBuilder{
+		config: config,
+	}
 }

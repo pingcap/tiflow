@@ -31,7 +31,6 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -84,16 +83,16 @@ type mysqlBackend struct {
 // NewMySQLBackends creates a new MySQL sink using schema storage
 func NewMySQLBackends(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	dbConnFactory pmysql.Factory,
 	statistics *metrics.Statistics,
 ) ([]*mysqlBackend, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	changefeed := fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)
 
 	cfg := pmysql.NewConfig()
-	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
+	err := cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +108,11 @@ func NewMySQLBackends(
 	}
 
 	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -777,7 +781,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				}
 			}
 
-			// we set write source for each txn,
+			// we try to set write source for each txn,
 			// so we can use it to trace the data source
 			if err = s.setWriteSource(pctx, tx); err != nil {
 				err := logDMLTxnErr(
@@ -870,8 +874,8 @@ func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 
 // setWriteSource sets write source for the transaction.
 func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
-	// we only set write source when donwstream is TiDB
-	if !s.cfg.IsTiDB {
+	// we only set write source when donwstream is TiDB and write source is existed.
+	if !s.cfg.IsWriteSourceExisted {
 		return nil
 	}
 	// downstream is TiDB, set system variables.

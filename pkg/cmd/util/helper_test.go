@@ -205,12 +205,14 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			Delimiter:  string(config.Comma),
 			NullString: config.NULL,
 		},
-		Terminator:               util.AddressOf("\r\n"),
-		DateSeparator:            util.AddressOf(config.DateSeparatorDay.String()),
-		EnablePartitionSeparator: util.AddressOf(true),
-		EnableKafkaSinkV2:        util.AddressOf(false),
-		OnlyOutputUpdatedColumns: util.AddressOf(false),
-		Protocol:                 util.AddressOf("open-protocol"),
+		Terminator:                       util.AddressOf("\r\n"),
+		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
+		EnablePartitionSeparator:         util.AddressOf(true),
+		EnableKafkaSinkV2:                util.AddressOf(false),
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		LargeMessageOnlyHandleKeyColumns: util.AddressOf(false),
+		Protocol:                         util.AddressOf("open-protocol"),
 	}, cfg.Sink)
 }
 
@@ -240,7 +242,9 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			NullString:      "\\N",
 			IncludeCommitTs: false,
 		},
-		OnlyOutputUpdatedColumns: util.AddressOf(false),
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		LargeMessageOnlyHandleKeyColumns: util.AddressOf(false),
 	}, cfg.Sink)
 }
 

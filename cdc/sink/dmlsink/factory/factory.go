@@ -50,6 +50,7 @@ type SinkFactory struct {
 // New creates a new SinkFactory by schema.
 func New(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	sinkURIStr string,
 	cfg *config.ReplicaConfig,
 	errCh chan error,
@@ -63,7 +64,8 @@ func New(
 	schema := strings.ToLower(sinkURI.Scheme)
 	switch schema {
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
-		txnSink, err := txn.NewMySQLSink(ctx, sinkURI, cfg, errCh, txn.DefaultConflictDetectorSlots)
+		txnSink, err := txn.NewMySQLSink(ctx, changefeedID, sinkURI, cfg, errCh,
+			txn.DefaultConflictDetectorSlots)
 		if err != nil {
 			return nil, err
 		}
@@ -73,14 +75,14 @@ func New(
 		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
 			factoryCreator = v2.NewFactory
 		}
-		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
+		mqs, err := mq.NewKafkaDMLSink(ctx, changefeedID, sinkURI, cfg, errCh,
 			factoryCreator, dmlproducer.NewKafkaDMLProducer)
 		if err != nil {
 			return nil, err
 		}
 		s.rowSink = mqs
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
-		storageSink, err := cloudstorage.NewDMLSink(ctx, sinkURI, cfg, errCh)
+		storageSink, err := cloudstorage.NewDMLSink(ctx, changefeedID, sinkURI, cfg, errCh)
 		if err != nil {
 			return nil, err
 		}

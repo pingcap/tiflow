@@ -51,8 +51,8 @@ func TestRmUnusedField(t *testing.T) {
 				},
 			},
 		}
-		err := mysqlCf.VerifyAndComplete()
-		require.Nil(t, err)
+
+		mysqlCf.VerifyAndComplete()
 		require.True(t, mysqlCf.Config.Sink.SchemaRegistry == nil)
 		require.True(t, mysqlCf.Config.Sink.Protocol == nil)
 		require.Nil(t, mysqlCf.Config.Sink.CSVConfig)
@@ -74,8 +74,7 @@ func TestRmUnusedField(t *testing.T) {
 				},
 			},
 		}
-		err := strCf.VerifyAndComplete()
-		require.Nil(t, err)
+		strCf.VerifyAndComplete()
 		require.True(t, strCf.Config.Sink.SchemaRegistry == nil)
 		require.NotNil(t, strCf.Config.Sink.CSVConfig)
 	}
@@ -96,8 +95,7 @@ func TestRmUnusedField(t *testing.T) {
 				},
 			},
 		}
-		err := kaCf.VerifyAndComplete()
-		require.Nil(t, err)
+		kaCf.VerifyAndComplete()
 		require.Equal(t, defaultRegistry, util.GetOrZero(kaCf.Config.Sink.SchemaRegistry))
 		require.Equal(t, config.ProtocolAvro.String(), util.GetOrZero(kaCf.Config.Sink.Protocol))
 		require.Nil(t, kaCf.Config.Sink.CSVConfig)
@@ -119,8 +117,7 @@ func TestRmUnusedField(t *testing.T) {
 				},
 			},
 		}
-		err := kcCf.VerifyAndComplete()
-		require.Nil(t, err)
+		kcCf.VerifyAndComplete()
 		require.True(t, kcCf.Config.Sink.SchemaRegistry == nil)
 		require.Equal(
 			t,
@@ -258,8 +255,7 @@ func TestVerifyAndComplete(t *testing.T) {
 		},
 	}
 
-	err := info.VerifyAndComplete()
-	require.Nil(t, err)
+	info.VerifyAndComplete()
 	require.Equal(t, SortUnified, info.Engine)
 
 	marshalConfig1, err := info.Config.Marshal()

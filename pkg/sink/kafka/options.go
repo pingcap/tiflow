@@ -28,7 +28,6 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -213,7 +212,7 @@ func (o *Options) SetPartitionNum(realPartitionCount int32) error {
 }
 
 // Apply the sinkURI to update Options
-func (o *Options) Apply(ctx context.Context,
+func (o *Options) Apply(changefeedID model.ChangeFeedID,
 	sinkURI *url.URL, replicaConfig *config.ReplicaConfig,
 ) error {
 	o.BrokerEndpoints = strings.Split(sinkURI.Host, ",")
@@ -255,8 +254,8 @@ func (o *Options) Apply(ctx context.Context,
 		kafkaClientID = *urlParameter.KafkaClientID
 	}
 	clientID, err := NewKafkaClientID(
-		contextutil.CaptureAddrFromCtx(ctx),
-		contextutil.ChangefeedIDFromCtx(ctx),
+		config.GetGlobalServerConfig().AdvertiseAddr,
+		changefeedID,
 		kafkaClientID)
 	if err != nil {
 		return err

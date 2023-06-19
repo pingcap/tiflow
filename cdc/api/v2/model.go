@@ -352,22 +352,24 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 
 		res.Sink = &config.SinkConfig{
-			DispatchRules:            dispatchRules,
-			Protocol:                 c.Sink.Protocol,
-			CSVConfig:                csvConfig,
-			ColumnSelectors:          columnSelectors,
-			SchemaRegistry:           c.Sink.SchemaRegistry,
-			EncoderConcurrency:       c.Sink.EncoderConcurrency,
-			Terminator:               c.Sink.Terminator,
-			DateSeparator:            c.Sink.DateSeparator,
-			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
-			FileIndexWidth:           c.Sink.FileIndexWidth,
-			EnableKafkaSinkV2:        c.Sink.EnableKafkaSinkV2,
-			OnlyOutputUpdatedColumns: c.Sink.OnlyOutputUpdatedColumns,
-			KafkaConfig:              kafkaConfig,
-			MySQLConfig:              mysqlConfig,
-			CloudStorageConfig:       cloudStorageConfig,
-			SafeMode:                 c.Sink.SafeMode,
+			DispatchRules:                    dispatchRules,
+			Protocol:                         c.Sink.Protocol,
+			CSVConfig:                        csvConfig,
+			ColumnSelectors:                  columnSelectors,
+			SchemaRegistry:                   c.Sink.SchemaRegistry,
+			EncoderConcurrency:               c.Sink.EncoderConcurrency,
+			Terminator:                       c.Sink.Terminator,
+			DateSeparator:                    c.Sink.DateSeparator,
+			EnablePartitionSeparator:         c.Sink.EnablePartitionSeparator,
+			FileIndexWidth:                   c.Sink.FileIndexWidth,
+			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
+			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
+			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
+			LargeMessageOnlyHandleKeyColumns: c.Sink.LargeMessageOnlyHandleKeyColumns,
+			KafkaConfig:                      kafkaConfig,
+			MySQLConfig:                      mysqlConfig,
+			CloudStorageConfig:               cloudStorageConfig,
+			SafeMode:                         c.Sink.SafeMode,
 		}
 
 		if c.Sink.TxnAtomicity != nil {
@@ -565,22 +567,24 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		res.Sink = &SinkConfig{
-			Protocol:                 cloned.Sink.Protocol,
-			SchemaRegistry:           cloned.Sink.SchemaRegistry,
-			DispatchRules:            dispatchRules,
-			CSVConfig:                csvConfig,
-			ColumnSelectors:          columnSelectors,
-			EncoderConcurrency:       cloned.Sink.EncoderConcurrency,
-			Terminator:               cloned.Sink.Terminator,
-			DateSeparator:            cloned.Sink.DateSeparator,
-			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
-			FileIndexWidth:           cloned.Sink.FileIndexWidth,
-			EnableKafkaSinkV2:        cloned.Sink.EnableKafkaSinkV2,
-			OnlyOutputUpdatedColumns: cloned.Sink.OnlyOutputUpdatedColumns,
-			KafkaConfig:              kafkaConfig,
-			MySQLConfig:              mysqlConfig,
-			CloudStorageConfig:       cloudStorageConfig,
-			SafeMode:                 cloned.Sink.SafeMode,
+			Protocol:                         cloned.Sink.Protocol,
+			SchemaRegistry:                   cloned.Sink.SchemaRegistry,
+			DispatchRules:                    dispatchRules,
+			CSVConfig:                        csvConfig,
+			ColumnSelectors:                  columnSelectors,
+			EncoderConcurrency:               cloned.Sink.EncoderConcurrency,
+			Terminator:                       cloned.Sink.Terminator,
+			DateSeparator:                    cloned.Sink.DateSeparator,
+			EnablePartitionSeparator:         cloned.Sink.EnablePartitionSeparator,
+			FileIndexWidth:                   cloned.Sink.FileIndexWidth,
+			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
+			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
+			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
+			LargeMessageOnlyHandleKeyColumns: cloned.Sink.LargeMessageOnlyHandleKeyColumns,
+			KafkaConfig:                      kafkaConfig,
+			MySQLConfig:                      mysqlConfig,
+			CloudStorageConfig:               cloudStorageConfig,
+			SafeMode:                         cloned.Sink.SafeMode,
 		}
 
 		if cloned.Sink.TxnAtomicity != nil {
@@ -719,23 +723,25 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 *string             `json:"protocol,omitempty"`
-	SchemaRegistry           *string             `json:"schema_registry,omitempty"`
-	CSVConfig                *CSVConfig          `json:"csv,omitempty"`
-	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector   `json:"column_selectors,omitempty"`
-	TxnAtomicity             *string             `json:"transaction_atomicity,omitempty"`
-	EncoderConcurrency       *int                `json:"encoder_concurrency,omitempty"`
-	Terminator               *string             `json:"terminator,omitempty"`
-	DateSeparator            *string             `json:"date_separator,omitempty"`
-	EnablePartitionSeparator *bool               `json:"enable_partition_separator,omitempty"`
-	FileIndexWidth           *int                `json:"file_index_width,omitempty"`
-	EnableKafkaSinkV2        *bool               `json:"enable_kafka_sink_v2,omitempty"`
-	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns,omitempty"`
-	SafeMode                 *bool               `json:"safe_mode,omitempty"`
-	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
-	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
-	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	Protocol                         *string             `json:"protocol,omitempty"`
+	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
+	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
+	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
+	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
+	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
+	Terminator                       *string             `json:"terminator,omitempty"`
+	DateSeparator                    *string             `json:"date_separator,omitempty"`
+	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
+	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
+	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
+	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
+	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
+	LargeMessageOnlyHandleKeyColumns *bool               `json:"large_message_only_handle_key_columns"`
+	SafeMode                         *bool               `json:"safe_mode,omitempty"`
+	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
+	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
+	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 }
 
 // CSVConfig denotes the csv config
