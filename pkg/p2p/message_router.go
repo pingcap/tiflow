@@ -61,7 +61,17 @@ type messageRouterImpl struct {
 	enableLocalClient bool
 }
 
-func NewMessageRouterWithLocalClient(
+// NewMessageRouterWithLocalClient creates a new MessageRouter with a local client.
+func NewMessageRouterWithLocalClient(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) *messageRouterImpl {
+	return newMessageRouterWithLocalClient(selfID, credentials, clientConfig, true)
+}
+
+// NewMessageRouter creates a new MessageRouter
+func NewMessageRouter(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) *messageRouterImpl {
+	return newMessageRouterWithLocalClient(selfID, credentials, clientConfig, false)
+}
+
+func newMessageRouterWithLocalClient(
 	selfID NodeID,
 	credentials *security.Credential,
 	clientConfig *MessageClientConfig,
@@ -76,11 +86,6 @@ func NewMessageRouterWithLocalClient(
 		clientConfig:      clientConfig,
 		enableLocalClient: enableLocalClient,
 	}
-}
-
-// NewMessageRouter creates a new MessageRouter
-func NewMessageRouter(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) *messageRouterImpl {
-	return NewMessageRouterWithLocalClient(selfID, credentials, clientConfig, false)
 }
 
 type clientWrapper struct {

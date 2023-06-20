@@ -668,7 +668,7 @@ func (m *MessageServer) receiveLocalMessage(ctx context.Context, localCh <-chan 
 		batchRawMessages = []RawMessageEntry{}
 	}
 
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	for {
 		select {
 		case <-ctx.Done():

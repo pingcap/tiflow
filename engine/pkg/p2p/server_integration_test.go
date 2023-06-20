@@ -61,7 +61,7 @@ func TestMessageRPCServiceBasics(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := messageSrvc.Serve(ctx, l, make(<-chan p2pImpl.RawMessageEntry))
+		err := messageSrvc.Serve(ctx, l)
 		require.Error(t, err)
 		require.Regexp(t, ".*canceled.*", err.Error())
 	}()
