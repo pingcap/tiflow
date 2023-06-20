@@ -2581,6 +2581,9 @@ var doc = `{
                 "sink": {
                     "$ref": "#/definitions/v2.SinkConfig"
                 },
+                "status_update_interval": {
+                    "type": "string"
+                },
                 "sync_point_interval": {
                     "type": "string"
                 },
