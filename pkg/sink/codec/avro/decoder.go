@@ -18,16 +18,16 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
+	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -440,135 +440,154 @@ func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, stri
 	return result, codec.Schema(), nil
 }
 
+// calculate the checksum value, and compare it with the expected one, return error if not identical.
 func (d *decoder) verifyChecksum(columns []*model.Column, expected uint64) error {
-	calculator := rowcodec.RowData{
-		Cols: make([]rowcodec.ColData, 0, len(columns)),
-		Data: make([]byte, 0),
-	}
-	for _, col := range columns {
-		info := &timodel.ColumnInfo{
-			FieldType: *types.NewFieldType(col.Type),
-		}
-
-		data, err := d.buildDatum(col.Value, col.Type)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		calculator.Cols = append(calculator.Cols, rowcodec.ColData{
-			ColumnInfo: info,
-			Datum:      &data,
-		})
-	}
-	checksum, err := calculator.Checksum()
+	checksum, err := calculateChecksum(columns)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	if uint64(checksum) != expected {
+	if checksum != expected {
 		log.Error("checksum mismatch",
 			zap.Uint64("expected", expected),
-			zap.Uint32("actual", checksum))
+			zap.Uint64("actual", checksum))
 		return errors.New("checksum mismatch")
 	}
 
 	return nil
 }
 
-func (d *decoder) buildDatum(value interface{}, typ byte) (types.Datum, error) {
-	if value == nil {
-		return types.NewDatum(value), nil
+// calculate the checksum, caller should make sure all columns is ordered by the column's id.
+// by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L294
+func calculateChecksum(columns []*model.Column) (uint64, error) {
+	var (
+		checksum uint32
+		err      error
+	)
+	buf := make([]byte, 0)
+	for _, col := range columns {
+		buf, err = buildChecksumBytes(buf, col.Value, col.Type)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		checksum = crc32.Update(checksum, crc32.IEEETable, buf)
 	}
-	switch typ {
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong,
-		mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
+	return uint64(checksum), nil
+}
+
+// buildChecksumBytes append value the buf, type is used to convert value interface to concrete value.
+// by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L308
+func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) {
+	if value == nil {
+		return buf, nil
+	}
+
+	switch ty {
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
 		switch a := value.(type) {
 		case int32:
-			return types.NewIntDatum(int64(a)), nil
+			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
 		case uint32:
-			return types.NewUintDatum(uint64(a)), nil
+			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
 		case int64:
-			return types.NewIntDatum(a), nil
+			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
 		case uint64:
-			return types.NewUintDatum(a), nil
+			buf = binary.LittleEndian.AppendUint64(buf, a)
 		case string:
 			v, err := strconv.ParseUint(a, 10, 64)
 			if err != nil {
-				return types.Datum{}, errors.Trace(err)
+				return nil, errors.Trace(err)
 			}
-			return types.NewUintDatum(v), nil
+			buf = binary.LittleEndian.AppendUint64(buf, v)
 		default:
-			log.Panic("unknown golang type for the mysql Types",
-				zap.Any("mysqlType", typ), zap.Any("value", value))
+			log.Panic("unknown golang type for the integral value",
+				zap.Any("value", value), zap.Any("mysqlType", ty))
 		}
-	case mysql.TypeTimestamp:
-		mysqlTime, err := types.ParseTimestamp(d.sc, value.(string))
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
+	case mysql.TypeFloat, mysql.TypeDouble:
+		var v float64
+		switch a := value.(type) {
+		case float32:
+			v = float64(a)
+		case float64:
+			v = a
 		}
-		return types.NewTimeDatum(mysqlTime), nil
-	case mysql.TypeDatetime:
-		mysqlTime, err := types.ParseDatetime(d.sc, value.(string))
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
+		if math.IsInf(v, 0) || math.IsNaN(v) {
+			v = 0
 		}
-		return types.NewTimeDatum(mysqlTime), nil
-	case mysql.TypeDate, mysql.TypeNewDate:
-		mysqlTime, err := types.ParseDate(d.sc, value.(string))
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
-		}
-		return types.NewTimeDatum(mysqlTime), nil
-	case mysql.TypeDuration:
-		duration, ok, err := types.ParseDuration(d.sc, value.(string), 0)
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
-		}
-		if ok {
-			return types.Datum{}, errors.New("parse duration failed")
-		}
-		return types.NewDurationDatum(duration), nil
-	case mysql.TypeNewDecimal:
-		dec := new(types.MyDecimal)
-		err := dec.FromString([]byte(value.(string)))
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
-		}
-		return types.NewDecimalDatum(dec), nil
-	case mysql.TypeEnum:
-		e := types.Enum{
-			Name:  "",
-			Value: value.(uint64),
-		}
-		return types.NewMysqlEnumDatum(e), nil
-	case mysql.TypeSet:
-		s := types.Set{
-			Name:  "",
-			Value: value.(uint64),
-		}
-		return types.NewMysqlSetDatum(s, ""), nil
-	case mysql.TypeJSON:
-		// original json string convert to map, and then marshal it to binary,
-		// to follow the tidb json logic.
-		var m map[string]interface{}
-		err := json.Unmarshal([]byte(value.(string)), &m)
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
-		}
-
-		binary, err := json.Marshal(m)
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
-		}
-		var bj types.BinaryJSON
-		err = bj.UnmarshalJSON(binary)
-		if err != nil {
-			return types.Datum{}, errors.Trace(err)
-		}
-
-		return types.NewJSONDatum(bj), nil
+		buf = binary.LittleEndian.AppendUint64(buf, math.Float64bits(v))
+	case mysql.TypeEnum, mysql.TypeSet:
+		buf = binary.LittleEndian.AppendUint64(buf, value.(uint64))
 	case mysql.TypeBit:
-		return types.NewBinaryLiteralDatum(value.([]byte)), nil
+		// bit is store as bytes, convert to uint64.
+		v, err := binaryLiteralToInt(value.([]byte))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		buf = binary.LittleEndian.AppendUint64(buf, v)
+	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+		switch a := value.(type) {
+		case string:
+			buf = appendLengthValue(buf, []byte(a))
+		case []byte:
+			buf = appendLengthValue(buf, a)
+		default:
+			log.Panic("unknown golang type for the string value",
+				zap.Any("value", value), zap.Any("mysqlType", ty))
+		}
+	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeNewDate:
+		v := value.(string)
+		buf = appendLengthValue(buf, []byte(v))
+	case mysql.TypeDuration:
+		buf = appendLengthValue(buf, []byte(value.(string)))
+	case mysql.TypeNewDecimal:
+		buf = appendLengthValue(buf, []byte(value.(string)))
+	case mysql.TypeJSON:
+		buf = appendLengthValue(buf, []byte(value.(string)))
+	case mysql.TypeNull, mysql.TypeGeometry:
+		// do nothing, does not take into the checksum calculation.
 	default:
+		return buf, errors.New("invalid type for the checksum calculation")
 	}
-	return types.NewDatum(value), nil
+	return buf, nil
+}
+
+func appendLengthValue(buf []byte, val []byte) []byte {
+	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(val)))
+	buf = append(buf, val...)
+	return buf
+}
+
+// convert bytes into uint64,
+// by follow https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/types/binary_literal.go#L105
+func binaryLiteralToInt(bytes []byte) (uint64, error) {
+	bytes = trimLeadingZeroBytes(bytes)
+	length := len(bytes)
+
+	if length > 8 {
+		log.Error("invalid bit value found", zap.ByteString("value", bytes))
+		return math.MaxUint64, errors.New("invalid bit value")
+	}
+
+	if length == 0 {
+		return 0, nil
+	}
+
+	// Note: the byte-order is BigEndian.
+	val := uint64(bytes[0])
+	for i := 1; i < length; i++ {
+		val = (val << 8) | uint64(bytes[i])
+	}
+	return val, nil
+}
+
+func trimLeadingZeroBytes(bytes []byte) []byte {
+	if len(bytes) == 0 {
+		return bytes
+	}
+	pos, posMax := 0, len(bytes)-1
+	for ; pos < posMax; pos++ {
+		if bytes[pos] != 0 {
+			break
+		}
+	}
+	return bytes[pos:]
 }
