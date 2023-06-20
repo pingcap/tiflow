@@ -272,6 +272,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Engine == "" {
 		info.Engine = SortUnified
 	}
+	if info.Config.StatusUpdateInterval == nil {
+		info.Config.StatusUpdateInterval = defaultConfig.StatusUpdateInterval
+	}
 	if info.Config.Filter == nil {
 		info.Config.Filter = defaultConfig.Filter
 	}
