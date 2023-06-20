@@ -52,7 +52,7 @@ type grpcMessageClient struct {
 
 	// newSender is used to create a new sender.
 	// It can be replaced to unit test MessageClient.
-	newSenderFn func(clientStream) clientBatchSender
+	newSenderFn func(MessageClientStream) clientBatchSender[MessageEntry]
 
 	connector clientConnector
 }
@@ -66,16 +66,16 @@ type topicEntry struct {
 	lastSent atomic.Int64
 }
 
-// NewMessageClient creates a new MessageClient
+// NewGrpcMessageClient creates a new MessageClient
 // senderID is an identifier for the local node.
-func NewMessageClient(senderID NodeID, config *MessageClientConfig) *grpcMessageClient {
+func NewGrpcMessageClient(senderID NodeID, config *MessageClientConfig) *grpcMessageClient {
 	return &grpcMessageClient{
 		sendCh:   internal.NewSendChan(int64(config.SendChannelSize)),
 		topics:   make(map[string]*topicEntry),
 		senderID: senderID,
 		closeCh:  make(chan struct{}),
 		config:   config,
-		newSenderFn: func(stream clientStream) clientBatchSender {
+		newSenderFn: func(stream MessageClientStream) clientBatchSender[MessageEntry] {
 			return newClientBatchSender(stream, config.MaxBatchBytes, config.MaxBatchCount)
 		},
 		connector: newClientConnector(),
@@ -171,7 +171,7 @@ func (c *grpcMessageClient) launchStream(ctx context.Context, gRPCClient p2p.CDC
 	return errors.Trace(c.run(ctx, clientStream, cancelStream))
 }
 
-func (c *grpcMessageClient) run(ctx context.Context, stream clientStream, cancel func()) error {
+func (c *grpcMessageClient) run(ctx context.Context, stream MessageClientStream, cancel func()) error {
 	errg, ctx := errgroup.WithContext(ctx)
 
 	errg.Go(func() error {
@@ -187,7 +187,7 @@ func (c *grpcMessageClient) run(ctx context.Context, stream clientStream, cancel
 	return errors.Trace(errg.Wait())
 }
 
-func (c *grpcMessageClient) runTx(ctx context.Context, stream clientStream) error {
+func (c *grpcMessageClient) runTx(ctx context.Context, stream MessageClientStream) error {
 	if err := c.retrySending(ctx, stream); err != nil {
 		return errors.Trace(err)
 	}
@@ -253,7 +253,7 @@ func (c *grpcMessageClient) runTx(ctx context.Context, stream clientStream) erro
 }
 
 // retrySending retries sending messages when the gRPC stream is re-established.
-func (c *grpcMessageClient) retrySending(ctx context.Context, stream clientStream) error {
+func (c *grpcMessageClient) retrySending(ctx context.Context, stream MessageClientStream) error {
 	topicsCloned := make(map[string]*topicEntry)
 	c.topicMu.RLock()
 	for k, v := range c.topics {
@@ -306,7 +306,7 @@ func (c *grpcMessageClient) retrySending(ctx context.Context, stream clientStrea
 	return nil
 }
 
-func (c *grpcMessageClient) runRx(ctx context.Context, stream clientStream) error {
+func (c *grpcMessageClient) runRx(ctx context.Context, stream MessageClientStream) error {
 	peerAddr := unknownPeerLabel
 	peer, ok := gRPCPeer.FromContext(stream.Context())
 	if ok {

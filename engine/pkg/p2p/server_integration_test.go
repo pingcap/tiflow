@@ -61,7 +61,7 @@ func TestMessageRPCServiceBasics(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := messageSrvc.Serve(ctx, l)
+		err := messageSrvc.Serve(ctx, l, make(<-chan p2pImpl.RawMessageEntry))
 		require.Error(t, err)
 		require.Regexp(t, ".*canceled.*", err.Error())
 	}()
@@ -77,7 +77,7 @@ func TestMessageRPCServiceBasics(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	client := p2pImpl.NewMessageClient("test-client-1", clientConfigForUnitTesting)
+	client := p2pImpl.NewGrpcMessageClient("test-client-1", clientConfigForUnitTesting)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

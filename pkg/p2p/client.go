@@ -15,8 +15,10 @@ package p2p
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
@@ -34,6 +36,7 @@ type MessageClient interface {
 	TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error)
 
 	// CurrentAck is used to query the latest sequence number for a topic that is acknowledged by the server.
+	// Note: currently only used for test.
 	CurrentAck(topic Topic) (Seq, bool)
 }
 
@@ -59,4 +62,53 @@ type MessageClientConfig struct {
 	ClientVersion string
 	// MaxRecvMsgSize is the maximum message size in bytes TiCDC can receive.
 	MaxRecvMsgSize int
+}
+
+type localMessageClient struct {
+	ctx     context.Context
+	idx     atomic.Int64
+	localCh chan RawMessageEntry
+	// config is read only
+	config *MessageClientConfig
+}
+
+func newLocalMessageClient(ctx context.Context, config *MessageClientConfig) MessageClient {
+	return &localMessageClient{
+		ctx:     ctx,
+		idx:     atomic.Int64{},
+		localCh: make(chan RawMessageEntry, config.SendChannelSize),
+		config:  config,
+	}
+}
+
+func (c *localMessageClient) Run(
+	ctx context.Context, network string, addr string, receiverID NodeID, credential *security.Credential,
+) error {
+	return nil
+}
+
+func (c *localMessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (Seq, error) {
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-c.ctx.Done():
+		return 0, errors.WrapError(errors.ErrPeerMessageClientClosed, c.ctx.Err())
+	case c.localCh <- RawMessageEntry{topic, value}:
+		return c.idx.Add(1), nil
+	}
+}
+
+func (c *localMessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (Seq, error) {
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case c.localCh <- RawMessageEntry{topic, value}:
+		return c.idx.Add(1), nil
+	default:
+		return 0, errors.ErrPeerMessageSendTryAgain.GenWithStackByArgs()
+	}
+}
+
+func (c *localMessageClient) CurrentAck(topic Topic) (Seq, bool) {
+	return c.idx.Load(), false
 }
