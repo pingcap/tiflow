@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics/txn"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
@@ -744,7 +745,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	// approximateSize is multiplied by 2 because in extreme circustumas, every
 	// byte in dmls can be escaped and adds one byte.
 	fallbackToSeqWay := dmls.approximateSize*2 > s.maxAllowedPacket
-	return retry.Do(pctx, func() error {
+	err := retry.Do(pctx, func() error {
 		writeTimeout, _ := time.ParseDuration(s.cfg.WriteTimeout)
 		writeTimeout += networkDriftDuration
 
@@ -817,6 +818,13 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
 		retry.WithMaxTries(s.dmlMaxRetry),
 		retry.WithIsRetryableErr(isRetryableDMLError))
+
+	// we should not retry to restart sink component or retry changefeed,
+	//  if DML failed by return an unretryable error.
+	if !errorutil.IsRetryableDMLError(err) {
+		return cerror.WrapChangefeedUnretryableErr(err)
+	}
+	return err
 }
 
 func logDMLTxnErr(
