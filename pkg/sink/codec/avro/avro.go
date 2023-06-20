@@ -1015,6 +1015,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return encoder
 }
 
+// SetupEncoderAndSchemaRegistry4Testing start a local schema registry for testing.
 func SetupEncoderAndSchemaRegistry4Testing(
 	ctx context.Context,
 	config *common.Config,
@@ -1034,6 +1035,7 @@ func SetupEncoderAndSchemaRegistry4Testing(
 	}, nil
 }
 
+// TeardownEncoderAndSchemaRegistry4Testing stop the local schema registry for testing.
 func TeardownEncoderAndSchemaRegistry4Testing() {
 	stopHTTPInterceptForTestingRegistry()
 }

@@ -132,7 +132,7 @@ func startHTTPInterceptForTestingRegistry() {
 	failCounter := 0
 	httpmock.RegisterResponder("POST", `=~^http://127.0.0.1:8081/may-fail`,
 		func(req *http.Request) (*http.Response, error) {
-			io.ReadAll(req.Body)
+			_, _ = io.ReadAll(req.Body)
 			if failCounter < 3 {
 				failCounter++
 				return httpmock.NewStringResponse(500, ""), nil
