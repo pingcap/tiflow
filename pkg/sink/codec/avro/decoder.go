@@ -465,6 +465,9 @@ func calculateChecksum(columns []*model.Column) (uint64, error) {
 	)
 	buf := make([]byte, 0)
 	for _, col := range columns {
+		if len(buf) > 0 {
+			buf = buf[:0]
+		}
 		buf, err = buildChecksumBytes(buf, col.Value, col.Type)
 		if err != nil {
 			return 0, errors.Trace(err)
