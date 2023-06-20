@@ -482,6 +482,10 @@ func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) 
 	}
 
 	switch ty {
+	// TypeTiny, TypeShort, TypeInt32 is encoded as int32
+	// TypeLong is encoded as int32 if signed, int64 if unsigned
+	// TypeLongLong is encoded as uint64 if unsigned, int64 if signed,
+	// if bigintUnsignedHandlingMode set as string, encode as string.
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
 		switch a := value.(type) {
 		case int32:
@@ -502,6 +506,7 @@ func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) 
 			log.Panic("unknown golang type for the integral value",
 				zap.Any("value", value), zap.Any("mysqlType", ty))
 		}
+	// TypeFloat encoded as float32, TypeDouble encoded as float64
 	case mysql.TypeFloat, mysql.TypeDouble:
 		var v float64
 		switch a := value.(type) {
@@ -514,8 +519,11 @@ func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) 
 			v = 0
 		}
 		buf = binary.LittleEndian.AppendUint64(buf, math.Float64bits(v))
+	// TypeEnum, TypeSet encoded as string
+	// but convert to int by the getColumnValue function
 	case mysql.TypeEnum, mysql.TypeSet:
 		buf = binary.LittleEndian.AppendUint64(buf, value.(uint64))
+	// TypeBit encoded as bytes
 	case mysql.TypeBit:
 		// bit is store as bytes, convert to uint64.
 		v, err := binaryLiteralToInt(value.([]byte))
@@ -523,6 +531,7 @@ func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) 
 			return nil, errors.Trace(err)
 		}
 		buf = binary.LittleEndian.AppendUint64(buf, v)
+	// encoded as bytes is binary flag set to true, else string
 	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		switch a := value.(type) {
 		case string:
@@ -533,17 +542,19 @@ func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) 
 			log.Panic("unknown golang type for the string value",
 				zap.Any("value", value), zap.Any("mysqlType", ty))
 		}
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeNewDate:
+	// all encoded as string
+	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
 		v := value.(string)
 		buf = appendLengthValue(buf, []byte(v))
-	case mysql.TypeDuration:
-		buf = appendLengthValue(buf, []byte(value.(string)))
+	// encoded as string if decimalHandlingMode set to string, it's required to enable checksum.
 	case mysql.TypeNewDecimal:
 		buf = appendLengthValue(buf, []byte(value.(string)))
+	// encoded as string
 	case mysql.TypeJSON:
 		buf = appendLengthValue(buf, []byte(value.(string)))
+	// this should not happen, does not take into the checksum calculation.
 	case mysql.TypeNull, mysql.TypeGeometry:
-		// do nothing, does not take into the checksum calculation.
+		// do nothing
 	default:
 		return buf, errors.New("invalid type for the checksum calculation")
 	}
