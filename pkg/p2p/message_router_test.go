@@ -52,7 +52,7 @@ func newMessageRouterTestSuite() *messageRouterTestSuite {
 	return &messageRouterTestSuite{
 		servers: map[NodeID]*MessageServer{},
 		cancels: map[NodeID]context.CancelFunc{},
-		messageRouter: NewMessageRouter(
+		messageRouter: NewMessageRouterWithLocalClient(
 			"test-client-1",
 			&security.Credential{},
 			clientConfig4TestingMessageRouter),

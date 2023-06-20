@@ -236,7 +236,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	advertiseAddr := c.config.AdvertiseAddr
 	messageClientConfig.AdvertisedAddr = advertiseAddr
 
-	c.MessageRouter = p2p.NewMessageRouterWithLocalClient(c.info.ID, c.config.Security, messageClientConfig, true)
+	c.MessageRouter = p2p.NewMessageRouterWithLocalClient(c.info.ID, c.config.Security, messageClientConfig)
 
 	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
