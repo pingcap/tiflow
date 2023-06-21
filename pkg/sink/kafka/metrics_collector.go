@@ -30,8 +30,12 @@ type MetricsCollector interface {
 	Run(ctx context.Context)
 }
 
-// RefreshMetricsInterval specifies the interval of refresh kafka client metrics.
-const RefreshMetricsInterval = 5 * time.Second
+const (
+	// RefreshMetricsInterval specifies the interval of refresh kafka client metrics.
+	RefreshMetricsInterval = 5 * time.Second
+	// RefreshClusterMetaInterval specifies the interval of refresh kafka cluster meta.
+	RefreshClusterMetaInterval = 30 * time.Minute
+)
 
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
@@ -71,9 +75,13 @@ func NewSaramaMetricsCollector(
 }
 
 func (m *saramaMetricsCollector) Run(ctx context.Context) {
-	ticker := time.NewTicker(RefreshMetricsInterval)
+	// Initialize brokers.
+	m.updateBrokers(ctx)
+
+	refreshMetricsTicker := time.NewTicker(RefreshMetricsInterval)
+	refreshClusterMetaTicker := time.NewTicker(RefreshClusterMetaInterval)
 	defer func() {
-		ticker.Stop()
+		refreshMetricsTicker.Stop()
 		m.cleanupMetrics()
 	}()
 
@@ -84,10 +92,11 @@ func (m *saramaMetricsCollector) Run(ctx context.Context) {
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID))
 			return
-		case <-ticker.C:
-			m.updateBrokers(ctx)
+		case <-refreshMetricsTicker.C:
 			m.collectBrokerMetrics()
 			m.collectProducerMetrics()
+		case <-refreshClusterMetaTicker.C:
+			m.updateBrokers(ctx)
 		}
 	}
 }
