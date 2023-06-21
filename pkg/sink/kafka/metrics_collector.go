@@ -84,6 +84,7 @@ func (m *saramaMetricsCollector) Run(ctx context.Context) {
 	refreshClusterMetaTicker := time.NewTicker(refreshClusterMetaInterval)
 	defer func() {
 		refreshMetricsTicker.Stop()
+		refreshClusterMetaTicker.Stop()
 		m.cleanupMetrics()
 	}()
 
