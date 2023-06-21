@@ -170,14 +170,14 @@ func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
 }
 
 func (t *tableSpan) handleAddTableTask(
-	ctx context.Context,
+	ctx context.Context, barrier *schedulepb.Barrier,
 ) (result *schedulepb.Message, err error) {
 	state, _ := t.getAndUpdateTableSpanState()
 	changed := true
 	for changed {
 		switch state {
 		case tablepb.TableStateAbsent:
-			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, t.task.IsPrepare)
+			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, t.task.IsPrepare, barrier)
 			if err != nil || !done {
 				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
@@ -208,7 +208,7 @@ func (t *tableSpan) handleAddTableTask(
 			}
 
 			if t.task.status == dispatchTableTaskReceived {
-				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, false)
+				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, false, barrier)
 				if err != nil || !done {
 					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),
@@ -283,14 +283,14 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 		zap.Any("ignoredTask", task))
 }
 
-func (t *tableSpan) poll(ctx context.Context) (*schedulepb.Message, error) {
+func (t *tableSpan) poll(ctx context.Context, barrier *schedulepb.Barrier) (*schedulepb.Message, error) {
 	if t.task == nil {
 		return nil, nil
 	}
 	if t.task.IsRemove {
 		return t.handleRemoveTableTask(), nil
 	}
-	return t.handleAddTableTask(ctx)
+	return t.handleAddTableTask(ctx, barrier)
 }
 
 type tableSpanManager struct {
@@ -310,12 +310,12 @@ func newTableSpanManager(
 	}
 }
 
-func (tm *tableSpanManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
+func (tm *tableSpanManager) poll(ctx context.Context, barrier *schedulepb.Barrier) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	var err error
 	toBeDropped := []tablepb.Span{}
 	tm.tables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
-		message, err1 := table.poll(ctx)
+		message, err1 := table.poll(ctx, barrier)
 		if err != nil {
 			err = errors.Trace(err1)
 			return false
