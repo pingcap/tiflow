@@ -615,6 +615,9 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	ftTypeEnumNotNull.SetFlag(mysql.NotNullFlag)
 	ftTypeEnumNotNull.SetElems([]string{"e0", "e1"})
 
+	// mysql.TypeEnum + null
+	ftTypeEnumNull := types.NewFieldType(mysql.TypeEnum)
+
 	// mysql.TypeSet + notnull
 	ftTypeSetNotNull := types.NewFieldType(mysql.TypeSet)
 	ftTypeSetNotNull.SetFlag(mysql.NotNullFlag)
@@ -959,7 +962,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeEnumNotNull},
 			// TypeEnum value will be a string and then translate to []byte
 			// NotNull && no default will choose first element
-			Res:     uint64(0),
+			Res:     uint64(1),
 			Default: nil,
 		},
 		// mysql.TypeEnum + notnull + default
@@ -972,6 +975,14 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			// TypeEnum default value will be a string and then translate to []byte
 			Res:     "e1",
 			Default: "e1",
+		},
+		// mysql.TypeEnum + null
+		{
+			Name: "mysql.TypeEnum + null",
+			ColInfo: timodel.ColumnInfo{
+				FieldType: *ftTypeEnumNull,
+			},
+			Res: nil,
 		},
 		// mysql.TypeSet + notnull
 		{
