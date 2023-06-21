@@ -169,7 +169,6 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 				state.maxReceivedResolvedTs.Store(maxResolvedTs)
 			}
 		} else {
-			state.receivedEvents.Add(1)
 			if event.CRTs > maxCommitTs {
 				maxCommitTs = event.CRTs
 				state.maxReceivedCommitTs.Store(maxCommitTs)
@@ -286,18 +285,6 @@ func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
 	}
 }
 
-// ReceivedEvents implements engine.SortEngine.
-func (s *EventSorter) ReceivedEvents() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	totalReceivedEvents := int64(0)
-	s.tables.Range(func(_ tablepb.Span, state *tableState) bool {
-		totalReceivedEvents += state.receivedEvents.Load()
-		return true
-	})
-	return totalReceivedEvents
-}
-
 // Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.mu.Lock()
@@ -379,7 +366,6 @@ type tableState struct {
 	// For statistics.
 	maxReceivedCommitTs   atomic.Uint64
 	maxReceivedResolvedTs atomic.Uint64
-	receivedEvents        atomic.Int64
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex

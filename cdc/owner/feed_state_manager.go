@@ -276,7 +276,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			if job.OverwriteCheckpointTs > 0 {
 				oldCheckpointTs := status.CheckpointTs
 				status = &model.ChangeFeedStatus{
-					ResolvedTs:        job.OverwriteCheckpointTs,
 					CheckpointTs:      job.OverwriteCheckpointTs,
 					MinTableBarrierTs: job.OverwriteCheckpointTs,
 					AdminJobType:      model.AdminNone,
