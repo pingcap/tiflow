@@ -68,7 +68,6 @@ func getOptions(addr string) *kafka.Options {
 }
 
 func TestProducerAck(t *testing.T) {
-	
 	leader, topic := initBroker(t, true)
 	defer leader.Close()
 
