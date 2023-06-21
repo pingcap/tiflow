@@ -1014,3 +1014,28 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	}
 	return encoder
 }
+
+// SetupEncoderAndSchemaRegistry4Testing start a local schema registry for testing.
+func SetupEncoderAndSchemaRegistry4Testing(
+	ctx context.Context,
+	config *common.Config,
+) (*BatchEncoder, error) {
+	startHTTPInterceptForTestingRegistry()
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, "http://127.0.0.1:8081", nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &BatchEncoder{
+		namespace:          model.DefaultNamespace,
+		valueSchemaManager: valueSchemaM,
+		keySchemaManager:   keySchemaM,
+		result:             make([]*common.Message, 0, 1),
+		config:             config,
+	}, nil
+}
+
+// TeardownEncoderAndSchemaRegistry4Testing stop the local schema registry for testing.
+func TeardownEncoderAndSchemaRegistry4Testing() {
+	stopHTTPInterceptForTestingRegistry()
+}
