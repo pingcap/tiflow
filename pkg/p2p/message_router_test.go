@@ -33,7 +33,7 @@ import (
 type messageRouterTestSuite struct {
 	servers       map[NodeID]*MessageServer
 	cancels       map[NodeID]context.CancelFunc
-	messageRouter MessageRouter
+	messageRouter *messageRouterImpl
 	wg            sync.WaitGroup
 }
 
@@ -52,7 +52,7 @@ func newMessageRouterTestSuite() *messageRouterTestSuite {
 	return &messageRouterTestSuite{
 		servers: map[NodeID]*MessageServer{},
 		cancels: map[NodeID]context.CancelFunc{},
-		messageRouter: NewMessageRouter(
+		messageRouter: NewMessageRouterWithLocalClient(
 			"test-client-1",
 			&security.Credential{},
 			clientConfig4TestingMessageRouter),
@@ -89,7 +89,7 @@ func (s *messageRouterTestSuite) addServer(ctx context.Context, t *testing.T, id
 		defer s.wg.Done()
 		defer grpcServer.Stop()
 		defer s.messageRouter.RemovePeer(id)
-		err := newServer.Run(ctx)
+		err := newServer.Run(ctx, nil)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
@@ -113,6 +113,11 @@ func TestMessageRouterBasic(t *testing.T) {
 	suite.addServer(ctx, t, "server-1")
 	suite.addServer(ctx, t, "server-2")
 	suite.addServer(ctx, t, "server-3")
+
+	selfID := suite.messageRouter.selfID
+	localClient := suite.messageRouter.GetClient(selfID)
+	require.NotNil(t, localClient)
+	require.NotNil(t, suite.messageRouter.GetLocalChannel())
 
 	noClient := suite.messageRouter.GetClient("server-4")
 	require.Nilf(t, noClient, "no client should have been created")
