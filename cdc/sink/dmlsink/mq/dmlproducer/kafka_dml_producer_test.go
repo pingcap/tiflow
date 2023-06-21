@@ -68,8 +68,7 @@ func getOptions(addr string) *kafka.Options {
 }
 
 func TestProducerAck(t *testing.T) {
-	t.Parallel()
-
+	
 	leader, topic := initBroker(t, true)
 	defer leader.Close()
 
@@ -136,8 +135,6 @@ func TestProducerAck(t *testing.T) {
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
-	t.Parallel()
-
 	leader, topic := initBroker(t, false)
 	defer leader.Close()
 
@@ -202,8 +199,6 @@ func TestProducerSendMsgFailed(t *testing.T) {
 }
 
 func TestProducerDoubleClose(t *testing.T) {
-	t.Parallel()
-
 	leader, _ := initBroker(t, false)
 	defer leader.Close()
 
