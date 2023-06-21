@@ -33,8 +33,8 @@ type MetricsCollector interface {
 const (
 	// RefreshMetricsInterval specifies the interval of refresh kafka client metrics.
 	RefreshMetricsInterval = 5 * time.Second
-	// RefreshClusterMetaInterval specifies the interval of refresh kafka cluster meta.
-	RefreshClusterMetaInterval = 30 * time.Minute
+	// refreshClusterMetaInterval specifies the interval of refresh kafka cluster meta.
+	refreshClusterMetaInterval = 30 * time.Minute
 )
 
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
@@ -79,7 +79,7 @@ func (m *saramaMetricsCollector) Run(ctx context.Context) {
 	m.updateBrokers(ctx)
 
 	refreshMetricsTicker := time.NewTicker(RefreshMetricsInterval)
-	refreshClusterMetaTicker := time.NewTicker(RefreshClusterMetaInterval)
+	refreshClusterMetaTicker := time.NewTicker(refreshClusterMetaInterval)
 	defer func() {
 		refreshMetricsTicker.Stop()
 		m.cleanupMetrics()
