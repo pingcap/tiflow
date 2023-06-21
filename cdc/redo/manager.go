@@ -102,6 +102,7 @@ func (m *ddlManager) GetResolvedTs() model.Ts {
 type DMLManager interface {
 	redoManager
 	AddTable(span tablepb.Span, startTs uint64)
+	StartTable(span tablepb.Span, startTs uint64)
 	RemoveTable(span tablepb.Span)
 	UpdateResolvedTs(ctx context.Context, span tablepb.Span, resolvedTs uint64) error
 	GetResolvedTs(span tablepb.Span) model.Ts
@@ -300,6 +301,12 @@ func (m *logManager) emitRedoEvents(
 		}
 		return nil
 	})
+}
+
+// StartTable starts a table, which means the table is ready to emit redo events.
+// Note that this function should only be called once when adding a new table to processor.
+func (m *logManager) StartTable(span tablepb.Span, resolvedTs uint64) {
+	m.onResolvedTsMsg(span, resolvedTs)
 }
 
 // UpdateResolvedTs asynchronously updates resolved ts of a single table.

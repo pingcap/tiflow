@@ -213,7 +213,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
 	span := spanz.TableIDToComparableSpan(1)
-	ok, err := p.AddTableSpan(ctx, span, 20, true)
+	ok, err := p.AddTableSpan(ctx, span, 20, true, nil)
 	require.NoError(t, err)
 	require.True(t, ok)
 	p.sinkManager.r.UpdateBarrierTs(20, nil)
@@ -253,7 +253,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, tablepb.TableStatePrepared, state)
 
-	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, true)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, true, nil)
 	require.NoError(t, err)
 	require.True(t, ok)
 	stats = p.sinkManager.r.GetTableStats(span)
@@ -263,7 +263,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Equal(t, model.Ts(101), stats.ReceivedMaxResolvedTs)
 
 	// Start to replicate table-1.
-	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false, nil)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -359,10 +359,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false, nil)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false, nil)
 	require.Nil(t, err)
 	require.True(t, done)
 
@@ -399,10 +399,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false, nil)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false, nil)
 	require.Nil(t, err)
 	require.True(t, done)
 	err = p.Tick(ctx)
@@ -444,10 +444,10 @@ func TestPositionDeleted(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add table
-	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false, nil)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 40, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 40, false, nil)
 	require.Nil(t, err)
 	require.True(t, done)
 
@@ -555,7 +555,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	tester.MustApplyPatches()
 
 	span := spanz.TableIDToComparableSpan(1)
-	done, err := p.AddTableSpan(ctx, span, 5, false)
+	done, err := p.AddTableSpan(ctx, span, 5, false, nil)
 	require.True(t, done)
 	require.Nil(t, err)
 	err = p.Tick(ctx)
