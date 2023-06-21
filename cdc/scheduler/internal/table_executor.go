@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 )
 
 // TableExecutor is an abstraction for "Processor".
@@ -30,7 +31,7 @@ type TableExecutor interface {
 	// if `isPrepare` is true, the 1st phase of the 2 phase scheduling protocol.
 	// if `isPrepare` is false, the 2nd phase.
 	AddTableSpan(
-		ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
+		ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool, barrier *schedulepb.Barrier,
 	) (done bool, err error)
 
 	// IsAddTableSpanFinished make sure the requested table span is in the proper status
