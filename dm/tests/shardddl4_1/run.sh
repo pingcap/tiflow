@@ -1217,13 +1217,14 @@ function DM_STRICT_OPTIMISTIC_SINGLE_SOURCE_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
 	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2,2);"
 
-	run_sql_source1 "alter table ${shardddl1}.${tb1} add c int;"
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add c int not null default 10;"
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(3,3,3);"
 	run_sql_source1 "insert into ${shardddl1}.${tb2} values(4,4);"
 
-	run_sql_source1 "alter table ${shardddl1}.${tb2} change b c int;"
+	run_sql_source1 "alter table ${shardddl1}.${tb2} add c varchar(30) not null default '10';"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
+		'"stage": "Paused"' 1 \
 		"because schema conflict detected" 1
 }
 
