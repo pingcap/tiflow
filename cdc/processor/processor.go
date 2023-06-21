@@ -120,8 +120,13 @@ func (p *processor) checkReadyForMessages() bool {
 // 1. `Create Table`, a new table dispatched to the processor, `isPrepare` should be false
 // 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
 // 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
+<<<<<<< HEAD
 func (p *processor) AddTable(
 	ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
+=======
+func (p *processor) AddTableSpan(
+	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool, barrier *schedulepb.Barrier,
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 ) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
@@ -166,12 +171,27 @@ func (p *processor) AddTable(
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
+<<<<<<< HEAD
 				if p.pullBasedSinking {
 					if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
 						return false, errors.Trace(err)
 					}
 				} else {
 					p.tables[tableID].Start(startTs)
+=======
+				if p.redo.r.Enabled() {
+					var redoResolvedTs model.Ts
+					if barrier != nil {
+						redoResolvedTs = barrier.GlobalBarrierTs
+					} else {
+						stats := p.sinkManager.r.GetTableStats(span)
+						redoResolvedTs = stats.BarrierTs
+					}
+					p.redo.r.StartTable(span, redoResolvedTs)
+				}
+				if err := p.sinkManager.r.StartTable(span, startTs); err != nil {
+					return false, errors.Trace(err)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 				}
 			}
 			return true, nil
@@ -271,6 +291,7 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 	var state tablepb.TableState
 	done := func() bool {
 		var alreadyExist bool
+<<<<<<< HEAD
 		if p.pullBasedSinking {
 			state, alreadyExist = p.sinkManager.GetTableState(tableID)
 			if alreadyExist {
@@ -278,6 +299,13 @@ func (p *processor) IsAddTableFinished(tableID model.TableID, isPrepare bool) bo
 				tableResolvedTs = stats.ResolvedTs
 				tableCheckpointTs = stats.CheckpointTs
 			}
+=======
+		state, alreadyExist = p.sinkManager.r.GetTableState(span)
+		if alreadyExist {
+			stats := p.sinkManager.r.GetTableStats(span)
+			tableResolvedTs = stats.ResolvedTs
+			tableCheckpointTs = stats.CheckpointTs
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 		} else {
 			table, ok := p.tables[tableID]
 			if ok {

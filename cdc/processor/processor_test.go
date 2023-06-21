@@ -279,7 +279,12 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
+<<<<<<< HEAD
 	ok, err := p.AddTable(ctx, 1, 20, true)
+=======
+	span := spanz.TableIDToComparableSpan(1)
+	ok, err := p.AddTableSpan(ctx, span, 20, true, nil)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -305,12 +310,21 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStatePrepared, table1.State())
 
+<<<<<<< HEAD
 	ok, err = p.AddTable(ctx, 1, 30, true)
+=======
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, true, nil)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(0), table1.sinkStartTs)
 
+<<<<<<< HEAD
 	ok, err = p.AddTable(ctx, 1, 30, false)
+=======
+	// Start to replicate table-1.
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false, nil)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(30), table1.sinkStartTs)
@@ -405,10 +419,17 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
+<<<<<<< HEAD
 	done, err := p.AddTable(ctx, model.TableID(1), 20, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
+=======
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false, nil)
+	require.Nil(t, err)
+	require.True(t, done)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false, nil)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	require.Nil(t, err)
 	require.True(t, done)
 
@@ -440,10 +461,17 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
+<<<<<<< HEAD
 	done, err = p.AddTable(ctx, model.TableID(1), 20, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
+=======
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 20, false, nil)
+	require.Nil(t, err)
+	require.True(t, done)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 30, false, nil)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	require.Nil(t, err)
 	require.True(t, done)
 	err = p.Tick(ctx)
@@ -485,7 +513,17 @@ func TestPositionDeleted(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
+<<<<<<< HEAD
 	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+=======
+	// add table
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), 30, false, nil)
+	require.Nil(t, err)
+	require.True(t, done)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), 40, false, nil)
+	require.Nil(t, err)
+	require.True(t, done)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 
 	// some others delete the task position
 	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
@@ -572,7 +610,23 @@ func TestUpdateBarrierTs(t *testing.T) {
 	})
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
+<<<<<<< HEAD
 	done, err := p.AddTable(ctx, model.TableID(1), 5, false)
+=======
+	// init tick
+	err := p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+
+	// Do a no operation tick to lazy init the processor.
+	err = p.Tick(ctx)
+	require.Nil(t, err)
+	tester.MustApplyPatches()
+
+	span := spanz.TableIDToComparableSpan(1)
+	done, err := p.AddTableSpan(ctx, span, 5, false, nil)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	require.True(t, done)
 	require.Nil(t, err)
 	err = p.Tick(ctx)

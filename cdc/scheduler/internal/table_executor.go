@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 )
 
 // TableExecutor is an abstraction for "Processor".
@@ -29,8 +30,13 @@ type TableExecutor interface {
 	// AddTable add a new table with `startTs`
 	// if `isPrepare` is true, the 1st phase of the 2 phase scheduling protocol.
 	// if `isPrepare` is false, the 2nd phase.
+<<<<<<< HEAD
 	AddTable(
 		ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
+=======
+	AddTableSpan(
+		ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool, barrier *schedulepb.Barrier,
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	) (done bool, err error)
 
 	// IsAddTableFinished make sure the requested table is in the proper status

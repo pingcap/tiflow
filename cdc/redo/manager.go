@@ -97,10 +97,18 @@ func (m *ddlManager) GetResolvedTs() model.Ts {
 // DMLManager defines an interface that is used to manage dml logs in processor.
 type DMLManager interface {
 	redoManager
+<<<<<<< HEAD
 	AddTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	GetResolvedTs(tableID model.TableID) model.Ts
+=======
+	AddTable(span tablepb.Span, startTs uint64)
+	StartTable(span tablepb.Span, startTs uint64)
+	RemoveTable(span tablepb.Span)
+	UpdateResolvedTs(ctx context.Context, span tablepb.Span, resolvedTs uint64) error
+	GetResolvedTs(span tablepb.Span) model.Ts
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	EmitRowChangedEvents(
 		ctx context.Context,
 		tableID model.TableID,
@@ -285,6 +293,12 @@ func (m *logManager) emitRedoEvents(
 		}
 		return nil
 	})
+}
+
+// StartTable starts a table, which means the table is ready to emit redo events.
+// Note that this function should only be called once when adding a new table to processor.
+func (m *logManager) StartTable(span tablepb.Span, resolvedTs uint64) {
+	m.onResolvedTsMsg(span, resolvedTs)
 }
 
 // UpdateResolvedTs asynchronously updates resolved ts of a single table.

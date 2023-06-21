@@ -168,13 +168,24 @@ func (t *table) handleRemoveTableTask() *schedulepb.Message {
 	return nil
 }
 
+<<<<<<< HEAD
 func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Message, err error) {
 	state, _ := t.getAndUpdateTableState()
+=======
+func (t *tableSpan) handleAddTableTask(
+	ctx context.Context, barrier *schedulepb.Barrier,
+) (result *schedulepb.Message, err error) {
+	state, _ := t.getAndUpdateTableSpanState()
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	changed := true
 	for changed {
 		switch state {
 		case tablepb.TableStateAbsent:
+<<<<<<< HEAD
 			done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, t.task.IsPrepare)
+=======
+			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, t.task.IsPrepare, barrier)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 			if err != nil || !done {
 				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
@@ -205,7 +216,11 @@ func (t *table) handleAddTableTask(ctx context.Context) (result *schedulepb.Mess
 			}
 
 			if t.task.status == dispatchTableTaskReceived {
+<<<<<<< HEAD
 				done, err := t.executor.AddTable(ctx, t.task.TableID, t.task.StartTs, false)
+=======
+				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, false, barrier)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 				if err != nil || !done {
 					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),
@@ -280,14 +295,18 @@ func (t *table) injectDispatchTableTask(task *dispatchTableTask) {
 		zap.Any("ignoredTask", task))
 }
 
+<<<<<<< HEAD
 func (t *table) poll(ctx context.Context) (*schedulepb.Message, error) {
+=======
+func (t *tableSpan) poll(ctx context.Context, barrier *schedulepb.Barrier) (*schedulepb.Message, error) {
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 	if t.task == nil {
 		return nil, nil
 	}
 	if t.task.IsRemove {
 		return t.handleRemoveTableTask(), nil
 	}
-	return t.handleAddTableTask(ctx)
+	return t.handleAddTableTask(ctx, barrier)
 }
 
 type tableManager struct {
@@ -307,10 +326,19 @@ func newTableManager(
 	}
 }
 
+<<<<<<< HEAD
 func (tm *tableManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	for tableID, table := range tm.tables {
 		message, err := table.poll(ctx)
+=======
+func (tm *tableSpanManager) poll(ctx context.Context, barrier *schedulepb.Barrier) ([]*schedulepb.Message, error) {
+	result := make([]*schedulepb.Message, 0)
+	var err error
+	toBeDropped := []tablepb.Span{}
+	tm.tables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
+		message, err1 := table.poll(ctx, barrier)
+>>>>>>> a9d599cfe0 (scheduler, processor(ticdc): advance redo resolvedTs before start sink (#9276))
 		if err != nil {
 			return result, errors.Trace(err)
 		}
