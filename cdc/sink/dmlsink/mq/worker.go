@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -322,13 +323,55 @@ func (w *worker) sendMessages(ctx context.Context) error {
 	}
 }
 
-func (w *worker) claimCheckSendMessage(message *common.Message) error {
-	// 1. send message to the external storage
-	// 2. send one message to the MQ with external storage message location.
+type claimCheckMessage struct {
+	Key   []byte `json:"key"`
+	Value []byte `json:"value"`
+}
 
-	//if w.storage != nil {
-	//
-	//}
+type claimCheckLocationMessage struct {
+	Location  string `json:"location"`
+	CommitTs  uint64 `json:"commitTs"`
+	Schema    string `json:"schema"`
+	TableName string `json:"tableName"`
+
+	//HandleKey
+}
+
+func (w *worker) claimCheckSendMessage(ctx context.Context, message *common.Message) error {
+	if w.storage == nil {
+		return errors.New("claim check cannot found the external storage")
+	}
+
+	// 1. send message to the external storage
+	m := claimCheckMessage{
+		Key:   message.Key,
+		Value: message.Value,
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// todo: how to name the file ?
+	var name string
+	err = w.storage.WriteFile(ctx, name, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// shall we callback here to announce the message is successfully delivered ?
+	message.Callback()
+
+	locationM := claimCheckLocationMessage{
+		Location: name,
+	}
+	data, err = json.Marshal(locationM)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	// 3. how to generate the claimCheck location message ?
+
+	// 2. send one message to the MQ with external storage message location.
 
 	return nil
 }
