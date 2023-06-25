@@ -50,9 +50,9 @@ component_management:
     - component_id: component_cdc # this is an identifier that should not be changed
       name: cdc # this is a display name, and can be changed freely
       paths:
-        - "cdc/**"
-        - "cmd/**"
-        - "pkg/**"
+        - cdc/**
+        - cmd/**
+        - pkg/**
     - component_id: component_dm
       name: dm
       paths:
