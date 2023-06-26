@@ -315,7 +315,9 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 }
 
 // LockRange locks a range with specified version.
-func (l *RegionRangeLock) LockRange(ctx context.Context, startKey, endKey []byte, regionID, version uint64) LockRangeResult {
+func (l *RegionRangeLock) LockRange(
+	ctx context.Context, startKey, endKey []byte, regionID, version uint64,
+) LockRangeResult {
 	res, signalChs := l.tryLockRange(startKey, endKey, regionID, version)
 
 	if res.Status != LockRangeStatusWait {
@@ -344,22 +346,22 @@ func (l *RegionRangeLock) LockRange(ctx context.Context, startKey, endKey []byte
 }
 
 // UnlockRange unlocks a range and update checkpointTs of the range to specified value.
-func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version uint64, checkpointTs uint64) {
+func (l *RegionRangeLock) UnlockRange(
+	startKey, endKey []byte, regionID, version uint64,
+	checkpointTs ...uint64,
+) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	entry, ok := l.rangeLock.Get(rangeLockEntryWithKey(startKey))
-
 	if !ok {
 		log.Panic("unlocking a not locked range",
 			zap.String("changefeed", l.changefeedLogInfo),
 			zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)),
-			zap.Uint64("version", version),
-			zap.Uint64("checkpointTs", checkpointTs))
+			zap.Uint64("version", version))
 	}
-
 	if entry.regionID != regionID {
 		log.Panic("unlocked a range but regionID mismatch",
 			zap.String("changefeed", l.changefeedLogInfo),
@@ -384,7 +386,6 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)),
 			zap.Uint64("version", version),
-			zap.Uint64("checkpointTs", checkpointTs),
 			zap.String("foundLockEntry", entry.String()))
 	}
 
@@ -392,15 +393,22 @@ func (l *RegionRangeLock) UnlockRange(startKey, endKey []byte, regionID, version
 		ch <- nil
 	}
 
-	_, ok = l.rangeLock.Delete(entry)
-	if !ok {
+	if entry, ok = l.rangeLock.Delete(entry); !ok {
 		panic("unreachable")
 	}
-	l.rangeCheckpointTs.Set(startKey, endKey, checkpointTs)
+
+	var newCheckpointTs uint64
+	if len(checkpointTs) > 0 {
+		newCheckpointTs = checkpointTs[0]
+	} else {
+		newCheckpointTs = entry.state.CheckpointTs.Load()
+	}
+
+	l.rangeCheckpointTs.Set(startKey, endKey, newCheckpointTs)
 	log.Debug("unlocked range",
 		zap.String("changefeed", l.changefeedLogInfo),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
-		zap.Uint64("checkpointTs", checkpointTs),
+		zap.Uint64("checkpointTs", newCheckpointTs),
 		zap.String("startKey", hex.EncodeToString(startKey)),
 		zap.String("endKey", hex.EncodeToString(endKey)))
 }

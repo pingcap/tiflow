@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/workerpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -635,8 +636,16 @@ func handleEventEntry(
 	metrics *regionWorkerMetrics,
 	emit func(assembled model.RegionFeedEvent) bool,
 ) error {
-	regionID, _, startTime, _ := state.getRegionMeta()
+	regionID, regionSpan, startTime, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
+		// NOTE: from TiKV 7.0.0, entries are already filtered out in TiKV side.
+		// We can remove the check in future.
+		comparableKey := spanz.ToComparableKey(entry.GetKey())
+		if entry.Type != cdcpb.Event_INITIALIZED &&
+			!spanz.KeyInSpan(comparableKey, regionSpan) {
+			metrics.metricDroppedEventSize.Observe(float64(entry.Size()))
+			continue
+		}
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
 			if time.Since(startTime) > 20*time.Second {
