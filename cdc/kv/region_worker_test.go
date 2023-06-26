@@ -157,6 +157,7 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 		tikv.RegionVerID{},
 		spanz.ToSpan([]byte{}, spanz.UpperBoundKey),
 		&tikv.RPCContext{}), 0)
+	state.sri.lockedRange = &regionlock.LockedRange{}
 	state.start()
 	worker := newRegionWorker(model.ChangeFeedID{}, s, "")
 	require.Equal(t, 2, cap(worker.outputCh))
