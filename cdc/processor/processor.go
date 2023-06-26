@@ -807,6 +807,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		p.changefeedID,
 		schemaStorage,
 		f,
+		false, /* isOwner */
 	)
 	if err != nil {
 		return errors.Trace(err)

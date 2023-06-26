@@ -207,6 +207,7 @@ func (ch *Chann[T]) unboundedProcessing() {
 				return
 			}
 		}
+		ch.q = nil
 	}
 }
 

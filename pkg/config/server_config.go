@@ -112,9 +112,11 @@ var defaultServerConfig = &ServerConfig{
 	},
 	Security: &SecurityConfig{},
 	KVClient: &KVClientConfig{
-		WorkerConcurrent: 8,
-		WorkerPoolSize:   0, // 0 will use NumCPU() * 2
-		RegionScanLimit:  40,
+		EnableMultiplexing:   false,
+		WorkerConcurrent:     8,
+		GrpcStreamConcurrent: 1,
+		WorkerPoolSize:       0, // 0 will use NumCPU() * 2
+		RegionScanLimit:      40,
 		// The default TiKV region election timeout is [10s, 20s],
 		// Use 1 minute to cover region leader missing.
 		RegionRetryDuration: TomlDuration(time.Minute),

@@ -228,6 +228,10 @@ loop:
 	return nil
 }
 
+func (s *mockChangeDataService) EventFeedV2(server cdcpb.ChangeData_EventFeedV2Server) error {
+	return s.EventFeed(server)
+}
+
 func newMockService(
 	ctx context.Context,
 	t *testing.T,
@@ -2063,7 +2067,6 @@ func TestResolveLock(t *testing.T) {
 }
 
 func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
-	InitWorkerPool()
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := &sync.WaitGroup{}
 

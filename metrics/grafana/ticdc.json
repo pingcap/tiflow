@@ -4462,7 +4462,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum (rate(ticdc_puller_txn_collect_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed, instance, type)",
+              "expr": "sum (rate(ticdc_puller_txn_collect_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\", changefeed!~\".*ddl_puller\", instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed, instance, type)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -13635,7 +13635,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "sum (rate(ticdc_puller_txn_collect_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\", changefeed=~\"$changefeed\"}[1m])) by (instance, type)",
+          "expr": "sum (rate(ticdc_puller_txn_collect_event_count{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\", changefeed=~\"$changefeed\", changefeed!~\".*ddl_puller\"}[1m])) by (instance, type)",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
