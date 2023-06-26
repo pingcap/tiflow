@@ -22,13 +22,6 @@ import (
 	"testing"
 	"time"
 
-<<<<<<< HEAD
-=======
-	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-mysql-org/go-mysql/mysql"
-	. "github.com/pingcap/check"
-	"github.com/pingcap/log"
->>>>>>> cd6f4e4248 (syncer(dm): discard checkpoint snapshot when syncer reset (#8378))
 	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/stretchr/testify/require"
@@ -47,7 +40,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
