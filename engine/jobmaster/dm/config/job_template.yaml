@@ -1,5 +1,6 @@
 task-mode: all
-shard-mode: pessimistic
+shard-mode: optimistic
+strict-optimistic-shard-mode: true
 ignore-checking-items: []
 meta-schema: dm_meta
 #enable-heartbeat: false
