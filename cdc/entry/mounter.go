@@ -424,7 +424,15 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 			b = emptyBytes
 		}
 		return b, sizeOfBytes(b), "", nil
-	case mysql.TypeFloat, mysql.TypeDouble:
+	case mysql.TypeFloat:
+		v := datum.GetFloat32()
+		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 1) || math.IsInf(float64(v), -1) {
+			warn = fmt.Sprintf("the value is invalid in column: %f", v)
+			v = 0
+		}
+		const sizeOfV = unsafe.Sizeof(v)
+		return v, int(sizeOfV), warn, nil
+	case mysql.TypeDouble:
 		v := datum.GetFloat64()
 		if math.IsNaN(v) || math.IsInf(v, 1) || math.IsInf(v, -1) {
 			warn = fmt.Sprintf("the value is invalid in column: %f", v)
@@ -474,7 +482,12 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 		case mysql.TypeEnum:
 			// For enum type, if no default value and not null is set,
 			// the default value is the first element of the enum list
-			d = types.NewDatum(col.FieldType.GetElem(0))
+			name := col.FieldType.GetElem(0)
+			enumValue, err := types.ParseEnumName(col.FieldType.GetElems(), name, col.GetCollate())
+			if err != nil {
+				return d, 0, "", errors.Trace(err)
+			}
+			d = types.NewMysqlEnumDatum(enumValue)
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 			return emptyBytes, sizeOfEmptyBytes, "", nil
 		default:

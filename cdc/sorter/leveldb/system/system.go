@@ -22,13 +22,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/memory"
 	lsorter "github.com/pingcap/tiflow/cdc/sorter/leveldb"
 	"github.com/pingcap/tiflow/cdc/sorter/leveldb/message"
 	"github.com/pingcap/tiflow/pkg/actor"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/db"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -131,7 +131,7 @@ func (s *System) Start(ctx context.Context) error {
 	s.dbSystem.Start(ctx)
 	s.WriterSystem.Start(ctx)
 	s.ReaderSystem.Start(ctx)
-	totalMemory, err := memory.MemTotal()
+	totalMemory, err := util.MemTotal()
 	if err != nil {
 		return errors.Trace(err)
 	}

@@ -209,6 +209,8 @@ func TestParseCfg(t *testing.T) {
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 		},
 	}, o.serverConfig)
@@ -357,6 +359,8 @@ max-recv-msg-size = 4
 				ServerAckInterval:            config.TomlDuration(1 * time.Second),
 				ServerWorkerPoolSize:         16,
 				MaxRecvMsgSize:               4,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 		},
 	}, o.serverConfig)
@@ -501,6 +505,8 @@ cert-allowed-cn = ["dd","ee"]
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 				ServerWorkerPoolSize:         4,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
+				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+				KeepAliveTime:                config.TomlDuration(time.Second * 30),
 			},
 		},
 	}, o.serverConfig)
@@ -562,6 +568,8 @@ unknown3 = 3
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
 			ServerWorkerPoolSize:         4,
 			MaxRecvMsgSize:               256 * 1024 * 1024,
+			KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
+			KeepAliveTime:                config.TomlDuration(time.Second * 30),
 		},
 	}, o.serverConfig.Debug)
 }

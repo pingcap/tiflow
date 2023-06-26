@@ -27,6 +27,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
+var (
+	// DefaultTimeout is the default timeout for writing external storage
+	DefaultTimeout = 15 * time.Minute
+	// CloseTimeout is the default timeout for close redo writer
+	CloseTimeout = 15 * time.Second
+)
+
 const (
 	// DefaultFileMode is the default mode when operation files
 	DefaultFileMode = 0o644
@@ -155,13 +162,21 @@ func IsBlackholeStorage(scheme string) bool {
 
 // InitExternalStorage init an external storage.
 var InitExternalStorage = func(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
+	s, err := util.GetExternalStorageWithTimeout(ctx, uri.String(), DefaultTimeout)
+	if err != nil {
+		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize, err)
+	}
+	return s, nil
+}
+
+func initExternalStorageForTest(ctx context.Context, uri url.URL) (storage.ExternalStorage, error) {
 	if ConsistentStorage(uri.Scheme) == consistentStorageS3 && len(uri.Host) == 0 {
 		// TODO: this branch is compatible with previous s3 logic and will be removed
 		// in the future.
 		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize,
 			errors.Errorf("please specify the bucket for %+v", uri))
 	}
-	s, err := util.GetExternalStorage(ctx, uri.String(), nil)
+	s, err := util.GetExternalStorageFromURI(ctx, uri.String())
 	if err != nil {
 		return nil, errors.WrapChangefeedUnretryableErr(errors.ErrStorageInitialize, err)
 	}
@@ -181,7 +196,7 @@ func ValidateStorage(uri *url.URL) error {
 	if IsExternalStorage(scheme) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		_, err := InitExternalStorage(ctx, *uri)
+		_, err := initExternalStorageForTest(ctx, *uri)
 		return err
 	}
 

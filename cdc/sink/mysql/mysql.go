@@ -183,6 +183,13 @@ func NewMySQLSink(
 			"some types of DDL may fail to be executed",
 			zap.String("hostname", hostName), zap.String("port", port))
 	}
+
+	isTiDB, err := CheckIsTiDB(ctx, testDB)
+	if err != nil {
+		return nil, err
+	}
+	params.isTiDB = isTiDB
+
 	db, err := GetDBConnImpl(ctx, dsnStr)
 	if err != nil {
 		return nil, err
@@ -800,6 +807,7 @@ func convert2RowChanges(
 			tableInfo,
 			nil, nil)
 	}
+	res.SetApproximateDataSize(row.ApproximateDataSize)
 	return res
 }
 
@@ -876,7 +884,7 @@ func (s *mysqlSink) groupRowsByType(
 				updateRow = append(
 					updateRow,
 					convert2RowChanges(row, tableInfo, sqlmodel.RowChangeUpdate))
-				if len(updateRow) >= s.params.maxTxnRow {
+				if len(updateRow) >= s.params.batchUpdateRowCount {
 					updateRows = append(updateRows, updateRow)
 					updateRow = make([]*sqlmodel.RowChange, 0, s.params.maxTxnRow)
 				}
@@ -912,6 +920,29 @@ func (s *mysqlSink) batchSingleTxnDmls(
 		}
 	}
 
+	// handle update
+	if len(updateRows) > 0 {
+		// TODO: use sql.GenUpdateSQL to generate update sql after we optimize the func.
+		if s.params.isTiDB {
+			for _, rows := range updateRows {
+				s, v := s.genUpdateSQL(rows...)
+				sqls = append(sqls, s...)
+				values = append(values, v...)
+			}
+		} else {
+			// The behavior of batch update statement differs between TiDB and MySQL.
+			// So we don't use batch update statement when downstream is MySQL.
+			// Ref:https://docs.pingcap.com/tidb/stable/sql-statement-update#mysql-compatibility
+			for _, rows := range updateRows {
+				for _, row := range rows {
+					sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+					sqls = append(sqls, sql)
+					values = append(values, value)
+				}
+			}
+		}
+	}
+
 	// handle insert
 	if len(insertRows) > 0 {
 		for _, rows := range insertRows {
@@ -921,18 +952,6 @@ func (s *mysqlSink) batchSingleTxnDmls(
 				values = append(values, value)
 			} else {
 				sql, value := sqlmodel.GenInsertSQL(sqlmodel.DMLReplace, rows...)
-				sqls = append(sqls, sql)
-				values = append(values, value)
-			}
-		}
-	}
-
-	// handle update
-	if len(updateRows) > 0 {
-		// TODO: use sql.GenUpdateSQL to generate update sql after we optimize the func.
-		for _, rows := range updateRows {
-			for _, row := range rows {
-				sql, value := row.GenSQL(sqlmodel.DMLUpdate)
 				sqls = append(sqls, sql)
 				values = append(values, value)
 			}
@@ -1126,6 +1145,28 @@ func (s *mysqlSink) execDMLs(ctx context.Context, txns []*model.SingleTableTxn, 
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+func (s *mysqlSink) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]interface{}) {
+	size, count := 0, 0
+	for _, r := range rows {
+		size += int(r.GetApproximateDataSize())
+		count++
+	}
+	if size < defaultMaxBatchUpdateRowSize*count {
+		// use batch update
+		sql, value := sqlmodel.GenUpdateSQLFast(rows...)
+		return []string{sql}, [][]interface{}{value}
+	}
+	// each row has one independent update SQL.
+	sqls := make([]string, 0, len(rows))
+	values := make([][]interface{}, 0, len(rows))
+	for _, row := range rows {
+		sql, value := row.GenSQL(sqlmodel.DMLUpdate)
+		sqls = append(sqls, sql)
+		values = append(values, value)
+	}
+	return sqls, values
 }
 
 // if the column value type is []byte and charset is not binary, we get its string

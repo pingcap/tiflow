@@ -20,6 +20,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/version"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -70,6 +72,8 @@ func removeVAndHash(v string) string {
 	return strings.TrimPrefix(v, "v")
 }
 
+var checkClusterVersionRetryTimes = 10
+
 // CheckClusterVersion check TiKV and PD version.
 // need only one PD alive and match the cdc version.
 func CheckClusterVersion(
@@ -85,7 +89,14 @@ func CheckClusterVersion(
 	}
 
 	for _, pdAddr := range pdAddrs {
-		err = CheckPDVersion(ctx, pdAddr, credential)
+		// check pd version with retry, if the pdAddr is a service or lb address
+		// the http client may connect to an unhealthy PD that returns 503
+		err = retry.Do(ctx, func() error {
+			return CheckPDVersion(ctx, pdAddr, credential)
+		}, retry.WithBackoffBaseDelay(time.Millisecond.Milliseconds()*10),
+			retry.WithBackoffMaxDelay(time.Second.Milliseconds()),
+			retry.WithMaxTries(uint64(checkClusterVersionRetryTimes)),
+			retry.WithIsRetryableErr(cerror.IsRetryableError))
 		if err == nil {
 			break
 		}
@@ -106,6 +117,8 @@ func CheckPDVersion(ctx context.Context, pdAddr string, credential *security.Cre
 		return err
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	resp, err := httpClient.Get(ctx, fmt.Sprintf("%s/pd/api/v1/version", pdAddr))
 	if err != nil {
 		return cerror.ErrCheckClusterVersionFromPD.GenWithStackByArgs(err)

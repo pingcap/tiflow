@@ -36,7 +36,7 @@ stop_minio() {
 
 stop() {
 	# to distinguish whether the test failed in the DML synchronization phase or the DDL synchronization phase
-	echo $(mysql -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} -uroot -e "select count(*) from consistent_replicate_storage_s3.USERTABLE;")
+	echo $(mysql -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} -uroot -e "select count(*) from consistent_replicate_storage_s3.usertable;")
 	stop_minio
 	stop_tidb_cluster
 }
@@ -61,7 +61,7 @@ function run() {
 	run_sql "CREATE DATABASE consistent_replicate_storage_s3;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	go-ycsb load mysql -P $CUR/conf/workload -p mysql.host=${UP_TIDB_HOST} -p mysql.port=${UP_TIDB_PORT} -p mysql.user=root -p mysql.db=consistent_replicate_storage_s3
 	run_sql "CREATE table consistent_replicate_storage_s3.check1(id int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "consistent_replicate_storage_s3.USERTABLE" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "consistent_replicate_storage_s3.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists "consistent_replicate_storage_s3.check1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 
@@ -70,8 +70,8 @@ function run() {
 	cleanup_process $CDC_BINARY
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/mysql/MySQLSinkHangLongTime=return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	run_sql "create table consistent_replicate_storage_s3.USERTABLE2 like consistent_replicate_storage_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "insert into consistent_replicate_storage_s3.USERTABLE2 select * from consistent_replicate_storage_s3.USERTABLE" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "create table consistent_replicate_storage_s3.usertable2 like consistent_replicate_storage_s3.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "insert into consistent_replicate_storage_s3.usertable2 select * from consistent_replicate_storage_s3.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# to ensure row changed events have been replicated to TiCDC
 	sleep 10
