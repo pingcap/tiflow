@@ -35,7 +35,7 @@ type mockClientBatchSender struct {
 	sendCnt int32 // atomic
 }
 
-func (s *mockClientBatchSender) Append(msg messageEntry) error {
+func (s *mockClientBatchSender) Append(msg MessageEntry) error {
 	args := s.Called(msg)
 	atomic.AddInt32(&s.sendCnt, 1)
 	return args.Error(0)
@@ -74,9 +74,9 @@ func TestMessageClientBasics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	client := NewMessageClient("node-1", clientConfigForUnitTesting)
+	client := NewGrpcMessageClient("node-1", clientConfigForUnitTesting)
 	sender := &mockClientBatchSender{}
-	client.newSenderFn = func(stream clientStream) clientBatchSender {
+	client.newSenderFn = func(stream MessageClientStream) clientBatchSender[MessageEntry] {
 		return sender
 	}
 	connector := &mockClientConnector{}
@@ -231,9 +231,9 @@ func TestClientPermanentFailure(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	client := NewMessageClient("node-1", clientConfigForUnitTesting)
+	client := NewGrpcMessageClient("node-1", clientConfigForUnitTesting)
 	sender := &mockClientBatchSender{}
-	client.newSenderFn = func(stream clientStream) clientBatchSender {
+	client.newSenderFn = func(stream MessageClientStream) clientBatchSender[MessageEntry] {
 		return sender
 	}
 	connector := &mockClientConnector{}
@@ -287,13 +287,13 @@ func TestClientSendAnomalies(t *testing.T) {
 	// disables flushing to make this case deterministic.
 	config.BatchSendInterval = 999 * time.Second
 
-	client := NewMessageClient("node-1", config)
+	client := NewGrpcMessageClient("node-1", config)
 	sender := &mockClientBatchSender{}
 
 	runCtx, closeClient := context.WithCancel(ctx)
 	defer closeClient()
 
-	client.newSenderFn = func(stream clientStream) clientBatchSender {
+	client.newSenderFn = func(stream MessageClientStream) clientBatchSender[MessageEntry] {
 		<-runCtx.Done()
 		return sender
 	}

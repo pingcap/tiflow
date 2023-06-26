@@ -99,7 +99,7 @@ func runP2PIntegrationTest(
 	go func() {
 		defer wg.Done()
 		for {
-			err := server.Run(ctx)
+			err := server.Run(ctx, nil)
 			if cerror.ErrPeerMessageInjectedServerRestart.Equal(err) {
 				log.Warn("server restarted")
 				continue
@@ -134,7 +134,7 @@ func runP2PIntegrationTest(
 		}()
 	}
 
-	client := NewMessageClient("test-client-1", clientConfig4Testing)
+	client := NewGrpcMessageClient("test-client-1", clientConfig4Testing)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -263,7 +263,7 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := server.Run(ctx)
+		err := server.Run(ctx, nil)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
@@ -289,7 +289,7 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 		}
 	}()
 
-	client := NewMessageClient("test-client-1", clientConfig4Testing)
+	client := NewGrpcMessageClient("test-client-1", clientConfig4Testing)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -340,7 +340,7 @@ func TestMessageBackPressure(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := server.Run(ctx)
+		err := server.Run(ctx, nil)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
@@ -361,7 +361,7 @@ func TestMessageBackPressure(t *testing.T) {
 		}
 	}()
 
-	client := NewMessageClient("test-client-1", clientConfig4Testing)
+	client := NewGrpcMessageClient("test-client-1", clientConfig4Testing)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -408,7 +408,7 @@ func TestTopicCongested(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := server.Run(ctx)
+		err := server.Run(ctx, nil)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
@@ -417,7 +417,7 @@ func TestTopicCongested(t *testing.T) {
 	newClientConfig := *clientConfig4Testing
 	newClientConfig.MaxBatchCount = 1
 	newClientConfig.RetryRateLimitPerSecond = 100
-	client := NewMessageClient("test-client-1", clientConfig4Testing)
+	client := NewGrpcMessageClient("test-client-1", clientConfig4Testing)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

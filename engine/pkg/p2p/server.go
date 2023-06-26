@@ -155,7 +155,7 @@ func (s *MessageRPCService) Serve(ctx context.Context, l net.Listener) error {
 
 	wg.Go(func() (err error) {
 		defer logutil.ErrorFilterContextCanceled(log.L(), "message server exited", zap.Error(err))
-		return errors.Trace(s.messageServer.Run(ctx))
+		return errors.Trace(s.messageServer.Run(ctx, nil))
 	})
 
 	// TODO redesign MessageRPCService to avoid this branch

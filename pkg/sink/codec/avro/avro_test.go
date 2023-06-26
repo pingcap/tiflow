@@ -28,33 +28,9 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
-
-func setupEncoderAndSchemaRegistry(
-	ctx context.Context,
-	config *common.Config,
-) (*BatchEncoder, error) {
-	startHTTPInterceptForTestingRegistry()
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, "http://127.0.0.1:8081", nil)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	return &BatchEncoder{
-		namespace:          model.DefaultNamespace,
-		valueSchemaManager: valueSchemaM,
-		keySchemaManager:   keySchemaM,
-		result:             make([]*common.Message, 0, 1),
-		config:             config,
-	}, nil
-}
-
-func teardownEncoderAndSchemaRegistry() {
-	stopHTTPInterceptForTestingRegistry()
-}
 
 func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
 	types.SetBinChsClnFlag(ft)
@@ -775,8 +751,8 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, config)
-	defer teardownEncoderAndSchemaRegistry()
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, config)
+	defer TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
 
@@ -874,8 +850,8 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, config)
-	defer teardownEncoderAndSchemaRegistry()
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, config)
+	defer TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
 
@@ -1074,8 +1050,8 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, config)
-	defer teardownEncoderAndSchemaRegistry()
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, config)
+	defer TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
 
