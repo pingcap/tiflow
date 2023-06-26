@@ -228,7 +228,7 @@ loop:
 	return nil
 }
 
-func (s *mockChangeDataService) MultiplexingEventFeed(server cdcpb.ChangeData_MultiplexingEventFeedServer) error {
+func (s *mockChangeDataService) EventFeedV2(server cdcpb.ChangeData_EventFeedV2Server) error {
 	return s.EventFeed(server)
 }
 
