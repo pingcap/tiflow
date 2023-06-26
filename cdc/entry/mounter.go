@@ -485,7 +485,7 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (interface{}, int, string, e
 			name := col.FieldType.GetElem(0)
 			enumValue, err := types.ParseEnumName(col.FieldType.GetElems(), name, col.GetCollate())
 			if err != nil {
-				return d, nil, 0, "", errors.Trace(err)
+				return d, 0, "", errors.Trace(err)
 			}
 			d = types.NewMysqlEnumDatum(enumValue)
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
