@@ -156,7 +156,7 @@ func (r *Manager) HandleCaptureChanges(
 		var err error
 		spanStatusMap.Ascend(func(span tablepb.Span, status map[string]*tablepb.TableStatus) bool {
 			table, err1 := NewReplicationSet(span, checkpointTs, status, r.changefeedID)
-			if err != nil {
+			if err1 != nil {
 				err = errors.Trace(err1)
 				return false
 			}
