@@ -45,6 +45,10 @@ const (
 	baseURL    = "http://" + masterAddr + "/api/v1/jobs/%s"
 	tenantID   = "e2e-test"
 	projectID  = "project-dm"
+
+	envS3AccessKeyID     = "ENGINE_S3_ACCESS_KEY"
+	envS3SecretAccessKey = "ENGINE_S3_SECRET_KEY"
+	envS3Endpoint        = "ENGINE_S3_ENDPOINT"
 )
 
 func TestDMJob(t *testing.T) {
@@ -480,7 +484,18 @@ func testSimpleDumpSyncModeTask(
 	require.NoError(t, err)
 	// start dump job
 	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("<placeholder>"), []byte(db))
-	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: dump"), []byte("task-mode: dump"))
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: all"), []byte("task-mode: dump"))
+
+	endpoint := os.Getenv(envS3Endpoint)
+	require.Greater(t, len(endpoint), 0, "empty endpoint in env %s", envS3Endpoint)
+
+	accessKeyID := os.Getenv(envS3AccessKeyID)
+	require.Greater(t, len(accessKeyID), 0, "empty access key ID in env %s", envS3AccessKeyID)
+
+	secretAccessKey := os.Getenv(envS3SecretAccessKey)
+	require.Greater(t, len(secretAccessKey), 0, "empty secret access key in env %s", envS3SecretAccessKey)
+
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("#    dir: ./dumped_data"), []byte(fmt.Sprintf("    dir: s3://engine-it/dumped_data_%s?force-path-style=1&access-key=%s&secret-access-key=%s&endpoint=%s", db, accessKeyID, secretAccessKey, endpoint)))
 	var jobID string
 	require.Eventually(t, func() bool {
 		var err error
@@ -513,8 +528,6 @@ func testSimpleDumpSyncModeTask(
 	}
 
 	// dump finished and job exits
-	// TODO: check load status after framework supports it
-	// TODO: check checkpoint deleted after frameworker support StopImpl
 	require.Eventually(t, func() bool {
 		job, err := e2e.QueryJobViaHTTP(ctx, masterAddr, tenantID, projectID, jobID)
 		return err == nil && job.State == pb.Job_Finished
@@ -537,7 +550,11 @@ func testSimpleDumpSyncModeTask(
 		jobStatus, err = queryStatus(ctx, httpClient, jobID, []string{source1, source2})
 		return err == nil && jobStatus.JobID == jobID
 	}, time.Second*5, time.Millisecond*100)
-	require.Contains(t, string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
+	// wait sync job online
+	require.Eventually(t, func() bool {
+		jobStatus, err = queryStatus(ctx, httpClient, jobID, []string{source1, source2})
+		return err == nil && strings.Contains(string(jobStatus.TaskStatus[source1].Status.Status), "totalEvents")
+	}, time.Second*5, time.Millisecond*100)
 	require.Contains(t, jobStatus.TaskStatus[source2].Status.ErrorMsg, fmt.Sprintf("task %s for job not found", source2))
 
 	// check full phase

@@ -13,6 +13,13 @@ function run() {
 	start_engine_cluster $CONFIG
 	wait_mysql_online.sh --host 127.0.0.1 --port 3306
 	wait_mysql_online.sh --host 127.0.0.1 --port 4000
+
+	echo -e "\nstart to run dump/load&sync mode integration tests...\n"
+
+	export ENGINE_S3_ACCESS_KEY=engine
+	export ENGINE_S3_SECRET_KEY=engineSecret
+	export ENGINE_S3_ENDPOINT="http://minio-standalone:9000/"
+
 	CGO_ENABLED=0 go test -count=1 -v -run ^TestDMDumpSyncJob$ github.com/pingcap/tiflow/engine/test/e2e
 }
 
