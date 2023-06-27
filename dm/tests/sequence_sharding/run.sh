@@ -71,7 +71,7 @@ function run() {
 	# still conflict
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/task.yaml" \
-		"detect inconsistent DDL sequence" 2	
+		"detect inconsistent DDL sequence" 2
 }
 
 cleanup_data sharding_target2
