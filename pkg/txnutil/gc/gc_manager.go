@@ -126,14 +126,7 @@ func (m *gcManager) CheckStaleCheckpointTs(
 func (m *gcManager) IgnoreFailedChangeFeed(
 	checkpointTs uint64,
 ) bool {
-	pdTime, err := m.pdClock.CurrentTime()
-	if err != nil {
-		log.Warn("failed to get ts",
-			zap.String("GcManagerID", m.gcServiceID),
-			zap.Error(err),
-		)
-		return false
-	}
+	pdTime := m.pdClock.CurrentTime()
 	// ignore the changefeed if its current checkpoint TS is earlier
 	// than the (currentPDTso - failedFeedDataRetentionTime).
 	gcSafepointUpperBound := checkpointTs - 1
