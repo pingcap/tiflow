@@ -172,6 +172,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 		// holder 存放有列类型信息
 		var holder map[string]interface{}
 		switch ty := field["type"].(type) {
+		// if the column is nullable, type info is store in the slice
 		case []interface{}:
 			for _, item := range ty {
 				if m, ok := item.(map[string]interface{}); ok {
@@ -179,6 +180,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 					break
 				}
 			}
+		// if the column is not nullable, type info is store in the map
 		case map[string]interface{}:
 			holder = ty["connect.parameters"].(map[string]interface{})
 		default:
@@ -202,7 +204,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 			buf = buf[:0]
 		}
 
-		// 根据每一列的 value 和 mysqlType，生成用于更新 checksum 的字节切片
+		// 根据每一列的 value 和 mysqlType，生成用于更新 checksum 的字节切片，然后更新 checksum
 		buf, err = buildChecksumBytes(buf, value, mysqlType)
 		if err != nil {
 			return errors.Trace(err)
@@ -218,7 +220,6 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 	}
 
 	log.Info("checksum verified", zap.Uint64("checksum", uint64(actualChecksum)))
-
 	return nil
 }
 
