@@ -295,6 +295,8 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	log.Info("create pd client successfully", zap.Strings("pdEndpoints", s.pdEndpoints))
+
 	pc, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
 	if err != nil {
 		return errors.Trace(err)

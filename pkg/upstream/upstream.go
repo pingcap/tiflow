@@ -35,8 +35,6 @@ import (
 	pd "github.com/tikv/pd/client"
 	uatomic "github.com/uber-go/atomic"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
 )
 
 const (
@@ -114,34 +112,15 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	up.cancel = cancel
-	grpcTLSOption, err := up.SecurityConfig.ToGRPCDialOption()
+	var err error
+	up.PDClient, err = pd.NewClientWithContext(ctx,
+		up.PdEndpoints, up.SecurityConfig.PDSecurityOption())
 	if err != nil {
 		up.err.Store(err)
 		return errors.Trace(err)
 	}
+	log.Info("create pd client successfully", zap.Strings("pdEndpoints", up.PdEndpoints))
 
-	up.PDClient, err = pd.NewClientWithContext(
-		ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
-		// the default `timeout` is 3s, maybe too small if the pd is busy,
-		// set to 10s to avoid frequent timeout.
-		pd.WithCustomTimeoutOption(10*time.Second),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		up.err.Store(err)
-		return errors.Trace(err)
-	}
 	clusterID := up.PDClient.GetClusterID(ctx)
 	if up.ID != 0 && up.ID != clusterID {
 		err := fmt.Errorf("upstream id missmatch expected %d, actual: %d",
