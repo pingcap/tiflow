@@ -387,7 +387,9 @@ func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
 }
 
-func decodeRawBytes(ctx context.Context, schemaM *SchemaManager, data []byte, topic string) (map[string]interface{}, map[string]interface{}, error) {
+func decodeRawBytes(
+	ctx context.Context, schemaM *SchemaManager, data []byte, topic string,
+) (map[string]interface{}, map[string]interface{}, error) {
 	schemaID, binary, err := extractSchemaIDAndBinaryData(data)
 	if err != nil {
 		return nil, nil, err

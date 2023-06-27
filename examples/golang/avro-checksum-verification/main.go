@@ -1,3 +1,16 @@
+// Copyright 2023 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -24,8 +37,6 @@ const (
 	// confluent avro wire format, the first byte is always 0
 	// https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format
 	magicByte = uint8(0)
-
-	tidbOp = "_tidb_op"
 )
 
 func main() {
@@ -152,9 +163,9 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 			return errors.New("schema field should be a map")
 		}
 
-		// `tidbOp` 及之后的列不参与到 checksum 计算中，因为它们是一些用于辅助数据消费的列，并非真实的 TiDB 列数据
+		// `_tidb_op` 及之后的列不参与到 checksum 计算中，因为它们是一些用于辅助数据消费的列，并非真实的 TiDB 列数据
 		colName := field["name"].(string)
-		if colName == tidbOp {
+		if colName == "_tidb_op" {
 			break
 		}
 
