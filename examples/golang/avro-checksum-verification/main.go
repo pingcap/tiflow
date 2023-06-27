@@ -59,7 +59,6 @@ func main() {
 	ctx := context.Background()
 	log.Info("start consuming ...", zap.String("kafka", kafkaAddr), zap.String("topic", topic), zap.String("groupID", consumerGroupID))
 	for {
-		// 1. 获取 kafka 消息
 		message, err := consumer.FetchMessage(ctx)
 		if err != nil {
 			log.Error("read kafka message failed", zap.Error(err))
@@ -70,19 +69,16 @@ func main() {
 			log.Info("delete event does not have value, skip checksum verification", zap.String("topic", topic))
 		}
 
-		// 2. 对 value 部分进行解码，得到对应的 value 和 schema
 		valueMap, valueSchema, err := getValueMapAndSchema(value, schemaRegistryURL)
 		if err != nil {
 			log.Panic("decode kafka value failed", zap.String("topic", topic), zap.ByteString("value", value), zap.Error(err))
 		}
 
-		// 3. 使用上一步得到的 value 和 schema，计算并且校验 checksum
 		err = CalculateAndVerifyChecksum(valueMap, valueSchema)
 		if err != nil {
 			log.Panic("calculate checksum failed", zap.String("topic", topic), zap.ByteString("value", value), zap.Error(err))
 		}
 
-		// 4. 数据消费成功，提交 offset
 		if err := consumer.CommitMessages(ctx, message); err != nil {
 			log.Error("commit kafka message failed", zap.Error(err))
 			break
@@ -131,13 +127,14 @@ func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 
 func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) error {
 	// fields 存放有数据变更事件的每一个列的类型信息，按照每一列的 ID 排序，该顺序和 Checksum 计算顺序相同。
+	// fields store the type information of all columns, sorted by column ID, the same as the checksum calculation order.
 	fields, ok := valueSchema["fields"].([]interface{})
 	if !ok {
 		return errors.New("schema fields should be a map")
 	}
 
-	// 1. 从收到的 valueMap 里面，获取到期望的 checksum 值，它被编码成 string 类型
-	// 如果找不到期望的 checksum 值，说明 TiCDC 发送该条数据时，还没有开启 checksum 功能，直接返回。
+	// if cannot found the expected checksum, just return.
+	// This may happen when sending the event, the TiCDC does not enable checksum.
 	o, ok := valueMap["_tidb_row_level_checksum"]
 	if !ok {
 		return nil
@@ -147,15 +144,13 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 		return nil
 	}
 
-	// expectedChecksum 即是从 TiCDC 传递而来的期望的 checksum 值
 	expectedChecksum, err := strconv.ParseUint(expected, 10, 64)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	// 2. 遍历每一个 field，计算 Checksum 值
+	// 2. iterate over each field to calculate the actual checksum value
 	var actualChecksum uint32
-	// buf 用来存储每次更新 checksum 时使用的 bytes。
 	buf := make([]byte, 0)
 	for _, item := range fields {
 		field, ok := item.(map[string]interface{})
@@ -163,13 +158,14 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 			return errors.New("schema field should be a map")
 		}
 
-		// `_tidb_op` 及之后的列不参与到 checksum 计算中，因为它们是一些用于辅助数据消费的列，并非真实的 TiDB 列数据
+		// `_tidb_op` and subsequent columns are not involved in the checksum calculation,
+		// since they are some columns used to assist data consumption, not real TiDB column data
 		colName := field["name"].(string)
 		if colName == "_tidb_op" {
 			break
 		}
 
-		// holder 存放有列类型信息
+		// holder store column type information.
 		var holder map[string]interface{}
 		switch ty := field["type"].(type) {
 		// if the column is nullable, type info is store in the slice
@@ -190,7 +186,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 
 		mysqlType := mysqlTypeFromTiDBType(tidbType)
 
-		// 根据每一列的名字，从解码之后的 value map 里拿到该列的值。
+		// get the column value from the decoded value map by column name, it's an interface.
 		value, ok := valueMap[colName]
 		if !ok {
 			return errors.New("value not found")
@@ -204,7 +200,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 			buf = buf[:0]
 		}
 
-		// 根据每一列的 value 和 mysqlType，生成用于更新 checksum 的字节切片，然后更新 checksum
+		// generate a byte slice, and use it to update the checksum.
 		buf, err = buildChecksumBytes(buf, value, mysqlType)
 		if err != nil {
 			return errors.Trace(err)
