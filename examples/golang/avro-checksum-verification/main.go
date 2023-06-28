@@ -62,11 +62,13 @@ func main() {
 		message, err := consumer.FetchMessage(ctx)
 		if err != nil {
 			log.Error("read kafka message failed", zap.Error(err))
+			break
 		}
 
 		value := message.Value
 		if len(value) == 0 {
 			log.Info("delete event does not have value, skip checksum verification", zap.String("topic", topic))
+			continue
 		}
 
 		valueMap, valueSchema, err := getValueMapAndSchema(value, schemaRegistryURL)
@@ -125,8 +127,9 @@ func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
 }
 
+// CalculateAndVerifyChecksum calculates the checksum of the value and compares it with the expected checksum.
+// return error if not matched.
 func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) error {
-	// fields 存放有数据变更事件的每一个列的类型信息，按照每一列的 ID 排序，该顺序和 Checksum 计算顺序相同。
 	// fields store the type information of all columns, sorted by column ID, the same as the checksum calculation order.
 	fields, ok := valueSchema["fields"].([]interface{})
 	if !ok {
@@ -149,7 +152,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 		return errors.Trace(err)
 	}
 
-	// 2. iterate over each field to calculate the actual checksum value
+	// iterate over each field to calculate the actual checksum value by update the crc32 checksum.
 	var actualChecksum uint32
 	buf := make([]byte, 0)
 	for _, item := range fields {
@@ -305,7 +308,7 @@ func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType 
 	return value, nil
 }
 
-// buildChecksumBytes append value the buf, mysqlType is used to is used to convert value interface to concrete type.
+// buildChecksumBytes append value the buf, mysqlType is used to convert value interface to concrete type.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L308
 func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, error) {
 	if value == nil {
