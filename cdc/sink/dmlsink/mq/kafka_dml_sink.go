@@ -120,6 +120,7 @@ func NewKafkaDMLSink(
 		ctx, changefeedID, p, adminClient, topicManager,
 		eventRouter, encoderConfig,
 		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency),
+		replicaConfig,
 		errCh,
 	)
 	if err != nil {

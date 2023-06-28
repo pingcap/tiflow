@@ -305,7 +305,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if message.TooLarge {
-						if err := w.claimCheckSendMessage(message); err != nil {
+						if err := w.claimCheckSendMessage(ctx, message); err != nil {
 							return 0, err
 						}
 						return message.GetRowsCount(), nil
