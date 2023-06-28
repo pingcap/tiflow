@@ -266,14 +266,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 				w.rtsManager.Upsert(regionID, resolvedTs, eventTime)
 			}
 		case <-advanceCheckTicker.C:
-			currentTimeFromPD, err := w.session.client.pdClock.CurrentTime()
-			if err != nil {
-				log.Warn("failed to get current time from PD",
-					zap.Error(err),
-					zap.String("namespace", w.session.client.changefeed.Namespace),
-					zap.String("changefeed", w.session.client.changefeed.ID))
-				continue
-			}
+			currentTimeFromPD := w.session.client.pdClock.CurrentTime()
 			expired := make([]*regionTsInfo, 0)
 			for w.rtsManager.Len() > 0 {
 				item := w.rtsManager.Pop()
@@ -335,7 +328,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 							zap.Uint64("resolvedTs", lastResolvedTs),
 						)
 					}
-					err = w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
+					err := w.session.lockResolver.Resolve(ctx, rts.regionID, maxVersion)
 					if err != nil {
 						log.Warn("failed to resolve lock",
 							zap.Uint64("regionID", rts.regionID),

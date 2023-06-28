@@ -43,13 +43,11 @@ func TestTimeFromPD(t *testing.T) {
 	defer clock.Stop()
 	time.Sleep(1 * time.Second)
 
-	t1, err := clock.CurrentTime()
-	require.Nil(t, err)
+	t1 := clock.CurrentTime()
 
 	time.Sleep(400 * time.Millisecond)
 	// assume that the gc safe point updated one hour ago
-	t2, err := clock.CurrentTime()
-	require.Nil(t, err)
+	t2 := clock.CurrentTime()
 	// should return new time
 	require.NotEqual(t, t1, t2)
 }
@@ -70,7 +68,7 @@ func TestEventTimeAndProcessingTime(t *testing.T) {
 
 	sleep := time.Second
 	time.Sleep(sleep)
-	t1, err := clock.CurrentTime()
+	t1 := clock.CurrentTime()
 	now := time.Now()
 	require.Nil(t, err)
 	require.Less(t, now.Sub(t1), sleep/2)

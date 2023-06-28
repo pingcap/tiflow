@@ -379,10 +379,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	}
 
-	pdTime, err := c.upstream.PDClock.CurrentTime()
-	if err != nil {
-		log.Warn("There is error in pd clock, use local time as pd time", zap.Error(err))
-	}
+	pdTime := c.upstream.PDClock.CurrentTime()
 	currentTs := oracle.GetPhysical(pdTime)
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,

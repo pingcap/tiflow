@@ -355,7 +355,7 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 	span tablepb.Span, sinkStats sinkmanager.TableStats,
 ) tablepb.Stats {
 	pullerStats := p.sourceManager.r.GetTablePullerStats(span)
-	now, _ := p.upstream.PDClock.CurrentTime()
+	now := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
