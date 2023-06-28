@@ -7,7 +7,6 @@ require (
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/tidb v1.1.0-beta.0.20230505070356-cb609bb39c80
 	github.com/pingcap/tidb/parser v0.0.0-20230505070356-cb609bb39c80
-	github.com/pingcap/tiflow v0.0.0-20230626110235-d3625874e49c
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
 	go.uber.org/zap v1.24.0
 )

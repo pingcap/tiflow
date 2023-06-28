@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"hash/crc32"
 	"io"
 	"math"
@@ -28,7 +29,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -111,7 +111,7 @@ func getValueMapAndSchema(data []byte, url string) (map[string]interface{}, map[
 
 	schema := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(codec.Schema()), &schema); err != nil {
-		return nil, nil, errors.Trace(err)
+		return nil, nil, err
 	}
 
 	return result, schema, nil
@@ -119,10 +119,10 @@ func getValueMapAndSchema(data []byte, url string) (map[string]interface{}, map[
 
 func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	if len(data) < 5 {
-		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return 0, nil, errors.New("invalid avro data, length is less than 5")
 	}
 	if data[0] != magicByte {
-		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return 0, nil, errors.New("invalid avro data, magic byte not found")
 	}
 	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
 }
@@ -149,7 +149,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 
 	expectedChecksum, err := strconv.ParseUint(expected, 10, 64)
 	if err != nil {
-		return errors.Trace(err)
+		return err
 	}
 
 	// iterate over each field to calculate the actual checksum value by update the crc32 checksum.
@@ -196,7 +196,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 		}
 		value, err := getColumnValue(value, holder, mysqlType)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
 
 		if len(buf) > 0 {
@@ -206,7 +206,7 @@ func CalculateAndVerifyChecksum(valueMap, valueSchema map[string]interface{}) er
 		// generate a byte slice, and use it to update the checksum.
 		buf, err = buildChecksumBytes(buf, value, mysqlType)
 		if err != nil {
-			return errors.Trace(err)
+			return err
 		}
 		actualChecksum = crc32.Update(actualChecksum, crc32.IEEETable, buf)
 	}
@@ -284,7 +284,7 @@ func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType 
 		case string:
 			enum, err := types.ParseEnum(allowed, t, "")
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, err
 			}
 			value = enum.Value
 		case nil:
@@ -298,7 +298,7 @@ func getColumnValue(value interface{}, holder map[string]interface{}, mysqlType 
 		case string:
 			s, err := types.ParseSet(elems, t, "")
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, err
 			}
 			value = s.Value
 		case nil:
@@ -333,7 +333,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		case string:
 			v, err := strconv.ParseUint(a, 10, 64)
 			if err != nil {
-				return nil, errors.Trace(err)
+				return nil, err
 			}
 			buf = binary.LittleEndian.AppendUint64(buf, v)
 		default:
@@ -362,7 +362,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		// bit is store as bytes, convert to uint64.
 		v, err := binaryLiteralToInt(value.([]byte))
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, err
 		}
 		buf = binary.LittleEndian.AppendUint64(buf, v)
 	// encoded as bytes if binary flag set to true, else string
@@ -445,7 +445,7 @@ func GetSchema(url string, schemaID int) (*goavro.Codec, error) {
 	req, err := http.NewRequest("GET", requestURI, nil)
 	if err != nil {
 		log.Error("Cannot create the request to look up the schema", zap.Error(err))
-		return nil, errors.WrapError(errors.ErrAvroSchemaAPIError, err)
+		return nil, err
 	}
 	req.Header.Add(
 		"Accept",
@@ -463,30 +463,30 @@ func GetSchema(url string, schemaID int) (*goavro.Codec, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Error("Cannot parse the lookup schema response", zap.Error(err))
-		return nil, errors.WrapError(errors.ErrAvroSchemaAPIError, err)
+		return nil, err
 	}
 
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry", zap.String("requestURI", requestURI), zap.Int("schemaID", schemaID))
-		return nil, errors.ErrAvroSchemaAPIError.GenWithStackByArgs("Schema not found in Registry")
+		return nil, errors.New("schema not found in Registry")
 	}
 
 	if resp.StatusCode != 200 {
 		log.Error("Failed to query schema from the Registry, HTTP error",
 			zap.Int("status", resp.StatusCode), zap.String("uri", requestURI), zap.ByteString("responseBody", body))
-		return nil, errors.ErrAvroSchemaAPIError.GenWithStack("Failed to query schema from the Registry, HTTP error")
+		return nil, errors.New("failed to query schema from the Registry, HTTP error")
 	}
 
 	var jsonResp lookupResponse
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
 		log.Error("Failed to parse result from Registry", zap.Error(err))
-		return nil, errors.WrapError(errors.ErrAvroSchemaAPIError, err)
+		return nil, err
 	}
 
 	codec, err := goavro.NewCodec(jsonResp.Schema)
 	if err != nil {
-		return nil, errors.WrapError(errors.ErrAvroSchemaAPIError, err)
+		return nil, err
 	}
 	return codec, nil
 }
