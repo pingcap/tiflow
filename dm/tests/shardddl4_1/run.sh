@@ -1213,12 +1213,57 @@ function DM_RESYNC_TXN_INTERRUPT() {
 		"clean_table" "optimistic"
 }
 
+function DM_STRICT_OPTIMISTIC_SINGLE_SOURCE_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2,2);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add c int not null default 10;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(3,3,3);"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(4,4);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb2} add c varchar(30) not null default '10';"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"stage": "Paused"' 1 \
+		"because schema conflict detected" 1
+}
+
+function DM_STRICT_OPTIMISTIC_SINGLE_SOURCE() {
+	run_case STRICT_OPTIMISTIC_SINGLE_SOURCE "single-source-strict-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source1 \"create table ${shardddl1}.${tb2} (a int primary key, b int);\"" \
+		"clean_table" "optimistic"
+}
+
+function DM_STRICT_OPTIMISTIC_DOUBLE_SOURCE_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1,1);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2,2);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add c int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(3,3,3);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(4,4);"
+
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add d int not null;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"because schema conflict detected" 1
+}
+
+function DM_STRICT_OPTIMISTIC_DOUBLE_SOURCE() {
+	run_case STRICT_OPTIMISTIC_DOUBLE_SOURCE "double-source-strict-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int primary key, b int);\"" \
+		"clean_table" "optimistic"
+}
+
 function run() {
 	init_cluster
 	init_database
 	DM_TABLE_CHECKPOINT_BACKWARD
 	DM_RESYNC_NOT_FLUSHED
 	DM_RESYNC_TXN_INTERRUPT
+	DM_STRICT_OPTIMISTIC_SINGLE_SOURCE
+	DM_STRICT_OPTIMISTIC_DOUBLE_SOURCE
 	start=131
 	end=155
 	except=(140 141 144)
