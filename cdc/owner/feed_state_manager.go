@@ -441,6 +441,7 @@ func (m *feedStateManager) warningsReportedByProcessors() []*model.RunningError 
 				if position == nil {
 					return nil, false, nil
 				}
+				// set Warning to nil after it has been handled
 				position.Warning = nil
 				return position, true, nil
 			})

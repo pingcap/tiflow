@@ -461,9 +461,17 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 	}
 }
 
+<<<<<<< HEAD
 func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats sinkmanager.TableStats) tablepb.Stats {
 	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
 	now, _ := p.upstream.PDClock.CurrentTime()
+=======
+func (p *processor) getStatsFromSourceManagerAndSinkManager(
+	span tablepb.Span, sinkStats sinkmanager.TableStats,
+) tablepb.Stats {
+	pullerStats := p.sourceManager.r.GetTablePullerStats(span)
+	now := p.upstream.PDClock.CurrentTime()
+>>>>>>> af510b4627 (pdutil (ticdc): refine pd clock interface (#9298))
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
