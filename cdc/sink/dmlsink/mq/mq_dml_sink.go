@@ -76,7 +76,6 @@ func newDMLSink(
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
 	encoderConfig *common.Config,
-	encoderConcurrency int,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
 ) (*dmlSink, error) {
@@ -94,6 +93,7 @@ func newDMLSink(
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
+	encoderConcurrency := util.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, storage, statistics)

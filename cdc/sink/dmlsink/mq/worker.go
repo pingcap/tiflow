@@ -69,6 +69,8 @@ type worker struct {
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
+	encoderBuilder codec.RowEventEncoderBuilder
+
 	encoderGroup codec.EncoderGroup
 
 	// producer is used to send the messages to the Kafka broker.
@@ -101,6 +103,7 @@ func newWorker(
 		protocol:                          protocol,
 		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
 		ticker:                            time.NewTicker(flushInterval),
+		encoderBuilder:                    builder,
 		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                          producer,
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
@@ -305,7 +308,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if message.TooLarge {
-						if err := w.claimCheckSendMessage(ctx, message); err != nil {
+						if err := w.claimCheckSendMessage(ctx, message, future.Topic, future.Partition); err != nil {
 							return 0, err
 						}
 						return message.GetRowsCount(), nil
@@ -328,16 +331,11 @@ type claimCheckMessage struct {
 	Value []byte `json:"value"`
 }
 
-type claimCheckLocationMessage struct {
-	Location  string `json:"location"`
-	CommitTs  uint64 `json:"commitTs"`
-	Schema    string `json:"schema"`
-	TableName string `json:"tableName"`
-
-	//HandleKey
+func buildClaimCheckFileName() string {
+	return ""
 }
 
-func (w *worker) claimCheckSendMessage(ctx context.Context, message *common.Message) error {
+func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partition int32, message *common.Message) error {
 	if w.storage == nil {
 		return errors.New("claim check cannot found the external storage")
 	}
@@ -352,26 +350,23 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, message *common.Mess
 		return errors.Trace(err)
 	}
 
-	// todo: how to name the file ?
-	var name string
-	err = w.storage.WriteFile(ctx, name, data)
+	fileName := buildClaimCheckFileName()
+	err = w.storage.WriteFile(ctx, fileName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// shall we callback here to announce the message is successfully delivered ?
+
+	// todo: shall we callback here to announce the message is successfully delivered ?
 	message.Callback()
 
-	locationM := claimCheckLocationMessage{
-		Location: name,
-	}
-	data, err = json.Marshal(locationM)
+	encoder := w.encoderBuilder.Build()
+
+	//locationM := encoder.GenerateClaimCheckLocationMessage(message, fileName)
+
+	err = w.producer.AsyncSendMessage(ctx, topic, partition, locationM)
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	// 3. how to generate the claimCheck location message ?
-
-	// 2. send one message to the MQ with external storage message location.
 
 	return nil
 }

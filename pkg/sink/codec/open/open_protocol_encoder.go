@@ -109,6 +109,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 				return errors.Trace(err)
 			}
 		} else {
+			// claim check enabled, should set the claim check message location here.
 			messageTooLarge = true
 		}
 	}
