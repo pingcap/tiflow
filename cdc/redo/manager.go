@@ -171,10 +171,6 @@ func (s *statefulRts) getUnflushed() model.Ts {
 	return atomic.LoadUint64(&s.unflushed)
 }
 
-func (s *statefulRts) setFlushed(flushed model.Ts) {
-	atomic.StoreUint64(&s.flushed, flushed)
-}
-
 func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (changed bool) {
 	for {
 		old := atomic.LoadUint64(&s.unflushed)
@@ -182,6 +178,19 @@ func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (changed bool) {
 			return false
 		}
 		if atomic.CompareAndSwapUint64(&s.unflushed, old, unflushed) {
+			break
+		}
+	}
+	return true
+}
+
+func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (changed bool) {
+	for {
+		old := atomic.LoadUint64(&s.flushed)
+		if old > flushed {
+			return false
+		}
+		if atomic.CompareAndSwapUint64(&s.flushed, old, flushed) {
 			break
 		}
 	}
@@ -306,7 +315,13 @@ func (m *logManager) emitRedoEvents(
 // StartTable starts a table, which means the table is ready to emit redo events.
 // Note that this function should only be called once when adding a new table to processor.
 func (m *logManager) StartTable(span tablepb.Span, resolvedTs uint64) {
+	// advance unflushed resolved ts
 	m.onResolvedTsMsg(span, resolvedTs)
+
+	// advance flushed resolved ts
+	if value, loaded := m.rtsMap.Load(span); loaded {
+		value.(*statefulRts).checkAndSetFlushed(resolvedTs)
+	}
 }
 
 // UpdateResolvedTs asynchronously updates resolved ts of a single table.
@@ -372,7 +387,13 @@ func (m *logManager) prepareForFlush() *spanz.HashMap[model.Ts] {
 func (m *logManager) postFlush(tableRtsMap *spanz.HashMap[model.Ts]) {
 	tableRtsMap.Range(func(span tablepb.Span, flushed uint64) bool {
 		if value, loaded := m.rtsMap.Load(span); loaded {
-			value.(*statefulRts).setFlushed(flushed)
+			changed := value.(*statefulRts).checkAndSetFlushed(flushed)
+			if !changed {
+				log.Debug("flush redo with regressed resolved ts",
+					zap.Stringer("span", &span),
+					zap.Uint64("flushed", flushed),
+					zap.Uint64("current", value.(*statefulRts).getFlushed()))
+			}
 		}
 		return true
 	})

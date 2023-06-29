@@ -164,7 +164,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	// remove table not exist
 	ctx := context.Background()
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err := a.tableM.poll(ctx, &schedulepb.Barrier{})
+	responses, err := a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 0)
 
@@ -183,7 +183,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("AddTableSpan", mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, &schedulepb.Barrier{})
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -203,14 +203,14 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(false, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	_, err = a.tableM.poll(ctx, &schedulepb.Barrier{})
+	_, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 
 	mockTableExecutor.ExpectedCalls = mockTableExecutor.ExpectedCalls[:1]
 	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, &schedulepb.Barrier{})
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -232,7 +232,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		mock.Anything, mock.Anything).Return(false, nil)
 
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, &schedulepb.Barrier{})
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -247,7 +247,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	mockTableExecutor.On("IsAddTableSpanFinished", mock.Anything,
 		mock.Anything, mock.Anything).Return(true, nil)
 	a.handleMessageDispatchTableRequest(addTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, &schedulepb.Barrier{})
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 
@@ -262,7 +262,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, &schedulepb.Barrier{})
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok := responses[0].DispatchTableResponse.
@@ -279,7 +279,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, false)
 	// remove table in the replicating state failed, should still in replicating.
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, &schedulepb.Barrier{})
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -293,7 +293,7 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 		Return(3, true)
 	// remove table in the replicating state success, should in stopped
 	a.handleMessageDispatchTableRequest(removeTableRequest, processorEpoch)
-	responses, err = a.tableM.poll(ctx, &schedulepb.Barrier{})
+	responses, err = a.tableM.poll(ctx)
 	require.NoError(t, err)
 	require.Len(t, responses, 1)
 	removeTableResponse, ok = responses[0].DispatchTableResponse.
@@ -1069,8 +1069,9 @@ func newMockTableExecutor() *MockTableExecutor {
 
 // AddTableSpan adds a table span to the executor.
 func (e *MockTableExecutor) AddTableSpan(
-	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool, _ *schedulepb.Barrier,
+	ctx context.Context, span tablepb.Span, checkpoint tablepb.Checkpoint, isPrepare bool,
 ) (bool, error) {
+	startTs := checkpoint.CheckpointTs
 	log.Info("AddTableSpan",
 		zap.String("span", span.String()),
 		zap.Any("startTs", startTs),
