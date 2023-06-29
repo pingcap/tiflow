@@ -115,6 +115,32 @@ func newClaimCheckFileName(e *model.RowChangedEvent) string {
 	return strings.Join(elements, "-")
 }
 
+func (d *BatchEncoder) newSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
+	versionHead := make([]byte, 8)
+	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
+	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+
+	var (
+		keyLenByte   [8]byte
+		valueLenByte [8]byte
+	)
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+
+	message.Key = append(message.Key, keyLenByte[:]...)
+	message.Key = append(message.Key, key...)
+	message.Value = append(message.Value, valueLenByte[:]...)
+	message.Value = append(message.Value, value...)
+	message.Ts = e.CommitTs
+	message.Schema = &e.Table.Schema
+	message.Table = &e.Table.Table
+	message.ClaimCheckFileName = newClaimCheckFileName(e)
+	message.IncRowsCount()
+
+	if callback != nil {
+		message.Callback = callback
+	}
+}
+
 // AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
@@ -150,14 +176,17 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
+		if d.config.LargeMessageHandle.EnableClaimCheck() {
+			d.newSingleLargeMessage4ClaimCheck(key, value, e, callback)
+			return nil
+			
+		}
+
 		if d.config.LargeMessageHandle.HandleKeyOnly() {
 			key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
 			if err != nil {
 				return errors.Trace(err)
 			}
-		} else {
-			// claim check enabled, should set the claim check message location here.
-			claimCheckFileName = newClaimCheckFileName(e)
 		}
 	}
 
