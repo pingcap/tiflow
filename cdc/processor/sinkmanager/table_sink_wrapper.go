@@ -294,6 +294,7 @@ func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
 		t.tableSinkMu.RUnlock()
 		return false
 	}
+	t.tableSinkMu.RUnlock()
 	t.doTableSinkClear()
 	return true
 }
