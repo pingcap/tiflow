@@ -141,29 +141,24 @@ func (m *BtreeMap[T]) FindHoles(start, end tablepb.Span) ([]tablepb.Span, []tabl
 	m.cache.coveredSpans = m.cache.coveredSpans[:0]
 	m.cache.holes = m.cache.holes[:0]
 
-	firstSpan := true
-	var lastSpan tablepb.Span
+	lastSpan := tablepb.Span{
+		StartKey: start.StartKey,
+		EndKey:   start.StartKey,
+	}
 	m.AscendRange(start, end, func(current tablepb.Span, _ T) bool {
-		if firstSpan {
-			ord := bytes.Compare(start.StartKey, current.StartKey)
-			if ord < 0 {
-				m.cache.holes = append(m.cache.holes, tablepb.Span{
-					StartKey: start.StartKey,
-					EndKey:   current.StartKey,
-				})
-			} else if ord > 0 {
-				log.Panic("map is out of order",
-					zap.String("start", start.String()),
-					zap.String("current", current.String()))
-			}
-			firstSpan = false
-		} else if !bytes.Equal(lastSpan.EndKey, current.StartKey) {
+		ord := bytes.Compare(lastSpan.EndKey, current.StartKey)
+		if ord < 0 {
 			// Find a hole.
 			m.cache.holes = append(m.cache.holes, tablepb.Span{
 				StartKey: lastSpan.EndKey,
 				EndKey:   current.StartKey,
 			})
+		} else if ord > 0 {
+			log.Panic("map is out of order",
+				zap.String("lastSpan", lastSpan.String()),
+				zap.String("current", current.String()))
 		}
+
 		lastSpan = current
 		m.cache.coveredSpans = append(m.cache.coveredSpans, current)
 		return true
