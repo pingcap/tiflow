@@ -16,6 +16,8 @@ package mq
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -308,7 +310,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if message.TooLarge {
-						if err := w.claimCheckSendMessage(ctx, message, future.Topic, future.Partition); err != nil {
+						if err := w.claimCheckSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 							return 0, err
 						}
 						return message.GetRowsCount(), nil
@@ -331,8 +333,10 @@ type claimCheckMessage struct {
 	Value []byte `json:"value"`
 }
 
-func buildClaimCheckFileName() string {
-	return ""
+func buildClaimCheckFileName(scheme, table string, commitTs uint64, handleKeyValues ...string) string {
+	elements := []string{scheme, table, strconv.FormatUint(commitTs, 10)}
+	elements = append(elements, handleKeyValues...)
+	return strings.Join(elements, "-")
 }
 
 func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partition int32, message *common.Message) error {
@@ -350,7 +354,7 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 		return errors.Trace(err)
 	}
 
-	fileName := buildClaimCheckFileName()
+	fileName := buildClaimCheckFileName(*message.Schema, *message.Table, message.Ts, message.HandleKeyColumnValues...)
 	err = w.storage.WriteFile(ctx, fileName, data)
 	if err != nil {
 		return errors.Trace(err)
@@ -361,8 +365,7 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 
 	encoder := w.encoderBuilder.Build()
 
-	//locationM := encoder.GenerateClaimCheckLocationMessage(message, fileName)
-
+	locationM := encoder.NewClaimCheckLocationMessage(message, fileName)
 	err = w.producer.AsyncSendMessage(ctx, topic, partition, locationM)
 	if err != nil {
 		return errors.Trace(err)

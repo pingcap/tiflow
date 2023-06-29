@@ -30,6 +30,9 @@ type MessageKey struct {
 	Type      model.MessageType `json:"t"`
 	// Only Handle Key Columns encoded in the message's value part.
 	OnlyHandleKey bool `json:"ohk,omitempty"`
+
+	// Claim check location for the message's value part.
+	ClaimCheckLocation string `json:"ccl,omitempty"`
 }
 
 // Encode encodes the message key to a byte slice.

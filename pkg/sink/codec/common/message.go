@@ -41,6 +41,8 @@ type Message struct {
 	rowsCount int               // rows in one Message
 	Callback  func()            // Callback function will be called when the message is sent to the sink.
 
+	HandleKeyColumnValues []string
+
 	TooLarge bool
 }
 

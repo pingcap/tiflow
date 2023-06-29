@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"go.uber.org/zap"
 )
 
@@ -66,6 +67,44 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 		zap.Any("table", e.Table), zap.Uint64("commitTs", e.CommitTs))
 
 	return key, value, nil
+}
+
+// NewClaimCheckLocationMessage creates a new message with the claim check location.
+// This should be called when the message is too large, and the claim check enabled.
+// This method should not meet error, since only one string is set to the message,
+// it should not cause the encode error or the message too large error.
+func (d *BatchEncoder) NewClaimCheckLocationMessage(location string, callback func()) (*common.Message, error) {
+	messageKey := &internal.MessageKey{
+		ClaimCheckLocation: location,
+	}
+
+	key, err := messageKey.Encode()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	length := len(key) + common.MaxRecordOverhead + 16
+	if length > d.config.MaxMessageBytes {
+		log.Warn("Single message is too large for open-protocol",
+			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("key", key))
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+	}
+
+	versionHead := make([]byte, 8)
+	var keyLenByte [8]byte
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+
+	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+	message.Key = append(message.Key, keyLenByte[:]...)
+	message.Key = append(message.Key, key...)
+	if callback != nil {
+		message.Callback = callback
+	}
+	message.IncRowsCount()
+
+	return message, nil
 }
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
