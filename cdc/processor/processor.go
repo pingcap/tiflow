@@ -110,12 +110,17 @@ var _ scheduler.TableExecutor = (*processor)(nil)
 // 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
 // 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
 func (p *processor) AddTableSpan(
+<<<<<<< HEAD
 	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
+=======
+	ctx context.Context, span tablepb.Span, checkpoint tablepb.Checkpoint, isPrepare bool,
+>>>>>>> 7497ea66a8 (redo, processor(ticdc): set flushed resolvedTs when start table (#9281))
 ) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
 	}
 
+	startTs := checkpoint.CheckpointTs
 	if startTs == 0 {
 		log.Panic("table start ts must not be 0",
 			zap.String("captureID", p.captureInfo.ID),
@@ -145,6 +150,14 @@ func (p *processor) AddTableSpan(
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
+<<<<<<< HEAD
+=======
+				if p.redo.r.Enabled() {
+					// ResolvedTs is store in external storage when redo log is enabled, so we need to
+					// start table with ResolvedTs in redoDMLManager.
+					p.redo.r.StartTable(span, checkpoint.ResolvedTs)
+				}
+>>>>>>> 7497ea66a8 (redo, processor(ticdc): set flushed resolvedTs when start table (#9281))
 				if err := p.sinkManager.r.StartTable(span, startTs); err != nil {
 					return false, errors.Trace(err)
 				}

@@ -169,15 +169,23 @@ func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
 	return nil
 }
 
+<<<<<<< HEAD
 func (t *tableSpan) handleAddTableTask(
 	ctx context.Context,
 ) (result *schedulepb.Message, err error) {
+=======
+func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.Message, err error) {
+>>>>>>> 7497ea66a8 (redo, processor(ticdc): set flushed resolvedTs when start table (#9281))
 	state, _ := t.getAndUpdateTableSpanState()
 	changed := true
 	for changed {
 		switch state {
 		case tablepb.TableStateAbsent:
+<<<<<<< HEAD
 			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, t.task.IsPrepare)
+=======
+			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.Checkpoint, t.task.IsPrepare)
+>>>>>>> 7497ea66a8 (redo, processor(ticdc): set flushed resolvedTs when start table (#9281))
 			if err != nil || !done {
 				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
@@ -208,7 +216,11 @@ func (t *tableSpan) handleAddTableTask(
 			}
 
 			if t.task.status == dispatchTableTaskReceived {
+<<<<<<< HEAD
 				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, false)
+=======
+				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.Checkpoint, false)
+>>>>>>> 7497ea66a8 (redo, processor(ticdc): set flushed resolvedTs when start table (#9281))
 				if err != nil || !done {
 					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),

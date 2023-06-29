@@ -1069,8 +1069,13 @@ func newMockTableExecutor() *MockTableExecutor {
 
 // AddTableSpan adds a table span to the executor.
 func (e *MockTableExecutor) AddTableSpan(
+<<<<<<< HEAD
 	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
+=======
+	ctx context.Context, span tablepb.Span, checkpoint tablepb.Checkpoint, isPrepare bool,
+>>>>>>> 7497ea66a8 (redo, processor(ticdc): set flushed resolvedTs when start table (#9281))
 ) (bool, error) {
+	startTs := checkpoint.CheckpointTs
 	log.Info("AddTableSpan",
 		zap.String("span", span.String()),
 		zap.Any("startTs", startTs),
