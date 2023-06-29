@@ -47,6 +47,7 @@ type RowEventEncoder interface {
 	DDLEventBatchEncoder
 	// AppendRowChangedEvent appends a row changed event into the batch or buffer.
 	AppendRowChangedEvent(context.Context, string, *model.RowChangedEvent, func()) error
+	NewClaimCheckLocationMessage(*common.Message) (*common.Message, error)
 	MessageBuilder
 }
 

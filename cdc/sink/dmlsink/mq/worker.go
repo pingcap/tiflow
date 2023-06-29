@@ -16,8 +16,6 @@ package mq
 import (
 	"context"
 	"encoding/json"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -309,7 +307,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			for _, message := range future.Messages {
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
-					if message.TooLarge {
+					if message.ClaimCheckFileName != "" {
 						if err := w.claimCheckSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 							return 0, err
 						}
@@ -333,12 +331,6 @@ type claimCheckMessage struct {
 	Value []byte `json:"value"`
 }
 
-func buildClaimCheckFileName(scheme, table string, commitTs uint64, handleKeyValues ...string) string {
-	elements := []string{scheme, table, strconv.FormatUint(commitTs, 10)}
-	elements = append(elements, handleKeyValues...)
-	return strings.Join(elements, "-")
-}
-
 func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partition int32, message *common.Message) error {
 	if w.storage == nil {
 		return errors.New("claim check cannot found the external storage")
@@ -354,18 +346,13 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 		return errors.Trace(err)
 	}
 
-	fileName := buildClaimCheckFileName(*message.Schema, *message.Table, message.Ts, message.HandleKeyColumnValues...)
-	err = w.storage.WriteFile(ctx, fileName, data)
+	err = w.storage.WriteFile(ctx, message.ClaimCheckFileName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	// todo: shall we callback here to announce the message is successfully delivered ?
-	message.Callback()
-
 	encoder := w.encoderBuilder.Build()
-
-	locationM := encoder.NewClaimCheckLocationMessage(message, fileName)
+	locationM, err := encoder.NewClaimCheckLocationMessage(message)
 	err = w.producer.AsyncSendMessage(ctx, topic, partition, locationM)
 	if err != nil {
 		return errors.Trace(err)

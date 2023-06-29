@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"strconv"
+	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -73,9 +75,9 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 // This should be called when the message is too large, and the claim check enabled.
 // This method should not meet error, since only one string is set to the message,
 // it should not cause the encode error or the message too large error.
-func (d *BatchEncoder) NewClaimCheckLocationMessage(location string, callback func()) (*common.Message, error) {
+func (d *BatchEncoder) NewClaimCheckLocationMessage(m *common.Message) (*common.Message, error) {
 	messageKey := &internal.MessageKey{
-		ClaimCheckLocation: location,
+		ClaimCheckLocation: m.ClaimCheckFileName,
 	}
 
 	key, err := messageKey.Encode()
@@ -99,12 +101,18 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(location string, callback fu
 	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
 	message.Key = append(message.Key, keyLenByte[:]...)
 	message.Key = append(message.Key, key...)
-	if callback != nil {
-		message.Callback = callback
+	if m.Callback != nil {
+		message.Callback = m.Callback
 	}
 	message.IncRowsCount()
 
 	return message, nil
+}
+
+func newClaimCheckFileName(e *model.RowChangedEvent) string {
+	elements := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
+	elements = append(elements, e.GetHandleKeyColumnValues()...)
+	return strings.Join(elements, "-")
 }
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
@@ -127,7 +135,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	messageTooLarge := false
+	var claimCheckFileName string
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
@@ -149,7 +157,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			}
 		} else {
 			// claim check enabled, should set the claim check message location here.
-			messageTooLarge = true
+			claimCheckFileName = newClaimCheckFileName(e)
 		}
 	}
 
@@ -181,7 +189,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	message.Ts = e.CommitTs
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
-	message.TooLarge = messageTooLarge
+	message.ClaimCheckFileName = claimCheckFileName
 	message.IncRowsCount()
 
 	if callback != nil {
