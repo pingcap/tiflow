@@ -370,8 +370,8 @@ func (m *metaManager) prepareForFlushMeta() (bool, common.LogMeta) {
 }
 
 func (m *metaManager) postFlushMeta(meta common.LogMeta) {
-	m.metaResolvedTs.setFlushed(meta.ResolvedTs)
-	m.metaCheckpointTs.setFlushed(meta.CheckpointTs)
+	m.metaResolvedTs.checkAndSetFlushed(meta.ResolvedTs)
+	m.metaCheckpointTs.checkAndSetFlushed(meta.CheckpointTs)
 }
 
 func (m *metaManager) flush(ctx context.Context, meta common.LogMeta) error {

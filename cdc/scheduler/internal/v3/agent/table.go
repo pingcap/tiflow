@@ -169,15 +169,13 @@ func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
 	return nil
 }
 
-func (t *tableSpan) handleAddTableTask(
-	ctx context.Context, barrier *schedulepb.Barrier,
-) (result *schedulepb.Message, err error) {
+func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.Message, err error) {
 	state, _ := t.getAndUpdateTableSpanState()
 	changed := true
 	for changed {
 		switch state {
 		case tablepb.TableStateAbsent:
-			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, t.task.IsPrepare, barrier)
+			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.Checkpoint, t.task.IsPrepare)
 			if err != nil || !done {
 				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
@@ -208,7 +206,7 @@ func (t *tableSpan) handleAddTableTask(
 			}
 
 			if t.task.status == dispatchTableTaskReceived {
-				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, false, barrier)
+				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.Checkpoint, false)
 				if err != nil || !done {
 					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),
@@ -283,14 +281,14 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 		zap.Any("ignoredTask", task))
 }
 
-func (t *tableSpan) poll(ctx context.Context, barrier *schedulepb.Barrier) (*schedulepb.Message, error) {
+func (t *tableSpan) poll(ctx context.Context) (*schedulepb.Message, error) {
 	if t.task == nil {
 		return nil, nil
 	}
 	if t.task.IsRemove {
 		return t.handleRemoveTableTask(), nil
 	}
-	return t.handleAddTableTask(ctx, barrier)
+	return t.handleAddTableTask(ctx)
 }
 
 type tableSpanManager struct {
@@ -315,7 +313,7 @@ func (tm *tableSpanManager) poll(ctx context.Context, barrier *schedulepb.Barrie
 	var err error
 	toBeDropped := []tablepb.Span{}
 	tm.tables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
-		message, err1 := table.poll(ctx, barrier)
+		message, err1 := table.poll(ctx)
 		if err != nil {
 			err = errors.Trace(err1)
 			return false
