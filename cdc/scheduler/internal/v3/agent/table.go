@@ -308,7 +308,7 @@ func newTableSpanManager(
 	}
 }
 
-func (tm *tableSpanManager) poll(ctx context.Context, barrier *schedulepb.Barrier) ([]*schedulepb.Message, error) {
+func (tm *tableSpanManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	var err error
 	toBeDropped := []tablepb.Span{}

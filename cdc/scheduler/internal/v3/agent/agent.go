@@ -211,7 +211,7 @@ func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 		return nil, errors.Trace(err)
 	}
 
-	responses, err := a.tableM.poll(ctx, barrier)
+	responses, err := a.tableM.poll(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

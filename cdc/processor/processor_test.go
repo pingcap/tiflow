@@ -229,7 +229,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
 	span := spanz.TableIDToComparableSpan(1)
-	ok, err := p.AddTableSpan(ctx, span, tablepb.Checkpoint{20, 0}, true)
+	ok, err := p.AddTableSpan(ctx, span, tablepb.Checkpoint{CheckpointTs: 20}, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 	p.sinkManager.r.UpdateBarrierTs(20, nil)
@@ -268,7 +268,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, tablepb.TableStatePrepared, state)
 
-	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{30, 0}, true)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 30}, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 	stats = p.sinkManager.r.GetTableStats(span)
@@ -277,7 +277,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.Equal(t, model.Ts(20), stats.BarrierTs)
 
 	// Start to replicate table-1.
-	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{30, 0}, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -317,7 +317,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
 	span := spanz.TableIDToComparableSpan(1)
-	ok, err := p.AddTableSpan(ctx, span, tablepb.Checkpoint{20, 0}, true)
+	ok, err := p.AddTableSpan(ctx, span, tablepb.Checkpoint{CheckpointTs: 20}, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 	p.sinkManager.r.UpdateBarrierTs(20, nil)
@@ -357,7 +357,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	require.Equal(t, tablepb.TableStatePrepared, state)
 
 	// ignore duplicate add request
-	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{30, 0}, true)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 30}, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 	stats = p.sinkManager.r.GetTableStats(span)
@@ -371,7 +371,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	require.Equal(t, model.Ts(50), stats.BarrierTs)
 
 	// Start to replicate table-1.
-	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{30, 60}, false)
+	ok, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 30, ResolvedTs: 60}, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -471,10 +471,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{20, 0}, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 20}, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{30, 0}, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.Nil(t, err)
 	require.True(t, done)
 
@@ -510,10 +510,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{20, 0}, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 20}, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{30, 0}, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	err = p.Tick(ctx)
@@ -555,10 +555,10 @@ func TestPositionDeleted(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add table
-	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{30, 0}, false)
+	done, err := p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(1), tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{40, 0}, false)
+	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{CheckpointTs: 40}, false)
 	require.Nil(t, err)
 	require.True(t, done)
 
