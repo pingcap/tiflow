@@ -391,9 +391,15 @@ error = '''
 flow controller is aborted
 '''
 
+<<<<<<< HEAD
 ["CDC:ErrFlowControllerEventLargerThanQuota"]
 error = '''
 event is larger than the total memory quota, size: %d, quota: %d
+=======
+["CDC:ErrGCTTLExceeded"]
+error = '''
+the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL and the changefeed is blocking global GC progression
+>>>>>>> dcf6f85e0a (cdc: fail the changefeed blocking global gc and suppressing the gc-ttl (#9304))
 '''
 
 ["CDC:ErrGRPCDialFailed"]
