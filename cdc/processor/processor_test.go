@@ -664,7 +664,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	tester.MustApplyPatches()
 
 	span := spanz.TableIDToComparableSpan(1)
-	done, err := p.AddTableSpan(ctx, span, tablepb.Checkpoint{5, 0}, false)
+	done, err := p.AddTableSpan(ctx, span, tablepb.Checkpoint{CheckpointTs: 5}, false)
 	require.True(t, done)
 	require.Nil(t, err)
 	err = p.Tick(ctx)
