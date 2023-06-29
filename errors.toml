@@ -303,7 +303,7 @@ flow controller is aborted
 
 ["CDC:ErrGCTTLExceeded"]
 error = '''
-the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL
+the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL and the changefeed is blocking global GC progression
 '''
 
 ["CDC:ErrGRPCDialFailed"]

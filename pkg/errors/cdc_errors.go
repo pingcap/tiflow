@@ -591,8 +591,8 @@ var (
 		errors.RFCCodeText("CDC:ErrSnapshotLostByGC"),
 	)
 	ErrGCTTLExceeded = errors.Normalize(
-		"the checkpoint-ts(%d) lag of the changefeed(%s) "+
-			"has exceeded the GC TTL",
+		"the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded "+
+			"the GC TTL and the changefeed is blocking global GC progression",
 		errors.RFCCodeText("CDC:ErrGCTTLExceeded"),
 	)
 	ErrNotOwner = errors.Normalize(
