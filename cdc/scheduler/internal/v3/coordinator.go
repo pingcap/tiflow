@@ -93,38 +93,27 @@ func NewCoordinator(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg, redoMetaManager)
-	coord.trans = trans
-	coord.pdClock = up.PDClock
-	coord.changefeedEpoch = changefeedEpoch
-	coord.reconciler, err = keyspan.NewReconciler(changefeedID, up, cfg.ChangefeedSettings)
+	reconciler, err := keyspan.NewReconciler(changefeedID, up, cfg.ChangefeedSettings)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return coord, nil
-}
-
-func newCoordinator(
-	captureID model.CaptureID,
-	changefeedID model.ChangeFeedID,
-	ownerRevision int64,
-	cfg *config.SchedulerConfig,
-	redoMetaManager redo.MetaManager,
-) *coordinator {
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
-
 	return &coordinator{
-		version:   version.ReleaseSemver(),
-		revision:  revision,
-		captureID: captureID,
+		version:         version.ReleaseSemver(),
+		revision:        revision,
+		changefeedEpoch: changefeedEpoch,
+		captureID:       captureID,
+		trans:           trans,
 		replicationM: replication.NewReplicationManager(
 			cfg.MaxTaskConcurrency, changefeedID),
 		captureM:        member.NewCaptureManager(captureID, changefeedID, revision, cfg),
 		schedulerM:      scheduler.NewSchedulerManager(changefeedID, cfg),
+		reconciler:      reconciler,
 		changefeedID:    changefeedID,
 		compat:          compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
+		pdClock:         up.PDClock,
 		redoMetaManager: redoMetaManager,
-	}
+	}, nil
 }
 
 // Tick implement the scheduler interface
@@ -225,8 +214,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 		return count, nil
 	}
 
-	// when draining the capture, tables need to be dispatched to other
-	// capture except the draining one, so at least should have 2 captures alive.
+	// when draining the capture, tables need to be dispatched to other capture
+	// except the draining one, so there should be at least two live captures.
 	if len(c.captureM.Captures) <= 1 {
 		log.Warn("schedulerv3: drain capture request ignored, "+
 			"only one captures alive",
@@ -286,9 +275,10 @@ func (c *coordinator) poll(
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	c.maybeCollectMetrics()
 	if c.compat.UpdateCaptureInfo(aliveCaptures) {
+		spanReplicationEnabled := c.compat.CheckSpanReplicationEnabled()
 		log.Info("schedulerv3: compat update capture info",
 			zap.Any("captures", aliveCaptures),
-			zap.Bool("spanReplicationEnabled", c.compat.CheckSpanReplicationEnabled()))
+			zap.Bool("spanReplicationEnabled", spanReplicationEnabled))
 	}
 
 	recvMsgs, err := c.recvMsgs(ctx)
