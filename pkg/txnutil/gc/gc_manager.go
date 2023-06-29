@@ -146,5 +146,5 @@ func (m *gcManager) IgnoreFailedChangeFeed(
 	gcSafepointUpperBound := checkpointTs - 1
 	return pdTime.Sub(
 		oracle.GetTimeFromTS(gcSafepointUpperBound),
-	) > time.Duration(m.gcTTL) * time.Second
+	) > time.Duration(m.gcTTL)*time.Second
 }
