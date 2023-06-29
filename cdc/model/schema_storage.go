@@ -84,10 +84,10 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 			TableID:     info.ID,
 			IsPartition: info.GetPartitionInfo() != nil,
 		},
+		hasUniqueColumn:  false,
 		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
-		uniqueColumns:    make(map[int64]struct{}),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
 		ColumnsFlag:      make(map[int64]ColumnFlagType, len(info.Columns)),
 		handleColID:      []int64{-1},
@@ -134,9 +134,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 	for i, idx := range ti.Indices {
 		ti.indicesOffset[idx.ID] = i
 		if ti.IsIndexUnique(idx) {
-			for _, col := range idx.Columns {
-				ti.uniqueColumns[ti.Columns[col.Offset].ID] = struct{}{}
-			}
+			ti.hasUniqueColumn = true
 		}
 		if idx.Primary || idx.Unique {
 			indexColOffset := make([]int, 0, len(idx.Columns))
