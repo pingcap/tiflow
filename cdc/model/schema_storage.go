@@ -49,7 +49,8 @@ type TableInfo struct {
 	Version       uint64
 	columnsOffset map[int64]int
 	indicesOffset map[int64]int
-	uniqueColumns map[int64]struct{}
+
+	hasUniqueColumn bool
 
 	// It's a mapping from ColumnID to the offset of the columns in row changed events.
 	RowColumnsOffset map[int64]int
@@ -108,7 +109,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 				// pk is handle
 				ti.handleColID = []int64{col.ID}
 				ti.HandleIndexID = HandleIndexPKIsHandle
-				ti.uniqueColumns[col.ID] = struct{}{}
+				ti.hasUniqueColumn = true
 				ti.IndexColumnsOffset = append(ti.IndexColumnsOffset, []int{ti.RowColumnsOffset[col.ID]})
 			} else if ti.IsCommonHandle {
 				ti.HandleIndexID = HandleIndexPKIsHandle
@@ -272,7 +273,7 @@ func IsColCDCVisible(col *model.ColumnInfo) bool {
 
 // ExistTableUniqueColumn returns whether the table has a unique column
 func (ti *TableInfo) ExistTableUniqueColumn() bool {
-	return len(ti.uniqueColumns) != 0
+	return ti.hasUniqueColumn
 }
 
 // IsEligible returns whether the table is a eligible table
