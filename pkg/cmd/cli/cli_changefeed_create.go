@@ -155,28 +155,9 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 		return err
 	}
 
-<<<<<<< HEAD
-		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
-		if protocol != "" {
-			cfg.Sink.Protocol = protocol
-		}
-		for _, fp := range config.ForceEnableOldValueProtocols {
-			if cfg.Sink.Protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
-				cfg.EnableOldValue = true
-				break
-			}
-		}
-
-		if cfg.ForceReplicate {
-			log.Error("if use force replicate, old value feature must be enabled")
-			return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
-		}
-=======
 	err = cfg.AdjustEnableOldValueAndVerifyForceReplicate(uri)
 	if err != nil {
 		return err
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {

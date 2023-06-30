@@ -286,12 +286,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.Integrity == nil {
 		info.Config.Integrity = defaultConfig.Integrity
 	}
-
-<<<<<<< HEAD
-	return nil
-=======
-	info.RmUnusedFields()
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.

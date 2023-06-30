@@ -324,19 +324,6 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		return err
 	}
 
-<<<<<<< HEAD
-	if !enableOldValue {
-		for _, protocolStr := range ForceEnableOldValueProtocols {
-			if protocolStr == s.Protocol {
-				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-					"Please update changefeed config", s.Protocol))
-				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
-			}
-		}
-	}
-=======
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))

@@ -301,10 +301,9 @@ func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url
 	scheme := strings.ToLower(sinkURI.Scheme)
 	protocol := sinkURI.Query().Get(ProtocolKey)
 	if protocol != "" {
-		c.Sink.Protocol = util.AddressOf(protocol)
+		c.Sink.Protocol = protocol
 	}
-	protocol = util.GetOrZero(c.Sink.Protocol)
-	c.AdjustEnableOldValue(scheme, protocol)
+	c.AdjustEnableOldValue(scheme, c.Sink.Protocol)
 
 	if !c.ForceReplicate {
 		return nil

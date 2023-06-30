@@ -988,8 +988,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
-=======
 func TestDecodeRowEnableChecksum(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -1120,7 +1118,6 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NoError(t, err)
 }
 
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -1153,11 +1150,7 @@ func TestDecodeRow(t *testing.T) {
 
 		ts := schemaStorage.GetLastSnapshot().CurrentTs()
 
-<<<<<<< HEAD
 		schemaStorage.AdvanceResolvedTs(ver.Ver)
-=======
-	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
->>>>>>> 6537ab8fbc (config(ticdc): enable-old-value always false if using avro or csv as the encoding protocol (#9079))
 
 		mounter := NewMounter(
 			schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
