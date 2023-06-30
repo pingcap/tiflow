@@ -120,7 +120,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Sink: &config.SinkConfig{
 							Terminator: putil.AddressOf(config.CRLF),
 						},
-						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						Integrity:            config.GetDefaultReplicaConfig().Integrity,
+						StatusUpdateInterval: putil.AddressOf(2 * time.Second),
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -170,8 +171,9 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Sink: &config.SinkConfig{
 							Terminator: putil.AddressOf(config.CRLF),
 						},
-						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
-						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						Scheduler:            config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:            config.GetDefaultReplicaConfig().Integrity,
+						StatusUpdateInterval: putil.AddressOf(2 * time.Second),
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -226,8 +228,9 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Sink: &config.SinkConfig{
 							Terminator: putil.AddressOf(config.CRLF),
 						},
-						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
-						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						Scheduler:            config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:            config.GetDefaultReplicaConfig().Integrity,
+						StatusUpdateInterval: putil.AddressOf(2 * time.Second),
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
