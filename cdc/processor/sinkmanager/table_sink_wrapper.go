@@ -64,14 +64,9 @@ type tableSinkWrapper struct {
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
-<<<<<<< HEAD
 	// receivedSorterCommitTs is the commit ts received from the sorter.
 	// We use this to statistics the latency of the table sorter.
 	receivedSorterCommitTs atomic.Uint64
-	// receivedEventCount is the number of events received from the sorter.
-	receivedEventCount atomic.Int64
-=======
->>>>>>> d9fa56f5ed (processor (ticdc): remove remain event metric (#9240))
 
 	// replicateTs is the ts that the table sink has started to replicate.
 	replicateTs    model.Ts
@@ -228,17 +223,10 @@ func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
 	return t.receivedSorterResolvedTs.Load()
 }
 
-<<<<<<< HEAD
 func (t *tableSinkWrapper) getReceivedSorterCommitTs() model.Ts {
 	return t.receivedSorterCommitTs.Load()
 }
 
-func (t *tableSinkWrapper) getReceivedEventCount() int64 {
-	return t.receivedEventCount.Load()
-}
-
-=======
->>>>>>> d9fa56f5ed (processor (ticdc): remove remain event metric (#9240))
 func (t *tableSinkWrapper) getState() tablepb.TableState {
 	return t.state.Load()
 }
