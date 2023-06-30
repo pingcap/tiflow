@@ -246,8 +246,6 @@ func (sm *saramaMetricsMonitor) collectBrokers() {
 }
 
 func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
-	sm.collectBrokers()
-
 	for id := range sm.brokers {
 		brokerID := strconv.Itoa(int(id))
 
@@ -309,8 +307,14 @@ func (sm *saramaMetricsMonitor) collectBrokerMetrics() {
 	}
 }
 
-// flushMetricsInterval specifies the interval of refresh sarama metrics.
-const flushMetricsInterval = 5 * time.Second
+const (
+	// flushMetricsInterval specifies the interval of refresh sarama metrics.
+	flushMetricsInterval = 5 * time.Second
+	// refreshClusterMetaInterval specifies the interval of refresh kafka cluster meta.
+	// Do not set it too small, because it will cause too many requests to kafka cluster.
+	// Every request will get all topics and all brokers information.
+	refreshClusterMetaInterval = 30 * time.Minute
+)
 
 func runSaramaMetricsMonitor(ctx context.Context,
 	registry metrics.Registry,
@@ -325,18 +329,25 @@ func runSaramaMetricsMonitor(ctx context.Context,
 		brokers:      make(map[int32]struct{}),
 	}
 
-	ticker := time.NewTicker(flushMetricsInterval)
+	// Initialize brokers.
+	monitor.collectBrokers()
+
+	refreshMetricsTicker := time.NewTicker(flushMetricsInterval)
+	refreshClusterMetaTicker := time.NewTicker(refreshClusterMetaInterval)
 	go func() {
 		defer func() {
-			ticker.Stop()
+			refreshMetricsTicker.Stop()
+			refreshClusterMetaTicker.Stop()
 			monitor.cleanup()
 		}()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-refreshMetricsTicker.C:
 				monitor.collectMetrics()
+			case <-refreshClusterMetaTicker.C:
+				monitor.collectBrokers()
 			}
 		}
 	}()
