@@ -100,19 +100,7 @@ func rowChangeToMsg(
 	config *common.Config,
 	largeMessageOnlyHandleKeyColumns bool,
 ) (*internal.MessageKey, *messageRow, error) {
-	var partition *int64
-	if e.Table.IsPartition {
-		partition = &e.Table.TableID
-	}
-	key := &internal.MessageKey{
-		Ts:            e.CommitTs,
-		Schema:        e.Table.Schema,
-		Table:         e.Table.Table,
-		RowID:         e.RowID,
-		Partition:     partition,
-		Type:          model.MessageTypeRow,
-		OnlyHandleKey: largeMessageOnlyHandleKeyColumns,
-	}
+	key := internal.NewMessageKey(e, largeMessageOnlyHandleKeyColumns)
 	value := &messageRow{}
 	if e.IsDelete() {
 		onlyHandleKeyColumns := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns

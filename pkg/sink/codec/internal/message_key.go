@@ -35,6 +35,22 @@ type MessageKey struct {
 	ClaimCheckLocation string `json:"ccl,omitempty"`
 }
 
+func NewMessageKey(e *model.RowChangedEvent, onlyHandleKey bool) *MessageKey {
+	var partition *int64
+	if e.Table.IsPartition {
+		partition = &e.Table.TableID
+	}
+	return &MessageKey{
+		Ts:            e.CommitTs,
+		Schema:        e.Table.Schema,
+		Table:         e.Table.Table,
+		RowID:         e.RowID,
+		Partition:     partition,
+		Type:          model.MessageTypeRow,
+		OnlyHandleKey: onlyHandleKey,
+	}
+}
+
 // Encode encodes the message key to a byte slice.
 func (m *MessageKey) Encode() ([]byte, error) {
 	data, err := json.Marshal(m)

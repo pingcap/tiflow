@@ -203,7 +203,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 	key, err := keyMsg.Encode()
-	
+
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -212,28 +212,40 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	var claimCheckFileName string
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
-		log.Warn("Single message is too large for open-protocol",
-			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
-			zap.Int("length", length),
-			zap.Any("table", e.Table),
-			zap.Any("key", key))
-
 		if d.config.LargeMessageHandle.Disabled() {
+			log.Error("Single message is too large for open-protocol",
+				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+				zap.Int("length", length),
+				zap.Any("table", e.Table),
+				zap.Any("key", key))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
+			log.Warn("Single message is too large for open-protocol, "+
+				"claim check enabled, send it to the external storage",
+				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+				zap.Int("length", length),
+				zap.Any("table", e.Table),
+				zap.Any("key", key))
+			// This message is too large, must be sent individually.
+			d.tryBuildCallback()
 			d.newSingleLargeMessage4ClaimCheck(key, value, e, callback)
 			return nil
-
 		}
 
+		// message only have handle key can be batched with other messages
+		// to reduce small message count
 		if d.config.LargeMessageHandle.HandleKeyOnly() {
+			log.Warn("Single message is too large for open-protocol, only encode handle key columns",
+				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+				zap.Int("length", length),
+				zap.Any("table", e.Table),
+				zap.Any("key", key))
 			key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
 			if err != nil {
 				return errors.Trace(err)
@@ -269,7 +281,6 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	message.Ts = e.CommitTs
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
-	message.ClaimCheckFileName = claimCheckFileName
 	message.IncRowsCount()
 
 	if callback != nil {
