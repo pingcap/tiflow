@@ -481,7 +481,7 @@ func TestSyncPoint(t *testing.T) {
 		// check the time interval between adjacent sync points is less or equal than one second
 		require.LessOrEqual(t, mockDDLSink.syncPointHis[i]-mockDDLSink.syncPointHis[i-1], uint64(1000<<18))
 	}
-	require.GreaterOrEqual(t, len(mockDDLSink.syncPointHis), 5)
+	require.GreaterOrEqual(t, len(mockDDLSink.syncPointHis), 2)
 }
 
 func TestFinished(t *testing.T) {

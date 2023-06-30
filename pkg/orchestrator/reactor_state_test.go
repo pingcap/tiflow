@@ -318,12 +318,13 @@ func TestPatchInfo(t *testing.T) {
 		SinkURI: "123",
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
-			Filter:     defaultConfig.Filter,
-			Mounter:    defaultConfig.Mounter,
-			Sink:       defaultConfig.Sink,
-			Consistent: defaultConfig.Consistent,
-			Scheduler:  defaultConfig.Scheduler,
-			Integrity:  defaultConfig.Integrity,
+			Filter:               defaultConfig.Filter,
+			Mounter:              defaultConfig.Mounter,
+			Sink:                 defaultConfig.Sink,
+			Consistent:           defaultConfig.Consistent,
+			Scheduler:            defaultConfig.Scheduler,
+			Integrity:            defaultConfig.Integrity,
+			StatusUpdateInterval: putil.AddressOf(2 * time.Second),
 		},
 	}
 	cfInfo.RmUnusedFields()
@@ -339,12 +340,13 @@ func TestPatchInfo(t *testing.T) {
 		StartTs: 6,
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
-			Filter:     defaultConfig.Filter,
-			Mounter:    defaultConfig.Mounter,
-			Sink:       defaultConfig.Sink,
-			Consistent: defaultConfig.Consistent,
-			Scheduler:  defaultConfig.Scheduler,
-			Integrity:  defaultConfig.Integrity,
+			Filter:               defaultConfig.Filter,
+			Mounter:              defaultConfig.Mounter,
+			Sink:                 defaultConfig.Sink,
+			Consistent:           defaultConfig.Consistent,
+			Scheduler:            defaultConfig.Scheduler,
+			Integrity:            defaultConfig.Integrity,
+			StatusUpdateInterval: putil.AddressOf(2 * time.Second),
 		},
 	}
 	cfInfo.RmUnusedFields()
