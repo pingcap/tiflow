@@ -912,6 +912,10 @@ func (p *processor) Close() error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 
+	// clean up metrics first to avoid some metrics are not cleaned up
+	// when error occurs during closing the processor
+	p.cleanupMetrics()
+
 	p.sinkManager.stop(p.changefeedID)
 	p.sinkManager.r = nil
 	p.sourceManager.stop(p.changefeedID)
@@ -949,7 +953,6 @@ func (p *processor) Close() error {
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 
-	p.cleanupMetrics()
 	log.Info("processor closed",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
