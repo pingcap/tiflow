@@ -988,136 +988,6 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	}
 }
 
-func TestDecodeRowEnableChecksum(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	tk := helper.Tk()
-
-	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
-	helper.Tk().MustExec("use test")
-
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
-	filter, err := filter.NewFilter(replicaConfig, "")
-	require.NoError(t, err)
-
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
-	require.NoError(t, err)
-
-	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
-	require.NoError(t, err)
-	require.NotNil(t, schemaStorage)
-
-	createTableDDL := "create table t (id int primary key, a int)"
-	job := helper.DDL2Job(createTableDDL)
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-
-	ts := schemaStorage.GetLastSnapshot().CurrentTs()
-	schemaStorage.AdvanceResolvedTs(ver.Ver)
-
-	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
-
-	ctx := context.Background()
-
-	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "t")
-	require.True(t, ok)
-
-	// row without checksum
-	tk.Session().GetSessionVars().EnableRowLevelChecksum = false
-	tk.MustExec("insert into t values (1, 10)")
-
-	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV := &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-
-	row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	// the upstream tidb does not enable checksum, so the checksum is nil
-	require.Nil(t, row.Checksum)
-
-	// 	row with one checksum
-	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
-	tk.MustExec("insert into t values (2, 20)")
-
-	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV = &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	require.NotNil(t, row.Checksum)
-
-	expected, ok := mounter.decoder.GetChecksum()
-	require.True(t, ok)
-	require.Equal(t, expected, row.Checksum.Current)
-	require.False(t, row.Checksum.Corrupted)
-
-	// row with 2 checksum
-	tk.MustExec("insert into t values (3, 30)")
-	job = helper.DDL2Job("alter table t change column a a varchar(10)")
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-
-	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
-	rawKV = &model.RawKVEntry{
-		OpType:  model.OpTypePut,
-		Key:     key,
-		Value:   value,
-		StartTs: ts - 1,
-		CRTs:    ts + 1,
-	}
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row)
-	require.NotNil(t, row.Checksum)
-
-	first, ok := mounter.decoder.GetChecksum()
-	require.True(t, ok)
-
-	extra, ok := mounter.decoder.GetExtraChecksum()
-	require.True(t, ok)
-
-	if row.Checksum.Current != first {
-		require.Equal(t, extra, row.Checksum.Current)
-	} else {
-		require.Equal(t, first, row.Checksum.Current)
-	}
-	require.False(t, row.Checksum.Corrupted)
-
-	// hack the table info to make the checksum corrupted
-	tableInfo.Columns[0].FieldType = *types.NewFieldType(mysql.TypeVarchar)
-
-	// corrupt-handle-level default to warn, so no error, but the checksum is corrupted
-	row, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.NoError(t, err)
-	require.NotNil(t, row.Checksum)
-	require.True(t, row.Checksum.Corrupted)
-
-	mounter.integrity.CorruptionHandleLevel = integrity.CorruptionHandleLevelError
-	_, err = mounter.unmarshalAndMountRowChanged(ctx, rawKV)
-	require.Error(t, err)
-	require.ErrorIs(t, err, cerror.ErrCorruptedDataMutation)
-
-	job = helper.DDL2Job("drop table t")
-	err = schemaStorage.HandleDDLJob(job)
-	require.NoError(t, err)
-}
-
 func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -1152,8 +1022,7 @@ func TestDecodeRow(t *testing.T) {
 
 		schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-		mounter := NewMounter(
-			schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
+		mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
 
 		helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
 		helper.Tk().MustExec(`update student set age = 27 where id = 1`)
