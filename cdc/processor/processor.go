@@ -912,15 +912,11 @@ func (p *processor) Close() error {
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 
-<<<<<<< HEAD
-	p.sinkManager.stop(p.changefeedID)
-=======
 	// clean up metrics first to avoid some metrics are not cleaned up
 	// when error occurs during closing the processor
 	p.cleanupMetrics()
 
-	p.sinkManager.stop()
->>>>>>> a6939c3156 (changefeed (ticdc): remove status of a changefeed after it is removed (#9174))
+	p.sinkManager.stop(p.changefeedID)
 	p.sinkManager.r = nil
 	p.sourceManager.stop(p.changefeedID)
 	p.sourceManager.r = nil
