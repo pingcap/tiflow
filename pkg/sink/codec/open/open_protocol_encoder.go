@@ -42,7 +42,7 @@ type BatchEncoder struct {
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
 	// set the `largeMessageOnlyHandleKeyColumns` to true to only encode handle key columns.
-	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, true)
+	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config, true)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -50,7 +50,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	value, err := valueMsg.encode(d.config.OnlyOutputUpdatedColumns)
+	value, err := valueMsg.encode()
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -141,6 +141,56 @@ func (d *BatchEncoder) newSingleLargeMessage4ClaimCheck(key, value []byte, e *mo
 	}
 }
 
+func encodeKey(e *model.RowChangedEvent, largeMessageOnlyHandleKeyColumns bool) ([]byte, error) {
+	var partition *int64
+	if e.Table.IsPartition {
+		partition = &e.Table.TableID
+	}
+	key := &internal.MessageKey{
+		Ts:            e.CommitTs,
+		Schema:        e.Table.Schema,
+		Table:         e.Table.Table,
+		RowID:         e.RowID,
+		Partition:     partition,
+		Type:          model.MessageTypeRow,
+		OnlyHandleKey: largeMessageOnlyHandleKeyColumns,
+	}
+	return key.Encode()
+}
+
+func encodeValue(preColumns, columns []*model.Column,
+	deleteOnlyHandleKeyColumns bool,
+	largeMessageOnlyHandleKeyColumns bool,
+	onlyOutputUpdatedColumns bool) ([]byte, error) {
+
+	value := &messageRow{}
+
+	if len(preColumns) != 0 && len(columns) == 0 {
+		onlyHandleKeyColumns := deleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
+		value.Delete = rowChangeColumns2CodecColumns(preColumns, onlyHandleKeyColumns)
+		if onlyHandleKeyColumns && len(value.Delete) == 0 {
+			return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the delete event")
+		}
+	} else if len(preColumns) != 0 && len(columns) != 0 {
+		value.Update = rowChangeColumns2CodecColumns(columns, largeMessageOnlyHandleKeyColumns)
+		value.PreColumns = rowChangeColumns2CodecColumns(preColumns, largeMessageOnlyHandleKeyColumns)
+		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
+			return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
+		}
+		// check if the column is updated, if not do not output it
+		if onlyOutputUpdatedColumns && len(value.PreColumns) > 0 {
+			value.dropNotUpdatedColumns()
+		}
+	} else {
+		value.Update = rowChangeColumns2CodecColumns(columns, largeMessageOnlyHandleKeyColumns)
+		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {
+			return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the insert event")
+		}
+	}
+
+	return value.encode()
+}
+
 // AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
@@ -148,15 +198,16 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, false)
+	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	key, err := keyMsg.Encode()
+	
 	if err != nil {
 		return errors.Trace(err)
 	}
-	value, err := valueMsg.encode(d.config.OnlyOutputUpdatedColumns)
+	value, err := valueMsg.encode()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -179,7 +230,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
 			d.newSingleLargeMessage4ClaimCheck(key, value, e, callback)
 			return nil
-			
+
 		}
 
 		if d.config.LargeMessageHandle.HandleKeyOnly() {
