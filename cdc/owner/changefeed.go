@@ -945,7 +945,7 @@ func (c *changefeed) updateStatus(checkpointTs, minTableBarrierTs model.Ts) {
 	updateInterval := c.state.Info.Config.StatusUpdateInterval
 	if updateInterval != nil &&
 		c.statusLastUpdateTime != nil &&
-		time.Now().Sub(c.statusLastUpdateTime.Load()) < *updateInterval {
+		time.Since(c.statusLastUpdateTime.Load()) < *updateInterval {
 		return
 	}
 
