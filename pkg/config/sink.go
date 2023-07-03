@@ -556,15 +556,24 @@ func (c *LargeMessageHandleConfig) Validate() error {
 
 // HandleKeyOnly returns true if handle large message by encoding handle key only.
 func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
+	if c == nil {
+		return false
+	}
 	return c.LargeMessageHandleOption == largeMessageHandleOptionHandleKeyOnly
 }
 
 // EnableClaimCheck returns true if enable claim check.
 func (c *LargeMessageHandleConfig) EnableClaimCheck() bool {
+	if c == nil {
+		return false
+	}
 	return c.LargeMessageHandleOption == largeMessageHandleOptionClaimCheck
 }
 
 // Disabled returns true if disable large message handle.
 func (c *LargeMessageHandleConfig) Disabled() bool {
+	if c == nil {
+		return false
+	}
 	return c.LargeMessageHandleOption == largeMessageHandleOptionNone
 }

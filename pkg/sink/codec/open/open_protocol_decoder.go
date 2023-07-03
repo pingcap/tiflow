@@ -14,13 +14,19 @@
 package open
 
 import (
+	"context"
 	"encoding/binary"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 )
 
 // BatchMixedDecoder decodes the byte of a batch into the original messages.
@@ -130,6 +136,8 @@ type BatchDecoder struct {
 	valueBytes []byte
 	nextKey    *internal.MessageKey
 	nextKeyLen uint64
+
+	storage storage.ExternalStorage
 }
 
 // HasNext implements the RowEventDecoder interface
@@ -226,9 +234,24 @@ func (b *BatchDecoder) decodeNextKey() error {
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder() codec.RowEventDecoder {
-	return &BatchDecoder{}
+func NewBatchDecoder(ctx context.Context, config *config.ReplicaConfig) (codec.RowEventDecoder, error) {
+	var (
+		storage storage.ExternalStorage
+		err     error
+	)
+	if config.Sink.LargeMessageHandle.EnableClaimCheck() {
+		storageURI := config.Sink.LargeMessageHandle.ClaimCheckStorageURI
+		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+		log.Info("claim-check enabled, set the external storage for the kafka consumer",
+			zap.String("storageURI", storageURI))
+	}
 
+	return &BatchDecoder{
+		storage: storage,
+	}, nil
 }
 
 // AddKeyValue implements the RowEventDecoder interface

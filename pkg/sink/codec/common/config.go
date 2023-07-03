@@ -175,6 +175,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 		}
+		if replicaConfig.Sink.LargeMessageHandle != nil {
+			c.LargeMessageHandle = replicaConfig.Sink.LargeMessageHandle
+		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
@@ -191,8 +194,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
-
-	c.LargeMessageHandle = replicaConfig.Sink.LargeMessageHandle
 	return nil
 }
 
