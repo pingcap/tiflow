@@ -41,6 +41,7 @@ type Message struct {
 	rowsCount int               // rows in one Message
 	Callback  func()            // Callback function will be called when the message is sent to the sink.
 
+	// ClaimCheckFileName is set if the message should be sent to the claim check storage.
 	ClaimCheckFileName string
 }
 

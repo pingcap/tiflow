@@ -37,7 +37,8 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
-	config *common.Config
+	currentMessage *common.Message
+	config         *common.Config
 }
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
@@ -113,6 +114,14 @@ func newClaimCheckFileName(e *model.RowChangedEvent) string {
 	elements := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
 	elements = append(elements, e.GetHandleKeyColumnValues()...)
 	return strings.Join(elements, "-")
+}
+
+func (d *BatchEncoder) newMessage() {
+	versionHead := make([]byte, 8)
+	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
+	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+
+	d.currentMessage = message
 }
 
 func (d *BatchEncoder) newSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
@@ -202,8 +211,8 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	key, err := keyMsg.Encode()
 
+	key, err := keyMsg.Encode()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -225,6 +234,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
+		// single message too large, and claim check enabled, encode it to a new individual message.
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
 			log.Warn("Single message is too large for open-protocol, "+
 				"claim check enabled, send it to the external storage",
@@ -232,7 +242,6 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 				zap.Int("length", length),
 				zap.Any("table", e.Table),
 				zap.Any("key", key))
-			// This message is too large, must be sent individually.
 			d.tryBuildCallback()
 			d.newSingleLargeMessage4ClaimCheck(key, value, e, callback)
 			return nil

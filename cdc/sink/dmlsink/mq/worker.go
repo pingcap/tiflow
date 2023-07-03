@@ -358,6 +358,8 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 		return errors.Trace(err)
 	}
 
+	log.Info("message too large, send it to the external claim check storage")
+
 	return nil
 }
 
