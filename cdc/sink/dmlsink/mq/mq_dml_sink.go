@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
@@ -33,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -86,10 +88,15 @@ func newDMLSink(
 
 	var storage storage.ExternalStorage
 	if replicaConfig.Sink.LargeMessageHandle.EnableClaimCheck() {
-		storage, err = util.GetExternalStorageFromURI(ctx, replicaConfig.Sink.LargeMessageHandle.ClaimCheckStorageURI)
+		storageURI := replicaConfig.Sink.LargeMessageHandle.ClaimCheckStorageURI
+		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
+		log.Info("claim-check enabled, set the external storage for the kafka sink",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("storageURI", storageURI))
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

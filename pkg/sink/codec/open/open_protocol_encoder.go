@@ -37,8 +37,7 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
-	currentMessage *common.Message
-	config         *common.Config
+	config *common.Config
 }
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
@@ -113,15 +112,9 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(m *common.Message) (*common.
 func newClaimCheckFileName(e *model.RowChangedEvent) string {
 	elements := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
 	elements = append(elements, e.GetHandleKeyColumnValues()...)
-	return strings.Join(elements, "-")
-}
-
-func (d *BatchEncoder) newMessage() {
-	versionHead := make([]byte, 8)
-	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
-	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
-
-	d.currentMessage = message
+	fileName := strings.Join(elements, "-")
+	fileName += ".json"
+	return fileName
 }
 
 func (d *BatchEncoder) newSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
@@ -148,6 +141,7 @@ func (d *BatchEncoder) newSingleLargeMessage4ClaimCheck(key, value []byte, e *mo
 	if callback != nil {
 		message.Callback = callback
 	}
+	d.messageBuf = append(d.messageBuf, message)
 }
 
 func encodeKey(e *model.RowChangedEvent, largeMessageOnlyHandleKeyColumns bool) ([]byte, error) {
