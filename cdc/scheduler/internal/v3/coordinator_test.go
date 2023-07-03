@@ -31,6 +31,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -200,8 +201,29 @@ func TestCoordinatorTransportCompat(t *testing.T) {
 	}}, msgs)
 }
 
+func newCoordinatorForTest(
+	captureID model.CaptureID,
+	changefeedID model.ChangeFeedID,
+	ownerRevision int64,
+	cfg *config.SchedulerConfig,
+) *coordinator {
+	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
+
+	return &coordinator{
+		version:   version.ReleaseSemver(),
+		revision:  revision,
+		captureID: captureID,
+		replicationM: replication.NewReplicationManager(
+			cfg.MaxTaskConcurrency, changefeedID),
+		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
+		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
+		changefeedID: changefeedID,
+		compat:       compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
+	}
+}
+
 func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.MockTrans) {
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg)
+	coord := newCoordinatorForTest("a", model.ChangeFeedID{}, 1, cfg)
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 	coord.reconciler = keyspan.NewReconcilerForTests(
