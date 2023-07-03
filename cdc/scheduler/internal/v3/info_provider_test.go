@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/keyspan"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
@@ -35,7 +34,7 @@ func TestInfoProvider(t *testing.T) {
 		MaxTaskConcurrency: 1,
 		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
 	}
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, cfg, redo.NewDisabledMetaManager())
+	coord := newCoordinatorForTest("a", model.ChangeFeedID{}, 1, cfg)
 	cfg.ChangefeedSettings = config.GetDefaultReplicaConfig().Scheduler
 	coord.reconciler = keyspan.NewReconcilerForTests(
 		keyspan.NewMockRegionCache(), cfg.ChangefeedSettings)
@@ -66,11 +65,11 @@ func TestInfoProvider(t *testing.T) {
 func TestInfoProviderIsInitialized(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	coord := newCoordinatorForTest("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 		ChangefeedSettings: config.GetDefaultReplicaConfig().Scheduler,
-	}, redo.NewDisabledMetaManager())
+	})
 	var ip internal.InfoProvider = coord
 
 	// Has not initialized yet.

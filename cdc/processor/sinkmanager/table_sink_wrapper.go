@@ -67,8 +67,6 @@ type tableSinkWrapper struct {
 	// receivedSorterCommitTs is the commit ts received from the sorter.
 	// We use this to statistics the latency of the table sorter.
 	receivedSorterCommitTs atomic.Uint64
-	// receivedEventCount is the number of events received from the sorter.
-	receivedEventCount atomic.Int64
 
 	// replicateTs is the ts that the table sink has started to replicate.
 	replicateTs    model.Ts
@@ -164,13 +162,11 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) error {
 	t.tableSinkMu.RLock()
 	defer t.tableSinkMu.RUnlock()
-	// If it's nil it means it's closed.
-	if t.tableSink != nil {
-		t.tableSink.AppendRowChangedEvents(events...)
-	} else {
+	if t.tableSink == nil {
 		// If it's nil it means it's closed.
 		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
+	t.tableSink.AppendRowChangedEvents(events...)
 	return nil
 }
 
@@ -198,15 +194,11 @@ func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	t.tableSinkMu.RLock()
 	defer t.tableSinkMu.RUnlock()
-	if t.tableSink != nil {
-		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
-			return errors.Trace(err)
-		}
-	} else {
+	if t.tableSink == nil {
 		// If it's nil it means it's closed.
 		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
-	return nil
+	return t.tableSink.UpdateResolvedTs(ts)
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
@@ -227,10 +219,6 @@ func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
 
 func (t *tableSinkWrapper) getReceivedSorterCommitTs() model.Ts {
 	return t.receivedSorterCommitTs.Load()
-}
-
-func (t *tableSinkWrapper) getReceivedEventCount() int64 {
-	return t.receivedEventCount.Load()
 }
 
 func (t *tableSinkWrapper) getState() tablepb.TableState {
@@ -285,7 +273,7 @@ func (t *tableSinkWrapper) markAsClosed() {
 
 func (t *tableSinkWrapper) asyncClose() bool {
 	t.markAsClosing()
-	if t.asyncClearTableSink() {
+	if t.asyncCloseAndClearTableSink() {
 		t.markAsClosed()
 		return true
 	}
@@ -294,7 +282,7 @@ func (t *tableSinkWrapper) asyncClose() bool {
 
 func (t *tableSinkWrapper) close() {
 	t.markAsClosing()
-	t.clearTableSink()
+	t.closeAndClearTableSink()
 	t.markAsClosed()
 }
 
@@ -309,33 +297,43 @@ func (t *tableSinkWrapper) initTableSink() bool {
 	return true
 }
 
-func (t *tableSinkWrapper) asyncClearTableSink() bool {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
-	if t.tableSink != nil {
-		if !t.tableSink.AsyncClose() {
-			return false
-		}
-		checkpointTs := t.tableSink.GetCheckpointTs()
-		if t.tableSinkCheckpointTs.Less(checkpointTs) {
-			t.tableSinkCheckpointTs = checkpointTs
-		}
-		t.tableSink = nil
+func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
+	t.tableSinkMu.RLock()
+	if t.tableSink == nil {
+		t.tableSinkMu.RUnlock()
+		return true
 	}
+	if !t.tableSink.AsyncClose() {
+		t.tableSinkMu.RUnlock()
+		return false
+	}
+	t.tableSinkMu.RUnlock()
+	t.doTableSinkClear()
 	return true
 }
 
-func (t *tableSinkWrapper) clearTableSink() {
+func (t *tableSinkWrapper) closeAndClearTableSink() {
+	t.tableSinkMu.RLock()
+	if t.tableSink == nil {
+		t.tableSinkMu.RUnlock()
+		return
+	}
+	t.tableSink.Close()
+	t.tableSinkMu.RUnlock()
+	t.doTableSinkClear()
+}
+
+func (t *tableSinkWrapper) doTableSinkClear() {
 	t.tableSinkMu.Lock()
 	defer t.tableSinkMu.Unlock()
-	if t.tableSink != nil {
-		t.tableSink.Close()
-		checkpointTs := t.tableSink.GetCheckpointTs()
-		if t.tableSinkCheckpointTs.Less(checkpointTs) {
-			t.tableSinkCheckpointTs = checkpointTs
-		}
-		t.tableSink = nil
+	if t.tableSink == nil {
+		return
 	}
+	checkpointTs := t.tableSink.GetCheckpointTs()
+	if t.tableSinkCheckpointTs.Less(checkpointTs) {
+		t.tableSinkCheckpointTs = checkpointTs
+	}
+	t.tableSink = nil
 }
 
 // When the attached sink fail, there can be some events that have already been
@@ -442,7 +440,7 @@ func convertRowChangedEvents(
 		// This indicates that it is an update event,
 		// and after enable old value internally by default(but disable in the configuration).
 		// We need to handle the update event to be compatible with the old format.
-		if !enableOldValue && colLen != 0 && preColLen != 0 && colLen == preColLen {
+		if e.Row.IsUpdate() && !enableOldValue {
 			if shouldSplitUpdateEvent(e) {
 				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {
@@ -507,13 +505,6 @@ func splitUpdateEvent(
 	deleteEvent.RawKV = &deleteEventRowKV
 
 	deleteEvent.Row.Columns = nil
-	for i := range deleteEvent.Row.PreColumns {
-		// NOTICE: Only the handle key pre column is retained in the delete event.
-		if deleteEvent.Row.PreColumns[i] != nil &&
-			!deleteEvent.Row.PreColumns[i].Flag.IsHandleKey() {
-			deleteEvent.Row.PreColumns[i] = nil
-		}
-	}
 
 	insertEvent := *updateEvent
 	insertEventRow := *updateEvent.Row

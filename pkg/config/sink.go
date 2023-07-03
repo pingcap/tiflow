@@ -94,10 +94,16 @@ func (l AtomicityLevel) validate(scheme string) error {
 }
 
 // ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var ForceEnableOldValueProtocols = []string{
-	ProtocolCanal.String(),
-	ProtocolCanalJSON.String(),
-	ProtocolMaxwell.String(),
+var ForceEnableOldValueProtocols = map[string]struct{}{
+	ProtocolCanal.String():     {},
+	ProtocolCanalJSON.String(): {},
+	ProtocolMaxwell.String():   {},
+}
+
+// ForceDisableOldValueProtocols specifies protocols need to be forced to disable old value.
+var ForceDisableOldValueProtocols = map[string]struct{}{
+	ProtocolAvro.String(): {},
+	ProtocolCsv.String():  {},
 }
 
 // SinkConfig represents sink config for a changefeed
@@ -313,21 +319,11 @@ type CloudStorageConfig struct {
 	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
 }
 
-func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL, enableOldValue bool) error {
+func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
 	}
 
-	if !enableOldValue {
-		for _, protocolStr := range ForceEnableOldValueProtocols {
-			if protocolStr == s.Protocol {
-				log.Error(fmt.Sprintf("Old value is not enabled when using `%s` protocol. "+
-					"Please update changefeed config", s.Protocol))
-				return cerror.WrapError(cerror.ErrKafkaInvalidConfig,
-					errors.New(fmt.Sprintf("%s protocol requires old value to be enabled", s.Protocol)))
-			}
-		}
-	}
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))

@@ -94,7 +94,6 @@ type processor struct {
 	metricProcessorErrorCounter  prometheus.Counter
 	metricProcessorTickDuration  prometheus.Observer
 	metricsProcessorMemoryGauge  prometheus.Gauge
-	metricRemainKVEventGauge     prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -416,8 +415,6 @@ func newProcessor(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsProcessorMemoryGauge: processorMemoryGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricRemainKVEventGauge: remainKVEventsGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
@@ -664,7 +661,6 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
-		p.changefeed.Info.Config.EnableOldValue,
 		p.filter, tz, p.changefeedID, p.changefeed.Info.Config.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.spawn(stdCtx)
@@ -899,9 +895,6 @@ func (p *processor) refreshMetrics() {
 		return
 	}
 	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.r.GetAllCurrentTableSpansCount()))
-	sortEngineReceivedEvents := p.sourceManager.r.ReceivedEvents()
-	tableSinksReceivedEvents := p.sinkManager.r.ReceivedEvents()
-	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
 // Close closes the processor. It must be called explicitly to stop all sub-components.
@@ -964,28 +957,6 @@ func (p *processor) cleanupMetrics() {
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorTickDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
-	ok := remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	if !ok {
-		log.Warn("delete remain kv events gauge metrics failed",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-	}
-
-	ok = puller.PullerEventCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID, "kv")
-	if !ok {
-		log.Warn("delete puller event counter metrics failed",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("type", "kv"))
-	}
-	ok = puller.PullerEventCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID, "resolved")
-	if !ok {
-		log.Warn("delete puller event counter metrics failed",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("type", "resolved"))
-	}
 }
 
 // WriteDebugInfo write the debug info to Writer

@@ -48,10 +48,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerFromCtx creates a new scheduler from context.
+// newScheduler creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
-func newSchedulerFromCtx(
-	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
+func newScheduler(
+	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64,
+	cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -61,12 +62,6 @@ func newSchedulerFromCtx(
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRev, epoch, up, cfg, redoMetaManager)
 	return ret, errors.Trace(err)
-}
-
-func newScheduler(
-	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
-) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, up, epoch, cfg, redoMetaManager)
 }
 
 type changefeed struct {
