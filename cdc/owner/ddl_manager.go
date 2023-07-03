@@ -87,12 +87,6 @@ var redoBarrierDDLs = map[timodel.ActionType]struct{}{
 	timodel.ActionRecoverTable:           {},
 }
 
-type ddlBarrier struct {
-	schedulepb.BarrierWithMinTs
-	// redoBarrierTs is the minimum ts of ddl events that create a new physical table.
-	redoBarrierTs model.Ts
-}
-
 // ddlManager holds the pending DDL events of all tables and responsible for
 // executing them to downstream.
 // It also provides the ability to calculate the barrier of a changefeed.
@@ -183,7 +177,7 @@ func (m *ddlManager) tick(
 	ctx context.Context,
 	checkpointTs model.Ts,
 	tableCheckpoint map[model.TableName]model.Ts,
-) ([]model.TableID, *ddlBarrier, error) {
+) ([]model.TableID, *schedulepb.BarrierWithMinTs, error) {
 	m.justSentDDL = nil
 	m.updateCheckpointTs(checkpointTs, tableCheckpoint)
 
@@ -430,11 +424,9 @@ func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 }
 
 // barrier returns ddlResolvedTs and tableBarrier
-func (m *ddlManager) barrier() *ddlBarrier {
-	barrier := &ddlBarrier{
-		BarrierWithMinTs: schedulepb.NewBarrierWithMinTs(m.ddlResolvedTs),
-		redoBarrierTs:    m.ddlResolvedTs,
-	}
+func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
+	barrier := schedulepb.NewBarrierWithMinTs(m.ddlResolvedTs)
+
 	tableBarrierMap := make(map[model.TableID]model.Ts)
 	ddls := m.getAllTableNextDDL()
 	if m.justSentDDL != nil {
@@ -450,8 +442,8 @@ func (m *ddlManager) barrier() *ddlBarrier {
 			// executed, so the table's resolvedTs will not be calculated in redo.
 			// To solve this problem, resovedTs of redo manager should not be greater
 			// than the min commitTs of ddls that create a new physical table.
-			if ddl.CommitTs < barrier.redoBarrierTs {
-				barrier.redoBarrierTs = ddl.CommitTs
+			if ddl.CommitTs < barrier.RedoBarrierTs {
+				barrier.RedoBarrierTs = ddl.CommitTs
 			}
 		}
 		if isGlobalDDL(ddl) {
