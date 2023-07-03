@@ -30,11 +30,10 @@ import (
 
 // BatchEncoder encodes the events into the byte of a batch into.
 type BatchEncoder struct {
-	messageBuf   []*common.Message
-	callbackBuff []func()
-	curBatchSize int
+	messageBuf []*common.Message
 
-	config *common.Config
+	curBatch *batch
+	config   *common.Config
 }
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
@@ -107,41 +106,13 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		}
 	}
 
-	if len(d.messageBuf) == 0 ||
-		d.curBatchSize >= d.config.MaxBatchSize ||
-		d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.config.MaxMessageBytes {
-		// Before we create a new message, we should handle the previous callbacks.
-		d.tryBuildCallback()
-		versionHead := make([]byte, 8)
-		binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
-		msg := common.NewMsg(config.ProtocolOpen, versionHead, nil,
-			0, model.MessageTypeRow, nil, nil)
-		d.messageBuf = append(d.messageBuf, msg)
-		d.curBatchSize = 0
+	if d.curBatch.full() ||
+		d.curBatch.length()+len(key)+len(value)+16 > d.config.MaxMessageBytes {
+		d.buildBatch()
+		d.resetBatch()
 	}
 
-	var (
-		keyLenByte   [8]byte
-		valueLenByte [8]byte
-	)
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
-	message := d.messageBuf[len(d.messageBuf)-1]
-	message.Key = append(message.Key, keyLenByte[:]...)
-	message.Key = append(message.Key, key...)
-	message.Value = append(message.Value, valueLenByte[:]...)
-	message.Value = append(message.Value, value...)
-	message.Ts = e.CommitTs
-	message.Schema = &e.Table.Schema
-	message.Table = &e.Table.Table
-	message.IncRowsCount()
-
-	if callback != nil {
-		d.callbackBuff = append(d.callbackBuff, callback)
-	}
-
-	d.curBatchSize++
+	d.curBatch.appendKeyValue(key, value, callback)
 	return nil
 }
 
@@ -206,24 +177,11 @@ func (d *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error)
 
 // Build implements the RowEventEncoder interface
 func (d *BatchEncoder) Build() (messages []*common.Message) {
-	d.tryBuildCallback()
+	d.buildBatch()
+	d.resetBatch()
 	ret := d.messageBuf
 	d.messageBuf = make([]*common.Message, 0)
 	return ret
-}
-
-// tryBuildCallback will collect all the callbacks into one message's callback.
-func (d *BatchEncoder) tryBuildCallback() {
-	if len(d.messageBuf) != 0 && len(d.callbackBuff) != 0 {
-		lastMsg := d.messageBuf[len(d.messageBuf)-1]
-		callbacks := d.callbackBuff
-		lastMsg.Callback = func() {
-			for _, cb := range callbacks {
-				cb()
-			}
-		}
-		d.callbackBuff = make([]func(), 0)
-	}
 }
 
 type batchEncoderBuilder struct {
@@ -243,6 +201,74 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 // NewBatchEncoder creates a new BatchEncoder.
 func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
+		config:   config,
+		curBatch: newBatch(config),
+	}
+}
+
+type batch struct {
+	message      *common.Message
+	callbackBuff []func()
+
+	config *common.Config
+}
+
+func newBatch(config *common.Config) *batch {
+	batch := &batch{
 		config: config,
 	}
+	batch.reset()
+	return batch
+}
+
+func (b *batch) appendKeyValue(key, value []byte, callback func()) {
+	var (
+		keyLenByte   [8]byte
+		valueLenByte [8]byte
+	)
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
+
+	b.message.Key = append(b.message.Key, keyLenByte[:]...)
+	b.message.Key = append(b.message.Key, key...)
+
+	b.message.Value = append(b.message.Value, valueLenByte[:]...)
+	b.message.Value = append(b.message.Value, value...)
+
+	b.callbackBuff = append(b.callbackBuff, callback)
+}
+
+func (b *batch) build() *common.Message {
+	result := b.message
+	callback := func() {
+		for _, cb := range b.callbackBuff {
+			cb()
+		}
+	}
+	result.Callback = callback
+	return result
+}
+
+func (b *batch) reset() {
+	versionHead := make([]byte, 8)
+	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
+	b.message = common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+	b.callbackBuff = make([]func(), 0, b.config.MaxBatchSize)
+}
+
+func (b *batch) full() bool {
+	return len(b.callbackBuff) > b.config.MaxBatchSize
+}
+
+func (b *batch) length() int {
+	return b.message.Length()
+}
+
+func (d *BatchEncoder) buildBatch() {
+	message := d.curBatch.build()
+	d.messageBuf = append(d.messageBuf, message)
+}
+
+func (d *BatchEncoder) resetBatch() {
+	d.curBatch.reset()
 }
