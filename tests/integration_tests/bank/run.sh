@@ -25,7 +25,7 @@ function prepare() {
 }
 
 trap stop_tidb_cluster EXIT
-# kafka is not supported yet.
+# No need to support kafka and storage sink.
 if [ "$SINK_TYPE" == "mysql" ]; then
 	prepare $*
 

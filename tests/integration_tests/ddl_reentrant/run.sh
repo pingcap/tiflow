@@ -118,7 +118,7 @@ function ddl_test() {
 }
 
 function run() {
-	# don't test kafka in this case
+	# No need to test kafka and storage sink.
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi

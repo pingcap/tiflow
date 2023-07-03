@@ -943,7 +943,8 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("resolvedTs", resolvedTs),
-			zap.Any("checkpointTs", checkpointTs))
+			zap.Any("checkpointTs", checkpointTs),
+			zap.Uint64("barrierTs", tableSink.barrierTs.Load()))
 	}
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),

@@ -506,7 +506,9 @@ func (r *Manager) RunningTasks() *spanz.BtreeMap[*ScheduleTask] {
 
 // AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
 func (r *Manager) AdvanceCheckpoint(
-	currentTables *TableRanges, currentPDTime time.Time,
+	currentTables *TableRanges,
+	currentPDTime time.Time,
+	barrier schedulepb.BarrierWithMinTs,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestRange := tablepb.Span{}
@@ -573,6 +575,31 @@ func (r *Manager) AdvanceCheckpoint(
 	}
 	if slowestRange.TableID != 0 {
 		r.slowestTableID = slowestRange
+	}
+
+	// If currentTables is empty, we should advance newResolvedTs to global barrier ts and
+	// advance newCheckpointTs to min table barrier ts.
+	if newResolvedTs == math.MaxUint64 || newCheckpointTs == math.MaxUint64 {
+		if newCheckpointTs != newResolvedTs || currentTables.Len() != 0 {
+			log.Panic("schedulerv3: newCheckpointTs and newResolvedTs should be both maxUint64 "+
+				"if currentTables is empty",
+				zap.Uint64("newCheckpointTs", newCheckpointTs),
+				zap.Uint64("newResolvedTs", newResolvedTs),
+				zap.Any("currentTables", currentTables))
+		}
+		newResolvedTs = barrier.GlobalBarrierTs
+		newCheckpointTs = barrier.MinTableBarrierTs
+	}
+
+	if newCheckpointTs > barrier.MinTableBarrierTs {
+		newCheckpointTs = barrier.MinTableBarrierTs
+		// TODO: add panic after we fix the bug that newCheckpointTs > minTableBarrierTs.
+		// log.Panic("schedulerv3: newCheckpointTs should not be larger than minTableBarrierTs",
+		// 	zap.Uint64("newCheckpointTs", newCheckpointTs),
+		// 	zap.Uint64("newResolvedTs", newResolvedTs),
+		// 	zap.Any("currentTables", currentTables.currentTables),
+		// 	zap.Any("barrier", barrier.Barrier),
+		// 	zap.Any("minTableBarrierTs", barrier.MinTableBarrierTs))
 	}
 
 	// If changefeed's checkpoint lag is larger than 30s,

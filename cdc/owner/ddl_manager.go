@@ -88,11 +88,7 @@ var redoBarrierDDLs = map[timodel.ActionType]struct{}{
 }
 
 type ddlBarrier struct {
-	*schedulepb.Barrier
-	// minDDLBarrierTs is the minimum commitTs of all DDL events and is only
-	// used to check whether there is a pending DDL job at the checkpointTs when
-	// initializing the changefeed.
-	minDDLBarrierTs model.Ts
+	schedulepb.BarrierWithMinTs
 	// redoBarrierTs is the minimum ts of ddl events that create a new physical table.
 	redoBarrierTs model.Ts
 }
@@ -292,15 +288,13 @@ func (m *ddlManager) tick(
 		}
 
 		if m.shouldExecDDL(nextDDL) {
-			log.Info("execute a ddl event",
-				zap.String("query", nextDDL.Query),
-				zap.Uint64("commitTs", nextDDL.CommitTs),
-				zap.Uint64("checkpointTs", m.checkpointTs))
-
 			if m.executingDDL == nil {
+				log.Info("execute a ddl event",
+					zap.String("query", nextDDL.Query),
+					zap.Uint64("commitTs", nextDDL.CommitTs),
+					zap.Uint64("checkpointTs", m.checkpointTs))
 				m.executingDDL = nextDDL
 			}
-
 			err := m.executeDDL(ctx)
 			if err != nil {
 				return nil, nil, err
@@ -438,11 +432,8 @@ func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 // barrier returns ddlResolvedTs and tableBarrier
 func (m *ddlManager) barrier() *ddlBarrier {
 	barrier := &ddlBarrier{
-		Barrier: &schedulepb.Barrier{
-			GlobalBarrierTs: m.ddlResolvedTs,
-		},
-		minDDLBarrierTs: m.ddlResolvedTs,
-		redoBarrierTs:   m.ddlResolvedTs,
+		BarrierWithMinTs: schedulepb.NewBarrierWithMinTs(m.ddlResolvedTs),
+		redoBarrierTs:    m.ddlResolvedTs,
 	}
 	tableBarrierMap := make(map[model.TableID]model.Ts)
 	ddls := m.getAllTableNextDDL()
@@ -451,8 +442,8 @@ func (m *ddlManager) barrier() *ddlBarrier {
 	}
 
 	for _, ddl := range ddls {
-		if ddl.CommitTs < barrier.minDDLBarrierTs {
-			barrier.minDDLBarrierTs = ddl.CommitTs
+		if ddl.CommitTs < barrier.MinTableBarrierTs {
+			barrier.MinTableBarrierTs = ddl.CommitTs
 		}
 		if m.redoMetaManager.Enabled() && isRedoBarrierDDL(ddl) {
 			// The pipeline for a new table does not exist until the ddl is successfully
