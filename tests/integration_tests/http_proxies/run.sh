@@ -6,6 +6,8 @@ CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
+SINK_TYPE=$1
+
 TEST_HOST_LIST=(UP_TIDB_HOST UP_PD_HOST_{1..3} UP_TIKV_HOST_{1..3})
 # FIXME: hostname in macOS doesn't support -I option.
 lan_addrs=($(hostname -I))
@@ -83,9 +85,10 @@ function check() {
 
 trap "stop_tidb_cluster && stop_proxy" EXIT
 
-prepare
-sleep 5
-check
-
-check_logs $WORK_DIR
+if [ "$SINK_TYPE" == "mysql" ]; then
+	prepare
+	sleep 5
+	check
+	check_logs $WORK_DIR
+fi
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
