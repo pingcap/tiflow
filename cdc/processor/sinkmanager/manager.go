@@ -16,10 +16,10 @@ package sinkmanager
 import (
 	"context"
 	"math"
+	"math/rand"
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -50,6 +50,8 @@ const (
 	// engine.CleanByTable can be expensive. So it's necessary to reduce useless calls.
 	cleanTableInterval  = 5 * time.Second
 	cleanTableMinEvents = 128
+	maxRetryDuration    = 30 * time.Minute
+	errGCInterval       = 10 * time.Minute
 )
 
 // TableStats of a table sink.
@@ -123,8 +125,8 @@ type SinkManager struct {
 
 	// To control the error retry.
 	lastInternalError  error
+	firstRetryTime     time.Time
 	lastErrorRetryTime time.Time
-	errorBackoff       *backoff.ExponentialBackOff
 }
 
 // New creates a new sink manager.
@@ -170,14 +172,6 @@ func New(
 	}
 
 	m.ready = make(chan struct{})
-
-	// Use exponential backoff to control the error retry.
-	// The first retry will be executed after 5s, and the max retry interval is 5min.
-	// The max retry time is 30min.
-	m.errorBackoff = backoff.NewExponentialBackOff()
-	m.errorBackoff.InitialInterval = 5 * time.Second
-	m.errorBackoff.MaxInterval = 5 * time.Minute
-	m.errorBackoff.MaxElapsedTime = 30 * time.Minute
 
 	return m
 }
@@ -303,20 +297,23 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 // getRetryBackoff returns the backoff duration for retrying the last error.
 // If the retry time is exhausted, it returns the an ChangefeedUnRetryableError.
 func (m *SinkManager) getRetryBackoff(err error) (time.Duration, error) {
-	// reset backoff if last error is too long ago
+	// reset firstRetryTime when the last error is too long ago
 	// it means the last error is retry success, and the sink is running well for some time
-	if m.lastInternalError != nil &&
-		time.Since(m.lastErrorRetryTime) >= m.errorBackoff.MaxInterval*2 {
-		m.errorBackoff.Reset()
+	if m.lastInternalError == nil ||
+		time.Since(m.lastErrorRetryTime) >= errGCInterval {
+		m.firstRetryTime = time.Now()
+	}
+
+	// return an unretryable error if retry time is exhausted
+	if time.Since(m.firstRetryTime) >= maxRetryDuration {
+		return 0, cerror.WrapChangefeedUnretryableErr(err)
 	}
 
 	m.lastInternalError = err
 	m.lastErrorRetryTime = time.Now()
 
-	interval := m.errorBackoff.NextBackOff()
-	if interval == backoff.Stop {
-		return 0, cerror.WrapChangefeedUnretryableErr(err)
-	}
+	// interval is in range [5s, 30s)
+	interval := time.Second * time.Duration(rand.Int63n(25)+5)
 	return interval, nil
 }
 
