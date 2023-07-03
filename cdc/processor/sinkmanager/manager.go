@@ -64,6 +64,13 @@ type TableStats struct {
 	ReceivedMaxResolvedTs model.Ts
 }
 
+type sinkRetry struct {
+	// To control the error retry.
+	lastInternalError  error
+	firstRetryTime     time.Time
+	lastErrorRetryTime time.Time
+}
+
 // SinkManager is the implementation of SinkManager.
 type SinkManager struct {
 	changefeedID model.ChangeFeedID
@@ -102,7 +109,7 @@ type SinkManager struct {
 	sinkWorkerAvailable chan struct{}
 	// sinkMemQuota is used to control the total memory usage of the table sink.
 	sinkMemQuota *memquota.MemQuota
-
+	sinkRetry    sinkRetry
 	// redoWorkers used to pull data from source manager.
 	redoWorkers []*redoWorker
 	// redoTaskChan is used to send tasks to redoWorkers.
@@ -125,11 +132,6 @@ type SinkManager struct {
 
 	// Metric for table sink.
 	metricsTableSinkTotalRows prometheus.Counter
-
-	// To control the error retry.
-	lastInternalError  error
-	firstRetryTime     time.Time
-	lastErrorRetryTime time.Time
 }
 
 // New creates a new sink manager.
@@ -152,6 +154,11 @@ func New(
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
+		sinkRetry: sinkRetry{
+			lastInternalError:  nil,
+			firstRetryTime:     time.Now(),
+			lastErrorRetryTime: time.Now(),
+		},
 
 		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -302,26 +309,23 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 func (m *SinkManager) getRetryBackoff(err error) (time.Duration, error) {
 	// reset firstRetryTime when the last error is too long ago
 	// it means the last error is retry success, and the sink is running well for some time
-	if m.lastInternalError == nil ||
-		time.Since(m.lastErrorRetryTime) >= errGCInterval {
-		m.firstRetryTime = time.Now()
+	if m.sinkRetry.lastInternalError == nil ||
+		time.Since(m.sinkRetry.lastErrorRetryTime) >= errGCInterval {
+		m.sinkRetry.firstRetryTime = time.Now()
 	}
 
 	// return an unretryable error if retry time is exhausted
-	if time.Since(m.firstRetryTime) >= maxRetryDuration {
+	if time.Since(m.sinkRetry.firstRetryTime) >= maxRetryDuration {
 		return 0, cerror.WrapChangefeedUnretryableErr(err)
 	}
 
-	m.lastInternalError = err
-	m.lastErrorRetryTime = time.Now()
+	m.sinkRetry.lastInternalError = err
+	m.sinkRetry.lastErrorRetryTime = time.Now()
 
 	// interval is in range [5s, 30s)
 	interval := time.Second * time.Duration(rand.Int63n(25)+5)
 	return interval, nil
 }
-
-// 1. add a backoff to avoid retrying too fast and infinitely
-// 2. add a background goroutine to reset backoff when last error time is too long ago (e.g. 30 min)
 
 func (m *SinkManager) initSinkFactory(errCh chan error) error {
 	m.sinkFactoryMu.Lock()
