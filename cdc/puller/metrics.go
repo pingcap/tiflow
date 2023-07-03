@@ -17,67 +17,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var (
-	txnCollectCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "txn_collect_event_count",
-			Help:      "The number of events received from txn collector",
-		}, []string{"namespace", "changefeed", "type"})
-	missedRegionCollectCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "region_resolved_missed_count",
-			Help:      "The number of regions not cached when forward resolved ts",
-		}, []string{"namespace", "changefeed", "type"})
-	pullerResolvedTsGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "resolved_ts",
-			Help:      "puller forward resolved ts",
-		}, []string{"namespace", "changefeed"})
-	outputChanSizeHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "output_chan_size",
-			Help:      "Puller entry buffer size",
-			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
-		}, []string{"namespace", "changefeed"})
-	memBufferSizeGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "mem_buffer_size",
-			Help:      "Puller in memory buffer size",
-		}, []string{"namespace", "changefeed"})
-	eventChanSizeHistogram = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "event_chan_size",
-			Help:      "Puller event channel size",
-			Buckets:   prometheus.ExponentialBuckets(1, 2, 8),
-		}, []string{"namespace", "changefeed"})
-	discardedDDLCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "puller",
-			Name:      "discarded_ddl_count",
-			Help:      "The total count of ddl job that are discarded in ddl puller.",
-		}, []string{"namespace", "changefeed"})
-)
+// PullerEventCounter is the counter of puller's received events
+// There are two types of events: kv (row changed event), resolved (resolved ts event).
+var PullerEventCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "ticdc",
+		Subsystem: "puller",
+		Name:      "txn_collect_event_count", // keep the old name for compatibility
+		Help:      "The number of events received by a puller",
+	}, []string{"namespace", "changefeed", "type"})
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(txnCollectCounter)
-	registry.MustRegister(missedRegionCollectCounter)
-	registry.MustRegister(pullerResolvedTsGauge)
-	registry.MustRegister(memBufferSizeGauge)
-	registry.MustRegister(outputChanSizeHistogram)
-	registry.MustRegister(eventChanSizeHistogram)
-	registry.MustRegister(discardedDDLCounter)
+	registry.MustRegister(PullerEventCounter)
 }
