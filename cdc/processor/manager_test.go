@@ -55,7 +55,7 @@ func NewManager4Test(
 		changefeedEpoch uint64,
 		cfg *config.SchedulerConfig,
 	) *processor {
-		return newProcessor4Test(t, state, captureInfo, m.liveness, cfg)
+		return newProcessor4Test(t, state, captureInfo, m.liveness, cfg, false)
 	}
 	return m
 }

@@ -47,25 +47,19 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerFromCtx creates a new scheduler from context.
+// newScheduler creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
-func newSchedulerFromCtx(
+func newScheduler(
 	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
-) (ret scheduler.Scheduler, err error) {
+) (scheduler.Scheduler, error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
 	messageRouter := ctx.GlobalVars().MessageRouter
 	ownerRev := ctx.GlobalVars().OwnerRevision
 	captureID := ctx.GlobalVars().CaptureInfo.ID
-	ret, err = scheduler.NewScheduler(
+	ret, err := scheduler.NewScheduler(
 		ctx, captureID, changeFeedID, messageServer, messageRouter, ownerRev, epoch, up, cfg, redoMetaManager)
 	return ret, errors.Trace(err)
-}
-
-func newScheduler(
-	ctx cdcContext.Context, up *upstream.Upstream, epoch uint64, cfg *config.SchedulerConfig, redoMetaManager redo.MetaManager,
-) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, up, epoch, cfg, redoMetaManager)
 }
 
 type changefeed struct {
@@ -379,10 +373,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	}
 
-	pdTime, err := c.upstream.PDClock.CurrentTime()
-	if err != nil {
-		log.Warn("There is error in pd clock, use local time as pd time", zap.Error(err))
-	}
+	pdTime := c.upstream.PDClock.CurrentTime()
 	currentTs := oracle.GetPhysical(pdTime)
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,

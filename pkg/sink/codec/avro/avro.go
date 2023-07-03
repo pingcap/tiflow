@@ -364,23 +364,20 @@ func getTiDBTypeFromColumn(col *model.Column) string {
 	return tt
 }
 
-func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
-	var (
-		result byte
-		flag   model.ColumnFlagType
-	)
-	switch tp {
-	case "INT":
-		// maybe mysql.TypeTiny / mysql.TypeShort / mysql.TypeInt24 / mysql.TypeLong
-		// we don't know the exact type, so we use mysql.TypeLong
-		result = mysql.TypeLong
-	case "INT UNSIGNED":
+func flagFromTiDBType(tp string) model.ColumnFlagType {
+	var flag model.ColumnFlagType
+	if strings.Contains(tp, "UNSIGNED") {
 		flag.SetIsUnsigned()
+	}
+	return flag
+}
+
+func mysqlTypeFromTiDBType(tidbType string) byte {
+	var result byte
+	switch tidbType {
+	case "INT", "INT UNSIGNED":
 		result = mysql.TypeLong
-	case "BIGINT":
-		result = mysql.TypeLonglong
-	case "BIGINT UNSIGNED":
-		flag.SetIsUnsigned()
+	case "BIGINT", "BIGINT UNSIGNED":
 		result = mysql.TypeLonglong
 	case "FLOAT":
 		result = mysql.TypeFloat
@@ -393,9 +390,6 @@ func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
 	case "TEXT":
 		result = mysql.TypeVarchar
 	case "BLOB":
-		// maybe mysql.TypeTinyBlob / mysql.TypeMediumBlob / mysql.TypeBlob / mysql.TypeLongBlob
-		// we don't know the exact type, so we use mysql.TypeLongBlob
-		flag.SetIsBinary()
 		result = mysql.TypeLongBlob
 	case "ENUM":
 		result = mysql.TypeEnum
@@ -414,9 +408,9 @@ func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
 	case "YEAR":
 		result = mysql.TypeYear
 	default:
-		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tp))
+		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tidbType))
 	}
-	return result, flag
+	return result
 }
 
 const (

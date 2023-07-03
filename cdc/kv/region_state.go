@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/tikv/client-go/v2/tikv"
 )
@@ -29,65 +30,66 @@ const (
 )
 
 type singleRegionInfo struct {
-	verID      tikv.RegionVerID
-	span       tablepb.Span
-	resolvedTs uint64
-	rpcCtx     *tikv.RPCContext
+	verID  tikv.RegionVerID
+	span   tablepb.Span
+	rpcCtx *tikv.RPCContext
+
+	lockedRange *regionlock.LockedRange
+	createTime  time.Time
 }
 
 func newSingleRegionInfo(
 	verID tikv.RegionVerID,
 	span tablepb.Span,
-	ts uint64,
 	rpcCtx *tikv.RPCContext,
 ) singleRegionInfo {
 	return singleRegionInfo{
 		verID:      verID,
 		span:       span,
-		resolvedTs: ts,
 		rpcCtx:     rpcCtx,
+		createTime: time.Now(),
 	}
 }
 
-type regionFeedState struct {
-	sri       singleRegionInfo
-	requestID uint64
-	stopped   int32
+func (s singleRegionInfo) resolvedTs() uint64 {
+	return s.lockedRange.CheckpointTs.Load()
+}
 
-	initialized    atomic.Bool
-	matcher        *matcher
-	startFeedTime  time.Time
-	lastResolvedTs uint64
+type regionFeedState struct {
+	sri           singleRegionInfo
+	requestID     uint64
+	matcher       *matcher
+	startFeedTime time.Time
+
+	stopped atomic.Bool
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
 		sri:       sri,
 		requestID: requestID,
-		stopped:   0,
 	}
 }
 
 func (s *regionFeedState) start() {
 	s.startFeedTime = time.Now()
-	s.lastResolvedTs = s.sri.resolvedTs
 	s.matcher = newMatcher()
 }
 
 func (s *regionFeedState) markStopped() {
-	atomic.StoreInt32(&s.stopped, 1)
+	s.stopped.Store(true)
 }
 
 func (s *regionFeedState) isStopped() bool {
-	return atomic.LoadInt32(&s.stopped) > 0
+	return s.stopped.Load()
 }
 
 func (s *regionFeedState) isInitialized() bool {
-	return s.initialized.Load()
+	return s.sri.lockedRange.Initialzied.Load()
 }
 
 func (s *regionFeedState) setInitialized() {
-	s.initialized.Store(true)
+	s.sri.lockedRange.Initialzied.Store(true)
 }
 
 func (s *regionFeedState) getRegionID() uint64 {
@@ -95,23 +97,18 @@ func (s *regionFeedState) getRegionID() uint64 {
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
-	return atomic.LoadUint64(&s.lastResolvedTs)
+	return s.sri.lockedRange.CheckpointTs.Load()
 }
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	if resolvedTs > s.getLastResolvedTs() {
-		atomic.StoreUint64(&s.lastResolvedTs, resolvedTs)
+	checkpointTs := &s.sri.lockedRange.CheckpointTs
+	for {
+		last := checkpointTs.Load()
+		if last >= resolvedTs || checkpointTs.CompareAndSwap(last, resolvedTs) {
+			return
+		}
 	}
-}
-
-// setRegionInfoResolvedTs is only called when the region disconnect,
-// to update the `singleRegionInfo` which is reused by reconnect.
-func (s *regionFeedState) setRegionInfoResolvedTs() {
-	if s.getLastResolvedTs() <= s.sri.resolvedTs {
-		return
-	}
-	s.sri.resolvedTs = s.lastResolvedTs
 }
 
 func (s *regionFeedState) getRegionInfo() singleRegionInfo {

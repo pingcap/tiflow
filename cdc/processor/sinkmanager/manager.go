@@ -248,7 +248,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 
 		select {
 		case <-m.managerCtx.Done():
-			return errors.Trace(m.managerCtx.Err())
+			return m.managerCtx.Err()
 		case err = <-gcErrors:
 			return errors.Trace(err)
 		case err = <-sinkErrors:
@@ -940,7 +940,8 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("resolvedTs", resolvedTs),
-			zap.Any("checkpointTs", checkpointTs))
+			zap.Any("checkpointTs", checkpointTs),
+			zap.Uint64("barrierTs", tableSink.barrierTs.Load()))
 	}
 	return TableStats{
 		CheckpointTs: checkpointTs.ResolvedMark(),
@@ -976,15 +977,11 @@ func (m *SinkManager) Close() {
 
 	start := time.Now()
 	m.waitSubroutines()
-	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
-		sink := value.(*tableSinkWrapper)
-		sink.close()
-		if m.eventCache != nil {
-			m.eventCache.removeTable(sink.span)
-		}
-		return true
-	})
+	// NOTE: It's unnecceary to close table sinks before clear sink factory.
 	m.clearSinkFactory()
+	if m.eventCache != nil {
+		m.eventCache.clear()
+	}
 
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),

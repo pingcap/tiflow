@@ -99,13 +99,13 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 // NextRowChangedEvent returns the next row changed event if exists
 func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	var (
-		valueMap  map[string]interface{}
-		rawSchema string
-		err       error
+		valueMap    map[string]interface{}
+		valueSchema map[string]interface{}
+		err         error
 	)
 
 	ctx := context.Background()
-	keyMap, rawKeySchema, err := d.decodeKey(ctx)
+	keyMap, keySchema, err := d.decodeKey(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -116,20 +116,15 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if isDelete {
 		// delete event only have key part, treat it as the value part also.
 		valueMap = keyMap
-		rawSchema = rawKeySchema
+		valueSchema = keySchema
 	} else {
-		valueMap, rawSchema, err = d.decodeValue(ctx)
+		valueMap, valueSchema, err = d.decodeValue(ctx)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 
-	schema := make(map[string]interface{})
-	if err := json.Unmarshal([]byte(rawSchema), &schema); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	event, err := assembleEvent(keyMap, valueMap, schema, isDelete)
+	event, err := assembleEvent(keyMap, valueMap, valueSchema, isDelete)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -213,7 +208,9 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 		}
 		tidbType := holder["tidb_type"].(string)
 
-		mysqlType, flag := mysqlAndFlagTypeFromTiDBType(tidbType)
+		mysqlType := mysqlTypeFromTiDBType(tidbType)
+
+		flag := flagFromTiDBType(tidbType)
 		if _, ok := keyMap[colName]; ok {
 			flag.SetIsHandleKey()
 		}
@@ -392,52 +389,47 @@ func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
 }
 
-func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, string, error) {
-	schemaID, binary, err := extractSchemaIDAndBinaryData(d.key)
+func decodeRawBytes(
+	ctx context.Context, schemaM *SchemaManager, data []byte, topic string,
+) (map[string]interface{}, map[string]interface{}, error) {
+	schemaID, binary, err := extractSchemaIDAndBinaryData(data)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
-	codec, err := d.keySchemaM.Lookup(ctx, d.topic, schemaID)
+	codec, err := schemaM.Lookup(ctx, topic, schemaID)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
+
 	native, _, err := codec.NativeFromBinary(binary)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	result, ok := native.(map[string]interface{})
 	if !ok {
-		return nil, "", errors.New("raw avro message is not a map")
+		return nil, nil, errors.New("raw avro message is not a map")
 	}
-	d.key = nil
 
-	return result, codec.Schema(), nil
+	schema := make(map[string]interface{})
+	if err := json.Unmarshal([]byte(codec.Schema()), &schema); err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	return result, schema, nil
 }
 
-func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, string, error) {
-	schemaID, binary, err := extractSchemaIDAndBinaryData(d.value)
-	if err != nil {
-		return nil, "", err
-	}
+func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
+	data := d.key
+	d.key = nil
+	return decodeRawBytes(ctx, d.keySchemaM, data, d.topic)
+}
 
-	codec, err := d.valueSchemaM.Lookup(ctx, d.topic, schemaID)
-	if err != nil {
-		return nil, "", err
-	}
-	native, _, err := codec.NativeFromBinary(binary)
-	if err != nil {
-		return nil, "", err
-	}
-
-	result, ok := native.(map[string]interface{})
-	if !ok {
-		return nil, "", errors.New("raw avro message is not a map")
-	}
+func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
+	data := d.value
 	d.value = nil
-
-	return result, codec.Schema(), nil
+	return decodeRawBytes(ctx, d.valueSchemaM, data, d.topic)
 }
 
 // calculate the checksum value, and compare it with the expected one, return error if not identical.
@@ -477,17 +469,17 @@ func calculateChecksum(columns []*model.Column) (uint64, error) {
 	return uint64(checksum), nil
 }
 
-// buildChecksumBytes append value the buf, type is used to convert value interface to concrete value.
+// buildChecksumBytes append value the buf, mysqlType is used to convert value interface to concrete type.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L308
-func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) {
+func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, error) {
 	if value == nil {
 		return buf, nil
 	}
 
-	switch ty {
+	switch mysqlType {
 	// TypeTiny, TypeShort, TypeInt32 is encoded as int32
-	// TypeLong is encoded as int32 if signed, int64 if unsigned
-	// TypeLongLong is encoded as uint64 if unsigned, int64 if signed,
+	// TypeLong is encoded as int32 if signed, else int64.
+	// TypeLongLong is encoded as int64 if signed, else uint64,
 	// if bigintUnsignedHandlingMode set as string, encode as string.
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
 		switch a := value.(type) {
@@ -507,7 +499,7 @@ func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) 
 			buf = binary.LittleEndian.AppendUint64(buf, v)
 		default:
 			log.Panic("unknown golang type for the integral value",
-				zap.Any("value", value), zap.Any("mysqlType", ty))
+				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	// TypeFloat encoded as float32, TypeDouble encoded as float64
 	case mysql.TypeFloat, mysql.TypeDouble:
@@ -534,7 +526,7 @@ func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) 
 			return nil, errors.Trace(err)
 		}
 		buf = binary.LittleEndian.AppendUint64(buf, v)
-	// encoded as bytes is binary flag set to true, else string
+	// encoded as bytes if binary flag set to true, else string
 	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		switch a := value.(type) {
 		case string:
@@ -543,7 +535,7 @@ func buildChecksumBytes(buf []byte, value interface{}, ty byte) ([]byte, error) 
 			buf = appendLengthValue(buf, a)
 		default:
 			log.Panic("unknown golang type for the string value",
-				zap.Any("value", value), zap.Any("mysqlType", ty))
+				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
 		}
 	// all encoded as string
 	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
