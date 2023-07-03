@@ -372,13 +372,13 @@ func TestGetRetryBackoff(t *testing.T) {
 
 	backoff, err := manager.getRetryBackoff(errors.New("test"))
 	require.NoError(t, err)
-	require.Less(t, backoff, manager.errorBackoff.NextBackOff())
+	require.Less(t, backoff, 30*time.Second)
 	time.Sleep(500 * time.Millisecond)
-	elapsedTime := manager.errorBackoff.GetElapsedTime()
+	elapsedTime := time.Since(manager.firstRetryTime)
 
 	// mock time to test reset error backoff
 	manager.lastErrorRetryTime = time.Unix(0, 0)
 	_, err = manager.getRetryBackoff(errors.New("test"))
 	require.NoError(t, err)
-	require.Less(t, manager.errorBackoff.GetElapsedTime(), elapsedTime)
+	require.Less(t, time.Since(manager.firstRetryTime), elapsedTime)
 }
