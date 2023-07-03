@@ -97,7 +97,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
-func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
+func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	var (
 		valueMap  map[string]interface{}
 		rawSchema string
@@ -107,7 +107,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 	ctx := context.Background()
 	keyMap, rawKeySchema, err := d.decodeKey(ctx)
 	if err != nil {
-		return nil, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	// for the delete event, only have key part, it holds primary key or the unique key columns.
@@ -120,29 +120,29 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 	} else {
 		valueMap, rawSchema, err = d.decodeValue(ctx)
 		if err != nil {
-			return nil, false, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 	}
 
 	schema := make(map[string]interface{})
 	if err := json.Unmarshal([]byte(rawSchema), &schema); err != nil {
-		return nil, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	event, err := assembleEvent(keyMap, valueMap, schema, isDelete)
 	if err != nil {
-		return nil, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	// Delete event only has Primary Key Columns, but the checksum is calculated based on the whole row columns,
 	// checksum verification cannot be done here, so skip it.
 	if isDelete {
-		return event, false, nil
+		return event, nil
 	}
 
 	expectedChecksum, found, err := extractExpectedChecksum(valueMap)
 	if err != nil {
-		return nil, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 
 	if isCorrupted(valueMap) {
@@ -162,11 +162,11 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
 
 	if found {
 		if err := d.verifyChecksum(event.Columns, expectedChecksum); err != nil {
-			return nil, false, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 	}
 
-	return event, false, nil
+	return event, nil
 }
 
 // assembleEvent return a row changed event

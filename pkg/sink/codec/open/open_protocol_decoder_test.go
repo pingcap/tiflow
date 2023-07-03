@@ -68,7 +68,7 @@ func TestDecodeEvent(t *testing.T) {
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, tp)
 
-	obtained, onlyHandleKey, err := decoder.NextRowChangedEvent()
+	obtained, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
 	require.False(t, onlyHandleKey)
 
@@ -104,7 +104,7 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, tp)
 
-	obtained, onlyHandleKey, err := decoder.NextRowChangedEvent()
+	obtained, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
 	require.True(t, onlyHandleKey)
 	require.Equal(t, insertEvent.CommitTs, obtained.CommitTs)
