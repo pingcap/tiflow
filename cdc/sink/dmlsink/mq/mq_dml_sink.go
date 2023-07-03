@@ -165,6 +165,12 @@ func (s *dmlSink) Close() {
 	}
 	s.wg.Wait()
 
+	s.alive.RLock()
+	if s.alive.topicManager != nil {
+		s.alive.topicManager.Close()
+	}
+	s.alive.RUnlock()
+
 	if s.adminClient != nil {
 		s.adminClient.Close()
 	}

@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -361,20 +360,20 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		barrier.GlobalBarrierTs = otherBarrierTs
 	}
 
-	if barrier.minDDLBarrierTs > otherBarrierTs {
+	if barrier.MinTableBarrierTs > otherBarrierTs {
 		log.Debug("There are other barriers less than min table barrier, wait for them",
 			zap.Uint64("otherBarrierTs", otherBarrierTs),
 			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		barrier.minDDLBarrierTs = otherBarrierTs
+		barrier.MinTableBarrierTs = otherBarrierTs
 	}
 
 	log.Debug("owner handles barrier",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
-		zap.Uint64("checkpointTs", preCheckpointTs),
-		zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
+		zap.Uint64("preCheckpointTs", preCheckpointTs),
+		zap.Uint64("preResolvedTs", c.state.Status.ResolvedTs),
 		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
-		zap.Uint64("minTableBarrierTs", barrier.minDDLBarrierTs),
+		zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
 		zap.Any("tableBarrier", barrier.TableBarriers))
 
 	if barrier.GlobalBarrierTs < preCheckpointTs {
@@ -384,20 +383,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-	startTime := time.Now()
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
-		ctx, preCheckpointTs, allPhysicalTables, captures, barrier.Barrier)
-	costTime := time.Since(startTime)
-	if costTime > schedulerLogsWarnDuration {
-		log.Warn("scheduler tick took too long",
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID), zap.Duration("duration", costTime))
-	}
+		ctx, preCheckpointTs, allPhysicalTables, captures, barrier.BarrierWithMinTs)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	pdTime, _ := c.upstream.PDClock.CurrentTime()
+	pdTime, err := c.upstream.PDClock.CurrentTime()
+	if err != nil {
+		return errors.Trace(err)
+	}
 	currentTs := oracle.GetPhysical(pdTime)
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
@@ -409,27 +404,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 			c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.state.Status.ResolvedTs)
 		}
 		return nil
-	}
-
-	// If allPhysicalTables is empty, the newResolvedTs and newCheckpointTs shoulde
-	// be max uint64. In this case, we need to advance newResolvedTs to global barrier
-	// ts and advance newCheckpointTs to min table barrier ts.
-	if newResolvedTs == math.MaxUint64 || newCheckpointTs == math.MaxUint64 {
-		if newCheckpointTs != newResolvedTs {
-			log.Panic("newResolvedTs and newCheckpointTs should be both max uint64 or not",
-				zap.Uint64("checkpointTs", preCheckpointTs),
-				zap.Uint64("resolvedTs", c.state.Status.ResolvedTs),
-				zap.Uint64("newCheckpointTs", newCheckpointTs),
-				zap.Uint64("newResolvedTs", newResolvedTs))
-		}
-		newResolvedTs = barrier.GlobalBarrierTs
-		newCheckpointTs = barrier.minDDLBarrierTs
-	}
-
-	// Note that newResolvedTs could be larger than barrier.GlobalBarrierTs no matter
-	// whether redo is enabled.
-	if newCheckpointTs > barrier.minDDLBarrierTs {
-		newCheckpointTs = barrier.minDDLBarrierTs
 	}
 
 	prevResolvedTs := c.state.Status.ResolvedTs
@@ -482,8 +456,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	// MinTableBarrierTs should never regress
-	if barrier.minDDLBarrierTs < c.state.Status.MinTableBarrierTs {
-		barrier.minDDLBarrierTs = c.state.Status.MinTableBarrierTs
+	if barrier.MinTableBarrierTs < c.state.Status.MinTableBarrierTs {
+		barrier.MinTableBarrierTs = c.state.Status.MinTableBarrierTs
 	}
 
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
@@ -497,7 +471,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
-	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.minDDLBarrierTs)
+	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.MinTableBarrierTs)
 	c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
 	c.tickDownstreamObserver(ctx)
 
@@ -831,6 +805,10 @@ func (c *changefeed) cleanupMetrics() {
 
 	changefeedBarrierTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedBarrierTsGauge = nil
+
+	if c.isRemoved {
+		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	}
 }
 
 // cleanup redo logs if changefeed is removed and redo log is enabled

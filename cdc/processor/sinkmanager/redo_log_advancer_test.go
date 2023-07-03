@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
-	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -78,6 +77,12 @@ func (m *mockRedoDMLManager) UpdateResolvedTs(ctx context.Context,
 	defer m.mu.Unlock()
 	m.resolvedTss[span.TableID] = resolvedTs
 	return nil
+}
+
+func (m *mockRedoDMLManager) StartTable(span tablepb.Span, resolvedTs uint64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resolvedTss[span.TableID] = resolvedTs
 }
 
 func (m *mockRedoDMLManager) GetResolvedTs(span tablepb.Span) model.Ts {
@@ -479,7 +484,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 			false,
 		)
 		require.False(suite.T(), advanced)
-		require.ErrorIs(suite.T(), err, cerrors.ErrFlowControllerAborted)
+		require.ErrorIs(suite.T(), err, context.Canceled)
 		down <- struct{}{}
 	}()
 

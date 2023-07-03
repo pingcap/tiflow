@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
@@ -151,28 +150,14 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 		}
 	}
 
-	if !cfg.EnableOldValue {
-		sinkURIParsed, err := url.Parse(o.commonChangefeedOptions.sinkURI)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-		}
+	uri, err := url.Parse(o.commonChangefeedOptions.sinkURI)
+	if err != nil {
+		return err
+	}
 
-		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
-		if protocol != "" {
-			cfg.Sink.Protocol = protocol
-		}
-		for _, fp := range config.ForceEnableOldValueProtocols {
-			if cfg.Sink.Protocol == fp {
-				log.Warn("Attempting to replicate without old value enabled. CDC will enable old value and continue.", zap.String("protocol", cfg.Sink.Protocol))
-				cfg.EnableOldValue = true
-				break
-			}
-		}
-
-		if cfg.ForceReplicate {
-			log.Error("if use force replicate, old value feature must be enabled")
-			return cerror.ErrOldValueNotEnabled.GenWithStackByArgs()
-		}
+	err = cfg.AdjustEnableOldValueAndVerifyForceReplicate(uri)
+	if err != nil {
+		return err
 	}
 
 	for _, rules := range cfg.Sink.DispatchRules {

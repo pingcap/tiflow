@@ -10,8 +10,7 @@ SINK_TYPE=$1
 MAX_RETRIES=20
 
 function run() {
-	# it is no need to test kafka
-	# the logic are all the same
+	# No need to test kafka and storage sink, since the logic are all the same.
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return
 	fi

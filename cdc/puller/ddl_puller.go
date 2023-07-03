@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -78,9 +77,8 @@ type ddlJobPullerImpl struct {
 	// It holds the info of table `tidb_ddl_jobs` of upstream TiDB.
 	ddlJobsTable *model.TableInfo
 	// It holds the column id of `job_meta` in table `tidb_ddl_jobs`.
-	jobMetaColumnID           int64
-	outputCh                  chan *model.DDLJobEntry
-	metricDiscardedDDLCounter prometheus.Counter
+	jobMetaColumnID int64
+	outputCh        chan *model.DDLJobEntry
 }
 
 // Run starts the DDLJobPuller.
@@ -356,7 +354,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
 			zap.String("job", job.String()))
-		p.metricDiscardedDDLCounter.Inc()
 		return true, nil
 	}
 
@@ -398,7 +395,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
 			zap.String("job", job.String()))
-		p.metricDiscardedDDLCounter.Inc()
 		return true, nil
 	}
 
@@ -494,8 +490,6 @@ func NewDDLJobPuller(
 		),
 		kvStorage: kvStorage,
 		outputCh:  make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
-		metricDiscardedDDLCounter: discardedDDLCounter.
-			WithLabelValues(changefeed.Namespace, changefeed.ID),
 	}, nil
 }
 
@@ -671,6 +665,22 @@ func (h *ddlPullerImpl) Close() {
 	log.Info("close the ddl puller",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID))
+
+	ok := PullerEventCounter.DeleteLabelValues(h.changefeedID.Namespace, h.changefeedID.ID, "kv")
+	if !ok {
+		log.Warn("delete puller event counter metrics failed",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.String("type", "kv"))
+	}
+	ok = PullerEventCounter.DeleteLabelValues(h.changefeedID.Namespace, h.changefeedID.ID, "resolved")
+	if !ok {
+		log.Warn("delete puller event counter metrics failed",
+			zap.String("namespace", h.changefeedID.Namespace),
+			zap.String("changefeed", h.changefeedID.ID),
+			zap.String("type", "resolved"))
+	}
+
 	h.cancel()
 }
 

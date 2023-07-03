@@ -42,8 +42,8 @@ func NewSaramaFactory(
 	}, nil
 }
 
-func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
-	config, err := NewSaramaConfig(f.option)
+func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, error) {
+	config, err := NewSaramaConfig(ctx, f.option)
 	if err != nil {
 		return nil, err
 	}
@@ -52,8 +52,8 @@ func (f *saramaFactory) AdminClient() (ClusterAdminClient, error) {
 
 // SyncProducer returns a Sync Producer,
 // it should be the caller's responsibility to close the producer
-func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
-	config, err := NewSaramaConfig(f.option)
+func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) {
+	config, err := NewSaramaConfig(ctx, f.option)
 	if err != nil {
 		return nil, err
 	}
@@ -78,11 +78,11 @@ func (f *saramaFactory) SyncProducer() (SyncProducer, error) {
 // AsyncProducer return an Async Producer,
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) AsyncProducer(
-	_ context.Context,
+	ctx context.Context,
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	config, err := NewSaramaConfig(f.option)
+	config, err := NewSaramaConfig(ctx, f.option)
 	if err != nil {
 		return nil, err
 	}

@@ -150,7 +150,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	defer func() {
 		// Collect metrics.
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
-		task.tableSink.receivedEventCount.Add(int64(allEventCount))
 		w.metricOutputEventCountKV.Add(float64(allEventCount))
 
 		// If eventCache is nil, update sorter commit ts and range event count.
@@ -188,7 +187,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// events have been reported. Then we can continue the table
 			// at the checkpoint position.
 			case tablesink.SinkInternalError:
-				task.tableSink.clearTableSink()
+				task.tableSink.closeAndClearTableSink()
+				// After the table sink is cleared all pending events are sent out or dropped.
+				// So we can re-add the table into sinkMemQuota.
+				w.sinkMemQuota.ClearTable(task.tableSink.span)
+
 				// Restart the table sink based on the checkpoint position.
 				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
 					ckpt := task.tableSink.getCheckpointTs().ResolvedMark()
@@ -269,7 +272,6 @@ func (w *sinkWorker) fetchFromCache(
 	if popRes.success {
 		newLowerBound = popRes.boundary.Next()
 		if len(popRes.events) > 0 {
-			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 			w.metricOutputEventCountKV.Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
 			if err = task.tableSink.appendRowChangedEvents(popRes.events...); err != nil {

@@ -37,6 +37,9 @@ type Config struct {
 	MaxMessageBytes int
 	MaxBatchSize    int
 
+	// onlyHandleKeyColumns is true, for the delete event only output the handle key columns.
+	OnlyHandleKeyColumns bool
+
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
 
@@ -164,6 +167,8 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	if replicaConfig.Integrity != nil {
 		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
+
+	c.OnlyHandleKeyColumns = !replicaConfig.EnableOldValue
 
 	return nil
 }

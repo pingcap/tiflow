@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 // fakeRegionID when the frontier is initializing, there is no region ID
@@ -41,8 +40,7 @@ type spanFrontier struct {
 
 	seekTempResult []*skipListNode
 
-	cachedRegions                     map[uint64]*skipListNode
-	metricResolvedRegionMissedCounter prometheus.Counter
+	cachedRegions map[uint64]*skipListNode
 }
 
 // NewFrontier creates Frontier from the given spans.
@@ -50,16 +48,14 @@ type spanFrontier struct {
 // So we use set it as util.UpperBoundKey, the means the real use case *should not* have an
 // End key bigger than util.UpperBoundKey
 func NewFrontier(checkpointTs uint64,
-	metricResolvedRegionMissedCounter prometheus.Counter,
 	spans ...tablepb.Span,
 ) Frontier {
 	s := &spanFrontier{
 		spanList:       *newSpanList(),
 		seekTempResult: make(seekResult, maxHeight),
 		cachedRegions:  map[uint64]*skipListNode{},
-
-		metricResolvedRegionMissedCounter: metricResolvedRegionMissedCounter,
 	}
+
 	firstSpan := true
 	for _, span := range spans {
 		if firstSpan {
@@ -89,7 +85,6 @@ func (s *spanFrontier) Forward(regionID uint64, span tablepb.Span, ts uint64) {
 			return
 		}
 	}
-	s.metricResolvedRegionMissedCounter.Inc()
 	s.insert(regionID, span, ts)
 }
 

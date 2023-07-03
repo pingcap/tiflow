@@ -205,32 +205,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, err
 	}
-	if !replicaCfg.EnableOldValue {
-		sinkURIParsed, err := url.Parse(cfg.SinkURI)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
-		}
 
-		protocol := sinkURIParsed.Query().Get(config.ProtocolKey)
-		if protocol != "" {
-			replicaCfg.Sink.Protocol = protocol
-		}
-		for _, fp := range config.ForceEnableOldValueProtocols {
-			if replicaCfg.Sink.Protocol == fp {
-				log.Warn(
-					"Attempting to replicate without old value enabled. "+
-						"CDC will enable old value and continue.",
-					zap.String("protocol", replicaCfg.Sink.Protocol))
-				replicaCfg.EnableOldValue = true
-				break
-			}
-		}
-
-		if replicaCfg.ForceReplicate {
-			return nil, cerror.ErrOldValueNotEnabled.GenWithStackByArgs(
-				"if use force replicate, old value feature must be enabled")
-		}
-	}
 	f, err := filter.NewFilter(replicaCfg, "")
 	if err != nil {
 		return nil, errors.Cause(err)

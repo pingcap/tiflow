@@ -106,7 +106,7 @@ func NewForTest(
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
 func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
-	m.engine.AddTable(span)
+	m.engine.AddTable(span, startTs)
 	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
 	p.Start(m.ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(span, p)
@@ -160,11 +160,6 @@ func (m *SourceManager) GetTablePullerStats(span tablepb.Span) puller.Stats {
 // GetTableSorterStats returns the sorter stats of the table.
 func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats {
 	return m.engine.GetStatsByTable(span)
-}
-
-// ReceivedEvents returns the number of events in the engine that have not been sent to the sink.
-func (m *SourceManager) ReceivedEvents() int64 {
-	return m.engine.ReceivedEvents()
 }
 
 // Run implements util.Runnable.

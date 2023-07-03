@@ -236,6 +236,7 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 
 func (s *ddlSinkImpl) run(ctx context.Context) {
 	ctx, s.cancel = context.WithCancel(ctx)
+	ctx = contextutil.PutChangefeedIDInCtx(ctx, s.changefeedID)
 
 	s.wg.Add(1)
 	go func() {

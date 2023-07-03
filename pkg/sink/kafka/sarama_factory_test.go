@@ -63,7 +63,7 @@ func TestSyncProducer(t *testing.T) {
 	factory, ok := f.(*saramaFactory)
 	require.True(t, ok)
 
-	sync, err := factory.SyncProducer()
+	sync, err := factory.SyncProducer(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, sync)
 	sync.Close()

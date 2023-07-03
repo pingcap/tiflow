@@ -58,8 +58,8 @@ func (s *EventSorter) IsTableBased() bool {
 }
 
 // AddTable implements engine.SortEngine.
-func (s *EventSorter) AddTable(span tablepb.Span) {
-	resolvedTs := model.Ts(0)
+func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
+	resolvedTs := startTs
 	if _, exists := s.tables.LoadOrStore(span, &tableSorter{resolvedTs: &resolvedTs}); exists {
 		log.Panic("add an exist table", zap.Stringer("span", &span))
 	}
@@ -143,12 +143,6 @@ func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
 	log.Panic("GetStatsByTable should never be called")
 	return engine.TableStats{}
-}
-
-// ReceivedEvents implements engine.SortEngine.
-// Do not use this function, it is only used for testing.
-func (s *EventSorter) ReceivedEvents() int64 {
-	return 0
 }
 
 // Close implements engine.SortEngine.

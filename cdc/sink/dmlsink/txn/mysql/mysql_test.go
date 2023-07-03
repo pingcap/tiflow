@@ -82,6 +82,10 @@ func newTestMockDB(t *testing.T) (db *sql.DB, mock sqlmock.Sqlmock) {
 		Number:  1305,
 		Message: "FUNCTION test.tidb_version does not exist",
 	})
+	mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+		Number:  1305,
+		Message: "FUNCTION test.tidb_version does not exist",
+	})
 	require.Nil(t, err)
 	return
 }
