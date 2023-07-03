@@ -134,7 +134,6 @@ func TestDecodeEvent(t *testing.T) {
 
 	decodedEvent, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
-	require.False(t, onlyHandleKey)
 	require.NotNil(t, decodedEvent)
 }
 

@@ -79,7 +79,6 @@ func TestCSVBatchDecoder(t *testing.T) {
 		require.Equal(t, model.MessageTypeRow, tp)
 		event, err := decoder.NextRowChangedEvent()
 		require.NoError(t, err)
-		require.False(t, onlyHandleKey)
 		require.NotNil(t, event)
 	}
 

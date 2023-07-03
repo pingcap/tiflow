@@ -16,6 +16,7 @@ package codec
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -85,4 +86,15 @@ func IsColumnValueEqual(preValue, updatedValue interface{}) bool {
 	// mounter use the same table info to parse the value,
 	// the value type should be the same
 	return preValue == updatedValue
+}
+
+type ClaimCheckMessage struct {
+	Key   []byte `json:"key"`
+	Value []byte `json:"value"`
+}
+
+func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
+	var m ClaimCheckMessage
+	err := json.Unmarshal(data, &m)
+	return &m, err
 }

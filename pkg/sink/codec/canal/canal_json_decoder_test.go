@@ -53,7 +53,6 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 
 			consumed, err := decoder.NextRowChangedEvent()
 			require.NoError(t, err)
-			require.False(t, onlyHandleKey)
 
 			require.Equal(t, testCaseInsert.Table, consumed.Table)
 			if encodeEnable && decodeEnable {
@@ -79,7 +78,6 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 
 			consumed, err = decoder.NextRowChangedEvent()
 			require.Error(t, err)
-			require.False(t, onlyHandleKey)
 			require.Nil(t, consumed)
 		}
 	}
@@ -151,7 +149,6 @@ func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 		cnt++
 		event, err := decoder.NextRowChangedEvent()
 		require.NoError(t, err)
-		require.False(t, onlyHandleKey)
 		require.NotNil(t, event)
 	}
 	require.Equal(t, 3, cnt)

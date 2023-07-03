@@ -79,9 +79,9 @@ func TestMaxMessageBytes(t *testing.T) {
 
 func TestMaxBatchSize(t *testing.T) {
 	t.Parallel()
-	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
-	config.MaxBatchSize = 64
-	encoder := NewBatchEncoderBuilder(config).Build()
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
+	codecConfig.MaxBatchSize = 64
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	testEvent := &model.RowChangedEvent{
 		CommitTs: 1,
@@ -93,13 +93,15 @@ func TestMaxBatchSize(t *testing.T) {
 		}},
 	}
 
+	ctx := context.Background()
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
+		err := encoder.AppendRowChangedEvent(ctx, "", testEvent, nil)
 		require.Nil(t, err)
 	}
 
 	messages := encoder.Build()
-	decoder := NewBatchDecoder()
+	decoder, err := NewBatchDecoder(ctx, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
 	sum := 0
 	for _, msg := range messages {
 		err := decoder.AddKeyValue(msg.Key, msg.Value)
@@ -113,9 +115,8 @@ func TestMaxBatchSize(t *testing.T) {
 			}
 
 			require.Equal(t, model.MessageTypeRow, v)
-			_, err := decoder.NextRowChangedEvent()
+			_, err = decoder.NextRowChangedEvent()
 			require.NoError(t, err)
-			require.False(t, onlyHandleKey)
 			count++
 		}
 		require.LessOrEqual(t, count, 64)
@@ -204,13 +205,14 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 }
 
 func TestOpenProtocolBatchCodec(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
-	config.MaxBatchSize = 64
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
+	codecConfig.MaxBatchSize = 64
 	tester := internal.NewDefaultBatchTester()
-	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config),
+	tester.TestBatchCodec(t, NewBatchEncoderBuilder(codecConfig),
 		func(key []byte, value []byte) (codec.RowEventDecoder, error) {
-			decoder := NewBatchDecoder()
-			err := decoder.AddKeyValue(key, value)
+			decoder, err := NewBatchDecoder(context.Background(), config.GetDefaultReplicaConfig())
+			require.NoError(t, err)
+			err = decoder.AddKeyValue(key, value)
 			return decoder, err
 		})
 }

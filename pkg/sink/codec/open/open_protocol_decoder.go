@@ -84,7 +84,6 @@ func (b *BatchMixedDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error
 		return nil, errors.Trace(err)
 	}
 	rowEvent := msgToRowChange(b.nextKey, rowMsg)
-	onlyHandleKey := b.nextKey.OnlyHandleKey
 	b.nextKey = nil
 	return rowEvent, nil
 }
@@ -169,6 +168,33 @@ func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	return resolvedTs, nil
 }
 
+func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEvent, error) {
+	data, err := b.storage.ReadFile(context.Background(), b.nextKey.ClaimCheckLocation)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	claimCheckM, err := codec.UnmarshalClaimCheckMessage(data)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	rowMsg := new(messageRow)
+
+	valueLen := binary.BigEndian.Uint64(claimCheckM.Value[:8])
+	value := claimCheckM.Value[8 : valueLen+8]
+	if err := rowMsg.decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	keyLen := binary.BigEndian.Uint64(claimCheckM.Key[:8])
+	key := claimCheckM.Key[8 : keyLen+8]
+	msgKey := new(internal.MessageKey)
+	if err := msgKey.Decode(key); err != nil {
+		return nil, errors.Trace(err)
+	}
+	event := msgToRowChange(msgKey, rowMsg)
+	return event, nil
+}
+
 // NextRowChangedEvent implements the RowEventDecoder interface
 func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
@@ -180,6 +206,11 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey.Type != model.MessageTypeRow {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
+	// claim-check message found
+	if b.nextKey.ClaimCheckLocation != "" {
+		return b.assembleEventFromClaimCheckStorage()
+	}
+
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
 	b.valueBytes = b.valueBytes[valueLen+8:]
@@ -188,7 +219,6 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 	rowEvent := msgToRowChange(b.nextKey, rowMsg)
-	onlyHandleKey := b.nextKey.OnlyHandleKey
 	b.nextKey = nil
 	return rowEvent, nil
 }
@@ -217,6 +247,10 @@ func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 }
 
 func (b *BatchDecoder) hasNext() bool {
+	// claim-check enabled, it's ok to received message without value part.
+	if b.storage != nil {
+		return len(b.keyBytes) > 0 || len(b.valueBytes) > 0
+	}
 	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
 }
 

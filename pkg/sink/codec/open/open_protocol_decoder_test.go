@@ -50,8 +50,8 @@ var (
 )
 
 func TestDecodeEvent(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen)
-	encoder := NewBatchEncoderBuilder(config).Build()
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	ctx := context.Background()
 	topic := "test"
@@ -60,7 +60,8 @@ func TestDecodeEvent(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder := NewBatchDecoder()
+	decoder, err := NewBatchDecoder(ctx, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 	tp, hasNext, err := decoder.HasNext()
@@ -70,7 +71,6 @@ func TestDecodeEvent(t *testing.T) {
 
 	obtained, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
-	require.False(t, onlyHandleKey)
 
 	obtainedColumns := make(map[string]*model.Column)
 	for _, col := range obtained.Columns {
@@ -83,11 +83,13 @@ func TestDecodeEvent(t *testing.T) {
 }
 
 func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen)
-	config.LargeMessageOnlyHandleKeyColumns = true
-	config.MaxMessageBytes = 185
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.MaxMessageBytes = 185
+	codecConfig.LargeMessageHandle = &config.LargeMessageHandleConfig{
+		LargeMessageHandleOption: "handle-key-only",
+	}
 
-	encoder := NewBatchEncoderBuilder(config).Build()
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	ctx := context.Background()
 	topic := "test"
@@ -96,7 +98,8 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder := NewBatchDecoder()
+	decoder, err := NewBatchDecoder(ctx, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 	tp, hasNext, err := decoder.HasNext()
@@ -106,7 +109,6 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 
 	obtained, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
-	require.True(t, onlyHandleKey)
 	require.Equal(t, insertEvent.CommitTs, obtained.CommitTs)
 
 	obtainedColumns := make(map[string]*model.Column)

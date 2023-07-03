@@ -326,18 +326,13 @@ func (w *worker) sendMessages(ctx context.Context) error {
 	}
 }
 
-type claimCheckMessage struct {
-	Key   []byte `json:"key"`
-	Value []byte `json:"value"`
-}
-
 func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partition int32, message *common.Message) error {
 	if w.storage == nil {
 		return errors.New("claim check cannot found the external storage")
 	}
 
 	// 1. send message to the external storage
-	m := claimCheckMessage{
+	m := codec.ClaimCheckMessage{
 		Key:   message.Key,
 		Value: message.Value,
 	}
