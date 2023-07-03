@@ -150,7 +150,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	defer func() {
 		// Collect metrics.
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
-		task.tableSink.receivedEventCount.Add(int64(allEventCount))
 		w.metricOutputEventCountKV.Add(float64(allEventCount))
 
 		// If eventCache is nil, update sorter commit ts and range event count.
@@ -273,7 +272,6 @@ func (w *sinkWorker) fetchFromCache(
 	if popRes.success {
 		newLowerBound = popRes.boundary.Next()
 		if len(popRes.events) > 0 {
-			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 			w.metricOutputEventCountKV.Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
 			if err = task.tableSink.appendRowChangedEvents(popRes.events...); err != nil {

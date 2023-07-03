@@ -189,20 +189,6 @@ func (mr *MockSortEngineMockRecorder) OnResolve(action interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnResolve", reflect.TypeOf((*MockSortEngine)(nil).OnResolve), action)
 }
 
-// ReceivedEvents mocks base method.
-func (m *MockSortEngine) ReceivedEvents() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReceivedEvents")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// ReceivedEvents indicates an expected call of ReceivedEvents.
-func (mr *MockSortEngineMockRecorder) ReceivedEvents() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedEvents", reflect.TypeOf((*MockSortEngine)(nil).ReceivedEvents))
-}
-
 // RemoveTable mocks base method.
 func (m *MockSortEngine) RemoveTable(span tablepb.Span) {
 	m.ctrl.T.Helper()
