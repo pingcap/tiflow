@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"errors"
 	"math"
 	"testing"
 	"time"
@@ -355,4 +356,29 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	case <-timer.C:
 		log.Panic("must get an error instead of a timeout")
 	}
+}
+
+func TestGetRetryBackoff(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 16)
+	changefeedInfo := getChangefeedInfo()
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	defer func() {
+		cancel()
+		manager.Close()
+	}()
+
+	backoff, err := manager.getRetryBackoff(errors.New("test"))
+	require.NoError(t, err)
+	require.Less(t, backoff, manager.errorBackoff.NextBackOff())
+	time.Sleep(500 * time.Millisecond)
+	elapsedTime := manager.errorBackoff.GetElapsedTime()
+
+	// mock time to test reset error backoff
+	manager.lastErrorRetryTime = time.Unix(0, 0)
+	_, err = manager.getRetryBackoff(errors.New("test"))
+	require.NoError(t, err)
+	require.Less(t, manager.errorBackoff.GetElapsedTime(), elapsedTime)
 }
