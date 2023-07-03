@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
@@ -119,6 +120,11 @@ type SinkManager struct {
 
 	// Metric for table sink.
 	metricsTableSinkTotalRows prometheus.Counter
+
+	// To control the error retry.
+	lastInternalError  error
+	lastErrorRetryTime time.Time
+	errorBackoff       *backoff.ExponentialBackOff
 }
 
 // New creates a new sink manager.
@@ -164,6 +170,15 @@ func New(
 	}
 
 	m.ready = make(chan struct{})
+
+	// Use exponential backoff to control the error retry.
+	// The first retry will be executed after 5s, and the max retry interval is 5min.
+	// The max retry time is 30min.
+	m.errorBackoff = backoff.NewExponentialBackOff()
+	m.errorBackoff.InitialInterval = 5 * time.Second
+	m.errorBackoff.MaxInterval = 5 * time.Minute
+	m.errorBackoff.MaxElapsedTime = 30 * time.Minute
+
 	return m
 }
 
@@ -264,6 +279,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			sinkFactoryErrors = make(chan error, 16)
 		}
 
+		// If the error is retryable, we should retry to re-establish the internal resources.
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
 			select {
 			case <-m.managerCtx.Done():
@@ -272,12 +288,40 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 		} else {
 			return errors.Trace(err)
 		}
-		// Use a 5 second backoff when re-establishing internal resources.
-		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
+
+		backoff, err := m.getRetryBackoff(err)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if err = util.Hang(m.managerCtx, backoff); err != nil {
 			return errors.Trace(err)
 		}
 	}
 }
+
+// getRetryBackoff returns the backoff duration for retrying the last error.
+// If the retry time is exhausted, it returns the an ChangefeedUnRetryableError.
+func (m *SinkManager) getRetryBackoff(err error) (time.Duration, error) {
+	// reset backoff if last error is too long ago
+	// it means the last error is retry success, and the sink is running well for some time
+	if m.lastInternalError != nil &&
+		time.Since(m.lastErrorRetryTime) >= m.errorBackoff.MaxInterval*2 {
+		m.errorBackoff.Reset()
+	}
+
+	m.lastInternalError = err
+	m.lastErrorRetryTime = time.Now()
+
+	interval := m.errorBackoff.NextBackOff()
+	if interval == backoff.Stop {
+		return 0, cerror.WrapChangefeedUnretryableErr(err)
+	}
+	return interval, nil
+}
+
+// 1. add a backoff to avoid retrying too fast and infinitely
+// 2. add a background goroutine to reset backoff when last error time is too long ago (e.g. 30 min)
 
 func (m *SinkManager) initSinkFactory(errCh chan error) error {
 	m.sinkFactoryMu.Lock()
