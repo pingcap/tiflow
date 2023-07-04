@@ -177,8 +177,8 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEv
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	rowMsg := new(messageRow)
 
+	rowMsg := new(messageRow)
 	valueLen := binary.BigEndian.Uint64(claimCheckM.Value[:8])
 	value := claimCheckM.Value[8 : valueLen+8]
 	if err := rowMsg.decode(value); err != nil {
@@ -192,6 +192,8 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEv
 		return nil, errors.Trace(err)
 	}
 	event := msgToRowChange(msgKey, rowMsg)
+	b.nextKey = nil
+	
 	return event, nil
 }
 

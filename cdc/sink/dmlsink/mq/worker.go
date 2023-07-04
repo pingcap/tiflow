@@ -346,7 +346,7 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 		return errors.New("claim check encoder is not supported")
 	}
 
-	locationM, err := claimCheckEncoder.NewClaimCheckLocationMessage(message)
+	locationM, err := claimCheckEncoder.NewClaimCheckMessage(message)
 	err = w.producer.AsyncSendMessage(ctx, topic, partition, locationM)
 	if err != nil {
 		return errors.Trace(err)

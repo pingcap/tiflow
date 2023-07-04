@@ -71,12 +71,13 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 	return key, value, nil
 }
 
-// NewClaimCheckLocationMessage creates a new message with the claim check location.
+// NewClaimCheckMessage creates a new message with the claim check location.
 // This should be called when the message is too large, and the claim check enabled.
 // This method should not meet error, since only one string is set to the message,
 // it should not cause the encode error or the message too large error.
-func (d *BatchEncoder) NewClaimCheckLocationMessage(m *common.Message) (*common.Message, error) {
+func (d *BatchEncoder) NewClaimCheckMessage(m *common.Message) (*common.Message, error) {
 	messageKey := &internal.MessageKey{
+		Type:               model.MessageTypeRow,
 		ClaimCheckLocation: m.ClaimCheckFileName,
 	}
 

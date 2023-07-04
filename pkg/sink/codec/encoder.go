@@ -52,7 +52,7 @@ type RowEventEncoder interface {
 }
 
 type ClaimCheckEncoder interface {
-	NewClaimCheckLocationMessage(*common.Message) (*common.Message, error)
+	NewClaimCheckMessage(*common.Message) (*common.Message, error)
 }
 
 // RowEventEncoderBuilder builds row encoder with context.
