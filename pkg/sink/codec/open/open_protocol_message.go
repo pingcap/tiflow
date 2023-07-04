@@ -126,8 +126,7 @@ func rowChangeToMsg(
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
-		// check if the column is updated, if not do not output it
-		if config.OnlyOutputUpdatedColumns && len(value.PreColumns) > 0 {
+		if config.OnlyOutputUpdatedColumns {
 			value.dropNotUpdatedColumns()
 		}
 
