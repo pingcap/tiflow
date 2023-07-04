@@ -44,3 +44,27 @@ func CheckRegionsLeftCover(regions []*metapb.Region, span tablepb.Span) bool {
 	}
 	return true
 }
+
+// CutRegionsLeftCoverSpan cuts regions at the position which doesn't cover span
+// or is incontinuous with the previous one.
+func CutRegionsLeftCoverSpan(regions []*metapb.Region, span tablepb.Span) []*metapb.Region {
+	if len(regions) == 0 {
+		return nil
+	}
+	sort.Slice(regions, func(i, j int) bool {
+		return spanz.StartCompare(regions[i].StartKey, regions[j].StartKey) == -1
+	})
+	if spanz.StartCompare(regions[0].StartKey, span.StartKey) == 1 {
+		return nil
+	}
+
+	nextStart := regions[0].StartKey
+	for i, region := range regions {
+		// incontinuous regions
+		if spanz.StartCompare(nextStart, region.StartKey) != 0 {
+			return regions[:i]
+		}
+		nextStart = region.EndKey
+	}
+	return regions
+}

@@ -631,7 +631,7 @@ func (s *SharedClient) runStream(
 	ctx context.Context,
 	rs *requestedStore,
 	stream *requestedStream,
-) {
+) (canceled bool) {
 	defer s.clearStream(rs, stream)
 	log.Info("event feed going to create grpc stream",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -651,20 +651,10 @@ func (s *SharedClient) runStream(
 		g.Go(func() (err error) { return s.sendToStream(ctx, rs, stream) })
 		g.Go(func() (err error) { return s.receiveFromStream(ctx, rs, stream) })
 		if err := g.Wait(); err == nil || errors.Cause(err) == context.Canceled {
-			return
+			return true
 		}
 	}
-
-	// If any error happens and it's not canceled, clear pending region states
-	// so we can re-schedule them later.
-	for _, m := range stream.clearStates() {
-		for _, state := range m {
-			state.markStopped(&sendRequestToStoreErr{})
-			slot := hashRegionID(state.sri.verID.GetID(), len(s.workers))
-			sfEvent := statefulEvent{eventItem: eventItem{state: state}}
-			_ = s.workers[slot].sendEvent(ctx, sfEvent)
-		}
-	}
+	return false
 }
 
 func (s *SharedClient) requestRegion(
@@ -689,7 +679,16 @@ func (s *SharedClient) requestRegion(
 		stream.wg.Add(1)
 		go func() {
 			defer stream.wg.Done()
-			s.runStream(ctx, rs, stream)
+			if !s.runStream(ctx, rs, stream) {
+				for _, m := range stream.clearStates() {
+					for _, state := range m {
+						state.markStopped(&sendRequestToStoreErr{})
+						slot := hashRegionID(state.sri.verID.GetID(), len(s.workers))
+						sfEvent := statefulEvent{eventItem: eventItem{state: state}}
+						_ = s.workers[slot].sendEvent(ctx, sfEvent)
+					}
+				}
+			}
 		}()
 	}
 }
@@ -762,41 +761,49 @@ func (s *SharedClient) divideAndRequestRegions(
 	ctx context.Context,
 	span tablepb.Span,
 	requestedTable *requestedTable,
-) (err error) {
+) error {
 	limit := 1024
 	nextSpan := span
-	var regions []*tikv.Region
+	backoffBeforeLoad := false
 	for {
+		if backoffBeforeLoad {
+			if err := util.Hang(ctx, 5*time.Second); err != nil {
+				return err
+			}
+			backoffBeforeLoad = false
+		}
+
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
-		regions, err = s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
+		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
 		if err != nil {
 			log.Warn("event feed load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("span", nextSpan),
 				zap.Error(err))
-
-			// Re-schedule the span with a simple backoff.
-			if err = util.Hang(ctx, 3*time.Second); err != nil {
-				return err
-			}
-			s.scheduleDivideRegionAndRequest(ctx, nextSpan, requestedTable)
-			return
+			backoffBeforeLoad = true
+			continue
 		}
 
 		metas := make([]*metapb.Region, 0, len(regions))
 		for _, region := range regions {
-			metas = append(metas, region.GetMeta())
+			if meta := region.GetMeta(); meta != nil {
+				metas = append(metas, meta)
+			}
 		}
-		if !regionlock.CheckRegionsLeftCover(metas, nextSpan) {
-			log.Panic("event feed check span left cover shouldn't fail",
+		metas = regionlock.CutRegionsLeftCoverSpan(metas, nextSpan)
+		if len(metas) == 0 {
+			log.Warn("event feed load regions with holes",
 				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID))
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Any("span", nextSpan))
+			backoffBeforeLoad = true
+			continue
 		}
 
-		for _, region := range regions {
+		for _, region := range metas {
 			// NOTE: the End key return by the PD API will be nil to represent the biggest key.
-			regionSpan := tablepb.Span{StartKey: region.GetMeta().StartKey, EndKey: region.GetMeta().EndKey}
+			regionSpan := tablepb.Span{StartKey: region.StartKey, EndKey: region.EndKey}
 			regionSpan = spanz.HackSpan(regionSpan)
 			partialSpan, err := spanz.Intersect(requestedTable.span, regionSpan)
 			if err != nil {
@@ -804,11 +811,12 @@ func (s *SharedClient) divideAndRequestRegions(
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID))
 			}
-			sri := newSingleRegionInfo(region.VerID(), partialSpan, nil)
+			verID := tikv.NewRegionVerID(region.Id, region.RegionEpoch.ConfVer, region.RegionEpoch.Version)
+			sri := newSingleRegionInfo(verID, partialSpan, nil)
 			sri.requestedTable = requestedTable
 			s.scheduleRegionRequest(ctx, sri)
 
-			nextSpan.StartKey = region.GetMeta().EndKey
+			nextSpan.StartKey = region.EndKey
 			if spanz.EndCompare(nextSpan.StartKey, span.EndKey) >= 0 {
 				return nil
 			}
