@@ -348,12 +348,15 @@ func (c *consumer) emitDMLEvents(
 					prometheus.NewCounter(prometheus.CounterOpts{}))
 			}
 
-			if _, ok := c.tableTsMap[tableID]; !ok || row.CommitTs >= c.tableTsMap[tableID].Ts {
+			_, ok := c.tableTsMap[tableID]
+			if !ok || row.CommitTs > c.tableTsMap[tableID].Ts {
 				c.tableTsMap[tableID] = model.ResolvedTs{
 					Mode:    model.BatchResolvedMode,
 					Ts:      row.CommitTs,
 					BatchID: 1,
 				}
+			} else if row.CommitTs == c.tableTsMap[tableID].Ts {
+				c.tableTsMap[tableID] = c.tableTsMap[tableID].AdvanceBatch()
 			} else {
 				log.Warn("row changed event commit ts fallback, ignore",
 					zap.Uint64("commitTs", row.CommitTs),
