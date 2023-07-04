@@ -890,24 +890,24 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.B
 		default:
 			log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 		}
+	}
 
-		// If there are other barriers less than ddl barrier,
-		// we should wait for them.
-		// Note: There may be some tableBarrierTs larger than otherBarrierTs,
-		// but we can ignore them because they will be handled in the processor.
-		if barrier.GlobalBarrierTs > barrierTs {
-			log.Debug("There are other barriers less than ddl barrier, wait for them",
-				zap.Uint64("otherBarrierTs", barrierTs),
-				zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs))
-			barrier.GlobalBarrierTs = barrierTs
-		}
+	// If there are other barriers less than ddl barrier,
+	// we should wait for them.
+	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
+	// but we can ignore them because they will be handled in the processor.
+	if barrier.GlobalBarrierTs > barrierTs {
+		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.Uint64("otherBarrierTs", barrierTs),
+			zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs))
+		barrier.GlobalBarrierTs = barrierTs
+	}
 
-		if barrier.MinTableBarrierTs > barrierTs {
-			log.Debug("There are other barriers less than min table barrier, wait for them",
-				zap.Uint64("otherBarrierTs", barrierTs),
-				zap.Uint64("minTableBarrierTs", barrier.GlobalBarrierTs))
-			barrier.MinTableBarrierTs = barrierTs
-		}
+	if barrier.MinTableBarrierTs > barrierTs {
+		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.Uint64("otherBarrierTs", barrierTs),
+			zap.Uint64("minTableBarrierTs", barrier.GlobalBarrierTs))
+		barrier.MinTableBarrierTs = barrierTs
 	}
 	return nil
 }
