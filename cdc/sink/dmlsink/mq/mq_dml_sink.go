@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
@@ -86,14 +85,14 @@ func newDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	var storage storage.ExternalStorage
+	var claimCheck *ClaimCheck
 	if replicaConfig.Sink.LargeMessageHandle.EnableClaimCheck() {
 		storageURI := replicaConfig.Sink.LargeMessageHandle.ClaimCheckStorageURI
-		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		claimCheck, err = NewClaimCheck(ctx, storageURI)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
-		log.Info("claim-check enabled, set the external storage for the kafka sink",
+		log.Info("claim-check enabled",
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
 			zap.String("storageURI", storageURI))
@@ -103,7 +102,7 @@ func newDMLSink(
 	encoderConcurrency := util.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
-		encoderBuilder, encoderConcurrency, producer, storage, statistics)
+		encoderBuilder, encoderConcurrency, producer, claimCheck, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,

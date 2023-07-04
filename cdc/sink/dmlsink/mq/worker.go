@@ -15,12 +15,10 @@ package mq
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -82,10 +80,11 @@ type worker struct {
 	metricMQWorkerBatchSize prometheus.Observer
 	// metricMQWorkerBatchDuration tracks the time duration cost on batch messages.
 	metricMQWorkerBatchDuration prometheus.Observer
+
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
 
-	storage storage.ExternalStorage
+	claimCheck *ClaimCheck
 }
 
 // newWorker creates a new flush worker.
@@ -95,7 +94,7 @@ func newWorker(
 	builder codec.RowEventEncoderBuilder,
 	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
-	storage storage.ExternalStorage,
+	claimCheck *ClaimCheck,
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
@@ -109,8 +108,9 @@ func newWorker(
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
-		statistics:                        statistics,
-		storage:                           storage,
+		metricMQWorkerClaimCheckSendMessageDuration: mq.WorkerClaimCheckSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
+		statistics: statistics,
+		storage:    storage,
 	}
 
 	return w
@@ -305,14 +305,14 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, message := range future.Messages {
+				if message.ClaimCheckFileName != "" {
+					if err := w.claimCheckSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
+						return errors.Trace(err)
+					}
+					continue
+				}
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
-					if message.ClaimCheckFileName != "" {
-						if err := w.claimCheckSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
-							return 0, err
-						}
-						return message.GetRowsCount(), nil
-					}
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 						return 0, err
 					}
@@ -327,21 +327,11 @@ func (w *worker) sendMessages(ctx context.Context) error {
 }
 
 func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partition int32, message *common.Message) error {
-	if w.storage == nil {
-		return errors.New("claim check cannot found the external storage")
+	if w.claimCheck == nil {
+		return errors.New("claim check cannot found")
 	}
 
-	// 1. send message to the external storage
-	m := codec.ClaimCheckMessage{
-		Key:   message.Key,
-		Value: message.Value,
-	}
-	data, err := json.Marshal(m)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	err = w.storage.WriteFile(ctx, message.ClaimCheckFileName, data)
+	err := w.claimCheck.WriteMessage(ctx, message)
 	if err != nil {
 		log.Error("send message to the external claim check storage failed",
 			zap.String("namespace", w.changeFeedID.Namespace),
@@ -352,7 +342,6 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 	}
 
 	encoder := w.encoderBuilder.Build()
-
 	claimCheckEncoder, ok := encoder.(codec.ClaimCheckEncoder)
 	if !ok {
 		return errors.New("claim check encoder is not supported")
@@ -379,4 +368,5 @@ func (w *worker) close() {
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	mq.WorkerClaimCheckSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 }
