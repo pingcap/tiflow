@@ -193,7 +193,7 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEv
 	}
 	event := msgToRowChange(msgKey, rowMsg)
 	b.nextKey = nil
-	
+
 	return event, nil
 }
 

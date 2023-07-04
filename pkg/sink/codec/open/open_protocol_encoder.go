@@ -96,6 +96,7 @@ func (d *BatchEncoder) NewClaimCheckMessage(m *common.Message) (*common.Message,
 	}
 
 	versionHead := make([]byte, 8)
+	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
 	var keyLenByte [8]byte
 	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
 
