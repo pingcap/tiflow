@@ -31,9 +31,7 @@ type RowEventDecoder interface {
 	// NextResolvedEvent returns the next resolved event if exists
 	NextResolvedEvent() (uint64, error)
 	// NextRowChangedEvent returns the next row changed event if exists
-	// return true if the event only has handle key sent, only open-protocol support this at the moment
-	// consumer should query the row data by the handle key and commit-ts
-	NextRowChangedEvent() (*model.RowChangedEvent, bool, error)
+	NextRowChangedEvent() (*model.RowChangedEvent, error)
 	// NextDDLEvent returns the next DDL event if exists
 	NextDDLEvent() (*model.DDLEvent, error)
 }

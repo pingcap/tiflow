@@ -68,9 +68,8 @@ func TestDecodeEvent(t *testing.T) {
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, tp)
 
-	obtained, onlyHandleKey, err := decoder.NextRowChangedEvent()
+	obtained, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
-	require.False(t, onlyHandleKey)
 
 	obtainedColumns := make(map[string]*model.Column)
 	for _, col := range obtained.Columns {
@@ -104,9 +103,8 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, tp)
 
-	obtained, onlyHandleKey, err := decoder.NextRowChangedEvent()
+	obtained, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
-	require.True(t, onlyHandleKey)
 	require.Equal(t, insertEvent.CommitTs, obtained.CommitTs)
 
 	obtainedColumns := make(map[string]*model.Column)

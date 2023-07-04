@@ -113,9 +113,8 @@ func TestMaxBatchSize(t *testing.T) {
 			}
 
 			require.Equal(t, model.MessageTypeRow, v)
-			_, onlyHandleKey, err := decoder.NextRowChangedEvent()
+			_, err = decoder.NextRowChangedEvent()
 			require.NoError(t, err)
-			require.False(t, onlyHandleKey)
 			count++
 		}
 		require.LessOrEqual(t, count, 64)
