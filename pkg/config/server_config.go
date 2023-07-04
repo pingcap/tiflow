@@ -115,6 +115,7 @@ var defaultServerConfig = &ServerConfig{
 		EnableMultiplexing:   false,
 		WorkerConcurrent:     8,
 		GrpcStreamConcurrent: 1,
+		FrontierConcurrent:   8,
 		WorkerPoolSize:       0, // 0 will use NumCPU() * 2
 		RegionScanLimit:      40,
 		// The default TiKV region election timeout is [10s, 20s],

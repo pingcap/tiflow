@@ -73,6 +73,8 @@ type regionWorkerMetrics struct {
 	metricSendEventResolvedCounter  prometheus.Counter
 	metricSendEventCommitCounter    prometheus.Counter
 	metricSendEventCommittedCounter prometheus.Counter
+
+	metricQueueDuration prometheus.Observer
 }
 
 /*
@@ -113,9 +115,7 @@ type regionWorker struct {
 	inputPending int32
 }
 
-func newRegionWorker(
-	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
-) *regionWorker {
+func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetrics {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
@@ -138,6 +138,15 @@ func newRegionWorker(
 	metrics.metricSendEventCommittedCounter = sendEventCounter.
 		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
 
+	metrics.metricQueueDuration = regionWorkerQueueDuration.
+		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
+
+	return metrics
+}
+
+func newRegionWorker(
+	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+) *regionWorker {
 	return &regionWorker{
 		session:       s,
 		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
@@ -148,7 +157,7 @@ func newRegionWorker(
 		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
 		storeAddr:     addr,
 		concurrency:   int(s.client.config.WorkerConcurrent),
-		metrics:       metrics,
+		metrics:       newRegionWorkerMetrics(changefeedID),
 		inputPending:  0,
 	}
 }
@@ -207,7 +216,7 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		return w.checkShouldExit()
 	}
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
-	state.markStopped()
+	state.markStopped(nil)
 	w.delRegionState(regionID)
 	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
 
@@ -806,7 +815,7 @@ func (w *regionWorker) evictAllRegions() {
 			if regionState.isStopped() {
 				return true
 			}
-			regionState.markStopped()
+			regionState.markStopped(nil)
 			deletes = append(deletes, struct {
 				regionID    uint64
 				regionState *regionFeedState

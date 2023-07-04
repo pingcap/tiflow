@@ -27,6 +27,10 @@ import (
 const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
+
+	stateNormal  uint32 = 0
+	stateStopped uint32 = 1
+	stateRemoved uint32 = 2
 )
 
 type singleRegionInfo struct {
@@ -34,8 +38,9 @@ type singleRegionInfo struct {
 	span   tablepb.Span
 	rpcCtx *tikv.RPCContext
 
-	lockedRange *regionlock.LockedRange
-	createTime  time.Time
+	requestedTable *requestedTable
+	lockedRange    *regionlock.LockedRange
+	createTime     time.Time
 }
 
 func newSingleRegionInfo(
@@ -44,10 +49,9 @@ func newSingleRegionInfo(
 	rpcCtx *tikv.RPCContext,
 ) singleRegionInfo {
 	return singleRegionInfo{
-		verID:      verID,
-		span:       span,
-		rpcCtx:     rpcCtx,
-		createTime: time.Now(),
+		verID:  verID,
+		span:   span,
+		rpcCtx: rpcCtx,
 	}
 }
 
@@ -61,7 +65,15 @@ type regionFeedState struct {
 	matcher       *matcher
 	startFeedTime time.Time
 
-	stopped atomic.Bool
+	// Transform: normal -> stopped -> removed.
+	state atomic.Uint32
+
+	// All region errors should be handled in region workers.
+	// `err` is used to retrieve errors generated outside.
+	err struct {
+		sync.Mutex
+		e error
+	}
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
@@ -76,12 +88,32 @@ func (s *regionFeedState) start() {
 	s.matcher = newMatcher()
 }
 
-func (s *regionFeedState) markStopped() {
-	s.stopped.Store(true)
+// mark regionFeedState as stopped with the given error if possible.
+func (s *regionFeedState) markStopped(err error) {
+	if s.state.CompareAndSwap(stateNormal, stateStopped) {
+		if err != nil {
+			s.err.Lock()
+			defer s.err.Unlock()
+			s.err.e = err
+		}
+	}
+}
+
+// masrk regionFeedState as removed if possible.
+func (s *regionFeedState) markRemoved() (changed bool) {
+	return s.state.CompareAndSwap(stateStopped, stateRemoved)
 }
 
 func (s *regionFeedState) isStopped() bool {
-	return s.stopped.Load()
+	return s.state.Load() == stateStopped
+}
+
+func (s *regionFeedState) takeError() (err error) {
+	s.err.Lock()
+	defer s.err.Unlock()
+	err = s.err.e
+	s.err.e = nil
+	return
 }
 
 func (s *regionFeedState) isInitialized() bool {

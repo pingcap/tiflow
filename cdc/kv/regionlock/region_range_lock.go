@@ -159,13 +159,18 @@ type RegionRangeLock struct {
 	rangeCheckpointTs *rangeTsMap
 	rangeLock         *btree.BTreeG[*rangeLockEntry]
 	regionIDLock      map[uint64]*rangeLockEntry
+	stopped           bool
+	refCount          uint64
+
+	postLockSuccess func(regionID uint64, state *LockedRange)
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
 func NewRegionRangeLock(
 	startKey, endKey []byte, startTs uint64, changefeedLogInfo string,
+	postLockSuccess ...func(regionID uint64, state *LockedRange),
 ) *RegionRangeLock {
-	return &RegionRangeLock{
+	rrl := &RegionRangeLock{
 		id:                allocID(),
 		totalSpan:         tablepb.Span{StartKey: startKey, EndKey: endKey},
 		changefeedLogInfo: changefeedLogInfo,
@@ -173,6 +178,10 @@ func NewRegionRangeLock(
 		rangeLock:         btree.NewG(16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
 	}
+	if len(postLockSuccess) > 0 {
+		rrl.postLockSuccess = postLockSuccess[0]
+	}
+	return rrl
 }
 
 func (l *RegionRangeLock) getOverlappedEntries(startKey, endKey []byte, regionID uint64) []*rangeLockEntry {
@@ -213,6 +222,9 @@ func (l *RegionRangeLock) getOverlappedEntries(startKey, endKey []byte, regionID
 func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, version uint64) (LockRangeResult, []<-chan interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.stopped {
+		return LockRangeResult{Status: LockRangeStatusCancel}, nil
+	}
 
 	overlappingEntries := l.getOverlappedEntries(startKey, endKey, regionID)
 
@@ -236,6 +248,10 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)))
 
+		l.refCount += 1
+		if l.postLockSuccess != nil {
+			l.postLockSuccess(regionID, &newEntry.state)
+		}
 		return LockRangeResult{
 			Status:       LockRangeStatusSuccess,
 			CheckpointTs: checkpointTs,
@@ -346,10 +362,11 @@ func (l *RegionRangeLock) LockRange(
 }
 
 // UnlockRange unlocks a range and update checkpointTs of the range to specified value.
+// If it returns true it means it is stopped and all ranges are unlocked correctly.
 func (l *RegionRangeLock) UnlockRange(
 	startKey, endKey []byte, regionID, version uint64,
 	checkpointTs ...uint64,
-) {
+) (drained bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -378,6 +395,8 @@ func (l *RegionRangeLock) UnlockRange(
 			zap.String("regionIDLockEntry", l.regionIDLock[regionID].String()))
 	}
 	delete(l.regionIDLock, regionID)
+	l.refCount -= 1
+	drained = l.stopped && l.refCount == 0
 
 	if entry.version != version || !bytes.Equal(entry.endKey, endKey) {
 		log.Panic("unlocking region doesn't match the locked region",
@@ -411,6 +430,22 @@ func (l *RegionRangeLock) UnlockRange(
 		zap.Uint64("checkpointTs", newCheckpointTs),
 		zap.String("startKey", hex.EncodeToString(startKey)),
 		zap.String("endKey", hex.EncodeToString(endKey)))
+	return
+}
+
+// RefCount returns how many ranges are locked.
+func (l *RegionRangeLock) RefCount() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.refCount
+}
+
+// Stop stops the instance.
+func (l *RegionRangeLock) Stop() (drained bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.stopped = true
+	return l.stopped && l.refCount == 0
 }
 
 const (
@@ -445,6 +480,8 @@ type LockRangeResult struct {
 // LockedRange is returned by `RegionRangeLock.LockRange`, which can be used to
 // collect informations for the range. And collected informations can be accessed
 // by iterating `RegionRangeLock`.
+//
+// TODO: we can changes it to a generic.
 type LockedRange struct {
 	CheckpointTs atomic.Uint64
 	Initialzied  atomic.Bool
@@ -492,4 +529,20 @@ type LockedRangeValue struct {
 	RegionID     uint64
 	CheckpointTs uint64
 	Initialized  bool
+}
+
+// CallPostLockSuccess calls `postLockSuccess` on all locked ranges again.
+func (l *RegionRangeLock) CallPostLockSuccess() {
+	if l.postLockSuccess != nil {
+		l.mu.Lock()
+		entries := make([]*rangeLockEntry, 0, len(l.regionIDLock))
+		for _, entry := range l.regionIDLock {
+			entries = append(entries, entry)
+		}
+		l.mu.Unlock()
+
+		for _, entry := range entries {
+			l.postLockSuccess(entry.regionID, &entry.state)
+		}
+	}
 }

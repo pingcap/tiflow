@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -29,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const defaultMaxBatchSize = 256
@@ -46,6 +48,11 @@ type tablePullers struct {
 	errChan chan error
 	spanz.SyncMap
 	pullerWrapperCreator pullerWrapperCreator
+}
+
+type multiplexingPuller struct {
+	client *kv.SharedClient
+	puller *pullerwrapper.MultiplexingWrapper
 }
 
 // SourceManager is the manager of the source engine and puller.
@@ -66,8 +73,9 @@ type SourceManager struct {
 
 	// if `config.GetGlobalServerConfig().KVClient.EnableMultiplexing` is true `tablePullers`
 	// will be used. Otherwise `multiplexingPuller` will be used instead.
-	multiplexing bool
-	tablePullers tablePullers
+	multiplexing       bool
+	tablePullers       tablePullers
+	multiplexingPuller multiplexingPuller
 }
 
 // New creates a new source manager.
@@ -124,6 +132,7 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	m.engine.AddTable(span, startTs)
 
 	if m.multiplexing {
+		m.multiplexingPuller.puller.Subscribe("dml", tableName, []tablepb.Span{span}, startTs)
 		return
 	}
 
@@ -135,6 +144,7 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.
 func (m *SourceManager) RemoveTable(span tablepb.Span) {
 	if m.multiplexing {
+		m.multiplexingPuller.puller.Unsubscribe([]tablepb.Span{span})
 		m.engine.RemoveTable(span)
 		return
 	}
@@ -167,7 +177,7 @@ func (m *SourceManager) CleanByTable(span tablepb.Span, upperBound engine.Positi
 // GetTablePullerStats returns the puller stats of the table.
 func (m *SourceManager) GetTablePullerStats(span tablepb.Span) puller.Stats {
 	if m.multiplexing {
-		return puller.Stats{}
+		return m.multiplexingPuller.puller.MultiplexingPuller.Stats(span)
 	}
 
 	p, ok := m.tablePullers.Load(span)
@@ -188,6 +198,19 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.multiplexing {
+		clientConfig := config.GetGlobalServerConfig().KVClient
+		m.multiplexingPuller.client = kv.NewSharedClient(
+			m.changefeedID, clientConfig, m.bdrMode,
+			m.up.PDClient, m.up.GrpcPool, m.up.RegionCache, m.up.PDClock, m.up.KVStorage,
+		)
+		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
+			m.changefeedID, m.multiplexingPuller.client, m.engine,
+			int(clientConfig.FrontierConcurrent),
+		)
+
+		g, ctx := errgroup.WithContext(ctx)
+		g.Go(func() error { return m.multiplexingPuller.client.Run(ctx) })
+		g.Go(func() error { return m.multiplexingPuller.puller.Run(ctx) })
 		close(m.ready)
 		return nil
 	}

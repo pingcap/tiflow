@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -68,6 +69,11 @@ type ddlJobPullerImpl struct {
 	multiplexing bool
 	puller       struct {
 		Puller
+	}
+	multiplexingPuller struct {
+		*MultiplexingPuller
+		client      *kv.SharedClient
+		sortedDDLCh <-chan *model.RawKVEntry
 	}
 
 	kvStorage     tidbkv.Storage
@@ -160,7 +166,23 @@ func (p *ddlJobPullerImpl) run(ctx context.Context) error {
 }
 
 func (p *ddlJobPullerImpl) runMultiplexing(ctx context.Context) error {
-	return nil
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error { return p.multiplexingPuller.client.Run(ctx) })
+	eg.Go(func() error { return p.multiplexingPuller.Run(ctx) })
+	eg.Go(func() error {
+		for {
+			var ddlRawKV *model.RawKVEntry
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ddlRawKV = <-p.multiplexingPuller.sortedDDLCh:
+			}
+			if err := p.handleRawKVEntry(ctx, ddlRawKV); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	})
+	return eg.Wait()
 }
 
 // WaitForReady implements util.Runnable.
@@ -506,6 +528,28 @@ func NewDDLJobPuller(
 		outputCh:      make(chan *model.DDLJobEntry, defaultPullerOutputChanSize),
 	}
 	if jobPuller.multiplexing {
+		mp := &jobPuller.multiplexingPuller
+
+		mp.client = kv.NewSharedClient(
+			changefeed, cfg, ddlPullerFilterLoop,
+			pdCli, grpcPool, regionCache, pdClock, kvStorage,
+		)
+
+		rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)
+		mp.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
+
+		consume := func(ctx context.Context, raw *model.RawKVEntry, _ []tablepb.Span) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case rawDDLCh <- raw:
+				return nil
+			}
+		}
+		slots, hasher := 1, func(tablepb.Span, int) int { return 0 }
+		mp.MultiplexingPuller = NewMultiplexingPuller(changefeed, mp.client, consume, slots, hasher, 1)
+
+		mp.Subscribe("ddl", memorysorter.DDLPullerTableName, spans, checkpointTs)
 	} else {
 		jobPuller.puller.Puller = New(
 			ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock,
