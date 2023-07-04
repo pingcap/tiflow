@@ -618,7 +618,7 @@ func TestBarrierAdvance(t *testing.T) {
 		}
 		// sync-point is enabled, sync point barrier is ticked
 		if i == 1 {
-			require.Equal(t, cf.state.Info.StartTs+10, barrier)
+			require.Equal(t, cf.state.Info.StartTs+10, barrier.GlobalBarrierTs)
 		}
 
 		// Suppose tableCheckpoint has been advanced.
