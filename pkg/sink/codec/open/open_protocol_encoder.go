@@ -107,8 +107,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	}
 
 	if d.curBatch.full(key, value) {
-		d.b
-		uildBatch()
+		d.buildBatch()
 		d.resetBatch()
 	}
 
