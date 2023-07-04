@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
 
@@ -32,24 +33,7 @@ type messageRow struct {
 	Delete     map[string]internal.Column `json:"d,omitempty"`
 }
 
-func (m *messageRow) encode(outputOnlyUpdatedColumn bool) ([]byte, error) {
-	// check if the column is updated, if not do not output it
-	if outputOnlyUpdatedColumn && len(m.PreColumns) > 0 {
-		for col, value := range m.Update {
-			oldValue, ok := m.PreColumns[col]
-			if !ok {
-				continue
-			}
-			// sql type is not equal
-			if value.Type != oldValue.Type {
-				continue
-			}
-			// value equal
-			if codec.IsColumnValueEqual(oldValue.Value, value.Value) {
-				delete(m.PreColumns, col)
-			}
-		}
-	}
+func (m *messageRow) encode() ([]byte, error) {
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
 }
@@ -71,6 +55,24 @@ func (m *messageRow) decode(data []byte) error {
 		m.PreColumns[colName] = internal.FormatColumn(column)
 	}
 	return nil
+}
+
+func (m *messageRow) dropNotUpdatedColumns() {
+	// if the column is not updated, do not output it.
+	for col, value := range m.Update {
+		oldValue, ok := m.PreColumns[col]
+		if !ok {
+			continue
+		}
+		// sql type is not equal
+		if value.Type != oldValue.Type {
+			continue
+		}
+		// value equal
+		if codec.IsColumnValueEqual(oldValue.Value, value.Value) {
+			delete(m.PreColumns, col)
+		}
+	}
 }
 
 type messageDDL struct {
@@ -96,7 +98,7 @@ func newResolvedMessage(ts uint64) *internal.MessageKey {
 
 func rowChangeToMsg(
 	e *model.RowChangedEvent,
-	deleteOnlyHandleKeyColumns bool,
+	config *common.Config,
 	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow, error) {
 	var partition *int64
 	if e.Table.IsPartition {
@@ -113,7 +115,7 @@ func rowChangeToMsg(
 	}
 	value := &messageRow{}
 	if e.IsDelete() {
-		onlyHandleKeyColumns := deleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
+		onlyHandleKeyColumns := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
 		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, onlyHandleKeyColumns)
 		if onlyHandleKeyColumns && len(value.Delete) == 0 {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the delete event")
@@ -124,6 +126,11 @@ func rowChangeToMsg(
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
+		// check if the column is updated, if not do not output it
+		if config.OnlyOutputUpdatedColumns && len(value.PreColumns) > 0 {
+			value.dropNotUpdatedColumns()
+		}
+
 	} else {
 		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
 		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {
