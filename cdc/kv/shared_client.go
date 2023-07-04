@@ -468,6 +468,16 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 }
 
 func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, stream *requestedStream) (err error) {
+	defer func() {
+		if err := stream.client.CloseSend(); err != nil {
+			log.Warn("event feed grpc stream close send fail",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Uint64("storeID", rs.storeID),
+				zap.String("addr", rs.storeAddr))
+		}
+	}()
+
 	doSend := func(req *cdcpb.ChangeDataRequest) error {
 		if err := stream.client.Send(req); err != nil {
 			log.Warn("event feed send request to grpc stream failed",
@@ -476,7 +486,6 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 				zap.Uint64("storeID", rs.storeID),
 				zap.String("addr", rs.storeAddr),
 				zap.Error(err))
-			_ = stream.client.CloseSend()
 			return errors.Trace(err)
 		}
 		return nil
@@ -514,7 +523,6 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 		if err = doSend(req); err != nil {
 			return err
 		}
-
 	}
 }
 
