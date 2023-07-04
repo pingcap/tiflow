@@ -1187,7 +1187,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, messageType)
 
-	row, _, err = decoder.NextRowChangedEvent()
+	row, err = decoder.NextRowChangedEvent()
 	// no error, checksum verification passed.
 	require.NoError(t, err)
 }

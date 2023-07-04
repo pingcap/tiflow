@@ -104,16 +104,16 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the RowEventDecoder interface.
-func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
+func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.closed {
-		return nil, false, cerror.WrapError(cerror.ErrCSVDecodeFailed, errors.New("no csv row can be found"))
+		return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed, errors.New("no csv row can be found"))
 	}
 
 	e, err := csvMsg2RowChangedEvent(b.msg, b.tableInfo.Columns)
 	if err != nil {
-		return nil, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-	return e, false, nil
+	return e, nil
 }
 
 // NextDDLEvent implements the RowEventDecoder interface.

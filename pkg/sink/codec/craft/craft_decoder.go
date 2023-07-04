@@ -52,27 +52,27 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 }
 
 // NextRowChangedEvent implements the RowEventDecoder interface
-func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, error) {
+func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	ty, hasNext, err := b.HasNext()
 	if err != nil {
-		return nil, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	if !hasNext || ty != model.MessageTypeRow {
-		return nil, false, cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
+		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
 	}
 	oldValue, newValue, err := b.decoder.RowChangedEvent(b.index)
 	if err != nil {
-		return nil, false, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	ev := &model.RowChangedEvent{}
 	if oldValue != nil {
 		if ev.PreColumns, err = oldValue.ToModel(); err != nil {
-			return nil, false, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 	}
 	if newValue != nil {
 		if ev.Columns, err = newValue.ToModel(); err != nil {
-			return nil, false, errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 	}
 	ev.CommitTs = b.headers.GetTs(b.index)
@@ -86,7 +86,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, bool, erro
 		ev.Table.IsPartition = true
 	}
 	b.index++
-	return ev, false, nil
+	return ev, nil
 }
 
 // NextDDLEvent implements the RowEventDecoder interface
