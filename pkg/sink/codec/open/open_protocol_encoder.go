@@ -106,9 +106,9 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		}
 	}
 
-	if d.curBatch.full() ||
-		d.curBatch.length()+len(key)+len(value)+16 > d.config.MaxMessageBytes {
-		d.buildBatch()
+	if d.curBatch.full(key, value) {
+		d.b
+		uildBatch()
 		d.resetBatch()
 	}
 
@@ -256,12 +256,12 @@ func (b *batch) reset() {
 	b.callbackBuff = make([]func(), 0, b.config.MaxBatchSize)
 }
 
-func (b *batch) full() bool {
-	return len(b.callbackBuff) > b.config.MaxBatchSize
-}
+func (b *batch) full(key, value []byte) bool {
+	if len(b.callbackBuff) >= b.config.MaxBatchSize {
+		return true
+	}
 
-func (b *batch) length() int {
-	return b.message.Length()
+	return b.message.Length()+len(key)+len(value)+16 > b.config.MaxMessageBytes
 }
 
 func (d *BatchEncoder) buildBatch() {
