@@ -34,8 +34,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	require.Nil(t, stream.getState(1, 2))
 	require.Nil(t, stream.takeState(1, 2))
 
-	stream.requestedRegions.m[1] = make(map[uint64]*regionFeedState)
-	stream.requestedRegions.m[1][2] = &regionFeedState{sri: singleRegionInfo{requestedTable: &requestedTable{}}}
+	stream.setState(1, 2, &regionFeedState{sri: singleRegionInfo{requestedTable: &requestedTable{}}})
 	require.NotNil(t, stream.getState(1, 2))
 	require.NotNil(t, stream.takeState(1, 2))
 	require.Nil(t, stream.getState(1, 2))
@@ -43,7 +42,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	requestedTable := &requestedTable{requestID: 1}
 	requestedTable.removed.Store(true)
 	for i := uint64(2); i < uint64(5); i++ {
-		stream.requestedRegions.m[1][i] = &regionFeedState{sri: singleRegionInfo{requestedTable: requestedTable}}
+		stream.setState(1, i, &regionFeedState{sri: singleRegionInfo{requestedTable: requestedTable}})
 	}
 
 	require.Nil(t, stream.getState(1, 2))

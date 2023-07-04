@@ -118,9 +118,7 @@ type requestedStore struct {
 
 type requestedStream struct {
 	// init is for initializing client and conn asynchronously.
-	init func() error
-	// stream send/recv goroutines are maintained with wg.
-	wg sync.WaitGroup
+	init func(ctx context.Context) error
 
 	streamID         uint64
 	client           cdcpb.ChangeData_EventFeedClient
@@ -128,11 +126,12 @@ type requestedStream struct {
 	requests         *chann.DrainableChann[singleRegionInfo]
 	requestedRegions struct {
 		sync.RWMutex
-		// whether the stream is in running or not.
-		running bool
 		// map[requestID]map[regionID]*regionFeedState
 		m map[uint64]map[uint64]*regionFeedState
 	}
+
+	// To trigger a connect action lazily.
+	connectTrigger *singleRegionInfo
 }
 
 type requestedTable struct {
@@ -321,7 +320,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 
 	g.Go(func() error { return s.handleRequestRanges(ctx, g) })
 	g.Go(func() error { return s.dispatchRequest(ctx) })
-	g.Go(func() error { return s.requestRegionToStore(ctx) })
+	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
 	g.Go(func() error { return s.resolveLock(ctx) })
 
@@ -329,13 +328,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID))
 
-	err := g.Wait()
-	for _, rs := range s.requestedStores {
-		for _, stream := range rs.streams {
-			stream.wg.Wait()
-		}
-	}
-	return err
+	return g.Wait()
 }
 
 // Close closes the client. Must be called after `Run` returns.
@@ -396,7 +389,7 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 	}
 }
 
-func (s *SharedClient) requestRegionToStore(ctx context.Context) error {
+func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Group) error {
 	for {
 		var sri singleRegionInfo
 		select {
@@ -405,17 +398,9 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context) error {
 		case sri = <-s.regionRouter.Out():
 			storeID := sri.rpcCtx.Peer.StoreId
 			storeAddr := sri.rpcCtx.Addr
-			rs := s.requestStore(ctx, storeID, storeAddr)
-
-			requestID := sri.requestedTable.requestID
-			regionID := sri.verID.GetID()
-			state := newRegionFeedState(sri, requestID)
-			state.start()
-			s.metrics.regionConnectDuration.Observe(float64(time.Since(state.sri.createTime).Milliseconds()))
-
+			rs := s.requestStore(ctx, g, storeID, storeAddr)
 			offset := rs.nextStream.Add(1) % uint32(len(rs.streams))
 			rs.streams[offset].requests.In() <- sri
-			s.requestRegion(ctx, rs, rs.streams[offset], requestID, regionID, state)
 		}
 	}
 }
@@ -430,7 +415,7 @@ func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.Regio
 }
 
 func (s *SharedClient) requestStore(
-	ctx context.Context,
+	ctx context.Context, g *errgroup.Group,
 	storeID uint64, storeAddr string,
 ) *requestedStore {
 	var rs *requestedStore
@@ -441,7 +426,7 @@ func (s *SharedClient) requestStore(
 	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
 	s.requestedStores[storeAddr] = rs
 	for i := uint(0); i < s.config.GrpcStreamConcurrent; i++ {
-		stream := s.newStream(ctx, rs)
+		stream := s.newStream(ctx, g, rs)
 		rs.streams = append(rs.streams, stream)
 	}
 
@@ -491,17 +476,22 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 		return nil
 	}
 
+	sri := *stream.connectTrigger
+	stream.connectTrigger = nil
 	for {
-		var sri singleRegionInfo
-		var req *cdcpb.ChangeDataRequest
-		select {
-		case sri = <-stream.requests.Out():
-		case <-ctx.Done():
-			return ctx.Err()
+		if sri.lockedRange != nil {
+			requestID := sri.requestedTable.requestID
+			regionID := sri.verID.GetID()
+			state := newRegionFeedState(sri, requestID)
+			state.start()
+			stream.setState(requestID, regionID, state)
+			s.metrics.regionConnectDuration.Observe(float64(time.Since(state.sri.createTime).Milliseconds()))
+		} else {
+			// It's a spectial message for removing table. See requestedStream.handleRemovedTable.
 		}
 
 		if sri.requestedTable.removed.Load() {
-			req = &cdcpb.ChangeDataRequest{
+			req := &cdcpb.ChangeDataRequest{
 				RequestId: sri.requestedTable.requestID,
 				Request:   &cdcpb.ChangeDataRequest_Deregister_{},
 			}
@@ -519,9 +509,15 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			continue
 		}
 
-		req = s.createRegionRequest(sri)
+		req := s.createRegionRequest(sri)
 		if err = doSend(req); err != nil {
 			return err
+		}
+
+		select {
+		case sri = <-stream.requests.Out():
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }
@@ -604,14 +600,14 @@ func (s *SharedClient) sendResolvedTs(ctx context.Context, resolvedTs *cdcpb.Res
 	return nil
 }
 
-func (s *SharedClient) newStream(ctx context.Context, r *requestedStore) *requestedStream {
+func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requestedStore) *requestedStream {
 	stream := &requestedStream{
 		streamID: streamIDGen.Add(1),
 		requests: chann.NewAutoDrainChann[singleRegionInfo](),
 	}
 
 	stream.requestedRegions.m = make(map[uint64]map[uint64]*regionFeedState)
-	stream.init = func() (err error) {
+	stream.init = func(ctx context.Context) (err error) {
 		if stream.conn, err = s.grpcPool.GetConn(r.storeAddr); err != nil {
 			return errors.Trace(err)
 		}
@@ -625,6 +621,37 @@ func (s *SharedClient) newStream(ctx context.Context, r *requestedStore) *reques
 		}
 		return nil
 	}
+
+	g.Go(func() error {
+		for {
+			if stream.connectTrigger == nil {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case sri := <-stream.requests.Out():
+					stream.connectTrigger = new(singleRegionInfo)
+					*stream.connectTrigger = sri
+				}
+			}
+
+			if canceled := s.runStream(ctx, r, stream); canceled {
+				return nil
+			}
+			for _, m := range stream.clearStates() {
+				for _, state := range m {
+					state.markStopped(&sendRequestToStoreErr{})
+					slot := hashRegionID(state.sri.verID.GetID(), len(s.workers))
+					sfEvent := statefulEvent{eventItem: eventItem{state: state}}
+					_ = s.workers[slot].sendEvent(ctx, sfEvent)
+				}
+			}
+			if err := util.Hang(ctx, time.Second); err != nil {
+				// TODO(qupeng): handle the case that TiKV closes the connection.
+				return err
+			}
+		}
+	})
+
 	return stream
 }
 
@@ -640,14 +667,25 @@ func (s *SharedClient) runStream(
 	rs *requestedStore,
 	stream *requestedStream,
 ) (canceled bool) {
-	defer s.clearStream(rs, stream)
+	ctx, cancel := context.WithCancel(ctx)
+	defer func() {
+		log.Info("event feed grpc stream exits",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Uint64("storeID", rs.storeID),
+			zap.String("addr", rs.storeAddr))
+		// To cancel grpc client stream explicitly.
+		cancel()
+		s.clearStream(rs, stream)
+	}()
+
 	log.Info("event feed going to create grpc stream",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("storeID", rs.storeID),
 		zap.String("addr", rs.storeAddr))
 
-	if err := stream.init(); err != nil {
+	if err := stream.init(ctx); err != nil {
 		log.Warn("event feed create grpc stream failed",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -665,42 +703,6 @@ func (s *SharedClient) runStream(
 	return false
 }
 
-func (s *SharedClient) requestRegion(
-	ctx context.Context,
-	rs *requestedStore,
-	stream *requestedStream,
-	requestID, regionID uint64,
-	state *regionFeedState,
-) {
-	stream.requestedRegions.Lock()
-	defer stream.requestedRegions.Unlock()
-
-	var m map[uint64]*regionFeedState
-	if m = stream.requestedRegions.m[requestID]; m == nil {
-		m = make(map[uint64]*regionFeedState)
-		stream.requestedRegions.m[requestID] = m
-	}
-	m[regionID] = state
-
-	if !stream.requestedRegions.running {
-		stream.requestedRegions.running = true
-		stream.wg.Add(1)
-		go func() {
-			defer stream.wg.Done()
-			if !s.runStream(ctx, rs, stream) {
-				for _, m := range stream.clearStates() {
-					for _, state := range m {
-						state.markStopped(&sendRequestToStoreErr{})
-						slot := hashRegionID(state.sri.verID.GetID(), len(s.workers))
-						sfEvent := statefulEvent{eventItem: eventItem{state: state}}
-						_ = s.workers[slot].sendEvent(ctx, sfEvent)
-					}
-				}
-			}
-		}()
-	}
-}
-
 func (r *requestedStream) handleRemovedTable(requestedTable *requestedTable) {
 	if requestedTable.removed.Load() {
 		now := time.Now()
@@ -711,6 +713,17 @@ func (r *requestedStream) handleRemovedTable(requestedTable *requestedTable) {
 			}
 		}
 	}
+}
+
+func (r *requestedStream) setState(requestID, regionID uint64, state *regionFeedState) {
+	r.requestedRegions.Lock()
+	defer r.requestedRegions.Unlock()
+	var m map[uint64]*regionFeedState
+	if m = r.requestedRegions.m[requestID]; m == nil {
+		m = make(map[uint64]*regionFeedState)
+		r.requestedRegions.m[requestID] = m
+	}
+	m[regionID] = state
 }
 
 func (r *requestedStream) getState(requestID, regionID uint64) (state *regionFeedState) {
@@ -748,7 +761,6 @@ func (r *requestedStream) takeStates(requestID uint64) (v map[uint64]*regionFeed
 func (r *requestedStream) clearStates() (v map[uint64]map[uint64]*regionFeedState) {
 	r.requestedRegions.Lock()
 	defer r.requestedRegions.Unlock()
-	r.requestedRegions.running = false
 	v = r.requestedRegions.m
 	r.requestedRegions.m = make(map[uint64]map[uint64]*regionFeedState)
 	return
@@ -1122,6 +1134,8 @@ const (
 func getContextFromFeatures(ctx context.Context, features []string) context.Context {
 	return grpcmeta.NewOutgoingContext(
 		ctx,
-		grpcmeta.New(map[string]string{rpcMetaFeaturesKey: strings.Join(features, rpcMetaFeaturesSep)}),
+		grpcmeta.New(map[string]string{
+			rpcMetaFeaturesKey: strings.Join(features, rpcMetaFeaturesSep),
+		}),
 	)
 }
