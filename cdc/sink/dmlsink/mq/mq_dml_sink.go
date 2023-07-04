@@ -88,7 +88,7 @@ func newDMLSink(
 	var claimCheck *ClaimCheck
 	if replicaConfig.Sink.LargeMessageHandle.EnableClaimCheck() {
 		storageURI := replicaConfig.Sink.LargeMessageHandle.ClaimCheckStorageURI
-		claimCheck, err = NewClaimCheck(ctx, storageURI)
+		claimCheck, err = NewClaimCheck(ctx, storageURI, changefeedID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}

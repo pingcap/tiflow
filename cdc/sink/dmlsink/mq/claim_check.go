@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -29,19 +31,20 @@ import (
 type ClaimCheck struct {
 	storage storage.ExternalStorage
 
-	// metricMQWorkerClaimCheckSendMessageDuration tracks the time duration
+	// metricSendMessageDuration tracks the time duration
 	// cost on send messages to the claim check external storage.
-	metricMQWorkerClaimCheckSendMessageDuration prometheus.Observer
+	metricSendMessageDuration prometheus.Observer
 }
 
-func NewClaimCheck(ctx context.Context, uri string) (*ClaimCheck, error) {
+func NewClaimCheck(ctx context.Context, uri string, id model.ChangeFeedID) (*ClaimCheck, error) {
 	storage, err := util.GetExternalStorageFromURI(ctx, uri)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &ClaimCheck{
-		storage: storage,
+		storage:                   storage,
+		metricSendMessageDuration: mq.ClaimCheckSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 	}, nil
 }
 
@@ -61,10 +64,6 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.metricMQWorkerClaimCheckSendMessageDuration.Observe(time.Since(start).Seconds())
+	c.metricSendMessageDuration.Observe(time.Since(start).Seconds())
 	return nil
-}
-
-func (c *ClaimCheck) Close() {
-
 }

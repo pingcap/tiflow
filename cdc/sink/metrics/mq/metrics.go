@@ -30,16 +30,6 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed"})
 
-	// WorkerClaimCheckSendMessageDuration records the duration of send message to the external claim-check storage.
-	WorkerClaimCheckSendMessageDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "sink",
-			Name:      "mq_worker_claim_check_send_message_duration",
-			Help:      "Duration(s) for MQ worker send message to the external claim-check storage.",
-			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
-		}, []string{"namespace", "changefeed"})
-
 	// WorkerBatchSize record the size of each batched messages.
 	WorkerBatchSize = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -58,6 +48,16 @@ var (
 			Help:      "Batch duration for MQ worker.",
 			Buckets:   prometheus.ExponentialBuckets(0.004, 2, 10), // 4ms ~ 2s
 		}, []string{"namespace", "changefeed"})
+
+	// ClaimCheckSendMessageDuration records the duration of send message to the external claim-check storage.
+	ClaimCheckSendMessageDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "mq_claim_check_send_message_duration",
+			Help:      "Duration(s) for MQ worker send message to the external claim-check storage.",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file.
@@ -65,7 +65,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(WorkerSendMessageDuration)
 	registry.MustRegister(WorkerBatchSize)
 	registry.MustRegister(WorkerBatchDuration)
-	registry.MustRegister(WorkerClaimCheckSendMessageDuration)
+	registry.MustRegister(ClaimCheckSendMessageDuration)
 	codec.InitMetrics(registry)
 	kafka.InitMetrics(registry)
 }

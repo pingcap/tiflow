@@ -108,9 +108,8 @@ func newWorker(
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
-		metricMQWorkerClaimCheckSendMessageDuration: mq.WorkerClaimCheckSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
-		statistics: statistics,
-		storage:    storage,
+		statistics:                        statistics,
+		claimCheck:                        claimCheck,
 	}
 
 	return w
@@ -368,5 +367,5 @@ func (w *worker) close() {
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
-	mq.WorkerClaimCheckSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	mq.ClaimCheckSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 }

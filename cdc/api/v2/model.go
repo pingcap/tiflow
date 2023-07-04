@@ -272,9 +272,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
 			}
 		}
-		largeMessageHandle := &config.LargeMessageHandleConfig{
-			LargeMessageHandleOption: c.Sink.LargeMessageHandle.LargeMessageHandleOption,
-			ClaimCheckStorageURI:     c.Sink.LargeMessageHandle.ClaimCheckStorageURI,
+		var largeMessageHandle *config.LargeMessageHandleConfig
+		if c.Sink.LargeMessageHandle != nil {
+			largeMessageHandle = &config.LargeMessageHandleConfig{
+				LargeMessageHandleOption: c.Sink.LargeMessageHandle.LargeMessageHandleOption,
+				ClaimCheckStorageURI:     c.Sink.LargeMessageHandle.ClaimCheckStorageURI,
+			}
 		}
 		var kafkaConfig *config.KafkaConfig
 		if c.Sink.KafkaConfig != nil {
