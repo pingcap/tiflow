@@ -224,7 +224,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		return false
 	}
 
-	globalResolvedTs := p.changefeed.Status.ResolvedTs
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	var tableResolvedTs, tableCheckpointTs uint64
@@ -259,7 +258,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
-			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("state", state),
@@ -273,7 +271,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Stringer("span", &span),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
-		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("state", state),
@@ -765,13 +762,13 @@ func (p *processor) handleErrorCh() (err error) {
 
 func (p *processor) initDDLHandler(ctx context.Context) error {
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	resolvedTs := p.changefeed.Status.ResolvedTs
+	minTableBarrierTs := p.changefeed.Status.MinTableBarrierTs
 	forceReplicate := p.changefeed.Info.Config.ForceReplicate
 
-	// if resolvedTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
+	// if minTableBarrierTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
 	// been executed or not. So the DDL puller must start at checkpointTs-1.
 	var ddlStartTs uint64
-	if resolvedTs > checkpointTs {
+	if minTableBarrierTs > checkpointTs {
 		ddlStartTs = checkpointTs
 	} else {
 		ddlStartTs = checkpointTs - 1
@@ -817,12 +814,6 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 	tableBarrier := p.calculateTableBarrierTs(barrier)
 	globalBarrierTs := barrier.GetGlobalBarrierTs()
-	// when redo is enable, globalBarrierTs must less than or equal to global resolvedTs
-	if p.redo.r.Enabled() {
-		if globalBarrierTs > p.changefeed.Status.ResolvedTs {
-			globalBarrierTs = p.changefeed.Status.ResolvedTs
-		}
-	}
 	schemaResolvedTs := p.ddlHandler.r.schemaStorage.ResolvedTs()
 	if schemaResolvedTs < globalBarrierTs {
 		// Do not update barrier ts that is larger than

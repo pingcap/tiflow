@@ -51,10 +51,10 @@ func (mr *MockStatusProviderMockRecorder) GetAllChangeFeedInfo(ctx interface{}) 
 }
 
 // GetAllChangeFeedStatuses mocks base method.
-func (m *MockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
+func (m *MockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllChangeFeedStatuses", ctx)
-	ret0, _ := ret[0].(map[model.ChangeFeedID]*model.ChangeFeedStatus)
+	ret0, _ := ret[0].(map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -111,10 +111,10 @@ func (mr *MockStatusProviderMockRecorder) GetChangeFeedInfo(ctx, changefeedID in
 }
 
 // GetChangeFeedStatus mocks base method.
-func (m *MockStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
+func (m *MockStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetChangeFeedStatus", ctx, changefeedID)
-	ret0, _ := ret[0].(*model.ChangeFeedStatus)
+	ret0, _ := ret[0].(*model.ChangeFeedStatusForAPI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -286,7 +286,7 @@ func TestGetChangeFeed(t *testing.T) {
 			Code: string(cerrors.ErrStartTsBeforeGC.RFCCode()),
 		},
 	}
-	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
+	statusProvider.changefeedStatus = &model.ChangeFeedStatusForAPI{
 		CheckpointTs: 1,
 	}
 	w = httptest.NewRecorder()
@@ -442,7 +442,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
 		Times(1)
 
-	statusProvider.changefeedStatus = &model.ChangeFeedStatus{
+	statusProvider.changefeedStatus = &model.ChangeFeedStatusForAPI{
 		CheckpointTs: 1,
 	}
 	w = httptest.NewRecorder()
@@ -538,7 +538,7 @@ func TestListChangeFeeds(t *testing.T) {
 				State: model.StateStopped,
 			},
 		},
-		changefeedStatuses: map[model.ChangeFeedID]*model.ChangeFeedStatus{
+		changefeedStatuses: map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI{
 			model.DefaultChangeFeedID("cf1"): {},
 			model.DefaultChangeFeedID("cf2"): {},
 			model.DefaultChangeFeedID("cf3"): {},
@@ -844,7 +844,7 @@ func TestDeleteChangefeed(t *testing.T) {
 
 	// case 4: remove changefeed
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
-		&model.ChangeFeedStatus{}, nil)
+		&model.ChangeFeedStatusForAPI{}, nil)
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
 		nil, cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID))
 	w = httptest.NewRecorder()
@@ -855,7 +855,7 @@ func TestDeleteChangefeed(t *testing.T) {
 
 	// case 5: remove changefeed failed
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).AnyTimes().Return(
-		&model.ChangeFeedStatus{}, nil)
+		&model.ChangeFeedStatusForAPI{}, nil)
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)

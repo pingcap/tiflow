@@ -16,7 +16,6 @@ package owner
 import (
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -28,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
+	credo "github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -163,7 +163,7 @@ func (m *mockScheduler) Tick(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
-	barrier schedulepb.BarrierWithMinTs,
+	barrier *schedulepb.BarrierWithMinTs,
 ) (newCheckpointTs, newResolvedTs model.Ts, err error) {
 	m.currentTables = currentTables
 	return barrier.MinTableBarrierTs, barrier.GlobalBarrierTs, nil
@@ -224,7 +224,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		// new scheduler
 		func(
 			ctx cdcContext.Context, up *upstream.Upstream, epoch uint64,
-			cfg *config.SchedulerConfig,
+			cfg *config.SchedulerConfig, redoMetaManager credo.MetaManager,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
 		},
@@ -596,39 +596,54 @@ func TestBarrierAdvance(t *testing.T) {
 
 		// The changefeed load the info from etcd.
 		cf.state.Status = &model.ChangeFeedStatus{
-			ResolvedTs:        cf.state.Info.StartTs + 10,
 			CheckpointTs:      cf.state.Info.StartTs,
-			MinTableBarrierTs: cf.state.Info.StartTs,
+			MinTableBarrierTs: cf.state.Info.StartTs + 5,
 		}
 
 		// Do the preflightCheck and initialize the changefeed.
 		cf.Tick(ctx, captures)
 		tester.MustApplyPatches()
+		if i == 1 {
+			cf.ddlManager.ddlResolvedTs += 10
+		}
+		_, barrier, err := cf.ddlManager.tick(ctx, cf.state.Status.CheckpointTs, nil)
 
-		barrier, err := cf.handleBarrier(ctx)
+		require.Nil(t, err)
+
+		err = cf.handleBarrier(ctx, barrier)
 		require.Nil(t, err)
 
 		if i == 0 {
-			require.Equal(t, uint64(math.MaxUint64), barrier)
+			require.Equal(t, cf.state.Info.StartTs, barrier.GlobalBarrierTs)
 		}
 		// sync-point is enabled, sync point barrier is ticked
 		if i == 1 {
-			require.Equal(t, cf.state.Info.StartTs+10, barrier)
+			require.Equal(t, cf.state.Info.StartTs+10, barrier.GlobalBarrierTs)
 		}
 
 		// Suppose tableCheckpoint has been advanced.
-		cf.state.Status.CheckpointTs = cf.state.Status.ResolvedTs
+		cf.state.Status.CheckpointTs += 10
 
 		// Need more 1 tick to advance barrier if sync-point is enabled.
 		if i == 1 {
-			barrier, err := cf.handleBarrier(ctx)
+			err = cf.handleBarrier(ctx, barrier)
 			require.Nil(t, err)
-			require.Equal(t, cf.state.Info.StartTs+10, barrier)
+			require.Equal(t, cf.state.Info.StartTs+10, barrier.GlobalBarrierTs)
+			// Then the last tick barrier must be advanced correctly.
+			cf.ddlManager.ddlResolvedTs += 1000000000000
+			_, barrier, err = cf.ddlManager.tick(ctx, cf.state.Status.CheckpointTs+10, nil)
+			require.Nil(t, err)
+			err = cf.handleBarrier(ctx, barrier)
+
+			nextSyncPointTs := oracle.GoTimeToTS(
+				oracle.GetTimeFromTS(cf.state.Status.CheckpointTs + 10).
+					Add(cf.state.Info.Config.SyncPointInterval))
+
+			require.Nil(t, err)
+			require.Equal(t, nextSyncPointTs, barrier.GlobalBarrierTs)
+			require.Less(t, cf.state.Status.CheckpointTs+10, barrier.GlobalBarrierTs)
+			require.Less(t, barrier.GlobalBarrierTs, cf.ddlManager.ddlResolvedTs)
 		}
 
-		// Then the last tick barrier must be advanced correctly.
-		barrier, err = cf.handleBarrier(ctx)
-		require.Nil(t, err)
-		require.Less(t, cf.state.Info.StartTs+10, barrier)
 	}
 }

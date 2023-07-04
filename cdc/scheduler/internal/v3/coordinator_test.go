@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/keyspan"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
@@ -206,6 +207,7 @@ func newCoordinatorForTest(
 	changefeedID model.ChangeFeedID,
 	ownerRevision int64,
 	cfg *config.SchedulerConfig,
+	redoMetaManager redo.MetaManager,
 ) *coordinator {
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
 
@@ -215,15 +217,16 @@ func newCoordinatorForTest(
 		captureID: captureID,
 		replicationM: replication.NewReplicationManager(
 			cfg.MaxTaskConcurrency, changefeedID),
-		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
-		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
-		changefeedID: changefeedID,
-		compat:       compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
+		captureM:        member.NewCaptureManager(captureID, changefeedID, revision, cfg),
+		schedulerM:      scheduler.NewSchedulerManager(changefeedID, cfg),
+		changefeedID:    changefeedID,
+		compat:          compat.New(cfg, map[model.CaptureID]*model.CaptureInfo{}),
+		redoMetaManager: redoMetaManager,
 	}
 }
 
 func newTestCoordinator(cfg *config.SchedulerConfig) (*coordinator, *transport.MockTrans) {
-	coord := newCoordinatorForTest("a", model.ChangeFeedID{}, 1, cfg)
+	coord := newCoordinatorForTest("a", model.ChangeFeedID{}, 1, cfg, redo.NewDisabledMetaManager())
 	trans := transport.NewMockTrans()
 	coord.trans = trans
 	coord.reconciler = keyspan.NewReconcilerForTests(
