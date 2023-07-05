@@ -15,13 +15,13 @@ package open
 
 import (
 	"testing"
-	"time"
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,22 +31,22 @@ func TestFormatCol(t *testing.T) {
 		Type:  mysql.TypeString,
 		Value: "测",
 	}}}
-	rowEncode, err := row.encode(false)
-	require.Nil(t, err)
+	rowEncode, err := row.encode()
+	require.NoError(t, err)
 	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, row, row2)
-
+	//
 	row = &messageRow{Update: map[string]internal.Column{"test": {
 		Type:  mysql.TypeBlob,
 		Value: []byte("测"),
 	}}}
-	rowEncode, err = row.encode(false)
-	require.Nil(t, err)
+	rowEncode, err = row.encode()
+	require.NoError(t, err)
 	row2 = new(messageRow)
 	err = row2.decode(rowEncode)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, row, row2)
 }
 
@@ -60,11 +60,11 @@ func TestNonBinaryStringCol(t *testing.T) {
 	mqCol := internal.Column{}
 	mqCol.FromRowChangeColumn(col)
 	row := &messageRow{Update: map[string]internal.Column{"test": mqCol}}
-	rowEncode, err := row.encode(false)
-	require.Nil(t, err)
+	rowEncode, err := row.encode()
+	require.NoError(t, err)
 	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, row, row2)
 	mqCol2 := row2.Update["test"]
 	col2 := mqCol2.ToRowChangeColumn("test")
@@ -83,11 +83,11 @@ func TestVarBinaryCol(t *testing.T) {
 	mqCol := internal.Column{}
 	mqCol.FromRowChangeColumn(col)
 	row := &messageRow{Update: map[string]internal.Column{"test": mqCol}}
-	rowEncode, err := row.encode(false)
-	require.Nil(t, err)
+	rowEncode, err := row.encode()
+	require.NoError(t, err)
 	row2 := new(messageRow)
 	err = row2.decode(rowEncode)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, row, row2)
 	mqCol2 := row2.Update["test"]
 	col2 := mqCol2.ToRowChangeColumn("test")
@@ -96,69 +96,97 @@ func TestVarBinaryCol(t *testing.T) {
 
 func TestOnlyOutputUpdatedColumn(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		pre     interface{}
-		updated interface{}
-		output  bool
-	}{
-		{
-			pre:     []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-			updated: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
-			output:  false,
+
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.OnlyOutputUpdatedColumns = true
+
+	table := &model.TableName{
+		Schema: "test",
+		Table:  "test",
+	}
+
+	event := &model.RowChangedEvent{
+		Table: table,
+		PreColumns: []*model.Column{
+			{
+				Name:  "test",
+				Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+			},
 		},
-		{
-			pre:     uint64(1),
-			updated: uint64(1),
-			output:  false,
-		},
-		{
-			pre:     nil,
-			updated: nil,
-			output:  false,
-		},
-		{
-			pre:     float64(6.2),
-			updated: float32(6.2),
-			output:  true,
-		},
-		{
-			pre:     uint64(1),
-			updated: int64(1),
-			output:  true,
-		},
-		{
-			pre:     time.Time{},
-			updated: time.Time{},
-			output:  false,
-		},
-		{
-			pre:     "time.Time{}",
-			updated: time.Time{},
-			output:  true,
-		},
-		{
-			pre:     "time.Time{}",
-			updated: "time.Time{}",
-			output:  false,
+		Columns: []*model.Column{
+			{
+				Name:  "test",
+				Value: []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A},
+			},
 		},
 	}
 
-	for _, cs := range cases {
-		col := internal.Column{
-			Value: cs.pre,
-		}
-		col2 := internal.Column{
-			Value: cs.updated,
-		}
-		row := &messageRow{
-			Update:     map[string]internal.Column{"test": col2},
-			PreColumns: map[string]internal.Column{"test": col},
-		}
-		_, err := row.encode(true)
-		require.Nil(t, err)
-		_, ok := row.PreColumns["test"]
-		assert.Equal(t, cs.output, ok)
+	// column not updated, so ignore it.
+	_, row, err := rowChangeToMsg(event, codecConfig, false)
+	require.NoError(t, err)
+	_, ok := row.PreColumns["test"]
+	require.False(t, ok)
+
+	event = &model.RowChangedEvent{
+		Table: table,
+		PreColumns: []*model.Column{
+			{
+				Name:  "test",
+				Value: nil,
+			},
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "test",
+				Value: nil,
+			},
+		},
 	}
+	_, row, err = rowChangeToMsg(event, codecConfig, false)
+	require.NoError(t, err)
+	_, ok = row.PreColumns["test"]
+	require.False(t, ok)
+
+	// column type updated, so output it.
+	event = &model.RowChangedEvent{
+		Table: table,
+		PreColumns: []*model.Column{
+			{
+				Name:  "test",
+				Value: float64(6.2),
+			},
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "test",
+				Value: float32(6.2),
+			},
+		},
+	}
+	_, row, err = rowChangeToMsg(event, codecConfig, false)
+	require.NoError(t, err)
+	_, ok = row.PreColumns["test"]
+	require.True(t, ok)
+
+	event = &model.RowChangedEvent{
+		Table: table,
+		PreColumns: []*model.Column{
+			{
+				Name:  "test",
+				Value: uint64(1),
+			},
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "test",
+				Value: int64(1),
+			},
+		},
+	}
+	_, row, err = rowChangeToMsg(event, codecConfig, false)
+	require.NoError(t, err)
+	_, ok = row.PreColumns["test"]
+	require.True(t, ok)
 }
 
 func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
@@ -175,12 +203,17 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
 		},
 	}
-	_, value, err := rowChangeToMsg(insertEvent, true, false)
+
+	config := common.NewConfig(config.ProtocolOpen)
+	config.DeleteOnlyHandleKeyColumns = true
+
+	_, value, err := rowChangeToMsg(insertEvent, config, false)
 	require.NoError(t, err)
 	require.Contains(t, value.Update, "id")
 	require.Contains(t, value.Update, "a")
 
-	key, value, err := rowChangeToMsg(insertEvent, false, true)
+	config.DeleteOnlyHandleKeyColumns = false
+	key, value, err := rowChangeToMsg(insertEvent, config, true)
 	require.NoError(t, err)
 	require.True(t, key.OnlyHandleKey)
 	require.Contains(t, value.Update, "id")
@@ -197,7 +230,7 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
 		},
 	}
-	_, _, err = rowChangeToMsg(insertEventNoHandleKey, false, true)
+	_, _, err = rowChangeToMsg(insertEventNoHandleKey, config, true)
 	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 
 	updateEvent := &model.RowChangedEvent{
@@ -215,11 +248,14 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
 		},
 	}
-	_, value, err = rowChangeToMsg(updateEvent, true, false)
+
+	config.DeleteOnlyHandleKeyColumns = true
+	_, value, err = rowChangeToMsg(updateEvent, config, false)
 	require.NoError(t, err)
 	require.Contains(t, value.PreColumns, "a")
 
-	key, value, err = rowChangeToMsg(updateEvent, false, true)
+	config.DeleteOnlyHandleKeyColumns = false
+	key, value, err = rowChangeToMsg(updateEvent, config, true)
 	require.NoError(t, err)
 	require.True(t, key.OnlyHandleKey)
 	require.NotContains(t, value.PreColumns, "a")
@@ -240,7 +276,7 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
 		},
 	}
-	_, _, err = rowChangeToMsg(updateEventNoHandleKey, false, true)
+	_, _, err = rowChangeToMsg(updateEventNoHandleKey, config, true)
 	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 
 	deleteEvent := &model.RowChangedEvent{
@@ -254,15 +290,18 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
 		},
 	}
-	_, value, err = rowChangeToMsg(deleteEvent, true, false)
+	config.DeleteOnlyHandleKeyColumns = true
+	_, value, err = rowChangeToMsg(deleteEvent, config, false)
 	require.NoError(t, err)
 	require.NotContains(t, value.Delete, "a")
 
-	_, value, err = rowChangeToMsg(deleteEvent, false, false)
+	config.DeleteOnlyHandleKeyColumns = false
+	_, value, err = rowChangeToMsg(deleteEvent, config, false)
 	require.NoError(t, err)
 	require.Contains(t, value.Delete, "a")
 
-	key, value, err = rowChangeToMsg(deleteEvent, false, true)
+	config.DeleteOnlyHandleKeyColumns = false
+	key, value, err = rowChangeToMsg(deleteEvent, config, true)
 	require.NoError(t, err)
 	require.True(t, key.OnlyHandleKey)
 	require.NotContains(t, value.Delete, "a")
@@ -279,6 +318,6 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 		},
 	}
 
-	_, _, err = rowChangeToMsg(deleteEventNoHandleKey, false, true)
+	_, _, err = rowChangeToMsg(deleteEventNoHandleKey, config, true)
 	require.Error(t, err, cerror.ErrOpenProtocolCodecInvalidData)
 }
