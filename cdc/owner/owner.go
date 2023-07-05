@@ -156,7 +156,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	ctx := stdCtx.(cdcContext.Context)
 	for changefeedID, changefeedState := range state.Changefeeds {
 		// check if we are the changefeed owner to  handle this changefeed
-		if o.shouldHandleChangefeed(changefeedState) {
+		if !o.shouldHandleChangefeed(changefeedState) {
 			continue
 		}
 		if changefeedState.Info == nil {
