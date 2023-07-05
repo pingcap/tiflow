@@ -165,11 +165,11 @@ func NewSnapshotFromMeta(
 			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 		}
 		for _, tableInfo := range tableInfos {
-			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
-			if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-				log.Debug("ignore table", zap.String("table", tableInfo.TableName.String()))
+			if filter.ShouldIgnoreTable(dbinfo.Name.O, tableInfo.Name.O) {
+				log.Debug("ignore table", zap.String("table", tableInfo.Name.O))
 				continue
 			}
+			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,
 				tag:    tag,

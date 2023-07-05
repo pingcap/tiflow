@@ -338,6 +338,7 @@ func (info *ChangeFeedInfo) rmMQOnlyFields() {
 	info.Config.Sink.EnableKafkaSinkV2 = nil
 	info.Config.Sink.OnlyOutputUpdatedColumns = nil
 	info.Config.Sink.DeleteOnlyOutputHandleKeyColumns = nil
+	info.Config.Sink.LargeMessageOnlyHandleKeyColumns = nil
 	info.Config.Sink.KafkaConfig = nil
 }
 
@@ -583,4 +584,14 @@ func (t DownstreamType) String() string {
 		return "Storage"
 	}
 	return "Unknown"
+}
+
+// ChangeFeedStatusForAPI uses to transfer the status of changefeed for API.
+type ChangeFeedStatusForAPI struct {
+	ResolvedTs   uint64 `json:"resolved-ts"`
+	CheckpointTs uint64 `json:"checkpoint-ts"`
+	// minTableBarrierTs is the minimum commitTs of all DDL events and is only
+	// used to check whether there is a pending DDL job at the checkpointTs when
+	// initializing the changefeed.
+	MinTableBarrierTs uint64 `json:"min-table-barrier-ts"`
 }

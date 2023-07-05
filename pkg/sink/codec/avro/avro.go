@@ -364,23 +364,20 @@ func getTiDBTypeFromColumn(col *model.Column) string {
 	return tt
 }
 
-func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
-	var (
-		result byte
-		flag   model.ColumnFlagType
-	)
-	switch tp {
-	case "INT":
-		// maybe mysql.TypeTiny / mysql.TypeShort / mysql.TypeInt24 / mysql.TypeLong
-		// we don't know the exact type, so we use mysql.TypeLong
-		result = mysql.TypeLong
-	case "INT UNSIGNED":
+func flagFromTiDBType(tp string) model.ColumnFlagType {
+	var flag model.ColumnFlagType
+	if strings.Contains(tp, "UNSIGNED") {
 		flag.SetIsUnsigned()
+	}
+	return flag
+}
+
+func mysqlTypeFromTiDBType(tidbType string) byte {
+	var result byte
+	switch tidbType {
+	case "INT", "INT UNSIGNED":
 		result = mysql.TypeLong
-	case "BIGINT":
-		result = mysql.TypeLonglong
-	case "BIGINT UNSIGNED":
-		flag.SetIsUnsigned()
+	case "BIGINT", "BIGINT UNSIGNED":
 		result = mysql.TypeLonglong
 	case "FLOAT":
 		result = mysql.TypeFloat
@@ -393,9 +390,6 @@ func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
 	case "TEXT":
 		result = mysql.TypeVarchar
 	case "BLOB":
-		// maybe mysql.TypeTinyBlob / mysql.TypeMediumBlob / mysql.TypeBlob / mysql.TypeLongBlob
-		// we don't know the exact type, so we use mysql.TypeLongBlob
-		flag.SetIsBinary()
 		result = mysql.TypeLongBlob
 	case "ENUM":
 		result = mysql.TypeEnum
@@ -414,9 +408,9 @@ func mysqlAndFlagTypeFromTiDBType(tp string) (byte, model.ColumnFlagType) {
 	case "YEAR":
 		result = mysql.TypeYear
 	default:
-		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tp))
+		log.Panic("this should not happen, unknown TiDB type", zap.String("type", tidbType))
 	}
-	return result, flag
+	return result
 }
 
 const (
@@ -913,8 +907,11 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		enumVar, err := types.ParseEnumValue(ft.GetElems(), col.Value.(uint64))
+		elements := ft.GetElems()
+		number := col.Value.(uint64)
+		enumVar, err := types.ParseEnumValue(elements, number)
 		if err != nil {
+			log.Info("avro encoder parse enum value failed", zap.Strings("elements", elements), zap.Uint64("number", number))
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
 		return enumVar.Name, "string", nil
@@ -922,8 +919,12 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		setVar, err := types.ParseSetValue(ft.GetElems(), col.Value.(uint64))
+		elements := ft.GetElems()
+		number := col.Value.(uint64)
+		setVar, err := types.ParseSetValue(elements, number)
 		if err != nil {
+			log.Info("avro encoder parse set value failed",
+				zap.Strings("elements", elements), zap.Uint64("number", number), zap.Error(err))
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
 		return setVar.Name, "string", nil
@@ -935,13 +936,14 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			n, err := strconv.ParseInt(v, 10, 32)
 			if err != nil {
+				log.Info("avro encoder parse year value failed", zap.String("value", v), zap.Error(err))
 				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 			}
 			return int32(n), "int", nil
 		}
 		return int32(col.Value.(int64)), "int", nil
 	default:
-		log.Error("unknown mysql type", zap.Any("mysqlType", col.Type))
+		log.Error("unknown mysql type", zap.Any("value", col.Value), zap.Any("mysqlType", col.Type))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
 	}
 }
@@ -1013,4 +1015,29 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 		config:             b.config,
 	}
 	return encoder
+}
+
+// SetupEncoderAndSchemaRegistry4Testing start a local schema registry for testing.
+func SetupEncoderAndSchemaRegistry4Testing(
+	ctx context.Context,
+	config *common.Config,
+) (*BatchEncoder, error) {
+	startHTTPInterceptForTestingRegistry()
+	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, "http://127.0.0.1:8081", nil)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &BatchEncoder{
+		namespace:          model.DefaultNamespace,
+		valueSchemaManager: valueSchemaM,
+		keySchemaManager:   keySchemaM,
+		result:             make([]*common.Message, 0, 1),
+		config:             config,
+	}, nil
+}
+
+// TeardownEncoderAndSchemaRegistry4Testing stop the local schema registry for testing.
+func TeardownEncoderAndSchemaRegistry4Testing() {
+	stopHTTPInterceptForTestingRegistry()
 }

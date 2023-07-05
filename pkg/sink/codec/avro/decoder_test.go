@@ -39,8 +39,8 @@ func TestDecodeEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := setupEncoderAndSchemaRegistry(ctx, config)
-	defer teardownEncoderAndSchemaRegistry()
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, config)
+	defer TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
 

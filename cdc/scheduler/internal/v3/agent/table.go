@@ -169,15 +169,13 @@ func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
 	return nil
 }
 
-func (t *tableSpan) handleAddTableTask(
-	ctx context.Context,
-) (result *schedulepb.Message, err error) {
+func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.Message, err error) {
 	state, _ := t.getAndUpdateTableSpanState()
 	changed := true
 	for changed {
 		switch state {
 		case tablepb.TableStateAbsent:
-			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, t.task.IsPrepare)
+			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.Checkpoint, t.task.IsPrepare)
 			if err != nil || !done {
 				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
@@ -208,7 +206,7 @@ func (t *tableSpan) handleAddTableTask(
 			}
 
 			if t.task.status == dispatchTableTaskReceived {
-				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.StartTs, false)
+				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.Checkpoint, false)
 				if err != nil || !done {
 					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),

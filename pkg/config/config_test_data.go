@@ -59,7 +59,8 @@ const (
     "protocol": "open-protocol",
 	"enable-kafka-sink-v2": false,
 	"only-output-updated-columns": false,
-	"delete-only-output-handle-key-columns": false
+	"delete-only-output-handle-key-columns": false,
+	"large-message-only-handle-key-columns": false
   },
   "consistent": {
     "level": "none",
@@ -114,7 +115,9 @@ const (
   },
   "per-table-memory-quota": 0,
   "kv-client": {
+    "enable-multiplexing": false,
     "worker-concurrent": 8,
+    "grpc-stream-concurrent": 1,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
     "region-retry-duration": 60000000000
@@ -204,6 +207,7 @@ const (
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
+	"large-message-only-handle-key-columns": true,
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -333,6 +337,7 @@ const (
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
+	"large-message-only-handle-key-columns": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,

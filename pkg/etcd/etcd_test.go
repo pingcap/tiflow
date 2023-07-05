@@ -419,7 +419,7 @@ func TestDeleteCaptureInfo(t *testing.T) {
 	captureID := "test-capture-id"
 
 	changefeedStatus := map[model.ChangeFeedID]model.ChangeFeedStatus{
-		model.DefaultChangeFeedID("test-cf-1"): {ResolvedTs: 1},
+		model.DefaultChangeFeedID("test-cf-1"): {CheckpointTs: 1},
 	}
 
 	for id, status := range changefeedStatus {

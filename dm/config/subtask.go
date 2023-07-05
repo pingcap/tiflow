@@ -84,9 +84,10 @@ type SubTaskConfig struct {
 	flagSet *flag.FlagSet
 
 	// when in sharding, multi dm-workers do one task
-	IsSharding bool   `toml:"is-sharding" json:"is-sharding"`
-	ShardMode  string `toml:"shard-mode" json:"shard-mode"`
-	OnlineDDL  bool   `toml:"online-ddl" json:"online-ddl"`
+	IsSharding                bool   `toml:"is-sharding" json:"is-sharding"`
+	ShardMode                 string `toml:"shard-mode" json:"shard-mode"`
+	StrictOptimisticShardMode bool   `toml:"strict-optimistic-shard-mode" json:"strict-optimistic-shard-mode"`
+	OnlineDDL                 bool   `toml:"online-ddl" json:"online-ddl"`
 
 	// pt/gh-ost name rule, support regex
 	ShadowTableRules []string `yaml:"shadow-table-rules" toml:"shadow-table-rules" json:"shadow-table-rules"`
@@ -287,6 +288,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		return terror.ErrConfigShardModeNotSupport.Generate(c.ShardMode)
 	} else if c.ShardMode == "" && c.IsSharding {
 		c.ShardMode = ShardPessimistic // use the pessimistic mode as default for back compatible.
+	}
+	if c.StrictOptimisticShardMode && c.ShardMode != ShardOptimistic {
+		return terror.ErrConfigStrictOptimisticShardMode.Generate()
 	}
 
 	if len(c.ColumnMappingRules) > 0 {

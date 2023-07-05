@@ -79,6 +79,12 @@ func (m *mockRedoDMLManager) UpdateResolvedTs(ctx context.Context,
 	return nil
 }
 
+func (m *mockRedoDMLManager) StartTable(span tablepb.Span, resolvedTs uint64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resolvedTss[span.TableID] = resolvedTs
+}
+
 func (m *mockRedoDMLManager) GetResolvedTs(span tablepb.Span) model.Ts {
 	m.mu.Lock()
 	defer m.mu.Unlock()

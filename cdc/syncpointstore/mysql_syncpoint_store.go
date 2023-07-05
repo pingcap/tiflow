@@ -52,7 +52,7 @@ func newMySQLSyncPointStore(
 	syncPointRetention time.Duration,
 ) (SyncPointStore, error) {
 	cfg := mysql.NewConfig()
-	err := cfg.Apply(ctx, id, sinkURI, config.GetDefaultReplicaConfig())
+	err := cfg.Apply(config.GetGlobalServerConfig().TZ, id, sinkURI, config.GetDefaultReplicaConfig())
 	if err != nil {
 		return nil, err
 	}

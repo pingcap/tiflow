@@ -16,6 +16,7 @@ package sinkmanager
 import (
 	"context"
 	"math"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -49,6 +50,8 @@ const (
 	// engine.CleanByTable can be expensive. So it's necessary to reduce useless calls.
 	cleanTableInterval  = 5 * time.Second
 	cleanTableMinEvents = 128
+	maxRetryDuration    = 30 * time.Minute
+	errGCInterval       = 10 * time.Minute
 )
 
 // TableStats of a table sink.
@@ -56,9 +59,13 @@ type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
 	BarrierTs    model.Ts
-	// From sorter.
-	ReceivedMaxCommitTs   model.Ts
-	ReceivedMaxResolvedTs model.Ts
+}
+
+type sinkRetry struct {
+	// To control the error retry.
+	lastInternalError  error
+	firstRetryTime     time.Time
+	lastErrorRetryTime time.Time
 }
 
 // SinkManager is the implementation of SinkManager.
@@ -99,7 +106,7 @@ type SinkManager struct {
 	sinkWorkerAvailable chan struct{}
 	// sinkMemQuota is used to control the total memory usage of the table sink.
 	sinkMemQuota *memquota.MemQuota
-
+	sinkRetry    sinkRetry
 	// redoWorkers used to pull data from source manager.
 	redoWorkers []*redoWorker
 	// redoTaskChan is used to send tasks to redoWorkers.
@@ -144,6 +151,11 @@ func New(
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
+		sinkRetry: sinkRetry{
+			lastInternalError:  nil,
+			firstRetryTime:     time.Now(),
+			lastErrorRetryTime: time.Now(),
+		},
 
 		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -167,6 +179,7 @@ func New(
 	}
 
 	m.ready = make(chan struct{})
+
 	return m
 }
 
@@ -251,7 +264,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 
 		select {
 		case <-m.managerCtx.Done():
-			return errors.Trace(m.managerCtx.Err())
+			return m.managerCtx.Err()
 		case err = <-gcErrors:
 			return errors.Trace(err)
 		case err = <-sinkErrors:
@@ -267,6 +280,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			sinkFactoryErrors = make(chan error, 16)
 		}
 
+		// If the error is retryable, we should retry to re-establish the internal resources.
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
 			select {
 			case <-m.managerCtx.Done():
@@ -275,11 +289,39 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 		} else {
 			return errors.Trace(err)
 		}
-		// Use a 5 second backoff when re-establishing internal resources.
-		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
+
+		backoff, err := m.getRetryBackoff(err)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if err = util.Hang(m.managerCtx, backoff); err != nil {
 			return errors.Trace(err)
 		}
 	}
+}
+
+// getRetryBackoff returns the backoff duration for retrying the last error.
+// If the retry time is exhausted, it returns the an ChangefeedUnRetryableError.
+func (m *SinkManager) getRetryBackoff(err error) (time.Duration, error) {
+	// reset firstRetryTime when the last error is too long ago
+	// it means the last error is retry success, and the sink is running well for some time
+	if m.sinkRetry.lastInternalError == nil ||
+		time.Since(m.sinkRetry.lastErrorRetryTime) >= errGCInterval {
+		m.sinkRetry.firstRetryTime = time.Now()
+	}
+
+	// return an unretryable error if retry time is exhausted
+	if time.Since(m.sinkRetry.firstRetryTime) >= maxRetryDuration {
+		return 0, cerror.WrapChangefeedUnretryableErr(err)
+	}
+
+	m.sinkRetry.lastInternalError = err
+	m.sinkRetry.lastErrorRetryTime = time.Now()
+
+	// interval is in range [5s, 30s)
+	interval := time.Second * time.Duration(rand.Int63n(25)+5)
+	return interval, nil
 }
 
 func (m *SinkManager) initSinkFactory(errCh chan error) error {
@@ -934,7 +976,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	if m.redoDMLMgr != nil {
 		resolvedTs = m.redoDMLMgr.GetResolvedTs(span)
 	} else {
-		resolvedTs = m.sourceManager.GetTableResolvedTs(span)
+		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
 	if resolvedTs < checkpointTs.ResolvedMark() {
@@ -943,25 +985,14 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("resolvedTs", resolvedTs),
-			zap.Any("checkpointTs", checkpointTs))
+			zap.Any("checkpointTs", checkpointTs),
+			zap.Uint64("barrierTs", tableSink.barrierTs.Load()))
 	}
 	return TableStats{
-		CheckpointTs:          checkpointTs.ResolvedMark(),
-		ResolvedTs:            resolvedTs,
-		BarrierTs:             tableSink.barrierTs.Load(),
-		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
-		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
+		CheckpointTs: checkpointTs.ResolvedMark(),
+		ResolvedTs:   resolvedTs,
+		BarrierTs:    tableSink.barrierTs.Load(),
 	}
-}
-
-// ReceivedEvents returns the number of events received by all table sinks.
-func (m *SinkManager) ReceivedEvents() int64 {
-	totalReceivedEvents := int64(0)
-	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
-		totalReceivedEvents += value.(*tableSinkWrapper).getReceivedEventCount()
-		return true
-	})
-	return totalReceivedEvents
 }
 
 // WaitForReady implements pkg/util.Runnable.
@@ -991,15 +1022,11 @@ func (m *SinkManager) Close() {
 
 	start := time.Now()
 	m.waitSubroutines()
-	m.tableSinks.Range(func(_ tablepb.Span, value interface{}) bool {
-		sink := value.(*tableSinkWrapper)
-		sink.close()
-		if m.eventCache != nil {
-			m.eventCache.removeTable(sink.span)
-		}
-		return true
-	})
+	// NOTE: It's unnecceary to close table sinks before clear sink factory.
 	m.clearSinkFactory()
+	if m.eventCache != nil {
+		m.eventCache.clear()
+	}
 
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),

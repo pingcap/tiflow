@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -155,7 +156,7 @@ func (r *Manager) HandleCaptureChanges(
 		var err error
 		spanStatusMap.Ascend(func(span tablepb.Span, status map[string]*tablepb.TableStatus) bool {
 			table, err1 := NewReplicationSet(span, checkpointTs, status, r.changefeedID)
-			if err != nil {
+			if err1 != nil {
 				err = errors.Trace(err1)
 				return false
 			}
@@ -508,7 +509,8 @@ func (r *Manager) RunningTasks() *spanz.BtreeMap[*ScheduleTask] {
 func (r *Manager) AdvanceCheckpoint(
 	currentTables *TableRanges,
 	currentPDTime time.Time,
-	barrier schedulepb.BarrierWithMinTs,
+	barrier *schedulepb.BarrierWithMinTs,
+	redoMetaManager redo.MetaManager,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestRange := tablepb.Span{}
@@ -610,6 +612,33 @@ func (r *Manager) AdvanceCheckpoint(
 		time.Since(r.lastLogSlowTablesTime) > logSlowTablesInterval {
 		r.logSlowTableInfo(currentPDTime)
 		r.lastLogSlowTablesTime = time.Now()
+	}
+
+	if redoMetaManager.Enabled() {
+		if newResolvedTs > barrier.RedoBarrierTs {
+			newResolvedTs = barrier.RedoBarrierTs
+		}
+		redoMetaManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+		flushedMeta := redoMetaManager.GetFlushedMeta()
+		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
+		log.Debug("owner gets flushed meta",
+			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+			zap.Uint64("newResolvedTs", newResolvedTs),
+			zap.Uint64("newCheckpointTs", newCheckpointTs),
+			zap.String("namespace", r.changefeedID.Namespace),
+			zap.String("changefeed", r.changefeedID.ID))
+		if flushedResolvedTs != 0 && flushedResolvedTs < newResolvedTs {
+			newResolvedTs = flushedResolvedTs
+		}
+
+		if newCheckpointTs > newResolvedTs {
+			newCheckpointTs = newResolvedTs
+		}
+
+		if barrier.GlobalBarrierTs > newResolvedTs {
+			barrier.GlobalBarrierTs = newResolvedTs
+		}
 	}
 
 	return newCheckpointTs, newResolvedTs

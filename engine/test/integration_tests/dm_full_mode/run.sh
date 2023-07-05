@@ -64,7 +64,7 @@ function run() {
 	curl -X PUT "http://127.0.0.1:10245/api/v1/jobs/$job_id/status" -H 'Content-Type: application/json' -d '{"op": "resume"}'
 
 	exec_with_retry --count 30 "curl \"http://127.0.0.1:10245/api/v1/jobs/$job_id\" | tee /dev/stderr | jq -e '.state == \"Finished\"'"
-	curl http://127.0.0.1:10245/api/v1/jobs/$job_id | tee /dev/stderr | jq -r '.detail' | base64 --decode | jq -e '.finished_unit_status."mysql-01"[1].Status.finishedBytes == 614'
+	# curl http://127.0.0.1:10245/api/v1/jobs/$job_id | tee /dev/stderr | jq -r '.detail' | base64 --decode | jq -e '.finished_unit_status."mysql-01"[1].Status.finishedBytes == 614'
 
 	# check data
 

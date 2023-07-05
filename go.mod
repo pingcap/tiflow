@@ -28,7 +28,7 @@ require (
 	github.com/gin-gonic/gin v1.8.1
 	github.com/glebarez/go-sqlite v1.17.3
 	github.com/glebarez/sqlite v1.4.6
-	github.com/go-mysql-org/go-mysql v1.6.1-0.20221223014230-81966e15b9c5
+	github.com/go-mysql-org/go-mysql v1.7.1-0.20230619063055-fd67d94318fd
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/goccy/go-json v0.9.11
@@ -60,7 +60,7 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20221009092201-b66cddb77c32
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
-	github.com/pingcap/kvproto v0.0.0-20230426023724-d90a321b46be
+	github.com/pingcap/kvproto v0.0.0-20230626064255-5f60f7f5d8e2
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
 	github.com/pingcap/tidb v1.1.0-beta.0.20230505070356-cb609bb39c80
 	github.com/pingcap/tidb-tools v7.0.0+incompatible
@@ -173,7 +173,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.10.0 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
-	github.com/golang/glog v1.0.0 // indirect
+	github.com/golang/glog v1.1.0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/pprof v0.0.0-20211122183932-1daafda22083 // indirect
@@ -199,7 +199,7 @@ require (
 	github.com/jonboulle/clockwork v0.3.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.16.5 // indirect
+	github.com/klauspost/compress v1.16.6 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect

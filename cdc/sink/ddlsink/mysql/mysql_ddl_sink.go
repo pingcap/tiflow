@@ -70,7 +70,7 @@ func NewDDLSink(
 	replicaConfig *config.ReplicaConfig,
 ) (*DDLSink, error) {
 	cfg := pmysql.NewConfig()
-	err := cfg.Apply(ctx, changefeedID, sinkURI, replicaConfig)
+	err := cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -136,11 +136,38 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 		retry.WithIsRetryableErr(errorutil.IsRetryableDDLError))
 }
 
+// isReorgOrPartitionDDL returns true if given ddl type is reorg ddl or
+// partition ddl.
+func isReorgOrPartitionDDL(t timodel.ActionType) bool {
+	// partition related ddl
+	return t == timodel.ActionAddTablePartition ||
+		t == timodel.ActionExchangeTablePartition ||
+		t == timodel.ActionReorganizePartition ||
+		// reorg ddls
+		t == timodel.ActionAddPrimaryKey ||
+		t == timodel.ActionAddIndex ||
+		t == timodel.ActionModifyColumn ||
+		// following ddls can be fast when the downstream is TiDB, we must
+		// still take them into consideration to ensure compatibility with all
+		// MySQL-compatible databases.
+		t == timodel.ActionAddColumn ||
+		t == timodel.ActionAddColumns ||
+		t == timodel.ActionDropColumn ||
+		t == timodel.ActionDropColumns
+}
+
 func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
-	writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
-	writeTimeout += networkDriftDuration
-	ctx, cancelFunc := context.WithTimeout(pctx, writeTimeout)
-	defer cancelFunc()
+	ctx := pctx
+	// When executing Reorg and Partition DDLs in TiDB, there is no timeout
+	// mechanism by default. Instead, the system will wait for the DDL operation
+	// to be executed or completed before proceeding.
+	if !isReorgOrPartitionDDL(ddl.Type) {
+		writeTimeout, _ := time.ParseDuration(m.cfg.WriteTimeout)
+		writeTimeout += networkDriftDuration
+		var cancelFunc func()
+		ctx, cancelFunc = context.WithTimeout(pctx, writeTimeout)
+		defer cancelFunc()
+	}
 
 	shouldSwitchDB := needSwitchDB(ddl)
 

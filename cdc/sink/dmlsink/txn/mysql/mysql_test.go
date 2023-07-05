@@ -46,6 +46,12 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func init() {
+	serverConfig := config.GetGlobalServerConfig().Clone()
+	serverConfig.TZ = "UTC"
+	config.StoreGlobalServerConfig(serverConfig)
+}
+
 func newMySQLBackendWithoutDB(ctx context.Context) *mysqlBackend {
 	cfg := pmysql.NewConfig()
 	cfg.BatchDMLEnable = false
@@ -81,6 +87,10 @@ func newMySQLBackend(
 
 func newTestMockDB(t *testing.T) (db *sql.DB, mock sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+	mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+		Number:  1305,
+		Message: "FUNCTION test.tidb_version does not exist",
+	})
 	mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
 		Number:  1305,
 		Message: "FUNCTION test.tidb_version does not exist",
