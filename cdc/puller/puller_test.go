@@ -134,7 +134,7 @@ func newPullerForTest(
 		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
 		checkpointTs, spans, config.GetDefaultServerConfig().KVClient,
 		model.DefaultChangeFeedID("changefeed-id-test"), 0,
-		"table-test", false)
+		"table-test", false, false)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
