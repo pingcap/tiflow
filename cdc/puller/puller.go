@@ -89,6 +89,7 @@ func New(ctx context.Context,
 	tableID model.TableID,
 	tableName string,
 	filterLoop bool,
+	isDDLPuller bool,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {

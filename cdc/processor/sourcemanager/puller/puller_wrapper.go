@@ -108,6 +108,7 @@ func (n *WrapperImpl) Start(
 		n.span.TableID,
 		n.tableName,
 		n.bdrMode,
+		false,
 	)
 
 	// Use errgroup to ensure all sub goroutines can exit without calling Close.
