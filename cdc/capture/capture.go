@@ -163,7 +163,8 @@ func NewCapture4Test(o owner.Owner) *captureImpl {
 
 // NewCaptureWithServerManager4Test returns a new Capture instance for test.
 func NewCaptureWithServerManager4Test(o owner.Owner,
-	manager owner.ServerManager) *captureImpl {
+	manager owner.ServerManager,
+) *captureImpl {
 	res := &captureImpl{
 		info: &model.CaptureInfo{
 			ID:            "capture-for-test",
