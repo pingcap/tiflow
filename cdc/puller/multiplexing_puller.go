@@ -28,13 +28,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	resolveLockFence        time.Duration = 10 * time.Second
-	resolveLockTickInterval time.Duration = 5 * time.Second
+	resolveLockFence        time.Duration = 20 * time.Second
+	resolveLockTickInterval time.Duration = 10 * time.Second
 
 	multiplexingPullerEventChanSize = 1024
 	resolvedSpanChanSize            = 128
@@ -400,10 +401,18 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 }
 
 func (p *tableProgress) resolveLock() {
-	if p.initialized && time.Since(p.resolvedTsUpdated) >= resolveLockFence {
-		for _, span := range p.spans {
-			p.client.ResolveLock(span)
-		}
+	if !p.initialized || time.Since(p.resolvedTsUpdated) < resolveLockFence {
+		return
+	}
+	resolvedTs := p.resolvedTs.Load()
+	resolvedTime := oracle.GetTimeFromTS(resolvedTs)
+	currentTime := p.client.GetPDClock().CurrentTime()
+	if !currentTime.After(resolvedTime) || currentTime.Sub(resolvedTime) < resolveLockFence {
+		return
+	}
+
+	for _, span := range p.spans {
+		p.client.ResolveLock(span, resolvedTs)
 	}
 }
 

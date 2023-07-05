@@ -161,14 +161,11 @@ type RegionRangeLock struct {
 	regionIDLock      map[uint64]*rangeLockEntry
 	stopped           bool
 	refCount          uint64
-
-	postLockSuccess func(regionID uint64, state *LockedRange)
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
 func NewRegionRangeLock(
 	startKey, endKey []byte, startTs uint64, changefeedLogInfo string,
-	postLockSuccess ...func(regionID uint64, state *LockedRange),
 ) *RegionRangeLock {
 	rrl := &RegionRangeLock{
 		id:                allocID(),
@@ -177,9 +174,6 @@ func NewRegionRangeLock(
 		rangeCheckpointTs: newRangeTsMap(startKey, endKey, startTs),
 		rangeLock:         btree.NewG(16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
-	}
-	if len(postLockSuccess) > 0 {
-		rrl.postLockSuccess = postLockSuccess[0]
 	}
 	return rrl
 }
@@ -249,9 +243,6 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			zap.String("endKey", hex.EncodeToString(endKey)))
 
 		l.refCount += 1
-		if l.postLockSuccess != nil {
-			l.postLockSuccess(regionID, &newEntry.state)
-		}
 		return LockRangeResult{
 			Status:       LockRangeStatusSuccess,
 			CheckpointTs: checkpointTs,
@@ -487,16 +478,33 @@ type LockedRange struct {
 	Initialzied  atomic.Bool
 }
 
-// CheckLockedRanges do some checks.
-func (l *RegionRangeLock) CheckLockedRanges() (r CheckLockedRangesResult) {
+// CheckLockedRangesResult returns by `RegionRangeLock.CheckLockedRanges`.
+type CheckLockedRangesResult struct {
+	HoleExists    bool
+	FastestRegion LockedRangeValue
+	SlowestRegion LockedRangeValue
+}
+
+// LockedRangeValue is like `LockedRange`.
+type LockedRangeValue struct {
+	RegionID     uint64
+	CheckpointTs uint64
+	Initialized  bool
+}
+
+// CheckSlowLockedRanges checks slow locked ranges.
+func (l *RegionRangeLock) CheckSlowLockedRanges(
+	action func(regionID uint64, state *LockedRange),
+) (r CheckLockedRangesResult) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
 	r.FastestRegion.CheckpointTs = 0
 	r.SlowestRegion.CheckpointTs = math.MaxUint64
 
 	lastEnd := l.totalSpan.StartKey
-	l.rangeLock.AscendGreaterOrEqual(&rangeLockEntry{startKey: nil}, func(item *rangeLockEntry) bool {
+	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
+		action(item.regionID, &item.state)
+
 		r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, item.startKey) < 0
 		ckpt := item.state.CheckpointTs.Load()
 		if ckpt > r.FastestRegion.CheckpointTs {
@@ -513,36 +521,5 @@ func (l *RegionRangeLock) CheckLockedRanges() (r CheckLockedRangesResult) {
 		return true
 	})
 	r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0
-
 	return
-}
-
-// CheckLockedRangesResult returns by `RegionRangeLock.CheckLockedRanges`.
-type CheckLockedRangesResult struct {
-	HoleExists    bool
-	FastestRegion LockedRangeValue
-	SlowestRegion LockedRangeValue
-}
-
-// LockedRangeValue is like `LockedRange`.
-type LockedRangeValue struct {
-	RegionID     uint64
-	CheckpointTs uint64
-	Initialized  bool
-}
-
-// CallPostLockSuccess calls `postLockSuccess` on all locked ranges again.
-func (l *RegionRangeLock) CallPostLockSuccess() {
-	if l.postLockSuccess != nil {
-		l.mu.Lock()
-		entries := make([]*rangeLockEntry, 0, len(l.regionIDLock))
-		for _, entry := range l.regionIDLock {
-			entries = append(entries, entry)
-		}
-		l.mu.Unlock()
-
-		for _, entry := range entries {
-			l.postLockSuccess(entry.regionID, &entry.state)
-		}
-	}
 }

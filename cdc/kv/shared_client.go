@@ -41,7 +41,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	kvclientv2 "github.com/tikv/client-go/v2/kv"
-	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -101,6 +100,7 @@ type SharedClient struct {
 type resolveLockTask struct {
 	regionID   uint64
 	maxVersion uint64
+	state      *regionlock.LockedRange
 	enter      time.Time
 }
 
@@ -146,7 +146,8 @@ type requestedTable struct {
 	deregister sync.Map // map[streamID]time.Time
 
 	// To handle lock resolvings.
-	staleLocks struct {
+	postUpdateRegionResolvedTs func(regionID uint64, state *regionlock.LockedRange)
+	staleLocks                 struct {
 		maxVersion atomic.Uint64
 
 		sync.RWMutex
@@ -266,7 +267,7 @@ func (s *SharedClient) Unsubscribe(span tablepb.Span) (subID SubscriptionID, suc
 
 // ResolveLock is a function. If outsider subscribers find a span resolved timestamp is
 // advanced slowly or stopped, they can try to resolve locks in the given span.
-func (s *SharedClient) ResolveLock(span tablepb.Span) (success bool) {
+func (s *SharedClient) ResolveLock(span tablepb.Span, maxVersion uint64) (success bool) {
 	if span.TableID == 0 {
 		log.Panic("event feed unsubscribe with zero tablepb.Span.TableID",
 			zap.String("namespace", s.changefeed.Namespace),
@@ -282,15 +283,7 @@ func (s *SharedClient) ResolveLock(span tablepb.Span) (success bool) {
 	}
 	s.totalSpans.Unlock()
 
-	if requestedTable.updateStaleLocks(s) {
-		res := requestedTable.rangeLock.CheckLockedRanges()
-		log.Warn("event feed finds slow locked ranges",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Int64("tableID", requestedTable.span.TableID),
-			zap.Uint64("requestID", requestedTable.requestID),
-			zap.Any("LockedRanges", res))
-	}
+	requestedTable.updateStaleLocks(s, maxVersion)
 	return true
 }
 
@@ -845,7 +838,6 @@ func (s *SharedClient) divideAndRequestRegions(
 }
 
 func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegionInfo) {
-	sri.createTime = time.Now()
 	handleResult := func(res regionlock.LockRangeResult) {
 		switch res.Status {
 		case regionlock.LockRangeStatusSuccess:
@@ -864,6 +856,7 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 		}
 	}
 
+	sri.createTime = time.Now()
 	rangeLock := sri.requestedTable.rangeLock
 	res := rangeLock.LockRange(ctx, sri.span.StartKey, sri.span.EndKey, sri.verID.GetID(), sri.verID.GetVer())
 	if res.Status == regionlock.LockRangeStatusWait {
@@ -973,15 +966,13 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 
 func (s *SharedClient) resolveLock(ctx context.Context) error {
 	resolveLastRun := make(map[uint64]time.Time)
-	gcTicker := time.NewTicker(resolveLockFence * 3 / 2)
-	defer gcTicker.Stop()
 
 	gcResolveLastRun := func() {
 		if len(resolveLastRun) > 1024 {
 			copied := make(map[uint64]time.Time)
 			now := time.Now()
 			for regionID, lastRun := range resolveLastRun {
-				if now.Sub(lastRun) < resolveLockFence {
+				if now.Sub(lastRun) < resolveLockMinInterval {
 					resolveLastRun[regionID] = lastRun
 				}
 			}
@@ -989,14 +980,18 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 		}
 	}
 
-	doResolve := func(regionID uint64, maxVersion uint64) {
-		start := time.Now()
-		defer s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
+	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
+		if state.CheckpointTs.Load() > maxVersion || !state.Initialzied.Load() {
+			return
+		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
-			if time.Since(lastRun) < resolveLockFence {
+			if time.Since(lastRun) < resolveLockMinInterval {
 				return
 			}
 		}
+		start := time.Now()
+		defer s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
+
 		if err := s.lockResolver.Resolve(ctx, regionID, maxVersion); err != nil {
 			log.Warn("event feed resolve lock fail",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -1006,6 +1001,9 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 		}
 		resolveLastRun[regionID] = time.Now()
 	}
+
+	gcTicker := time.NewTicker(resolveLockMinInterval * 3 / 2)
+	defer gcTicker.Stop()
 LOOP:
 	for {
 		var task resolveLockTask
@@ -1017,7 +1015,7 @@ LOOP:
 			continue LOOP
 		case task = <-s.resolveLockCh.Out():
 			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
-			doResolve(task.regionID, task.maxVersion)
+			doResolve(task.regionID, task.state, task.maxVersion)
 		}
 	}
 }
@@ -1026,26 +1024,26 @@ func (s *SharedClient) newRequestedTable(
 	subID SubscriptionID, span tablepb.Span, startTs uint64,
 	eventCh chan<- MultiplexingEvent,
 ) *requestedTable {
-	requestedTable := &requestedTable{
-		span:      span,
-		startTs:   startTs,
+	rt := &requestedTable{
+		span:    span,
+		startTs: startTs,
+		rangeLock: regionlock.NewRegionRangeLock(
+			span.StartKey, span.EndKey, startTs,
+			s.changefeed.Namespace+"."+s.changefeed.ID,
+		),
 		eventCh:   eventCh,
 		requestID: uint64(subID),
 	}
 
-	requestedTable.rangeLock = regionlock.NewRegionRangeLock(
-		span.StartKey, span.EndKey, startTs,
-		s.changefeed.Namespace+"."+s.changefeed.ID,
-		func(regionID uint64, state *regionlock.LockedRange) {
-			maxVersion := requestedTable.staleLocks.maxVersion.Load()
-			if state.CheckpointTs.Load() <= maxVersion {
-				enter := time.Now()
-				s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, enter}
-			}
-		},
-	)
+	rt.postUpdateRegionResolvedTs = func(regionID uint64, state *regionlock.LockedRange) {
+		maxVersion := rt.staleLocks.maxVersion.Load()
+		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
+			enter := time.Now()
+			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
+		}
+	}
 
-	return requestedTable
+	return rt
 }
 
 func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) MultiplexingEvent {
@@ -1056,20 +1054,24 @@ func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) Mu
 	}
 }
 
-func (r *requestedTable) updateStaleLocks(s *SharedClient) (success bool) {
-	currentTime := s.pdClock.CurrentTime()
-	r.staleLocks.Lock()
-	if currentTime.Sub(r.staleLocks.registered) < resolveLockFence/2 {
-		r.staleLocks.Unlock()
-		return false
+func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
+	for {
+		old := r.staleLocks.maxVersion.Load()
+		if old >= maxVersion {
+			return
+		}
+		if r.staleLocks.maxVersion.CompareAndSwap(old, maxVersion) {
+			break
+		}
 	}
-	r.staleLocks.registered = currentTime
-	r.staleLocks.Unlock()
 
-	maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTime.Add(-1*resolveLockFence)), 0)
-	r.staleLocks.maxVersion.Store(maxVersion)
-	r.rangeLock.CallPostLockSuccess()
-	return true
+	res := r.rangeLock.CheckSlowLockedRanges(r.postUpdateRegionResolvedTs)
+	log.Warn("event feed finds slow locked ranges",
+		zap.String("namespace", s.changefeed.Namespace),
+		zap.String("changefeed", s.changefeed.ID),
+		zap.Int64("tableID", r.span.TableID),
+		zap.Uint64("requestID", r.requestID),
+		zap.Any("LockedRanges", res))
 }
 
 type sharedClientMetrics struct {
@@ -1128,7 +1130,7 @@ const (
 	rpcMetaFeatureStreamMultiplexing string = "stream-multiplexing"
 	rpcMetaFeaturesSep               string = ","
 
-	resolveLockFence time.Duration = 10 * time.Second
+	resolveLockMinInterval time.Duration = 10 * time.Second
 )
 
 func getContextFromFeatures(ctx context.Context, features []string) context.Context {

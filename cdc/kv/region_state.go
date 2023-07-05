@@ -134,12 +134,18 @@ func (s *regionFeedState) getLastResolvedTs() uint64 {
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	checkpointTs := &s.sri.lockedRange.CheckpointTs
+	state := s.sri.lockedRange
 	for {
-		last := checkpointTs.Load()
-		if last >= resolvedTs || checkpointTs.CompareAndSwap(last, resolvedTs) {
+		last := state.CheckpointTs.Load()
+		if last >= resolvedTs {
 			return
 		}
+		if state.CheckpointTs.CompareAndSwap(last, resolvedTs) {
+			break
+		}
+	}
+	if s.sri.requestedTable != nil {
+		s.sri.requestedTable.postUpdateRegionResolvedTs(s.sri.verID.GetID(), state)
 	}
 }
 

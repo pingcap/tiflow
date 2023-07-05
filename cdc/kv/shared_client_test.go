@@ -81,22 +81,31 @@ func TestRequestedTable(t *testing.T) {
 	// Lock a range, and then ResolveLock will trigger a task for it.
 	res := table.rangeLock.LockRange(context.Background(), []byte{'b'}, []byte{'c'}, 1, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
+	res.LockedRange.Initialzied.Store(true)
 
-	require.True(t, s.ResolveLock(span))
-	time.Sleep(100 * time.Millisecond)
+	require.True(t, s.ResolveLock(span, 200))
 	select {
 	case <-s.resolveLockCh.Out():
-	default:
+	case <-time.NewTimer(100 * time.Millisecond).C:
 		require.True(t, false, "must get a resolve lock task")
 	}
 
-	// Lock another range, and it will auto trigger a task for it.
-	res = table.rangeLock.LockRange(context.Background(), []byte{'c'}, []byte{'d'}, 2, 200)
+	// Lock another range, no task will be triggered before initialized.
+	res = table.rangeLock.LockRange(context.Background(), []byte{'c'}, []byte{'d'}, 2, 100)
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
-	time.Sleep(100 * time.Millisecond)
+	state := newRegionFeedState(singleRegionInfo{lockedRange: res.LockedRange, requestedTable: table}, 1)
 	select {
 	case <-s.resolveLockCh.Out():
-	default:
+		require.True(t, false, "shouldn't get a resolve lock task")
+	case <-time.NewTimer(100 * time.Millisecond).C:
+	}
+
+	// Task will be triggered after initialized.
+	state.setInitialized()
+	state.updateResolvedTs(101)
+	select {
+	case <-s.resolveLockCh.Out():
+	case <-time.NewTimer(100 * time.Millisecond).C:
 		require.True(t, false, "must get a resolve lock task")
 	}
 
