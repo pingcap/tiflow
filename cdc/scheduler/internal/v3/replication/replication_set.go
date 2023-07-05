@@ -943,7 +943,7 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 		r.Checkpoint.ResolvedTs = checkpoint.ResolvedTs
 	}
 	if r.Checkpoint.ResolvedTs < r.Checkpoint.CheckpointTs {
-		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+		log.Panic("schedulerv3: resolved ts should not less than checkpoint ts",
 			zap.Any("replicationSet", r),
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
