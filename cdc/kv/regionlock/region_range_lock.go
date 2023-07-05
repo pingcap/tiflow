@@ -167,7 +167,7 @@ type RegionRangeLock struct {
 func NewRegionRangeLock(
 	startKey, endKey []byte, startTs uint64, changefeedLogInfo string,
 ) *RegionRangeLock {
-	rrl := &RegionRangeLock{
+	return &RegionRangeLock{
 		id:                allocID(),
 		totalSpan:         tablepb.Span{StartKey: startKey, EndKey: endKey},
 		changefeedLogInfo: changefeedLogInfo,
@@ -175,7 +175,6 @@ func NewRegionRangeLock(
 		rangeLock:         btree.NewG(16, rangeLockEntryLess),
 		regionIDLock:      make(map[uint64]*rangeLockEntry),
 	}
-	return rrl
 }
 
 func (l *RegionRangeLock) getOverlappedEntries(startKey, endKey []byte, regionID uint64) []*rangeLockEntry {
@@ -471,25 +470,9 @@ type LockRangeResult struct {
 // LockedRange is returned by `RegionRangeLock.LockRange`, which can be used to
 // collect informations for the range. And collected informations can be accessed
 // by iterating `RegionRangeLock`.
-//
-// TODO: we can changes it to a generic.
 type LockedRange struct {
 	CheckpointTs atomic.Uint64
 	Initialzied  atomic.Bool
-}
-
-// CheckLockedRangesResult returns by `RegionRangeLock.CheckLockedRanges`.
-type CheckLockedRangesResult struct {
-	HoleExists    bool
-	FastestRegion LockedRangeValue
-	SlowestRegion LockedRangeValue
-}
-
-// LockedRangeValue is like `LockedRange`.
-type LockedRangeValue struct {
-	RegionID     uint64
-	CheckpointTs uint64
-	Initialized  bool
 }
 
 // CheckSlowLockedRanges checks slow locked ranges.
@@ -522,4 +505,18 @@ func (l *RegionRangeLock) CheckSlowLockedRanges(
 	})
 	r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0
 	return
+}
+
+// CheckLockedRangesResult returns by `RegionRangeLock.CheckLockedRanges`.
+type CheckLockedRangesResult struct {
+	HoleExists    bool
+	FastestRegion LockedRangeValue
+	SlowestRegion LockedRangeValue
+}
+
+// LockedRangeValue is like `LockedRange`.
+type LockedRangeValue struct {
+	RegionID     uint64
+	CheckpointTs uint64
+	Initialized  bool
 }
