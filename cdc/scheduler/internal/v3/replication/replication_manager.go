@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -155,7 +156,7 @@ func (r *Manager) HandleCaptureChanges(
 		var err error
 		spanStatusMap.Ascend(func(span tablepb.Span, status map[string]*tablepb.TableStatus) bool {
 			table, err1 := NewReplicationSet(span, checkpointTs, status, r.changefeedID)
-			if err != nil {
+			if err1 != nil {
 				err = errors.Trace(err1)
 				return false
 			}
@@ -506,7 +507,10 @@ func (r *Manager) RunningTasks() *spanz.BtreeMap[*ScheduleTask] {
 
 // AdvanceCheckpoint tries to advance checkpoint and returns current checkpoint.
 func (r *Manager) AdvanceCheckpoint(
-	currentTables *TableRanges, currentPDTime time.Time,
+	currentTables *TableRanges,
+	currentPDTime time.Time,
+	barrier *schedulepb.BarrierWithMinTs,
+	redoMetaManager redo.MetaManager,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestRange := tablepb.Span{}
@@ -575,6 +579,31 @@ func (r *Manager) AdvanceCheckpoint(
 		r.slowestTableID = slowestRange
 	}
 
+	// If currentTables is empty, we should advance newResolvedTs to global barrier ts and
+	// advance newCheckpointTs to min table barrier ts.
+	if newResolvedTs == math.MaxUint64 || newCheckpointTs == math.MaxUint64 {
+		if newCheckpointTs != newResolvedTs || currentTables.Len() != 0 {
+			log.Panic("schedulerv3: newCheckpointTs and newResolvedTs should be both maxUint64 "+
+				"if currentTables is empty",
+				zap.Uint64("newCheckpointTs", newCheckpointTs),
+				zap.Uint64("newResolvedTs", newResolvedTs),
+				zap.Any("currentTables", currentTables))
+		}
+		newResolvedTs = barrier.GlobalBarrierTs
+		newCheckpointTs = barrier.MinTableBarrierTs
+	}
+
+	if newCheckpointTs > barrier.MinTableBarrierTs {
+		newCheckpointTs = barrier.MinTableBarrierTs
+		// TODO: add panic after we fix the bug that newCheckpointTs > minTableBarrierTs.
+		// log.Panic("schedulerv3: newCheckpointTs should not be larger than minTableBarrierTs",
+		// 	zap.Uint64("newCheckpointTs", newCheckpointTs),
+		// 	zap.Uint64("newResolvedTs", newResolvedTs),
+		// 	zap.Any("currentTables", currentTables.currentTables),
+		// 	zap.Any("barrier", barrier.Barrier),
+		// 	zap.Any("minTableBarrierTs", barrier.MinTableBarrierTs))
+	}
+
 	// If changefeed's checkpoint lag is larger than 30s,
 	// log the 4 slowlest table infos every minute, which can
 	// help us find the problematic tables.
@@ -583,6 +612,33 @@ func (r *Manager) AdvanceCheckpoint(
 		time.Since(r.lastLogSlowTablesTime) > logSlowTablesInterval {
 		r.logSlowTableInfo(currentPDTime)
 		r.lastLogSlowTablesTime = time.Now()
+	}
+
+	if redoMetaManager.Enabled() {
+		if newResolvedTs > barrier.RedoBarrierTs {
+			newResolvedTs = barrier.RedoBarrierTs
+		}
+		redoMetaManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+		flushedMeta := redoMetaManager.GetFlushedMeta()
+		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
+		log.Debug("owner gets flushed meta",
+			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+			zap.Uint64("newResolvedTs", newResolvedTs),
+			zap.Uint64("newCheckpointTs", newCheckpointTs),
+			zap.String("namespace", r.changefeedID.Namespace),
+			zap.String("changefeed", r.changefeedID.ID))
+		if flushedResolvedTs != 0 && flushedResolvedTs < newResolvedTs {
+			newResolvedTs = flushedResolvedTs
+		}
+
+		if newCheckpointTs > newResolvedTs {
+			newCheckpointTs = newResolvedTs
+		}
+
+		if barrier.GlobalBarrierTs > newResolvedTs {
+			barrier.GlobalBarrierTs = newResolvedTs
+		}
 	}
 
 	return newCheckpointTs, newResolvedTs

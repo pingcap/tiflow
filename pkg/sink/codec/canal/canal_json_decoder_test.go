@@ -85,8 +85,8 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 	t.Parallel()
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &JSONRowEventEncoder{
-			builder:             newCanalEntryBuilder(),
-			enableTiDBExtension: encodeEnable,
+			builder: newCanalEntryBuilder(),
+			config:  &common.Config{EnableTiDBExtension: encodeEnable},
 		}
 		require.NotNil(t, encoder)
 

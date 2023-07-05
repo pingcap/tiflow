@@ -74,7 +74,6 @@ type Mounter interface {
 type mounter struct {
 	schemaStorage                SchemaStorage
 	tz                           *time.Location
-	enableOldValue               bool
 	changefeedID                 model.ChangeFeedID
 	filter                       pfilter.Filter
 	metricTotalRows              prometheus.Gauge
@@ -98,14 +97,12 @@ func NewMounter(schemaStorage SchemaStorage,
 	changefeedID model.ChangeFeedID,
 	tz *time.Location,
 	filter pfilter.Filter,
-	enableOldValue bool,
 	integrity *integrity.Config,
 ) Mounter {
 	return &mounter{
-		schemaStorage:  schemaStorage,
-		changefeedID:   changefeedID,
-		enableOldValue: enableOldValue,
-		filter:         filter,
+		schemaStorage: schemaStorage,
+		changefeedID:  changefeedID,
+		filter:        filter,
 		metricTotalRows: totalRowsCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
@@ -336,7 +333,7 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 }
 
 func datum2Column(
-	tableInfo *model.TableInfo, datums map[int64]types.Datum, fillWithDefaultValue bool,
+	tableInfo *model.TableInfo, datums map[int64]types.Datum,
 ) ([]*model.Column, []types.Datum, []*timodel.ColumnInfo, []rowcodec.ColInfo, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
@@ -358,11 +355,6 @@ func datum2Column(
 		colName := colInfo.Name.O
 		colID := colInfo.ID
 		colDatums, exist := datums[colID]
-		if !exist && !fillWithDefaultValue {
-			log.Debug("column value is not found",
-				zap.String("table", tableInfo.Name.O), zap.String("column", colName))
-			continue
-		}
 
 		var (
 			colValue interface{}
@@ -372,7 +364,7 @@ func datum2Column(
 		)
 		if exist {
 			colValue, size, warn, err = formatColVal(colDatums, colInfo)
-		} else if fillWithDefaultValue {
+		} else {
 			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
@@ -383,7 +375,7 @@ func datum2Column(
 				zap.String("column", colInfo.Name.String()))
 		}
 
-		defaultValue := getDDLDefaultDefinition(colInfo)
+		defaultValue := GetDDLDefaultDefinition(colInfo)
 		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
@@ -511,7 +503,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow, m.enableOldValue)
+		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -532,17 +524,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			}
 			corrupted = true
 		}
-
-		// NOTICE: When the old Value feature is off,
-		// the Delete event only needs to keep the handle key column.
-		if row.Delete && !m.enableOldValue {
-			for i := range preCols {
-				col := preCols[i]
-				if col != nil && !col.Flag.IsHandleKey() {
-					preCols[i] = nil
-				}
-			}
-		}
 	}
 
 	var (
@@ -551,7 +532,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		current uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.Row, true)
+		cols, rawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.Row)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -742,7 +723,12 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 		case mysql.TypeEnum:
 			// For enum type, if no default value and not null is set,
 			// the default value is the first element of the enum list
-			d = types.NewDatum(col.FieldType.GetElem(0))
+			name := col.FieldType.GetElem(0)
+			enumValue, err := types.ParseEnumName(col.FieldType.GetElems(), name, col.GetCollate())
+			if err != nil {
+				return d, nil, 0, "", errors.Trace(err)
+			}
+			d = types.NewMysqlEnumDatum(enumValue)
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 			return d, emptyBytes, sizeOfEmptyBytes, "", nil
 		default:
@@ -756,7 +742,8 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 	return d, v, size, warn, err
 }
 
-func getDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
+// GetDDLDefaultDefinition returns the default definition of a column.
+func GetDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
 	defaultValue := col.GetDefaultValue()
 	if defaultValue == nil {
 		defaultValue = col.GetOriginDefaultValue()

@@ -94,7 +94,6 @@ type processor struct {
 	metricProcessorErrorCounter  prometheus.Counter
 	metricProcessorTickDuration  prometheus.Observer
 	metricsProcessorMemoryGauge  prometheus.Gauge
-	metricRemainKVEventGauge     prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -110,12 +109,13 @@ var _ scheduler.TableExecutor = (*processor)(nil)
 // 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
 // 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
 func (p *processor) AddTableSpan(
-	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
+	ctx context.Context, span tablepb.Span, checkpoint tablepb.Checkpoint, isPrepare bool,
 ) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
 	}
 
+	startTs := checkpoint.CheckpointTs
 	if startTs == 0 {
 		log.Panic("table start ts must not be 0",
 			zap.String("captureID", p.captureInfo.ID),
@@ -145,6 +145,11 @@ func (p *processor) AddTableSpan(
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
+				if p.redo.r.Enabled() {
+					// ResolvedTs is store in external storage when redo log is enabled, so we need to
+					// start table with ResolvedTs in redoDMLManager.
+					p.redo.r.StartTable(span, checkpoint.ResolvedTs)
+				}
 				if err := p.sinkManager.r.StartTable(span, startTs); err != nil {
 					return false, errors.Trace(err)
 				}
@@ -219,13 +224,13 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		return false
 	}
 
-	globalResolvedTs := p.changefeed.Status.ResolvedTs
 	globalCheckpointTs := p.changefeed.Status.CheckpointTs
 
 	var tableResolvedTs, tableCheckpointTs uint64
 	var state tablepb.TableState
 	done := func() bool {
-		state, alreadyExist := p.sinkManager.r.GetTableState(span)
+		var alreadyExist bool
+		state, alreadyExist = p.sinkManager.r.GetTableState(span)
 		if alreadyExist {
 			stats := p.sinkManager.r.GetTableStats(span)
 			tableResolvedTs = stats.ResolvedTs
@@ -253,7 +258,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
-			zap.Uint64("globalResolvedTs", globalResolvedTs),
 			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 			zap.Any("state", state),
@@ -267,7 +271,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Stringer("span", &span),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
-		zap.Uint64("globalResolvedTs", globalResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
 		zap.Any("state", state),
@@ -411,8 +414,6 @@ func newProcessor(
 		metricProcessorTickDuration: processorTickDuration.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsProcessorMemoryGauge: processorMemoryGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricRemainKVEventGauge: remainKVEventsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.lazyInit = p.lazyInitImpl
@@ -660,7 +661,6 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		p.changefeed.Info.Config.Mounter.WorkerNum,
-		p.changefeed.Info.Config.EnableOldValue,
 		p.filter, tz, p.changefeedID, p.changefeed.Info.Config.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.spawn(stdCtx)
@@ -762,13 +762,13 @@ func (p *processor) handleErrorCh() (err error) {
 
 func (p *processor) initDDLHandler(ctx context.Context) error {
 	checkpointTs := p.changefeed.Info.GetCheckpointTs(p.changefeed.Status)
-	resolvedTs := p.changefeed.Status.ResolvedTs
+	minTableBarrierTs := p.changefeed.Status.MinTableBarrierTs
 	forceReplicate := p.changefeed.Info.Config.ForceReplicate
 
-	// if resolvedTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
+	// if minTableBarrierTs == checkpointTs it means owner can't tell whether the DDL on checkpointTs has
 	// been executed or not. So the DDL puller must start at checkpointTs-1.
 	var ddlStartTs uint64
-	if resolvedTs > checkpointTs {
+	if minTableBarrierTs > checkpointTs {
 		ddlStartTs = checkpointTs
 	} else {
 		ddlStartTs = checkpointTs - 1
@@ -814,12 +814,6 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 	tableBarrier := p.calculateTableBarrierTs(barrier)
 	globalBarrierTs := barrier.GetGlobalBarrierTs()
-	// when redo is enable, globalBarrierTs must less than or equal to global resolvedTs
-	if p.redo.r.Enabled() {
-		if globalBarrierTs > p.changefeed.Status.ResolvedTs {
-			globalBarrierTs = p.changefeed.Status.ResolvedTs
-		}
-	}
 	schemaResolvedTs := p.ddlHandler.r.schemaStorage.ResolvedTs()
 	if schemaResolvedTs < globalBarrierTs {
 		// Do not update barrier ts that is larger than
@@ -901,9 +895,6 @@ func (p *processor) refreshMetrics() {
 		return
 	}
 	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.r.GetAllCurrentTableSpansCount()))
-	sortEngineReceivedEvents := p.sourceManager.r.ReceivedEvents()
-	tableSinksReceivedEvents := p.sinkManager.r.ReceivedEvents()
-	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
 // Close closes the processor. It must be called explicitly to stop all sub-components.
@@ -911,6 +902,10 @@ func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
+
+	// clean up metrics first to avoid some metrics are not cleaned up
+	// when error occurs during closing the processor
+	p.cleanupMetrics()
 
 	p.sinkManager.stop(p.changefeedID)
 	p.sinkManager.r = nil
@@ -949,7 +944,6 @@ func (p *processor) Close() error {
 	// mark tables share the same cdcContext with its original table, don't need to cancel
 	failpoint.Inject("processorStopDelay", nil)
 
-	p.cleanupMetrics()
 	log.Info("processor closed",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
@@ -963,7 +957,6 @@ func (p *processor) cleanupMetrics() {
 	processorSchemaStorageGcTsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorTickDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 }
 
 // WriteDebugInfo write the debug info to Writer

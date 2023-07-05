@@ -313,9 +313,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	filter, err := filter.NewFilter(config, "")
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
-		model.DefaultChangeFeedID("c1"),
-		time.UTC, filter, false,
-		config.Integrity).(*mounter)
+		model.DefaultChangeFeedID("c1"), time.UTC, filter, config.Integrity).(*mounter)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -596,6 +594,9 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	ftTypeEnumNotNull := types.NewFieldType(mysql.TypeEnum)
 	ftTypeEnumNotNull.SetFlag(mysql.NotNullFlag)
 	ftTypeEnumNotNull.SetElems([]string{"e0", "e1"})
+
+	// mysql.TypeEnum + null
+	ftTypeEnumNull := types.NewFieldType(mysql.TypeEnum)
 
 	// mysql.TypeSet + notnull
 	ftTypeSetNotNull := types.NewFieldType(mysql.TypeSet)
@@ -941,7 +942,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			ColInfo: timodel.ColumnInfo{FieldType: *ftTypeEnumNotNull},
 			// TypeEnum value will be a string and then translate to []byte
 			// NotNull && no default will choose first element
-			Res:     uint64(0),
+			Res:     uint64(1),
 			Default: nil,
 		},
 		// mysql.TypeEnum + notnull + default
@@ -954,6 +955,14 @@ func TestGetDefaultZeroValue(t *testing.T) {
 			// TypeEnum default value will be a string and then translate to []byte
 			Res:     "e1",
 			Default: "e1",
+		},
+		// mysql.TypeEnum + null
+		{
+			Name: "mysql.TypeEnum + null",
+			ColInfo: timodel.ColumnInfo{
+				FieldType: *ftTypeEnumNull,
+			},
+			Res: nil,
 		},
 		// mysql.TypeSet + notnull
 		{
@@ -985,7 +994,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	for _, tc := range testCases {
 		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
-		val = getDDLDefaultDefinition(&tc.ColInfo)
+		val = GetDDLDefaultDefinition(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
 	}
 }
@@ -1024,8 +1033,7 @@ func TestDecodeRow(t *testing.T) {
 
 		schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-		mounter := NewMounter(
-			schemaStorage, changefeed, time.Local, filter, true, cfg.Integrity).(*mounter)
+		mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
 
 		helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
 		helper.Tk().MustExec(`update student set age = 27 where id = 1`)
@@ -1105,7 +1113,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(schemaStorage, cfID, time.Local, f, true, cfg.Integrity).(*mounter)
+	mounter := NewMounter(schemaStorage, cfID, time.Local, f, cfg.Integrity).(*mounter)
 
 	type testCase struct {
 		schema  string
@@ -1282,7 +1290,7 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{}, true)
+		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)

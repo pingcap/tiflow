@@ -18,6 +18,7 @@ import (
 	"math"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -261,7 +262,7 @@ func (info *ChangeFeedInfo) Clone() (*ChangeFeedInfo, error) {
 // VerifyAndComplete verifies changefeed info and may fill in some fields.
 // If a required field is not provided, return an error.
 // If some necessary filed is missing but can use a default value, fill in it.
-func (info *ChangeFeedInfo) VerifyAndComplete() error {
+func (info *ChangeFeedInfo) VerifyAndComplete() {
 	defaultConfig := config.GetDefaultReplicaConfig()
 	if info.Engine == "" {
 		info.Engine = SortUnified
@@ -285,8 +286,6 @@ func (info *ChangeFeedInfo) VerifyAndComplete() error {
 	if info.Config.Integrity == nil {
 		info.Config.Integrity = defaultConfig.Integrity
 	}
-
-	return nil
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.
@@ -320,6 +319,14 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
 	info.fixScheduler(inheritV66)
 	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
+
+	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
+		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
+		info.fixEnableOldValue()
+		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
+			zap.Bool("enableOldValue", info.Config.EnableOldValue))
+	}
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -388,6 +395,18 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 		query.Del(config.ProtocolKey)
 		info.updateSinkURIAndConfigProtocol(uri, "", query)
 	}
+}
+
+func (info *ChangeFeedInfo) fixEnableOldValue() {
+	uri, err := url.Parse(info.SinkURI)
+	if err != nil {
+		// this is impossible to happen, since the changefeed registered successfully.
+		log.Warn("parse sink URI failed", zap.Error(err))
+		return
+	}
+	scheme := strings.ToLower(uri.Scheme)
+	protocol := uri.Query().Get(config.ProtocolKey)
+	info.Config.AdjustEnableOldValue(scheme, protocol)
 }
 
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {
@@ -493,4 +512,14 @@ func (t DownstreamType) String() string {
 		return "Storage"
 	}
 	return "Unknown"
+}
+
+// ChangeFeedStatusForAPI uses to transfer the status of changefeed for API.
+type ChangeFeedStatusForAPI struct {
+	ResolvedTs   uint64 `json:"resolved-ts"`
+	CheckpointTs uint64 `json:"checkpoint-ts"`
+	// minTableBarrierTs is the minimum commitTs of all DDL events and is only
+	// used to check whether there is a pending DDL job at the checkpointTs when
+	// initializing the changefeed.
+	MinTableBarrierTs uint64 `json:"min-table-barrier-ts"`
 }
