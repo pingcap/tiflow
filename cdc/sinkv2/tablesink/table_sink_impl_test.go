@@ -298,8 +298,8 @@ func TestOperationsAfterClose(t *testing.T) {
 
 	sink := &mockEventSink{dead: make(chan struct{})}
 	tb := New[*model.SingleTableTxn](
-		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
-		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+		model.DefaultChangeFeedID("1"), 1, model.Ts(0),
+		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
 
 	require.True(t, tb.AsyncClose())
 
