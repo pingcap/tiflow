@@ -28,7 +28,33 @@ import (
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
+
+func createServerManager4Test(ctx cdcContext.Context, t *testing.T) (*serverManager, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
+	pdClient := &gc.MockPDClient{
+		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
+			return safePoint, nil
+		},
+	}
+
+	m := upstream.NewManager4Test(pdClient)
+	o := NewServerManager(m, config.NewDefaultSchedulerConfig()).(*serverManager)
+
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+
+	// set captures
+	cdcKey := etcd.CDCKey{
+		ClusterID: state.ClusterID,
+		Tp:        etcd.CDCKeyTypeCapture,
+		CaptureID: ctx.GlobalVars().CaptureInfo.ID,
+	}
+	captureBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
+	require.Nil(t, err)
+	tester.MustUpdate(cdcKey.String(), captureBytes)
+	return o, state, tester
+}
 
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
@@ -139,7 +165,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
-	o := &serverManager{changefeeds: make(map[model.ChangeFeedID]interface{})}
+	o := &serverManager{changefeeds: make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState)}
 
 	for i := 0; i < 100; i++ {
 		cfID := model.DefaultChangeFeedID(fmt.Sprintf("testChangefeed-%d", i))
@@ -171,4 +197,80 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
 	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
+}
+
+func TestFixChangefeedState(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+	serverManager, state, tester := createServerManager4Test(ctx, t)
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
+	// Mismatched state and admin job.
+	changefeedInfo := &model.ChangeFeedInfo{
+		State:        model.StateNormal,
+		AdminJobType: model.AdminStop,
+		StartTs:      oracle.GoTimeToTS(time.Now()),
+		Config:       config.GetDefaultReplicaConfig(),
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	require.Nil(t, err)
+	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
+	_, err = serverManager.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.NotContains(t, serverManager.changefeeds, changefeedID)
+	// Start tick normally.
+	_, err = serverManager.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.Contains(t, serverManager.changefeeds, changefeedID)
+	// The meta information is fixed correctly.
+	require.Equal(t, serverManager.changefeeds[changefeedID].Info.State, model.StateStopped)
+}
+
+func TestCheckClusterVersion(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+	serverManager, state, tester := createServerManager4Test(ctx, t)
+	ctx, cancel := cdcContext.WithCancel(ctx)
+	defer cancel()
+
+	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		etcd.DefaultClusterAndMetaPrefix),
+		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225",
+"address":"127.0.0.1:8300","version":"v6.0.0"}`))
+
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
+	changefeedInfo := &model.ChangeFeedInfo{
+		StartTs: oracle.GoTimeToTS(time.Now()),
+		Config:  config.GetDefaultReplicaConfig(),
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	require.Nil(t, err)
+	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+
+	// check the tick is skipped and the changefeed will not be handled
+	_, err = serverManager.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.NotContains(t, serverManager.changefeeds, changefeedID)
+
+	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
+		etcd.DefaultClusterAndMetaPrefix,
+	),
+		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"`+ctx.GlobalVars().CaptureInfo.Version+`"}`))
+
+	// check the tick is not skipped and the changefeed will be handled normally
+	_, err = serverManager.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.Contains(t, serverManager.changefeeds, changefeedID)
 }

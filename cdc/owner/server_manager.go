@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -35,7 +34,7 @@ type ServerManager interface {
 }
 
 type serverManager struct {
-	changefeeds     map[model.ChangeFeedID]interface{}
+	changefeeds     map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState
 	upstreamManager *upstream.Manager
 
 	// logLimiter controls cluster version check log output rate
@@ -57,7 +56,7 @@ func NewServerManager(
 ) ServerManager {
 	return &serverManager{
 		upstreamManager: upstreamManager,
-		changefeeds:     make(map[model.ChangeFeedID]interface{}),
+		changefeeds:     make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState),
 		lastTickTime:    time.Now(),
 		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 		cfg:             cfg,
@@ -66,10 +65,6 @@ func NewServerManager(
 
 // Tick implements the Reactor interface
 func (o *serverManager) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	failpoint.Inject("owner-run-with-error", func() {
-		failpoint.Return(nil, errors.New("owner run with injected error"))
-	})
-	failpoint.Inject("sleep-in-owner-tick", nil)
 	state := rawState.(*orchestrator.GlobalReactorState)
 	// At the first Tick, we need to do a bootstrap operation.
 	// Fix incompatible or incorrect meta information.
@@ -94,7 +89,7 @@ func (o *serverManager) Tick(stdCtx context.Context, rawState orchestrator.React
 	// Tick all changefeeds.
 	// ctx := stdCtx.(cdcContext.Context)
 	for _, changefeed := range state.Changefeeds {
-		o.changefeeds[changefeed.ID] = struct{}{}
+		o.changefeeds[changefeed.ID] = changefeed
 	}
 
 	return state, nil
