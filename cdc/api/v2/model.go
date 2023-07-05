@@ -272,6 +272,15 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
 			}
 		}
+
+		var largeMessageHandle *config.LargeMessageHandleConfig
+		if c.Sink.LargeMessageHandle != nil {
+			largeMessageHandle = &config.LargeMessageHandleConfig{
+				LargeMessageHandleOption: c.Sink.LargeMessageHandle.LargeMessageHandleOption,
+				ClaimCheckStorageURI:     c.Sink.LargeMessageHandle.ClaimCheckStorageURI,
+			}
+		}
+
 		var kafkaConfig *config.KafkaConfig
 		if c.Sink.KafkaConfig != nil {
 			var codeConfig *config.CodecConfig
@@ -365,7 +374,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
-			LargeMessageOnlyHandleKeyColumns: c.Sink.LargeMessageOnlyHandleKeyColumns,
+			LargeMessageHandle:               largeMessageHandle,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			CloudStorageConfig:               cloudStorageConfig,
@@ -478,6 +487,15 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Columns: selector.Columns,
 			})
 		}
+
+		var largeMessageHandle *LargeMessageHandleConfig
+		if cloned.Sink.LargeMessageHandle != nil {
+			largeMessageHandle = &LargeMessageHandleConfig{
+				LargeMessageHandleOption: cloned.Sink.LargeMessageHandle.LargeMessageHandleOption,
+				ClaimCheckStorageURI:     cloned.Sink.LargeMessageHandle.ClaimCheckStorageURI,
+			}
+		}
+
 		var csvConfig *CSVConfig
 		if cloned.Sink.CSVConfig != nil {
 			csvConfig = &CSVConfig{
@@ -580,7 +598,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
-			LargeMessageOnlyHandleKeyColumns: cloned.Sink.LargeMessageOnlyHandleKeyColumns,
+			LargeMessageHandle:               largeMessageHandle,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			CloudStorageConfig:               cloudStorageConfig,
@@ -723,25 +741,25 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                         *string             `json:"protocol,omitempty"`
-	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
-	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
-	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
-	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
-	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
-	Terminator                       *string             `json:"terminator,omitempty"`
-	DateSeparator                    *string             `json:"date_separator,omitempty"`
-	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
-	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
-	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
-	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
-	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
-	LargeMessageOnlyHandleKeyColumns *bool               `json:"large_message_only_handle_key_columns"`
-	SafeMode                         *bool               `json:"safe_mode,omitempty"`
-	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
-	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
-	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	Protocol                         *string                   `json:"protocol,omitempty"`
+	SchemaRegistry                   *string                   `json:"schema_registry,omitempty"`
+	CSVConfig                        *CSVConfig                `json:"csv,omitempty"`
+	DispatchRules                    []*DispatchRule           `json:"dispatchers,omitempty"`
+	ColumnSelectors                  []*ColumnSelector         `json:"column_selectors,omitempty"`
+	TxnAtomicity                     *string                   `json:"transaction_atomicity,omitempty"`
+	EncoderConcurrency               *int                      `json:"encoder_concurrency,omitempty"`
+	Terminator                       *string                   `json:"terminator,omitempty"`
+	DateSeparator                    *string                   `json:"date_separator,omitempty"`
+	EnablePartitionSeparator         *bool                     `json:"enable_partition_separator,omitempty"`
+	FileIndexWidth                   *int                      `json:"file_index_width,omitempty"`
+	EnableKafkaSinkV2                *bool                     `json:"enable_kafka_sink_v2,omitempty"`
+	OnlyOutputUpdatedColumns         *bool                     `json:"only_output_updated_columns,omitempty"`
+	DeleteOnlyOutputHandleKeyColumns *bool                     `json:"delete_only_output_handle_key_columns"`
+	LargeMessageHandle               *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+	SafeMode                         *bool                     `json:"safe_mode,omitempty"`
+	KafkaConfig                      *KafkaConfig              `json:"kafka_config,omitempty"`
+	MySQLConfig                      *MySQLConfig              `json:"mysql_config,omitempty"`
+	CloudStorageConfig               *CloudStorageConfig       `json:"cloud_storage_config,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -751,6 +769,13 @@ type CSVConfig struct {
 	Quote           string `json:"quote"`
 	NullString      string `json:"null"`
 	IncludeCommitTs bool   `json:"include_commit_ts"`
+}
+
+// LargeMessageHandleConfig denotes the large message handling config
+// This is the same as config.LargeMessageHandleConfig
+type LargeMessageHandleConfig struct {
+	LargeMessageHandleOption string `json:"large_message_handle_option"`
+	ClaimCheckStorageURI     string `json:"claim_check_storage_uri"`
 }
 
 // DispatchRule represents partition rule for a table

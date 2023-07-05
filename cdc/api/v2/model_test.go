@@ -56,7 +56,9 @@ var defaultAPIConfig = &ReplicaConfig{
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		LargeMessageOnlyHandleKeyColumns: util.AddressOf(false),
+		LargeMessageHandle: &LargeMessageHandleConfig{
+			LargeMessageHandleOption: config.LargeMessageHandleOptionNone,
+		},
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
