@@ -651,6 +651,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
+					continue
 				}
 				var partitionID int64
 				if row.Table.IsPartition {
@@ -676,7 +677,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
 				if ts < globalResolvedTs {
-					log.Panic("partition resolved ts fallback",
+					log.Warn("partition resolved ts fallback",
 						zap.Uint64("ts", ts),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Int32("partition", partition))
