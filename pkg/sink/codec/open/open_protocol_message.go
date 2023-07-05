@@ -33,23 +33,6 @@ type messageRow struct {
 	Delete     map[string]internal.Column `json:"d,omitempty"`
 }
 
-func (m *messageRow) dropNotUpdatedColumns() {
-	for col, value := range m.Update {
-		oldValue, ok := m.PreColumns[col]
-		if !ok {
-			continue
-		}
-		// sql type is not equal
-		if value.Type != oldValue.Type {
-			continue
-		}
-		// value equal
-		if codec.IsColumnValueEqual(oldValue.Value, value.Value) {
-			delete(m.PreColumns, col)
-		}
-	}
-}
-
 func (m *messageRow) encode() ([]byte, error) {
 	data, err := json.Marshal(m)
 	return data, cerror.WrapError(cerror.ErrMarshalFailed, err)
@@ -72,6 +55,24 @@ func (m *messageRow) decode(data []byte) error {
 		m.PreColumns[colName] = internal.FormatColumn(column)
 	}
 	return nil
+}
+
+func (m *messageRow) dropNotUpdatedColumns() {
+	// if the column is not updated, do not output it.
+	for col, value := range m.Update {
+		oldValue, ok := m.PreColumns[col]
+		if !ok {
+			continue
+		}
+		// sql type is not equal
+		if value.Type != oldValue.Type {
+			continue
+		}
+		// value equal
+		if codec.IsColumnValueEqual(oldValue.Value, value.Value) {
+			delete(m.PreColumns, col)
+		}
+	}
 }
 
 type messageDDL struct {
@@ -98,9 +99,20 @@ func newResolvedMessage(ts uint64) *internal.MessageKey {
 func rowChangeToMsg(
 	e *model.RowChangedEvent,
 	config *common.Config,
-	largeMessageOnlyHandleKeyColumns bool,
-) (*internal.MessageKey, *messageRow, error) {
-	key := internal.NewMessageKey(e, largeMessageOnlyHandleKeyColumns)
+	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow, error) {
+	var partition *int64
+	if e.Table.IsPartition {
+		partition = &e.Table.TableID
+	}
+	key := &internal.MessageKey{
+		Ts:            e.CommitTs,
+		Schema:        e.Table.Schema,
+		Table:         e.Table.Table,
+		RowID:         e.RowID,
+		Partition:     partition,
+		Type:          model.MessageTypeRow,
+		OnlyHandleKey: largeMessageOnlyHandleKeyColumns,
+	}
 	value := &messageRow{}
 	if e.IsDelete() {
 		onlyHandleKeyColumns := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
@@ -114,10 +126,10 @@ func rowChangeToMsg(
 		if largeMessageOnlyHandleKeyColumns && (len(value.Update) == 0 || len(value.PreColumns) == 0) {
 			return nil, nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found handle key columns for the update event")
 		}
-		// check if the column is updated, if not do not output it
-		if config.OnlyOutputUpdatedColumns && len(value.PreColumns) > 0 {
+		if config.OnlyOutputUpdatedColumns {
 			value.dropNotUpdatedColumns()
 		}
+
 	} else {
 		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
 		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {
