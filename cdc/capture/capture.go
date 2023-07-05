@@ -487,6 +487,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}()
 		err = c.runEtcdWorker(ownerCtx, serverManager,
 			initGlobalSate(),
+			// todo: do not use owner flush interval
 			ownerFlushInterval, util.RoleServerManager.String())
 		c.owner.AsyncStop()
 		c.serverManager.AsyncStop()
