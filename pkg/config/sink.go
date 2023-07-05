@@ -529,8 +529,11 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 }
 
 const (
-	LargeMessageHandleOptionNone          string = "none"
-	LargeMessageHandleOptionClaimCheck    string = "claim-check"
+	// LargeMessageHandleOptionNone means not handling large message.
+	LargeMessageHandleOptionNone string = "none"
+	// LargeMessageHandleOptionClaimCheck means handling large message by sending to the claim check storage.
+	LargeMessageHandleOptionClaimCheck string = "claim-check"
+	// LargeMessageHandleOptionHandleKeyOnly means handling large message by sending only handle key columns.
 	LargeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
 )
 
@@ -540,6 +543,7 @@ type LargeMessageHandleConfig struct {
 	ClaimCheckStorageURI     string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
 }
 
+// NewDefaultLargeMessageHandleConfig return the default LargeMessageHandleConfig.
 func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
 	return &LargeMessageHandleConfig{
 		LargeMessageHandleOption: LargeMessageHandleOptionNone,

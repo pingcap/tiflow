@@ -97,7 +97,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
 			zap.Any("key", key))
-		if !d.config.LargeMessageOnlyHandleKeyColumns {
+		if d.config.LargeMessageHandle.Disabled() {
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 

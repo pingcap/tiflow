@@ -41,9 +41,7 @@ type Config struct {
 	// DeleteOnlyHandleKeyColumns is true, for the delete event only output the handle key columns.
 	DeleteOnlyHandleKeyColumns bool
 
-	// LargeMessageOnlyHandleKeyColumns is true,
-	// for message large then the MaxMessageBytes only output the handle key columns.
-	LargeMessageOnlyHandleKeyColumns bool
+	LargeMessageHandle *config.LargeMessageHandleConfig
 
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
@@ -177,6 +175,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 		}
+		c.LargeMessageHandle = replicaConfig.Sink.LargeMessageHandle
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
@@ -193,13 +192,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
-	c.LargeMessageOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns)
-	if c.LargeMessageOnlyHandleKeyColumns {
-		log.Warn("large message only handle key columns is enabled, "+
-			"if the full message's size is larger than max-message-bytes, only send the handle key columns",
-			zap.Any("protocol", c.Protocol))
-	}
-
 	return nil
 }
 
