@@ -457,32 +457,36 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
+		c.setServerManager(serverManager)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		initGlobalSate := func() *orchestrator.GlobalReactorState {
+			globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
 
-		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
-			c.MessageRouter.AddPeer(captureID, addr)
-		})
-		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
-			c.MessageRouter.RemovePeer(captureID)
-			// If an owner is killed by "kill -19", other CDC nodes will remove that capture,
-			// but the peer in the message server will not be removed, so the message server still sends
-			// ack message to that peer, until the write buffer is full. So we need to deregister the peer
-			// when the capture is removed.
-			if err := c.MessageServer.ScheduleDeregisterPeerTask(ctx, captureID); err != nil {
-				log.Warn("deregister peer failed",
-					zap.String("captureID", captureID),
-					zap.Error(err))
-			}
-		})
+			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
+				c.MessageRouter.AddPeer(captureID, addr)
+			})
+			globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
+				c.MessageRouter.RemovePeer(captureID)
+				// If an owner is killed by "kill -19", other CDC nodes will remove that capture,
+				// but the peer in the message server will not be removed, so the message server still sends
+				// ack message to that peer, until the write buffer is full. So we need to deregister the peer
+				// when the capture is removed.
+				if err := c.MessageServer.ScheduleDeregisterPeerTask(ctx, captureID); err != nil {
+					log.Warn("deregister peer failed",
+						zap.String("captureID", captureID),
+						zap.Error(err))
+				}
+			})
+			return globalState
+		}
 
 		go func() {
 			err = c.runEtcdWorker(ownerCtx, owner,
-				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
+				initGlobalSate(),
 				ownerFlushInterval, util.RoleOwner.String())
 		}()
 		err = c.runEtcdWorker(ownerCtx, serverManager,
-			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
+			initGlobalSate(),
 			ownerFlushInterval, util.RoleServerManager.String())
 		c.owner.AsyncStop()
 		c.serverManager.AsyncStop()

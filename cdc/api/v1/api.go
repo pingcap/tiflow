@@ -613,7 +613,7 @@ func (h *OpenAPI) MoveTable(c *gin.Context) {
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/owner/resign [post]
 func (h *OpenAPI) ResignOwner(c *gin.Context) {
-	o, _ := h.capture.GetOwner()
+	o, _ := h.capture.GetServerManager()
 	if o != nil {
 		o.AsyncStop()
 	}
