@@ -116,7 +116,8 @@ type captureImpl struct {
 		liveness *model.Liveness,
 		cfg *config.SchedulerConfig,
 	) processor.Manager
-	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
+	newOwner         func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
+	newServerManager func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.ServerManager
 }
 
 // NewCapture returns a new Capture instance
@@ -135,6 +136,7 @@ func NewCapture(pdEndpoints []string,
 		pdEndpoints:         pdEndpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
+		newServerManager:    owner.NewServerManager,
 		info:                &model.CaptureInfo{},
 		sortEngineFactory:   sortEngineMangerFactory,
 
@@ -449,6 +451,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
+		serverManager := c.newServerManager(c.upstreamManager, c.config.Debug.Scheduler)
+
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
 
@@ -470,9 +474,14 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 		})
 
-		err = c.runEtcdWorker(ownerCtx, owner,
+		go func() {
+			err = c.runEtcdWorker(ownerCtx, owner,
+				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
+				ownerFlushInterval, util.RoleOwner.String())
+		}()
+		err = c.runEtcdWorker(ownerCtx, serverManager,
 			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
-			ownerFlushInterval, util.RoleOwner.String())
+			ownerFlushInterval, util.RoleServerManager.String())
 		c.owner.AsyncStop()
 		c.setOwner(nil)
 
