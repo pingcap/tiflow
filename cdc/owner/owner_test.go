@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -264,45 +263,6 @@ func TestStopChangefeed(t *testing.T) {
 	require.NotContains(t, state.Changefeeds, changefeedID)
 }
 
-func TestFixChangefeedSinkProtocol(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
-	owner, state, tester := createOwner4Test(ctx, t)
-	changefeedID := model.DefaultChangeFeedID("test-changefeed")
-	// Unknown protocol.
-	changefeedInfo := &model.ChangeFeedInfo{
-		State:          model.StateNormal,
-		AdminJobType:   model.AdminStop,
-		StartTs:        oracle.GoTimeToTS(time.Now()),
-		CreatorVersion: "5.3.0",
-		SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
-		Config: &config.ReplicaConfig{
-			Sink: &config.SinkConfig{Protocol: util.AddressOf(config.ProtocolDefault.String())},
-		},
-	}
-	changefeedStr, err := changefeedInfo.Marshal()
-	require.Nil(t, err)
-	cdcKey := etcd.CDCKey{
-		ClusterID:    state.ClusterID,
-		Tp:           etcd.CDCKeyTypeChangefeedInfo,
-		ChangefeedID: changefeedID,
-	}
-	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
-	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
-	_, err = owner.Tick(ctx, state)
-	tester.MustApplyPatches()
-	require.Nil(t, err)
-	require.NotContains(t, owner.changefeeds, changefeedID)
-
-	// Start tick normally.
-	_, err = owner.Tick(ctx, state)
-	tester.MustApplyPatches()
-	require.Nil(t, err)
-	require.Contains(t, owner.changefeeds, changefeedID)
-	// The meta information is fixed correctly.
-	require.Equal(t, owner.changefeeds[changefeedID].state.Info.SinkURI,
-		"kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol")
-}
-
 func TestAdminJob(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
 	ctx, cancel := cdcContext.WithCancel(ctx)
@@ -455,8 +415,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	_, err = owner.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.NoError(t, err)
-	// add changefeed failed, since 3 different version instances in the cluster.
-	require.Nil(t, owner.changefeeds[cf3])
+	require.NotNil(t, owner.changefeeds[cf3])
 
 	// make sure statusProvider works well
 	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -487,7 +446,7 @@ WorkLoop:
 	require.Nil(t, errIn)
 	require.NotNil(t, infos[cf1])
 	require.NotNil(t, infos[cf2])
-	require.Nil(t, infos[cf3])
+	require.NotNil(t, infos[cf3])
 }
 
 // AsyncStop should cleanup jobs and reject.

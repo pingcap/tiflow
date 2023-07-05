@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -273,4 +274,43 @@ func TestCheckClusterVersion(t *testing.T) {
 	tester.MustApplyPatches()
 	require.Nil(t, err)
 	require.Contains(t, serverManager.changefeeds, changefeedID)
+}
+
+func TestFixChangefeedSinkProtocol(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(false)
+	serverManager, state, tester := createServerManager4Test(ctx, t)
+	changefeedID := model.DefaultChangeFeedID("test-changefeed")
+	// Unknown protocol.
+	changefeedInfo := &model.ChangeFeedInfo{
+		State:          model.StateNormal,
+		AdminJobType:   model.AdminStop,
+		StartTs:        oracle.GoTimeToTS(time.Now()),
+		CreatorVersion: "5.3.0",
+		SinkURI:        "kafka://127.0.0.1:9092/ticdc-test2?protocol=random",
+		Config: &config.ReplicaConfig{
+			Sink: &config.SinkConfig{Protocol: util.AddressOf(config.ProtocolDefault.String())},
+		},
+	}
+	changefeedStr, err := changefeedInfo.Marshal()
+	require.Nil(t, err)
+	cdcKey := etcd.CDCKey{
+		ClusterID:    state.ClusterID,
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ChangefeedID: changefeedID,
+	}
+	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
+	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
+	_, err = serverManager.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.NotContains(t, serverManager.changefeeds, changefeedID)
+
+	// Start tick normally.
+	_, err = serverManager.Tick(ctx, state)
+	tester.MustApplyPatches()
+	require.Nil(t, err)
+	require.Contains(t, serverManager.changefeeds, changefeedID)
+	// The meta information is fixed correctly.
+	require.Equal(t, serverManager.changefeeds[changefeedID].Info.SinkURI,
+		"kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol")
 }
