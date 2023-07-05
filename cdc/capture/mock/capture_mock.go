@@ -109,6 +109,21 @@ func (mr *MockCaptureMockRecorder) GetOwnerCaptureInfo(ctx interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwnerCaptureInfo", reflect.TypeOf((*MockCapture)(nil).GetOwnerCaptureInfo), ctx)
 }
 
+// GetServerManager mocks base method.
+func (m *MockCapture) GetServerManager() (owner.ServerManager, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetServerManager")
+	ret0, _ := ret[0].(owner.ServerManager)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetServerManager indicates an expected call of GetServerManager.
+func (mr *MockCaptureMockRecorder) GetServerManager() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServerManager", reflect.TypeOf((*MockCapture)(nil).GetServerManager))
+}
+
 // GetUpstreamManager mocks base method.
 func (m *MockCapture) GetUpstreamManager() (*upstream.Manager, error) {
 	m.ctrl.T.Helper()

@@ -57,6 +57,7 @@ type Capture interface {
 	Liveness() model.Liveness
 
 	GetOwner() (owner.Owner, error)
+	GetServerManager() (owner.ServerManager, error)
 	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
 	IsOwner() bool
 
@@ -82,6 +83,7 @@ type captureImpl struct {
 	pdEndpoints     []string
 	ownerMu         sync.Mutex
 	owner           owner.Owner
+	serverManager   owner.ServerManager
 	upstreamManager *upstream.Manager
 
 	// session keeps alive between the capture and etcd
@@ -483,6 +485,8 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 			ownerFlushInterval, util.RoleServerManager.String())
 		c.owner.AsyncStop()
+		c.serverManager.AsyncStop()
+		c.setServerManager(nil)
 		c.setOwner(nil)
 
 		// if owner exits, resign the owner key,
@@ -559,6 +563,12 @@ func (c *captureImpl) setOwner(owner owner.Owner) {
 	c.owner = owner
 }
 
+func (c *captureImpl) setServerManager(serverManager owner.ServerManager) {
+	c.ownerMu.Lock()
+	defer c.ownerMu.Unlock()
+	c.serverManager = serverManager
+}
+
 // GetOwner returns owner if it is the owner.
 func (c *captureImpl) GetOwner() (owner.Owner, error) {
 	c.ownerMu.Lock()
@@ -567,6 +577,16 @@ func (c *captureImpl) GetOwner() (owner.Owner, error) {
 		return nil, cerror.ErrNotOwner.GenWithStackByArgs()
 	}
 	return c.owner, nil
+}
+
+// GetServerManager returns `owner.ServerManager` if not nil
+func (c *captureImpl) GetServerManager() (owner.ServerManager, error) {
+	c.ownerMu.Lock()
+	defer c.ownerMu.Unlock()
+	if c.owner == nil {
+		return nil, cerror.ErrNotOwner.GenWithStackByArgs()
+	}
+	return c.serverManager, nil
 }
 
 // campaign to be an owner.

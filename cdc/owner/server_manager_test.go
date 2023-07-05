@@ -32,7 +32,10 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-func createServerManager4Test(ctx cdcContext.Context, t *testing.T) (*serverManager, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
+func createServerManager4Test(ctx cdcContext.Context,
+	t *testing.T) (*serverManager, *orchestrator.GlobalReactorState,
+	*orchestrator.ReactorStateTester,
+) {
 	pdClient := &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
@@ -267,7 +270,8 @@ func TestCheckClusterVersion(t *testing.T) {
 	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		etcd.DefaultClusterAndMetaPrefix,
 	),
-		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"`+ctx.GlobalVars().CaptureInfo.Version+`"}`))
+		[]byte(`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300","version":"`+
+			ctx.GlobalVars().CaptureInfo.Version+`"}`))
 
 	// check the tick is not skipped and the changefeed will be handled normally
 	_, err = serverManager.Tick(ctx, state)

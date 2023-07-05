@@ -15,12 +15,14 @@ package owner
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -31,6 +33,7 @@ import (
 // ServerManager is a manager to schedule changefeeds
 type ServerManager interface {
 	orchestrator.Reactor
+	AsyncStop()
 }
 
 type serverManager struct {
@@ -45,6 +48,8 @@ type serverManager struct {
 	// NOTICE: Do not use it in a method other than tick unexpectedly,
 	//         as it is not a thread-safe value.
 	bootstrapped bool
+
+	closed int32
 
 	cfg *config.SchedulerConfig
 }
@@ -90,6 +95,11 @@ func (o *serverManager) Tick(stdCtx context.Context, rawState orchestrator.React
 	// ctx := stdCtx.(cdcContext.Context)
 	for _, changefeed := range state.Changefeeds {
 		o.changefeeds[changefeed.ID] = changefeed
+	}
+
+	// if closed, exit the etcd worker loop
+	if atomic.LoadInt32(&o.closed) != 0 {
+		return state, cerror.ErrReactorFinished.GenWithStackByArgs()
 	}
 
 	return state, nil
@@ -234,4 +244,9 @@ func (o *serverManager) calculateGCSafepoint(state *orchestrator.GlobalReactorSt
 		}
 	}
 	return minCheckpointTsMap, forceUpdateMap
+}
+
+// AsyncStop stops the server manager asynchronously
+func (o *serverManager) AsyncStop() {
+	atomic.StoreInt32(&o.closed, 1)
 }
