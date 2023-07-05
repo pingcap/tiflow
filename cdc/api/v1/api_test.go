@@ -693,8 +693,8 @@ func TestMoveTable(t *testing.T) {
 func TestResignOwner(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
-	mo := mock_owner.NewMockOwner(ctrl)
-	cp := capture.NewCapture4Test(mo)
+	mo := mock_owner.NewMockServerManager(ctrl)
+	cp := capture.NewCaptureWithServerManager4Test(mock_owner.NewMockOwner(ctrl), mo)
 	router := newRouter(cp, newStatusProvider())
 	// test resign owner succeeded
 	mo.EXPECT().AsyncStop()

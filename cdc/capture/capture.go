@@ -161,6 +161,23 @@ func NewCapture4Test(o owner.Owner) *captureImpl {
 	return res
 }
 
+// NewCaptureWithServerManager4Test returns a new Capture instance for test.
+func NewCaptureWithServerManager4Test(o owner.Owner,
+	manager owner.ServerManager) *captureImpl {
+	res := &captureImpl{
+		info: &model.CaptureInfo{
+			ID:            "capture-for-test",
+			AdvertiseAddr: "127.0.0.1",
+			Version:       "test",
+		},
+		migrator: &migrate.NoOpMigrator{},
+		config:   config.GetGlobalServerConfig(),
+	}
+	res.serverManager = manager
+	res.owner = o
+	return res
+}
+
 // NewCaptureWithManager4Test returns a new Capture instance for test.
 func NewCaptureWithManager4Test(o owner.Owner, m *upstream.Manager) *captureImpl {
 	res := &captureImpl{
@@ -459,34 +476,31 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		c.setOwner(owner)
 		c.setServerManager(serverManager)
 
-		initGlobalSate := func() *orchestrator.GlobalReactorState {
-			globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
 
-			globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
-				c.MessageRouter.AddPeer(captureID, addr)
-			})
-			globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
-				c.MessageRouter.RemovePeer(captureID)
-				// If an owner is killed by "kill -19", other CDC nodes will remove that capture,
-				// but the peer in the message server will not be removed, so the message server still sends
-				// ack message to that peer, until the write buffer is full. So we need to deregister the peer
-				// when the capture is removed.
-				if err := c.MessageServer.ScheduleDeregisterPeerTask(ctx, captureID); err != nil {
-					log.Warn("deregister peer failed",
-						zap.String("captureID", captureID),
-						zap.Error(err))
-				}
-			})
-			return globalState
-		}
+		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
+			c.MessageRouter.AddPeer(captureID, addr)
+		})
+		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
+			c.MessageRouter.RemovePeer(captureID)
+			// If an owner is killed by "kill -19", other CDC nodes will remove that capture,
+			// but the peer in the message server will not be removed, so the message server still sends
+			// ack message to that peer, until the write buffer is full. So we need to deregister the peer
+			// when the capture is removed.
+			if err := c.MessageServer.ScheduleDeregisterPeerTask(ctx, captureID); err != nil {
+				log.Warn("deregister peer failed",
+					zap.String("captureID", captureID),
+					zap.Error(err))
+			}
+		})
 
 		go func() {
 			err = c.runEtcdWorker(ownerCtx, owner,
-				initGlobalSate(),
+				globalState,
 				ownerFlushInterval, util.RoleOwner.String())
 		}()
 		err = c.runEtcdWorker(ownerCtx, serverManager,
-			initGlobalSate(),
+			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 			// todo: do not use owner flush interval
 			ownerFlushInterval, util.RoleServerManager.String())
 		c.owner.AsyncStop()
