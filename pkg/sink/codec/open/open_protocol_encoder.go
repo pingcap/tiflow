@@ -258,6 +258,8 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		}
 	}
 
+	log.Info("open-protocol encode message", zap.Int("length", length))
+
 	if len(d.messageBuf) == 0 ||
 		d.curBatchSize >= d.config.MaxBatchSize ||
 		d.messageBuf[len(d.messageBuf)-1].Length()+len(key)+len(value)+16 > d.config.MaxMessageBytes {
