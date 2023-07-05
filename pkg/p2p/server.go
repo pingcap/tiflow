@@ -391,7 +391,7 @@ func (m *MessageServer) deregisterPeerByID(ctx context.Context, peerID string) {
 	m.peerLock.Unlock()
 	if !ok {
 		log.Warn("peer not found", zap.String("peerID", peerID))
-		return
+		//return
 	}
 	m.deregisterPeer(ctx, peer, nil)
 }

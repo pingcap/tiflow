@@ -496,11 +496,11 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 
 		go func() {
 			err = c.runEtcdWorker(ownerCtx, owner,
-				globalState,
+				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 				ownerFlushInterval, util.RoleOwner.String())
 		}()
 		err = c.runEtcdWorker(ownerCtx, serverManager,
-			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
+			globalState,
 			// todo: do not use owner flush interval
 			ownerFlushInterval, util.RoleServerManager.String())
 		c.owner.AsyncStop()
