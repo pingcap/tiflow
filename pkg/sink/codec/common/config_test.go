@@ -112,6 +112,93 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 	require.True(t, c.AvroEnableWatermark)
 }
 
+func TestLargeMessageHandleConfig(t *testing.T) {
+	t.Parallel()
+
+	// not set, should always success
+	uri := "kafka://127.0.0.1:9092/large-message-handle?protocol=open-protocol"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	protocol := sinkURI.Query().Get("protocol")
+	p, err := config.ParseSinkProtocolFromString(protocol)
+	require.NoError(t, err)
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	c := NewConfig(p)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	err = c.Validate()
+	require.NoError(t, err)
+	require.True(t, c.LargeMessageHandle.Disabled())
+
+	// open-protocol, should return no error
+	replicaConfig.Sink.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	err = c.Validate()
+	require.NoError(t, err)
+	require.True(t, c.LargeMessageHandle.HandleKeyOnly())
+
+	// canal-json, `enable-tidb-extension` is false, return error
+	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	p, err = config.ParseSinkProtocolFromString(sinkURI.Query().Get("protocol"))
+	require.NoError(t, err)
+
+	c = NewConfig(p)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	err = c.Validate()
+	require.Error(t, err)
+
+	// canal-json, `enable-tidb-extension` is true, no error
+	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json&enable-tidb-extension=true"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	p, err = config.ParseSinkProtocolFromString(sinkURI.Query().Get("protocol"))
+	require.NoError(t, err)
+
+	c = NewConfig(p)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	err = c.Validate()
+	require.NoError(t, err)
+
+	// avro, `enable-tidb-extension` is false, return error
+	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=avro"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	p, err = config.ParseSinkProtocolFromString(sinkURI.Query().Get("protocol"))
+	require.NoError(t, err)
+
+	replicaConfig.Sink.SchemaRegistry = util.AddressOf("this-is-a-uri")
+
+	c = NewConfig(p)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	err = c.Validate()
+	require.Error(t, err)
+
+	// avro, `enable-tidb-extension` is true, no error
+	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=avro&enable-tidb-extension=true"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	p, err = config.ParseSinkProtocolFromString(sinkURI.Query().Get("protocol"))
+	require.NoError(t, err)
+
+	c = NewConfig(p)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	err = c.Validate()
+	require.NoError(t, err)
+}
+
 func TestConfigApplyValidate(t *testing.T) {
 	t.Parallel()
 
@@ -290,10 +377,10 @@ func TestConfigApplyValidate(t *testing.T) {
 	c = NewConfig(config.ProtocolOpen)
 	replicaConfig = config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = util.AddressOf(true)
-	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = util.AddressOf(true)
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.True(t, c.DeleteOnlyHandleKeyColumns)
+	require.NotNil(t, c.LargeMessageHandle)
 }
 
 func TestMergeConfig(t *testing.T) {
@@ -324,7 +411,9 @@ func TestMergeConfig(t *testing.T) {
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
+	replicaConfig.Sink.LargeMessageHandle = &config.LargeMessageHandleConfig{
+		LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
+	}
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abc")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(123),
@@ -347,6 +436,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
 	require.Equal(t, 456, c.MaxBatchSize)
+	require.Equal(t, config.LargeMessageHandleOptionHandleKeyOnly, c.LargeMessageHandle.LargeMessageHandleOption)
 
 	// test override
 	uri = "kafka://127.0.0.1:9092/abc?" +
@@ -358,7 +448,10 @@ func TestMergeConfig(t *testing.T) {
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(false)
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
+	replicaConfig.Sink.LargeMessageHandle = &config.LargeMessageHandleConfig{
+		LargeMessageHandleOption: config.LargeMessageHandleOptionClaimCheck,
+		ClaimCheckStorageURI:     "file:///claim-check",
+	}
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abcd")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(1233),
@@ -381,4 +474,5 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
 	require.Equal(t, 456, c.MaxBatchSize)
+	require.Equal(t, c.LargeMessageHandle.LargeMessageHandleOption, config.LargeMessageHandleOptionClaimCheck)
 }

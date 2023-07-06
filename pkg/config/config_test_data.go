@@ -60,7 +60,10 @@ const (
 	"enable-kafka-sink-v2": false,
 	"only-output-updated-columns": false,
 	"delete-only-output-handle-key-columns": false,
-	"large-message-only-handle-key-columns": false
+    "large-message-handle": {
+      "large-message-handle-option": "none",
+      "claim-check-storage-uri": ""
+    }
   },
   "consistent": {
     "level": "none",
@@ -207,7 +210,10 @@ const (
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
-	"large-message-only-handle-key-columns": true,
+    "large-message-handle": {
+      "large-message-handle-option": "handle-key-only",
+      "claim-check-storage-uri": ""
+    },
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -337,7 +343,10 @@ const (
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
-	"large-message-only-handle-key-columns": true,
+    "large-message-handle": {
+      "large-message-handle-option": "handle-key-only",
+      "claim-check-storage-uri": ""
+    },
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,

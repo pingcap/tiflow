@@ -64,7 +64,9 @@ func TestReplicaConfigMarshal(t *testing.T) {
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	conf.Sink.LargeMessageHandle = NewDefaultLargeMessageHandleConfig()
+	conf.Sink.LargeMessageHandle = &LargeMessageHandleConfig{
+		LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
+	}
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
