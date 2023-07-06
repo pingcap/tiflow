@@ -1546,6 +1546,17 @@ var doc = `{
                 }
             }
         },
+        "config.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "claim-check-storage-uri": {
+                    "type": "string"
+                },
+                "large-message-handle-option": {
+                    "type": "string"
+                }
+            }
+        },
         "config.MySQLConfig": {
             "type": "object",
             "properties": {
@@ -1647,9 +1658,9 @@ var doc = `{
                 "kafka-config": {
                     "$ref": "#/definitions/config.KafkaConfig"
                 },
-                "large-message-only-handle-key-columns": {
-                    "description": "LargeMessageOnlyHandleKeyColumns is only available when the downstream is MQ.",
-                    "type": "boolean"
+                "large-message-handle": {
+                    "description": "LargeMessageHandle is only available when the downstream is MQ.",
+                    "$ref": "#/definitions/config.LargeMessageHandleConfig"
                 },
                 "mysql-config": {
                     "$ref": "#/definitions/config.MySQLConfig"
@@ -2444,6 +2455,17 @@ var doc = `{
                 }
             }
         },
+        "v2.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "claim_check_storage_uri": {
+                    "type": "string"
+                },
+                "large_message_handle_option": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.LogLevelReq": {
             "type": "object",
             "properties": {
@@ -2703,8 +2725,8 @@ var doc = `{
                 "kafka_config": {
                     "$ref": "#/definitions/v2.KafkaConfig"
                 },
-                "large_message_only_handle_key_columns": {
-                    "type": "boolean"
+                "large_message_handle": {
+                    "$ref": "#/definitions/v2.LargeMessageHandleConfig"
                 },
                 "mysql_config": {
                     "$ref": "#/definitions/v2.MySQLConfig"

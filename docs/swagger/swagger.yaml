@@ -137,6 +137,13 @@ definitions:
       write-timeout:
         type: string
     type: object
+  config.LargeMessageHandleConfig:
+    properties:
+      claim-check-storage-uri:
+        type: string
+      large-message-handle-option:
+        type: string
+    type: object
   config.MySQLConfig:
     properties:
       enable-batch-dml:
@@ -211,10 +218,9 @@ definitions:
         type: integer
       kafka-config:
         $ref: '#/definitions/config.KafkaConfig'
-      large-message-only-handle-key-columns:
-        description: LargeMessageOnlyHandleKeyColumns is only available when the downstream
-          is MQ.
-        type: boolean
+      large-message-handle:
+        $ref: '#/definitions/config.LargeMessageHandleConfig'
+        description: LargeMessageHandle is only available when the downstream is MQ.
       mysql-config:
         $ref: '#/definitions/config.MySQLConfig'
       only-output-updated-columns:
@@ -752,6 +758,13 @@ definitions:
       write_timeout:
         type: string
     type: object
+  v2.LargeMessageHandleConfig:
+    properties:
+      claim_check_storage_uri:
+        type: string
+      large_message_handle_option:
+        type: string
+    type: object
   v2.LogLevelReq:
     properties:
       log_level:
@@ -922,8 +935,8 @@ definitions:
         type: integer
       kafka_config:
         $ref: '#/definitions/v2.KafkaConfig'
-      large_message_only_handle_key_columns:
-        type: boolean
+      large_message_handle:
+        $ref: '#/definitions/v2.LargeMessageHandleConfig'
       mysql_config:
         $ref: '#/definitions/v2.MySQLConfig'
       only_output_updated_columns:
