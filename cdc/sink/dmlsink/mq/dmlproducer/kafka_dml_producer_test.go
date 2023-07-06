@@ -36,23 +36,6 @@ func initBroker(t *testing.T) (*sarama.MockBroker, string) {
 	leader := sarama.NewMockBroker(t, 2)
 
 	return leader, topic
-	//metadataResponse := new(sarama.MetadataResponse)
-	//metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
-	//metadataResponse.AddTopicPartition(topic, 0,
-	//	leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	//metadataResponse.AddTopicPartition(topic, 1,
-	//	leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	//// Response for `sarama.NewClient`
-	//leader.Returns(metadataResponse)
-	//if withProducerResponse {
-	//	prodSuccess := new(sarama.ProduceResponse)
-	//	prodSuccess.AddTopicPartition(topic, 0, sarama.ErrNoError)
-	//	prodSuccess.AddTopicPartition(topic, 1, sarama.ErrNoError)
-	//	for i := 0; i < 20; i++ {
-	//		leader.Returns(prodSuccess)
-	//	}
-	//}
-	//return leader, topic
 }
 
 func getOptions(addr string) *kafka.Options {
