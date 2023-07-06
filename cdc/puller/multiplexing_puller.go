@@ -411,8 +411,9 @@ func (p *tableProgress) resolveLock() {
 		return
 	}
 
+	maxVersion := oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence))
 	for _, span := range p.spans {
-		p.client.ResolveLock(span, resolvedTs)
+		p.client.ResolveLock(span, maxVersion)
 	}
 }
 
