@@ -205,11 +205,6 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err != nil {
 			return err
 		}
-
-		err = c.Sink.LargeMessageHandle.Validate()
-		if err != nil {
-			return err
-		}
 	}
 
 	if c.Consistent != nil {

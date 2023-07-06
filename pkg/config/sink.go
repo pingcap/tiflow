@@ -551,15 +551,28 @@ func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
 }
 
 // Validate the LargeMessageHandleConfig.
-func (c *LargeMessageHandleConfig) Validate() error {
-	switch c.LargeMessageHandleOption {
-	case LargeMessageHandleOptionNone, LargeMessageHandleOptionHandleKeyOnly:
-	case LargeMessageHandleOptionClaimCheck:
-		if c.ClaimCheckStorageURI == "" {
-			return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs("claim-check-storage-uri is required")
+func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtension bool) error {
+	if c.LargeMessageHandleOption == LargeMessageHandleOptionNone {
+		return nil
+	}
+
+	switch protocol {
+	case ProtocolOpen:
+	case ProtocolCanalJSON, ProtocolAvro:
+		if !enableTiDBExtension {
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
+				c.LargeMessageHandleOption, protocol.String())
 		}
 	default:
-		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(c.LargeMessageHandleOption)
+		return cerror.ErrInvalidReplicaConfig.GenWithStack(
+			"large message handle is set to %s, protocol is %s, it's not supported",
+			c.LargeMessageHandleOption, protocol.String())
+	}
+
+	if c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck && c.ClaimCheckStorageURI == "" {
+		return cerror.ErrInvalidReplicaConfig.GenWithStack(
+			"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
 	}
 	return nil
 }
