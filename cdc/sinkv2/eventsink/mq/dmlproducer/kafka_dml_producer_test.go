@@ -72,12 +72,6 @@ func getConfig(addr string) *kafkav1.Config {
 }
 
 func TestProducerAck(t *testing.T) {
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/dmlproducer/kafka_dml_producer_test.go
-	t.Skip("skip because of race introduced by #9026")
-	t.Parallel()
-
-=======
->>>>>>> 567d0a61b5 (kafka(ticdc): remove parallel from kafka dml producer unit test (#9282)):cdc/sink/dmlsink/mq/dmlproducer/kafka_dml_producer_test.go
 	leader, topic := initBroker(t, true)
 	defer leader.Close()
 
@@ -139,12 +133,6 @@ func TestProducerAck(t *testing.T) {
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/dmlproducer/kafka_dml_producer_test.go
-	t.Skip("skip because of race introduced by #9026")
-	t.Parallel()
-
-=======
->>>>>>> 567d0a61b5 (kafka(ticdc): remove parallel from kafka dml producer unit test (#9282)):cdc/sink/dmlsink/mq/dmlproducer/kafka_dml_producer_test.go
 	leader, topic := initBroker(t, false)
 	defer leader.Close()
 
@@ -207,12 +195,6 @@ func TestProducerSendMsgFailed(t *testing.T) {
 }
 
 func TestProducerDoubleClose(t *testing.T) {
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/dmlproducer/kafka_dml_producer_test.go
-	t.Skip("skip because of race introduced by #9026")
-	t.Parallel()
-
-=======
->>>>>>> 567d0a61b5 (kafka(ticdc): remove parallel from kafka dml producer unit test (#9282)):cdc/sink/dmlsink/mq/dmlproducer/kafka_dml_producer_test.go
 	leader, _ := initBroker(t, false)
 	defer leader.Close()
 
