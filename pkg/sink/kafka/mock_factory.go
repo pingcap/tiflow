@@ -15,7 +15,11 @@ package kafka
 
 import (
 	"context"
+	"testing"
 
+	"github.com/Shopify/sarama"
+	"github.com/Shopify/sarama/mocks"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/util"
 )
@@ -24,18 +28,27 @@ import (
 type MockFactory struct {
 	// some unit test is based on sarama, so we set it as a helper
 	helper Factory
+
+	t            *testing.T
+	o            *Options
+	changefeedID model.ChangeFeedID
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
 func NewMockFactory(
+	t *testing.T,
 	o *Options, changefeedID model.ChangeFeedID,
 ) (Factory, error) {
 	helper, err := NewSaramaFactory(o, changefeedID)
 	if err != nil {
 		return nil, err
 	}
-
-	return &MockFactory{helper: helper}, nil
+	return &MockFactory{
+		helper:       helper,
+		t:            t,
+		o:            o,
+		changefeedID: changefeedID,
+	}, nil
 }
 
 // AdminClient return a mocked admin client
@@ -45,7 +58,14 @@ func (f *MockFactory) AdminClient(_ context.Context) (ClusterAdminClient, error)
 
 // SyncProducer creates a sync producer
 func (f *MockFactory) SyncProducer(ctx context.Context) (SyncProducer, error) {
-	return f.helper.SyncProducer(ctx)
+	config, err := NewSaramaConfig(ctx, f.o)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	syncProducer := mocks.NewSyncProducer(f.t, config)
+	return &MockSaramaSyncProducer{
+		Producer: syncProducer,
+	}, nil
 }
 
 // AsyncProducer creates an async producer
@@ -63,4 +83,42 @@ func (f *MockFactory) MetricsCollector(
 	adminClient ClusterAdminClient,
 ) MetricsCollector {
 	return f.helper.MetricsCollector(role, adminClient)
+}
+
+type MockSaramaSyncProducer struct {
+	Producer *mocks.SyncProducer
+}
+
+func (m *MockSaramaSyncProducer) SendMessage(
+	ctx context.Context,
+	topic string, partitionNum int32,
+	key []byte, value []byte,
+) error {
+	_, _, err := m.Producer.SendMessage(&sarama.ProducerMessage{
+		Topic:     topic,
+		Key:       sarama.ByteEncoder(key),
+		Value:     sarama.ByteEncoder(value),
+		Partition: partitionNum,
+	})
+	return err
+}
+
+func (m *MockSaramaSyncProducer) SendMessages(ctx context.Context,
+	topic string, partitionNum int32,
+	key []byte, value []byte,
+) error {
+	msgs := make([]*sarama.ProducerMessage, partitionNum)
+	for i := 0; i < int(partitionNum); i++ {
+		msgs[i] = &sarama.ProducerMessage{
+			Topic:     topic,
+			Key:       sarama.ByteEncoder(key),
+			Value:     sarama.ByteEncoder(value),
+			Partition: int32(i),
+		}
+	}
+	return m.Producer.SendMessages(msgs)
+}
+
+func (m *MockSaramaSyncProducer) Close() {
+	m.Producer.Close()
 }

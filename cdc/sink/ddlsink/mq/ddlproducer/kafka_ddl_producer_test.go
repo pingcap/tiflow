@@ -27,28 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func initBroker(t *testing.T, withPartitionResponse int) (*sarama.MockBroker, string) {
+func initBroker(t *testing.T) (*sarama.MockBroker, string) {
 	topic := kafka.DefaultMockTopicName
 	leader := sarama.NewMockBroker(t, 2)
-	metadataResponse := new(sarama.MetadataResponse)
-	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
-	metadataResponse.AddTopicPartition(topic, 0,
-		leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	metadataResponse.AddTopicPartition(topic, 1,
-		leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	metadataResponse.AddTopicPartition(topic, 2,
-		leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	// Response for `sarama.NewClient`
-	leader.Returns(metadataResponse)
-
-	prodSuccess := new(sarama.ProduceResponse)
-	for i := 0; i < withPartitionResponse; i++ {
-		prodSuccess.AddTopicPartition(topic, int32(i), sarama.ErrNoError)
-	}
-	for i := 0; i < withPartitionResponse; i++ {
-		leader.Returns(prodSuccess)
-	}
-
 	return leader, topic
 }
 
@@ -68,7 +49,7 @@ func getOptions(addr string) *kafka.Options {
 }
 
 func TestSyncBroadcastMessage(t *testing.T) {
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
+	leader, topic := initBroker(t)
 	defer leader.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -76,12 +57,18 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	options.MaxMessages = 1
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(options, changefeed)
+	factory, err := kafka.NewMockFactory(t, options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
+	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
 
+	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+	require.NoError(t, err)
+
+	for i := 0; i < kafka.DefaultMockPartitionNum; i++ {
+		syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
+	}
 	err = p.SyncBroadcastMessage(ctx, topic,
 		kafka.DefaultMockPartitionNum, &common.Message{Ts: 417318403368288260})
 	require.NoError(t, err)
@@ -94,19 +81,23 @@ func TestSyncBroadcastMessage(t *testing.T) {
 }
 
 func TestSyncSendMessage(t *testing.T) {
-	leader, topic := initBroker(t, 1)
+	leader, topic := initBroker(t)
 	defer leader.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	options := getOptions(leader.Addr())
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(options, changefeed)
+	factory, err := kafka.NewMockFactory(t, options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
+	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
 
+	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+	require.NoError(t, err)
+
+	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
 	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
 	require.NoError(t, err)
 
@@ -117,7 +108,7 @@ func TestSyncSendMessage(t *testing.T) {
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
-	leader, topic := initBroker(t, 0)
+	leader, topic := initBroker(t)
 	defer leader.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -128,19 +119,24 @@ func TestProducerSendMsgFailed(t *testing.T) {
 
 	// This will make the first send failed.
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(options, changefeed)
+	factory, err := kafka.NewMockFactory(t, options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
+	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+	require.NoError(t, err)
+
 	defer p.Close()
 
+	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndFail(sarama.ErrMessageTooLarge)
 	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
-	require.Regexp(t, ".*too large.*", err)
+	require.ErrorIs(t, err, sarama.ErrMessageTooLarge)
 }
 
 func TestProducerDoubleClose(t *testing.T) {
-	leader, _ := initBroker(t, 0)
+	leader, _ := initBroker(t)
 	defer leader.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -148,10 +144,13 @@ func TestProducerDoubleClose(t *testing.T) {
 	options := getOptions(leader.Addr())
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(options, changefeed)
+	factory, err := kafka.NewMockFactory(t, options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
+	syncProducer, err := factory.SyncProducer(ctx)
+	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 	require.NoError(t, err)
 
 	p.Close()
