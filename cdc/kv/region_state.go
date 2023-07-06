@@ -40,7 +40,6 @@ type singleRegionInfo struct {
 
 	requestedTable *requestedTable
 	lockedRange    *regionlock.LockedRange
-	createTime     time.Time
 }
 
 func newSingleRegionInfo(

@@ -15,15 +15,26 @@ package kv
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/pingcap/kvproto/pkg/cdcpb"
+	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
+	"github.com/tikv/client-go/v2/testutils"
+	"github.com/tikv/client-go/v2/tikv"
 )
 
 func TestRequestedStreamRequestedRegions(t *testing.T) {
@@ -40,7 +51,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	require.Nil(t, stream.getState(1, 2))
 
 	requestedTable := &requestedTable{requestID: 1}
-	requestedTable.removed.Store(true)
+	requestedTable.stopped.Store(true)
 	for i := uint64(2); i < uint64(5); i++ {
 		stream.setState(1, i, &regionFeedState{sri: singleRegionInfo{requestedTable: requestedTable}})
 	}
@@ -49,7 +60,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	select {
 	case sri := <-stream.requests.Out():
 		require.Equal(t, sri.requestedTable.requestID, uint64(1))
-	case <-time.NewTimer(100 * time.Millisecond).C:
+	case <-time.After(100 * time.Millisecond):
 		require.True(t, false, "must get a singleRegionInfo")
 	}
 
@@ -57,7 +68,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	select {
 	case <-stream.requests.Out():
 		require.False(t, true, "shouldn't get a singleRegionInfo")
-	case <-time.NewTimer(100 * time.Millisecond).C:
+	case <-time.After(100 * time.Millisecond):
 	}
 
 	requestedTable.deregister.Store(uint64(100), time.Now().Add(-1*time.Hour))
@@ -65,7 +76,7 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	select {
 	case sri := <-stream.requests.Out():
 		require.Equal(t, sri.requestedTable.requestID, uint64(1))
-	case <-time.NewTimer(100 * time.Millisecond).C:
+	case <-time.After(100 * time.Millisecond):
 		require.True(t, false, "must get a singleRegionInfo")
 	}
 }
@@ -86,7 +97,7 @@ func TestRequestedTable(t *testing.T) {
 	require.True(t, s.ResolveLock(span, 200))
 	select {
 	case <-s.resolveLockCh.Out():
-	case <-time.NewTimer(100 * time.Millisecond).C:
+	case <-time.After(100 * time.Millisecond):
 		require.True(t, false, "must get a resolve lock task")
 	}
 
@@ -97,7 +108,7 @@ func TestRequestedTable(t *testing.T) {
 	select {
 	case <-s.resolveLockCh.Out():
 		require.True(t, false, "shouldn't get a resolve lock task")
-	case <-time.NewTimer(100 * time.Millisecond).C:
+	case <-time.After(100 * time.Millisecond):
 	}
 
 	// Task will be triggered after initialized.
@@ -105,9 +116,115 @@ func TestRequestedTable(t *testing.T) {
 	state.updateResolvedTs(101)
 	select {
 	case <-s.resolveLockCh.Out():
-	case <-time.NewTimer(100 * time.Millisecond).C:
+	case <-time.After(100 * time.Millisecond):
 		require.True(t, false, "must get a resolve lock task")
 	}
 
 	s.resolveLockCh.CloseAndDrain()
+}
+
+func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	wg := &sync.WaitGroup{}
+
+	events1 := make(chan *cdcpb.ChangeDataEvent, 10)
+	events2 := make(chan *cdcpb.ChangeDataEvent, 10)
+	server1, addr1 := newMockService(ctx, t, newMockChangeDataService(t, events1), wg)
+	server2, addr2 := newMockService(ctx, t, newMockChangeDataService(t, events2), wg)
+
+	rpcClient, cluster, pdClient, _ := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
+
+	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
+	defer pdClient.Close()
+
+	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
+	defer grpcPool.Close()
+
+	regionCache := tikv.NewRegionCache(pdClient)
+	defer regionCache.Close()
+
+	pdClock := pdutil.NewClock4Test()
+
+	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
+	require.Nil(t, err)
+	defer kvStorage.Close() //nolint:errcheck
+	lockResolver := txnutil.NewLockerResolver(kvStorage, model.ChangeFeedID{})
+
+	invalidStore := "localhost:1"
+	cluster.AddStore(1, addr1)
+	cluster.AddStore(2, addr2)
+	cluster.AddStore(3, invalidStore)
+	cluster.Bootstrap(11, []uint64{1, 2, 3}, []uint64{4, 5, 6}, 6)
+
+	client := NewSharedClient(model.ChangeFeedID{ID: "test"},
+		&config.KVClientConfig{WorkerConcurrent: 1, GrpcStreamConcurrent: 1},
+		false, pdClient, grpcPool, regionCache, pdClock, lockResolver)
+	defer client.Close()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := client.Run(ctx)
+		require.Equal(t, context.Canceled, errors.Cause(err))
+	}()
+
+	subID := client.AllocSubscriptionID()
+	span := tablepb.Span{TableID: 1, StartKey: []byte("a"), EndKey: []byte("b")}
+	eventCh := make(chan MultiplexingEvent, 50)
+	client.Subscribe(subID, span, 1, eventCh)
+
+	makeTsEvent := func(regionID, ts, requestID uint64) *cdcpb.ChangeDataEvent {
+		return &cdcpb.ChangeDataEvent{
+			Events: []*cdcpb.Event{
+				{
+					RegionId:  regionID,
+					RequestId: requestID,
+					Event:     &cdcpb.Event_ResolvedTs{ResolvedTs: ts},
+				},
+			},
+		}
+	}
+
+	checkTsEvent := func(event model.RegionFeedEvent, ts uint64) {
+		require.Equal(t, ts, event.Resolved.ResolvedTs)
+	}
+
+	events1 <- mockInitializedEvent(11, uint64(subID))
+	ts := oracle.GoTimeToTS(pdClock.CurrentTime())
+	events1 <- makeTsEvent(11, ts, uint64(subID))
+	// After trying to receive something from the invalid store,
+	// it should auto switch to other stores and fetch events finally.
+	select {
+	case event := <-eventCh:
+		checkTsEvent(event.RegionFeedEvent, ts)
+	case <-time.After(5 * time.Second):
+		require.True(t, false, "reconnection not succeed in 5 second")
+	}
+
+	// Stop server1 and the client needs to handle it.
+	server1.Stop()
+
+	events2 <- mockInitializedEvent(11, uint64(subID))
+	ts = oracle.GoTimeToTS(pdClock.CurrentTime())
+	events2 <- makeTsEvent(11, ts, uint64(subID))
+	// After trying to receive something from a failed store,
+	// it should auto switch to other stores and fetch events finally.
+	select {
+	case event := <-eventCh:
+		checkTsEvent(event.RegionFeedEvent, ts)
+	case <-time.After(5 * time.Second):
+		require.True(t, false, "reconnection not succeed in 5 second")
+	}
+
+	// check gRPC connection active counter is updated correctly.
+	bucket, ok := grpcPool.bucketConns[invalidStore]
+	require.True(t, ok)
+	empty := bucket.recycle()
+	require.True(t, empty)
+
+	server2.Stop()
+	close(events1)
+	close(events2)
+	cancel()
+	wg.Wait()
 }

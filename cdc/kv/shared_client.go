@@ -139,8 +139,8 @@ type requestedTable struct {
 	eventCh   chan<- MultiplexingEvent
 	requestID uint64
 
-	// To handle table removings.
-	removed    atomic.Bool
+	// To handle table stoppings.
+	stopped    atomic.Bool
 	deregister sync.Map // map[streamID]time.Time
 
 	// To handle lock resolvings.
@@ -242,14 +242,14 @@ func (s *SharedClient) Unsubscribe(span tablepb.Span) (subID SubscriptionID, suc
 		s.totalSpans.m.Delete(span)
 		s.totalSpans.Unlock()
 
-		rt.removed.Store(true)
+		rt.stopped.Store(true)
 		log.Info("event feed unsubscribes table is began",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Int64("tableID", rt.span.TableID),
 			zap.Uint64("requestID", rt.requestID))
 		if rt.rangeLock.Stop() {
-			log.Info("event feed unsubscribes table is finished",
+			log.Info("event feed stop table is finished",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.String("span", rt.span.String()))
@@ -352,7 +352,8 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 		rpcCtx, err := s.getRPCContextForRegion(ctx, sri.verID)
 		if rpcCtx != nil {
 			sri.rpcCtx = rpcCtx
-			s.metrics.regionLocateDuration.Observe(float64(time.Since(sri.createTime).Milliseconds()))
+			locateTime := time.Since(sri.lockedRange.Created).Milliseconds()
+			s.metrics.regionLocateDuration.Observe(float64(locateTime))
 			s.regionRouter.In() <- sri
 			return
 		}
@@ -379,11 +380,10 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 
 func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Group) error {
 	for {
-		var sri singleRegionInfo
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case sri = <-s.regionRouter.Out():
+		case sri := <-s.regionRouter.Out():
 			storeID := sri.rpcCtx.Peer.StoreId
 			storeAddr := sri.rpcCtx.Addr
 			rs := s.requestStore(ctx, g, storeID, storeAddr)
@@ -397,7 +397,7 @@ func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.Regio
 	bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 	rpcCtx, err := s.regionCache.GetTiKVRPCContext(bo, id, kvclientv2.ReplicaReadLeader, 0)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrGetTiKVRPCContext, err)
+		return nil, errors.Trace(err)
 	}
 	return rpcCtx, nil
 }
@@ -468,17 +468,18 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 	stream.preFetchForConnecting = nil
 	for {
 		if sri.lockedRange != nil {
+			connectTime := time.Since(sri.lockedRange.Created).Milliseconds()
+			s.metrics.regionConnectDuration.Observe(float64(connectTime))
 			requestID := sri.requestedTable.requestID
 			regionID := sri.verID.GetID()
 			state := newRegionFeedState(sri, requestID)
 			state.start()
 			stream.setState(requestID, regionID, state)
-			s.metrics.regionConnectDuration.Observe(float64(time.Since(state.sri.createTime).Milliseconds()))
 		} else {
-			// It's a spectial message for removing table. See requestedStream.handleRemovedTable.
+			// It's a spectial message for removing table. See requestedStream.handleStoppedTable.
 		}
 
-		if sri.requestedTable.removed.Load() {
+		if sri.requestedTable.stopped.Load() {
 			req := &cdcpb.ChangeDataRequest{
 				RequestId: sri.requestedTable.requestID,
 				Request:   &cdcpb.ChangeDataRequest_Deregister_{},
@@ -612,14 +613,12 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 
 	g.Go(func() error {
 		for {
-			if stream.preFetchForConnecting == nil {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case sri := <-stream.requests.Out():
-					stream.preFetchForConnecting = new(singleRegionInfo)
-					*stream.preFetchForConnecting = sri
-				}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case sri := <-stream.requests.Out():
+				stream.preFetchForConnecting = new(singleRegionInfo)
+				*stream.preFetchForConnecting = sri
 			}
 
 			if canceled := s.runStream(ctx, r, stream); canceled {
@@ -633,6 +632,10 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 					_ = s.workers[slot].sendEvent(ctx, sfEvent)
 				}
 			}
+			for _, sri := range stream.clearPendingRegions() {
+				s.onRegionFail(ctx, newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
+			}
+
 			if err := util.Hang(ctx, time.Second); err != nil {
 				// TODO(qupeng): handle the case that TiKV closes the connection.
 				return err
@@ -691,8 +694,8 @@ func (s *SharedClient) runStream(
 	return false
 }
 
-func (r *requestedStream) handleRemovedTable(requestedTable *requestedTable) {
-	if requestedTable.removed.Load() {
+func (r *requestedStream) handleStoppedTable(requestedTable *requestedTable) {
+	if requestedTable.stopped.Load() {
 		now := time.Now()
 		value, loaded := requestedTable.deregister.LoadOrStore(r.streamID, now)
 		if !loaded || now.Sub(value.(time.Time)) > 10*time.Second {
@@ -720,8 +723,8 @@ func (r *requestedStream) getState(requestID, regionID uint64) (state *regionFee
 	if m, ok := r.requestedRegions.m[requestID]; ok {
 		state = m[regionID]
 	}
-	if state != nil && state.sri.requestedTable.removed.Load() {
-		r.handleRemovedTable(state.sri.requestedTable)
+	if state != nil && state.sri.requestedTable.stopped.Load() {
+		r.handleStoppedTable(state.sri.requestedTable)
 		return nil
 	}
 	return state
@@ -752,6 +755,19 @@ func (r *requestedStream) clearStates() (v map[uint64]map[uint64]*regionFeedStat
 	v = r.requestedRegions.m
 	r.requestedRegions.m = make(map[uint64]map[uint64]*regionFeedState)
 	return
+}
+
+func (r *requestedStream) clearPendingRegions() []singleRegionInfo {
+	regions := make([]singleRegionInfo, 0, r.requests.Len()+1)
+	if r.preFetchForConnecting != nil {
+		sri := *r.preFetchForConnecting
+		r.preFetchForConnecting = nil
+		regions = append(regions, sri)
+	}
+	for i := 1; i < cap(regions); i++ {
+		regions = append(regions, <-r.requests.Out())
+	}
+	return regions
 }
 
 func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Group) error {
@@ -837,7 +853,8 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 		switch res.Status {
 		case regionlock.LockRangeStatusSuccess:
 			sri.lockedRange = res.LockedRange
-			s.metrics.regionLockDuration.Observe(float64(time.Since(sri.createTime).Milliseconds()))
+			lockTime := time.Since(sri.lockedRange.Created).Milliseconds()
+			s.metrics.regionLockDuration.Observe(float64(lockTime))
 			select {
 			case s.regionCh.In() <- sri:
 			case <-ctx.Done():
@@ -851,7 +868,6 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 		}
 	}
 
-	sri.createTime = time.Now()
 	rangeLock := sri.requestedTable.rangeLock
 	res := rangeLock.LockRange(ctx, sri.span.StartKey, sri.span.EndKey, sri.verID.GetID(), sri.verID.GetVer())
 	if res.Status == regionlock.LockRangeStatusWait {
@@ -885,18 +901,18 @@ func (s *SharedClient) handleErrors(ctx context.Context) error {
 
 func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo) error {
 	rangeLock := errInfo.requestedTable.rangeLock
-	tableRemoved := rangeLock.UnlockRange(errInfo.span.StartKey, errInfo.span.EndKey,
+	tableStopped := rangeLock.UnlockRange(errInfo.span.StartKey, errInfo.span.EndKey,
 		errInfo.verID.GetID(), errInfo.verID.GetVer(), errInfo.resolvedTs())
-	if tableRemoved {
-		log.Info("event feed unsubscribes table is finished",
+	if tableStopped {
+		log.Info("event feed stop table is finished",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.String("span", errInfo.requestedTable.span.String()))
 		return nil
 	}
 
-	err := errInfo.err
-	switch eerr := errors.Cause(err).(type) {
+	err := errors.Cause(errInfo.err)
+	switch eerr := err.(type) {
 	case *eventError:
 		innerErr := eerr.err
 		log.Debug("cdc error",
@@ -949,13 +965,22 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 		return nil
 	default:
-		log.Warn("changefeed client or worker meets internal error",
+		// TODO(qupeng): it's better to stop the table subscription but keep the changefeed.
+		if cerror.ErrPrewriteNotMatch.Equal(err) {
+			log.Warn("event feed meets an internal error, fail the changefeed",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Error(err))
+			return err
+		}
+		log.Warn("event feed meets an internal error, re-schedule the region",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", errInfo.requestedTable.span.TableID),
+			zap.Uint64("requestID", errInfo.requestedTable.requestID),
 			zap.Error(err))
 		s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 		return nil
-
 	}
 }
 

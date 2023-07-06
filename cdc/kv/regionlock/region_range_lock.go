@@ -21,6 +21,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/btree"
 	"github.com/pingcap/log"
@@ -230,6 +231,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			version:  version,
 		}
 		newEntry.state.CheckpointTs.Store(checkpointTs)
+		newEntry.state.Created = time.Now()
 		l.rangeLock.ReplaceOrInsert(newEntry)
 		l.regionIDLock[regionID] = newEntry
 
@@ -473,6 +475,7 @@ type LockRangeResult struct {
 type LockedRange struct {
 	CheckpointTs atomic.Uint64
 	Initialzied  atomic.Bool
+	Created      time.Time
 }
 
 // CheckSlowLockedRanges checks slow locked ranges.
@@ -491,14 +494,16 @@ func (l *RegionRangeLock) CheckSlowLockedRanges(
 		r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, item.startKey) < 0
 		ckpt := item.state.CheckpointTs.Load()
 		if ckpt > r.FastestRegion.CheckpointTs {
+			r.FastestRegion.RegionID = item.regionID
 			r.FastestRegion.CheckpointTs = ckpt
 			r.FastestRegion.Initialized = item.state.Initialzied.Load()
-			r.FastestRegion.RegionID = item.regionID
+			r.FastestRegion.Created = item.state.Created
 		}
 		if ckpt < r.SlowestRegion.CheckpointTs {
+			r.SlowestRegion.RegionID = item.regionID
 			r.SlowestRegion.CheckpointTs = ckpt
 			r.SlowestRegion.Initialized = item.state.Initialzied.Load()
-			r.SlowestRegion.RegionID = item.regionID
+			r.SlowestRegion.Created = item.state.Created
 		}
 		lastEnd = item.endKey
 		return true
@@ -519,4 +524,5 @@ type LockedRangeValue struct {
 	RegionID     uint64
 	CheckpointTs uint64
 	Initialized  bool
+	Created      time.Time
 }

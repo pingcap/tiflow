@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -134,8 +133,7 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 			}
 		case *cdcpb.Event_Admin_:
 		case *cdcpb.Event_Error:
-			err := cerror.WrapError(cerror.ErrEventFeedEventError, &eventError{err: x.Error})
-			w.handleSingleRegionError(ctx, err, state, event.stream)
+			w.handleSingleRegionError(ctx, &eventError{err: x.Error}, state, event.stream)
 			return
 		case *cdcpb.Event_ResolvedTs:
 			w.handleResolvedTs(ctx, resolvedTsBatch{
