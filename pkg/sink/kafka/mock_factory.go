@@ -21,6 +21,7 @@ import (
 	"github.com/Shopify/sarama/mocks"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -74,7 +75,16 @@ func (f *MockFactory) AsyncProducer(
 	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
-	return f.helper.AsyncProducer(ctx, closedChan, failpointCh)
+	config, err := NewSaramaConfig(ctx, f.o)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	asyncProducer := mocks.NewAsyncProducer(f.t, config)
+	return &MockSaramaAsyncProducer{
+		AsyncProducer: asyncProducer,
+		closedChan:    closedChan,
+		failpointCh:   failpointCh,
+	}, nil
 }
 
 // MetricsCollector returns the metric collector
@@ -121,4 +131,66 @@ func (m *MockSaramaSyncProducer) SendMessages(ctx context.Context,
 
 func (m *MockSaramaSyncProducer) Close() {
 	m.Producer.Close()
+}
+
+type MockSaramaAsyncProducer struct {
+	AsyncProducer *mocks.AsyncProducer
+	closedChan    chan struct{}
+	failpointCh   chan error
+}
+
+func (p *MockSaramaAsyncProducer) AsyncRunCallback(
+	ctx context.Context,
+) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-p.closedChan:
+			return nil
+		case err := <-p.failpointCh:
+			return errors.Trace(err)
+		case ack := <-p.AsyncProducer.Successes():
+			if ack != nil {
+				callback := ack.Metadata.(func())
+				if callback != nil {
+					callback()
+				}
+			}
+		case err := <-p.AsyncProducer.Errors():
+			// We should not wrap a nil pointer if the pointer
+			// is of a subtype of `error` because Go would store the type info
+			// and the resulted `error` variable would not be nil,
+			// which will cause the pkg/error library to malfunction.
+			// See: https://go.dev/doc/faq#nil_error
+			if err == nil {
+				return nil
+			}
+			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
+		}
+	}
+}
+
+func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
+	partition int32, key []byte, value []byte,
+	callback func()) error {
+	msg := &sarama.ProducerMessage{
+		Topic:     topic,
+		Partition: partition,
+		Key:       sarama.StringEncoder(key),
+		Value:     sarama.ByteEncoder(value),
+		Metadata:  callback,
+	}
+	select {
+	case <-ctx.Done():
+		return errors.Trace(ctx.Err())
+	case <-p.closedChan:
+		return nil
+	case p.AsyncProducer.Input() <- msg:
+	}
+	return nil
+}
+
+func (p *MockSaramaAsyncProducer) Close() {
+	_ = p.AsyncProducer.Close()
 }

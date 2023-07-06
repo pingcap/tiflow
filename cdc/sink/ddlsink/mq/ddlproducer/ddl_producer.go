@@ -37,4 +37,4 @@ type DDLProducer interface {
 
 // Factory is a function to create a producer.
 type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
-	factory kafka.SyncProducer) (DDLProducer, error)
+	syncProducer kafka.SyncProducer) (DDLProducer, error)
