@@ -115,7 +115,7 @@ const (
   },
   "per-table-memory-quota": 0,
   "kv-client": {
-    "enable-multiplexing": false,
+    "enable-multiplexing": true,
     "worker-concurrent": 8,
     "grpc-stream-concurrent": 1,
     "frontier-concurrent": 8,

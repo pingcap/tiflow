@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/tikv"
@@ -529,10 +530,10 @@ func NewDDLJobPuller(
 	}
 	if jobPuller.multiplexing {
 		mp := &jobPuller.multiplexingPuller
-
 		mp.client = kv.NewSharedClient(
 			changefeed, cfg, ddlPullerFilterLoop,
-			pdCli, grpcPool, regionCache, pdClock, kvStorage,
+			pdCli, grpcPool, regionCache, pdClock,
+			txnutil.NewLockerResolver(kvStorage.(tikv.Storage), changefeed),
 		)
 
 		rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)

@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -73,7 +72,6 @@ type SharedClient struct {
 	grpcPool     GrpcPool
 	regionCache  *tikv.RegionCache
 	pdClock      pdutil.Clock
-	tikvStorage  tidbkv.Storage
 	lockResolver txnutil.LockResolver
 
 	// requestRangeCh is used to retrieve subscribed table tasks.
@@ -131,7 +129,7 @@ type requestedStream struct {
 	}
 
 	// To trigger a connect action lazily.
-	connectTrigger *singleRegionInfo
+	preFetchForConnecting *singleRegionInfo
 }
 
 type requestedTable struct {
@@ -164,7 +162,7 @@ func NewSharedClient(
 	grpcPool GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
-	kvStorage tidbkv.Storage,
+	lockResolver txnutil.LockResolver,
 ) *SharedClient {
 	s := &SharedClient{
 		changefeed: changefeed,
@@ -176,7 +174,6 @@ func NewSharedClient(
 		grpcPool:     grpcPool,
 		regionCache:  regionCache,
 		pdClock:      pdClock,
-		tikvStorage:  kvStorage,
 		lockResolver: nil,
 
 		requestRangeCh: chann.NewAutoDrainChann[rangeTask](),
@@ -300,10 +297,8 @@ func (s *SharedClient) RegionCount(span tablepb.Span) uint64 {
 // Run the client.
 func (s *SharedClient) Run(ctx context.Context) error {
 	s.clusterID = s.pd.GetClusterID(ctx)
-	s.lockResolver = txnutil.NewLockerResolver(s.tikvStorage.(tikv.Storage), s.changefeed)
 
 	g, ctx := errgroup.WithContext(ctx)
-
 	s.workers = make([]*sharedRegionWorker, 0, s.config.WorkerConcurrent)
 	for i := uint(0); i < s.config.WorkerConcurrent; i++ {
 		worker := newSharedRegionWorker(s)
@@ -469,8 +464,8 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 		return nil
 	}
 
-	sri := *stream.connectTrigger
-	stream.connectTrigger = nil
+	sri := *stream.preFetchForConnecting
+	stream.preFetchForConnecting = nil
 	for {
 		if sri.lockedRange != nil {
 			requestID := sri.requestedTable.requestID
@@ -617,13 +612,13 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 
 	g.Go(func() error {
 		for {
-			if stream.connectTrigger == nil {
+			if stream.preFetchForConnecting == nil {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
 				case sri := <-stream.requests.Out():
-					stream.connectTrigger = new(singleRegionInfo)
-					*stream.connectTrigger = sri
+					stream.preFetchForConnecting = new(singleRegionInfo)
+					*stream.preFetchForConnecting = sri
 				}
 			}
 

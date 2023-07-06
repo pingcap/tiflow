@@ -28,7 +28,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -201,7 +203,8 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 		clientConfig := config.GetGlobalServerConfig().KVClient
 		m.multiplexingPuller.client = kv.NewSharedClient(
 			m.changefeedID, clientConfig, m.bdrMode,
-			m.up.PDClient, m.up.GrpcPool, m.up.RegionCache, m.up.PDClock, m.up.KVStorage,
+			m.up.PDClient, m.up.GrpcPool, m.up.RegionCache, m.up.PDClock,
+			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
 		)
 		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
 			m.changefeedID, m.multiplexingPuller.client, m.engine,

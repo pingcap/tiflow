@@ -112,7 +112,7 @@ var defaultServerConfig = &ServerConfig{
 	},
 	Security: &SecurityConfig{},
 	KVClient: &KVClientConfig{
-		EnableMultiplexing:   false,
+		EnableMultiplexing:   true,
 		WorkerConcurrent:     8,
 		GrpcStreamConcurrent: 1,
 		FrontierConcurrent:   8,
