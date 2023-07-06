@@ -62,8 +62,8 @@ func newFeedStateManager4Test(
 	f.errBackoff.Multiplier = multiplier
 	f.errBackoff.RandomizationFactor = 0
 
-	f.resetErrBackoff()
-	f.lastErrorTime = time.Unix(0, 0)
+	f.resetErrRetry()
+	f.lastErrorRetryTime = time.Unix(0, 0)
 
 	return f
 }
@@ -324,7 +324,7 @@ func TestHandleError(t *testing.T) {
 		manager.Tick(state)
 		tester.MustApplyPatches()
 		require.False(t, manager.ShouldRunning())
-		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.State, model.StateWarning)
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		time.Sleep(d)
@@ -479,7 +479,7 @@ func TestChangefeedNotRetry(t *testing.T) {
 		return &model.ChangeFeedInfo{
 			SinkURI: "123",
 			Config:  &config.ReplicaConfig{},
-			State:   model.StateError,
+			State:   model.StateWarning,
 			Error: &model.RunningError{
 				Addr: "127.0.0.1",
 				Code: "CDC:ErrPipelineTryAgain",
@@ -497,7 +497,7 @@ func TestChangefeedNotRetry(t *testing.T) {
 		return &model.ChangeFeedInfo{
 			SinkURI: "123",
 			Config:  &config.ReplicaConfig{},
-			State:   model.StateError,
+			State:   model.StateWarning,
 			Error: &model.RunningError{
 				Addr:    "127.0.0.1",
 				Code:    "CDC:ErrExpressionColumnNotFound",
@@ -513,7 +513,7 @@ func TestChangefeedNotRetry(t *testing.T) {
 		return &model.ChangeFeedInfo{
 			SinkURI: "123",
 			Config:  &config.ReplicaConfig{},
-			State:   model.StateError,
+			State:   model.StateWarning,
 			Error: &model.RunningError{
 				Addr:    "127.0.0.1",
 				Code:    string(cerror.ErrExpressionColumnNotFound.RFCCode()),
@@ -530,7 +530,7 @@ func TestChangefeedNotRetry(t *testing.T) {
 		return &model.ChangeFeedInfo{
 			SinkURI: "123",
 			Config:  &config.ReplicaConfig{},
-			State:   model.StateError,
+			State:   model.StateWarning,
 			Error: &model.RunningError{
 				Addr:    "127.0.0.1",
 				Code:    string(cerror.ErrExpressionParseFailed.RFCCode()),
@@ -589,7 +589,7 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 			tester.MustApplyPatches()
 			// If an error occurs, backing off from running the task.
 			require.False(t, manager.ShouldRunning())
-			require.Equal(t, state.Info.State, model.StateError)
+			require.Equal(t, state.Info.State, model.StateWarning)
 			require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 			require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		}
@@ -637,7 +637,7 @@ func TestBackoffNeverStops(t *testing.T) {
 		manager.Tick(state)
 		tester.MustApplyPatches()
 		require.False(t, manager.ShouldRunning())
-		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.State, model.StateWarning)
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		// 100ms is the backoff interval, so sleep 100ms and after a manager tick,
@@ -688,7 +688,7 @@ func TestUpdateChangefeedEpoch(t *testing.T) {
 		manager.Tick(state)
 		tester.MustApplyPatches()
 		require.False(t, manager.ShouldRunning())
-		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.State, model.StateWarning)
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 

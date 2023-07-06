@@ -81,7 +81,7 @@ func TestMigration(t *testing.T) {
 	status1 := model.ChangeFeedStatus{CheckpointTs: 1}
 	info2 := model.ChangeFeedInfo{
 		SinkURI: "test1",
-		StartTs: 2, TargetTs: 200, State: model.StateError,
+		StartTs: 2, TargetTs: 200, State: model.StateWarning,
 	}
 	status2 := model.ChangeFeedStatus{CheckpointTs: 2}
 	cfg := config.GetDefaultReplicaConfig()
@@ -360,7 +360,7 @@ func TestMigrationNonDefaultCluster(t *testing.T) {
 	status1 := model.ChangeFeedStatus{CheckpointTs: 1}
 	info2 := model.ChangeFeedInfo{
 		SinkURI: "test1",
-		StartTs: 2, TargetTs: 200, State: model.StateError,
+		StartTs: 2, TargetTs: 200, State: model.StateWarning,
 	}
 	status2 := model.ChangeFeedStatus{CheckpointTs: 2}
 	info3 := model.ChangeFeedInfo{

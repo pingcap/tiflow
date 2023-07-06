@@ -28,6 +28,16 @@ type RunningError struct {
 	Message string    `json:"message"`
 }
 
+// // 发生时间，发生地址，发生组件，错误码，错误信息
+// // 重试时间，发生时 CheckpointTs
+// func NewRunningError(err error) *RunningError {
+// 	return &RunningError{
+// 		Time:    time.Now(),
+// 		Code:    cerror.RFCCode(err),
+// 		Message: err.Error(),
+// 	}
+// }
+
 // IsChangefeedUnRetryableError return true if a running error contains a changefeed not retry error.
 func (r RunningError) IsChangefeedUnRetryableError() bool {
 	return cerror.IsChangefeedUnRetryableError(errors.New(r.Message + r.Code))

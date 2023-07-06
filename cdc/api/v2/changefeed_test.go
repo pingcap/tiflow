@@ -541,7 +541,7 @@ func TestListChangeFeeds(t *testing.T) {
 				State: model.StateNormal,
 			},
 			model.DefaultChangeFeedID("cf2"): {
-				State: model.StateError,
+				State: model.StateWarning,
 			},
 			model.DefaultChangeFeedID("cf3"): {
 				State: model.StateStopped,

@@ -83,7 +83,7 @@ type FeedState string
 // All FeedStates
 const (
 	StateNormal   FeedState = "normal"
-	StateError    FeedState = "error"
+	StateWarning  FeedState = "warning"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
 	StateRemoved  FeedState = "removed"
@@ -95,7 +95,7 @@ func (s FeedState) ToInt() int {
 	switch s {
 	case StateNormal:
 		return 0
-	case StateError:
+	case StateWarning:
 		return 1
 	case StateFailed:
 		return 2
@@ -418,7 +418,7 @@ func (info *ChangeFeedInfo) fixState() {
 				if cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
 					state = StateFailed
 				} else {
-					state = StateError
+					state = StateWarning
 				}
 			}
 		case AdminStop:
