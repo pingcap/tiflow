@@ -20,6 +20,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -83,12 +85,13 @@ type server struct {
 	grpcService       *p2p.ServerWrapper
 	statusServer      *http.Server
 	etcdClient        etcd.CDCEtcdClient
-	pdEndpoints       []string
+	metaEndpints      []string
+	pdEndpoints       []string // the pd endpoints of the default upstream
 	sortEngineFactory *factory.SortEngineFactory
 }
 
 // New creates a server instance.
-func New(pdEndpoints []string) (*server, error) {
+func New(pdEndpoints, metaEndpoints []string) (*server, error) {
 	conf := config.GetGlobalServerConfig()
 
 	// This is to make communication between nodes possible.
@@ -111,9 +114,10 @@ func New(pdEndpoints []string) (*server, error) {
 
 	debugConfig := config.GetGlobalServerConfig().Debug
 	s := &server{
-		pdEndpoints: pdEndpoints,
-		grpcService: p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
-		tcpServer:   tcpServer,
+		metaEndpints: metaEndpoints,
+		pdEndpoints:  pdEndpoints,
+		grpcService:  p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
+		tcpServer:    tcpServer,
 	}
 
 	log.Info("CDC server created",
@@ -125,12 +129,12 @@ func New(pdEndpoints []string) (*server, error) {
 func (s *server) prepare(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 
-	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
+	grpcTLSOption, err := conf.MetaSecurity.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	tlsConfig, err := conf.Security.ToTLSConfig()
+	tlsConfig, err := conf.MetaSecurity.ToTLSConfig()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -138,7 +142,7 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
+	log.Info("create etcdCli", zap.Strings("endpoints", s.metaEndpints))
 	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
@@ -148,7 +152,7 @@ func (s *server) prepare(ctx context.Context) error {
 	// then cause the new owner cannot be elected immediately after the old owner offline.
 	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:        s.pdEndpoints,
+		Endpoints:        s.metaEndpints,
 		TLS:              tlsConfig,
 		LogConfig:        &logConfig,
 		DialTimeout:      5 * time.Second,
@@ -289,9 +293,9 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 	return nil
 }
 
-func (s *server) etcdHealthChecker(ctx context.Context) error {
+func (s *server) etcdHealthChecker(ctx context.Context, endpoints []string, security *config.SecurityConfig) error {
 	conf := config.GetGlobalServerConfig()
-	grpcClient, err := pd.NewClientWithContext(ctx, s.pdEndpoints, conf.Security.PDSecurityOption())
+	grpcClient, err := pd.NewClientWithContext(ctx, endpoints, security.PDSecurityOption())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -335,9 +339,24 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 	}
 }
 
+func stringSliceEqual(s1, s2 []string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+
+	c1 := make([]string, len(s1))
+	c2 := make([]string, len(s2))
+	copy(c1, s1)
+	copy(c2, s2)
+	sort.Strings(c1)
+	sort.Strings(c2)
+	return reflect.DeepEqual(c1, c2)
+}
+
 func (s *server) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	conf := config.GetGlobalServerConfig()
 
 	eg, egCtx := errgroup.WithContext(ctx)
 
@@ -345,9 +364,17 @@ func (s *server) run(ctx context.Context) (err error) {
 		return s.capture.Run(egCtx)
 	})
 
+	// check the health of the PD embedded etcd of the default upstream.
 	eg.Go(func() error {
-		return s.etcdHealthChecker(egCtx)
+		return s.etcdHealthChecker(egCtx, s.pdEndpoints, conf.Security)
 	})
+
+	// check the health of the meta storage.
+	if !stringSliceEqual(s.metaEndpints, s.pdEndpoints) {
+		eg.Go(func() error {
+			return s.etcdHealthChecker(egCtx, s.metaEndpints, conf.MetaSecurity)
+		})
+	}
 
 	eg.Go(func() error {
 		return kv.RunWorkerPool(egCtx)
