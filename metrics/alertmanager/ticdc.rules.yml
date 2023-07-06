@@ -49,42 +49,6 @@ groups:
       value: '{{ $value }}'
       summary: cdc_mounter unmarshal and mount time more than 1s
 
-  - alert: cdc_sink_execute_duration_time_more_than_10s
-    expr: histogram_quantile(0.9, rate(ticdc_sink_txn_exec_duration_bucket[1m])) > 10
-    for: 1m
-    labels:
-      env: ENV_LABELS_ENV
-      level: warning
-      expr: histogram_quantile(0.9, rate(ticdc_sink_txn_exec_duration_bucket[1m])) > 10
-    annotations:
-      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
-      value: '{{ $value }}'
-      summary: cdc sink execute_duration_time_more_than_10s
-
-  - alert: ticdc_puller_entry_sorter_sort_bucket
-    expr: histogram_quantile(0.9, rate(ticdc_puller_entry_sorter_sort_bucket{}[1m])) > 1
-    for: 1m
-    labels:
-      env: ENV_LABELS_ENV
-      level: warning
-      expr: histogram_quantile(0.9, rate(ticdc_puller_entry_sorter_sort_bucket{}[1m]))
-    annotations:
-      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
-      value: '{{ $value }}'
-      summary:  ticdc puller entry sorter sort latency is too high
-
-  - alert: ticdc_puller_entry_sorter_merge_bucket
-    expr: histogram_quantile(0.9, rate(ticdc_puller_entry_sorter_merge_bucket{}[1m])) > 1
-    for: 1m
-    labels:
-      env: ENV_LABELS_ENV
-      level: warning
-      expr: histogram_quantile(0.9, rate(ticdc_puller_entry_sorter_merge_bucket{}[1m]))
-    annotations:
-      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
-      value: '{{ $value }}'
-      summary:  ticdc puller entry sorter merge latency is too high
-
   - alert: tikv_cdc_min_resolved_ts_no_change_for_1m
     expr: changes(tikv_cdc_min_resolved_ts[1m]) < 1 and ON (instance) tikv_cdc_region_resolve_status{status="resolved"} > 0
     for: 1m
