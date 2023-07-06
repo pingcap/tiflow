@@ -91,7 +91,8 @@ type MultiplexingPuller struct {
 	queueResolvedDuration      prometheus.Observer
 }
 
-// NewMultiplexingPuller creates a MultiplexingPuller. Outputs are handled by `consume`.
+// NewMultiplexingPuller creates a MultiplexingPuller. Outputs are handled by
+// `consume`, which will be called in several sub-routines concurrently.
 func NewMultiplexingPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
@@ -122,7 +123,7 @@ func NewMultiplexingPuller(
 func (p *MultiplexingPuller) Subscribe(
 	pullerType string, tableName string,
 	spans []tablepb.Span, startTs model.Ts,
-) {
+) []kv.SubscriptionID {
 	progress := &tableProgress{
 		changefeed: p.changefeed,
 		pullerType: pullerType,
@@ -144,8 +145,10 @@ func (p *MultiplexingPuller) Subscribe(
 		return nil
 	}
 
+	subIDs := make([]kv.SubscriptionID, 0, len(spans))
 	for _, span := range spans {
 		subID := p.client.AllocSubscriptionID()
+		subIDs = append(subIDs, subID)
 		p.setProgress(subID, progress)
 		slot := p.hasher(span, len(p.inputChs))
 		if _, ok := p.client.Subscribe(subID, span, startTs, p.inputChs[slot]); !ok {
@@ -155,6 +158,7 @@ func (p *MultiplexingPuller) Subscribe(
 				zap.String("span", span.String()))
 		}
 	}
+	return subIDs
 }
 
 // Unsubscribe some spans, which must be subscribed in one call.
