@@ -610,7 +610,9 @@ func TestConfigurationCombinations(t *testing.T) {
 
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
 		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{
-			Sink: &config.SinkConfig{},
+			Sink: &config.SinkConfig{
+				LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
+			},
 		})
 		require.Nil(t, err)
 		encoderConfig.WithMaxMessageBytes(options.MaxMessageBytes)

@@ -84,7 +84,7 @@ func TestDecodeEvent(t *testing.T) {
 func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolOpen)
 	codecConfig.LargeMessageHandle = &config.LargeMessageHandleConfig{
-		LargeMessageHandleOption: config.LargeMessageHandleOptionNone,
+		LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
 	}
 
 	//config.LargeMessageOnlyHandleKeyColumns = true

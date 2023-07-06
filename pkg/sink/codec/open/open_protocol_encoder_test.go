@@ -52,20 +52,21 @@ func TestMaxMessageBytes(t *testing.T) {
 	topic := ""
 	// for a single message, the overhead is 36(maxRecordOverhead) + 8(versionHea) = 44, just can hold it.
 	a := 88 + 44
-	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
-	encoder := NewBatchEncoderBuilder(config).Build()
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
+	codecConfig.LargeMessageHandle = config.NewDefaultLargeMessageHandleConfig()
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.Nil(t, err)
 
 	// cannot hold a single message
-	config = config.WithMaxMessageBytes(a - 1)
-	encoder = NewBatchEncoderBuilder(config).Build()
+	codecConfig = codecConfig.WithMaxMessageBytes(a - 1)
+	encoder = NewBatchEncoderBuilder(codecConfig).Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.NotNil(t, err)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
-	config = config.WithMaxMessageBytes(256)
-	encoder = NewBatchEncoderBuilder(config).Build()
+	codecConfig = codecConfig.WithMaxMessageBytes(256)
+	encoder = NewBatchEncoderBuilder(codecConfig).Build()
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 		require.Nil(t, err)
