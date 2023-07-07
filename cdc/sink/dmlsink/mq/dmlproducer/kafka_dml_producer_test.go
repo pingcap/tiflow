@@ -51,8 +51,9 @@ func TestProducerAck(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, 1, config.Producer.Flush.MaxMessages)
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(t, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient(ctx)
@@ -125,8 +126,9 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(t, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient(ctx)
@@ -191,8 +193,9 @@ func TestProducerDoubleClose(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(t, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	adminClient, err := factory.AdminClient(ctx)

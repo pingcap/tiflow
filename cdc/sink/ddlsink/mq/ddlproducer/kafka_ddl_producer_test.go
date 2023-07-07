@@ -42,8 +42,9 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	options := getOptions()
 	options.MaxMessages = 1
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(t, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	syncProducer, err := factory.SyncProducer(ctx)
@@ -70,8 +71,9 @@ func TestSyncSendMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	options := getOptions()
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(t, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	syncProducer, err := factory.SyncProducer(ctx)
@@ -97,9 +99,11 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
 
+	ctx = context.WithValue(ctx, "testing.T", t)
+
 	// This will make the first send failed.
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(t, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	syncProducer, err := factory.SyncProducer(ctx)
@@ -120,8 +124,9 @@ func TestProducerDoubleClose(t *testing.T) {
 	defer cancel()
 	options := getOptions()
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
-	factory, err := kafka.NewMockFactory(t, options, changefeed)
+	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
 	syncProducer, err := factory.SyncProducer(ctx)

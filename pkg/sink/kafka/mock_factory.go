@@ -86,10 +86,12 @@ func (f *MockFactory) MetricsCollector(
 	return &mockMetricsCollector{}
 }
 
+// MockSaramaSyncProducer is a mock implementation of SyncProducer interface.
 type MockSaramaSyncProducer struct {
 	Producer *mocks.SyncProducer
 }
 
+// SendMessage implement the SyncProducer interface.
 func (m *MockSaramaSyncProducer) SendMessage(
 	ctx context.Context,
 	topic string, partitionNum int32,
@@ -104,6 +106,7 @@ func (m *MockSaramaSyncProducer) SendMessage(
 	return err
 }
 
+// SendMessages implement the SyncProducer interface.
 func (m *MockSaramaSyncProducer) SendMessages(ctx context.Context,
 	topic string, partitionNum int32,
 	key []byte, value []byte,
@@ -120,16 +123,21 @@ func (m *MockSaramaSyncProducer) SendMessages(ctx context.Context,
 	return m.Producer.SendMessages(msgs)
 }
 
+// Close implement the SyncProducer interface.
 func (m *MockSaramaSyncProducer) Close() {
 	m.Producer.Close()
 }
 
+// MockSaramaAsyncProducer is a mock implementation of AsyncProducer interface.
 type MockSaramaAsyncProducer struct {
 	AsyncProducer *mocks.AsyncProducer
 	closedChan    chan struct{}
 	failpointCh   chan error
+
+	closed bool
 }
 
+// AsyncRunCallback implement the AsyncProducer interface.
 func (p *MockSaramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
@@ -162,6 +170,7 @@ func (p *MockSaramaAsyncProducer) AsyncRunCallback(
 	}
 }
 
+// AsyncSend implement the AsyncProducer interface.
 func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
 	partition int32, key []byte, value []byte,
 	callback func(),
@@ -183,11 +192,17 @@ func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
 	return nil
 }
 
+// Close implement the AsyncProducer interface.
 func (p *MockSaramaAsyncProducer) Close() {
+	if p.closed {
+		return
+	}
 	_ = p.AsyncProducer.Close()
+	p.closed = true
 }
 
 type mockMetricsCollector struct{}
 
+// Run implements the MetricsCollector interface.
 func (m *mockMetricsCollector) Run(ctx context.Context) {
 }
