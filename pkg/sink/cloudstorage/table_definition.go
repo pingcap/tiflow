@@ -38,6 +38,7 @@ const (
 
 // TableCol denotes the column info for a table definition.
 type TableCol struct {
+	ID        int64       `json:"ColumnId"`
 	Name      string      `json:"ColumnName" `
 	Tp        string      `json:"ColumnType"`
 	Default   interface{} `json:"ColumnDefault,omitempty"`
@@ -62,6 +63,7 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 		displayDecimal = defaultDecimal
 	}
 
+	t.ID = col.ID
 	t.Name = col.Name.O
 	t.Tp = strings.ToUpper(types.TypeToStr(col.GetType(), col.GetCharset()))
 	if mysql.HasUnsignedFlag(col.GetFlag()) {
@@ -101,6 +103,7 @@ func (t *TableCol) FromTiColumnInfo(col *timodel.ColumnInfo) {
 func (t *TableCol) ToTiColumnInfo() (*timodel.ColumnInfo, error) {
 	col := new(timodel.ColumnInfo)
 
+	col.ID = t.ID
 	col.Name = timodel.NewCIStr(t.Name)
 	tp := types.StrToType(strings.ToLower(strings.TrimSuffix(t.Tp, " UNSIGNED")))
 	col.FieldType = *types.NewFieldType(tp)
