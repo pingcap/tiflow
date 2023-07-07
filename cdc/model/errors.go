@@ -28,15 +28,6 @@ type RunningError struct {
 	Message string    `json:"message"`
 }
 
-func NewRunningError(err error) *RunningError {
-	return &RunningError{
-		Time:    time.Now(),
-		Addr:    "test",
-		Code:    "test",
-		Message: err.Error(),
-	}
-}
-
 // IsChangefeedUnRetryableError return true if a running error contains a changefeed not retry error.
 func (r RunningError) IsChangefeedUnRetryableError() bool {
 	return cerror.IsChangefeedUnRetryableError(errors.New(r.Message + r.Code))

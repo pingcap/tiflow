@@ -135,6 +135,11 @@ func (s FeedState) IsNeeded(need string) bool {
 	return need == string(s)
 }
 
+// IsRunning return true if the feedState represents a running state.
+func (s FeedState) IsRunning() bool {
+	return s == StateNormal || s == StateWarning
+}
+
 // ChangeFeedInfo describes the detail of a ChangeFeed
 type ChangeFeedInfo struct {
 	UpstreamID uint64    `json:"upstream-id"`
