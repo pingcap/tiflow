@@ -60,11 +60,12 @@ type Config struct {
 	AvroEnableWatermark bool
 
 	// for sinking to cloud storage
-	Delimiter       string
-	Quote           string
-	NullString      string
-	IncludeCommitTs bool
-	Terminator      string
+	Delimiter            string
+	Quote                string
+	NullString           string
+	IncludeCommitTs      bool
+	Terminator           string
+	BinaryEncodingMethod string
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
@@ -176,6 +177,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.Quote = replicaConfig.Sink.CSVConfig.Quote
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
+			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {

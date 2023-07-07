@@ -762,7 +762,7 @@ func TestCSVMessageEncode(t *testing.T) {
 func TestConvertToCSVType(t *testing.T) {
 	for _, group := range csvTestColumnsGroup {
 		for _, c := range group {
-			val, _ := fromColValToCsvVal(&c.col, c.colInfo.Ft)
+			val, _ := fromColValToCsvVal(&common.Config{BinaryEncodingMethod: "base64"}, &c.col, c.colInfo.Ft)
 			require.Equal(t, c.want, val, c.col.Name)
 		}
 	}
@@ -792,11 +792,12 @@ func TestRowChangeEventConversion(t *testing.T) {
 			row.Columns = cols
 		}
 		csvMsg, err := rowChangedEvent2CSVMsg(&common.Config{
-			Delimiter:       "\t",
-			Quote:           "\"",
-			Terminator:      "\n",
-			NullString:      "\\N",
-			IncludeCommitTs: true,
+			Delimiter:            "\t",
+			Quote:                "\"",
+			Terminator:           "\n",
+			NullString:           "\\N",
+			IncludeCommitTs:      true,
+			BinaryEncodingMethod: "base64",
 		}, row)
 		require.NotNil(t, csvMsg)
 		require.Nil(t, err)
@@ -815,7 +816,9 @@ func TestRowChangeEventConversion(t *testing.T) {
 			ticols = append(ticols, ticol)
 		}
 
-		row2, err := csvMsg2RowChangedEvent(csvMsg, ticols)
+		row2, err := csvMsg2RowChangedEvent(&common.Config{
+			BinaryEncodingMethod: "base64",
+		}, csvMsg, ticols)
 		require.Nil(t, err)
 		require.NotNil(t, row2)
 	}

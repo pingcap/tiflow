@@ -15,6 +15,7 @@ package csv
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -233,7 +234,7 @@ func (c *csvMessage) formatValue(value any, strBuilder *strings.Builder) {
 	}
 }
 
-func fromCsvValToColValue(csvVal any, ft types.FieldType) (any, error) {
+func fromCsvValToColValue(csvConfig *common.Config, csvVal any, ft types.FieldType) (any, error) {
 	str, ok := csvVal.(string)
 	if !ok {
 		return csvVal, nil
@@ -243,9 +244,18 @@ func fromCsvValToColValue(csvVal any, ft types.FieldType) (any, error) {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		if ft.GetCharset() == charset.CharsetBin {
-			blob, err := base64.StdEncoding.DecodeString(str)
-			return blob, err
+			switch csvConfig.BinaryEncodingMethod {
+			case "base64":
+				return base64.StdEncoding.DecodeString(str)
+			case "hex":
+				return hex.DecodeString(str)
+			default:
+				return nil, cerror.WrapError(cerror.ErrCSVEncodeFailed,
+					errors.Errorf("unsupported binary encoding method %s",
+						csvConfig.BinaryEncodingMethod))
+			}
 		}
+
 		return []byte(str), nil
 	case mysql.TypeFloat:
 		val, err := strconv.ParseFloat(str, 32)
@@ -269,7 +279,7 @@ func fromCsvValToColValue(csvVal any, ft types.FieldType) (any, error) {
 }
 
 // fromColValToCsvVal converts column from TiDB type to csv type.
-func fromColValToCsvVal(col *model.Column, ft *types.FieldType) (any, error) {
+func fromColValToCsvVal(csvConfig *common.Config, col *model.Column, ft *types.FieldType) (any, error) {
 	if col.Value == nil {
 		return nil, nil
 	}
@@ -279,7 +289,16 @@ func fromColValToCsvVal(col *model.Column, ft *types.FieldType) (any, error) {
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		if col.Flag.IsBinary() {
 			if v, ok := col.Value.([]byte); ok {
-				return base64.StdEncoding.EncodeToString(v), nil
+				switch csvConfig.BinaryEncodingMethod {
+				case "base64":
+					return base64.StdEncoding.EncodeToString(v), nil
+				case "hex":
+					return hex.EncodeToString(v), nil
+				default:
+					return nil, cerror.WrapError(cerror.ErrCSVEncodeFailed,
+						errors.Errorf("unsupported binary encoding method %s",
+							csvConfig.BinaryEncodingMethod))
+				}
 			}
 			return col.Value, nil
 		}
@@ -323,7 +342,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 	}
 	if e.IsDelete() {
 		csvMsg.opType = operationDelete
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.PreColumns, e.ColInfos)
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.ColInfos)
 		if err != nil {
 			return nil, err
 		}
@@ -334,7 +353,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 			csvMsg.opType = operationUpdate
 		}
 		// for insert and update operation, we only record the after columns.
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(e.Columns, e.ColInfos)
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.ColInfos)
 		if err != nil {
 			return nil, err
 		}
@@ -342,7 +361,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 	return csvMsg, nil
 }
 
-func csvMsg2RowChangedEvent(csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*model.RowChangedEvent, error) {
+func csvMsg2RowChangedEvent(csvConfig *common.Config, csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*model.RowChangedEvent, error) {
 	var err error
 	if len(csvMsg.columns) != len(ticols) {
 		return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed,
@@ -357,9 +376,9 @@ func csvMsg2RowChangedEvent(csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*
 		Table:  csvMsg.tableName,
 	}
 	if csvMsg.opType == operationDelete {
-		e.PreColumns, err = csvColumns2RowChangeColumns(csvMsg.columns, ticols)
+		e.PreColumns, err = csvColumns2RowChangeColumns(csvConfig, csvMsg.columns, ticols)
 	} else {
-		e.Columns, err = csvColumns2RowChangeColumns(csvMsg.columns, ticols)
+		e.Columns, err = csvColumns2RowChangeColumns(csvConfig, csvMsg.columns, ticols)
 	}
 
 	if err != nil {
@@ -369,7 +388,7 @@ func csvMsg2RowChangedEvent(csvMsg *csvMessage, ticols []*timodel.ColumnInfo) (*
 	return e, nil
 }
 
-func rowChangeColumns2CSVColumns(cols []*model.Column, colInfos []rowcodec.ColInfo) ([]any, error) {
+func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.Column, colInfos []rowcodec.ColInfo) ([]any, error) {
 	var csvColumns []any
 	for i, column := range cols {
 		// column could be nil in a condition described in
@@ -378,7 +397,7 @@ func rowChangeColumns2CSVColumns(cols []*model.Column, colInfos []rowcodec.ColIn
 			continue
 		}
 
-		converted, err := fromColValToCsvVal(column, colInfos[i].Ft)
+		converted, err := fromColValToCsvVal(csvConfig, column, colInfos[i].Ft)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -388,7 +407,7 @@ func rowChangeColumns2CSVColumns(cols []*model.Column, colInfos []rowcodec.ColIn
 	return csvColumns, nil
 }
 
-func csvColumns2RowChangeColumns(csvCols []any, ticols []*timodel.ColumnInfo) ([]*model.Column, error) {
+func csvColumns2RowChangeColumns(csvConfig *common.Config, csvCols []any, ticols []*timodel.ColumnInfo) ([]*model.Column, error) {
 	cols := make([]*model.Column, 0, len(csvCols))
 	for idx, csvCol := range csvCols {
 		col := new(model.Column)
@@ -402,7 +421,7 @@ func csvColumns2RowChangeColumns(csvCols []any, ticols []*timodel.ColumnInfo) ([
 			col.Flag.SetIsPrimaryKey()
 		}
 
-		val, err := fromCsvValToColValue(csvCol, ticol.FieldType)
+		val, err := fromCsvValToColValue(csvConfig, csvCol, ticol.FieldType)
 		if err != nil {
 			return cols, err
 		}
