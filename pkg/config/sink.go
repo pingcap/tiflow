@@ -147,6 +147,8 @@ type CSVConfig struct {
 	NullString string `toml:"null" json:"null"`
 	// whether to include commit ts
 	IncludeCommitTs bool `toml:"include-commit-ts" json:"include-commit-ts"`
+	// encoding method of binary type
+	BinaryEncodingMethod string `toml:"binary-encoding-method" json:"binary-encoding-method"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {
