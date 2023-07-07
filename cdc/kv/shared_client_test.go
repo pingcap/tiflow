@@ -49,44 +49,16 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	require.NotNil(t, stream.getState(1, 2))
 	require.NotNil(t, stream.takeState(1, 2))
 	require.Nil(t, stream.getState(1, 2))
-
-	requestedTable := &requestedTable{requestID: 1}
-	requestedTable.stopped.Store(true)
-	for i := uint64(2); i < uint64(5); i++ {
-		stream.setState(1, i, &regionFeedState{sri: singleRegionInfo{requestedTable: requestedTable}})
-	}
-
-	require.Nil(t, stream.getState(1, 2))
-	select {
-	case sri := <-stream.requests.Out():
-		require.Equal(t, sri.requestedTable.requestID, uint64(1))
-	case <-time.After(100 * time.Millisecond):
-		require.True(t, false, "must get a singleRegionInfo")
-	}
-
-	require.Nil(t, stream.getState(1, 3))
-	select {
-	case <-stream.requests.Out():
-		require.False(t, true, "shouldn't get a singleRegionInfo")
-	case <-time.After(100 * time.Millisecond):
-	}
-
-	requestedTable.deregister.Store(uint64(100), time.Now().Add(-1*time.Hour))
-	require.Nil(t, stream.getState(1, 4))
-	select {
-	case sri := <-stream.requests.Out():
-		require.Equal(t, sri.requestedTable.requestID, uint64(1))
-	case <-time.After(100 * time.Millisecond):
-		require.True(t, false, "must get a singleRegionInfo")
-	}
 }
 
 func TestRequestedTable(t *testing.T) {
 	s := &SharedClient{resolveLockCh: chann.NewAutoDrainChann[resolveLockTask]()}
 	span := tablepb.Span{TableID: 1, StartKey: []byte{'a'}, EndKey: []byte{'z'}}
 	table := s.newRequestedTable(SubscriptionID(1), span, 100, nil)
-	s.totalSpans.m = spanz.NewHashMap[*requestedTable]()
-	s.totalSpans.m.ReplaceOrInsert(span, table)
+	s.totalSpans.m = spanz.NewHashMap[SubscriptionID]()
+	s.totalSpans.m.ReplaceOrInsert(span, SubscriptionID(1))
+	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
+	s.totalSpans.v[SubscriptionID(1)] = table
 	s.pdClock = pdutil.NewClock4Test()
 
 	// Lock a range, and then ResolveLock will trigger a task for it.
@@ -228,3 +200,8 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+// more tests:
+// resolve lock
+// unsubscribe table
+// prewrite not match

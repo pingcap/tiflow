@@ -15,7 +15,6 @@ package puller
 
 import (
 	"context"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -124,6 +123,15 @@ func (p *MultiplexingPuller) Subscribe(
 	pullerType string, tableName string,
 	spans []tablepb.Span, startTs model.Ts,
 ) []kv.SubscriptionID {
+	p.subscriptions.Lock()
+	defer p.subscriptions.Unlock()
+	return p.subscribe(pullerType, tableName, spans, startTs)
+}
+
+func (p *MultiplexingPuller) subscribe(
+	pullerType string, tableName string,
+	spans []tablepb.Span, startTs model.Ts,
+) []kv.SubscriptionID {
 	progress := &tableProgress{
 		changefeed: p.changefeed,
 		pullerType: pullerType,
@@ -149,7 +157,10 @@ func (p *MultiplexingPuller) Subscribe(
 	for _, span := range spans {
 		subID := p.client.AllocSubscriptionID()
 		subIDs = append(subIDs, subID)
-		p.setProgress(subID, progress)
+
+		p.subscriptions.m[subID] = progress
+		p.subscriptions.n.ReplaceOrInsert(span, progress)
+
 		slot := p.hasher(span, len(p.inputChs))
 		if _, ok := p.client.Subscribe(subID, span, startTs, p.inputChs[slot]); !ok {
 			log.Panic("redundant subscription",
@@ -163,34 +174,29 @@ func (p *MultiplexingPuller) Subscribe(
 
 // Unsubscribe some spans, which must be subscribed in one call.
 func (p *MultiplexingPuller) Unsubscribe(spans []tablepb.Span) {
-	subIDs := make([]kv.SubscriptionID, 0, len(spans))
+	p.subscriptions.Lock()
+	defer p.subscriptions.Unlock()
+	p.unsubscribe(spans)
+}
+
+func (p *MultiplexingPuller) unsubscribe(spans []tablepb.Span) {
 	for _, span := range spans {
 		if subID, ok := p.client.Unsubscribe(span); ok {
-			subIDs = append(subIDs, subID)
-		} else {
-			log.Panic("unexist unsubscription",
-				zap.String("namespace", p.changefeed.Namespace),
-				zap.String("changefeed", p.changefeed.ID),
-				zap.String("span", span.String()))
+			// It's ok to stop one progress multiple times.
+			progress := p.subscriptions.m[subID]
+			progress.consume.Lock()
+			progress.consume.removed = true
+			progress.consume.Unlock()
+
+			delete(p.subscriptions.m, subID)
+			p.subscriptions.n.Delete(span)
+			continue
 		}
-	}
-	sort.Slice(subIDs, func(i, j int) bool { return subIDs[i] < subIDs[j] })
-	if subIDs[0] != subIDs[len(subIDs)-1] {
-		log.Panic("unsubscribe spans with different ID",
+		log.Panic("unexist unsubscription",
 			zap.String("namespace", p.changefeed.Namespace),
-			zap.String("changefeed", p.changefeed.ID))
+			zap.String("changefeed", p.changefeed.ID),
+			zap.String("span", span.String()))
 	}
-
-	progress := p.delProgress(subIDs[0])
-	if progress == nil || len(progress.spans) != len(subIDs) {
-		log.Panic("unsubscribe spans different from subscription",
-			zap.String("namespace", p.changefeed.Namespace),
-			zap.String("changefeed", p.changefeed.ID))
-	}
-
-	progress.consume.Lock()
-	progress.consume.removed = true
-	progress.consume.Unlock()
 }
 
 // Run the puller.
@@ -254,28 +260,6 @@ func (p *MultiplexingPuller) handleInputCh(ctx context.Context, inputCh <-chan k
 			}
 		}
 	}
-}
-
-func (p *MultiplexingPuller) setProgress(subID kv.SubscriptionID, progress *tableProgress) {
-	p.subscriptions.Lock()
-	defer p.subscriptions.Unlock()
-	p.subscriptions.m[subID] = progress
-	for _, span := range progress.spans {
-		p.subscriptions.n.ReplaceOrInsert(span, progress)
-	}
-}
-
-func (p *MultiplexingPuller) delProgress(subID kv.SubscriptionID) *tableProgress {
-	p.subscriptions.Lock()
-	defer p.subscriptions.Unlock()
-	if progress, ok := p.subscriptions.m[subID]; ok {
-		delete(p.subscriptions.m, subID)
-		for _, span := range progress.spans {
-			p.subscriptions.n.Delete(span)
-		}
-		return progress
-	}
-	return nil
 }
 
 func (p *MultiplexingPuller) getProgress(subID kv.SubscriptionID) *tableProgress {
@@ -388,7 +372,7 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 
 	if resolvedTs > 0 && !p.initialized {
 		p.initialized = true
-		log.Info("table puller is initialized",
+		log.Info("puller is initialized",
 			zap.String("namespace", p.changefeed.Namespace),
 			zap.String("changefeed", p.changefeed.ID),
 			zap.String("tableName", p.tableName),

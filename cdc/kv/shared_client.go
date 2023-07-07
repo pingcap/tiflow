@@ -91,7 +91,8 @@ type SharedClient struct {
 
 	totalSpans struct {
 		sync.RWMutex
-		m *spanz.HashMap[*requestedTable]
+		m *spanz.HashMap[SubscriptionID]
+		v map[SubscriptionID]*requestedTable
 	}
 }
 
@@ -118,10 +119,11 @@ type requestedStream struct {
 	// init is for initializing client and conn asynchronously.
 	init func(ctx context.Context) error
 
-	streamID         uint64
-	client           cdcpb.ChangeData_EventFeedClient
-	conn             *sharedConn
-	requests         *chann.DrainableChann[singleRegionInfo]
+	streamID uint64
+	client   cdcpb.ChangeData_EventFeedClient
+	conn     *sharedConn
+	requests *chann.DrainableChann[singleRegionInfo]
+
 	requestedRegions struct {
 		sync.RWMutex
 		// map[requestID]map[regionID]*regionFeedState
@@ -139,10 +141,6 @@ type requestedTable struct {
 	eventCh   chan<- MultiplexingEvent
 	requestID uint64
 
-	// To handle table stoppings.
-	stopped    atomic.Bool
-	deregister sync.Map // map[streamID]time.Time
-
 	// To handle lock resolvings.
 	postUpdateRegionResolvedTs func(regionID uint64, state *regionlock.LockedRange)
 	staleLocks                 struct {
@@ -151,6 +149,10 @@ type requestedTable struct {
 		sync.RWMutex
 		registered time.Time
 	}
+
+	// To handle table stoppings.
+	stopped          atomic.Bool
+	unretryableError error
 }
 
 // NewSharedClient creates a client.
@@ -184,7 +186,8 @@ func NewSharedClient(
 
 		requestedStores: make(map[string]*requestedStore),
 	}
-	s.totalSpans.m = spanz.NewHashMap[*requestedTable]()
+	s.totalSpans.m = spanz.NewHashMap[SubscriptionID]()
+	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
 	s.initMetrics()
 	return s
 }
@@ -206,25 +209,25 @@ func (s *SharedClient) Subscribe(
 			zap.String("changefeed", s.changefeed.ID))
 	}
 
-	var requestedTable *requestedTable
 	s.totalSpans.Lock()
-	if requestedTable, _ = s.totalSpans.m.Get(span); requestedTable == nil {
-		requestedTable = s.newRequestedTable(subID, span, startTs, eventCh)
-		s.totalSpans.m.ReplaceOrInsert(span, requestedTable)
+	if existSubID, success = s.totalSpans.m.Get(span); success {
 		s.totalSpans.Unlock()
-
-		s.requestRangeCh.In() <- rangeTask{span: span, requestedTable: requestedTable}
-		log.Info("event feed subscribes table success",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Int64("tableID", span.TableID),
-			zap.Uint64("requestID", requestedTable.requestID))
-		success = true
-	} else {
-		s.totalSpans.Unlock()
-		existSubID = SubscriptionID(requestedTable.requestID)
 		success = false
+		return
 	}
+
+	rt := s.newRequestedTable(subID, span, startTs, eventCh)
+	s.totalSpans.m.ReplaceOrInsert(span, subID)
+	s.totalSpans.v[subID] = rt
+	s.totalSpans.Unlock()
+
+	s.requestRangeCh.In() <- rangeTask{span: span, requestedTable: rt}
+	log.Info("event feed subscribes table success",
+		zap.String("namespace", s.changefeed.Namespace),
+		zap.String("changefeed", s.changefeed.ID),
+		zap.String("span", rt.span.String()),
+		zap.Uint64("requestID", rt.requestID))
+	success = true
 	return
 }
 
@@ -238,27 +241,22 @@ func (s *SharedClient) Unsubscribe(span tablepb.Span) (subID SubscriptionID, suc
 	}
 
 	s.totalSpans.Lock()
-	if rt, ok := s.totalSpans.m.Get(span); ok {
-		s.totalSpans.m.Delete(span)
+	if subID, success = s.totalSpans.m.Get(span); !success {
 		s.totalSpans.Unlock()
-
-		rt.stopped.Store(true)
-		log.Info("event feed unsubscribes table is began",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Int64("tableID", rt.span.TableID),
-			zap.Uint64("requestID", rt.requestID))
-		if rt.rangeLock.Stop() {
-			log.Info("event feed stop table is finished",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.String("span", rt.span.String()))
-		}
-		subID = SubscriptionID(rt.requestID)
-		success = true
-	} else {
-		s.totalSpans.Unlock()
+		return
 	}
+
+	s.totalSpans.m.Delete(span)
+	rt := s.totalSpans.v[subID]
+	s.totalSpans.Unlock()
+
+	log.Info("event feed unsubscribes table",
+		zap.String("namespace", s.changefeed.Namespace),
+		zap.String("changefeed", s.changefeed.ID),
+		zap.String("span", rt.span.String()),
+		zap.Uint64("requestID", rt.requestID))
+
+	s.setTableStopped(rt, nil)
 	return
 }
 
@@ -271,25 +269,25 @@ func (s *SharedClient) ResolveLock(span tablepb.Span, maxVersion uint64) (succes
 			zap.String("changefeed", s.changefeed.ID))
 	}
 
-	var requestedTable *requestedTable
 	s.totalSpans.Lock()
-	requestedTable, _ = s.totalSpans.m.Get(span)
-	if requestedTable == nil {
+	var subID SubscriptionID
+	if subID, success = s.totalSpans.m.Get(span); success {
+		rt := s.totalSpans.v[subID]
 		s.totalSpans.Unlock()
-		return false
+		rt.updateStaleLocks(s, maxVersion)
+		return
 	}
-	s.totalSpans.Unlock()
 
-	requestedTable.updateStaleLocks(s, maxVersion)
-	return true
+	s.totalSpans.Unlock()
+	return
 }
 
 // RegionCount returns subscribed region count for the span.
 func (s *SharedClient) RegionCount(span tablepb.Span) uint64 {
 	s.totalSpans.RLock()
 	defer s.totalSpans.RUnlock()
-	if t, ok := s.totalSpans.m.Get(span); ok {
-		return t.rangeLock.RefCount()
+	if subID, ok := s.totalSpans.m.Get(span); ok {
+		return s.totalSpans.v[subID].rangeLock.RefCount()
 	}
 	return 0
 }
@@ -340,6 +338,35 @@ func (s *SharedClient) GetPDClock() pdutil.Clock {
 	return s.pdClock
 }
 
+func (s *SharedClient) setTableStopped(rt *requestedTable, err error) {
+	log.Info("event feed starts to stop table",
+		zap.String("namespace", s.changefeed.Namespace),
+		zap.String("changefeed", s.changefeed.ID),
+		zap.String("span", rt.span.String()))
+
+	// Set stopped to true so we can stop handling region events from the table.
+	// Then send a spetial singleRegionInfo to regionRouter to deregister the table
+	// from all TiKV instances.
+	if rt.stopped.CompareAndSwap(false, true) {
+		rt.unretryableError = err
+		s.regionRouter.In() <- singleRegionInfo{requestedTable: rt}
+		if rt.rangeLock.Stop() {
+			s.onTableDrained(rt)
+		}
+	}
+}
+
+func (s *SharedClient) onTableDrained(rt *requestedTable) {
+	log.Info("event feed stop table is finished",
+		zap.String("namespace", s.changefeed.Namespace),
+		zap.String("changefeed", s.changefeed.ID),
+		zap.String("span", rt.span.String()))
+
+	s.totalSpans.Lock()
+	defer s.totalSpans.Unlock()
+	delete(s.totalSpans.v, SubscriptionID(rt.requestID))
+}
+
 func (s *SharedClient) onRegionFail(ctx context.Context, errInfo regionErrorInfo) {
 	select {
 	case s.errCh.In() <- errInfo:
@@ -358,8 +385,7 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 			return
 		}
 		if err != nil {
-			// NOTE: retry later instead of failing the changefeed.
-			log.Warn("event feed get RPC context fail",
+			log.Debug("event feed get RPC context fail",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("regionID", sri.verID.GetID()),
@@ -380,16 +406,26 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 
 func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Group) error {
 	for {
+		var sri singleRegionInfo
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case sri := <-s.regionRouter.Out():
-			storeID := sri.rpcCtx.Peer.StoreId
-			storeAddr := sri.rpcCtx.Addr
-			rs := s.requestStore(ctx, g, storeID, storeAddr)
-			offset := rs.nextStream.Add(1) % uint32(len(rs.streams))
-			rs.streams[offset].requests.In() <- sri
+		case sri = <-s.regionRouter.Out():
 		}
+		// If lockedRange is nil it means it's a spetial task from stopping the table.
+		if sri.lockedRange == nil {
+			for _, rs := range s.requestedStores {
+				for _, stream := range rs.streams {
+					stream.requests.In() <- sri
+				}
+			}
+			continue
+		}
+		storeID := sri.rpcCtx.Peer.StoreId
+		storeAddr := sri.rpcCtx.Addr
+		rs := s.requestStore(ctx, g, storeID, storeAddr)
+		offset := rs.nextStream.Add(1) % uint32(len(rs.streams))
+		rs.streams[offset].requests.In() <- sri
 	}
 }
 
@@ -467,19 +503,8 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 	sri := *stream.preFetchForConnecting
 	stream.preFetchForConnecting = nil
 	for {
-		if sri.lockedRange != nil {
-			connectTime := time.Since(sri.lockedRange.Created).Milliseconds()
-			s.metrics.regionConnectDuration.Observe(float64(connectTime))
-			requestID := sri.requestedTable.requestID
-			regionID := sri.verID.GetID()
-			state := newRegionFeedState(sri, requestID)
-			state.start()
-			stream.setState(requestID, regionID, state)
-		} else {
-			// It's a spectial message for removing table. See requestedStream.handleStoppedTable.
-		}
-
-		if sri.requestedTable.stopped.Load() {
+		if sri.lockedRange == nil {
+			// It means it's a spetial task from stopping the table.
 			req := &cdcpb.ChangeDataRequest{
 				RequestId: sri.requestedTable.requestID,
 				Request:   &cdcpb.ChangeDataRequest_Deregister_{},
@@ -487,6 +512,13 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			if err = doSend(req); err != nil {
 				return err
 			}
+			// NOTE: some principles to help understand deregistering a table:
+			// 1. after a Deregister(requestID) message is sent out, no more region requests
+			//    with the same requestID will be sent out in the same GRPC stream;
+			// 2. so it's OK to clear all pending states in the GRPC stream;
+			// 3. is it possible that TiKV is keeping to send events belong to a removed state?
+			//    I guess no because internal errors will cause the changefeed or table stopped,
+			//    and then those regions from the bad requestID will be unsubscribed finally.
 			for _, state := range stream.takeStates(sri.requestedTable.requestID) {
 				state.markStopped(&sendRequestToStoreErr{})
 				slot := hashRegionID(state.sri.verID.GetID(), len(s.workers))
@@ -497,6 +529,23 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			}
 			continue
 		}
+
+		if sri.requestedTable.stopped.Load() {
+			// It can be skipped directly because there must be no pending states from
+			// the stopped requestedTable, or the spetial singleRegionInfo for stopping
+			// the table will be handled later.
+			s.onRegionFail(ctx, newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
+			continue
+		}
+
+		connectTime := time.Since(sri.lockedRange.Created).Milliseconds()
+		s.metrics.regionConnectDuration.Observe(float64(connectTime))
+
+		requestID := sri.requestedTable.requestID
+		regionID := sri.verID.GetID()
+		state := newRegionFeedState(sri, requestID)
+		state.start()
+		stream.setState(requestID, regionID, state)
 
 		req := s.createRegionRequest(sri)
 		if err = doSend(req); err != nil {
@@ -694,18 +743,6 @@ func (s *SharedClient) runStream(
 	return false
 }
 
-func (r *requestedStream) handleStoppedTable(requestedTable *requestedTable) {
-	if requestedTable.stopped.Load() {
-		now := time.Now()
-		value, loaded := requestedTable.deregister.LoadOrStore(r.streamID, now)
-		if !loaded || now.Sub(value.(time.Time)) > 10*time.Second {
-			if requestedTable.deregister.CompareAndSwap(r.streamID, value, now) {
-				r.requests.In() <- singleRegionInfo{requestedTable: requestedTable}
-			}
-		}
-	}
-}
-
 func (r *requestedStream) setState(requestID, regionID uint64, state *regionFeedState) {
 	r.requestedRegions.Lock()
 	defer r.requestedRegions.Unlock()
@@ -722,10 +759,6 @@ func (r *requestedStream) getState(requestID, regionID uint64) (state *regionFee
 	defer r.requestedRegions.RUnlock()
 	if m, ok := r.requestedRegions.m[requestID]; ok {
 		state = m[regionID]
-	}
-	if state != nil && state.sri.requestedTable.stopped.Load() {
-		r.handleStoppedTable(state.sri.requestedTable)
-		return nil
 	}
 	return state
 }
@@ -900,14 +933,10 @@ func (s *SharedClient) handleErrors(ctx context.Context) error {
 }
 
 func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo) error {
-	rangeLock := errInfo.requestedTable.rangeLock
-	tableStopped := rangeLock.UnlockRange(errInfo.span.StartKey, errInfo.span.EndKey,
-		errInfo.verID.GetID(), errInfo.verID.GetVer(), errInfo.resolvedTs())
-	if tableStopped {
-		log.Info("event feed stop table is finished",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.String("span", errInfo.requestedTable.span.String()))
+	if errInfo.requestedTable.rangeLock.UnlockRange(
+		errInfo.span.StartKey, errInfo.span.EndKey,
+		errInfo.verID.GetID(), errInfo.verID.GetVer(), errInfo.resolvedTs()) {
+		s.onTableDrained(errInfo.requestedTable)
 		return nil
 	}
 
@@ -965,22 +994,14 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
 		return nil
 	default:
-		// TODO(qupeng): it's better to stop the table subscription but keep the changefeed.
-		if cerror.ErrPrewriteNotMatch.Equal(err) {
-			log.Warn("event feed meets an internal error, fail the changefeed",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Error(err))
-			return err
-		}
-		log.Warn("event feed meets an internal error, re-schedule the region",
+		// TODO(qupeng): for some errors it's better to just deregister the region from TiKVs.
+		log.Warn("event feed meets an internal error, fail the changefeed",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
-			zap.Int64("tableID", errInfo.requestedTable.span.TableID),
+			zap.String("span", errInfo.requestedTable.span.String()),
 			zap.Uint64("requestID", errInfo.requestedTable.requestID),
 			zap.Error(err))
-		s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
-		return nil
+		return err
 	}
 }
 
@@ -1089,7 +1110,7 @@ func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 	log.Warn("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Int64("tableID", r.span.TableID),
+		zap.String("span", r.span.String()),
 		zap.Uint64("requestID", r.requestID),
 		zap.Any("LockedRanges", res))
 }
