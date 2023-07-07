@@ -35,11 +35,18 @@ import (
 func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/worker_test.go
 	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
+=======
+	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), id, encoderConfig)
+	require.NoError(t, err)
+	p, err := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/dmlsink/mq/worker_test.go
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	return newWorker(id, config.ProtocolOpen, builder, encoderConcurrency, p, statistics), p
@@ -48,11 +55,19 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	// 300 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300)
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/worker_test.go
 	builder, err := builder.NewEventBatchEncoderBuilder(context.Background(), encoderConfig)
 	require.Nil(t, err)
 	p, err := dmlproducer.NewDMLMockProducer(context.Background(), nil, nil, nil)
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
+=======
+	builder, err := builder.NewRowEventEncoderBuilder(context.Background(),
+		id, encoderConfig)
+	require.NoError(t, err)
+	p, err := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/dmlsink/mq/worker_test.go
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	return newWorker(id, config.ProtocolCanalJSON, builder, encoderConcurrency, p, statistics), p

@@ -15,7 +15,6 @@ package ddlproducer
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 //nolint:unused
 func initBroker(t *testing.T, withPartitionResponse int) (*sarama.MockBroker, string) {
 	topic := kafka.DefaultMockTopicName
@@ -64,11 +64,21 @@ func getConfig(addr string) *kafkav1.Config {
 	config.PartitionNum = int32(kafka.DefaultMockPartitionNum)
 	config.AutoCreate = false
 	config.BrokerEndpoints = strings.Split(addr, ",")
+=======
+func getOptions() *kafka.Options {
+	options := kafka.NewOptions()
+	options.Version = "0.9.0.0"
+	options.ClientID = "test-client"
+	options.PartitionNum = int32(kafka.DefaultMockPartitionNum)
+	options.AutoCreate = false
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 
 	return config
 }
 
 func TestSyncBroadcastMessage(t *testing.T) {
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
@@ -87,19 +97,39 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	require.Nil(t, err)
 	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
 	require.Nil(t, err)
+=======
+	ctx, cancel := context.WithCancel(context.Background())
+	options := getOptions()
+	options.MaxMessages = 1
 
-	err = p.SyncBroadcastMessage(ctx, topic,
+	ctx = context.WithValue(ctx, "testing.T", t)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(options, changefeed)
+	require.NoError(t, err)
+
+	syncProducer, err := factory.SyncProducer(ctx)
+	require.NoError(t, err)
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
+
+	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+	require.NoError(t, err)
+
+	for i := 0; i < kafka.DefaultMockPartitionNum; i++ {
+		syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
+	}
+	err = p.SyncBroadcastMessage(ctx, kafka.DefaultMockTopicName,
 		kafka.DefaultMockPartitionNum, &common.Message{Ts: 417318403368288260})
 	require.Nil(t, err)
 
 	p.Close()
-	err = p.SyncBroadcastMessage(ctx, topic,
+	err = p.SyncBroadcastMessage(ctx, kafka.DefaultMockTopicName,
 		kafka.DefaultMockPartitionNum, &common.Message{Ts: 417318403368288260})
 	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 	cancel()
 }
 
 func TestSyncSendMessage(t *testing.T) {
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
@@ -121,14 +151,34 @@ func TestSyncSendMessage(t *testing.T) {
 
 	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
 	require.Nil(t, err)
+=======
+	ctx, cancel := context.WithCancel(context.Background())
+	options := getOptions()
+
+	ctx = context.WithValue(ctx, "testing.T", t)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(options, changefeed)
+	require.NoError(t, err)
+
+	syncProducer, err := factory.SyncProducer(ctx)
+	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+	require.NoError(t, err)
+
+	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
+	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
+	require.NoError(t, err)
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 
 	p.Close()
-	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
+	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
 	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 	cancel()
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
@@ -142,22 +192,43 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	require.Nil(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 	saramaConfig.Producer.Retry.Max = 1
+=======
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	options := getOptions()
+	options.MaxMessages = 1
+	options.MaxMessageBytes = 1
+
+	ctx = context.WithValue(ctx, "testing.T", t)
+
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 	// This will make the first send failed.
 	saramaConfig.Producer.MaxMessageBytes = 1
 	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
 	require.Nil(t, err)
 	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
 	require.Nil(t, err)
+=======
+	syncProducer, err := factory.SyncProducer(ctx)
+	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+	require.NoError(t, err)
+
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 	defer p.Close()
 
-	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
-	require.Regexp(t, ".*too large.*", err)
+	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndFail(sarama.ErrMessageTooLarge)
+	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
+	require.ErrorIs(t, err, sarama.ErrMessageTooLarge)
 }
 
 func TestProducerDoubleClose(t *testing.T) {
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
@@ -177,6 +248,22 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.Nil(t, err)
 	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
 	require.Nil(t, err)
+=======
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	options := getOptions()
+
+	ctx = context.WithValue(ctx, "testing.T", t)
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+	factory, err := kafka.NewMockFactory(options, changefeed)
+	require.NoError(t, err)
+
+	syncProducer, err := factory.SyncProducer(ctx)
+	require.NoError(t, err)
+
+	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+	require.NoError(t, err)
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/ddlproducer/kafka_ddl_producer_test.go
 
 	p.Close()
 	p.Close()

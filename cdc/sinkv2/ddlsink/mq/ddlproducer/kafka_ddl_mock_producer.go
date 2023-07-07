@@ -30,9 +30,13 @@ type MockDDLProducer struct {
 }
 
 // NewMockDDLProducer creates a mock producer.
+<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/ddlproducer/kafka_ddl_mock_producer.go
 func NewMockDDLProducer(_ context.Context, _ sarama.Client,
 	_ kafka.ClusterAdminClient,
 ) (DDLProducer, error) {
+=======
+func NewMockDDLProducer(_ context.Context, _ model.ChangeFeedID, _ kafka.SyncProducer) (DDLProducer, error) {
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/ddlproducer/kafka_ddl_mock_producer.go
 	return &MockDDLProducer{
 		events: make(map[mqv1.TopicPartitionKey][]*common.Message),
 	}, nil
