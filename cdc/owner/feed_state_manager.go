@@ -119,7 +119,7 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 			m.state.Info.State != model.StateWarning {
 			m.patchState(model.StateNormal)
 		} else {
-			m.cleanUpInfos()
+			m.cleanUpTaskPositions()
 		}
 	}()
 
@@ -424,7 +424,7 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 	})
 }
 
-func (m *feedStateManager) cleanUpInfos() {
+func (m *feedStateManager) cleanUpTaskPositions() {
 	for captureID := range m.state.TaskPositions {
 		m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return nil, position != nil, nil
@@ -542,6 +542,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// if any error is occurred in this tick, we should set the changefeed state to warning
 	// and stop the changefeed
 	if lastError != nil {
+		log.Warn("changefeed meets an error", zap.Any("error", lastError))
 		m.shouldBeRunning = false
 		m.patchState(model.StatePending)
 	}
@@ -553,28 +554,6 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// TODO: this detection policy should be added into unit test.
 	if m.isChangefeedStable() {
 		m.resetErrRetry()
-	}
-}
-
-// checkAndChangeState checks the state of the changefeed and change it if needed.
-// if the state of the changefeed is warning and the changefeed's checkpointTs is
-// greater than the lastRetryCheckpointTs, it will change the state to normal.
-func (m *feedStateManager) checkAndChangeState() {
-	if m.state.Info == nil || m.state.Status == nil {
-		return
-	}
-	m.shiftStateWindow(m.state.Info.State)
-	if m.state.Info.State == model.StateWarning &&
-		m.state.Status.CheckpointTs > m.lastRetryCheckpointTs &&
-		time.Since(m.lastErrorRetryTime) > time.Second*20 {
-		log.Info("changefeed is recovered from warning state,"+
-			"its checkpointTs is greater than lastRetryCheckpointTs,"+
-			"it will be changed to normal state",
-			zap.String("changefeed", m.state.ID.String()),
-			zap.String("namespace", m.state.ID.Namespace),
-			zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
-			zap.Uint64("lastRetryCheckpointTs", m.lastRetryCheckpointTs))
-		m.patchState(model.StateNormal)
 	}
 }
 
@@ -601,4 +580,25 @@ func GenerateChangefeedEpoch(ctx context.Context, pdClient pd.Client) uint64 {
 		return uint64(time.Now().UnixNano())
 	}
 	return oracle.ComposeTS(phyTs, logical)
+}
+
+// checkAndChangeState checks the state of the changefeed and change it if needed.
+// if the state of the changefeed is warning and the changefeed's checkpointTs is
+// greater than the lastRetryCheckpointTs, it will change the state to normal.
+func (m *feedStateManager) checkAndChangeState() {
+	if m.state.Info == nil || m.state.Status == nil {
+		return
+	}
+	m.shiftStateWindow(m.state.Info.State)
+	if m.state.Info.State == model.StateWarning &&
+		m.state.Status.CheckpointTs > m.lastRetryCheckpointTs {
+		log.Info("changefeed is recovered from warning state,"+
+			"its checkpointTs is greater than lastRetryCheckpointTs,"+
+			"it will be changed to normal state",
+			zap.String("changefeed", m.state.ID.String()),
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
+			zap.Uint64("lastRetryCheckpointTs", m.lastRetryCheckpointTs))
+		m.patchState(model.StateNormal)
+	}
 }
