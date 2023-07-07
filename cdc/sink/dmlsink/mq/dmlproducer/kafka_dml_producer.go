@@ -24,7 +24,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -57,24 +56,15 @@ type kafkaDMLProducer struct {
 func NewKafkaDMLProducer(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
-	factory kafka.Factory,
-	adminClient kafka.ClusterAdminClient,
+	asyncProducer kafka.AsyncProducer,
+	metricsCollector kafka.MetricsCollector,
 	errCh chan error,
+	closeCh chan struct{},
+	failpointCh chan error,
 ) (DMLProducer, error) {
 	log.Info("Starting kafka DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
-
-	closeCh := make(chan struct{})
-	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
-	metricsCollector := factory.MetricsCollector(
-		util.RoleProcessor,
-		adminClient)
 
 	ctx, cancel := context.WithCancel(ctx)
 	k := &kafkaDMLProducer{
