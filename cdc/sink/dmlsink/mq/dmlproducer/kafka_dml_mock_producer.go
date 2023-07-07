@@ -28,14 +28,25 @@ var _ DMLProducer = (*MockDMLProducer)(nil)
 type MockDMLProducer struct {
 	mu     sync.Mutex
 	events map[string][]*common.Message
+
+	asyncProducer kafka.AsyncProducer
 }
 
 // NewDMLMockProducer creates a mock producer.
+<<<<<<< HEAD
 func NewDMLMockProducer(_ context.Context, _ kafka.Factory,
 	_ kafka.ClusterAdminClient, _ chan error,
+=======
+func NewDMLMockProducer(_ context.Context, _ model.ChangeFeedID, asyncProducer kafka.AsyncProducer,
+	_ kafka.MetricsCollector,
+	_ chan error,
+	_ chan struct{},
+	_ chan error,
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 ) (DMLProducer, error) {
 	return &MockDMLProducer{
-		events: make(map[string][]*common.Message),
+		events:        make(map[string][]*common.Message),
+		asyncProducer: asyncProducer,
 	}, nil
 }
 
@@ -58,7 +69,11 @@ func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
 }
 
 // Close do nothing.
-func (m *MockDMLProducer) Close() {}
+func (m *MockDMLProducer) Close() {
+	if m.asyncProducer != nil {
+		m.asyncProducer.Close()
+	}
+}
 
 // GetAllEvents returns the events received by the mock producer.
 func (m *MockDMLProducer) GetAllEvents() []*common.Message {

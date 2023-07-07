@@ -35,4 +35,9 @@ type DDLProducer interface {
 }
 
 // Factory is a function to create a producer.
+<<<<<<< HEAD
 type Factory func(ctx context.Context, factory kafka.Factory) (DDLProducer, error)
+=======
+type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
+	syncProducer kafka.SyncProducer) (DDLProducer, error)
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))

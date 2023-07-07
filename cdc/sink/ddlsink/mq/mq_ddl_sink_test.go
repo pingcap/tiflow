@@ -19,7 +19,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/Shopify/sarama"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
@@ -28,45 +27,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:unparam
-func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
-	topic := kafka.DefaultMockTopicName
-	leader := sarama.NewMockBroker(t, 1)
-
-	metadataResponse := sarama.NewMockMetadataResponse(t)
-	metadataResponse.SetBroker(leader.Addr(), leader.BrokerID())
-	for i := 0; i < partitionNum; i++ {
-		metadataResponse.SetLeader(topic, int32(i), leader.BrokerID())
-	}
-
-	prodSuccess := sarama.NewMockProduceResponse(t)
-	handlerMap := make(map[string]sarama.MockResponse)
-	handlerMap["MetadataRequest"] = metadataResponse
-	handlerMap["ProduceRequest"] = prodSuccess
-	leader.SetHandlerByMap(handlerMap)
-
-	return leader, topic
-}
-
 func TestNewKafkaDDLSinkFailed(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=avro"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+	uri := fmt.Sprintf(uriTemplate, "127.0.0.1:9092", kafka.DefaultMockTopicName)
 
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+<<<<<<< HEAD
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+=======
+	ctx = context.WithValue(ctx, "testing.T", t)
+	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory, ddlproducer.NewMockDDLProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
 		"should report error when protocol is avro but schema-registry is not set")
@@ -79,22 +61,25 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+	uri := fmt.Sprintf(uriTemplate, "127.0.0.1:9092", kafka.DefaultMockTopicName)
 
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+<<<<<<< HEAD
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+=======
+	ctx = context.WithValue(ctx, "testing.T", t)
+	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, s)
 
 	ddl := &model.DDLEvent{
@@ -108,7 +93,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 		Type:  mm.ActionCreateTable,
 	}
 	err = s.WriteDDLEvent(ctx, ddl)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		3, "All partitions should be broadcast")
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
@@ -122,22 +107,26 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=canal-json"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+	uri := fmt.Sprintf(uriTemplate, "127.0.0.1:9092", kafka.DefaultMockTopicName)
 
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+<<<<<<< HEAD
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+=======
+	ctx = context.WithValue(ctx, "testing.T", t)
+	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, replicaConfig,
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, s)
 
 	ddl := &model.DDLEvent{
@@ -151,7 +140,7 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 		Type:  mm.ActionCreateTable,
 	}
 	err = s.WriteDDLEvent(ctx, ddl)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		1, "Only zero partition")
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
@@ -165,20 +154,24 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip" +
 		"&protocol=canal-json&enable-tidb-extension=true"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+	uri := fmt.Sprintf(uriTemplate, "127.0.0.1:9092", kafka.DefaultMockTopicName)
 
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+<<<<<<< HEAD
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+=======
+	ctx = context.WithValue(ctx, "testing.T", t)
+	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, replicaConfig,
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
@@ -202,19 +195,17 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
 	// Notice: auto create topic is true. Auto created topic will have 1 partition.
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
 		"&kafka-client-id=unit-test&auto-create-topic=true&compression=gzip" +
 		"&protocol=canal-json&enable-tidb-extension=true"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+	uri := fmt.Sprintf(uriTemplate, "127.0.0.1:9092", kafka.DefaultMockTopicName)
 
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	replicaConfig.Sink.DispatchRules = []*config.DispatchRule{
 		{
 			Matcher:   []string{"*.*"},
@@ -222,10 +213,16 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 		},
 	}
 
+<<<<<<< HEAD
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+=======
+	ctx = context.WithValue(ctx, "testing.T", t)
+	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, replicaConfig,
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, s)
 
 	checkpointTs := uint64(417318403368288260)
@@ -251,7 +248,7 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	}
 
 	err = s.WriteCheckpointTs(ctx, checkpointTs, tables)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		6, "All topics and partitions should be broadcast")
@@ -269,30 +266,34 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
 	// Notice: tidb extension is disabled.
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip" +
 		"&protocol=canal-json&enable-tidb-extension=false"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+	uri := fmt.Sprintf(uriTemplate, "127.0.0.1:9092", kafka.DefaultMockTopicName)
 
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+<<<<<<< HEAD
 	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
+=======
+	ctx = context.WithValue(ctx, "testing.T", t)
+	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+		sinkURI, replicaConfig,
+>>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, s)
 
 	checkpointTs := uint64(417318403368288260)
 	var tables []*model.TableInfo
 	err = s.WriteCheckpointTs(ctx, checkpointTs, tables)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		0, "No topic and partition should be broadcast")
