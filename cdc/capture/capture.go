@@ -466,7 +466,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		globalVars := *ctx.GlobalVars()
 		newGlobalVars := &globalVars
 		newGlobalVars.OwnerRevision = ownerRev
-		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 
 		log.Info("campaign owner successfully",
 			zap.String("captureID", c.info.ID),
@@ -496,17 +495,22 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 		})
 
-		g, _ := errgroup.WithContext(ownerCtx)
+		g, ctx := errgroup.WithContext(ctx)
+		ctx, cancelOwner := context.WithCancel(ctx)
+		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 		g.Go(func() error {
 			return c.runEtcdWorker(ownerCtx, owner,
 				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 				ownerFlushInterval, util.RoleOwner.String())
 		})
 		g.Go(func() error {
-			return c.runEtcdWorker(ownerCtx, controller,
+			er := c.runEtcdWorker(ownerCtx, controller,
 				globalState,
 				// todo: do not use owner flush interval
 				ownerFlushInterval, util.RoleController.String())
+			// controller is exited, cancel owner to exit the loop.
+			cancelOwner()
+			return er
 		})
 		err = g.Wait()
 		c.owner.AsyncStop()
