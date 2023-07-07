@@ -27,9 +27,6 @@ import (
 
 // MockFactory is a mock implementation of Factory interface.
 type MockFactory struct {
-	// some unit test is based on sarama, so we set it as a helper
-	helper Factory
-
 	t            *testing.T
 	o            *Options
 	changefeedID model.ChangeFeedID
@@ -40,12 +37,7 @@ func NewMockFactory(
 	t *testing.T,
 	o *Options, changefeedID model.ChangeFeedID,
 ) (Factory, error) {
-	helper, err := NewSaramaFactory(o, changefeedID)
-	if err != nil {
-		return nil, err
-	}
 	return &MockFactory{
-		helper:       helper,
 		t:            t,
 		o:            o,
 		changefeedID: changefeedID,
@@ -89,10 +81,9 @@ func (f *MockFactory) AsyncProducer(
 
 // MetricsCollector returns the metric collector
 func (f *MockFactory) MetricsCollector(
-	role util.Role,
-	adminClient ClusterAdminClient,
+	_ util.Role, _ ClusterAdminClient,
 ) MetricsCollector {
-	return f.helper.MetricsCollector(role, adminClient)
+	return &mockMetricsCollector{}
 }
 
 type MockSaramaSyncProducer struct {
@@ -173,7 +164,8 @@ func (p *MockSaramaAsyncProducer) AsyncRunCallback(
 
 func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
 	partition int32, key []byte, value []byte,
-	callback func()) error {
+	callback func(),
+) error {
 	msg := &sarama.ProducerMessage{
 		Topic:     topic,
 		Partition: partition,
@@ -193,4 +185,9 @@ func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
 
 func (p *MockSaramaAsyncProducer) Close() {
 	_ = p.AsyncProducer.Close()
+}
+
+type mockMetricsCollector struct{}
+
+func (m *mockMetricsCollector) Run(ctx context.Context) {
 }

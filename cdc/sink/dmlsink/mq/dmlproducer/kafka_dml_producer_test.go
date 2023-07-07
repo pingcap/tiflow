@@ -16,7 +16,6 @@ package dmlproducer
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,33 +30,19 @@ import (
 	"go.uber.org/atomic"
 )
 
-func initBroker(t *testing.T) (*sarama.MockBroker, string) {
-	topic := kafka.DefaultMockTopicName
-	leader := sarama.NewMockBroker(t, 2)
-
-	return leader, topic
-}
-
-func getOptions(addr string) *kafka.Options {
+func getOptions() *kafka.Options {
 	options := kafka.NewOptions()
-	// Because the sarama mock broker is not compatible with version larger than 1.0.0.
-	// We use a smaller version in the following producer tests.
-	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac
-	// 030c15cf08e9e57925/async_producer_test.go#L1445-L1447
 	options.Version = "0.9.0.0"
 	options.ClientID = "test-client"
 	options.PartitionNum = int32(2)
 	options.AutoCreate = false
-	options.BrokerEndpoints = strings.Split(addr, ",")
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
 
 	return options
 }
 
 func TestProducerAck(t *testing.T) {
-	leader, topic := initBroker(t)
-	defer leader.Close()
-
-	options := getOptions(leader.Addr())
+	options := getOptions()
 	options.MaxMessages = 1
 
 	errCh := make(chan error, 1)
@@ -91,7 +76,7 @@ func TestProducerAck(t *testing.T) {
 
 	count := atomic.NewInt64(0)
 	for i := 0; i < 10; i++ {
-		err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
+		err = producer.AsyncSendMessage(ctx, kafka.DefaultMockTopicName, int32(0), &common.Message{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 			Callback: func() {
@@ -99,7 +84,7 @@ func TestProducerAck(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		err = producer.AsyncSendMessage(ctx, topic, int32(1), &common.Message{
+		err = producer.AsyncSendMessage(ctx, kafka.DefaultMockTopicName, int32(1), &common.Message{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 			Callback: func() {
@@ -123,7 +108,7 @@ func TestProducerAck(t *testing.T) {
 	producer.Close()
 	cancel()
 	// check send messages when context is producer closed
-	err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
+	err = producer.AsyncSendMessage(ctx, kafka.DefaultMockTopicName, int32(0), &common.Message{
 		Key:   []byte("cancel"),
 		Value: nil,
 	})
@@ -131,10 +116,7 @@ func TestProducerAck(t *testing.T) {
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
-	leader, topic := initBroker(t)
-	defer leader.Close()
-
-	options := getOptions(leader.Addr())
+	options := getOptions()
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -175,7 +157,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 		defer wg.Done()
 
 		asyncProducer.(*kafka.MockSaramaAsyncProducer).AsyncProducer.ExpectInputAndFail(sarama.ErrMessageTooLarge)
-		err = producer.AsyncSendMessage(ctx, topic, int32(0), &common.Message{
+		err = producer.AsyncSendMessage(ctx, kafka.DefaultMockTopicName, int32(0), &common.Message{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
 		})
@@ -203,10 +185,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 }
 
 func TestProducerDoubleClose(t *testing.T) {
-	leader, _ := initBroker(t)
-	defer leader.Close()
-
-	options := getOptions(leader.Addr())
+	options := getOptions()
 
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
