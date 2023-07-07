@@ -984,8 +984,11 @@ func TestExpressionUK(t *testing.T) {
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Len(t, result.Errors, 2)
-	require.Contains(t, result.Errors[0].ShortErr, "upstream has more PK or NOT NULL UK than downstream, index name: uk, columns: [`c2`+1 c]")
-	require.Contains(t, result.Errors[1].ShortErr, "downstream has more PK or NOT NULL UK than upstream, table name: test-table-1, index name: uk, columns: [`c2`+3 c]")
+	// maybe [`c2`+1 c] or [c `c2`+1]
+	require.Contains(t, result.Errors[0].ShortErr, "upstream has more PK or NOT NULL UK than downstream")
+	require.Contains(t, result.Errors[0].ShortErr, "`c2`+1")
+	require.Contains(t, result.Errors[1].ShortErr, "downstream has more PK or NOT NULL UK than upstream")
+	require.Contains(t, result.Errors[1].ShortErr, "`c2`+3")
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, downMock.ExpectationsWereMet())
 }
