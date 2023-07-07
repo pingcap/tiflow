@@ -86,6 +86,11 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
+	defer func() {
+		if err != nil && asyncProducer != nil {
+			asyncProducer.Close()
+		}
+	}()
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
 	log.Info("Try to create a DML sink producer",

@@ -63,12 +63,14 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
-	errCh := make(chan error, 1)
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeedID := model.DefaultChangeFeedID("test")
+
+	errCh := make(chan error, 1)
 	s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
 		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
@@ -90,16 +92,18 @@ func TestWriteEvents(t *testing.T) {
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	errCh := make(chan error, 1)
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeedID := model.DefaultChangeFeedID("test")
 	s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
 		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, s)
+	defer s.Close()
 
 	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
@@ -120,8 +124,7 @@ func TestWriteEvents(t *testing.T) {
 	err = s.WriteEvents(events...)
 	// Wait for the events to be received by the worker.
 	time.Sleep(time.Second)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Len(t, errCh, 0)
 	require.Len(t, s.alive.worker.producer.(*dmlproducer.MockDMLProducer).GetAllEvents(), 3000)
-	s.Close()
 }

@@ -27,18 +27,15 @@ import (
 
 // MockFactory is a mock implementation of Factory interface.
 type MockFactory struct {
-	t            *testing.T
 	o            *Options
 	changefeedID model.ChangeFeedID
 }
 
 // NewMockFactory constructs a Factory with mock implementation.
 func NewMockFactory(
-	t *testing.T,
 	o *Options, changefeedID model.ChangeFeedID,
 ) (Factory, error) {
 	return &MockFactory{
-		t:            t,
 		o:            o,
 		changefeedID: changefeedID,
 	}, nil
@@ -55,7 +52,9 @@ func (f *MockFactory) SyncProducer(ctx context.Context) (SyncProducer, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	syncProducer := mocks.NewSyncProducer(f.t, config)
+
+	t := ctx.Value("testing.T").(*testing.T)
+	syncProducer := mocks.NewSyncProducer(t, config)
 	return &MockSaramaSyncProducer{
 		Producer: syncProducer,
 	}, nil
@@ -71,7 +70,8 @@ func (f *MockFactory) AsyncProducer(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	asyncProducer := mocks.NewAsyncProducer(f.t, config)
+	t := ctx.Value("testing.T").(*testing.T)
+	asyncProducer := mocks.NewAsyncProducer(t, config)
 	return &MockSaramaAsyncProducer{
 		AsyncProducer: asyncProducer,
 		closedChan:    closedChan,

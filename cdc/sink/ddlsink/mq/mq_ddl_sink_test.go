@@ -67,6 +67,7 @@ func TestNewKafkaDDLSinkFailed(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
 		kafka.NewMockFactory, ddlproducer.NewMockDDLProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
@@ -93,6 +94,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
@@ -136,6 +138,7 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
 		sinkURI, replicaConfig,
 		kafka.NewMockFactory,
@@ -181,6 +184,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
 		sinkURI, replicaConfig,
 		kafka.NewMockFactory,
@@ -226,6 +230,7 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 		},
 	}
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
 		sinkURI, replicaConfig,
 		kafka.NewMockFactory,
@@ -288,6 +293,7 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
 		sinkURI, replicaConfig,
 		kafka.NewMockFactory,

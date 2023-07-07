@@ -30,7 +30,7 @@ type MockDDLProducer struct {
 }
 
 // NewMockDDLProducer creates a mock producer.
-func NewMockDDLProducer(_ context.Context, _ model.ChangeFeedID, _ kafka.Factory) (DDLProducer, error) {
+func NewMockDDLProducer(_ context.Context, _ model.ChangeFeedID, _ kafka.SyncProducer) (DDLProducer, error) {
 	return &MockDDLProducer{
 		events: make(map[string][]*common.Message),
 	}, nil
