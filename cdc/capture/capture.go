@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
@@ -57,7 +58,7 @@ type Capture interface {
 	Liveness() model.Liveness
 
 	GetOwner() (owner.Owner, error)
-	GetServerManager() (owner.ServerManager, error)
+	GetController() (controller.Controller, error)
 	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
 	IsOwner() bool
 
@@ -83,7 +84,7 @@ type captureImpl struct {
 	pdEndpoints     []string
 	ownerMu         sync.Mutex
 	owner           owner.Owner
-	serverManager   owner.ServerManager
+	controller      controller.Controller
 	upstreamManager *upstream.Manager
 
 	// session keeps alive between the capture and etcd
@@ -118,8 +119,8 @@ type captureImpl struct {
 		liveness *model.Liveness,
 		cfg *config.SchedulerConfig,
 	) processor.Manager
-	newOwner         func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
-	newServerManager func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.ServerManager
+	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
+	newController func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) controller.Controller
 }
 
 // NewCapture returns a new Capture instance
@@ -138,7 +139,7 @@ func NewCapture(pdEndpoints []string,
 		pdEndpoints:         pdEndpoints,
 		newProcessorManager: processor.NewManager,
 		newOwner:            owner.NewOwner,
-		newServerManager:    owner.NewServerManager,
+		newController:       controller.NewController,
 		info:                &model.CaptureInfo{},
 		sortEngineFactory:   sortEngineMangerFactory,
 
@@ -161,9 +162,9 @@ func NewCapture4Test(o owner.Owner) *captureImpl {
 	return res
 }
 
-// NewCaptureWithServerManager4Test returns a new Capture instance for test.
-func NewCaptureWithServerManager4Test(o owner.Owner,
-	manager owner.ServerManager,
+// NewCaptureWithController4Test returns a new Capture instance for test.
+func NewCaptureWithController4Test(o owner.Owner,
+	manager controller.Controller,
 ) *captureImpl {
 	res := &captureImpl{
 		info: &model.CaptureInfo{
@@ -174,7 +175,7 @@ func NewCaptureWithServerManager4Test(o owner.Owner,
 		migrator: &migrate.NoOpMigrator{},
 		config:   config.GetGlobalServerConfig(),
 	}
-	res.serverManager = manager
+	res.controller = manager
 	res.owner = o
 	return res
 }
@@ -471,11 +472,11 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		serverManager := c.newServerManager(c.upstreamManager, c.config.Debug.Scheduler)
+		controller := c.newController(c.upstreamManager, c.config.Debug.Scheduler)
 
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
-		c.setServerManager(serverManager)
+		c.setController(controller)
 
 		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
 
@@ -502,15 +503,15 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 				ownerFlushInterval, util.RoleOwner.String())
 		})
 		g.Go(func() error {
-			return c.runEtcdWorker(ownerCtx, serverManager,
+			return c.runEtcdWorker(ownerCtx, controller,
 				globalState,
 				// todo: do not use owner flush interval
-				ownerFlushInterval, util.RoleServerManager.String())
+				ownerFlushInterval, util.RoleController.String())
 		})
 		err = g.Wait()
 		c.owner.AsyncStop()
-		c.serverManager.AsyncStop()
-		c.setServerManager(nil)
+		c.controller.AsyncStop()
+		c.setController(nil)
 		c.setOwner(nil)
 
 		// if owner exits, resign the owner key,
@@ -587,10 +588,10 @@ func (c *captureImpl) setOwner(owner owner.Owner) {
 	c.owner = owner
 }
 
-func (c *captureImpl) setServerManager(serverManager owner.ServerManager) {
+func (c *captureImpl) setController(controller controller.Controller) {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
-	c.serverManager = serverManager
+	c.controller = controller
 }
 
 // GetOwner returns owner if it is the owner.
@@ -603,14 +604,14 @@ func (c *captureImpl) GetOwner() (owner.Owner, error) {
 	return c.owner, nil
 }
 
-// GetServerManager returns `owner.ServerManager` if not nil
-func (c *captureImpl) GetServerManager() (owner.ServerManager, error) {
+// GetController returns `controller.Controller` if not nil
+func (c *captureImpl) GetController() (controller.Controller, error) {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
 	if c.owner == nil {
 		return nil, cerror.ErrNotOwner.GenWithStackByArgs()
 	}
-	return c.serverManager, nil
+	return c.controller, nil
 }
 
 // campaign to be an owner.

@@ -21,7 +21,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
-	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
+	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -34,8 +34,8 @@ func TestResignOwner(t *testing.T) {
 		cp := mock_capture.NewMockCapture(ctrl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
 		cp.EXPECT().IsOwner().Return(true).AnyTimes()
-		mo := mock_owner.NewMockServerManager(ctrl)
-		cp.EXPECT().GetServerManager().Return(mo, nil)
+		mo := mock_controller.NewMockController(ctrl)
+		cp.EXPECT().GetController().Return(mo, nil)
 		mo.EXPECT().AsyncStop()
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
@@ -57,7 +57,7 @@ func TestResignOwner(t *testing.T) {
 		cp := mock_capture.NewMockCapture(ctrl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
 		cp.EXPECT().IsOwner().Return(true).AnyTimes()
-		cp.EXPECT().GetServerManager().Return(nil, errors.New("fake"))
+		cp.EXPECT().GetController().Return(nil, errors.New("fake"))
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
 		w := httptest.NewRecorder()

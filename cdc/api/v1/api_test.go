@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
+	mock2 "github.com/pingcap/tiflow/cdc/controller/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
@@ -693,8 +694,8 @@ func TestMoveTable(t *testing.T) {
 func TestResignOwner(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)
-	mo := mock_owner.NewMockServerManager(ctrl)
-	cp := capture.NewCaptureWithServerManager4Test(mock_owner.NewMockOwner(ctrl), mo)
+	mo := mock2.NewMockController(ctrl)
+	cp := capture.NewCaptureWithController4Test(mock_owner.NewMockOwner(ctrl), mo)
 	router := newRouter(cp, newStatusProvider())
 	// test resign owner succeeded
 	mo.EXPECT().AsyncStop()

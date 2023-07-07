@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package controller
 
 import (
 	"context"
@@ -31,13 +31,17 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// ServerManager is a manager to schedule changefeeds
-type ServerManager interface {
+// versionInconsistentLogRate represents the rate of log output when there are
+// captures with versions different from that of the owner
+const versionInconsistentLogRate = 1
+
+// Controller is a manager to schedule changefeeds
+type Controller interface {
 	orchestrator.Reactor
 	AsyncStop()
 }
 
-type serverManager struct {
+type controllerImpl struct {
 	changefeeds     map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState
 	upstreamManager *upstream.Manager
 
@@ -55,12 +59,12 @@ type serverManager struct {
 	cfg *config.SchedulerConfig
 }
 
-// NewServerManager creates a new ServerManager
-func NewServerManager(
+// NewController creates a new Controller
+func NewController(
 	upstreamManager *upstream.Manager,
 	cfg *config.SchedulerConfig,
-) ServerManager {
-	return &serverManager{
+) Controller {
+	return &controllerImpl{
 		upstreamManager: upstreamManager,
 		changefeeds:     make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState),
 		lastTickTime:    time.Now(),
@@ -70,8 +74,8 @@ func NewServerManager(
 }
 
 // Tick implements the Reactor interface
-func (o *serverManager) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	failpoint.Inject("sleep-in-owner-tick", nil)
+func (o *controllerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
+	failpoint.Inject("sleep-in-controller-tick", nil)
 	state := rawState.(*orchestrator.GlobalReactorState)
 	// At the first Tick, we need to do a bootstrap operation.
 	// Fix incompatible or incorrect meta information.
@@ -108,7 +112,7 @@ func (o *serverManager) Tick(stdCtx context.Context, rawState orchestrator.React
 }
 
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
-func (o *serverManager) Bootstrap(state *orchestrator.GlobalReactorState) {
+func (o *controllerImpl) Bootstrap(state *orchestrator.GlobalReactorState) {
 	log.Info("Start bootstrapping")
 	fixChangefeedInfos(state)
 }
@@ -128,7 +132,7 @@ func fixChangefeedInfos(state *orchestrator.GlobalReactorState) {
 	}
 }
 
-func (o *serverManager) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
+func (o *controllerImpl) clusterVersionConsistent(captures map[model.CaptureID]*model.CaptureInfo) bool {
 	versions := make(map[string]struct{}, len(captures))
 	for _, capture := range captures {
 		versions[capture.Version] = struct{}{}
@@ -145,7 +149,7 @@ func (o *serverManager) clusterVersionConsistent(captures map[model.CaptureID]*m
 	return true
 }
 
-func (o *serverManager) updateGCSafepoint(
+func (o *controllerImpl) updateGCSafepoint(
 	ctx context.Context, state *orchestrator.GlobalReactorState,
 ) error {
 	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
@@ -183,7 +187,7 @@ func (o *serverManager) updateGCSafepoint(
 
 // ignoreFailedChangeFeedWhenGC checks if a failed changefeed should be ignored
 // when calculating the gc safepoint of the associated upstream.
-func (o *serverManager) ignoreFailedChangeFeedWhenGC(
+func (o *controllerImpl) ignoreFailedChangeFeedWhenGC(
 	state *orchestrator.ChangefeedReactorState,
 ) bool {
 	upID := state.Info.UpstreamID
@@ -205,7 +209,7 @@ func (o *serverManager) ignoreFailedChangeFeedWhenGC(
 // Note: we need to maintain a TiCDC service GC safepoint for each upstream TiDB cluster
 // to prevent upstream TiDB GC from removing data that is still needed by TiCDC.
 // GcSafepoint is the minimum checkpointTs of all changefeeds that replicating a same upstream TiDB cluster.
-func (o *serverManager) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
+func (o *controllerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
 	map[uint64]uint64, map[uint64]interface{},
 ) {
 	minCheckpointTsMap := make(map[uint64]uint64)
@@ -249,6 +253,6 @@ func (o *serverManager) calculateGCSafepoint(state *orchestrator.GlobalReactorSt
 }
 
 // AsyncStop stops the server manager asynchronously
-func (o *serverManager) AsyncStop() {
+func (o *controllerImpl) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
 }

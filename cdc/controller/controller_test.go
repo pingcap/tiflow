@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package owner
+package controller
 
 import (
 	"context"
@@ -32,8 +32,8 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-func createServerManager4Test(ctx cdcContext.Context,
-	t *testing.T) (*serverManager, *orchestrator.GlobalReactorState,
+func createController4Test(ctx cdcContext.Context,
+	t *testing.T) (*controllerImpl, *orchestrator.GlobalReactorState,
 	*orchestrator.ReactorStateTester,
 ) {
 	pdClient := &gc.MockPDClient{
@@ -43,7 +43,7 @@ func createServerManager4Test(ctx cdcContext.Context,
 	}
 
 	m := upstream.NewManager4Test(pdClient)
-	o := NewServerManager(m, config.NewDefaultSchedulerConfig()).(*serverManager)
+	o := NewController(m, config.NewDefaultSchedulerConfig()).(*controllerImpl)
 
 	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -63,7 +63,7 @@ func createServerManager4Test(ctx cdcContext.Context,
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
 	m := upstream.NewManager4Test(mockPDClient)
-	o := NewServerManager(m, config.NewDefaultSchedulerConfig()).(*serverManager)
+	o := NewController(m, config.NewDefaultSchedulerConfig()).(*controllerImpl)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
@@ -169,7 +169,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
-	o := &serverManager{changefeeds: make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState)}
+	o := &controllerImpl{changefeeds: make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState)}
 
 	for i := 0; i < 100; i++ {
 		cfID := model.DefaultChangeFeedID(fmt.Sprintf("testChangefeed-%d", i))
@@ -205,7 +205,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 
 func TestFixChangefeedState(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
-	serverManager, state, tester := createServerManager4Test(ctx, t)
+	controller4Test, state, tester := createController4Test(ctx, t)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// Mismatched state and admin job.
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -223,22 +223,22 @@ func TestFixChangefeedState(t *testing.T) {
 	}
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
-	_, err = serverManager.Tick(ctx, state)
+	_, err = controller4Test.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
-	require.NotContains(t, serverManager.changefeeds, changefeedID)
+	require.NotContains(t, controller4Test.changefeeds, changefeedID)
 	// Start tick normally.
-	_, err = serverManager.Tick(ctx, state)
+	_, err = controller4Test.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
-	require.Contains(t, serverManager.changefeeds, changefeedID)
+	require.Contains(t, controller4Test.changefeeds, changefeedID)
 	// The meta information is fixed correctly.
-	require.Equal(t, serverManager.changefeeds[changefeedID].Info.State, model.StateStopped)
+	require.Equal(t, controller4Test.changefeeds[changefeedID].Info.State, model.StateStopped)
 }
 
 func TestCheckClusterVersion(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
-	serverManager, state, tester := createServerManager4Test(ctx, t)
+	controller4Test, state, tester := createController4Test(ctx, t)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
 
@@ -262,10 +262,10 @@ func TestCheckClusterVersion(t *testing.T) {
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 
 	// check the tick is skipped and the changefeed will not be handled
-	_, err = serverManager.Tick(ctx, state)
+	_, err = controller4Test.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
-	require.NotContains(t, serverManager.changefeeds, changefeedID)
+	require.NotContains(t, controller4Test.changefeeds, changefeedID)
 
 	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		etcd.DefaultClusterAndMetaPrefix,
@@ -274,15 +274,15 @@ func TestCheckClusterVersion(t *testing.T) {
 			ctx.GlobalVars().CaptureInfo.Version+`"}`))
 
 	// check the tick is not skipped and the changefeed will be handled normally
-	_, err = serverManager.Tick(ctx, state)
+	_, err = controller4Test.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
-	require.Contains(t, serverManager.changefeeds, changefeedID)
+	require.Contains(t, controller4Test.changefeeds, changefeedID)
 }
 
 func TestFixChangefeedSinkProtocol(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(false)
-	serverManager, state, tester := createServerManager4Test(ctx, t)
+	controller4Test, state, tester := createController4Test(ctx, t)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	// Unknown protocol.
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -304,17 +304,17 @@ func TestFixChangefeedSinkProtocol(t *testing.T) {
 	}
 	tester.MustUpdate(cdcKey.String(), []byte(changefeedStr))
 	// For the first tick, we do a bootstrap, and it tries to fix the meta information.
-	_, err = serverManager.Tick(ctx, state)
+	_, err = controller4Test.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
-	require.NotContains(t, serverManager.changefeeds, changefeedID)
+	require.NotContains(t, controller4Test.changefeeds, changefeedID)
 
 	// Start tick normally.
-	_, err = serverManager.Tick(ctx, state)
+	_, err = controller4Test.Tick(ctx, state)
 	tester.MustApplyPatches()
 	require.Nil(t, err)
-	require.Contains(t, serverManager.changefeeds, changefeedID)
+	require.Contains(t, controller4Test.changefeeds, changefeedID)
 	// The meta information is fixed correctly.
-	require.Equal(t, serverManager.changefeeds[changefeedID].Info.SinkURI,
+	require.Equal(t, controller4Test.changefeeds[changefeedID].Info.SinkURI,
 		"kafka://127.0.0.1:9092/ticdc-test2?protocol=open-protocol")
 }

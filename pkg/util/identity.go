@@ -17,8 +17,8 @@ package util
 type Role int
 
 const (
-	// RoleServerManager is the server manager.
-	RoleServerManager Role = iota
+	// RoleController is the server manager.
+	RoleController Role = iota
 	// RoleOwner is the owner of the cluster.
 	RoleOwner
 	// RoleProcessor is the processor of the cluster.
@@ -37,7 +37,7 @@ const (
 
 func (r Role) String() string {
 	switch r {
-	case RoleServerManager:
+	case RoleController:
 		return "server-manager"
 	case RoleOwner:
 		return "owner"

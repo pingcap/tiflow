@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	controller "github.com/pingcap/tiflow/cdc/controller"
 	model "github.com/pingcap/tiflow/cdc/model"
 	owner "github.com/pingcap/tiflow/cdc/owner"
 	etcd "github.com/pingcap/tiflow/pkg/etcd"
@@ -65,6 +66,21 @@ func (mr *MockCaptureMockRecorder) Drain() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Drain", reflect.TypeOf((*MockCapture)(nil).Drain))
 }
 
+// GetController mocks base method.
+func (m *MockCapture) GetController() (controller.Controller, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetController")
+	ret0, _ := ret[0].(controller.Controller)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetController indicates an expected call of GetController.
+func (mr *MockCaptureMockRecorder) GetController() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetController", reflect.TypeOf((*MockCapture)(nil).GetController))
+}
+
 // GetEtcdClient mocks base method.
 func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClient {
 	m.ctrl.T.Helper()
@@ -107,21 +123,6 @@ func (m *MockCapture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureIn
 func (mr *MockCaptureMockRecorder) GetOwnerCaptureInfo(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwnerCaptureInfo", reflect.TypeOf((*MockCapture)(nil).GetOwnerCaptureInfo), ctx)
-}
-
-// GetServerManager mocks base method.
-func (m *MockCapture) GetServerManager() (owner.ServerManager, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetServerManager")
-	ret0, _ := ret[0].(owner.ServerManager)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetServerManager indicates an expected call of GetServerManager.
-func (mr *MockCaptureMockRecorder) GetServerManager() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServerManager", reflect.TypeOf((*MockCapture)(nil).GetServerManager))
 }
 
 // GetUpstreamManager mocks base method.

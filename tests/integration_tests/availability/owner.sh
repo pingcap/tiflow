@@ -169,6 +169,7 @@ function test_owner_retryable_error() {
 function test_gap_between_watch_capture() {
 	echo "run test case test_gap_between_watch_capture"
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/sleep-in-owner-tick=1*sleep(6000)'
+	export GO_FAILPOINTS=$GO_FAILPOINTS';github.com/pingcap/tiflow/cdc/controller/sleep-in-controller-tick=1*sleep(6000)'
 	# start a capture server
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --logsuffix test_gap_between_watch_capture.server1
 	# ensure the server become the owner
