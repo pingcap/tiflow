@@ -83,11 +83,12 @@ type FeedState string
 // All FeedStates
 const (
 	StateNormal   FeedState = "normal"
-	StateWarning  FeedState = "warning"
+	StatePending  FeedState = "pending"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
 	StateRemoved  FeedState = "removed"
 	StateFinished FeedState = "finished"
+	StateWarning  FeedState = "warning"
 )
 
 // ToInt return an int for each `FeedState`, only use this for metrics.
@@ -95,7 +96,7 @@ func (s FeedState) ToInt() int {
 	switch s {
 	case StateNormal:
 		return 0
-	case StateWarning:
+	case StatePending:
 		return 1
 	case StateFailed:
 		return 2
@@ -105,6 +106,8 @@ func (s FeedState) ToInt() int {
 		return 4
 	case StateRemoved:
 		return 5
+	case StateWarning:
+		return 6
 	}
 	// -1 for unknown feed state
 	return -1
@@ -122,6 +125,10 @@ func (s FeedState) IsNeeded(need string) bool {
 		case StateStopped:
 			return true
 		case StateFailed:
+			return true
+		case StateWarning:
+			return true
+		case StatePending:
 			return true
 		}
 	}
