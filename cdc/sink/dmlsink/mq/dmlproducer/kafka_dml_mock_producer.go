@@ -37,8 +37,8 @@ type MockDMLProducer struct {
 func NewDMLMockProducer(_ context.Context, _ model.ChangeFeedID, asyncProducer kafka.AsyncProducer,
 	_ kafka.MetricsCollector,
 	_ chan error,
-	closeCh chan struct{},
-	failpointCh chan error,
+	_ chan struct{},
+	_ chan error,
 ) (DMLProducer, error) {
 	return &MockDMLProducer{
 		events:        make(map[string][]*common.Message),
@@ -66,7 +66,9 @@ func (m *MockDMLProducer) AsyncSendMessage(_ context.Context, topic string,
 
 // Close do nothing.
 func (m *MockDMLProducer) Close() {
-	m.asyncProducer.Close()
+	if m.asyncProducer != nil {
+		m.asyncProducer.Close()
+	}
 }
 
 // GetAllEvents returns the events received by the mock producer.
