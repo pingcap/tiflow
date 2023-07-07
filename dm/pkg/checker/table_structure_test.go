@@ -884,3 +884,107 @@ PRIMARY KEY ("c")
 	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
 	return mock
 }
+
+func TestExpressionUK(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	downDB, downMock, err := sqlmock.New()
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	// test same table structure
+
+	maxConnectionsRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
+	sqlModeRow := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+		  "c" int(11) NOT NULL,
+		  "c2" int(11) NOT NULL,
+		  PRIMARY KEY ("c"),
+		  UNIQUE KEY "uk" (("c2"+1), "c")
+		) ENGINE=InnoDB`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	sqlModeRow2 := sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	downMock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow2)
+	createTableRow2 := sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+		  "c" int(11) NOT NULL,
+		  "c2" int(11) NOT NULL,
+		  PRIMARY KEY ("c"),
+		  UNIQUE KEY "uk" (("c2"+1), "c")
+		) ENGINE=InnoDB`)
+	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow2)
+
+	checker := NewTablesChecker(
+		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
+		conn.NewBaseDBForTest(downDB),
+		map[string]map[filter.Table][]filter.Table{
+			"test-source": {
+				{Schema: "test-db", Name: "test-table-1"}: {
+					{Schema: "test-db", Name: "test-table-1"},
+				},
+			},
+		},
+		nil,
+		1)
+	result := checker.Check(ctx)
+	require.Equal(t, StateSuccess, result.State)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.NoError(t, downMock.ExpectationsWereMet())
+
+	// test different table structure
+
+	maxConnectionsRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("max_connections", "2")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'max_connections'").WillReturnRows(maxConnectionsRow)
+	sqlModeRow = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow)
+	createTableRow = sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+		  "c" int(11) NOT NULL,
+		  "c2" int(11) NOT NULL,
+		  PRIMARY KEY ("c"),
+		  UNIQUE KEY "uk" (("c2"+1), "c")
+		) ENGINE=InnoDB`)
+	mock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow)
+	sqlModeRow2 = sqlmock.NewRows([]string{"Variable_name", "Value"}).
+		AddRow("sql_mode", "ANSI_QUOTES")
+	downMock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(sqlModeRow2)
+	createTableRow2 = sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("test-table-1", `CREATE TABLE "test-table-1" (
+		  "c" int(11) NOT NULL,
+		  "c2" int(11) NOT NULL,
+		  PRIMARY KEY ("c"),
+		  UNIQUE KEY "uk" (("c2"+3), "c")
+		) ENGINE=InnoDB`)
+	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow2)
+
+	checker = NewTablesChecker(
+		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
+		conn.NewBaseDBForTest(downDB),
+		map[string]map[filter.Table][]filter.Table{
+			"test-source": {
+				{Schema: "test-db", Name: "test-table-1"}: {
+					{Schema: "test-db", Name: "test-table-1"},
+				},
+			},
+		},
+		nil,
+		1)
+	result = checker.Check(ctx)
+	require.Equal(t, StateWarning, result.State)
+	require.Len(t, result.Errors, 2)
+	// maybe [`c2`+1 c] or [c `c2`+1]
+	require.Contains(t, result.Errors[0].ShortErr, "upstream has more PK or NOT NULL UK than downstream")
+	require.Contains(t, result.Errors[0].ShortErr, "`c2`+1")
+	require.Contains(t, result.Errors[1].ShortErr, "downstream has more PK or NOT NULL UK than upstream")
+	require.Contains(t, result.Errors[1].ShortErr, "`c2`+3")
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.NoError(t, downMock.ExpectationsWereMet())
+}
