@@ -329,8 +329,8 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		c.MetaSchema = defaultMetaSchema
 	}
 
-	// adjust dir
-	if c.Mode == ModeAll || c.Mode == ModeFull {
+	// adjust dir, no need to do for load&sync mode because it needs its own s3 repository
+	if HasLoad(c.Mode) && c.Mode != ModeLoadSync {
 		// check
 		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
 		if isS3 && c.ImportMode == LoadModeLoader {

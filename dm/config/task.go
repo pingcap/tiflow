@@ -776,12 +776,11 @@ func (c *TaskConfig) adjust() error {
 		}
 		instanceIDs[inst.SourceID] = i
 
-		switch c.TaskMode {
-		case ModeFull, ModeAll, ModeDump:
+		if !HasSync(c.TaskMode) {
 			if inst.Meta != nil {
 				log.L().Warn("metadata will not be used. for Full mode, incremental sync will never occur; for All mode, the meta dumped by MyDumper will be used", zap.Int("mysql instance", i), zap.String("task mode", c.TaskMode))
 			}
-		case ModeIncrement, ModeLoadSync:
+		} else {
 			if inst.Meta == nil {
 				log.L().Warn("mysql-instance doesn't set meta for incremental mode, user should specify start_time to start task.", zap.String("sourceID", inst.SourceID))
 			} else {
@@ -838,7 +837,7 @@ func (c *TaskConfig) adjust() error {
 			inst.Mydumper.Threads = inst.MydumperThread
 		}
 
-		if (c.TaskMode == ModeFull || c.TaskMode == ModeAll || c.TaskMode == ModeDump) && len(inst.Mydumper.MydumperPath) == 0 {
+		if HasDump(c.TaskMode) && len(inst.Mydumper.MydumperPath) == 0 {
 			// only verify if set, whether is valid can only be verify when we run it
 			return terror.ErrConfigMydumperPathNotValid.Generate(i)
 		}
