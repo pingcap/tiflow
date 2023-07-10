@@ -241,6 +241,7 @@ func TestSyncWriterClose(t *testing.T) {
 func TestAsyncWriterAsyncSend(t *testing.T) {
 	mw := v2mock.NewMockWriter(gomock.NewController(t))
 	w := asyncWriter{w: mw}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	callback := func() {}
