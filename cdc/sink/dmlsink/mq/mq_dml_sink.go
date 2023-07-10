@@ -75,7 +75,7 @@ func newDMLSink(
 	encoderConcurrency int,
 	protocol config.Protocol,
 	errCh chan error,
-) (*dmlSink, error) {
+) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
 	worker := newWorker(changefeedID, protocol,
@@ -113,7 +113,7 @@ func newDMLSink(
 		}
 	}()
 
-	return s, nil
+	return s
 }
 
 // WriteEvents writes events to the sink.

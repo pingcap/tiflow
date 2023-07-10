@@ -126,15 +126,11 @@ func NewKafkaDMLSink(
 		zap.String("changefeedID", changefeedID.ID),
 		zap.Any("options", options))
 
-	s, err := newDMLSink(
+	s := newDMLSink(
 		ctx, changefeedID, dmlProducer, adminClient, topicManager,
 		eventRouter, encoderBuilder,
 		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency), encoderConfig.Protocol,
 		errCh,
 	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	return s, nil
 }
