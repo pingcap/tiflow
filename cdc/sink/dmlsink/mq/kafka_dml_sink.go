@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -59,7 +60,6 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
-
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
@@ -79,18 +79,6 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	closeCh := make(chan struct{})
-	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	defer func() {
-		if err != nil && asyncProducer != nil {
-			asyncProducer.Close()
-		}
-	}()
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
@@ -114,15 +102,34 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	closeCh := make(chan struct{})
+	failpointCh := make(chan error, 1)
+	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
+	}
+	defer func() {
+		if err != nil && asyncProducer != nil {
+			asyncProducer.Close()
+		}
+	}()
+
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
-	log.Info("Try to create a DML sink producer",
-		zap.Any("options", options))
 	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
+	log.Info("DML sink producer created",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeedID", changefeedID.ID),
+		zap.Any("options", options))
 
 	s, err := newDMLSink(
 		ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, encoderConfig,
-		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency),
+		eventRouter, encoderBuilder,
+		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency), encoderConfig.Protocol,
 		errCh,
 	)
 	if err != nil {
