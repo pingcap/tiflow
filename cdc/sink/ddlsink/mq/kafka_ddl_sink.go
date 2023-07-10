@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	cdcutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -104,6 +105,11 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
 	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -116,10 +122,6 @@ func NewKafkaDDLSink(
 
 	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
-	s, err := newDDLSink(ctx, changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderConfig)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
+	s := newDDLSink(ctx, changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder, protocol)
 	return s, nil
 }

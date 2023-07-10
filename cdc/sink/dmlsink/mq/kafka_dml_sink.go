@@ -112,14 +112,17 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
+	defer func() {
+		if err != nil && asyncProducer != nil {
+			asyncProducer.Close()
+		}
+	}()
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
 	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, failpointCh)
-	s := newDMLSink(
-		ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, encoderBuilder,
-		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency), encoderConfig.Protocol,
-		errCh,
+	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
+	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager,
+		eventRouter, encoderBuilder, concurrency, protocol, errCh,
 	)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),
