@@ -72,7 +72,7 @@ function run() {
 	ensure $MAX_RETRIES "check_etcd_meta_not_exist '/tidb/cdc/default/__cdc_meta__/owner' 'owner'"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "error" "failpoint injected retriable error" ""
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "pending" "failpoint injected retriable error" ""
 
 	run_cdc_cli changefeed remove -c $changefeedid
 	ensure $MAX_RETRIES check_no_changefeed ${UP_PD_HOST_1}:${UP_PD_PORT_1}

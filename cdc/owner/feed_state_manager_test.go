@@ -298,7 +298,9 @@ func TestHandleError(t *testing.T) {
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.Nil(t, status)
-		return &model.ChangeFeedStatus{}, true, nil
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 200,
+		}, true, nil
 	})
 
 	tester.MustApplyPatches()
@@ -350,6 +352,13 @@ func TestHandleError(t *testing.T) {
 	manager.Tick(state)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
+	state.PatchStatus(
+		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			status.CheckpointTs += 1
+			return status, true, nil
+		})
+	manager.Tick(state)
+	tester.MustApplyPatches()
 	require.Equal(t, model.StateNormal, state.Info.State)
 	require.Equal(t, model.AdminNone, state.Info.AdminJobType)
 	require.Equal(t, model.AdminNone, state.Status.AdminJobType)

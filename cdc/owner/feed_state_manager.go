@@ -111,6 +111,9 @@ func (m *feedStateManager) shiftStateWindow(state model.FeedState) {
 }
 
 func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adminJobPending bool) {
+	m.shiftStateWindow(state.Info.State)
+	m.checkAndInitLastRetryCheckpointTs(state.Status)
+
 	m.state = state
 	m.shouldBeRunning = true
 	defer func() {
@@ -127,6 +130,9 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	}
 
 	switch m.state.Info.State {
+	case model.StateUnInitialized:
+		m.patchState(model.StateNormal)
+		return
 	case model.StateRemoved:
 		m.shouldBeRunning = false
 		m.shouldBeRemoved = true
@@ -137,7 +143,7 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	case model.StatePending:
 		if time.Since(m.lastErrorRetryTime) < m.backoffInterval {
 			m.shouldBeRunning = false
-			break
+			return
 		}
 		// retry the changefeed
 		oldBackoffInterval := m.backoffInterval
@@ -171,16 +177,15 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 			zap.Time("lastErrorRetryTime", m.lastErrorRetryTime),
 			zap.Duration("lastRetryInterval", oldBackoffInterval),
 			zap.Duration("nextRetryInterval", m.backoffInterval))
+	case model.StateNormal, model.StateWarning:
+		m.checkAndChangeState()
+		errs := m.errorsReportedByProcessors()
+		m.handleError(errs...)
+		// warning are come from processors' sink component
+		// they ere not fatal errors, so we don't need to stop the changefeed
+		warnings := m.warningsReportedByProcessors()
+		m.handleWarning(warnings...)
 	}
-
-	m.checkAndChangeState()
-
-	errs := m.errorsReportedByProcessors()
-	m.handleError(errs...)
-	// warning are come from processors' sink component
-	// they ere not fatal errors, so we don't need to stop the changefeed
-	warnings := m.warningsReportedByProcessors()
-	m.handleWarning(warnings...)
 	return
 }
 
@@ -585,7 +590,6 @@ func (m *feedStateManager) checkAndChangeState() {
 	if m.state.Info == nil || m.state.Status == nil {
 		return
 	}
-	m.shiftStateWindow(m.state.Info.State)
 	if m.state.Info.State == model.StateWarning &&
 		m.state.Status.CheckpointTs > m.lastRetryCheckpointTs {
 		log.Info("changefeed is recovered from warning state,"+
@@ -597,4 +601,15 @@ func (m *feedStateManager) checkAndChangeState() {
 			zap.Uint64("lastRetryCheckpointTs", m.lastRetryCheckpointTs))
 		m.patchState(model.StateNormal)
 	}
+}
+
+// checkAndInitLastRetryCheckpointTs checks the lastRetryCheckpointTs and init it if needed.
+// It the owner is changed, the lastRetryCheckpointTs will be reset to 0, and we should init
+// it to the checkpointTs of the changefeed when the changefeed is ticked at the first time.
+func (m *feedStateManager) checkAndInitLastRetryCheckpointTs(status *model.ChangeFeedStatus) {
+	if status == nil || m.lastRetryCheckpointTs != 0 {
+		return
+	}
+	m.lastRetryCheckpointTs = status.CheckpointTs
+	log.Info("init lastRetryCheckpointTs", zap.Uint64("lastRetryCheckpointTs", m.lastRetryCheckpointTs))
 }
