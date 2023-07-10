@@ -114,11 +114,7 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	m.state = state
 	m.shouldBeRunning = true
 	defer func() {
-		if m.shouldBeRunning &&
-			m.state.Info.State != model.StatePending &&
-			m.state.Info.State != model.StateWarning {
-			m.patchState(model.StateNormal)
-		} else {
+		if !m.shouldBeRunning {
 			m.cleanUpTaskPositions()
 		}
 	}()
