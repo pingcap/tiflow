@@ -232,7 +232,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 	switch job.Type {
 	case model.AdminStop:
 		switch m.state.Info.State {
-		case model.StateNormal, model.StateWarning:
+		case model.StateNormal, model.StateWarning, model.StatePending:
 		default:
 			log.Warn("can not pause the changefeed in the current state",
 				zap.String("namespace", m.state.ID.Namespace),
@@ -244,17 +244,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		jobsPending = true
 		m.patchState(model.StateStopped)
 	case model.AdminRemove:
-		switch m.state.Info.State {
-		case model.StateNormal, model.StateWarning, model.StateFailed,
-			model.StateStopped, model.StateFinished, model.StateRemoved:
-		default:
-			log.Warn("can not remove the changefeed in the current state",
-				zap.String("namespace", m.state.ID.Namespace),
-				zap.String("changefeed", m.state.ID.ID),
-				zap.String("changefeedState", string(m.state.Info.State)), zap.Any("job", job))
-			return
-		}
-
 		m.shouldBeRunning = false
 		m.shouldBeRemoved = true
 		jobsPending = true
@@ -280,7 +269,8 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			zap.Uint64("checkpointTs", checkpointTs))
 	case model.AdminResume:
 		switch m.state.Info.State {
-		case model.StateFailed, model.StateWarning, model.StateStopped, model.StateFinished:
+		case model.StateFailed, model.StateWarning,
+			model.StateStopped, model.StateFinished, model.StatePending:
 		default:
 			log.Warn("can not resume the changefeed in the current state",
 				zap.String("namespace", m.state.ID.Namespace),
@@ -335,7 +325,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 
 	case model.AdminFinish:
 		switch m.state.Info.State {
-		case model.StateNormal:
+		case model.StateNormal, model.StateWarning:
 		default:
 			log.Warn("can not finish the changefeed in the current state",
 				zap.String("namespace", m.state.ID.Namespace),
