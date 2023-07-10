@@ -56,7 +56,7 @@ func NewKafkaDMLProducer(
 	changefeedID model.ChangeFeedID,
 	asyncProducer kafka.AsyncProducer,
 	metricsCollector kafka.MetricsCollector,
-	errCh chan error,
+	errCh chan error,gi
 	failpointCh chan error,
 ) DMLProducer {
 	log.Info("Starting kafka DML producer ...",
