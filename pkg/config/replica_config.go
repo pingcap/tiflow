@@ -58,7 +58,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 			Quote:                string(DoubleQuoteChar),
 			Delimiter:            Comma,
 			NullString:           NULL,
-			BinaryEncodingMethod: "hex",
+			BinaryEncodingMethod: "base64",
 		},
 		EncoderConcurrency:               util.AddressOf(16),
 		Terminator:                       util.AddressOf(CRLF),
