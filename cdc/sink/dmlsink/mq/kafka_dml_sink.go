@@ -107,9 +107,8 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
@@ -120,7 +119,7 @@ func NewKafkaDMLSink(
 	}()
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
-	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
+	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, failpointCh)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeedID", changefeedID.ID),

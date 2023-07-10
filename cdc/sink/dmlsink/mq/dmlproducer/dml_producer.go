@@ -42,6 +42,5 @@ type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
 	asyncProducer kafka.AsyncProducer,
 	metricsCollector kafka.MetricsCollector,
 	errCh chan error,
-	closeCh chan struct{},
 	failpointCh chan error,
 ) DMLProducer

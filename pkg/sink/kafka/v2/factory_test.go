@@ -104,14 +104,13 @@ func TestAsyncProducer(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	async, err := factory.AsyncProducer(ctx, make(chan struct{}, 1), make(chan error, 1))
+	async, err := factory.AsyncProducer(ctx, make(chan error, 1))
 	require.NoError(t, err)
 
 	asyncP, ok := async.(*asyncWriter)
 	w := asyncP.w.(*kafka.Writer)
 	require.True(t, ok)
 	require.True(t, w.Async)
-	require.NotNil(t, asyncP.closedChan)
 
 	require.Equal(t, w.ReadTimeout, o.ReadTimeout)
 	require.Equal(t, w.WriteTimeout, o.WriteTimeout)
@@ -121,7 +120,6 @@ func TestAsyncProducer(t *testing.T) {
 	var (
 		async0, _ = factory.AsyncProducer(
 			ctx,
-			make(chan struct{}, 1),
 			make(chan error, 1),
 		)
 		asyncP0, _ = async0.(*asyncWriter)
@@ -132,14 +130,12 @@ func TestAsyncProducer(t *testing.T) {
 		retErr0 = asyncP0.AsyncRunCallback(ctx)
 		close(retChan0)
 	}()
-	close(asyncP0.closedChan)
 	<-retChan0
 	require.NoError(t, retErr0)
 
 	var (
 		async1, _ = factory.AsyncProducer(
 			ctx,
-			make(chan struct{}, 1),
 			make(chan error, 1),
 		)
 		asyncP1, _ = async1.(*asyncWriter)
@@ -158,7 +154,6 @@ func TestAsyncProducer(t *testing.T) {
 	var (
 		async2, _ = factory.AsyncProducer(
 			ctx,
-			make(chan struct{}, 1),
 			make(chan error, 1),
 		)
 		asyncP2, _ = async2.(*asyncWriter)
@@ -182,7 +177,6 @@ func TestAsyncProducer(t *testing.T) {
 	var (
 		async3, _ = factory.AsyncProducer(
 			ctx,
-			make(chan struct{}, 1),
 			make(chan error, 1),
 		)
 		asyncP3, _ = async3.(*asyncWriter)
@@ -200,7 +194,6 @@ func TestAsyncProducer(t *testing.T) {
 	var (
 		async4, _ = factory.AsyncProducer(
 			ctx,
-			make(chan struct{}, 1),
 			make(chan error, 1),
 		)
 		asyncP4, _    = async4.(*asyncWriter)
@@ -224,7 +217,7 @@ func TestAsyncCompletetion(t *testing.T) {
 	o := newOptions4Test()
 	factory := newFactory4Test(o, t)
 	ctx := context.Background()
-	async, err := factory.AsyncProducer(ctx, make(chan struct{}, 1), make(chan error, 1))
+	async, err := factory.AsyncProducer(ctx, make(chan error, 1))
 	require.NoError(t, err)
 	asyncP, ok := async.(*asyncWriter)
 	require.True(t, ok)
@@ -343,9 +336,6 @@ func TestSyncWriterClose(t *testing.T) {
 func TestAsyncWriterAsyncSend(t *testing.T) {
 	mw := v2mock.NewMockWriter(gomock.NewController(t))
 	w := asyncWriter{w: mw}
-	closedCh := make(chan struct{}, 2)
-	closedCh <- struct{}{}
-	w.closedChan = closedCh
 	callback := func() {}
 	err := w.AsyncSend(context.Background(), "topic", 1, []byte{'1'}, []byte{}, callback)
 	require.Nil(t, err)
