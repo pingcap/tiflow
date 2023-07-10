@@ -63,7 +63,6 @@ func (f *MockFactory) SyncProducer(ctx context.Context) (SyncProducer, error) {
 // AsyncProducer creates an async producer
 func (f *MockFactory) AsyncProducer(
 	ctx context.Context,
-	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
 	config, err := NewSaramaConfig(ctx, f.o)
@@ -74,7 +73,6 @@ func (f *MockFactory) AsyncProducer(
 	asyncProducer := mocks.NewAsyncProducer(t, config)
 	return &MockSaramaAsyncProducer{
 		AsyncProducer: asyncProducer,
-		closedChan:    closedChan,
 		failpointCh:   failpointCh,
 	}, nil
 }
@@ -131,7 +129,6 @@ func (m *MockSaramaSyncProducer) Close() {
 // MockSaramaAsyncProducer is a mock implementation of AsyncProducer interface.
 type MockSaramaAsyncProducer struct {
 	AsyncProducer *mocks.AsyncProducer
-	closedChan    chan struct{}
 	failpointCh   chan error
 
 	closed bool
@@ -145,8 +142,6 @@ func (p *MockSaramaAsyncProducer) AsyncRunCallback(
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case <-p.closedChan:
-			return nil
 		case err := <-p.failpointCh:
 			return errors.Trace(err)
 		case ack := <-p.AsyncProducer.Successes():
@@ -185,8 +180,6 @@ func (p *MockSaramaAsyncProducer) AsyncSend(ctx context.Context, topic string,
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-p.closedChan:
-		return nil
 	case p.AsyncProducer.Input() <- msg:
 	}
 	return nil

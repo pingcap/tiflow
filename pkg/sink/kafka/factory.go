@@ -33,7 +33,7 @@ type Factory interface {
 	// SyncProducer creates a sync producer to writer message to kafka
 	SyncProducer(ctx context.Context) (SyncProducer, error)
 	// AsyncProducer creates an async producer to writer message to kafka
-	AsyncProducer(ctx context.Context, closedChan chan struct{}, failpointCh chan error) (AsyncProducer, error)
+	AsyncProducer(ctx context.Context, failpointCh chan error) (AsyncProducer, error)
 	// MetricsCollector returns the kafka metrics collector
 	MetricsCollector(role util.Role, adminClient ClusterAdminClient) MetricsCollector
 }
@@ -167,7 +167,6 @@ type saramaAsyncProducer struct {
 	client       sarama.Client
 	producer     sarama.AsyncProducer
 	changefeedID model.ChangeFeedID
-	closedChan   chan struct{}
 	failpointCh  chan error
 }
 
@@ -231,14 +230,8 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID))
 			return errors.Trace(ctx.Err())
-		case <-p.closedChan:
-			log.Info("async producer exit since receive closed signal",
-				zap.String("namespace", p.changefeedID.Namespace),
-				zap.String("changefeed", p.changefeedID.ID))
-			return nil
 		case err := <-p.failpointCh:
-			log.Warn("Receive from failpoint chan in kafka "+
-				"DML producer",
+			log.Warn("Receive from failpoint chan in kafka DML producer",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Error(err))
@@ -283,8 +276,6 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context,
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-p.closedChan:
-		return nil
 	case p.producer.Input() <- msg:
 	}
 	return nil

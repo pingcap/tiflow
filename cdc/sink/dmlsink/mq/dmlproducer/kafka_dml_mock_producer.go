@@ -37,13 +37,12 @@ type MockDMLProducer struct {
 func NewDMLMockProducer(_ context.Context, _ model.ChangeFeedID, asyncProducer kafka.AsyncProducer,
 	_ kafka.MetricsCollector,
 	_ chan error,
-	_ chan struct{},
 	_ chan error,
-) (DMLProducer, error) {
+) DMLProducer {
 	return &MockDMLProducer{
 		events:        make(map[string][]*common.Message),
 		asyncProducer: asyncProducer,
-	}, nil
+	}
 }
 
 // AsyncSendMessage appends a message to the mock producer.
