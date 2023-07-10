@@ -44,8 +44,7 @@ type kafkaDMLProducer struct {
 	// We also use it to guard against double closes.
 	closed bool
 
-	// failpointCh is used to inject failpoints to the run loop.
-	// Only used in test.
+	// failpointCh is used to inject failpoints to the run loop. Only used in test.
 	failpointCh chan error
 
 	cancel context.CancelFunc
@@ -57,7 +56,7 @@ func NewKafkaDMLProducer(
 	changefeedID model.ChangeFeedID,
 	asyncProducer kafka.AsyncProducer,
 	metricsCollector kafka.MetricsCollector,
-	errCh chan error,
+	errCh chan error,gi
 	failpointCh chan error,
 ) DMLProducer {
 	log.Info("Starting kafka DML producer ...",

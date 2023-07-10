@@ -231,8 +231,7 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				zap.String("changefeed", p.changefeedID.ID))
 			return errors.Trace(ctx.Err())
 		case err := <-p.failpointCh:
-			log.Warn("Receive from failpoint chan in kafka "+
-				"DML producer",
+			log.Warn("Receive from failpoint chan in kafka DML producer",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Error(err))
