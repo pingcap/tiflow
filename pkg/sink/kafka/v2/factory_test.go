@@ -336,14 +336,16 @@ func TestSyncWriterClose(t *testing.T) {
 func TestAsyncWriterAsyncSend(t *testing.T) {
 	mw := v2mock.NewMockWriter(gomock.NewController(t))
 	w := asyncWriter{w: mw}
-	callback := func() {}
-	err := w.AsyncSend(context.Background(), "topic", 1, []byte{'1'}, []byte{}, callback)
-	require.Nil(t, err)
+
 	ctx, cancel := context.WithCancel(context.Background())
+
+	callback := func() {}
+	mw.EXPECT().WriteMessages(gomock.Any(), gomock.Any()).Return(nil)
+	err := w.AsyncSend(ctx, "topic", 1, []byte{'1'}, []byte{}, callback)
+	require.NoError(t, err)
+
 	cancel()
+
 	err = w.AsyncSend(ctx, "topic", 1, []byte{'1'}, []byte{}, callback)
-	require.NotNil(t, err)
-	mw.EXPECT().WriteMessages(gomock.Any(), gomock.Any()).Return(errors.New("fake"))
-	err = w.AsyncSend(context.Background(), "topic", 1, []byte{'1'}, []byte{}, callback)
-	require.NotNil(t, err)
+	require.ErrorIs(t, err, context.Canceled)
 }
