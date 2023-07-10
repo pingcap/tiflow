@@ -92,21 +92,6 @@ func NewKafkaDMLSink(
 		}
 	}()
 
-	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
-	log.Info("Try to create a DML sink producer",
-		zap.Any("options", options))
-	p, err := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && p != nil {
-			p.Close()
-		}
-	}()
-
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
 		changefeedID,
@@ -129,8 +114,13 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
+	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
+	log.Info("Try to create a DML sink producer",
+		zap.Any("options", options))
+	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
+
 	s, err := newDMLSink(
-		ctx, changefeedID, p, adminClient, topicManager,
+		ctx, changefeedID, dmlProducer, adminClient, topicManager,
 		eventRouter, encoderConfig,
 		tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency),
 		errCh,

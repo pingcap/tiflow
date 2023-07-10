@@ -82,29 +82,6 @@ func NewKafkaDDLSink(
 	log.Info("Try to create a DDL sink producer",
 		zap.Any("options", options))
 
-	syncProducer, err := factory.SyncProducer(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer func() {
-		if err != nil && syncProducer != nil {
-			syncProducer.Close()
-		}
-	}()
-
-	p, err := producerCreator(ctx, changefeedID, syncProducer)
-	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && p != nil {
-			p.Close()
-		}
-	}()
-
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
 		changefeedID,
@@ -127,7 +104,19 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newDDLSink(ctx, changefeedID, p, adminClient, topicManager, eventRouter, encoderConfig)
+	syncProducer, err := factory.SyncProducer(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer func() {
+		if err != nil && syncProducer != nil {
+			syncProducer.Close()
+		}
+	}()
+
+	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
+	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
+	s, err := newDDLSink(ctx, changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

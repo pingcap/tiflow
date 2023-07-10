@@ -61,7 +61,7 @@ func NewKafkaDMLProducer(
 	errCh chan error,
 	closeCh chan struct{},
 	failpointCh chan error,
-) (DMLProducer, error) {
+) DMLProducer {
 	log.Info("Starting kafka DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
@@ -99,7 +99,7 @@ func NewKafkaDMLProducer(
 		}
 	}()
 
-	return k, nil
+	return k
 }
 
 func (k *kafkaDMLProducer) AsyncSendMessage(

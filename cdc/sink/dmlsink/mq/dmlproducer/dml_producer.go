@@ -44,4 +44,4 @@ type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
 	errCh chan error,
 	closeCh chan struct{},
 	failpointCh chan error,
-) (DMLProducer, error)
+) DMLProducer
