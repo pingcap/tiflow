@@ -66,7 +66,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		LargeMessageHandle:               NewDefaultLargeMessageHandleConfig(),
 		TiDBSourceID:                     1,
 	},
 	Consistent: &ConsistentConfig{

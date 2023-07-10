@@ -134,7 +134,8 @@ func TestLargeMessageHandleConfig(t *testing.T) {
 
 	// open-protocol, should return no error
 	replicaConfig.Sink.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
-	err = c.Apply(sinkURI, replicaConfig)
+	err = c.Apply(sinkURI, repl
+	icaConfig)
 	require.NoError(t, err)
 	err = c.Validate()
 	require.NoError(t, err)
@@ -411,9 +412,6 @@ func TestMergeConfig(t *testing.T) {
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	replicaConfig.Sink.LargeMessageHandle = &config.LargeMessageHandleConfig{
-		LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
-	}
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abc")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(123),
@@ -423,6 +421,9 @@ func TestMergeConfig(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(true),
 			AvroBigintUnsignedHandlingMode: aws.String("ab"),
 			AvroDecimalHandlingMode:        aws.String("cd"),
+		},
+		LargeMessageHandle: &config.LargeMessageHandleConfig{
+			LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
 		},
 	}
 	c = NewConfig(config.ProtocolAvro)
@@ -448,10 +449,6 @@ func TestMergeConfig(t *testing.T) {
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(false)
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	replicaConfig.Sink.LargeMessageHandle = &config.LargeMessageHandleConfig{
-		LargeMessageHandleOption: config.LargeMessageHandleOptionClaimCheck,
-		ClaimCheckStorageURI:     "file:///claim-check",
-	}
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abcd")
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		MaxMessageBytes: aws.Int(1233),
@@ -461,6 +458,10 @@ func TestMergeConfig(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(false),
 			AvroBigintUnsignedHandlingMode: aws.String("adb"),
 			AvroDecimalHandlingMode:        aws.String("cde"),
+		},
+		LargeMessageHandle: &config.LargeMessageHandleConfig{
+			LargeMessageHandleOption: config.LargeMessageHandleOptionClaimCheck,
+			ClaimCheckStorageURI:     "file:///claim-check",
 		},
 	}
 	c = NewConfig(config.ProtocolAvro)

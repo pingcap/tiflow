@@ -175,7 +175,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 		}
-		c.LargeMessageHandle = replicaConfig.Sink.LargeMessageHandle
+		if replicaConfig.Sink.KafkaConfig != nil {
+			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
