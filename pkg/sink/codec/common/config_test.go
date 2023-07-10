@@ -383,6 +383,11 @@ func TestConfigApplyValidate(t *testing.T) {
 	c = NewConfig(config.ProtocolOpen)
 	replicaConfig = config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = util.AddressOf(true)
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		LargeMessageHandle: &config.LargeMessageHandleConfig{
+			LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
+		},
+	}
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.True(t, c.DeleteOnlyHandleKeyColumns)
