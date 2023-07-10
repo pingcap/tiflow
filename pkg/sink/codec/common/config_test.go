@@ -124,7 +124,14 @@ func TestLargeMessageHandleConfig(t *testing.T) {
 	p, err := config.ParseSinkProtocolFromString(protocol)
 	require.NoError(t, err)
 
+	// open-protocol, should return no error
 	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		LargeMessageHandle: &config.LargeMessageHandleConfig{
+			LargeMessageHandleOption: config.LargeMessageHandleOptionNone,
+		},
+	}
+
 	c := NewConfig(p)
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
@@ -132,10 +139,8 @@ func TestLargeMessageHandleConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, c.LargeMessageHandle.Disabled())
 
-	// open-protocol, should return no error
-	replicaConfig.Sink.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
-	err = c.Apply(sinkURI, repl
-	icaConfig)
+	replicaConfig.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	err = c.Validate()
 	require.NoError(t, err)

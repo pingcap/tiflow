@@ -210,10 +210,6 @@ const (
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
-    "large-message-handle": {
-      "large-message-handle-option": "handle-key-only",
-      "claim-check-storage-uri": ""
-    },
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -250,6 +246,10 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "claim-check-storage-uri": ""
       }
     },
     "mysql-config": {
@@ -343,10 +343,6 @@ const (
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
-    "large-message-handle": {
-      "large-message-handle-option": "handle-key-only",
-      "claim-check-storage-uri": ""
-    },
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -381,6 +377,10 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "claim-check-storage-uri": ""
       }
     },
     "mysql-config": {

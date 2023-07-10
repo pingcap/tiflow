@@ -1472,6 +1472,9 @@ var doc = `{
                 "key": {
                     "type": "string"
                 },
+                "large-message-handle": {
+                    "$ref": "#/definitions/config.LargeMessageHandleConfig"
+                },
                 "max-message-bytes": {
                     "type": "integer"
                 },
@@ -1657,10 +1660,6 @@ var doc = `{
                 },
                 "kafka-config": {
                     "$ref": "#/definitions/config.KafkaConfig"
-                },
-                "large-message-handle": {
-                    "description": "LargeMessageHandle is only available when the downstream is MQ.",
-                    "$ref": "#/definitions/config.LargeMessageHandleConfig"
                 },
                 "mysql-config": {
                     "$ref": "#/definitions/config.MySQLConfig"
@@ -2381,6 +2380,9 @@ var doc = `{
                 "key": {
                     "type": "string"
                 },
+                "large_message_handle": {
+                    "$ref": "#/definitions/v2.LargeMessageHandleConfig"
+                },
                 "max_message_bytes": {
                     "type": "integer"
                 },
@@ -2724,9 +2726,6 @@ var doc = `{
                 },
                 "kafka_config": {
                     "$ref": "#/definitions/v2.KafkaConfig"
-                },
-                "large_message_handle": {
-                    "$ref": "#/definitions/v2.LargeMessageHandleConfig"
                 },
                 "mysql_config": {
                     "$ref": "#/definitions/v2.MySQLConfig"

@@ -272,7 +272,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
 			}
 		}
-
 		var kafkaConfig *config.KafkaConfig
 		if c.Sink.KafkaConfig != nil {
 			var codeConfig *config.CodecConfig
@@ -489,7 +488,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Columns: selector.Columns,
 			})
 		}
-
 		var csvConfig *CSVConfig
 		if cloned.Sink.CSVConfig != nil {
 			csvConfig = &CSVConfig{

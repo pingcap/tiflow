@@ -88,6 +88,8 @@ definitions:
         type: string
       key:
         type: string
+      large-message-handle:
+        $ref: '#/definitions/config.LargeMessageHandleConfig'
       max-message-bytes:
         type: integer
       partition-num:
@@ -218,9 +220,6 @@ definitions:
         type: integer
       kafka-config:
         $ref: '#/definitions/config.KafkaConfig'
-      large-message-handle:
-        $ref: '#/definitions/config.LargeMessageHandleConfig'
-        description: LargeMessageHandle is only available when the downstream is MQ.
       mysql-config:
         $ref: '#/definitions/config.MySQLConfig'
       only-output-updated-columns:
@@ -709,6 +708,8 @@ definitions:
         type: string
       key:
         type: string
+      large_message_handle:
+        $ref: '#/definitions/v2.LargeMessageHandleConfig'
       max_message_bytes:
         type: integer
       partition_num:
@@ -935,8 +936,6 @@ definitions:
         type: integer
       kafka_config:
         $ref: '#/definitions/v2.KafkaConfig'
-      large_message_handle:
-        $ref: '#/definitions/v2.LargeMessageHandleConfig'
       mysql_config:
         $ref: '#/definitions/v2.MySQLConfig'
       only_output_updated_columns:

@@ -611,7 +611,9 @@ func TestConfigurationCombinations(t *testing.T) {
 		encoderConfig := common.NewConfig(config.ProtocolOpen)
 		err = encoderConfig.Apply(sinkURI, &config.ReplicaConfig{
 			Sink: &config.SinkConfig{
-				LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
+				KafkaConfig: &config.KafkaConfig{
+					LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
+				},
 			},
 		})
 		require.Nil(t, err)
