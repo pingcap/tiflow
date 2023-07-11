@@ -158,7 +158,7 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 		return err
 	}
 
-	err = cfg.AdjustEnableOldValueAndVerifyForceReplicate(uri)
+	err = cfg.ValidateAndAdjust(uri)
 	if err != nil {
 		return err
 	}

@@ -285,6 +285,16 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
 				}
 			}
+
+			var largeMessageHandle *config.LargeMessageHandleConfig
+			if c.Sink.KafkaConfig.LargeMessageHandle != nil {
+				oldConfig := c.Sink.KafkaConfig.LargeMessageHandle
+				largeMessageHandle = &config.LargeMessageHandleConfig{
+					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
+					ClaimCheckStorageURI:     oldConfig.ClaimCheckStorageURI,
+				}
+			}
+
 			kafkaConfig = &config.KafkaConfig{
 				PartitionNum:                 c.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            c.Sink.KafkaConfig.ReplicationFactor,
@@ -320,6 +330,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				Key:                          c.Sink.KafkaConfig.Key,
 				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
+				LargeMessageHandle:           largeMessageHandle,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -365,7 +376,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
-			LargeMessageOnlyHandleKeyColumns: c.Sink.LargeMessageOnlyHandleKeyColumns,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			CloudStorageConfig:               cloudStorageConfig,
@@ -500,6 +510,16 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
 				}
 			}
+
+			var largeMessageHandle *LargeMessageHandleConfig
+			if cloned.Sink.KafkaConfig.LargeMessageHandle != nil {
+				oldConfig := cloned.Sink.KafkaConfig.LargeMessageHandle
+				largeMessageHandle = &LargeMessageHandleConfig{
+					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
+					ClaimCheckStorageURI:     oldConfig.ClaimCheckStorageURI,
+				}
+			}
+
 			kafkaConfig = &KafkaConfig{
 				PartitionNum:                 cloned.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            cloned.Sink.KafkaConfig.ReplicationFactor,
@@ -535,6 +555,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Key:                          cloned.Sink.KafkaConfig.Key,
 				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
+				LargeMessageHandle:           largeMessageHandle,
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -580,7 +601,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
-			LargeMessageOnlyHandleKeyColumns: cloned.Sink.LargeMessageOnlyHandleKeyColumns,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			CloudStorageConfig:               cloudStorageConfig,
@@ -737,7 +757,6 @@ type SinkConfig struct {
 	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
 	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
 	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
-	LargeMessageOnlyHandleKeyColumns *bool               `json:"large_message_only_handle_key_columns"`
 	SafeMode                         *bool               `json:"safe_mode,omitempty"`
 	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
@@ -751,6 +770,13 @@ type CSVConfig struct {
 	Quote           string `json:"quote"`
 	NullString      string `json:"null"`
 	IncludeCommitTs bool   `json:"include_commit_ts"`
+}
+
+// LargeMessageHandleConfig denotes the large message handling config
+// This is the same as config.LargeMessageHandleConfig
+type LargeMessageHandleConfig struct {
+	LargeMessageHandleOption string `json:"large_message_handle_option"`
+	ClaimCheckStorageURI     string `json:"claim_check_storage_uri"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -928,40 +954,41 @@ type CodecConfig struct {
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
-	PartitionNum                 *int32       `json:"partition_num,omitempty"`
-	ReplicationFactor            *int16       `json:"replication_factor,omitempty"`
-	KafkaVersion                 *string      `json:"kafka_version,omitempty"`
-	MaxMessageBytes              *int         `json:"max_message_bytes,omitempty"`
-	Compression                  *string      `json:"compression,omitempty"`
-	KafkaClientID                *string      `json:"kafka_client_id,omitempty"`
-	AutoCreateTopic              *bool        `json:"auto_create_topic,omitempty"`
-	DialTimeout                  *string      `json:"dial_timeout,omitempty"`
-	WriteTimeout                 *string      `json:"write_timeout,omitempty"`
-	ReadTimeout                  *string      `json:"read_timeout,omitempty"`
-	RequiredAcks                 *int         `json:"required_acks,omitempty"`
-	SASLUser                     *string      `json:"sasl_user,omitempty"`
-	SASLPassword                 *string      `json:"sasl_password,omitempty"`
-	SASLMechanism                *string      `json:"sasl_mechanism,omitempty"`
-	SASLGssAPIAuthType           *string      `json:"sasl_gssapi_auth_type,omitempty"`
-	SASLGssAPIKeytabPath         *string      `json:"sasl_gssapi_keytab_path,omitempty"`
-	SASLGssAPIKerberosConfigPath *string      `json:"sasl_gssapi_kerberos_config_path,omitempty"`
-	SASLGssAPIServiceName        *string      `json:"sasl_gssapi_service_name,omitempty"`
-	SASLGssAPIUser               *string      `json:"sasl_gssapi_user,omitempty"`
-	SASLGssAPIPassword           *string      `json:"sasl_gssapi_password,omitempty"`
-	SASLGssAPIRealm              *string      `json:"sasl_gssapi_realm,omitempty"`
-	SASLGssAPIDisablePafxfast    *bool        `json:"sasl_gssapi_disable_pafxfast,omitempty"`
-	SASLOAuthClientID            *string      `json:"sasl_oauth_client_id,omitempty"`
-	SASLOAuthClientSecret        *string      `json:"sasl_oauth_client_secret,omitempty"`
-	SASLOAuthTokenURL            *string      `json:"sasl_oauth_token_url,omitempty"`
-	SASLOAuthScopes              []string     `json:"sasl_oauth_scopes,omitempty"`
-	SASLOAuthGrantType           *string      `json:"sasl_oauth_grant_type,omitempty"`
-	SASLOAuthAudience            *string      `json:"sasl_oauth_audience,omitempty"`
-	EnableTLS                    *bool        `json:"enable_tls,omitempty"`
-	CA                           *string      `json:"ca,omitempty"`
-	Cert                         *string      `json:"cert,omitempty"`
-	Key                          *string      `json:"key,omitempty"`
-	InsecureSkipVerify           *bool        `json:"insecure_skip_verify,omitempty"`
-	CodecConfig                  *CodecConfig `json:"codec_config,omitempty"`
+	PartitionNum                 *int32                    `json:"partition_num,omitempty"`
+	ReplicationFactor            *int16                    `json:"replication_factor,omitempty"`
+	KafkaVersion                 *string                   `json:"kafka_version,omitempty"`
+	MaxMessageBytes              *int                      `json:"max_message_bytes,omitempty"`
+	Compression                  *string                   `json:"compression,omitempty"`
+	KafkaClientID                *string                   `json:"kafka_client_id,omitempty"`
+	AutoCreateTopic              *bool                     `json:"auto_create_topic,omitempty"`
+	DialTimeout                  *string                   `json:"dial_timeout,omitempty"`
+	WriteTimeout                 *string                   `json:"write_timeout,omitempty"`
+	ReadTimeout                  *string                   `json:"read_timeout,omitempty"`
+	RequiredAcks                 *int                      `json:"required_acks,omitempty"`
+	SASLUser                     *string                   `json:"sasl_user,omitempty"`
+	SASLPassword                 *string                   `json:"sasl_password,omitempty"`
+	SASLMechanism                *string                   `json:"sasl_mechanism,omitempty"`
+	SASLGssAPIAuthType           *string                   `json:"sasl_gssapi_auth_type,omitempty"`
+	SASLGssAPIKeytabPath         *string                   `json:"sasl_gssapi_keytab_path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string                   `json:"sasl_gssapi_kerberos_config_path,omitempty"`
+	SASLGssAPIServiceName        *string                   `json:"sasl_gssapi_service_name,omitempty"`
+	SASLGssAPIUser               *string                   `json:"sasl_gssapi_user,omitempty"`
+	SASLGssAPIPassword           *string                   `json:"sasl_gssapi_password,omitempty"`
+	SASLGssAPIRealm              *string                   `json:"sasl_gssapi_realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool                     `json:"sasl_gssapi_disable_pafxfast,omitempty"`
+	SASLOAuthClientID            *string                   `json:"sasl_oauth_client_id,omitempty"`
+	SASLOAuthClientSecret        *string                   `json:"sasl_oauth_client_secret,omitempty"`
+	SASLOAuthTokenURL            *string                   `json:"sasl_oauth_token_url,omitempty"`
+	SASLOAuthScopes              []string                  `json:"sasl_oauth_scopes,omitempty"`
+	SASLOAuthGrantType           *string                   `json:"sasl_oauth_grant_type,omitempty"`
+	SASLOAuthAudience            *string                   `json:"sasl_oauth_audience,omitempty"`
+	EnableTLS                    *bool                     `json:"enable_tls,omitempty"`
+	CA                           *string                   `json:"ca,omitempty"`
+	Cert                         *string                   `json:"cert,omitempty"`
+	Key                          *string                   `json:"key,omitempty"`
+	InsecureSkipVerify           *bool                     `json:"insecure_skip_verify,omitempty"`
+	CodecConfig                  *CodecConfig              `json:"codec_config,omitempty"`
+	LargeMessageHandle           *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
