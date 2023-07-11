@@ -105,28 +105,24 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
 	log.Info("Try to create a DML sink producer", zap.Any("options", options))
-	p, err := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
+	dmlProducer := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
 	// Preventing leaks when error occurs.
 	// This also closes the client in p.Close().
 	defer func() {
-		if err != nil && p != nil {
-			p.Close()
+		if err != nil && dmlProducer != nil {
+			dmlProducer.Close()
 		}
 	}()
 
-	s := newDMLSink(ctx, changefeed, p, adminClient, topicManager, eventRouter, encoderBuilder,
+	s := newDMLSink(ctx, changefeed, dmlProducer, adminClient, topicManager, eventRouter, encoderBuilder,
 		replicaConfig.Sink.EncoderConcurrency, protocol, errCh)
 
 	return s, nil

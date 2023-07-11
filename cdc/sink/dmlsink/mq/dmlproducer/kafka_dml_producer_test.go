@@ -60,14 +60,11 @@ func TestProducerAck(t *testing.T) {
 	require.NoError(t, err)
 	metricsCollector := factory.MetricsCollector(util.RoleTester, adminClient)
 
-	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
 	require.NoError(t, err)
 
-	producer, err := NewKafkaDMLProducer(ctx, changefeed,
-		asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
-	require.NoError(t, err)
+	producer := NewKafkaDMLProducer(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
 	require.NotNil(t, producer)
 
 	messageCount := 20
@@ -135,14 +132,11 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	require.NoError(t, err)
 	metricsCollector := factory.MetricsCollector(util.RoleTester, adminClient)
 
-	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
 	require.NoError(t, err)
 
-	producer, err := NewKafkaDMLProducer(ctx, changefeed,
-		asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
-	require.NoError(t, err)
+	producer := NewKafkaDMLProducer(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
 	require.NotNil(t, producer)
 
 	defer func() {
@@ -202,13 +196,11 @@ func TestProducerDoubleClose(t *testing.T) {
 	require.NoError(t, err)
 	metricsCollector := factory.MetricsCollector(util.RoleTester, adminClient)
 
-	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
+	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
 	require.NoError(t, err)
 
-	producer, err := NewKafkaDMLProducer(ctx, changefeed,
-		asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
+	producer := NewKafkaDMLProducer(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
 	require.NoError(t, err)
 	require.NotNil(t, producer)
 
