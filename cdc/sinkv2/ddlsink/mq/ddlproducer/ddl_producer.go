@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/Shopify/sarama"
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
@@ -37,9 +36,5 @@ type DDLProducer interface {
 }
 
 // Factory is a function to create a producer.
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/ddlproducer/ddl_producer.go
 type Factory func(ctx context.Context, client sarama.Client,
 	adminClient kafka.ClusterAdminClient) (DDLProducer, error)
-=======
-type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
-	syncProducer kafka.SyncProducer) (DDLProducer, error)

@@ -53,26 +53,7 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/kafka_dml_sink.go
 	adminClient, err := adminClientCreator(baseConfig.BrokerEndpoints, saramaConfig)
-=======
-	closeCh := make(chan struct{})
-	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	defer func() {
-		if err != nil && asyncProducer != nil {
-			asyncProducer.Close()
-		}
-	}()
-
-	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
-	log.Info("Try to create a DML sink producer",
-		zap.Any("options", options))
-	p, err := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/dmlsink/mq/kafka_dml_sink.go
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
 	}
