@@ -45,17 +45,9 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink_test.go
+	errCh := make(chan error, 1)
 	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
 		kafka.NewMockAdminClient, dmlproducer.NewDMLMockProducer)
-=======
-	ctx = context.WithValue(ctx, "testing.T", t)
-	changefeedID := model.DefaultChangeFeedID("test")
-
-	errCh := make(chan error, 1)
-	s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
-		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/dmlsink/mq/mq_dml_sink_test.go
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
 		"should report error when protocol is avro but schema-registry is not set")
 	require.Nil(t, s)
@@ -78,17 +70,9 @@ func TestWriteEvents(t *testing.T) {
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	errCh := make(chan error, 1)
 
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink_test.go
 	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
 		kafka.NewMockAdminClient, dmlproducer.NewDMLMockProducer)
 	require.Nil(t, err)
-=======
-	ctx = context.WithValue(ctx, "testing.T", t)
-	changefeedID := model.DefaultChangeFeedID("test")
-	s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
-		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
-	require.NoError(t, err)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/dmlsink/mq/mq_dml_sink_test.go
 	require.NotNil(t, s)
 	defer s.Close()
 
