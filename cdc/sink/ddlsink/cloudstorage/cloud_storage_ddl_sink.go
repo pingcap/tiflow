@@ -58,10 +58,13 @@ func NewDDLSink(ctx context.Context,
 	}
 
 	d := &DDLSink{
-		id:             changefeedID,
-		storage:        storage,
-		statistics:     metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
-		outputColumnID: util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.OutputColumnID),
+		id:         changefeedID,
+		storage:    storage,
+		statistics: metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+	}
+
+	if replicaConfig != nil && replicaConfig.Sink.CloudStorageConfig != nil {
+		d.outputColumnID = util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.OutputColumnID)
 	}
 
 	return d, nil
