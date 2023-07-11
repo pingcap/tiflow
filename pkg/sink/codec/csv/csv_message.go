@@ -245,9 +245,9 @@ func fromCsvValToColValue(csvConfig *common.Config, csvVal any, ft types.FieldTy
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		if ft.GetCharset() == charset.CharsetBin {
 			switch csvConfig.BinaryEncodingMethod {
-			case "base64":
+			case config.BinaryEncodingBase64:
 				return base64.StdEncoding.DecodeString(str)
-			case "hex":
+			case config.BinaryEncodingHex:
 				return hex.DecodeString(str)
 			default:
 				return nil, cerror.WrapError(cerror.ErrCSVEncodeFailed,
@@ -290,9 +290,9 @@ func fromColValToCsvVal(csvConfig *common.Config, col *model.Column, ft *types.F
 		if col.Flag.IsBinary() {
 			if v, ok := col.Value.([]byte); ok {
 				switch csvConfig.BinaryEncodingMethod {
-				case "base64":
+				case config.BinaryEncodingBase64:
 					return base64.StdEncoding.EncodeToString(v), nil
-				case "hex":
+				case config.BinaryEncodingHex:
 					return hex.EncodeToString(v), nil
 				default:
 					return nil, cerror.WrapError(cerror.ErrCSVEncodeFailed,

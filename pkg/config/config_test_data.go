@@ -192,7 +192,8 @@ const (
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
-      "include-commit-ts": true
+      "include-commit-ts": true,
+      "binary-encoding-method":"base64"
     },
     "transaction-atomicity": "",
     "terminator": "",
@@ -318,7 +319,8 @@ const (
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
-      "include-commit-ts": true
+      "include-commit-ts": true,
+      "binary-encoding-method":"base64"
     },
     "terminator": "",
     "date-separator": "month",
