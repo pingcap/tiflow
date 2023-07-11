@@ -482,10 +482,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var csvConfig *CSVConfig
 		if cloned.Sink.CSVConfig != nil {
 			csvConfig = &CSVConfig{
-				Delimiter:       cloned.Sink.CSVConfig.Delimiter,
-				Quote:           cloned.Sink.CSVConfig.Quote,
-				NullString:      cloned.Sink.CSVConfig.NullString,
-				IncludeCommitTs: cloned.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            cloned.Sink.CSVConfig.Delimiter,
+				Quote:                cloned.Sink.CSVConfig.Quote,
+				NullString:           cloned.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      cloned.Sink.CSVConfig.IncludeCommitTs,
 				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
