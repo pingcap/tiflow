@@ -350,6 +350,8 @@ type CloudStorageConfig struct {
 	WorkerCount   *int    `toml:"worker-count" json:"worker-count,omitempty"`
 	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
 	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
+
+	OutputColumnID *bool `toml:"output-column-id" json:"output-column-id,omitempty"`
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {

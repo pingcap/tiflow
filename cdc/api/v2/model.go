@@ -378,9 +378,10 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var cloudStorageConfig *config.CloudStorageConfig
 		if c.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:   c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval: c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:      c.Sink.CloudStorageConfig.FileSize,
+				WorkerCount:    c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:  c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:       c.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID: c.Sink.CloudStorageConfig.OutputColumnID,
 			}
 		}
 
@@ -604,9 +605,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var cloudStorageConfig *CloudStorageConfig
 		if cloned.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:   cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval: cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:      cloned.Sink.CloudStorageConfig.FileSize,
+				WorkerCount:    cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:  cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:       cloned.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID: cloned.Sink.CloudStorageConfig.OutputColumnID,
 			}
 		}
 
@@ -1036,9 +1038,10 @@ type MySQLConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount   *int    `json:"worker_count,omitempty"`
-	FlushInterval *string `json:"flush_interval,omitempty"`
-	FileSize      *int    `json:"file_size,omitempty"`
+	WorkerCount    *int    `json:"worker_count,omitempty"`
+	FlushInterval  *string `json:"flush_interval,omitempty"`
+	FileSize       *int    `json:"file_size,omitempty"`
+	OutputColumnID *bool   `json:"output_column_id,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc
