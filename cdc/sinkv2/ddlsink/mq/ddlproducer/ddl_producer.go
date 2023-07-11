@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
@@ -42,4 +43,3 @@ type Factory func(ctx context.Context, client sarama.Client,
 =======
 type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
 	syncProducer kafka.SyncProducer) (DDLProducer, error)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/ddlproducer/ddl_producer.go
