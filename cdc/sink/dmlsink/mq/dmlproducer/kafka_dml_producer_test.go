@@ -42,16 +42,7 @@ func getOptions() *kafka.Options {
 }
 
 func TestProducerAck(t *testing.T) {
-<<<<<<< HEAD
-	t.Parallel()
-
-	leader, topic := initBroker(t, true)
-	defer leader.Close()
-
-	options := getOptions(leader.Addr())
-=======
 	options := getOptions()
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	options.MaxMessages = 1
 
 	errCh := make(chan error, 1)
@@ -74,14 +65,9 @@ func TestProducerAck(t *testing.T) {
 	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
 	require.NoError(t, err)
 
-<<<<<<< HEAD
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
-	require.Nil(t, err)
-=======
 	producer, err := NewKafkaDMLProducer(ctx, changefeed,
 		asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
 	require.NoError(t, err)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	require.NotNil(t, producer)
 
 	messageCount := 20
@@ -131,16 +117,7 @@ func TestProducerAck(t *testing.T) {
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
-<<<<<<< HEAD
-	t.Parallel()
-
-	leader, topic := initBroker(t, false)
-	defer leader.Close()
-
-	options := getOptions(leader.Addr())
-=======
 	options := getOptions()
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -163,15 +140,11 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
 	require.NoError(t, err)
 
-<<<<<<< HEAD
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
-=======
 	producer, err := NewKafkaDMLProducer(ctx, changefeed,
 		asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
 	require.NoError(t, err)
 	require.NotNil(t, producer)
 
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	defer func() {
 		producer.Close()
 
@@ -214,16 +187,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 }
 
 func TestProducerDoubleClose(t *testing.T) {
-<<<<<<< HEAD
-	t.Parallel()
-
-	leader, _ := initBroker(t, false)
-	defer leader.Close()
-
-	options := getOptions(leader.Addr())
-=======
 	options := getOptions()
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -243,15 +207,9 @@ func TestProducerDoubleClose(t *testing.T) {
 	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
 	require.NoError(t, err)
 
-<<<<<<< HEAD
-	require.Nil(t, err)
-	producer, err := NewKafkaDMLProducer(ctx, factory, adminClient, errCh)
-	require.Nil(t, err)
-=======
 	producer, err := NewKafkaDMLProducer(ctx, changefeed,
 		asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
 	require.NoError(t, err)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	require.NotNil(t, producer)
 
 	producer.Close()

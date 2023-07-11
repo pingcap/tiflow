@@ -43,12 +43,8 @@ func TestNewKafkaDDLSinkFailed(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-<<<<<<< HEAD
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-=======
 	ctx = context.WithValue(ctx, "testing.T", t)
-	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
+	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
 		kafka.NewMockFactory, ddlproducer.NewMockDDLProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
 		"should report error when protocol is avro but schema-registry is not set")
@@ -71,12 +67,8 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-<<<<<<< HEAD
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-=======
 	ctx = context.WithValue(ctx, "testing.T", t)
-	s, err := NewKafkaDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
+	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.NoError(t, err)
@@ -117,13 +109,9 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-<<<<<<< HEAD
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-=======
 	ctx = context.WithValue(ctx, "testing.T", t)
-	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+	s, err := NewKafkaDDLSink(ctx,
 		sinkURI, replicaConfig,
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.NoError(t, err)
@@ -165,13 +153,9 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-<<<<<<< HEAD
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-=======
 	ctx = context.WithValue(ctx, "testing.T", t)
-	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+	s, err := NewKafkaDDLSink(ctx,
 		sinkURI, replicaConfig,
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.Nil(t, err)
@@ -213,13 +197,9 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 		},
 	}
 
-<<<<<<< HEAD
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-=======
 	ctx = context.WithValue(ctx, "testing.T", t)
-	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+	s, err := NewKafkaDDLSink(ctx,
 		sinkURI, replicaConfig,
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.NoError(t, err)
@@ -278,13 +258,9 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
-<<<<<<< HEAD
-	s, err := NewKafkaDDLSink(ctx, sinkURI, replicaConfig,
-=======
 	ctx = context.WithValue(ctx, "testing.T", t)
-	s, err := NewKafkaDDLSink(ctx, model.DefaultChangeFeedID("test"),
+	s, err := NewKafkaDDLSink(ctx,
 		sinkURI, replicaConfig,
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 		kafka.NewMockFactory,
 		ddlproducer.NewMockDDLProducer)
 	require.NoError(t, err)

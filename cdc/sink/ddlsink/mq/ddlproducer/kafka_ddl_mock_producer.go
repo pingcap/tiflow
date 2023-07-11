@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
@@ -29,11 +30,7 @@ type MockDDLProducer struct {
 }
 
 // NewMockDDLProducer creates a mock producer.
-<<<<<<< HEAD
-func NewMockDDLProducer(_ context.Context, _ kafka.Factory) (DDLProducer, error) {
-=======
 func NewMockDDLProducer(_ context.Context, _ model.ChangeFeedID, _ kafka.SyncProducer) (DDLProducer, error) {
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	return &MockDDLProducer{
 		events: make(map[string][]*common.Message),
 	}, nil

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -77,37 +78,6 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	closeCh := make(chan struct{})
-	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	defer func() {
-		if err != nil && asyncProducer != nil {
-			asyncProducer.Close()
-		}
-	}()
-
-	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
-	log.Info("Try to create a DML sink producer",
-		zap.Any("options", options))
-<<<<<<< HEAD
-	p, err := producerCreator(ctx, factory, adminClient, errCh)
-=======
-	p, err := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && p != nil {
-			p.Close()
-		}
-	}()
-
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
 		topic,
@@ -128,6 +98,28 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	closeCh := make(chan struct{})
+	failpointCh := make(chan error, 1)
+	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
+	}
+
+	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
+	log.Info("Try to create a DML sink producer",
+		zap.Any("options", options))
+	p, err := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
+	}
+	// Preventing leaks when error occurs.
+	// This also closes the client in p.Close().
+	defer func() {
+		if err != nil && p != nil {
+			p.Close()
+		}
+	}()
 
 	s, err := newDMLSink(ctx, p, adminClient, topicManager, eventRouter, encoderConfig,
 		replicaConfig.Sink.EncoderConcurrency, errCh)

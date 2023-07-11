@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -54,37 +53,18 @@ type kafkaDMLProducer struct {
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
-<<<<<<< HEAD
-	factory kafka.Factory,
-	adminClient kafka.ClusterAdminClient,
-=======
 	changefeedID model.ChangeFeedID,
 	asyncProducer kafka.AsyncProducer,
 	metricsCollector kafka.MetricsCollector,
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	errCh chan error,
 	closeCh chan struct{},
 	failpointCh chan error,
 ) (DMLProducer, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting kafka DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
-<<<<<<< HEAD
-	closeCh := make(chan struct{})
-	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
-	metricsCollector := factory.MetricsCollector(
-		util.RoleProcessor,
-		adminClient)
-=======
 	ctx, cancel := context.WithCancel(ctx)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	k := &kafkaDMLProducer{
 		id:               changefeedID,
 		asyncProducer:    asyncProducer,

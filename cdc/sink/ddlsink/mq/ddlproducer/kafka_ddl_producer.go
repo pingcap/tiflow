@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -45,21 +44,10 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-<<<<<<< HEAD
-func NewKafkaDDLProducer(ctx context.Context, factory kafka.Factory) (DDLProducer, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
-	syncProducer, err := factory.SyncProducer(ctx)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
-=======
 func NewKafkaDDLProducer(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	syncProducer kafka.SyncProducer,
 ) (DDLProducer, error) {
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356))
 	p := &kafkaDDLProducer{
 		id:           changefeedID,
 		syncProducer: syncProducer,
