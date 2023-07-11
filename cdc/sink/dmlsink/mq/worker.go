@@ -317,4 +317,7 @@ func (w *worker) close() {
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+
+	mq.ClaimCheckSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
+	mq.ClaimCheckSendMessageCount.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 }

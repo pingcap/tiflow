@@ -15,6 +15,7 @@ package common
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -40,6 +41,9 @@ type Message struct {
 	Protocol  config.Protocol   // protocol
 	rowsCount int               // rows in one Message
 	Callback  func()            // Callback function will be called when the message is sent to the sink.
+
+	// ClaimCheckFileName is set if the message should be sent to the claim check storage.
+	ClaimCheckFileName string
 }
 
 // Length returns the expected size of the Kafka message
@@ -119,4 +123,15 @@ func NewMsg(
 	}
 
 	return ret
+}
+
+type ClaimCheckMessage struct {
+	Key   []byte `json:"key"`
+	Value []byte `json:"value"`
+}
+
+func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
+	var m ClaimCheckMessage
+	err := json.Unmarshal(data, &m)
+	return &m, err
 }

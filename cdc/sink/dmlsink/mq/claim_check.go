@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
 	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -36,6 +35,7 @@ type ClaimCheck struct {
 	// metricSendMessageDuration tracks the time duration
 	// cost on send messages to the claim check external storage.
 	metricSendMessageDuration prometheus.Observer
+	metricSendMessageCount    prometheus.Counter
 }
 
 func NewClaimCheck(ctx context.Context, uri string, id model.ChangeFeedID) (*ClaimCheck, error) {
@@ -57,7 +57,7 @@ func NewClaimCheck(ctx context.Context, uri string, id model.ChangeFeedID) (*Cla
 
 func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) error {
 	// 1. send message to the external storage
-	m := codec.ClaimCheckMessage{
+	m := common.ClaimCheckMessage{
 		Key:   message.Key,
 		Value: message.Value,
 	}
@@ -72,5 +72,6 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 		return errors.Trace(err)
 	}
 	c.metricSendMessageDuration.Observe(time.Since(start).Seconds())
+	c.metricSendMessageCount.Inc()
 	return nil
 }
