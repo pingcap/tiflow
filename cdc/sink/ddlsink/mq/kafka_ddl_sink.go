@@ -79,10 +79,6 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	start := time.Now()
-	log.Info("Try to create a DDL sink producer",
-		zap.Any("options", options))
-
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
 		changefeedID,
@@ -110,15 +106,12 @@ func NewKafkaDDLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	start := time.Now()
+	log.Info("Try to create a DDL sink producer", zap.Any("options", options))
 	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	defer func() {
-		if err != nil && syncProducer != nil {
-			syncProducer.Close()
-		}
-	}()
 
 	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
