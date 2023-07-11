@@ -431,7 +431,7 @@ func (c *CDCEtcdClientImpl) CreateChangefeedInfo(ctx context.Context,
 		UpstreamID: upstreamInfo.ID,
 		Namespace:  changeFeedID.Namespace,
 	}
-	upstreamEtcdKeyStr := upstreamInfoKey.String()
+	upstreamEtcdKeyStr := upstreamInfoKey.Stringx()
 	info.UpstreamID = upstreamInfo.ID
 	value, err := info.Marshal()
 	if err != nil {
@@ -459,7 +459,7 @@ func (c *CDCEtcdClientImpl) CreateChangefeedInfo(ctx context.Context,
 				"=", 0))
 	} else {
 		cmps = append(cmps,
-			clientv3.Compare(clientv3.ModRevision(upstreamInfoKey.String()),
+			clientv3.Compare(clientv3.ModRevision(upstreamInfoKey.Stringx()),
 				"=", upstreamResp.Kvs[0].ModRevision))
 	}
 
@@ -493,7 +493,7 @@ func (c *CDCEtcdClientImpl) UpdateChangefeedAndUpstream(ctx context.Context,
 		UpstreamID: upstreamInfo.ID,
 		Namespace:  changeFeedID.Namespace,
 	}
-	upstreamKeyStr := upstreamKey.String()
+	upstreamKeyStr := upstreamKey.Stringx()
 	upstreamInfoStr, err := upstreamInfo.Marshal()
 	if err != nil {
 		return errors.Trace(err)
@@ -621,7 +621,7 @@ func (c *CDCEtcdClientImpl) GetUpstreamInfo(ctx context.Context,
 		UpstreamID: upstreamID,
 		Namespace:  namespace,
 	}
-	KeyStr := Key.String()
+	KeyStr := Key.Stringx()
 	resp, err := c.Client.Get(ctx, KeyStr)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)

@@ -110,7 +110,7 @@ func NamespacedPrefix(clusterID, namespace string) string {
 }
 
 // Parse parses the given etcd key
-func (k *CDCKey) Parse(clusterID, key string) error {
+func (k *CDCKey) Parsex(clusterID, key string) error {
 	if !strings.HasPrefix(key, BaseKey(clusterID)) {
 		return cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 	}
@@ -186,7 +186,7 @@ func (k *CDCKey) Parse(clusterID, key string) error {
 	return nil
 }
 
-func (k *CDCKey) String() string {
+func (k *CDCKey) Stringx() string {
 	switch k.Tp {
 	case CDCKeyTypeOwner:
 		if len(k.OwnerLeaseID) == 0 {
