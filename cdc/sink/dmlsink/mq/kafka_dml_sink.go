@@ -60,7 +60,6 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
-
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
@@ -99,12 +98,12 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	log.Info("Try to create a DML sink producer", zap.Any("options", options))
 	failpointCh := make(chan error, 1)
 	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
 	if err != nil {
@@ -112,16 +111,7 @@ func NewKafkaDMLSink(
 	}
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
-	log.Info("Try to create a DML sink producer", zap.Any("options", options))
 	dmlProducer := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && dmlProducer != nil {
-			dmlProducer.Close()
-		}
-	}()
-
 	s := newDMLSink(ctx, changefeed, dmlProducer, adminClient, topicManager, eventRouter, encoderBuilder,
 		replicaConfig.Sink.EncoderConcurrency, protocol, errCh)
 

@@ -38,7 +38,8 @@ type DMLProducer interface {
 // there is no way to safely close errCh by the sender.
 // So we let the GC close errCh.
 // It's usually a buffered channel.
-type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
+type Factory func(ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	asyncProducer kafka.AsyncProducer,
 	metricsCollector kafka.MetricsCollector,
 	errCh chan error,

@@ -110,13 +110,6 @@ func NewKafkaDDLSink(
 	}
 
 	p := producerCreator(ctx, changefeed, syncProducer)
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && p != nil {
-			p.Close()
-		}
-	}()
 	s := newDDLSink(ctx, changefeed, p, adminClient, topicManager, eventRouter, encoderBuilder, protocol)
 	log.Info("DDL sink created", zap.Duration("duration", time.Since(start)))
 	return s, nil

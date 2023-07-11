@@ -48,12 +48,11 @@ func NewKafkaDDLProducer(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	syncProducer kafka.SyncProducer,
 ) DDLProducer {
-	p := &kafkaDDLProducer{
+	return &kafkaDDLProducer{
 		id:           changefeedID,
 		syncProducer: syncProducer,
 		closed:       false,
 	}
-	return p
 }
 
 func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string,
