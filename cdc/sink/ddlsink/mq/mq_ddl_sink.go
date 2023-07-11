@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
@@ -26,11 +25,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
@@ -61,22 +57,17 @@ type DDLSink struct {
 }
 
 func newDDLSink(ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	producer ddlproducer.DDLProducer,
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderConfig *common.Config,
-) (*DDLSink, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	s := &DDLSink{
+	encoderBuilder codec.RowEventEncoderBuilder,
+	protocol config.Protocol,
+) *DDLSink {
+	return &DDLSink{
 		id:             changefeedID,
-		protocol:       encoderConfig.Protocol,
+		protocol:       protocol,
 		eventRouter:    eventRouter,
 		topicManager:   topicManager,
 		encoderBuilder: encoderBuilder,
@@ -84,8 +75,6 @@ func newDDLSink(ctx context.Context,
 		statistics:     metrics.NewStatistics(ctx, sink.RowSink),
 		admin:          adminClient,
 	}
-
-	return s, nil
 }
 
 // WriteDDLEvent encodes the DDL event and sends it to the MQ system.

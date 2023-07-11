@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -99,6 +100,11 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
 	closeCh := make(chan struct{})
 	failpointCh := make(chan error, 1)
 	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
@@ -107,8 +113,7 @@ func NewKafkaDMLSink(
 	}
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
-	log.Info("Try to create a DML sink producer",
-		zap.Any("options", options))
+	log.Info("Try to create a DML sink producer", zap.Any("options", options))
 	p, err := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, closeCh, failpointCh)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
@@ -121,11 +126,8 @@ func NewKafkaDMLSink(
 		}
 	}()
 
-	s, err := newDMLSink(ctx, p, adminClient, topicManager, eventRouter, encoderConfig,
-		replicaConfig.Sink.EncoderConcurrency, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	s := newDMLSink(ctx, changefeed, p, adminClient, topicManager, eventRouter, encoderBuilder,
+		replicaConfig.Sink.EncoderConcurrency, protocol, errCh)
 
 	return s, nil
 }

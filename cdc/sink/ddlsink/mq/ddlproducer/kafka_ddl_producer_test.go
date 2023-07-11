@@ -50,9 +50,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
-	require.NoError(t, err)
-
+	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 	for i := 0; i < kafka.DefaultMockPartitionNum; i++ {
 		syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
 	}
@@ -79,8 +77,7 @@ func TestSyncSendMessage(t *testing.T) {
 	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
-	require.NoError(t, err)
+	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 
 	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
 	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
@@ -109,9 +106,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
-	require.NoError(t, err)
-
+	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 	defer p.Close()
 
 	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndFail(sarama.ErrMessageTooLarge)
@@ -132,8 +127,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
-	require.NoError(t, err)
+	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 
 	p.Close()
 	p.Close()

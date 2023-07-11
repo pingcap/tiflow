@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/zap"
 )
@@ -75,33 +76,6 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	start := time.Now()
-	log.Info("Try to create a DDL sink producer",
-		zap.Any("options", options))
-
-	syncProducer, err := factory.SyncProducer(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer func() {
-		if err != nil && syncProducer != nil {
-			syncProducer.Close()
-		}
-	}()
-
-	p, err := producerCreator(ctx, changefeed, syncProducer)
-	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && p != nil {
-			p.Close()
-		}
-	}()
-
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
 		topic,
@@ -122,11 +96,28 @@ func NewKafkaDDLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
 
-	s, err := newDDLSink(ctx, p, adminClient, topicManager, eventRouter, encoderConfig)
+	start := time.Now()
+	log.Info("Try to create a DDL sink producer", zap.Any("options", options))
+
+	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	p := producerCreator(ctx, changefeed, syncProducer)
+	// Preventing leaks when error occurs.
+	// This also closes the client in p.Close().
+	defer func() {
+		if err != nil && p != nil {
+			p.Close()
+		}
+	}()
+	s := newDDLSink(ctx, changefeed, p, adminClient, topicManager, eventRouter, encoderBuilder, protocol)
+	log.Info("DDL sink created", zap.Duration("duration", time.Since(start)))
 	return s, nil
 }
