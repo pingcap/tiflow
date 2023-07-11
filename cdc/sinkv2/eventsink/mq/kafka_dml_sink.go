@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
@@ -77,25 +76,6 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
-	log.Info("Try to create a DML sink producer",
-		zap.Any("baseConfig", baseConfig))
-	p, err := producerCreator(ctx, client, adminClient, errCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && p != nil {
-			p.Close()
-		}
-	}()
-
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
 		topic,
@@ -116,6 +96,19 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	log.Info("Try to create a DML sink producer", zap.Any("baseConfig", baseConfig))
+	p, err := producerCreator(ctx, baseConfig, saramaConfig, adminClient, errCh)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+	// Preventing leaks when error occurs.
+	// This also closes the client in p.Close().
+	defer func() {
+		if err != nil && p != nil {
+			p.Close()
+		}
+	}()
 
 	s, err := newSink(ctx, p, topicManager, eventRouter, encoderConfig,
 		replicaConfig.Sink.EncoderConcurrency, errCh)

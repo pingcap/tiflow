@@ -46,6 +46,7 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	errCh := make(chan error, 1)
+
 	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
 		kafka.NewMockAdminClient, dmlproducer.NewDMLMockProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",

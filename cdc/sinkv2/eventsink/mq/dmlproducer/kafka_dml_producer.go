@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -67,10 +68,16 @@ type kafkaDMLProducer struct {
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
-	client sarama.Client,
+	kafkaConfig *kafka.Config,
+	saramaConfig *sarama.Config,
 	adminClient pkafka.ClusterAdminClient,
 	errCh chan error,
 ) (DMLProducer, error) {
+	client, err := sarama.NewClient(kafkaConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
+
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting kafka DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),

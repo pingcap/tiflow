@@ -20,7 +20,8 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	mqv1 "github.com/pingcap/tiflow/cdc/sink/mq"
-	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
 var _ DMLProducer = (*MockDMLProducer)(nil)
@@ -32,8 +33,8 @@ type MockDMLProducer struct {
 }
 
 // NewDMLMockProducer creates a mock producer.
-func NewDMLMockProducer(_ context.Context, _ sarama.Client,
-	_ kafka.ClusterAdminClient, _ chan error,
+func NewDMLMockProducer(_ context.Context, _ *kafka.Config, _ *sarama.Config,
+	_ pkafka.ClusterAdminClient, _ chan error,
 ) (DMLProducer, error) {
 	return &MockDMLProducer{
 		events: make(map[mqv1.TopicPartitionKey][]*common.Message),
