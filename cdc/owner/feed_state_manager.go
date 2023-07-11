@@ -269,8 +269,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 			zap.Uint64("checkpointTs", checkpointTs))
 	case model.AdminResume:
 		switch m.state.Info.State {
-		case model.StateFailed, model.StateWarning,
-			model.StateStopped, model.StateFinished, model.StatePending:
+		case model.StateFailed, model.StateStopped, model.StateFinished:
 		default:
 			log.Warn("can not resume the changefeed in the current state",
 				zap.String("namespace", m.state.ID.Namespace),

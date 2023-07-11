@@ -81,14 +81,18 @@ const (
 type FeedState string
 
 // All FeedStates
+// Only `StateNormal` and `StatePending` changefeed is running,
+// others are stopped.
 const (
-	StateNormal        FeedState = "normal"
-	StatePending       FeedState = "pending"
-	StateFailed        FeedState = "failed"
-	StateStopped       FeedState = "stopped"
-	StateRemoved       FeedState = "removed"
-	StateFinished      FeedState = "finished"
-	StateWarning       FeedState = "warning"
+	StateNormal   FeedState = "normal"
+	StatePending  FeedState = "pending"
+	StateFailed   FeedState = "failed"
+	StateStopped  FeedState = "stopped"
+	StateRemoved  FeedState = "removed"
+	StateFinished FeedState = "finished"
+	StateWarning  FeedState = "warning"
+	// StateUnInitialized is used for the changefeed that has not been initialized
+	// it only exists in memory for a short time and will not be persisted to storage
 	StateUnInitialized FeedState = ""
 )
 
