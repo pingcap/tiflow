@@ -45,9 +45,10 @@ var defaultAPIConfig = &ReplicaConfig{
 	},
 	Sink: &SinkConfig{
 		CSVConfig: &CSVConfig{
-			Quote:      string(config.DoubleQuoteChar),
-			Delimiter:  config.Comma,
-			NullString: config.NULL,
+			Quote:                string(config.DoubleQuoteChar),
+			Delimiter:            config.Comma,
+			NullString:           config.NULL,
+			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
 		EncoderConcurrency:               util.AddressOf(16),
 		Terminator:                       util.AddressOf(config.CRLF),

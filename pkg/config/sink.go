@@ -63,6 +63,9 @@ const (
 	MaxFileIndexWidth = 20 // enough for 2^64 files
 	// DefaultFileIndexWidth is the default width of file index.
 	DefaultFileIndexWidth = MaxFileIndexWidth
+
+	BinaryEncodingHex    = "hex"
+	BinaryEncodingBase64 = "base64"
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -201,6 +204,14 @@ func (c *CSVConfig) validateAndAdjust() error {
 	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config quote and delimiter cannot be the same"))
+	}
+
+	// validate binary encoding method
+	switch c.BinaryEncodingMethod {
+	case BinaryEncodingHex, BinaryEncodingBase64:
+	default:
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config binary-encoding-method can only be hex or base64"))
 	}
 
 	return nil
