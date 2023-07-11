@@ -152,6 +152,12 @@ func (w *dmWorker) InitImpl(ctx context.Context) error {
 	if err := w.messageAgent.UpdateClient(w.masterID, w); err != nil {
 		return err
 	}
+	// for dump/load&sync mode task, we needn't to setup external storage
+	// these two tasks will directly read/write data from/to user specified external storage without executor's management
+	// for all/full mode task, the dump/load units run on a same executor, so they can access the s3 data under a same executor
+	// but for dump/load&sync mode task, import API needs a clear S3 URI without exector's prefix,
+	// what's more, dump/load units may not be executed on a same executor,
+	// so we choose to use user's own external storage and don't set up here.
 	if (w.cfg.Mode == dmconfig.ModeAll || w.cfg.Mode == dmconfig.ModeFull) && w.needExtStorage {
 		if err := w.setupStorage(ctx); err != nil {
 			return err

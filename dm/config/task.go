@@ -776,11 +776,12 @@ func (c *TaskConfig) adjust() error {
 		}
 		instanceIDs[inst.SourceID] = i
 
-		if !HasSync(c.TaskMode) {
+		switch c.TaskMode {
+		case ModeFull, ModeAll, ModeDump:
 			if inst.Meta != nil {
 				log.L().Warn("metadata will not be used. for Full mode, incremental sync will never occur; for All mode, the meta dumped by MyDumper will be used", zap.Int("mysql instance", i), zap.String("task mode", c.TaskMode))
 			}
-		} else {
+		case ModeIncrement:
 			if inst.Meta == nil {
 				log.L().Warn("mysql-instance doesn't set meta for incremental mode, user should specify start_time to start task.", zap.String("sourceID", inst.SourceID))
 			} else {

@@ -353,7 +353,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	}
 
 	// adjust sorting dir
-	if !HasLoad(c.Mode) {
+	if HasLoad(c.Mode) {
 		newDir := c.LoaderConfig.Dir
 		if c.LoaderConfig.SortingDirPhysical == "" {
 			if storage.IsLocalDiskPath(newDir) {
