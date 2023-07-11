@@ -261,8 +261,7 @@ func TestAsyncProducerErrorChan(t *testing.T) {
 	o := newOptions4Test()
 	factory := newFactory4Test(o, t)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 	asyncProducer, err := factory.AsyncProducer(ctx, make(chan error, 1))
 	require.NoError(t, err)
 
