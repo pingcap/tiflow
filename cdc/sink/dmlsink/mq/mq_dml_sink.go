@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
@@ -27,13 +26,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
-	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -76,37 +71,20 @@ func newDMLSink(
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderConfig *common.Config,
-	replicaConfig *config.ReplicaConfig,
+	encoderBuilder codec.RowEventEncoderBuilder,
+	encoderConcurrency int,
+	protocol config.Protocol,
+	claimCheck *ClaimCheck,
 	errCh chan error,
-) (*dmlSink, error) {
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	var claimCheck *ClaimCheck
-	if replicaConfig.Sink.LargeMessageHandle.EnableClaimCheck() {
-		storageURI := replicaConfig.Sink.LargeMessageHandle.ClaimCheckStorageURI
-		claimCheck, err = NewClaimCheck(ctx, storageURI, changefeedID)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-		log.Info("claim-check enabled",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID),
-			zap.String("storageURI", storageURI))
-	}
-
+) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
-	encoderConcurrency := util.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, encoderConfig.Protocol,
+	worker := newWorker(changefeedID, protocol,
 		encoderBuilder, encoderConcurrency, producer, claimCheck, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,
-		protocol:    encoderConfig.Protocol,
+		protocol:    protocol,
 		adminClient: adminClient,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -136,7 +114,7 @@ func newDMLSink(
 		}
 	}()
 
-	return s, nil
+	return s
 }
 
 // WriteEvents writes events to the sink.

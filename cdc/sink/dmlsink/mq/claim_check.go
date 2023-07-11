@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
@@ -26,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 )
 
 type ClaimCheck struct {
@@ -41,6 +43,11 @@ func NewClaimCheck(ctx context.Context, uri string, id model.ChangeFeedID) (*Cla
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
+	log.Info("claim-check enabled",
+		zap.String("namespace", id.Namespace),
+		zap.String("changefeed", id.ID),
+		zap.String("storageURI", uri))
 
 	return &ClaimCheck{
 		storage:                   storage,

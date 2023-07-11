@@ -79,7 +79,6 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) AsyncProducer(
 	ctx context.Context,
-	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
 	config, err := NewSaramaConfig(ctx, f.option)
@@ -100,7 +99,6 @@ func (f *saramaFactory) AsyncProducer(
 		client:       client,
 		producer:     p,
 		changefeedID: f.changefeedID,
-		closedChan:   closedChan,
 		failpointCh:  failpointCh,
 	}, nil
 }

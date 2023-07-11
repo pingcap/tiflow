@@ -36,9 +36,9 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), id, encoderConfig)
-	require.Nil(t, err)
-	p, err := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
+	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
 	return newWorker(id, config.ProtocolOpen, builder, encoderConcurrency, p, statistics), p
@@ -50,9 +50,9 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300)
 	builder, err := builder.NewRowEventEncoderBuilder(context.Background(),
 		id, encoderConfig)
-	require.Nil(t, err)
-	p, err := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
+	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
 	return newWorker(id, config.ProtocolCanalJSON, builder, encoderConcurrency, p, statistics), p
