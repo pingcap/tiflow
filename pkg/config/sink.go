@@ -141,8 +141,6 @@ type SinkConfig struct {
 
 	// DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.
 	DeleteOnlyOutputHandleKeyColumns *bool `toml:"delete-only-output-handle-key-columns" json:"delete-only-output-handle-key-columns,omitempty"`
-	// LargeMessageOnlyHandleKeyColumns is only available when the downstream is MQ.
-	LargeMessageOnlyHandleKeyColumns *bool `toml:"large-message-only-handle-key-columns" json:"large-message-only-handle-key-columns,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
@@ -276,40 +274,41 @@ type CodecConfig struct {
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
-	PartitionNum                 *int32       `toml:"partition-num" json:"partition-num,omitempty"`
-	ReplicationFactor            *int16       `toml:"replication-factor" json:"replication-factor,omitempty"`
-	KafkaVersion                 *string      `toml:"kafka-version" json:"kafka-version,omitempty"`
-	MaxMessageBytes              *int         `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
-	Compression                  *string      `toml:"compression" json:"compression,omitempty"`
-	KafkaClientID                *string      `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
-	AutoCreateTopic              *bool        `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
-	DialTimeout                  *string      `toml:"dial-timeout" json:"dial-timeout,omitempty"`
-	WriteTimeout                 *string      `toml:"write-timeout" json:"write-timeout,omitempty"`
-	ReadTimeout                  *string      `toml:"read-timeout" json:"read-timeout,omitempty"`
-	RequiredAcks                 *int         `toml:"required-acks" json:"required-acks,omitempty"`
-	SASLUser                     *string      `toml:"sasl-user" json:"sasl-user,omitempty"`
-	SASLPassword                 *string      `toml:"sasl-password" json:"sasl-password,omitempty"`
-	SASLMechanism                *string      `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
-	SASLGssAPIAuthType           *string      `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
-	SASLGssAPIKeytabPath         *string      `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
-	SASLGssAPIKerberosConfigPath *string      `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
-	SASLGssAPIServiceName        *string      `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
-	SASLGssAPIUser               *string      `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
-	SASLGssAPIPassword           *string      `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
-	SASLGssAPIRealm              *string      `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
-	SASLGssAPIDisablePafxfast    *bool        `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
-	SASLOAuthClientID            *string      `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
-	SASLOAuthClientSecret        *string      `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
-	SASLOAuthTokenURL            *string      `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
-	SASLOAuthScopes              []string     `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
-	SASLOAuthGrantType           *string      `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
-	SASLOAuthAudience            *string      `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
-	EnableTLS                    *bool        `toml:"enable-tls" json:"enable-tls,omitempty"`
-	CA                           *string      `toml:"ca" json:"ca,omitempty"`
-	Cert                         *string      `toml:"cert" json:"cert,omitempty"`
-	Key                          *string      `toml:"key" json:"key,omitempty"`
-	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
-	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+	PartitionNum                 *int32                    `toml:"partition-num" json:"partition-num,omitempty"`
+	ReplicationFactor            *int16                    `toml:"replication-factor" json:"replication-factor,omitempty"`
+	KafkaVersion                 *string                   `toml:"kafka-version" json:"kafka-version,omitempty"`
+	MaxMessageBytes              *int                      `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
+	Compression                  *string                   `toml:"compression" json:"compression,omitempty"`
+	KafkaClientID                *string                   `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
+	AutoCreateTopic              *bool                     `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
+	DialTimeout                  *string                   `toml:"dial-timeout" json:"dial-timeout,omitempty"`
+	WriteTimeout                 *string                   `toml:"write-timeout" json:"write-timeout,omitempty"`
+	ReadTimeout                  *string                   `toml:"read-timeout" json:"read-timeout,omitempty"`
+	RequiredAcks                 *int                      `toml:"required-acks" json:"required-acks,omitempty"`
+	SASLUser                     *string                   `toml:"sasl-user" json:"sasl-user,omitempty"`
+	SASLPassword                 *string                   `toml:"sasl-password" json:"sasl-password,omitempty"`
+	SASLMechanism                *string                   `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
+	SASLGssAPIAuthType           *string                   `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
+	SASLGssAPIKeytabPath         *string                   `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string                   `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
+	SASLGssAPIServiceName        *string                   `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
+	SASLGssAPIUser               *string                   `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
+	SASLGssAPIPassword           *string                   `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
+	SASLGssAPIRealm              *string                   `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool                     `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
+	SASLOAuthClientID            *string                   `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
+	SASLOAuthClientSecret        *string                   `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
+	SASLOAuthTokenURL            *string                   `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
+	SASLOAuthScopes              []string                  `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
+	SASLOAuthGrantType           *string                   `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
+	SASLOAuthAudience            *string                   `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
+	EnableTLS                    *bool                     `toml:"enable-tls" json:"enable-tls,omitempty"`
+	CA                           *string                   `toml:"ca" json:"ca,omitempty"`
+	Cert                         *string                   `toml:"cert" json:"cert,omitempty"`
+	Key                          *string                   `toml:"key" json:"key,omitempty"`
+	InsecureSkipVerify           *bool                     `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
+	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
+	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
@@ -526,4 +525,68 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 		return nil
 	}
 	return compatibilityError
+}
+
+const (
+	// LargeMessageHandleOptionNone means not handling large message.
+	LargeMessageHandleOptionNone string = "none"
+	// LargeMessageHandleOptionClaimCheck means handling large message by sending to the claim check storage.
+	LargeMessageHandleOptionClaimCheck string = "claim-check"
+	// LargeMessageHandleOptionHandleKeyOnly means handling large message by sending only handle key columns.
+	LargeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
+)
+
+// LargeMessageHandleConfig is the configuration for handling large message.
+type LargeMessageHandleConfig struct {
+	LargeMessageHandleOption string `toml:"large-message-handle-option" json:"large-message-handle-option"`
+	ClaimCheckStorageURI     string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
+}
+
+// NewDefaultLargeMessageHandleConfig return the default LargeMessageHandleConfig.
+func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
+	return &LargeMessageHandleConfig{
+		LargeMessageHandleOption: LargeMessageHandleOptionNone,
+	}
+}
+
+// Validate the LargeMessageHandleConfig.
+func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtension bool) error {
+	if c.LargeMessageHandleOption == LargeMessageHandleOptionNone {
+		return nil
+	}
+
+	switch protocol {
+	case ProtocolOpen:
+	case ProtocolCanalJSON, ProtocolAvro:
+		if !enableTiDBExtension {
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
+				c.LargeMessageHandleOption, protocol.String())
+		}
+	default:
+		return cerror.ErrInvalidReplicaConfig.GenWithStack(
+			"large message handle is set to %s, protocol is %s, it's not supported",
+			c.LargeMessageHandleOption, protocol.String())
+	}
+
+	if c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck && c.ClaimCheckStorageURI == "" {
+		return cerror.ErrInvalidReplicaConfig.GenWithStack(
+			"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
+	}
+	return nil
+}
+
+// HandleKeyOnly returns true if handle large message by encoding handle key only.
+func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
+	return c.LargeMessageHandleOption == LargeMessageHandleOptionHandleKeyOnly
+}
+
+// EnableClaimCheck returns true if enable claim check.
+func (c *LargeMessageHandleConfig) EnableClaimCheck() bool {
+	return c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck
+}
+
+// Disabled returns true if disable large message handle.
+func (c *LargeMessageHandleConfig) Disabled() bool {
+	return c.LargeMessageHandleOption == LargeMessageHandleOptionNone
 }
