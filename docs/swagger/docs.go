@@ -1303,6 +1303,10 @@ var doc = `{
         "config.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary-encoding-method": {
+                    "description": "encoding method of binary type",
+                    "type": "string"
+                },
                 "delimiter": {
                     "description": "delimiter between fields",
                     "type": "string"
@@ -1905,6 +1909,9 @@ var doc = `{
         "v2.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary_encoding_method": {
+                    "type": "string"
+                },
                 "delimiter": {
                     "type": "string"
                 },
