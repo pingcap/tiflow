@@ -84,24 +84,8 @@ func NewKafkaDDLSink(
 
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/kafka_ddl_sink.go
 		zap.Any("baseConfig", baseConfig))
 	p, err := producerCreator(ctx, client, adminClient)
-=======
-		zap.Any("options", options))
-
-	syncProducer, err := factory.SyncProducer(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer func() {
-		if err != nil && syncProducer != nil {
-			syncProducer.Close()
-		}
-	}()
-
-	p, err := producerCreator(ctx, changefeedID, syncProducer)
->>>>>>> 4bc1e73180 (kafka(ticdc): use sarama mock producer in the unit test to workaround the data race (#9356)):cdc/sink/ddlsink/mq/kafka_ddl_sink.go
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
