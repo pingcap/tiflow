@@ -114,7 +114,7 @@ func NewKafkaDDLSink(
 	}
 
 	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
-	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	s := newDDLSink(ctx, changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder, protocol)
+	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	return s, nil
 }
