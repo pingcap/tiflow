@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	collector "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -54,11 +55,15 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context, client sarama.Client,
+func NewKafkaDDLProducer(ctx context.Context, kafkaConfig *kafka.Config, saramaConfig *sarama.Config,
 	adminClient pkafka.ClusterAdminClient,
 ) (DDLProducer, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
+	client, err := sarama.NewClient(kafkaConfig.BrokerEndpoints, saramaConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
+	}
 	syncProducer, err := sarama.NewSyncProducerFromClient(client)
 	if err != nil {
 		// Close the client to prevent the goroutine leak.

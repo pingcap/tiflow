@@ -18,7 +18,8 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
 // DDLProducer is the interface for DDL message producer.
@@ -36,5 +37,8 @@ type DDLProducer interface {
 }
 
 // Factory is a function to create a producer.
-type Factory func(ctx context.Context, client sarama.Client,
-	adminClient kafka.ClusterAdminClient) (DDLProducer, error)
+type Factory func(ctx context.Context,
+	kafkaConfig *kafka.Config,
+	saramaConfig *sarama.Config,
+	adminClient pkafka.ClusterAdminClient,
+) (DDLProducer, error)

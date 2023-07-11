@@ -16,9 +16,7 @@ package ddlproducer
 import (
 	"context"
 	"testing"
-	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	kafkav1 "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -26,46 +24,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getOptions() *kafka.Options {
-	options := kafka.NewOptions()
-	options.Version = "0.9.0.0"
-	options.ClientID = "test-client"
-	options.PartitionNum = int32(kafka.DefaultMockPartitionNum)
-	options.AutoCreate = false
-	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
+func getConfig() *kafkav1.Config {
+	config := kafkav1.NewConfig()
+	// Because the sarama mock broker is not compatible with version larger than 1.0.0.
+	// We use a smaller version in the following producer tests.
+	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac
+	// 030c15cf08e9e57925/async_producer_test.go#L1445-L1447
+	config.Version = "0.9.0.0"
+	config.PartitionNum = int32(kafka.DefaultMockPartitionNum)
+	config.AutoCreate = false
+	config.BrokerEndpoints = []string{"127.0.0.1:9092"}
 
 	return config
 }
 
 func TestSyncBroadcastMessage(t *testing.T) {
-	t.Skip("skip because of race introduced by #9026")
 	t.Parallel()
 
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
-
 	ctx, cancel := context.WithCancel(context.Background())
-	config := getConfig(leader.Addr())
-	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
-	require.Nil(t, err)
+
+	config := getConfig()
+	saramaConfig, err := kafkav1.NewSaramaConfig(ctx, config)
+	require.NoError(t, err)
 	saramaConfig.Producer.Flush.MaxMessages = 1
 
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
-	require.Nil(t, err)
 	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
-	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
-	require.Nil(t, err)
-
-	p, err := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 	require.NoError(t, err)
 
-	for i := 0; i < kafka.DefaultMockPartitionNum; i++ {
-		syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
-	}
+	p, err := NewKafkaDDLProducer(ctx, config, saramaConfig, adminClient)
+	require.NoError(t, err)
+
 	err = p.SyncBroadcastMessage(ctx, kafka.DefaultMockTopicName,
 		kafka.DefaultMockPartitionNum, &common.Message{Ts: 417318403368288260})
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	p.Close()
 	err = p.SyncBroadcastMessage(ctx, kafka.DefaultMockTopicName,
@@ -74,83 +65,84 @@ func TestSyncBroadcastMessage(t *testing.T) {
 	cancel()
 }
 
-func TestSyncSendMessage(t *testing.T) {
-	t.Skip("skip because of race introduced by #9026")
-	t.Parallel()
-
-	leader, topic := initBroker(t, 1)
-	defer leader.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	config := getConfig(leader.Addr())
-	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
-	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
-
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
-	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
-	require.Nil(t, err)
-
-	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
-	require.Nil(t, err)
-
-	p.Close()
-	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
-	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
-	cancel()
-}
-
-func TestProducerSendMsgFailed(t *testing.T) {
-	t.Skip("skip because of race introduced by #9026")
-	t.Parallel()
-
-	leader, topic := initBroker(t, 0)
-	defer leader.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-	config := getConfig(leader.Addr())
-	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
-	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
-	saramaConfig.Producer.Retry.Max = 1
-	// This will make the first send failed.
-	saramaConfig.Producer.MaxMessageBytes = 1
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
-	require.Nil(t, err)
-
-	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
-	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
-	require.Nil(t, err)
-	defer p.Close()
-
-	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndFail(sarama.ErrMessageTooLarge)
-	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
-	require.ErrorIs(t, err, sarama.ErrMessageTooLarge)
-}
-
-func TestProducerDoubleClose(t *testing.T) {
-	t.Skip("skip because of race introduced by #9026")
-	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	config := getConfig(leader.Addr())
-	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
-	require.Nil(t, err)
-	saramaConfig.Producer.Flush.MaxMessages = 1
-
-	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
-	require.Nil(t, err)
-	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
-	require.Nil(t, err)
-	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
-	require.Nil(t, err)
-
-	p.Close()
-	p.Close()
-}
+//
+//func TestSyncSendMessage(t *testing.T) {
+//	t.Skip("skip because of race introduced by #9026")
+//	t.Parallel()
+//
+//	leader, topic := initBroker(t, 1)
+//	defer leader.Close()
+//
+//	ctx, cancel := context.WithCancel(context.Background())
+//	config := getConfig(leader.Addr())
+//	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
+//	require.Nil(t, err)
+//	saramaConfig.Producer.Flush.MaxMessages = 1
+//
+//	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+//	require.Nil(t, err)
+//	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+//	require.Nil(t, err)
+//	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
+//	require.Nil(t, err)
+//
+//	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
+//	require.Nil(t, err)
+//
+//	p.Close()
+//	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
+//	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
+//	cancel()
+//}
+//
+//func TestProducerSendMsgFailed(t *testing.T) {
+//	t.Skip("skip because of race introduced by #9026")
+//	t.Parallel()
+//
+//	leader, topic := initBroker(t, 0)
+//	defer leader.Close()
+//
+//	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+//	defer cancel()
+//	config := getConfig(leader.Addr())
+//	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
+//	require.Nil(t, err)
+//	saramaConfig.Producer.Flush.MaxMessages = 1
+//	saramaConfig.Producer.Retry.Max = 1
+//	// This will make the first send failed.
+//	saramaConfig.Producer.MaxMessageBytes = 1
+//	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+//	require.Nil(t, err)
+//
+//	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+//	require.Nil(t, err)
+//	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
+//	require.Nil(t, err)
+//	defer p.Close()
+//
+//	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndFail(sarama.ErrMessageTooLarge)
+//	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
+//	require.ErrorIs(t, err, sarama.ErrMessageTooLarge)
+//}
+//
+//func TestProducerDoubleClose(t *testing.T) {
+//	t.Skip("skip because of race introduced by #9026")
+//	t.Parallel()
+//	ctx, cancel := context.WithCancel(context.Background())
+//	defer cancel()
+//
+//	config := getConfig(leader.Addr())
+//	saramaConfig, err := kafkav1.NewSaramaConfig(context.Background(), config)
+//	require.Nil(t, err)
+//	saramaConfig.Producer.Flush.MaxMessages = 1
+//
+//	client, err := sarama.NewClient(config.BrokerEndpoints, saramaConfig)
+//	require.Nil(t, err)
+//	adminClient, err := kafka.NewMockAdminClient(config.BrokerEndpoints, saramaConfig)
+//	require.Nil(t, err)
+//	p, err := NewKafkaDDLProducer(ctx, client, adminClient)
+//	require.Nil(t, err)
+//
+//	p.Close()
+//	p.Close()
+//}

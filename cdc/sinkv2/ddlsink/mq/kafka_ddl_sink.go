@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
@@ -77,15 +76,10 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	client, err := sarama.NewClient(baseConfig.BrokerEndpoints, saramaConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-
 	start := time.Now()
 	log.Info("Try to create a DDL sink producer",
 		zap.Any("baseConfig", baseConfig))
-	p, err := producerCreator(ctx, client, adminClient)
+	p, err := producerCreator(ctx, baseConfig, saramaConfig, adminClient)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
