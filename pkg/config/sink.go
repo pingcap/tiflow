@@ -64,7 +64,9 @@ const (
 	// DefaultFileIndexWidth is the default width of file index.
 	DefaultFileIndexWidth = MaxFileIndexWidth
 
-	BinaryEncodingHex    = "hex"
+	// BinaryEncodingHex encodes binary data to hex string.
+	BinaryEncodingHex = "hex"
+	// BinaryEncodingBase64 encodes binary data to base64 string.
 	BinaryEncodingBase64 = "base64"
 )
 
