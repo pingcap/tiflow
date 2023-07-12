@@ -44,7 +44,6 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
 	encoderGroup := codec.NewEncoderGroup(builder, encoderConcurrency, id)
 	return newWorker(id, config.ProtocolOpen, p, encoderGroup, nil, nil, statistics), p
-
 }
 
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {

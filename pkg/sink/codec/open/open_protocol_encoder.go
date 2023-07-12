@@ -17,6 +17,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"strconv"
+	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,6 +27,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"go.uber.org/zap"
 )
 
@@ -92,16 +95,31 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
-		log.Warn("Single message is too large for open-protocol",
-			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
-			zap.Int("length", length),
-			zap.Any("table", e.Table),
-			zap.Any("key", key))
 		if d.config.LargeMessageHandle.Disabled() {
+			log.Warn("Single message is too large for open-protocol",
+				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+				zap.Int("length", length),
+				zap.Any("table", e.Table),
+				zap.Any("key", key))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
-		key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
+		// single message too large, claim check enabled, encode it to a new individual message.
+		if d.config.LargeMessageHandle.EnableClaimCheck() {
+			log.Warn("Single message is too large for open-protocol, claim-check enabled",
+				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+				zap.Int("length", length),
+				zap.Any("table", e.Table),
+				zap.Any("key", key))
+			// build previous batched messages
+			d.tryBuildCallback()
+			d.appendSingleLargeMessage4ClaimCheck(key, value, e, callback)
+			return nil
+		}
+
+		// it's must that `LargeMessageHandle == LargeMessageHandleOnlyHandleKeyColumns` here.
+		key, value, err = d.build
+		MessageOnlyHandleKeyColumns(e)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -224,6 +242,84 @@ func (d *BatchEncoder) tryBuildCallback() {
 		}
 		d.callbackBuff = make([]func(), 0)
 	}
+}
+
+// NewClaimCheckMessage implement the ClaimCheckEncoder interface.
+// NewClaimCheckMessage creates a new message with the claim check location.
+// This should be called when the message is too large, and the claim check enabled.
+// This method should not meet error, since only one string is set to the message,
+// it should not cause the encode error or the message too large error.
+func (d *BatchEncoder) NewClaimCheckMessage(m *common.Message) (*common.Message, error) {
+	messageKey := &internal.MessageKey{
+		Type:               model.MessageTypeRow,
+		ClaimCheckLocation: m.ClaimCheckFileName,
+	}
+
+	key, err := messageKey.Encode()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	length := len(key) + common.MaxRecordOverhead + 16
+	if length > d.config.MaxMessageBytes {
+		log.Warn("Single message is too large for open-protocol",
+			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("key", key))
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+	}
+
+	// only have the key part.
+	versionHead := make([]byte, 8)
+	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
+	var keyLenByte [8]byte
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+
+	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+	message.Key = append(message.Key, keyLenByte[:]...)
+	message.Key = append(message.Key, key...)
+	if m.Callback != nil {
+		message.Callback = m.Callback
+	}
+	message.IncRowsCount()
+
+	return message, nil
+}
+
+func newClaimCheckFileName(e *model.RowChangedEvent) string {
+	elements := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
+	elements = append(elements, e.GetHandleKeyColumnValues()...)
+	fileName := strings.Join(elements, "-")
+	fileName += ".json"
+	return fileName
+}
+
+func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
+	versionHead := make([]byte, 8)
+	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
+	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+
+	var (
+		keyLenByte   [8]byte
+		valueLenByte [8]byte
+	)
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
+
+	message.Key = append(message.Key, keyLenByte[:]...)
+	message.Key = append(message.Key, key...)
+	message.Value = append(message.Value, valueLenByte[:]...)
+	message.Value = append(message.Value, value...)
+	message.Ts = e.CommitTs
+	message.Schema = &e.Table.Schema
+	message.Table = &e.Table.Table
+	message.ClaimCheckFileName = newClaimCheckFileName(e)
+	message.IncRowsCount()
+
+	if callback != nil {
+		message.Callback = callback
+	}
+	d.messageBuf = append(d.messageBuf, message)
 }
 
 type batchEncoderBuilder struct {
