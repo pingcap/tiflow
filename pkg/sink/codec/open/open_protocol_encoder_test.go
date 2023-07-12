@@ -117,7 +117,10 @@ func TestMaxBatchSize(t *testing.T) {
 	}
 
 	messages := encoder.Build()
-	decoder, err := NewBatchDecoder(context.Background(), config.GetDefaultReplicaConfig())
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
+	decoder, err := NewBatchDecoder(context.Background(), replicaConfig)
 	require.NoError(t, err)
 	sum := 0
 	for _, msg := range messages {

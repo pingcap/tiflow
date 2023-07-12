@@ -17,8 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"strconv"
-	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -280,14 +278,6 @@ func (d *BatchEncoder) NewClaimCheckMessage(location string, callback func()) (*
 	return message, nil
 }
 
-func newClaimCheckFileName(e *model.RowChangedEvent) string {
-	elements := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
-	elements = append(elements, e.GetHandleKeyColumnValues()...)
-	fileName := strings.Join(elements, "-")
-	fileName += ".json"
-	return fileName
-}
-
 func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
 	versionHead := make([]byte, 8)
 	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
@@ -307,7 +297,7 @@ func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e 
 	message.Ts = e.CommitTs
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
-	message.ClaimCheckFileName = newClaimCheckFileName(e)
+	message.ClaimCheckFileName = common.NewClaimCheckFileName(e)
 	message.IncRowsCount()
 
 	if callback != nil {

@@ -305,7 +305,9 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			decoder, err := open.NewBatchDecoder(context.Background(), config.GetDefaultReplicaConfig())
+			replicaConfig := config.GetDefaultReplicaConfig()
+			replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
+			decoder, err := open.NewBatchDecoder(context.Background(), replicaConfig)
 			require.NoError(b, err)
 			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
