@@ -982,14 +982,6 @@ func (m *SinkManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
 	m.waitSubroutines()
-	m.tableSinks.Range(func(_, value interface{}) bool {
-		sink := value.(*tableSinkWrapper)
-		sink.close()
-		if m.eventCache != nil {
-			m.eventCache.removeTable(sink.tableID)
-		}
-		return true
-	})
 	m.clearSinkFactory()
 
 	log.Info("Closed sink manager",
