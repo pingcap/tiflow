@@ -71,8 +71,7 @@ func newDMLSink(
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderBuilder codec.RowEventEncoderBuilder,
-	encoderConcurrency int,
+	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
 	claimCheck *ClaimCheck,
 	claimCheckEncoder codec.ClaimCheckEncoder,
@@ -81,7 +80,7 @@ func newDMLSink(
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
 	worker := newWorker(changefeedID, protocol,
-		encoderBuilder, encoderConcurrency, producer, claimCheck, claimCheckEncoder, statistics)
+		producer, encoderGroup, claimCheck, claimCheckEncoder, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,

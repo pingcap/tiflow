@@ -136,8 +136,9 @@ func NewKafkaDMLSink(
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
 	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, failpointCh)
 	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
+	encoderGroup := codec.NewEncoderGroup(encoderBuilder, concurrency, changefeedID)
 	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, encoderBuilder, concurrency, protocol, claimCheck, claimCheckEncoder, errCh,
+		eventRouter, encoderGroup, protocol, claimCheck, claimCheckEncoder, errCh,
 	)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),
