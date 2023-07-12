@@ -87,9 +87,9 @@ func newJSONMessageForDML(
 ) ([]byte, error) {
 	isDelete := e.IsDelete()
 
-	onlyHandleKeyColumns := messageTooLarge
-	if isDelete && config.OnlyHandleKeyColumns {
-		onlyHandleKeyColumns = true
+	onlyHandleKey := messageTooLarge
+	if isDelete && config.DeleteOnlyHandleKeyColumns {
+		onlyHandleKey = true
 	}
 
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
@@ -163,7 +163,7 @@ func newJSONMessageForDML(
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
-				if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+				if onlyHandleKey && !col.Flag.IsHandleKey() {
 					continue
 				}
 				if emptyColumn {
@@ -214,13 +214,13 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.PreColumns, false, onlyHandleKeyColumns, nil, out, builder); err != nil {
+		if err := fillColumns(e.PreColumns, false, onlyHandleKey, nil, out, builder); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, false, onlyHandleKeyColumns, nil, out, builder); err != nil {
+		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
@@ -232,11 +232,11 @@ func newJSONMessageForDML(
 			}
 		}
 		out.RawString(",\"old\":")
-		if err := fillColumns(e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKeyColumns, newColsMap, out, builder); err != nil {
+		if err := fillColumns(e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, false, onlyHandleKeyColumns, nil, out, builder); err != nil {
+		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder); err != nil {
 			return nil, err
 		}
 	} else {
@@ -250,11 +250,19 @@ func newJSONMessageForDML(
 		out.RawString("\"commitTs\":")
 		out.Uint64(e.CommitTs)
 
+		// only send handle key may happen in 2 cases:
+		// 1. delete event, and set only handle key config. no need to encode `onlyHandleKey` field
+		// 2. event larger than the max message size, and enable large message handle to the `handleKeyOnly`, encode `onlyHandleKey` field
 		if messageTooLarge {
-			out.RawByte(',')
-			out.RawString("\"largeMessage\":true")
+			if config.LargeMessageHandle.HandleKeyOnly() {
+				out.RawByte(',')
+				out.RawString("\"onlyHandleKey\":true")
+			}
+			if config.LargeMessageHandle.EnableClaimCheck() {
+				out.RawByte(',')
+				out.RawString("\"claimCheck\":true")
+			}
 		}
-
 		out.RawByte('}')
 	}
 	out.RawByte('}')
@@ -380,13 +388,19 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
-		value, err = newJSONMessageForDML(c.builder, e, c.config, true)
-		if err != nil {
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		if c.config.LargeMessageHandle.HandleKeyOnly() {
+			value, err = newJSONMessageForDML(c.builder, e, c.config, true)
+			if err != nil {
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
+			m.Value = value
+			if m.Length() > c.config.MaxMessageBytes {
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
 		}
-		m.Value = value
-		if m.Length() > c.config.MaxMessageBytes {
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+
+		if c.config.LargeMessageHandle.EnableClaimCheck() {
+
 		}
 	}
 

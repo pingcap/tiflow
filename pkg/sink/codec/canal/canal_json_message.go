@@ -134,6 +134,7 @@ type tidbExtension struct {
 	CommitTs      uint64 `json:"commitTs,omitempty"`
 	WatermarkTs   uint64 `json:"watermarkTs,omitempty"`
 	OnlyHandleKey bool   `json:"onlyHandleKey,omitempty"`
+	ClaimCheck
 }
 
 type canalJSONMessageWithTiDBExtension struct {
