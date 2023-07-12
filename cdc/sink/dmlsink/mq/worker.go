@@ -361,8 +361,10 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 func (w *worker) close() {
 	w.msgChan.CloseAndDrain()
 	w.producer.Close()
-	w.claimCheck.Close()
-
+	if w.claimCheck != nil {
+		w.claimCheck.Close()
+	}
+	
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)

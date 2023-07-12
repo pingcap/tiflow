@@ -217,7 +217,9 @@ func TestOpenProtocolBatchCodec(t *testing.T) {
 	tester := internal.NewDefaultBatchTester()
 	tester.TestBatchCodec(t, NewBatchEncoderBuilder(codecConfig),
 		func(key []byte, value []byte) (codec.RowEventDecoder, error) {
-			decoder, err := NewBatchDecoder(context.Background(), config.GetDefaultReplicaConfig())
+			replicaConfig := config.GetDefaultReplicaConfig()
+			replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
+			decoder, err := NewBatchDecoder(context.Background(), replicaConfig)
 			require.NoError(t, err)
 			err = decoder.AddKeyValue(key, value)
 			return decoder, err
