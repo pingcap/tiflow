@@ -266,10 +266,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var csvConfig *config.CSVConfig
 		if c.Sink.CSVConfig != nil {
 			csvConfig = &config.CSVConfig{
-				Delimiter:       c.Sink.CSVConfig.Delimiter,
-				Quote:           c.Sink.CSVConfig.Quote,
-				NullString:      c.Sink.CSVConfig.NullString,
-				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            c.Sink.CSVConfig.Delimiter,
+				Quote:                c.Sink.CSVConfig.Quote,
+				NullString:           c.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      c.Sink.CSVConfig.IncludeCommitTs,
+				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
 		var kafkaConfig *config.KafkaConfig
@@ -491,10 +492,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var csvConfig *CSVConfig
 		if cloned.Sink.CSVConfig != nil {
 			csvConfig = &CSVConfig{
-				Delimiter:       cloned.Sink.CSVConfig.Delimiter,
-				Quote:           cloned.Sink.CSVConfig.Quote,
-				NullString:      cloned.Sink.CSVConfig.NullString,
-				IncludeCommitTs: cloned.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            cloned.Sink.CSVConfig.Delimiter,
+				Quote:                cloned.Sink.CSVConfig.Quote,
+				NullString:           cloned.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      cloned.Sink.CSVConfig.IncludeCommitTs,
+				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
 		var kafkaConfig *KafkaConfig
@@ -766,10 +768,11 @@ type SinkConfig struct {
 // CSVConfig denotes the csv config
 // This is the same as config.CSVConfig
 type CSVConfig struct {
-	Delimiter       string `json:"delimiter"`
-	Quote           string `json:"quote"`
-	NullString      string `json:"null"`
-	IncludeCommitTs bool   `json:"include_commit_ts"`
+	Delimiter            string `json:"delimiter"`
+	Quote                string `json:"quote"`
+	NullString           string `json:"null"`
+	IncludeCommitTs      bool   `json:"include_commit_ts"`
+	BinaryEncodingMethod string `json:"binary_encoding_method"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config

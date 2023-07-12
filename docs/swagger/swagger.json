@@ -1326,6 +1326,10 @@
         "config.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary-encoding-method": {
+                    "description": "encoding method of binary type",
+                    "type": "string"
+                },
                 "delimiter": {
                     "description": "delimiter between fields",
                     "type": "string"
@@ -1958,6 +1962,9 @@
         "v2.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary_encoding_method": {
+                    "type": "string"
+                },
                 "delimiter": {
                     "type": "string"
                 },

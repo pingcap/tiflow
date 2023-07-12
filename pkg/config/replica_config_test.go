@@ -49,10 +49,11 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		},
 	}
 	conf.Sink.CSVConfig = &CSVConfig{
-		Delimiter:       ",",
-		Quote:           "\"",
-		NullString:      `\N`,
-		IncludeCommitTs: true,
+		Delimiter:            ",",
+		Quote:                "\"",
+		NullString:           `\N`,
+		IncludeCommitTs:      true,
+		BinaryEncodingMethod: BinaryEncodingBase64,
 	}
 	conf.Sink.TxnAtomicity = util.AddressOf(unknownTxnAtomicity)
 	conf.Sink.DateSeparator = util.AddressOf("month")
