@@ -86,6 +86,7 @@ func NewConfig(protocol config.Protocol) *Config {
 
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
+		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
 	}
 }
 

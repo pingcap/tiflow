@@ -58,6 +58,7 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20), // 1ms~524s
 		}, []string{"namespace", "changefeed"})
 
+	// ClaimCheckSendMessageCount records the total count of messages sent to the external claim-check storage.
 	ClaimCheckSendMessageCount = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "ticdc",

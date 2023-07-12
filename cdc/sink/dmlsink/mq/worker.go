@@ -330,7 +330,7 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 		return errors.New("claim check cannot found")
 	}
 
-	err := w.claimCheck.WriteMessage(ctx, message)
+	err := w.claimCheck.WriteMessage(ctx, message.Key, message.Value, message.ClaimCheckFileName)
 	if err != nil {
 		log.Error("send message to the external claim check storage failed",
 			zap.String("namespace", w.changeFeedID.Namespace),
@@ -340,7 +340,11 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 		return errors.Trace(err)
 	}
 
-	locationM, err := w.claimCheckEncoder.NewClaimCheckMessage(message)
+	locationM, err := w.claimCheckEncoder.NewClaimCheckMessage(message.ClaimCheckFileName, message.Callback)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	err = w.producer.AsyncSendMessage(ctx, topic, partition, locationM)
 	if err != nil {
 		return errors.Trace(err)

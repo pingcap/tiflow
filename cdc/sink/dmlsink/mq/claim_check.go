@@ -29,6 +29,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// ClaimCheck manage send message to the claim-check external storage.
 type ClaimCheck struct {
 	storage storage.ExternalStorage
 
@@ -40,6 +41,7 @@ type ClaimCheck struct {
 	metricSendMessageCount    prometheus.Counter
 }
 
+// NewClaimCheck return a new ClaimCheck.
 func NewClaimCheck(ctx context.Context, uri string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
 	storage, err := util.GetExternalStorageFromURI(ctx, uri)
 	if err != nil {
@@ -58,10 +60,11 @@ func NewClaimCheck(ctx context.Context, uri string, changefeedID model.ChangeFee
 	}, nil
 }
 
-func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) error {
+// WriteMessage write message to the claim check external storage.
+func (c *ClaimCheck) WriteMessage(ctx context.Context, key, value []byte, fileName string) error {
 	m := common.ClaimCheckMessage{
-		Key:   message.Key,
-		Value: message.Value,
+		Key:   key,
+		Value: value,
 	}
 	data, err := json.Marshal(m)
 	if err != nil {
@@ -69,7 +72,7 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	}
 
 	start := time.Now()
-	err = c.storage.WriteFile(ctx, message.ClaimCheckFileName, data)
+	err = c.storage.WriteFile(ctx, fileName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -78,6 +81,7 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	return nil
 }
 
+// Close the claim check by clean up the metrics.
 func (c *ClaimCheck) Close() {
 	mq.ClaimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
 	mq.ClaimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)

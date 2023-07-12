@@ -125,11 +125,13 @@ func NewMsg(
 	return ret
 }
 
+// ClaimCheckMessage is the message sent to the claim-check external storage.
 type ClaimCheckMessage struct {
 	Key   []byte `json:"key"`
 	Value []byte `json:"value"`
 }
 
+// UnmarshalClaimCheckMessage unmarshal bytes to ClaimCheckMessage.
 func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
 	var m ClaimCheckMessage
 	err := json.Unmarshal(data, &m)

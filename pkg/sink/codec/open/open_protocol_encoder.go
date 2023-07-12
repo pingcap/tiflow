@@ -248,10 +248,10 @@ func (d *BatchEncoder) tryBuildCallback() {
 // This should be called when the message is too large, and the claim check enabled.
 // This method should not meet error, since only one string is set to the message,
 // it should not cause the encode error or the message too large error.
-func (d *BatchEncoder) NewClaimCheckMessage(m *common.Message) (*common.Message, error) {
+func (d *BatchEncoder) NewClaimCheckMessage(location string, callback func()) (*common.Message, error) {
 	messageKey := &internal.MessageKey{
 		Type:               model.MessageTypeRow,
-		ClaimCheckLocation: m.ClaimCheckFileName,
+		ClaimCheckLocation: location,
 	}
 
 	key, err := messageKey.Encode()
@@ -277,8 +277,8 @@ func (d *BatchEncoder) NewClaimCheckMessage(m *common.Message) (*common.Message,
 	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
 	message.Key = append(message.Key, keyLenByte[:]...)
 	message.Key = append(message.Key, key...)
-	if m.Callback != nil {
-		message.Callback = m.Callback
+	if callback != nil {
+		message.Callback = callback
 	}
 	message.IncRowsCount()
 
