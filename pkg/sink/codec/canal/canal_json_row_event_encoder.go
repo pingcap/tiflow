@@ -258,10 +258,6 @@ func newJSONMessageForDML(
 				out.RawByte(',')
 				out.RawString("\"onlyHandleKey\":true")
 			}
-			if config.LargeMessageHandle.EnableClaimCheck() {
-				out.RawByte(',')
-				out.RawString("\"claimCheck\":true")
-			}
 		}
 		out.RawByte('}')
 	}
@@ -400,12 +396,29 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		}
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
-
+			m.ClaimCheckFileName = common.NewClaimCheckFileName(e)
 		}
 	}
 
 	c.messages = append(c.messages, m)
 	return nil
+}
+
+// NewClaimCheckMessage implements the ClaimCheckEncoder interface
+func (c *JSONRowEventEncoder) NewClaimCheckMessage(location string, callback func()) (*common.Message, error) {
+	message := &canalJSONMessageWithTiDBExtension{
+		Extensions: &tidbExtension{ClaimCheckLocation: location},
+	}
+	value, err := json.Marshal(message)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+
+	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
+	result.Callback = callback
+	
+	result.IncRowsCount()
+	return result, nil
 }
 
 // Build implements the RowEventEncoder interface

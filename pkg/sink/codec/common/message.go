@@ -16,6 +16,8 @@ package common
 import (
 	"encoding/binary"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -136,4 +138,13 @@ func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
 	var m ClaimCheckMessage
 	err := json.Unmarshal(data, &m)
 	return &m, err
+}
+
+// NewClaimCheckFileName return a filename for the event.
+func NewClaimCheckFileName(e *model.RowChangedEvent) string {
+	elements := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
+	elements = append(elements, e.GetHandleKeyColumnValues()...)
+	fileName := strings.Join(elements, "-")
+	fileName += ".json"
+	return fileName
 }
