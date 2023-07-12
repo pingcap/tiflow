@@ -416,7 +416,7 @@ func (c *JSONRowEventEncoder) NewClaimCheckMessage(location string, callback fun
 
 	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
 	result.Callback = callback
-	
+
 	result.IncRowsCount()
 	return result, nil
 }

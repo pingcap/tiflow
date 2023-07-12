@@ -15,12 +15,16 @@ package canal
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/goccy/go-json"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -30,17 +34,33 @@ type batchDecoder struct {
 	msg                 canalJSONMessageInterface
 	enableTiDBExtension bool
 	terminator          string
+
+	storage storage.ExternalStorage
 }
 
 // NewBatchDecoder return a decoder for canal-json
 func NewBatchDecoder(
-	enableTiDBExtension bool,
-	terminator string,
-) codec.RowEventDecoder {
+	ctx context.Context, replicaConfig *config.ReplicaConfig,
+	enableTiDBExtension bool, terminator string,
+) (codec.RowEventDecoder, error) {
+	var (
+		storage storage.ExternalStorage
+		err     error
+	)
+	if replicaConfig.Sink.KafkaConfig.LargeMessageHandle.EnableClaimCheck() {
+		storageURI := replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI
+		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+		log.Info("claim-check enabled, set the external storage for the kafka consumer",
+			zap.String("storageURI", storageURI))
+	}
 	return &batchDecoder{
 		enableTiDBExtension: enableTiDBExtension,
 		terminator:          terminator,
-	}
+		storage:             storage,
+	}, nil
 }
 
 // AddKeyValue implements the RowEventDecoder interface
