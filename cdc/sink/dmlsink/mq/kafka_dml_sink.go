@@ -113,7 +113,7 @@ func NewKafkaDMLSink(
 		claimCheckEncoder codec.ClaimCheckEncoder
 		ok                bool
 	)
-	if replicaConfig.Sink.KafkaConfig.LargeMessageHandle.EnableClaimCheck() {
+	if encoderConfig.LargeMessageHandle.EnableClaimCheck() {
 		claimCheckEncoder, ok = encoderBuilder.Build().(codec.ClaimCheckEncoder)
 		if !ok {
 			return nil, cerror.ErrKafkaInvalidConfig.

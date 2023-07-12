@@ -34,7 +34,8 @@ func fillColumns(columns []*model.Column,
 	onlyHandleKeyColumn bool,
 	newColumnMap map[string]*model.Column,
 	out *jwriter.Writer,
-	builder *canalEntryBuilder) error {
+	builder *canalEntryBuilder,
+) error {
 	if len(columns) == 0 {
 		out.RawString("null")
 		return nil
