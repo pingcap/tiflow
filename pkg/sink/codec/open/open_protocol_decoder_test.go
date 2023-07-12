@@ -50,8 +50,8 @@ var (
 )
 
 func TestDecodeEvent(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen)
-	encoder := NewBatchEncoderBuilder(config).Build()
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	ctx := context.Background()
 	topic := "test"
@@ -60,7 +60,9 @@ func TestDecodeEvent(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder := NewBatchDecoder()
+	decoder, err := NewBatchDecoder(ctx, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 	tp, hasNext, err := decoder.HasNext()
@@ -99,7 +101,8 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder := NewBatchDecoder()
+	decoder, err := NewBatchDecoder(ctx, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 	tp, hasNext, err := decoder.HasNext()

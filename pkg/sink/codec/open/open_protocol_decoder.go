@@ -14,13 +14,20 @@
 package open
 
 import (
+	"context"
 	"encoding/binary"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 )
 
 // BatchMixedDecoder decodes the byte of a batch into the original messages.
@@ -129,6 +136,8 @@ type BatchDecoder struct {
 	valueBytes []byte
 	nextKey    *internal.MessageKey
 	nextKeyLen uint64
+
+	storage storage.ExternalStorage
 }
 
 // HasNext implements the RowEventDecoder interface
@@ -160,6 +169,35 @@ func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	return resolvedTs, nil
 }
 
+func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEvent, error) {
+	data, err := b.storage.ReadFile(context.Background(), b.nextKey.ClaimCheckLocation)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	rowMsg := new(messageRow)
+	valueLen := binary.BigEndian.Uint64(claimCheckM.Value[:8])
+	value := claimCheckM.Value[8 : valueLen+8]
+	if err := rowMsg.decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	keyLen := binary.BigEndian.Uint64(claimCheckM.Key[:8])
+	key := claimCheckM.Key[8 : keyLen+8]
+	msgKey := new(internal.MessageKey)
+	if err := msgKey.Decode(key); err != nil {
+		return nil, errors.Trace(err)
+	}
+	event := msgToRowChange(msgKey, rowMsg)
+	b.nextKey = nil
+
+	return event, nil
+}
+
 // NextRowChangedEvent implements the RowEventDecoder interface
 func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
@@ -171,6 +209,12 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey.Type != model.MessageTypeRow {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
+
+	// claim-check message found
+	if b.nextKey.ClaimCheckLocation != "" {
+		return b.assembleEventFromClaimCheckStorage()
+	}
+
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
 	b.valueBytes = b.valueBytes[valueLen+8:]
@@ -207,6 +251,10 @@ func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 }
 
 func (b *BatchDecoder) hasNext() bool {
+	// claim-check enabled, it's ok to received message without value part.
+	if b.storage != nil {
+		return len(b.keyBytes) > 0 || len(b.valueBytes) > 0
+	}
 	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
 }
 
@@ -224,8 +272,23 @@ func (b *BatchDecoder) decodeNextKey() error {
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder() codec.RowEventDecoder {
-	return &BatchDecoder{}
+func NewBatchDecoder(ctx context.Context, replicaConfig *config.ReplicaConfig) (codec.RowEventDecoder, error) {
+	var (
+		storage storage.ExternalStorage
+		err     error
+	)
+	if replicaConfig.Sink.KafkaConfig.LargeMessageHandle.EnableClaimCheck() {
+		storageURI := replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI
+		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+		log.Info("claim-check enabled, set the external storage for the kafka consumer",
+			zap.String("storageURI", storageURI))
+	}
+	return &BatchDecoder{
+		storage: storage,
+	}, nil
 
 }
 
