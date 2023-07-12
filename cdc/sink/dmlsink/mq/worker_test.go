@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
@@ -41,7 +42,9 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
-	return newWorker(id, config.ProtocolOpen, builder, encoderConcurrency, p, statistics), p
+	encoderGroup := codec.NewEncoderGroup(builder, encoderConcurrency, id)
+	return newWorker(id, config.ProtocolOpen, p, encoderGroup, nil, nil, statistics), p
+
 }
 
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
@@ -55,7 +58,8 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
-	return newWorker(id, config.ProtocolCanalJSON, builder, encoderConcurrency, p, statistics), p
+	encoderGroup := codec.NewEncoderGroup(builder, encoderConcurrency, id)
+	return newWorker(id, config.ProtocolOpen, p, encoderGroup, nil, nil, statistics), p
 }
 
 func TestNonBatchEncode_SendMessages(t *testing.T) {
