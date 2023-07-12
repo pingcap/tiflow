@@ -375,6 +375,8 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	}
 	m.IncRowsCount()
 
+	log.Info("message found", zap.Int("message-length", m.Length()))
+
 	// for single message that is longer than max-message-bytes, do not send it.
 	if m.Length() > c.config.MaxMessageBytes {
 		if c.config.LargeMessageHandle.Disabled() {
