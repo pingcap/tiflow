@@ -24,10 +24,13 @@ type ChangefeedState int
 
 // Defined changefeed states.
 const (
+	// States set by users explicitly.
 	StateNormal ChangefeedState = iota
-	StateFailed
 	StateStopped
 	StateRemoved
+
+	// States set by changefeed owner.
+	StateFailed
 	StateFinished
 )
 
@@ -68,11 +71,12 @@ type CaptureInfo struct {
 // All intrefaces are thread-safe.
 type CaptureObservation interface {
 	keepAlive
-    
-    // TryTakeControl tries to become controller.
-    TryTakeControl() bool
+
+	// TryTakeControl tries to become controller.
+	TryTakeControl() bool
 
 	// Advance is like OwnerObservation.Advance but handles many changefeeds.
+	// It should returns an InvalidOwner error if any changefeed ownership is revoked.
 	Advance(cfs []*ChangefeedInfo, progresses []*ChangefeedProgress) Error
 
 	// WatchOwners watches changefeed owners scheduled to the capture.
@@ -93,7 +97,7 @@ type ControllerObservation interface {
 
 	// UpdateChangefeed updates changefeed metadata, must be called on a stopped one.
 	UpdateChangefeed(clusterID string, cf *ChangefeedInfo) Error
-    
+
 	SetChangefeedStopped(clusterID string, cf *ChangefeedInfo) Error
 
 	// WatchCaptures watches captures in the TiCDC cluster.
