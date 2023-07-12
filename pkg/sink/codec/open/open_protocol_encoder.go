@@ -106,11 +106,6 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 
 		// single message too large, claim check enabled, encode it to a new individual message.
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
-			log.Warn("Single message is too large for open-protocol, claim-check enabled",
-				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
-				zap.Int("length", length),
-				zap.Any("table", e.Table),
-				zap.Any("key", key))
 			// build previous batched messages
 			d.tryBuildCallback()
 			d.appendSingleLargeMessage4ClaimCheck(key, value, e, callback)

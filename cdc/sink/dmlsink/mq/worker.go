@@ -350,7 +350,7 @@ func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partit
 		return errors.Trace(err)
 	}
 
-	log.Info("message too large, send it to the external claim check storage",
+	log.Info("send large message to the external claim check storage",
 		zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID),
 		zap.String("filename", message.ClaimCheckFileName))
