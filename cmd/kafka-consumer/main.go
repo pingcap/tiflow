@@ -552,7 +552,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	partition := claim.Partition()
 	c.sinksMu.Lock()
 	sink := c.sinks[partition]
-	c.sinksMu.Unlock()g
+	c.sinksMu.Unlock()
 	if sink == nil {
 		panic("sink should initialized")
 	}

@@ -130,6 +130,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			return nil, err
 		}
 
+		message = &canalJSONMessageWithTiDBExtension{}
 		err = json.Unmarshal(claimCheckM.Value, message)
 		if err != nil {
 			return nil, err
