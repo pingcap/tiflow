@@ -118,8 +118,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		}
 
 		// it's must that `LargeMessageHandle == LargeMessageHandleOnlyHandleKeyColumns` here.
-		key, value, err = d.build
-		MessageOnlyHandleKeyColumns(e)
+		key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
 		if err != nil {
 			return errors.Trace(err)
 		}
