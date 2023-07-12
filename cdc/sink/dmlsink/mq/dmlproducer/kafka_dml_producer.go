@@ -20,12 +20,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -45,42 +43,34 @@ type kafkaDMLProducer struct {
 	// closed is used to indicate whether the producer is closed.
 	// We also use it to guard against double closes.
 	closed bool
-	// closedChan is used to notify the run loop to exit.
-	closedChan chan struct{}
 	// failpointCh is used to inject failpoints to the run loop.
 	// Only used in test.
 	failpointCh chan error
+
+	cancel context.CancelFunc
 }
 
 // NewKafkaDMLProducer creates a new kafka producer.
 func NewKafkaDMLProducer(
 	ctx context.Context,
-	factory kafka.Factory,
-	adminClient kafka.ClusterAdminClient,
+	changefeedID model.ChangeFeedID,
+	asyncProducer kafka.AsyncProducer,
+	metricsCollector kafka.MetricsCollector,
 	errCh chan error,
-) (DMLProducer, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	failpointCh chan error,
+) DMLProducer {
 	log.Info("Starting kafka DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
-	closeCh := make(chan struct{})
-	failpointCh := make(chan error, 1)
-	asyncProducer, err := factory.AsyncProducer(ctx, closeCh, failpointCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-
-	metricsCollector := factory.MetricsCollector(
-		util.RoleProcessor,
-		adminClient)
+	ctx, cancel := context.WithCancel(ctx)
 	k := &kafkaDMLProducer{
 		id:               changefeedID,
 		asyncProducer:    asyncProducer,
 		metricsCollector: metricsCollector,
 		closed:           false,
-		closedChan:       closeCh,
 		failpointCh:      failpointCh,
+		cancel:           cancel,
 	}
 
 	// Start collecting metrics.
@@ -105,7 +95,7 @@ func NewKafkaDMLProducer(
 		}
 	}()
 
-	return k, nil
+	return k
 }
 
 func (k *kafkaDMLProducer) AsyncSendMessage(
@@ -146,12 +136,14 @@ func (k *kafkaDMLProducer) Close() {
 			zap.String("changefeed", k.id.ID))
 		return
 	}
-	close(k.failpointCh)
-	// Notify the run loop to exit.
-	close(k.closedChan)
-	k.closed = true
 
+	if k.cancel != nil {
+		k.cancel()
+	}
+
+	close(k.failpointCh)
 	k.asyncProducer.Close()
+	k.closed = true
 }
 
 func (k *kafkaDMLProducer) run(ctx context.Context) error {

@@ -25,7 +25,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -58,7 +60,6 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
-
 	// We must close adminClient when this func return cause by an error
 	// otherwise the adminClient will never be closed and lead to a goroutine leak.
 	defer func() {
@@ -76,20 +77,6 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	log.Info("Try to create a DML sink producer",
-		zap.Any("options", options))
-	p, err := producerCreator(ctx, factory, adminClient, errCh)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && p != nil {
-			p.Close()
-		}
-	}()
 
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
@@ -111,12 +98,22 @@ func NewKafkaDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	s, err := newDMLSink(ctx, p, adminClient, topicManager, eventRouter, encoderConfig,
-		replicaConfig.Sink.EncoderConcurrency, errCh)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
+
+	log.Info("Try to create a DML sink producer", zap.Any("options", options))
+	failpointCh := make(chan error, 1)
+	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
+	}
+
+	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
+	dmlProducer := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
+	s := newDMLSink(ctx, changefeed, dmlProducer, adminClient, topicManager, eventRouter, encoderBuilder,
+		replicaConfig.Sink.EncoderConcurrency, protocol, errCh)
 
 	return s, nil
 }

@@ -16,6 +16,7 @@ package dmlproducer
 import (
 	"context"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
@@ -37,5 +38,10 @@ type DMLProducer interface {
 // there is no way to safely close errCh by the sender.
 // So we let the GC close errCh.
 // It's usually a buffered channel.
-type Factory func(ctx context.Context, factory kafka.Factory,
-	adminClient kafka.ClusterAdminClient, errCh chan error) (DMLProducer, error)
+type Factory func(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	asyncProducer kafka.AsyncProducer,
+	metricsCollector kafka.MetricsCollector,
+	errCh chan error,
+	failpointCh chan error,
+) DMLProducer
