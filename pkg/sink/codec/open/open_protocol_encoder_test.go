@@ -274,7 +274,9 @@ func TestAppendMessageOnlyHandleKeyColumns(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder, err := NewBatchDecoder(context.Background(), config.GetDefaultReplicaConfig())
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
+	decoder, err := NewBatchDecoder(context.Background(), replicaConfig)
 	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
