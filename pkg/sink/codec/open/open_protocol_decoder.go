@@ -179,6 +179,20 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEv
 		return nil, errors.Trace(err)
 	}
 
+	version := binary.BigEndian.Uint64(claimCheckM.Key[:8])
+	if version != codec.BatchVersion1 {
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.
+			GenWithStack("unexpected key format version")
+	}
+
+	key := claimCheckM.Key[8:]
+	keyLen := binary.BigEndian.Uint64(key[:8])
+	key = key[8 : keyLen+8]
+	msgKey := new(internal.MessageKey)
+	if err := msgKey.Decode(key); err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	rowMsg := new(messageRow)
 	valueLen := binary.BigEndian.Uint64(claimCheckM.Value[:8])
 	value := claimCheckM.Value[8 : valueLen+8]
@@ -186,12 +200,6 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEv
 		return nil, errors.Trace(err)
 	}
 
-	keyLen := binary.BigEndian.Uint64(claimCheckM.Key[:8])
-	key := claimCheckM.Key[8 : keyLen+8]
-	msgKey := new(internal.MessageKey)
-	if err := msgKey.Decode(key); err != nil {
-		return nil, errors.Trace(err)
-	}
 	event := msgToRowChange(msgKey, rowMsg)
 	b.nextKey = nil
 
