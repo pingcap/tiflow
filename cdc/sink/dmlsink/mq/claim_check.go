@@ -57,6 +57,7 @@ func NewClaimCheck(ctx context.Context, uri string, changefeedID model.ChangeFee
 		changefeedID:              changefeedID,
 		storage:                   storage,
 		metricSendMessageDuration: mq.ClaimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricSendMessageCount:    mq.ClaimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}, nil
 }
 

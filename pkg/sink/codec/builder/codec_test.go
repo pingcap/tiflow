@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/craft"
@@ -304,7 +305,8 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			decoder := open.NewBatchDecoder()
+			decoder, err := open.NewBatchDecoder(context.Background(), config.GetDefaultReplicaConfig())
+			require.NoError(b, err)
 			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)
 			} else {
