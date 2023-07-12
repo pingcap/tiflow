@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -117,6 +118,28 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, cerror.ErrCanalDecodeFailed.
 			GenWithStack("not found row changed event message")
 	}
+
+	message, withExtension := b.msg.(*canalJSONMessageWithTiDBExtension)
+	if withExtension && message.Extensions.ClaimCheckLocation != "" {
+		data, err := b.storage.ReadFile(context.Background(), message.Extensions.ClaimCheckLocation)
+		if err != nil {
+			return nil, err
+		}
+		claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
+		if err != nil {
+			return nil, err
+		}
+
+		err = json.Unmarshal(claimCheckM.Value, message)
+		if err != nil {
+			return nil, err
+		}
+		b.msg = message
+
+		return b.NextRowChangedEvent()
+
+	}
+
 	result, err := canalJSONMessage2RowChange(b.msg)
 	if err != nil {
 		return nil, err
