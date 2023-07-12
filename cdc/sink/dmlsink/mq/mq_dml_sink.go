@@ -74,12 +74,14 @@ func newDMLSink(
 	encoderBuilder codec.RowEventEncoderBuilder,
 	encoderConcurrency int,
 	protocol config.Protocol,
+	claimCheck *ClaimCheck,
+	claimCheckEncoder codec.ClaimCheckEncoder,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
 	worker := newWorker(changefeedID, protocol,
-		encoderBuilder, encoderConcurrency, producer, statistics)
+		encoderBuilder, encoderConcurrency, producer, claimCheck, claimCheckEncoder, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,

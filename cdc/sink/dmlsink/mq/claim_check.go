@@ -32,31 +32,33 @@ import (
 type ClaimCheck struct {
 	storage storage.ExternalStorage
 
+	changefeedID model.ChangeFeedID
+
 	// metricSendMessageDuration tracks the time duration
 	// cost on send messages to the claim check external storage.
 	metricSendMessageDuration prometheus.Observer
 	metricSendMessageCount    prometheus.Counter
 }
 
-func NewClaimCheck(ctx context.Context, uri string, id model.ChangeFeedID) (*ClaimCheck, error) {
+func NewClaimCheck(ctx context.Context, uri string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
 	storage, err := util.GetExternalStorageFromURI(ctx, uri)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	log.Info("claim-check enabled",
-		zap.String("namespace", id.Namespace),
-		zap.String("changefeed", id.ID),
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
 		zap.String("storageURI", uri))
 
 	return &ClaimCheck{
+		changefeedID:              changefeedID,
 		storage:                   storage,
-		metricSendMessageDuration: mq.ClaimCheckSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
+		metricSendMessageDuration: mq.ClaimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}, nil
 }
 
 func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) error {
-	// 1. send message to the external storage
 	m := common.ClaimCheckMessage{
 		Key:   message.Key,
 		Value: message.Value,
@@ -74,4 +76,9 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	c.metricSendMessageDuration.Observe(time.Since(start).Seconds())
 	c.metricSendMessageCount.Inc()
 	return nil
+}
+
+func (c *ClaimCheck) Close() {
+	mq.ClaimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
+	mq.ClaimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
 }

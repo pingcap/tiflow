@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
@@ -107,6 +108,25 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	var (
+		claimCheck        *ClaimCheck
+		claimCheckEncoder codec.ClaimCheckEncoder
+		ok                bool
+	)
+	if replicaConfig.Sink.KafkaConfig.LargeMessageHandle.EnableClaimCheck() {
+		claimCheckEncoder, ok = encoderBuilder.Build().(codec.ClaimCheckEncoder)
+		if !ok {
+			return nil, cerror.ErrKafkaInvalidConfig.
+				GenWithStack("claim-check enabled but the encoding protocol %s does not support", protocol.String())
+		}
+
+		storageURI := replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI
+		claimCheck, err = NewClaimCheck(ctx, storageURI, changefeedID)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		}
+	}
+
 	failpointCh := make(chan error, 1)
 	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
 	if err != nil {
@@ -117,7 +137,7 @@ func NewKafkaDMLSink(
 	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, failpointCh)
 	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, encoderBuilder, concurrency, protocol, errCh,
+		eventRouter, encoderBuilder, concurrency, protocol, claimCheck, claimCheckEncoder, errCh,
 	)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),

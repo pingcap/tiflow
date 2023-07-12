@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -66,6 +67,9 @@ type worker struct {
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
+	// claimCheckEncoder is used to encode message which has claim-check location, send to kafka.
+	claimCheckEncoder codec.ClaimCheckEncoder
+
 	encoderGroup codec.EncoderGroup
 
 	// producer is used to send the messages to the Kafka broker.
@@ -79,6 +83,8 @@ type worker struct {
 	metricMQWorkerBatchDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
+
+	claimCheck *ClaimCheck
 }
 
 // newWorker creates a new flush worker.
@@ -88,6 +94,8 @@ func newWorker(
 	builder codec.RowEventEncoderBuilder,
 	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
+	claimCheck *ClaimCheck,
+	claimCheckEncoder codec.ClaimCheckEncoder,
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
@@ -97,6 +105,8 @@ func newWorker(
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
 		producer:                          producer,
+		claimCheck:                        claimCheck,
+		claimCheckEncoder:                 claimCheckEncoder,
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
@@ -295,6 +305,12 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, message := range future.Messages {
+				if message.ClaimCheckFileName != "" {
+					if err := w.claimCheckSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
+						return errors.Trace(err)
+					}
+					continue
+				}
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
@@ -310,14 +326,41 @@ func (w *worker) sendMessages(ctx context.Context) error {
 	}
 }
 
+func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partition int32, message *common.Message) error {
+	if w.claimCheck == nil {
+		return errors.New("claim check cannot found")
+	}
+
+	err := w.claimCheck.WriteMessage(ctx, message)
+	if err != nil {
+		log.Error("send message to the external claim check storage failed",
+			zap.String("namespace", w.changeFeedID.Namespace),
+			zap.String("changefeed", w.changeFeedID.ID),
+			zap.String("filename", message.ClaimCheckFileName),
+			zap.Error(err))
+		return errors.Trace(err)
+	}
+
+	locationM, err := w.claimCheckEncoder.NewClaimCheckMessage(message)
+	err = w.producer.AsyncSendMessage(ctx, topic, partition, locationM)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Info("message too large, send it to the external claim check storage",
+		zap.String("namespace", w.changeFeedID.Namespace),
+		zap.String("changefeed", w.changeFeedID.ID),
+		zap.String("filename", message.ClaimCheckFileName))
+
+	return nil
+}
+
 func (w *worker) close() {
 	w.msgChan.CloseAndDrain()
 	w.producer.Close()
+	w.claimCheck.Close()
 
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
-
-	mq.ClaimCheckSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
-	mq.ClaimCheckSendMessageCount.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 }
