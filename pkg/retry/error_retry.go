@@ -62,7 +62,7 @@ func NewErrorRetry(
 	}
 }
 
-// getRetryBackoff returns the backoff duration for retrying the last error.
+// GetRetryBackoff returns the backoff duration for retrying the last error.
 // If the retry time is exhausted, it returns the an ChangefeedUnRetryableError.
 func (r *ErrorRetry) GetRetryBackoff(err error) (time.Duration, error) {
 	// reset firstRetryTime when the last error is too long ago
