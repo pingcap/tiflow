@@ -127,6 +127,7 @@ func (m *gcManager) IgnoreFailedChangeFeed(
 	checkpointTs uint64,
 ) bool {
 	pdTime := m.pdClock.CurrentTime()
+
 	// ignore the changefeed if its current checkpoint TS is earlier
 	// than the (currentPDTso - failedFeedDataRetentionTime).
 	gcSafepointUpperBound := checkpointTs - 1
