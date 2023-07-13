@@ -32,7 +32,7 @@ import (
 const (
 	// When errors occurred, and we need to do backoff, we start an exponential backoff
 	// with an interval from 10s to 30min (10s, 20s, 40s, 80s, 160s, 320s,
-	//	 640s, 1280s, 1800s, ...).
+	//	 600s, 600s, ...).
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 10 * time.Minute
@@ -79,7 +79,6 @@ func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
 	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
 
 	f.resetErrRetry()
-	f.lastErrorRetryTime = time.Unix(0, 0)
 	return f
 }
 
@@ -280,8 +279,6 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.shouldBeRunning = true
 		// when the changefeed is manually resumed, we must reset the backoff
 		m.resetErrRetry()
-		// The lastErrorTime also needs to be cleared before a fresh run.
-		m.lastErrorRetryTime = time.Unix(0, 0)
 		jobsPending = true
 		m.patchState(model.StateNormal)
 
@@ -509,8 +506,8 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		}
 	}
 
-	// changefeed state from stopped to failed is allowed
-	// but stopped to error or normal is not allowed
+	// Changing changefeed state from stopped to failed is allowed
+	// but changing changefeed state from stopped to error or normal is not allowed.
 	if m.state.Info != nil && m.state.Info.State == model.StateStopped {
 		log.Warn("changefeed is stopped, ignore errors",
 			zap.String("changefeed", m.state.ID.ID),
@@ -519,22 +516,31 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 		return
 	}
 
-	lastError := errs[len(errs)-1]
-	// patch the last error to changefeed info
-	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		if info == nil {
-			return nil, false, nil
+	var lastError *model.RunningError
+	// find the last non nil error
+	// BTW, there shouldn't be any nil error in errs
+	// this is just a safe guard
+	for i := len(errs) - 1; i >= 0; i-- {
+		if errs[i] != nil {
+			lastError = errs[i]
+			break
 		}
-		info.Error = lastError
-		return info, lastError != nil, nil
-	})
-
+	}
 	// if any error is occurred in this tick, we should set the changefeed state to warning
 	// and stop the changefeed
 	if lastError != nil {
 		log.Warn("changefeed meets an error", zap.Any("error", lastError))
 		m.shouldBeRunning = false
 		m.patchState(model.StatePending)
+
+		// patch the last error to changefeed info
+		m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			if info == nil {
+				return nil, false, nil
+			}
+			info.Error = lastError
+			return info, true, nil
+		})
 	}
 
 	// If we enter into an abnormal state 'pending' for this changefeed now

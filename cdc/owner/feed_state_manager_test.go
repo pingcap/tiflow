@@ -63,7 +63,6 @@ func newFeedStateManager4Test(
 	f.errBackoff.RandomizationFactor = 0
 
 	f.resetErrRetry()
-	f.lastErrorRetryTime = time.Unix(0, 0)
 
 	return f
 }
