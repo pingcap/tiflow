@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
 	"github.com/pingcap/tiflow/cdc/syncpointstore"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -84,6 +85,7 @@ type ddlSinkImpl struct {
 	changefeedID model.ChangeFeedID
 	info         *model.ChangeFeedInfo
 
+	sinkRetry     *retry.ErrorRetry
 	reportError   func(err error)
 	reportWarning func(err error)
 }
@@ -101,6 +103,7 @@ func newDDLSink(
 		changefeedID: changefeedID,
 		info:         info,
 
+		sinkRetry:     retry.NewDefaultErrorRetry(),
 		reportError:   reportError,
 		reportWarning: reportWarning,
 	}
@@ -172,8 +175,12 @@ func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action
 			return err
 		}
 
-		// Use a 5 second backoff when re-establishing internal resources.
-		if err = util.Hang(ctx, 5*time.Second); err != nil {
+		backoff, err := s.sinkRetry.GetRetryBackoff(err)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		if err = util.Hang(ctx, backoff); err != nil {
 			return errors.Trace(err)
 		}
 	}
