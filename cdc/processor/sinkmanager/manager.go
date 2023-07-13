@@ -61,15 +61,6 @@ type TableStats struct {
 	BarrierTs    model.Ts
 }
 
-type sinkRetry struct {
-	// To control the error retry.
-	lastInternalError  error
-	firstRetryTime     time.Time
-	lastErrorRetryTime time.Time
-	maxRetryDuration   time.Duration
-	errGCInterval      time.Duration
-}
-
 // SinkManager is the implementation of SinkManager.
 type SinkManager struct {
 	changefeedID model.ChangeFeedID
