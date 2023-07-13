@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/klauspost/compress/snappy"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -72,8 +73,9 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, key, value []byte, fileNa
 		return errors.Trace(err)
 	}
 
+	encoded := snappy.Encode(nil, data)
 	start := time.Now()
-	err = c.storage.WriteFile(ctx, fileName, data)
+	err = c.storage.WriteFile(ctx, fileName, encoded)
 	if err != nil {
 		return errors.Trace(err)
 	}
