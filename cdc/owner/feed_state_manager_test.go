@@ -204,7 +204,7 @@ func TestHandleError(t *testing.T) {
 
 	require.False(t, manager.ShouldRunning())
 	require.False(t, manager.ShouldRemoved())
-	require.Equal(t, state.Info.State, model.StateFailed)
+	require.Equal(t, state.Info.State, model.StateError)
 	require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 	require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 

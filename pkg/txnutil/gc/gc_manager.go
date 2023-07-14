@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -113,11 +112,7 @@ func (m *gcManager) CheckStaleCheckpointTs(
 ) error {
 	gcSafepointUpperBound := checkpointTs - 1
 	if m.isTiCDCBlockGC {
-		pdTime, err := m.pdClock.CurrentTime()
-		// TODO: should we return err here, or just log it?
-		if err != nil {
-			return errors.Trace(err)
-		}
+		pdTime, _ := m.pdClock.CurrentTime()
 		if pdTime.Sub(oracle.GetTimeFromTS(gcSafepointUpperBound)) > time.Duration(m.gcTTL)*time.Second {
 			return cerror.ErrGCTTLExceeded.GenWithStackByArgs(checkpointTs, changefeedID)
 		}

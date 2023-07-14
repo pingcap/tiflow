@@ -463,7 +463,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			log.Warn("changefeed will not be restarted because it has been failing for a long time period",
 				zap.Duration("maxElapsedTime", m.errBackoff.MaxElapsedTime))
 			m.shouldBeRunning = false
-			m.patchState(model.StateFailed)
+			m.patchState(model.StateError)
 		} else {
 			log.Info("changefeed restart backoff interval is changed",
 				zap.String("namespace", m.state.ID.Namespace),
