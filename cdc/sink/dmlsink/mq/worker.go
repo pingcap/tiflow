@@ -327,6 +327,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 		}
 	}
 }
+
 func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partition int32, message *common.Message) error {
 	if w.claimCheck == nil {
 		return errors.New("claim check cannot found")
