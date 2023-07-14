@@ -463,7 +463,7 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 
 func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats sinkmanager.TableStats) tablepb.Stats {
 	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
-	now, _ := p.upstream.PDClock.CurrentTime()
+	now := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
