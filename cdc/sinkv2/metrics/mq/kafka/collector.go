@@ -26,8 +26,14 @@ import (
 	"go.uber.org/zap"
 )
 
-// flushMetricsInterval specifies the interval of refresh sarama metrics.
-const flushMetricsInterval = 5 * time.Second
+const (
+	// flushMetricsInterval specifies the interval of refresh sarama metrics.
+	flushMetricsInterval = 5 * time.Second
+	// refreshClusterMetaInterval specifies the interval of refresh kafka cluster meta.
+	// Do not set it too small, because it will cause too many requests to kafka cluster.
+	// Every request will get all topics and all brokers information.
+	refreshClusterMetaInterval = 30 * time.Minute
+)
 
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
@@ -71,9 +77,14 @@ func New(
 // Run collects kafka metrics.
 // It will close the admin client when it's done.
 func (m *Collector) Run(ctx context.Context) {
-	ticker := time.NewTicker(flushMetricsInterval)
+	// Initialize brokers.
+	m.updateBrokers()
+
+	refreshMetricsTicker := time.NewTicker(flushMetricsInterval)
+	refreshClusterMetaTicker := time.NewTicker(refreshClusterMetaInterval)
 	defer func() {
-		ticker.Stop()
+		refreshMetricsTicker.Stop()
+		refreshClusterMetaTicker.Stop()
 		m.cleanupMetrics()
 	}()
 
@@ -81,10 +92,11 @@ func (m *Collector) Run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			m.updateBrokers()
+		case <-refreshMetricsTicker.C:
 			m.collectBrokerMetrics()
 			m.collectProducerMetrics()
+		case <-refreshClusterMetaTicker.C:
+			m.updateBrokers()
 		}
 	}
 }

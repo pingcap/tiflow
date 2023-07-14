@@ -293,6 +293,21 @@ func TestClose(t *testing.T) {
 	}, time.Second, time.Millisecond*10, "table should be stopped")
 }
 
+func TestOperationsAfterClose(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{dead: make(chan struct{})}
+	tb := New[*model.SingleTableTxn](
+		model.DefaultChangeFeedID("1"), 1, model.Ts(0),
+		sink, &eventsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+
+	require.True(t, tb.AsyncClose())
+
+	tb.AppendRowChangedEvents(getTestRows()...)
+	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Nil(t, err)
+}
+
 func TestCloseCancellable(t *testing.T) {
 	t.Parallel()
 
