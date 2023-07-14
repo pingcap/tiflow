@@ -304,12 +304,15 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, message := range future.Messages {
+				// claim check message, send it to the external storage.
+				// also generate one new message which contain the location of the data message and send it to the kafka.
 				if message.ClaimCheckFileName != "" {
 					if err := w.claimCheckSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 						return errors.Trace(err)
 					}
 					continue
 				}
+				// normal message, just send it to the kafka.
 				start := time.Now()
 				if err := w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
@@ -324,7 +327,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 		}
 	}
 }
-
 func (w *worker) claimCheckSendMessage(ctx context.Context, topic string, partition int32, message *common.Message) error {
 	if w.claimCheck == nil {
 		return errors.New("claim check cannot found")
