@@ -273,7 +273,8 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
+      "file-size": 1024,
+      "output-column-id":false
     }
   },
   "consistent": {
@@ -405,7 +406,8 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
+      "file-size": 1024,
+      "output-column-id":false
     }
   },
   "consistent": {
