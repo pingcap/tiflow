@@ -122,9 +122,10 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		EnableCachePreparedStatement: aws.Bool(true),
 	}
 	conf.Sink.CloudStorageConfig = &CloudStorageConfig{
-		WorkerCount:   aws.Int(8),
-		FlushInterval: aws.String("1m"),
-		FileSize:      aws.Int(1024),
+		WorkerCount:    aws.Int(8),
+		FlushInterval:  aws.String("1m"),
+		FileSize:       aws.Int(1024),
+		OutputColumnID: aws.Bool(false),
 	}
 
 	b, err := conf.Marshal()

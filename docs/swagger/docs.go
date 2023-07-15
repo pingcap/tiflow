@@ -1376,6 +1376,9 @@ var doc = `{
                 "flush-interval": {
                     "type": "string"
                 },
+                "output-column-id": {
+                    "type": "boolean"
+                },
                 "worker-count": {
                     "type": "integer"
                 }
@@ -2169,6 +2172,9 @@ var doc = `{
                 },
                 "flush_interval": {
                     "type": "string"
+                },
+                "output_column_id": {
+                    "type": "boolean"
                 },
                 "worker_count": {
                     "type": "integer"
