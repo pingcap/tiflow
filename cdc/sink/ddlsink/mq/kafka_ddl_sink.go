@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	cdcutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -82,29 +83,6 @@ func NewKafkaDDLSink(
 	log.Info("Try to create a DDL sink producer",
 		zap.Any("options", options))
 
-	syncProducer, err := factory.SyncProducer(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	defer func() {
-		if err != nil && syncProducer != nil {
-			syncProducer.Close()
-		}
-	}()
-
-	p, err := producerCreator(ctx, changefeedID, syncProducer)
-	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
-	}
-	// Preventing leaks when error occurs.
-	// This also closes the client in p.Close().
-	defer func() {
-		if err != nil && p != nil {
-			p.Close()
-		}
-	}()
-
 	topicManager, err := util.GetTopicManagerAndTryCreateTopic(
 		ctx,
 		changefeedID,
@@ -127,10 +105,23 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newDDLSink(ctx, changefeedID, p, adminClient, topicManager, eventRouter, encoderConfig)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	defer func() {
+		if err != nil && syncProducer != nil {
+			syncProducer.Close()
+		}
+	}()
 
+	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
+	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
+	s := newDDLSink(ctx, changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder, protocol)
 	return s, nil
 }

@@ -44,17 +44,17 @@ type kafkaDDLProducer struct {
 }
 
 // NewKafkaDDLProducer creates a new kafka producer for replicating DDL.
-func NewKafkaDDLProducer(ctx context.Context,
+func NewKafkaDDLProducer(_ context.Context,
 	changefeedID model.ChangeFeedID,
 	syncProducer kafka.SyncProducer,
-) (DDLProducer, error) {
+) DDLProducer {
 	p := &kafkaDDLProducer{
 		id:           changefeedID,
 		syncProducer: syncProducer,
 		closed:       false,
 	}
 
-	return p, nil
+	return p
 }
 
 func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic string,

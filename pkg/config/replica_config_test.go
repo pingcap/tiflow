@@ -49,10 +49,11 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		},
 	}
 	conf.Sink.CSVConfig = &CSVConfig{
-		Delimiter:       ",",
-		Quote:           "\"",
-		NullString:      `\N`,
-		IncludeCommitTs: true,
+		Delimiter:            ",",
+		Quote:                "\"",
+		NullString:           `\N`,
+		IncludeCommitTs:      true,
+		BinaryEncodingMethod: BinaryEncodingBase64,
 	}
 	conf.Sink.TxnAtomicity = util.AddressOf(unknownTxnAtomicity)
 	conf.Sink.DateSeparator = util.AddressOf("month")
@@ -64,7 +65,6 @@ func TestReplicaConfigMarshal(t *testing.T) {
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	conf.Sink.LargeMessageOnlyHandleKeyColumns = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
@@ -100,6 +100,9 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			AvroDecimalHandlingMode:        aws.String("string"),
 			AvroBigintUnsignedHandlingMode: aws.String("string"),
 		},
+		LargeMessageHandle: &LargeMessageHandleConfig{
+			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
+		},
 	}
 	conf.Sink.MySQLConfig = &MySQLConfig{
 		WorkerCount:                  aws.Int(8),
@@ -119,9 +122,10 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		EnableCachePreparedStatement: aws.Bool(true),
 	}
 	conf.Sink.CloudStorageConfig = &CloudStorageConfig{
-		WorkerCount:   aws.Int(8),
-		FlushInterval: aws.String("1m"),
-		FileSize:      aws.Int(1024),
+		WorkerCount:    aws.Int(8),
+		FlushInterval:  aws.String("1m"),
+		FileSize:       aws.Int(1024),
+		OutputColumnID: aws.Bool(false),
 	}
 
 	b, err := conf.Marshal()
@@ -321,13 +325,13 @@ func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {
 	// mysql sink, do not adjust enable-old-value
 	sinkURI, err := url.Parse("mysql://")
 	require.NoError(t, err)
-	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.NoError(t, err)
 	require.False(t, config.EnableOldValue)
 
 	// mysql sink, `enable-old-value` false, `force-replicate` true, should return error
 	config.ForceReplicate = true
-	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.Error(t, cerror.ErrOldValueNotEnabled, err)
 
 	// canal, `enable-old-value` false, `force-replicate` false, no error, `enable-old-value` adjust to true
@@ -337,14 +341,14 @@ func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {
 	sinkURI, err = url.Parse("kafka://127.0.0.1:9092/test?protocol=canal")
 	require.NoError(t, err)
 
-	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.NoError(t, err)
 	require.True(t, config.EnableOldValue)
 
 	// canal, `force-replicate` true, `enable-old-value` true, no error
 	config.ForceReplicate = true
 	config.EnableOldValue = true
-	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.NoError(t, err)
 	require.True(t, config.ForceReplicate)
 	require.True(t, config.EnableOldValue)
@@ -355,14 +359,14 @@ func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {
 	sinkURI, err = url.Parse("kafka://127.0.0.1:9092/test?protocol=avro")
 	require.NoError(t, err)
 
-	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.NoError(t, err)
 	require.False(t, config.EnableOldValue)
 
 	// avro, `enable-old-value` true, no error, set to false. no matter `force-replicate`
 	config.EnableOldValue = true
 	config.ForceReplicate = true
-	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.NoError(t, err)
 	require.False(t, config.EnableOldValue)
 
@@ -372,14 +376,14 @@ func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {
 	sinkURI, err = url.Parse("s3://xxx/yyy?protocol=csv")
 	require.NoError(t, err)
 
-	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.NoError(t, err)
 	require.False(t, config.EnableOldValue)
 
 	// csv, `enable-old-value` true, no error, set to false. no matter `force-replicate`
 	config.EnableOldValue = true
 	config.ForceReplicate = true
-	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.NoError(t, err)
 	require.False(t, config.EnableOldValue)
 }

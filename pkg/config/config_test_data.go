@@ -60,7 +60,10 @@ const (
 	"enable-kafka-sink-v2": false,
 	"only-output-updated-columns": false,
 	"delete-only-output-handle-key-columns": false,
-	"large-message-only-handle-key-columns": false
+    "large-message-handle": {
+      "large-message-handle-option": "none",
+      "claim-check-storage-uri": ""
+    }
   },
   "consistent": {
     "level": "none",
@@ -200,14 +203,14 @@ const (
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
-      "include-commit-ts": true
+      "include-commit-ts": true,
+      "binary-encoding-method":"base64"
     },
     "date-separator": "month",
     "enable-partition-separator": true,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
-	"large-message-only-handle-key-columns": true,
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -244,6 +247,10 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "claim-check-storage-uri": ""
       }
     },
     "mysql-config": {
@@ -266,7 +273,8 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
+      "file-size": 1024,
+      "output-column-id":false
     }
   },
   "consistent": {
@@ -328,7 +336,8 @@ const (
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
-      "include-commit-ts": true
+      "include-commit-ts": true,
+      "binary-encoding-method":"base64"
     },
     "terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -337,7 +346,6 @@ const (
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
-	"large-message-only-handle-key-columns": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -372,6 +380,10 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "claim-check-storage-uri": ""
       }
     },
     "mysql-config": {
@@ -394,7 +406,8 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
+      "file-size": 1024,
+      "output-column-id":false
     }
   },
   "consistent": {

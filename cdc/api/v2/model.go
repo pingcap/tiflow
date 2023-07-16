@@ -102,6 +102,27 @@ type ChangefeedCommonInfo struct {
 	RunningError   *model.RunningError `json:"error"`
 }
 
+// MarshalJSON marshal changefeed common info to json
+// we need to set feed state to normal if it is uninitialized and pending to warning
+// to hide the detail of uninitialized and pending state from user
+func (c ChangefeedCommonInfo) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
+	type Alias ChangefeedCommonInfo
+
+	if c.FeedState == model.StateUnInitialized {
+		c.FeedState = model.StateNormal
+	}
+	if c.FeedState == model.StatePending {
+		c.FeedState = model.StateWarning
+	}
+
+	return json.Marshal(struct {
+		Alias
+	}{
+		Alias: Alias(c),
+	})
+}
+
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
 	Namespace     string         `json:"namespace"`
@@ -266,10 +287,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var csvConfig *config.CSVConfig
 		if c.Sink.CSVConfig != nil {
 			csvConfig = &config.CSVConfig{
-				Delimiter:       c.Sink.CSVConfig.Delimiter,
-				Quote:           c.Sink.CSVConfig.Quote,
-				NullString:      c.Sink.CSVConfig.NullString,
-				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            c.Sink.CSVConfig.Delimiter,
+				Quote:                c.Sink.CSVConfig.Quote,
+				NullString:           c.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      c.Sink.CSVConfig.IncludeCommitTs,
+				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
 		var kafkaConfig *config.KafkaConfig
@@ -285,6 +307,16 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
 				}
 			}
+
+			var largeMessageHandle *config.LargeMessageHandleConfig
+			if c.Sink.KafkaConfig.LargeMessageHandle != nil {
+				oldConfig := c.Sink.KafkaConfig.LargeMessageHandle
+				largeMessageHandle = &config.LargeMessageHandleConfig{
+					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
+					ClaimCheckStorageURI:     oldConfig.ClaimCheckStorageURI,
+				}
+			}
+
 			kafkaConfig = &config.KafkaConfig{
 				PartitionNum:                 c.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            c.Sink.KafkaConfig.ReplicationFactor,
@@ -320,6 +352,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				Key:                          c.Sink.KafkaConfig.Key,
 				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
+				LargeMessageHandle:           largeMessageHandle,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -345,9 +378,10 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var cloudStorageConfig *config.CloudStorageConfig
 		if c.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:   c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval: c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:      c.Sink.CloudStorageConfig.FileSize,
+				WorkerCount:    c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:  c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:       c.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID: c.Sink.CloudStorageConfig.OutputColumnID,
 			}
 		}
 
@@ -365,7 +399,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
-			LargeMessageOnlyHandleKeyColumns: c.Sink.LargeMessageOnlyHandleKeyColumns,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			CloudStorageConfig:               cloudStorageConfig,
@@ -481,10 +514,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var csvConfig *CSVConfig
 		if cloned.Sink.CSVConfig != nil {
 			csvConfig = &CSVConfig{
-				Delimiter:       cloned.Sink.CSVConfig.Delimiter,
-				Quote:           cloned.Sink.CSVConfig.Quote,
-				NullString:      cloned.Sink.CSVConfig.NullString,
-				IncludeCommitTs: cloned.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            cloned.Sink.CSVConfig.Delimiter,
+				Quote:                cloned.Sink.CSVConfig.Quote,
+				NullString:           cloned.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      cloned.Sink.CSVConfig.IncludeCommitTs,
+				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
 		var kafkaConfig *KafkaConfig
@@ -500,6 +534,16 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
 				}
 			}
+
+			var largeMessageHandle *LargeMessageHandleConfig
+			if cloned.Sink.KafkaConfig.LargeMessageHandle != nil {
+				oldConfig := cloned.Sink.KafkaConfig.LargeMessageHandle
+				largeMessageHandle = &LargeMessageHandleConfig{
+					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
+					ClaimCheckStorageURI:     oldConfig.ClaimCheckStorageURI,
+				}
+			}
+
 			kafkaConfig = &KafkaConfig{
 				PartitionNum:                 cloned.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            cloned.Sink.KafkaConfig.ReplicationFactor,
@@ -535,6 +579,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Key:                          cloned.Sink.KafkaConfig.Key,
 				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
+				LargeMessageHandle:           largeMessageHandle,
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -560,9 +605,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var cloudStorageConfig *CloudStorageConfig
 		if cloned.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:   cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval: cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:      cloned.Sink.CloudStorageConfig.FileSize,
+				WorkerCount:    cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:  cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:       cloned.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID: cloned.Sink.CloudStorageConfig.OutputColumnID,
 			}
 		}
 
@@ -580,7 +626,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
-			LargeMessageOnlyHandleKeyColumns: cloned.Sink.LargeMessageOnlyHandleKeyColumns,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			CloudStorageConfig:               cloudStorageConfig,
@@ -737,7 +782,6 @@ type SinkConfig struct {
 	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
 	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
 	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
-	LargeMessageOnlyHandleKeyColumns *bool               `json:"large_message_only_handle_key_columns"`
 	SafeMode                         *bool               `json:"safe_mode,omitempty"`
 	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
@@ -747,10 +791,18 @@ type SinkConfig struct {
 // CSVConfig denotes the csv config
 // This is the same as config.CSVConfig
 type CSVConfig struct {
-	Delimiter       string `json:"delimiter"`
-	Quote           string `json:"quote"`
-	NullString      string `json:"null"`
-	IncludeCommitTs bool   `json:"include_commit_ts"`
+	Delimiter            string `json:"delimiter"`
+	Quote                string `json:"quote"`
+	NullString           string `json:"null"`
+	IncludeCommitTs      bool   `json:"include_commit_ts"`
+	BinaryEncodingMethod string `json:"binary_encoding_method"`
+}
+
+// LargeMessageHandleConfig denotes the large message handling config
+// This is the same as config.LargeMessageHandleConfig
+type LargeMessageHandleConfig struct {
+	LargeMessageHandleOption string `json:"large_message_handle_option"`
+	ClaimCheckStorageURI     string `json:"claim_check_storage_uri"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -928,40 +980,41 @@ type CodecConfig struct {
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
-	PartitionNum                 *int32       `json:"partition_num,omitempty"`
-	ReplicationFactor            *int16       `json:"replication_factor,omitempty"`
-	KafkaVersion                 *string      `json:"kafka_version,omitempty"`
-	MaxMessageBytes              *int         `json:"max_message_bytes,omitempty"`
-	Compression                  *string      `json:"compression,omitempty"`
-	KafkaClientID                *string      `json:"kafka_client_id,omitempty"`
-	AutoCreateTopic              *bool        `json:"auto_create_topic,omitempty"`
-	DialTimeout                  *string      `json:"dial_timeout,omitempty"`
-	WriteTimeout                 *string      `json:"write_timeout,omitempty"`
-	ReadTimeout                  *string      `json:"read_timeout,omitempty"`
-	RequiredAcks                 *int         `json:"required_acks,omitempty"`
-	SASLUser                     *string      `json:"sasl_user,omitempty"`
-	SASLPassword                 *string      `json:"sasl_password,omitempty"`
-	SASLMechanism                *string      `json:"sasl_mechanism,omitempty"`
-	SASLGssAPIAuthType           *string      `json:"sasl_gssapi_auth_type,omitempty"`
-	SASLGssAPIKeytabPath         *string      `json:"sasl_gssapi_keytab_path,omitempty"`
-	SASLGssAPIKerberosConfigPath *string      `json:"sasl_gssapi_kerberos_config_path,omitempty"`
-	SASLGssAPIServiceName        *string      `json:"sasl_gssapi_service_name,omitempty"`
-	SASLGssAPIUser               *string      `json:"sasl_gssapi_user,omitempty"`
-	SASLGssAPIPassword           *string      `json:"sasl_gssapi_password,omitempty"`
-	SASLGssAPIRealm              *string      `json:"sasl_gssapi_realm,omitempty"`
-	SASLGssAPIDisablePafxfast    *bool        `json:"sasl_gssapi_disable_pafxfast,omitempty"`
-	SASLOAuthClientID            *string      `json:"sasl_oauth_client_id,omitempty"`
-	SASLOAuthClientSecret        *string      `json:"sasl_oauth_client_secret,omitempty"`
-	SASLOAuthTokenURL            *string      `json:"sasl_oauth_token_url,omitempty"`
-	SASLOAuthScopes              []string     `json:"sasl_oauth_scopes,omitempty"`
-	SASLOAuthGrantType           *string      `json:"sasl_oauth_grant_type,omitempty"`
-	SASLOAuthAudience            *string      `json:"sasl_oauth_audience,omitempty"`
-	EnableTLS                    *bool        `json:"enable_tls,omitempty"`
-	CA                           *string      `json:"ca,omitempty"`
-	Cert                         *string      `json:"cert,omitempty"`
-	Key                          *string      `json:"key,omitempty"`
-	InsecureSkipVerify           *bool        `json:"insecure_skip_verify,omitempty"`
-	CodecConfig                  *CodecConfig `json:"codec_config,omitempty"`
+	PartitionNum                 *int32                    `json:"partition_num,omitempty"`
+	ReplicationFactor            *int16                    `json:"replication_factor,omitempty"`
+	KafkaVersion                 *string                   `json:"kafka_version,omitempty"`
+	MaxMessageBytes              *int                      `json:"max_message_bytes,omitempty"`
+	Compression                  *string                   `json:"compression,omitempty"`
+	KafkaClientID                *string                   `json:"kafka_client_id,omitempty"`
+	AutoCreateTopic              *bool                     `json:"auto_create_topic,omitempty"`
+	DialTimeout                  *string                   `json:"dial_timeout,omitempty"`
+	WriteTimeout                 *string                   `json:"write_timeout,omitempty"`
+	ReadTimeout                  *string                   `json:"read_timeout,omitempty"`
+	RequiredAcks                 *int                      `json:"required_acks,omitempty"`
+	SASLUser                     *string                   `json:"sasl_user,omitempty"`
+	SASLPassword                 *string                   `json:"sasl_password,omitempty"`
+	SASLMechanism                *string                   `json:"sasl_mechanism,omitempty"`
+	SASLGssAPIAuthType           *string                   `json:"sasl_gssapi_auth_type,omitempty"`
+	SASLGssAPIKeytabPath         *string                   `json:"sasl_gssapi_keytab_path,omitempty"`
+	SASLGssAPIKerberosConfigPath *string                   `json:"sasl_gssapi_kerberos_config_path,omitempty"`
+	SASLGssAPIServiceName        *string                   `json:"sasl_gssapi_service_name,omitempty"`
+	SASLGssAPIUser               *string                   `json:"sasl_gssapi_user,omitempty"`
+	SASLGssAPIPassword           *string                   `json:"sasl_gssapi_password,omitempty"`
+	SASLGssAPIRealm              *string                   `json:"sasl_gssapi_realm,omitempty"`
+	SASLGssAPIDisablePafxfast    *bool                     `json:"sasl_gssapi_disable_pafxfast,omitempty"`
+	SASLOAuthClientID            *string                   `json:"sasl_oauth_client_id,omitempty"`
+	SASLOAuthClientSecret        *string                   `json:"sasl_oauth_client_secret,omitempty"`
+	SASLOAuthTokenURL            *string                   `json:"sasl_oauth_token_url,omitempty"`
+	SASLOAuthScopes              []string                  `json:"sasl_oauth_scopes,omitempty"`
+	SASLOAuthGrantType           *string                   `json:"sasl_oauth_grant_type,omitempty"`
+	SASLOAuthAudience            *string                   `json:"sasl_oauth_audience,omitempty"`
+	EnableTLS                    *bool                     `json:"enable_tls,omitempty"`
+	CA                           *string                   `json:"ca,omitempty"`
+	Cert                         *string                   `json:"cert,omitempty"`
+	Key                          *string                   `json:"key,omitempty"`
+	InsecureSkipVerify           *bool                     `json:"insecure_skip_verify,omitempty"`
+	CodecConfig                  *CodecConfig              `json:"codec_config,omitempty"`
+	LargeMessageHandle           *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
@@ -985,9 +1038,10 @@ type MySQLConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount   *int    `json:"worker_count,omitempty"`
-	FlushInterval *string `json:"flush_interval,omitempty"`
-	FileSize      *int    `json:"file_size,omitempty"`
+	WorkerCount    *int    `json:"worker_count,omitempty"`
+	FlushInterval  *string `json:"flush_interval,omitempty"`
+	FileSize       *int    `json:"file_size,omitempty"`
+	OutputColumnID *bool   `json:"output_column_id,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc

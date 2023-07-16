@@ -82,11 +82,15 @@ func TestDecodeEvent(t *testing.T) {
 }
 
 func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen)
-	config.LargeMessageOnlyHandleKeyColumns = true
-	config.MaxMessageBytes = 185
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.LargeMessageHandle = &config.LargeMessageHandleConfig{
+		LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
+	}
 
-	encoder := NewBatchEncoderBuilder(config).Build()
+	//config.LargeMessageOnlyHandleKeyColumns = true
+	codecConfig.MaxMessageBytes = 185
+
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	ctx := context.Background()
 	topic := "test"

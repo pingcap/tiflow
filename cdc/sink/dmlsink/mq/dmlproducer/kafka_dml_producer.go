@@ -43,10 +43,8 @@ type kafkaDMLProducer struct {
 	// closed is used to indicate whether the producer is closed.
 	// We also use it to guard against double closes.
 	closed bool
-	// closedChan is used to notify the run loop to exit.
-	closedChan chan struct{}
-	// failpointCh is used to inject failpoints to the run loop.
-	// Only used in test.
+
+	// failpointCh is used to inject failpoints to the run loop. Only used in test.
 	failpointCh chan error
 
 	cancel context.CancelFunc
@@ -59,9 +57,8 @@ func NewKafkaDMLProducer(
 	asyncProducer kafka.AsyncProducer,
 	metricsCollector kafka.MetricsCollector,
 	errCh chan error,
-	closeCh chan struct{},
 	failpointCh chan error,
-) (DMLProducer, error) {
+) DMLProducer {
 	log.Info("Starting kafka DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
@@ -72,7 +69,6 @@ func NewKafkaDMLProducer(
 		asyncProducer:    asyncProducer,
 		metricsCollector: metricsCollector,
 		closed:           false,
-		closedChan:       closeCh,
 		failpointCh:      failpointCh,
 		cancel:           cancel,
 	}
@@ -99,7 +95,7 @@ func NewKafkaDMLProducer(
 		}
 	}()
 
-	return k, nil
+	return k
 }
 
 func (k *kafkaDMLProducer) AsyncSendMessage(
@@ -145,11 +141,9 @@ func (k *kafkaDMLProducer) Close() {
 	}
 
 	close(k.failpointCh)
-	// Notify the run loop to exit.
-	close(k.closedChan)
-	k.closed = true
 
 	k.asyncProducer.Close()
+	k.closed = true
 }
 
 func (k *kafkaDMLProducer) run(ctx context.Context) error {

@@ -41,9 +41,7 @@ type Config struct {
 	// DeleteOnlyHandleKeyColumns is true, for the delete event only output the handle key columns.
 	DeleteOnlyHandleKeyColumns bool
 
-	// LargeMessageOnlyHandleKeyColumns is true,
-	// for message large then the MaxMessageBytes only output the handle key columns.
-	LargeMessageOnlyHandleKeyColumns bool
+	LargeMessageHandle *config.LargeMessageHandleConfig
 
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
@@ -60,11 +58,12 @@ type Config struct {
 	AvroEnableWatermark bool
 
 	// for sinking to cloud storage
-	Delimiter       string
-	Quote           string
-	NullString      string
-	IncludeCommitTs bool
-	Terminator      string
+	Delimiter            string
+	Quote                string
+	NullString           string
+	IncludeCommitTs      bool
+	Terminator           string
+	BinaryEncodingMethod string
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
@@ -176,6 +175,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.Quote = replicaConfig.Sink.CSVConfig.Quote
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
+			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
+		}
+		if replicaConfig.Sink.KafkaConfig != nil {
+			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
@@ -193,13 +196,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
-	c.LargeMessageOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns)
-	if c.LargeMessageOnlyHandleKeyColumns {
-		log.Warn("large message only handle key columns is enabled, "+
-			"if the full message's size is larger than max-message-bytes, only send the handle key columns",
-			zap.Any("protocol", c.Protocol))
-	}
-
 	return nil
 }
 
@@ -296,6 +292,13 @@ func (c *Config) Validate() error {
 		return cerror.ErrCodecInvalidConfig.Wrap(
 			errors.Errorf("invalid max-batch-size %d", c.MaxBatchSize),
 		)
+	}
+
+	if c.LargeMessageHandle != nil {
+		err := c.LargeMessageHandle.Validate(c.Protocol, c.EnableTiDBExtension)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

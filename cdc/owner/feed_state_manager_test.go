@@ -62,8 +62,7 @@ func newFeedStateManager4Test(
 	f.errBackoff.Multiplier = multiplier
 	f.errBackoff.RandomizationFactor = 0
 
-	f.resetErrBackoff()
-	f.lastErrorTime = time.Unix(0, 0)
+	f.resetErrRetry()
 
 	return f
 }
@@ -298,7 +297,9 @@ func TestHandleError(t *testing.T) {
 	})
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.Nil(t, status)
-		return &model.ChangeFeedStatus{}, true, nil
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 200,
+		}, true, nil
 	})
 
 	tester.MustApplyPatches()
@@ -324,13 +325,42 @@ func TestHandleError(t *testing.T) {
 		manager.Tick(state)
 		tester.MustApplyPatches()
 		require.False(t, manager.ShouldRunning())
-		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, state.Info.State, model.StatePending)
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		time.Sleep(d)
 		manager.Tick(state)
 		tester.MustApplyPatches()
 	}
+
+	// no error tick, state should be transferred from pending to warning
+	manager.Tick(state)
+	require.True(t, manager.ShouldRunning())
+	require.Equal(t, model.StateWarning, state.Info.State)
+	require.Equal(t, model.AdminNone, state.Info.AdminJobType)
+	require.Equal(t, model.AdminNone, state.Status.AdminJobType)
+
+	// no error tick and checkpointTs is progressing,
+	// state should be transferred from warning to normal
+	state.PatchStatus(
+		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			status.CheckpointTs += 1
+			return status, true, nil
+		})
+	tester.MustApplyPatches()
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	require.True(t, manager.ShouldRunning())
+	state.PatchStatus(
+		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+			status.CheckpointTs += 1
+			return status, true, nil
+		})
+	manager.Tick(state)
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateNormal, state.Info.State)
+	require.Equal(t, model.AdminNone, state.Info.AdminJobType)
+	require.Equal(t, model.AdminNone, state.Status.AdminJobType)
 }
 
 func TestHandleFastFailError(t *testing.T) {
@@ -479,7 +509,7 @@ func TestChangefeedNotRetry(t *testing.T) {
 		return &model.ChangeFeedInfo{
 			SinkURI: "123",
 			Config:  &config.ReplicaConfig{},
-			State:   model.StateError,
+			State:   model.StateWarning,
 			Error: &model.RunningError{
 				Addr: "127.0.0.1",
 				Code: "CDC:ErrPipelineTryAgain",
@@ -492,52 +522,52 @@ func TestChangefeedNotRetry(t *testing.T) {
 	manager.Tick(state)
 	require.True(t, manager.ShouldRunning())
 
-	// changefeed in error state and error can't be retried
-	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		return &model.ChangeFeedInfo{
-			SinkURI: "123",
-			Config:  &config.ReplicaConfig{},
-			State:   model.StateError,
-			Error: &model.RunningError{
-				Addr:    "127.0.0.1",
+	state.PatchTaskPosition("test",
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Error = &model.RunningError{
+				Time:    time.Now(),
+				Addr:    "test",
 				Code:    "CDC:ErrExpressionColumnNotFound",
 				Message: "what ever",
-			},
-		}, true, nil
-	})
+			}
+			return position, true, nil
+		})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	require.False(t, manager.ShouldRunning())
 
-	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		return &model.ChangeFeedInfo{
-			SinkURI: "123",
-			Config:  &config.ReplicaConfig{},
-			State:   model.StateError,
-			Error: &model.RunningError{
+	state.PatchTaskPosition("test",
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Error = &model.RunningError{
 				Addr:    "127.0.0.1",
 				Code:    string(cerror.ErrExpressionColumnNotFound.RFCCode()),
 				Message: cerror.ErrExpressionColumnNotFound.Error(),
-			},
-		}, true, nil
-	})
+			}
+			return position, true, nil
+		})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	// should be false
 	require.False(t, manager.ShouldRunning())
 
-	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
-		return &model.ChangeFeedInfo{
-			SinkURI: "123",
-			Config:  &config.ReplicaConfig{},
-			State:   model.StateError,
-			Error: &model.RunningError{
+	state.PatchTaskPosition("test",
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Error = &model.RunningError{
 				Addr:    "127.0.0.1",
 				Code:    string(cerror.ErrExpressionParseFailed.RFCCode()),
 				Message: cerror.ErrExpressionParseFailed.Error(),
-			},
-		}, true, nil
-	})
+			}
+			return position, true, nil
+		})
 	tester.MustApplyPatches()
 	manager.Tick(state)
 	// should be false
@@ -572,7 +602,11 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 			require.Equal(t, state.Info.State, model.StateFailed)
 			require.False(t, manager.ShouldRunning())
 		} else {
-			require.Equal(t, state.Info.State, model.StateNormal)
+			if i == 1 {
+				require.Equal(t, model.StateNormal, state.Info.State)
+			} else {
+				require.Equal(t, model.StateWarning, state.Info.State)
+			}
 			require.True(t, manager.ShouldRunning())
 			state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
 				func(position *model.TaskPosition) (
@@ -589,7 +623,7 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 			tester.MustApplyPatches()
 			// If an error occurs, backing off from running the task.
 			require.False(t, manager.ShouldRunning())
-			require.Equal(t, state.Info.State, model.StateError)
+			require.Equal(t, model.StatePending, state.Info.State)
 			require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 			require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		}
@@ -623,7 +657,11 @@ func TestBackoffNeverStops(t *testing.T) {
 	tester.MustApplyPatches()
 
 	for i := 1; i <= 30; i++ {
-		require.Equal(t, state.Info.State, model.StateNormal)
+		if i == 1 {
+			require.Equal(t, model.StateNormal, state.Info.State)
+		} else {
+			require.Equal(t, model.StateWarning, state.Info.State)
+		}
 		require.True(t, manager.ShouldRunning())
 		state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
 			func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
@@ -637,7 +675,7 @@ func TestBackoffNeverStops(t *testing.T) {
 		manager.Tick(state)
 		tester.MustApplyPatches()
 		require.False(t, manager.ShouldRunning())
-		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, model.StatePending, state.Info.State)
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 		// 100ms is the backoff interval, so sleep 100ms and after a manager tick,
@@ -688,7 +726,8 @@ func TestUpdateChangefeedEpoch(t *testing.T) {
 		manager.Tick(state)
 		tester.MustApplyPatches()
 		require.False(t, manager.ShouldRunning())
-		require.Equal(t, state.Info.State, model.StateError)
+		require.Equal(t, model.StatePending, state.Info.State, i)
+
 		require.Equal(t, state.Info.AdminJobType, model.AdminStop)
 		require.Equal(t, state.Status.AdminJobType, model.AdminStop)
 
