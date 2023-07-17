@@ -46,6 +46,8 @@ type Message struct {
 
 	// ClaimCheckFileName is set if the message should be sent to the claim check storage.
 	ClaimCheckFileName string
+
+	Event *model.RowChangedEvent
 }
 
 // Length returns the expected size of the Kafka message
