@@ -267,32 +267,32 @@ func (d *BatchEncoder) NewClaimCheckMessage(e *model.RowChangedEvent, callback f
 		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
-	versionHead := make([]byte, 8)
-	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
-
-	var (
-		keyLenByte   [8]byte
-		valueLenByte [8]byte
-	)
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
-	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
-	message.Key = append(message.Key, keyLenByte[:]...)
-	message.Key = append(message.Key, key...)
-	message.Value = append(message.Value, valueLenByte[:]...)
-	message.Value = append(message.Value, value...)
+	message := newMessage(key, value)
 	message.Ts = e.CommitTs
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
+	message.IncRowsCount()
 	if callback != nil {
 		message.Callback = callback
 	}
-	message.IncRowsCount()
 	return message, nil
 }
 
 func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
+	message := newMessage(key, value)
+	message.Ts = e.CommitTs
+	message.Schema = &e.Table.Schema
+	message.Table = &e.Table.Table
+	message.ClaimCheckFileName = common.NewClaimCheckFileName(e)
+	message.Event = e
+	message.IncRowsCount()
+	if callback != nil {
+		message.Callback = callback
+	}
+	d.messageBuf = append(d.messageBuf, message)
+}
+
+func newMessage(key, value []byte) *common.Message {
 	versionHead := make([]byte, 8)
 	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
 	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
@@ -308,16 +308,8 @@ func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e 
 	message.Key = append(message.Key, key...)
 	message.Value = append(message.Value, valueLenByte[:]...)
 	message.Value = append(message.Value, value...)
-	message.Ts = e.CommitTs
-	message.Schema = &e.Table.Schema
-	message.Table = &e.Table.Table
-	message.ClaimCheckFileName = common.NewClaimCheckFileName(e)
-	message.IncRowsCount()
 
-	if callback != nil {
-		message.Callback = callback
-	}
-	d.messageBuf = append(d.messageBuf, message)
+	return message
 }
 
 type batchEncoderBuilder struct {
