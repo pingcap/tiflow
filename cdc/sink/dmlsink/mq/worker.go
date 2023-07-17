@@ -307,7 +307,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			for _, message := range future.Messages {
 				if message.ClaimCheckFileName != "" {
 					// send the message to the external storage.
-					if err = w.claimCheck.WriteMessage(ctx, message.Key, message.Value, message.ClaimCheckFileName); err != nil {
+					if err = w.claimCheck.WriteMessage(ctx, message); err != nil {
 						log.Error("send message to the external claim check storage failed",
 							zap.String("namespace", w.changeFeedID.Namespace),
 							zap.String("changefeed", w.changeFeedID.ID),
@@ -316,7 +316,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 					// create the location message which contain the external storage location of the message.
-					locationMessage, err := w.claimCheckEncoder.NewClaimCheckMessage(message.Event, message.Callback)
+					locationMessage, err := w.claimCheckEncoder.NewClaimCheckMessage(message)
 					if err != nil {
 						return errors.Trace(err)
 					}

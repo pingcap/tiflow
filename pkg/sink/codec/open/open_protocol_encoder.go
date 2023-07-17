@@ -240,14 +240,14 @@ func (d *BatchEncoder) tryBuildCallback() {
 // This should be called when the message is too large, and the claim check enabled.
 // This method should not meet error, since only one string is set to the message,
 // it should not cause the encode error or the message too large error.
-func (d *BatchEncoder) NewClaimCheckMessage(e *model.RowChangedEvent, callback func()) (*common.Message, error) {
-	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config, true)
+func (d *BatchEncoder) NewClaimCheckMessage(origin *common.Message) (*common.Message, error) {
+	keyMsg, valueMsg, err := rowChangeToMsg(origin.Event, d.config, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	keyMsg.OnlyHandleKey = false
-	keyMsg.ClaimCheckLocation = common.NewClaimCheckFileName(e)
+	keyMsg.ClaimCheckLocation = origin.ClaimCheckFileName
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -268,12 +268,12 @@ func (d *BatchEncoder) NewClaimCheckMessage(e *model.RowChangedEvent, callback f
 	}
 
 	message := newMessage(key, value)
-	message.Ts = e.CommitTs
-	message.Schema = &e.Table.Schema
-	message.Table = &e.Table.Table
+	message.Ts = origin.Ts
+	message.Schema = origin.Schema
+	message.Table = origin.Table
 	message.IncRowsCount()
-	if callback != nil {
-		message.Callback = callback
+	if origin.Callback != nil {
+		message.Callback = origin.Callback
 	}
 	return message, nil
 }
@@ -283,6 +283,7 @@ func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e 
 	message.Ts = e.CommitTs
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
+	// ClaimCheckFileName must be set to indicate this message should be sent to the external storage.
 	message.ClaimCheckFileName = common.NewClaimCheckFileName(e)
 	message.Event = e
 	message.IncRowsCount()
