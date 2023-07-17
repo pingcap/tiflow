@@ -54,8 +54,6 @@ type controllerImpl struct {
 	bootstrapped bool
 
 	closed int32
-
-	cfg *config.SchedulerConfig
 }
 
 // NewController creates a new Controller
@@ -68,7 +66,6 @@ func NewController(
 		changefeeds:     make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState),
 		lastTickTime:    time.Now(),
 		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
-		cfg:             cfg,
 	}
 }
 
