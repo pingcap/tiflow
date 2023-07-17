@@ -48,7 +48,7 @@ type controllerImpl struct {
 	logLimiter   *rate.Limiter
 	lastTickTime time.Time
 	// bootstrapped specifies whether the controller has been initialized.
-	// This will only be done when the owner starts the first Tick.
+	// This will only be done when the controller starts the first Tick.
 	// NOTICE: Do not use it in a method other than tick unexpectedly,
 	//         as it is not a thread-safe value.
 	bootstrapped bool
