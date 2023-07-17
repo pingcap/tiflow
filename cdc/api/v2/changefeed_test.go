@@ -73,7 +73,7 @@ func TestCreateChangefeed(t *testing.T) {
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -247,7 +247,7 @@ func TestGetChangeFeed(t *testing.T) {
 	statusProvider := &mockStatusProvider{}
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 
 	apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 	router := newRouter(apiV2)
@@ -338,7 +338,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	statusProvider := &mockStatusProvider{}
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 
 	// case 1 invalid id
 	invalidID := "Invalid_#"
@@ -520,7 +520,7 @@ func TestListChangeFeeds(t *testing.T) {
 
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 
 	apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 	router := newRouter(apiV2)
@@ -613,7 +613,7 @@ func TestVerifyTable(t *testing.T) {
 	// statusProvider := &mockStatusProvider{}
 	// cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(upManager, nil).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 
 	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
@@ -706,7 +706,7 @@ func TestResumeChangefeed(t *testing.T) {
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
 	owner.EXPECT().EnqueueJob(gomock.Any(), gomock.Any()).
 		Do(func(adminJob model.AdminJob, done chan<- error) {
@@ -817,7 +817,7 @@ func TestDeleteChangefeed(t *testing.T) {
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
 	owner.EXPECT().EnqueueJob(gomock.Any(), gomock.Any()).
 		Do(func(adminJob model.AdminJob, done chan<- error) {
@@ -904,7 +904,7 @@ func TestPauseChangefeed(t *testing.T) {
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
 	owner.EXPECT().EnqueueJob(gomock.Any(), gomock.Any()).
 		Do(func(adminJob model.AdminJob, done chan<- error) {
