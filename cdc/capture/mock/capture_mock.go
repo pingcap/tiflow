@@ -81,6 +81,21 @@ func (mr *MockCaptureMockRecorder) GetController() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetController", reflect.TypeOf((*MockCapture)(nil).GetController))
 }
 
+// GetControllerCaptureInfo mocks base method.
+func (m *MockCapture) GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetControllerCaptureInfo", ctx)
+	ret0, _ := ret[0].(*model.CaptureInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetControllerCaptureInfo indicates an expected call of GetControllerCaptureInfo.
+func (mr *MockCaptureMockRecorder) GetControllerCaptureInfo(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetControllerCaptureInfo", reflect.TypeOf((*MockCapture)(nil).GetControllerCaptureInfo), ctx)
+}
+
 // GetEtcdClient mocks base method.
 func (m *MockCapture) GetEtcdClient() etcd.CDCEtcdClient {
 	m.ctrl.T.Helper()
@@ -108,21 +123,6 @@ func (m *MockCapture) GetOwner() (owner.Owner, error) {
 func (mr *MockCaptureMockRecorder) GetOwner() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwner", reflect.TypeOf((*MockCapture)(nil).GetOwner))
-}
-
-// GetOwnerCaptureInfo mocks base method.
-func (m *MockCapture) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOwnerCaptureInfo", ctx)
-	ret0, _ := ret[0].(*model.CaptureInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetOwnerCaptureInfo indicates an expected call of GetOwnerCaptureInfo.
-func (mr *MockCaptureMockRecorder) GetOwnerCaptureInfo(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwnerCaptureInfo", reflect.TypeOf((*MockCapture)(nil).GetOwnerCaptureInfo), ctx)
 }
 
 // GetUpstreamManager mocks base method.
@@ -153,6 +153,20 @@ func (m *MockCapture) Info() (model.CaptureInfo, error) {
 func (mr *MockCaptureMockRecorder) Info() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Info", reflect.TypeOf((*MockCapture)(nil).Info))
+}
+
+// IsController mocks base method.
+func (m *MockCapture) IsController() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsController")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsController indicates an expected call of IsController.
+func (mr *MockCaptureMockRecorder) IsController() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsController", reflect.TypeOf((*MockCapture)(nil).IsController))
 }
 
 // IsOwner mocks base method.

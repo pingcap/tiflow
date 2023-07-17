@@ -15,19 +15,26 @@ package controller
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+)
+
+type controllerJobType int
+
+// All OwnerJob types
+const (
+	controllerJobTypeQuery controllerJobType = iota
 )
 
 // versionInconsistentLogRate represents the rate of log output when there are
@@ -38,10 +45,16 @@ const versionInconsistentLogRate = 1
 type Controller interface {
 	orchestrator.Reactor
 	AsyncStop()
+	GetChangefeedOwnerCaptureInfo(id model.ChangeFeedID) *model.CaptureInfo
+	GetAllChangeFeedInfo(ctx context.Context) (
+		map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+	)
+	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
 }
 
 type controllerImpl struct {
 	changefeeds     map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState
+	captures        map[model.CaptureID]*model.CaptureInfo
 	upstreamManager *upstream.Manager
 
 	// logLimiter controls cluster version check log output rate
@@ -54,24 +67,34 @@ type controllerImpl struct {
 	bootstrapped bool
 
 	closed int32
+
+	controllerJobQueue struct {
+		sync.Mutex
+		queue []*controllerJob
+	}
+
+	captureInfo *model.CaptureInfo
 }
 
 // NewController creates a new Controller
 func NewController(
 	upstreamManager *upstream.Manager,
-	cfg *config.SchedulerConfig,
+	captureInfo *model.CaptureInfo,
 ) Controller {
 	return &controllerImpl{
 		upstreamManager: upstreamManager,
 		changefeeds:     make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState),
 		lastTickTime:    time.Now(),
 		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
+		captureInfo:     captureInfo,
 	}
 }
 
 // Tick implements the Reactor interface
 func (o *controllerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
 	state := rawState.(*orchestrator.GlobalReactorState)
+	o.captures = state.Captures
+
 	// At the first Tick, we need to do a bootstrap operation.
 	// Fix incompatible or incorrect meta information.
 	if !o.bootstrapped {
@@ -79,6 +102,11 @@ func (o *controllerImpl) Tick(stdCtx context.Context, rawState orchestrator.Reac
 		o.bootstrapped = true
 		return state, nil
 	}
+	// handleJobs() should be called before clusterVersionConsistent(), because
+	// when there are different versions of cdc nodes in the cluster,
+	// the admin job may not be processed all the time. And http api relies on
+	// admin job, which will cause all http api unavailable.
+	o.handleJobs(stdCtx)
 
 	if !o.clusterVersionConsistent(state.Captures) {
 		return state, nil
@@ -250,4 +278,21 @@ func (o *controllerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorS
 // AsyncStop stops the server manager asynchronously
 func (o *controllerImpl) AsyncStop() {
 	atomic.StoreInt32(&o.closed, 1)
+}
+
+// GetChangefeedOwnerCaptureInfo returns the capture info of the owner of the changefeed
+func (o *controllerImpl) GetChangefeedOwnerCaptureInfo(id model.ChangeFeedID) *model.CaptureInfo {
+	// todo: schedule changefeed owner to other capture
+	return o.captureInfo
+}
+
+// Export field names for pretty printing.
+type controllerJob struct {
+	Tp           controllerJobType
+	ChangefeedID model.ChangeFeedID
+
+	// for status provider
+	query *Query
+
+	done chan<- error
 }

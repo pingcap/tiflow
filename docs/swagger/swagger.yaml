@@ -1323,7 +1323,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: notify the current owner to resign
+      description: notify the current controller to resign
       produces:
       - application/json
       responses:
@@ -1337,7 +1337,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
-      summary: notify the owner to resign
+      summary: notify the ticdc cluster controller to resign
       tags:
       - owner
   /api/v1/processors:
@@ -1756,7 +1756,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
-      summary: Notify the owner to resign
+      summary: Notify the controller to resign
       tags:
       - owner
       - v2

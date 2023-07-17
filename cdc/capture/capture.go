@@ -59,8 +59,9 @@ type Capture interface {
 
 	GetOwner() (owner.Owner, error)
 	GetController() (controller.Controller, error)
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+	GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
 	IsOwner() bool
+	IsController() bool
 
 	Info() (model.CaptureInfo, error)
 	StatusProvider() owner.StatusProvider
@@ -120,7 +121,7 @@ type captureImpl struct {
 		cfg *config.SchedulerConfig,
 	) processor.Manager
 	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
-	newController func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) controller.Controller
+	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo) controller.Controller
 }
 
 // NewCapture returns a new Capture instance
@@ -471,7 +472,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		controller := c.newController(c.upstreamManager, c.config.Debug.Scheduler)
+		controller := c.newController(c.upstreamManager, c.info)
 
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
@@ -748,8 +749,14 @@ func (c *captureImpl) IsOwner() bool {
 	return c.owner != nil
 }
 
-// GetOwnerCaptureInfo return the owner capture info of current TiCDC cluster
-func (c *captureImpl) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
+func (c *captureImpl) IsController() bool {
+	c.ownerMu.Lock()
+	defer c.ownerMu.Unlock()
+	return c.controller != nil
+}
+
+// GetControllerCaptureInfo return the controller capture info of current TiCDC cluster
+func (c *captureImpl) GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
 	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err

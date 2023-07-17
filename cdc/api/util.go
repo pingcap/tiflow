@@ -150,8 +150,8 @@ func HandleOwnerScheduleTable(
 	}
 }
 
-// ForwardToOwner forwards an request to the owner
-func ForwardToOwner(c *gin.Context, p capture.Capture) {
+// ForwardToController forwards a request to the owner
+func ForwardToController(c *gin.Context, p capture.Capture) {
 	ctx := c.Request.Context()
 	// every request can only forward to owner one time
 	if len(c.GetHeader(forwardFromCapture)) != 0 {
@@ -167,11 +167,11 @@ func ForwardToOwner(c *gin.Context, p capture.Capture) {
 
 	c.Header(forwardFromCapture, info.ID)
 
-	var owner *model.CaptureInfo
-	// get owner
-	owner, err = p.GetOwnerCaptureInfo(ctx)
+	var controller *model.CaptureInfo
+	// get controller info
+	controller, err = p.GetControllerCaptureInfo(ctx)
 	if err != nil {
-		log.Info("get owner failed", zap.Error(err))
+		log.Info("get controller failed", zap.Error(err))
 		_ = c.Error(err)
 		return
 	}
@@ -186,7 +186,7 @@ func ForwardToOwner(c *gin.Context, p capture.Capture) {
 		return
 	}
 
-	req.URL.Host = owner.AdvertiseAddr
+	req.URL.Host = controller.AdvertiseAddr
 	// we should check tls config instead of security here because
 	// security will never be nil
 	if tls, _ := security.ToTLSConfigWithVerify(); tls != nil {

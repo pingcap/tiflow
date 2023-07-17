@@ -552,7 +552,7 @@ var doc = `{
         },
         "/api/v1/owner/resign": {
             "post": {
-                "description": "notify the current owner to resign",
+                "description": "notify the current controller to resign",
                 "consumes": [
                     "application/json"
                 ],
@@ -562,7 +562,7 @@ var doc = `{
                 "tags": [
                     "owner"
                 ],
-                "summary": "notify the owner to resign",
+                "summary": "notify the ticdc cluster controller to resign",
                 "responses": {
                     "202": {
                         "description": ""
@@ -1190,7 +1190,7 @@ var doc = `{
                     "owner",
                     "v2"
                 ],
-                "summary": "Notify the owner to resign",
+                "summary": "Notify the controller to resign",
                 "responses": {
                     "200": {
                         "description": "OK",

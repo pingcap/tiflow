@@ -29,7 +29,7 @@ import (
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/health [get]
 func (h *OpenAPIV2) health(c *gin.Context) {
-	if !h.capture.IsOwner() {
+	if !h.capture.IsController() {
 		middleware.ForwardToOwnerMiddleware(h.capture)(c)
 		return
 	}

@@ -83,10 +83,10 @@ func ErrorHandleMiddleware() gin.HandlerFunc {
 // is not owner, or handle it locally.
 func ForwardToOwnerMiddleware(p capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if !p.IsOwner() {
-			api.ForwardToOwner(ctx, p)
+		if !p.IsController() {
+			api.ForwardToController(ctx, p)
 
-			// Without calling Abort(), Gin will continued to process the next handler,
+			// Without calling Abort(), Gin will continue to process the next handler,
 			// execute code which should only be run by the owner, and cause a panic.
 			// See https://github.com/pingcap/tiflow/issues/5888
 			ctx.Abort()
