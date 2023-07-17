@@ -47,7 +47,7 @@ type controllerImpl struct {
 	// logLimiter controls cluster version check log output rate
 	logLimiter   *rate.Limiter
 	lastTickTime time.Time
-	// bootstrapped specifies whether the owner has been initialized.
+	// bootstrapped specifies whether the controller has been initialized.
 	// This will only be done when the owner starts the first Tick.
 	// NOTICE: Do not use it in a method other than tick unexpectedly,
 	//         as it is not a thread-safe value.
