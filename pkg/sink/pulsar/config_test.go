@@ -53,7 +53,7 @@ func TestPulsarConfig(t *testing.T) {
 				assert.Equal(t, config.OperationTimeout, 998*time.Second)
 				assert.Equal(t, config.BatchingMaxMessages, defaultBatchingMaxSize)
 				assert.Equal(t, config.BatchingMaxPublishDelay, defaultBatchingMaxPublishDelay)
-				assert.Equal(t, config.SendTimeout, 123*time.Millisecond)
+				assert.Equal(t, config.SendTimeout, 123*time.Second)
 			}
 		})
 	}

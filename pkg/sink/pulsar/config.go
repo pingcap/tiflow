@@ -254,7 +254,7 @@ func (c *PulsarConfig) Apply(sinkURI *url.URL) error {
 		if err != nil {
 			return err
 		}
-		c.SendTimeout = time.Millisecond * time.Duration(a)
+		c.SendTimeout = time.Second * time.Duration(a)
 	}
 
 	s = params.Get(MessageKey)
