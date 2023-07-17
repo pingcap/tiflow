@@ -259,10 +259,6 @@ func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 }
 
 func (b *BatchDecoder) hasNext() bool {
-	// claim-check enabled, it's ok to received message without value part.
-	if b.storage != nil {
-		return len(b.keyBytes) > 0 || len(b.valueBytes) > 0
-	}
 	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
 }
 
