@@ -15,7 +15,8 @@ import (
 
 // sink config Key
 const (
-	PulsarVersion   = "pulsar-version"
+	PulsarVersion = "pulsar-version"
+
 	MaxMessageBytes = "max-message-bytes"
 
 	// Compression 	support LZ4 ZLib ZSTD
@@ -42,22 +43,22 @@ const (
 	// interval or until
 	BatchingMaxPublishDelay = "batching-max-publish-delay"
 
-	// SendTimeout producer max send message timeout  (default: 1000ms)
+	// SendTimeout producer max send message timeout  (default: 30000ms)
 	SendTimeout = "send-timeout"
 
-	// ProducerMode single or batch send message(s)
-	ProducerMode = "producer-mode"
-
+	// MessageKey Option.All Keys filled in Pulsar when sending events are used for routing in Pulsar. If it is empty, it will be randomly distributed in each partition.
+	//For one changefeed task.
 	MessageKey = "message-key"
 
+	// BasicUserName Account name for pulsar basic authentication (the second priority authentication method)
 	BasicUserName = "basic-user-name"
 
 	BasicPassword = "basic-password"
 
+	// TokenFromFile Authentication from the file token, the path name of the file (the third priority authentication method)
 	TokenFromFile = "token-from-file"
 
-	DebugMode = "debug-mode"
-
+	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
 	Protocol = "protocol"
 )
 
@@ -69,10 +70,10 @@ const (
 
 	defaultBatchingMaxSize = uint(1000)
 
-	defaultBatchingMaxDelay = 10 * time.Millisecond
+	defaultBatchingMaxPublishDelay = 10 * time.Millisecond
 
-	// defaultSendTimeout 1000ms
-	defaultSendTimeout = 1000 * time.Millisecond
+	// defaultSendTimeout 30s
+	defaultSendTimeout = 30 * time.Second
 
 	// defaultProducerModeSingle batch send message(s)
 	defaultProducerModeBatch = "batch"
@@ -80,52 +81,66 @@ const (
 
 type PulsarConfig struct {
 	PulsarVersion string
-	// pulsar server message limited 5MB default
+	// MaxMessageBytes pulsar server message limited 5MB default,
+	// this default value is 0 !
+	// but it can not be set by client. if you set it,
+	// we will check message if greater than MaxMessageBytes before produce at client.
 	MaxMessageBytes int
-	//Compression     string
 
 	// Configure the service URL for the Pulsar service.
 	// This parameter is required
 	URL string
 
+	// pulsar client compression
+	CompressionType pulsar.CompressionType
+
+	// AuthenticationToken the token for the Pulsar server
 	AuthenticationToken string
 
+	// ConnectionTimeout Timeout for the establishment of a TCP connection (default: 5 seconds)
 	ConnectionTimeout time.Duration
 
+	// Set the operation timeout (default: 30 seconds)
+	// Producer-create, subscribe and unsubscribe operations will be retried until this interval, after which the
+	// operation will be marked as failed
 	OperationTimeout time.Duration
 
-	// producer config
+	// BatchingMaxMessages specifies the maximum number of messages permitted in a batch. (default: 1000)
 	BatchingMaxMessages uint
 
+	// BatchingMaxPublishDelay specifies the time period within which the messages sent will be batched (default: 10ms)
+	// if batch messages are enabled. If set to a non zero value, messages will be queued until this time
+	// interval or until
 	BatchingMaxPublishDelay time.Duration
 
-	// default: 1000ms
+	// SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.
+	// Send and SendAsync returns an error after timeout.
+	// default: 30s
 	SendTimeout time.Duration
 
-	// ProducerMode single or batch send message(s)
+	// ProducerMode batch send message(s)
 	ProducerMode string
 
-	// messageKey
+	// MessageKey Option.All Keys filled in Pulsar when sending events are used for routing in Pulsar. If it is empty, it will be randomly distributed in each partition.
+	//For one changefeed task.
 	MessageKey string
 
-	// TokenFromFile token file path
+	// TokenFromFile Authentication from the file token, the path name of the file (the third priority authentication method)
 	TokenFromFile string
 
-	// BasicUserName
+	// BasicUserName Account name for pulsar basic authentication (the second priority authentication method)
 	BasicUserName string
-	// BasicPassword
+	// BasicPassword with account
 	BasicPassword string
 
 	// DebugMode
 	DebugMode bool
 
+	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
 	Protocol config.Protocol
 
 	// parse the sinkURI
 	u *url.URL
-
-	// pulsar client compression
-	CompressionType pulsar.CompressionType
 }
 
 // GetBrokerURL get broker url
@@ -138,9 +153,33 @@ func (c *PulsarConfig) GetSinkURI() *url.URL {
 	return c.u
 }
 
+func (c *PulsarConfig) checkSinkURI(sinkURI *url.URL) error {
+	if sinkURI.Scheme == "" {
+		return fmt.Errorf("scheme is empty")
+	}
+	if sinkURI.Host == "" {
+		return fmt.Errorf("host is empty")
+	}
+	if sinkURI.Path == "" {
+		return fmt.Errorf("path is empty")
+	}
+	return nil
+}
+
 // Apply apply
 func (c *PulsarConfig) Apply(sinkURI *url.URL) error {
+	err := c.checkSinkURI(sinkURI)
+	if err != nil {
+		return err
+	}
+
 	params := sinkURI.Query()
+
+	c.URL = sinkURI.Scheme + "://" + sinkURI.Host
+	if len(c.URL) == 0 {
+		return fmt.Errorf("URL is empty")
+	}
+	c.u = sinkURI
 
 	s := params.Get(PulsarVersion)
 	if s != "" {
@@ -158,7 +197,6 @@ func (c *PulsarConfig) Apply(sinkURI *url.URL) error {
 
 	s = params.Get(Compression)
 	if s != "" {
-		//c.Compression = s
 		switch strings.ToLower(s) {
 		case "lz4":
 			c.CompressionType = pulsar.LZ4
@@ -173,12 +211,6 @@ func (c *PulsarConfig) Apply(sinkURI *url.URL) error {
 	if len(s) > 0 {
 		c.AuthenticationToken = s
 	}
-
-	c.URL = sinkURI.Scheme + "://" + sinkURI.Host
-	if len(c.URL) == 0 {
-		return fmt.Errorf("URL is empty")
-	}
-	c.u = sinkURI
 
 	s = params.Get(ConnectionTimeout)
 	if len(s) > 0 {
@@ -271,7 +303,7 @@ func NewPulsarConfig(sinkURI *url.URL) (*PulsarConfig, error) {
 		ConnectionTimeout:       defaultConnectionTimeout,
 		OperationTimeout:        defaultOperationTimeout,
 		BatchingMaxMessages:     defaultBatchingMaxSize,
-		BatchingMaxPublishDelay: defaultBatchingMaxDelay,
+		BatchingMaxPublishDelay: defaultBatchingMaxPublishDelay,
 		// from pkg/config.go
 		MaxMessageBytes: config.DefaultMaxMessageBytes,
 		SendTimeout:     defaultSendTimeout,

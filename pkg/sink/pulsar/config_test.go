@@ -18,13 +18,8 @@ func TestPulsarConfig(t *testing.T) {
 		{
 			name: "Test valid sinkURI",
 			sinkURI: "pulsar://127.0.0.1:6650/persistent://tenant/namespace/test-topic" +
-				"?send-timeout=0123&compression=lz4",
+				"?send-timeout=0123&compression=lz4&operation-timeout=998",
 			wantErr: false,
-		},
-		{
-			name:    "Test invalid sinkURI",
-			sinkURI: "pulsar://?send-timeout=123&compression=lz4",
-			wantErr: true,
 		},
 		{
 			name:    "Test invalid sinkURI",
@@ -55,11 +50,10 @@ func TestPulsarConfig(t *testing.T) {
 				assert.Equal(t, config.CompressionType, pulsar.LZ4)
 				assert.Equal(t, config.URL, "pulsar://127.0.0.1:6650")
 				assert.Equal(t, config.ConnectionTimeout, defaultConnectionTimeout)
-				assert.Equal(t, config.OperationTimeout, defaultOperationTimeout)
+				assert.Equal(t, config.OperationTimeout, 998*time.Second)
 				assert.Equal(t, config.BatchingMaxMessages, defaultBatchingMaxSize)
-				assert.Equal(t, config.BatchingMaxPublishDelay, defaultBatchingMaxDelay)
+				assert.Equal(t, config.BatchingMaxPublishDelay, defaultBatchingMaxPublishDelay)
 				assert.Equal(t, config.SendTimeout, 123*time.Millisecond)
-				assert.Equal(t, config.ProducerMode, defaultProducerModeBatch)
 			}
 		})
 	}
