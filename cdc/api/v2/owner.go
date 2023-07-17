@@ -29,7 +29,7 @@ import (
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/owner/resign [post]
 func (h *OpenAPIV2) resignOwner(c *gin.Context) {
-	o, _ := h.capture.GetOwner()
+	o, _ := h.capture.GetController()
 	if o != nil {
 		o.AsyncStop()
 	}

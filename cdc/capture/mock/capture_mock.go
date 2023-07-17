@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	controller "github.com/pingcap/tiflow/cdc/controller"
 	model "github.com/pingcap/tiflow/cdc/model"
 	owner "github.com/pingcap/tiflow/cdc/owner"
 	etcd "github.com/pingcap/tiflow/pkg/etcd"
@@ -63,6 +64,21 @@ func (m *MockCapture) Drain() <-chan struct{} {
 func (mr *MockCaptureMockRecorder) Drain() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Drain", reflect.TypeOf((*MockCapture)(nil).Drain))
+}
+
+// GetController mocks base method.
+func (m *MockCapture) GetController() (controller.Controller, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetController")
+	ret0, _ := ret[0].(controller.Controller)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetController indicates an expected call of GetController.
+func (mr *MockCaptureMockRecorder) GetController() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetController", reflect.TypeOf((*MockCapture)(nil).GetController))
 }
 
 // GetEtcdClient mocks base method.
