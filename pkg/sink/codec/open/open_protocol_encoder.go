@@ -241,12 +241,14 @@ func (d *BatchEncoder) tryBuildCallback() {
 // This should be called when the message is too large, and the claim check enabled.
 // This method should not meet error, since only one string is set to the message,
 // it should not cause the encode error or the message too large error.
-func (d *BatchEncoder) NewClaimCheckMessage(location string, callback func()) (*common.Message, error) {
+func (d *BatchEncoder) NewClaimCheckMessage(message *common.Message) (*common.Message, error) {
 	messageKey := &internal.MessageKey{
+		Ts:                 message.Ts,
+		Schema:             *message.Schema,
+		Table:              *message.Table,
 		Type:               model.MessageTypeRow,
-		ClaimCheckLocation: location,
+		ClaimCheckLocation: message.ClaimCheckFileName,
 	}
-
 	key, err := messageKey.Encode()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -267,15 +269,14 @@ func (d *BatchEncoder) NewClaimCheckMessage(location string, callback func()) (*
 	var keyLenByte [8]byte
 	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
 
-	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
-	message.Key = append(message.Key, keyLenByte[:]...)
-	message.Key = append(message.Key, key...)
-	if callback != nil {
-		message.Callback = callback
+	result := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+	result.Key = append(message.Key, keyLenByte[:]...)
+	result.Key = append(message.Key, key...)
+	if message.Callback != nil {
+		result.Callback = message.Callback
 	}
-	message.IncRowsCount()
-
-	return message, nil
+	result.IncRowsCount()
+	return result, nil
 }
 
 func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
