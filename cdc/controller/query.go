@@ -28,8 +28,8 @@ import (
 type QueryType int32
 
 const (
-	// QueryAllChangeFeedStatuses query all changefeed status.
-	QueryAllChangeFeedStatuses QueryType = iota
+	// QueryAllChangeFeedSCheckpointTs query all changefeed checkpoint ts.
+	QueryAllChangeFeedSCheckpointTs QueryType = iota
 	// QueryAllChangeFeedInfo is the type of query all changefeed info.
 	QueryAllChangeFeedInfo
 	// QueryCaptures is the type of query captures info.
@@ -65,6 +65,18 @@ func (o *controllerImpl) GetAllChangeFeedInfo(ctx context.Context) (
 		return nil, errors.Trace(err)
 	}
 	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
+}
+
+func (o *controllerImpl) GetAllChangeFeedCheckpointTs(ctx context.Context) (
+	map[model.ChangeFeedID]uint64, error,
+) {
+	query := &Query{
+		Tp: QueryAllChangeFeedSCheckpointTs,
+	}
+	if err := o.sendQueryToController(ctx, query); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return query.Data.(map[model.ChangeFeedID]uint64), nil
 }
 
 // Query queries controller internal information.
@@ -130,6 +142,18 @@ func (o *controllerImpl) handleJobs(_ context.Context) {
 
 func (o *controllerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
+	case QueryAllChangeFeedSCheckpointTs:
+		ret := make(map[model.ChangeFeedID]uint64)
+		for cfID, cfReactor := range o.changefeeds {
+			if cfReactor == nil {
+				continue
+			}
+			if cfReactor.Status == nil {
+				continue
+			}
+			ret[cfID] = cfReactor.Status.CheckpointTs
+		}
+		query.Data = ret
 	case QueryAllChangeFeedInfo:
 		ret := map[model.ChangeFeedID]*model.ChangeFeedInfo{}
 		for cfID, cfReactor := range o.changefeeds {

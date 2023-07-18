@@ -48,6 +48,21 @@ func (mr *MockControllerMockRecorder) AsyncStop() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncStop", reflect.TypeOf((*MockController)(nil).AsyncStop))
 }
 
+// GetAllChangeFeedCheckpointTs mocks base method.
+func (m *MockController) GetAllChangeFeedCheckpointTs(ctx context.Context) (map[model.ChangeFeedID]uint64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllChangeFeedCheckpointTs", ctx)
+	ret0, _ := ret[0].(map[model.ChangeFeedID]uint64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllChangeFeedCheckpointTs indicates an expected call of GetAllChangeFeedCheckpointTs.
+func (mr *MockControllerMockRecorder) GetAllChangeFeedCheckpointTs(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllChangeFeedCheckpointTs", reflect.TypeOf((*MockController)(nil).GetAllChangeFeedCheckpointTs), ctx)
+}
+
 // GetAllChangeFeedInfo mocks base method.
 func (m *MockController) GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error) {
 	m.ctrl.T.Helper()

@@ -49,6 +49,9 @@ type Controller interface {
 	GetAllChangeFeedInfo(ctx context.Context) (
 		map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
 	)
+	GetAllChangeFeedCheckpointTs(ctx context.Context) (
+		map[model.ChangeFeedID]uint64, error,
+	)
 	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
 }
 

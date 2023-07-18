@@ -27,6 +27,7 @@ import (
 	"github.com/golang/mock/gomock"
 	tidbkv "github.com/pingcap/tidb/kv"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
+	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
@@ -518,9 +519,12 @@ func TestUpdateChangefeed(t *testing.T) {
 func TestListChangeFeeds(t *testing.T) {
 	t.Parallel()
 
-	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	ctx := gomock.NewController(t)
+	cp := mock_capture.NewMockCapture(ctx)
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsController().Return(true).AnyTimes()
+	controller := mock_controller.NewMockController(ctx)
+	cp.EXPECT().GetController().Return(controller, nil).AnyTimes()
 
 	apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 	router := newRouter(apiV2)
@@ -535,8 +539,8 @@ func TestListChangeFeeds(t *testing.T) {
 	}
 
 	// case 1: list all changefeeds regardless of the state
-	provider1 := &mockStatusProvider{
-		changefeedInfos: map[model.ChangeFeedID]*model.ChangeFeedInfo{
+	controller.EXPECT().GetAllChangeFeedInfo(gomock.Any()).Return(
+		map[model.ChangeFeedID]*model.ChangeFeedInfo{
 			model.DefaultChangeFeedID("cf1"): {
 				State: model.StateNormal,
 			},
@@ -552,16 +556,16 @@ func TestListChangeFeeds(t *testing.T) {
 			model.DefaultChangeFeedID("cf5"): {
 				State: model.StateFinished,
 			},
-		},
-		changefeedStatuses: map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI{
-			model.DefaultChangeFeedID("cf1"): {},
-			model.DefaultChangeFeedID("cf2"): {},
-			model.DefaultChangeFeedID("cf3"): {},
-			model.DefaultChangeFeedID("cf4"): {},
-			model.DefaultChangeFeedID("cf5"): {},
-		},
-	}
-	cp.EXPECT().StatusProvider().Return(provider1).AnyTimes()
+		}, nil,
+	).Times(2)
+	controller.EXPECT().GetAllChangeFeedCheckpointTs(gomock.Any()).Return(
+		map[model.ChangeFeedID]uint64{
+			model.DefaultChangeFeedID("cf1"): 1,
+			model.DefaultChangeFeedID("cf2"): 2,
+			model.DefaultChangeFeedID("cf3"): 3,
+			model.DefaultChangeFeedID("cf4"): 4,
+			model.DefaultChangeFeedID("cf5"): 5,
+		}, nil).Times(2)
 	w := httptest.NewRecorder()
 	metaInfo := testCase{
 		url:    "/api/v2/changefeeds?state=all",
