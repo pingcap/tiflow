@@ -60,6 +60,19 @@ const (
 
 	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
 	Protocol = "protocol"
+
+	//TLSCertificatePath TLSPrivateKeyPath create new pulsar authentication provider with specified TLS certificate and private key
+	TLSCertificatePath = "tls-certificate-path"
+	TLSPrivateKeyPath  = "tls-private-key-path"
+
+	// OAuth2IssuerUrl  the URL of the authorization server.
+	OAuth2IssuerUrl = "oauth2-issuer-url"
+	// OAuth2Audience  the URL of the resource server.
+	OAuth2Audience = "oauth2-audience"
+	// OAuth2PrivateKey the private key used to sign the server.
+	OAuth2PrivateKey = "oauth2-private-key"
+	// OAuth2ClientId  the client ID of the application.
+	OAuth2ClientId = "oauth2-client-id"
 )
 
 // sink config default Value
@@ -133,6 +146,14 @@ type PulsarConfig struct {
 	// BasicPassword with account
 	BasicPassword string
 
+	//TLSCertificatePath TLSPrivateKeyPath create new pulsar authentication provider with specified TLS certificate and private key
+	TLSCertificatePath string
+	TLSPrivateKeyPath  string
+
+	// Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id
+	// and 'type' always is 'client_credentials'
+	OAuth2 map[string]string
+
 	// DebugMode
 	DebugMode bool
 
@@ -164,6 +185,36 @@ func (c *PulsarConfig) checkSinkURI(sinkURI *url.URL) error {
 		return fmt.Errorf("path is empty")
 	}
 	return nil
+}
+
+func (c *PulsarConfig) applyOAuth(params url.Values) {
+	// Go client use Oauth2 authentication
+	// https://pulsar.apache.org/docs/2.10.x/security-oauth2/#authentication-types
+
+	s := params.Get(OAuth2IssuerUrl)
+	if len(s) > 0 {
+		c.OAuth2["issuerUrl"] = s
+	}
+
+	s = params.Get(OAuth2Audience)
+	if len(s) > 0 {
+		c.OAuth2["audience"] = s
+	}
+
+	s = params.Get(OAuth2PrivateKey)
+	if len(s) > 0 {
+		c.OAuth2["privateKey"] = s
+	}
+
+	s = params.Get(OAuth2ClientId)
+	if len(s) > 0 {
+		c.OAuth2["clientId"] = s
+	}
+	if len(c.OAuth2) >= 4 {
+		c.OAuth2["type"] = "client_credentials"
+	} else {
+		c.OAuth2 = make(map[string]string)
+	}
 }
 
 // Apply apply
@@ -276,6 +327,18 @@ func (c *PulsarConfig) Apply(sinkURI *url.URL) error {
 	if len(s) > 0 {
 		c.BasicPassword = s
 	}
+
+	s = params.Get(TLSCertificatePath)
+	if len(s) > 0 {
+		c.TLSCertificatePath = s
+	}
+
+	s = params.Get(TLSPrivateKeyPath)
+	if len(s) > 0 {
+		c.TLSPrivateKeyPath = s
+	}
+
+	c.applyOAuth(params)
 
 	s = params.Get(Protocol)
 	if len(s) > 0 {
