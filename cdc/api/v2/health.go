@@ -30,7 +30,7 @@ import (
 // @Router	/api/v2/health [get]
 func (h *OpenAPIV2) health(c *gin.Context) {
 	if !h.capture.IsController() {
-		middleware.ForwardToOwnerMiddleware(h.capture)(c)
+		middleware.ForwardToControllerMiddleware(h.capture)(c)
 		return
 	}
 

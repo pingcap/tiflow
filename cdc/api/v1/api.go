@@ -84,7 +84,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// changefeed API
 	changefeedGroup := v1.Group("/changefeeds")
-	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	changefeedGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	changefeedGroup.GET("", api.ListChangefeed)
 	changefeedGroup.GET("/:changefeed_id", api.GetChangefeed)
 	changefeedGroup.POST("", api.CreateChangefeed)
@@ -97,18 +97,18 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// owner API
 	ownerGroup := v1.Group("/owner")
-	ownerGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	ownerGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	ownerGroup.POST("/resign", api.ResignController)
 
 	// processor API
 	processorGroup := v1.Group("/processors")
-	processorGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	processorGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	processorGroup.GET("", api.ListProcessor)
 	processorGroup.GET("/:changefeed_id/:capture_id", api.GetProcessor)
 
 	// capture API
 	captureGroup := v1.Group("/captures")
-	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	captureGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	captureGroup.GET("", api.ListCapture)
 	captureGroup.PUT("/drain", api.DrainCapture)
 }
@@ -869,7 +869,7 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 // @Router	/api/v1/health [get]
 func (h *OpenAPI) Health(c *gin.Context) {
 	if !h.capture.IsController() {
-		middleware.ForwardToOwnerMiddleware(h.capture)(c)
+		middleware.ForwardToControllerMiddleware(h.capture)(c)
 		return
 	}
 

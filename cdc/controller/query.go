@@ -49,7 +49,7 @@ func (o *controllerImpl) GetCaptures(ctx context.Context) ([]*model.CaptureInfo,
 	query := &Query{
 		Tp: QueryCaptures,
 	}
-	if err := o.sendQueryToOwner(ctx, query); err != nil {
+	if err := o.sendQueryToController(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return query.Data.([]*model.CaptureInfo), nil
@@ -61,26 +61,26 @@ func (o *controllerImpl) GetAllChangeFeedInfo(ctx context.Context) (
 	query := &Query{
 		Tp: QueryAllChangeFeedInfo,
 	}
-	if err := o.sendQueryToOwner(ctx, query); err != nil {
+	if err := o.sendQueryToController(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
 }
 
-// Query queries owner internal information.
+// Query queries controller internal information.
 func (o *controllerImpl) Query(query *Query, done chan<- error) {
-	o.pushOwnerJob(&controllerJob{
+	o.pushControllerJob(&controllerJob{
 		Tp:    controllerJobTypeQuery,
 		query: query,
 		done:  done,
 	})
 }
 
-func (o *controllerImpl) pushOwnerJob(job *controllerJob) {
+func (o *controllerImpl) pushControllerJob(job *controllerJob) {
 	o.controllerJobQueue.Lock()
 	defer o.controllerJobQueue.Unlock()
 	if atomic.LoadInt32(&o.closed) != 0 {
-		log.Info("reject owner job as controller has been closed",
+		log.Info("reject controller job as controller has been closed",
 			zap.Int("jobType", int(job.Tp)))
 		select {
 		case job.done <- cerror.ErrOwnerNotFound.GenWithStackByArgs():
@@ -92,7 +92,7 @@ func (o *controllerImpl) pushOwnerJob(job *controllerJob) {
 	o.controllerJobQueue.queue = append(o.controllerJobQueue.queue, job)
 }
 
-func (o *controllerImpl) sendQueryToOwner(ctx context.Context, query *Query) error {
+func (o *controllerImpl) sendQueryToController(ctx context.Context, query *Query) error {
 	doneCh := make(chan error, 1)
 	o.Query(query, doneCh)
 

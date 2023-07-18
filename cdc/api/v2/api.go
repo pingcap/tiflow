@@ -49,7 +49,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
-	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	changefeedGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	changefeedGroup.GET("/:changefeed_id", api.getChangeFeed)
 	changefeedGroup.POST("", api.createChangefeed)
 	changefeedGroup.GET("", api.listChangeFeeds)
@@ -62,30 +62,30 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// capture apis
 	captureGroup := v2.Group("/captures")
-	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	captureGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	captureGroup.POST("/:capture_id/drain", api.drainCapture)
 	captureGroup.GET("", api.listCaptures)
 
 	// processor apis
 	processorGroup := v2.Group("/processors")
-	processorGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	processorGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	processorGroup.GET("/:changefeed_id/:capture_id", api.getProcessor)
 	processorGroup.GET("", api.listProcessors)
 
 	verifyTableGroup := v2.Group("/verify_table")
-	verifyTableGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	verifyTableGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	verifyTableGroup.POST("", api.verifyTable)
 
 	// unsafe apis
 	unsafeGroup := v2.Group("/unsafe")
-	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	unsafeGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	unsafeGroup.GET("/metadata", api.CDCMetaData)
 	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
 	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
 	// owner apis
 	ownerGroup := v2.Group("/owner")
-	unsafeGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	unsafeGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	ownerGroup.POST("/resign", api.resignController)
 
 	// common APIs

@@ -60,7 +60,6 @@ type Capture interface {
 	GetOwner() (owner.Owner, error)
 	GetController() (controller.Controller, error)
 	GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
-	IsOwner() bool
 	IsController() bool
 
 	Info() (model.CaptureInfo, error)
@@ -742,13 +741,7 @@ func (c *captureImpl) WriteDebugInfo(ctx context.Context, w io.Writer) {
 	wait(doneM)
 }
 
-// IsOwner returns whether the capture is an owner
-func (c *captureImpl) IsOwner() bool {
-	c.ownerMu.Lock()
-	defer c.ownerMu.Unlock()
-	return c.owner != nil
-}
-
+// IsController returns whether the capture is a controller
 func (c *captureImpl) IsController() bool {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()

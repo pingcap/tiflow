@@ -150,10 +150,10 @@ func HandleOwnerScheduleTable(
 	}
 }
 
-// ForwardToController forwards a request to the owner
+// ForwardToController forwards a request to the controller
 func ForwardToController(c *gin.Context, p capture.Capture) {
 	ctx := c.Request.Context()
-	// every request can only forward to owner one time
+	// every request can only forward to controller one time
 	if len(c.GetHeader(forwardFromCapture)) != 0 {
 		_ = c.Error(cerror.ErrRequestForwardErr.FastGenByArgs())
 		return

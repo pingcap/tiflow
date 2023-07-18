@@ -169,20 +169,6 @@ func (mr *MockCaptureMockRecorder) IsController() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsController", reflect.TypeOf((*MockCapture)(nil).IsController))
 }
 
-// IsOwner mocks base method.
-func (m *MockCapture) IsOwner() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsOwner")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// IsOwner indicates an expected call of IsOwner.
-func (mr *MockCaptureMockRecorder) IsOwner() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsOwner", reflect.TypeOf((*MockCapture)(nil).IsOwner))
-}
-
 // IsReady mocks base method.
 func (m *MockCapture) IsReady() bool {
 	m.ctrl.T.Helper()
