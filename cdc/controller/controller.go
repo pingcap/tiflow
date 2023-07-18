@@ -32,13 +32,13 @@ import (
 
 type controllerJobType int
 
-// All OwnerJob types
+// All ControllerJob types
 const (
 	controllerJobTypeQuery controllerJobType = iota
 )
 
 // versionInconsistentLogRate represents the rate of log output when there are
-// captures with versions different from that of the owner
+// captures with versions different from that of the controller
 const versionInconsistentLogRate = 1
 
 // Controller is a manager to schedule changefeeds
@@ -111,7 +111,7 @@ func (o *controllerImpl) Tick(stdCtx context.Context, rawState orchestrator.Reac
 	if !o.clusterVersionConsistent(state.Captures) {
 		return state, nil
 	}
-	// Owner should update GC safepoint before initializing changefeed, so
+	// controller should update GC safepoint before initializing changefeed, so
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
 	//
@@ -164,7 +164,7 @@ func (o *controllerImpl) clusterVersionConsistent(captures map[model.CaptureID]*
 	if err := version.CheckTiCDCVersion(versions); err != nil {
 		if o.logLimiter.Allow() {
 			log.Warn("TiCDC cluster versions not allowed",
-				zap.String("ownerVer", version.ReleaseVersion),
+				zap.String("controllerVersion", version.ReleaseVersion),
 				zap.Any("captures", captures), zap.Error(err))
 		}
 		return false
