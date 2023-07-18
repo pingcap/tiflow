@@ -305,7 +305,8 @@ func BenchmarkCraftDecoding(b *testing.B) {
 func BenchmarkJsonDecoding(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, message := range codecJSONEncodedRowChanges {
-			decoder, err := open.NewBatchDecoder(context.Background(), config.GetDefaultReplicaConfig())
+			codecConfig := common.NewConfig(config.ProtocolOpen)
+			decoder, err := open.NewBatchDecoder(context.Background(), codecConfig)
 			require.NoError(b, err)
 			if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 				panic(err)

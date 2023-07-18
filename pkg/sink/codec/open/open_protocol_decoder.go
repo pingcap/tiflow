@@ -18,16 +18,13 @@ import (
 	"encoding/binary"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
 )
 
 // BatchMixedDecoder decodes the byte of a batch into the original messages.
@@ -259,10 +256,6 @@ func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 }
 
 func (b *BatchDecoder) hasNext() bool {
-	// claim-check enabled, it's ok to received message without value part.
-	if b.storage != nil {
-		return len(b.keyBytes) > 0 || len(b.valueBytes) > 0
-	}
 	return len(b.keyBytes) > 0 && len(b.valueBytes) > 0
 }
 
@@ -280,19 +273,17 @@ func (b *BatchDecoder) decodeNextKey() error {
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder(ctx context.Context, replicaConfig *config.ReplicaConfig) (codec.RowEventDecoder, error) {
+func NewBatchDecoder(ctx context.Context, config *common.Config) (codec.RowEventDecoder, error) {
 	var (
 		storage storage.ExternalStorage
 		err     error
 	)
-	if replicaConfig.Sink.KafkaConfig.LargeMessageHandle.EnableClaimCheck() {
-		storageURI := replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI
+	if config.LargeMessageHandle.EnableClaimCheck() {
+		storageURI := config.LargeMessageHandle.ClaimCheckStorageURI
 		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
-		log.Info("claim-check enabled, set the external storage for the kafka consumer",
-			zap.String("storageURI", storageURI))
 	}
 	return &BatchDecoder{
 		storage: storage,

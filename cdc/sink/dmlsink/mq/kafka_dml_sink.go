@@ -113,6 +113,7 @@ func NewKafkaDMLSink(
 		claimCheckEncoder codec.ClaimCheckEncoder
 		ok                bool
 	)
+
 	if encoderConfig.LargeMessageHandle.EnableClaimCheck() {
 		claimCheckEncoder, ok = encoderBuilder.Build().(codec.ClaimCheckEncoder)
 		if !ok {
@@ -120,8 +121,7 @@ func NewKafkaDMLSink(
 				GenWithStack("claim-check enabled but the encoding protocol %s does not support", protocol.String())
 		}
 
-		storageURI := replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI
-		claimCheck, err = NewClaimCheck(ctx, storageURI, changefeedID)
+		claimCheck, err = NewClaimCheck(ctx, encoderConfig.LargeMessageHandle, changefeedID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}

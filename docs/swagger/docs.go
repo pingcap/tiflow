@@ -1559,6 +1559,9 @@ var doc = `{
         "config.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
+                "claim-check-compression": {
+                    "type": "string"
+                },
                 "claim-check-storage-uri": {
                     "type": "string"
                 },
@@ -2473,6 +2476,9 @@ var doc = `{
         "v2.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
+                "claim_check_compression": {
+                    "type": "string"
+                },
                 "claim_check_storage_uri": {
                     "type": "string"
                 },
