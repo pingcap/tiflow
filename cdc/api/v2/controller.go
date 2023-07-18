@@ -21,7 +21,7 @@ import (
 
 // ResignController makes the current controller resign
 // @Summary Notify the controller to resign
-// @Description Notify the current owner to resign
+// @Description Notify the current controller to resign
 // @Tags owner,v2
 // @Accept json
 // @Produce json
