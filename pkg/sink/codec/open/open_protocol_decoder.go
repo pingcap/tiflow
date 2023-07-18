@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -274,13 +273,13 @@ func (b *BatchDecoder) decodeNextKey() error {
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder(ctx context.Context, replicaConfig *config.ReplicaConfig) (codec.RowEventDecoder, error) {
+func NewBatchDecoder(ctx context.Context, config *common.Config) (codec.RowEventDecoder, error) {
 	var (
 		storage storage.ExternalStorage
 		err     error
 	)
-	if replicaConfig.Sink.KafkaConfig.LargeMessageHandle.EnableClaimCheck() {
-		storageURI := replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI
+	if config.LargeMessageHandle.EnableClaimCheck() {
+		storageURI := config.LargeMessageHandle.ClaimCheckStorageURI
 		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)

@@ -118,9 +118,7 @@ func TestMaxBatchSize(t *testing.T) {
 
 	messages := encoder.Build()
 
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
-	decoder, err := NewBatchDecoder(context.Background(), replicaConfig)
+	decoder, err := NewBatchDecoder(context.Background(), codecConfig)
 	require.NoError(t, err)
 	sum := 0
 	for _, msg := range messages {
@@ -220,9 +218,7 @@ func TestOpenProtocolBatchCodec(t *testing.T) {
 	tester := internal.NewDefaultBatchTester()
 	tester.TestBatchCodec(t, NewBatchEncoderBuilder(codecConfig),
 		func(key []byte, value []byte) (codec.RowEventDecoder, error) {
-			replicaConfig := config.GetDefaultReplicaConfig()
-			replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
-			decoder, err := NewBatchDecoder(context.Background(), replicaConfig)
+			decoder, err := NewBatchDecoder(context.Background(), codecConfig)
 			require.NoError(t, err)
 			err = decoder.AddKeyValue(key, value)
 			return decoder, err
@@ -277,9 +273,7 @@ func TestAppendMessageOnlyHandleKeyColumns(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
-	decoder, err := NewBatchDecoder(context.Background(), replicaConfig)
+	decoder, err := NewBatchDecoder(context.Background(), codecConfig)
 	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)

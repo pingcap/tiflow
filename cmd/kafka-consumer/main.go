@@ -562,9 +562,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		decoder codec.RowEventDecoder
 		err     error
 	)
+
+	codecConfig := common.NewConfig(c.protocol)
+	if replicaConfig != nil && replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
+		codecConfig.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+	}
+
 	switch c.protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
-		decoder, err = open.NewBatchDecoder(ctx, replicaConfig)
+		decoder, err = open.NewBatchDecoder(ctx, codecConfig)
 	case config.ProtocolCanalJSON:
 		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
 	case config.ProtocolAvro:

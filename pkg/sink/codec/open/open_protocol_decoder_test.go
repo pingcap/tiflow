@@ -60,9 +60,7 @@ func TestDecodeEvent(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
-	decoder, err := NewBatchDecoder(ctx, replicaConfig)
+	decoder, err := NewBatchDecoder(ctx, codecConfig)
 	require.NoError(t, err)
 
 	err = decoder.AddKeyValue(message.Key, message.Value)
@@ -109,7 +107,7 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 			LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
 		},
 	}
-	decoder, err := NewBatchDecoder(ctx, replicaConfig)
+	decoder, err := NewBatchDecoder(ctx, codecConfig)
 	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
