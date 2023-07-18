@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // OpenAPIV2 provides CDC v2 APIs
@@ -90,4 +91,13 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// common APIs
 	v2.POST("/tso", api.QueryTso)
+}
+
+// GetChangefeedFromRequest returns the changefeed that parse from request
+func GetChangefeedFromRequest(ctx *gin.Context) model.ChangeFeedID {
+	namespace := getNamespaceValueWithDefault(ctx)
+	return model.ChangeFeedID{
+		Namespace: namespace,
+		ID:        ctx.Param(apiOpVarChangefeedID),
+	}
 }

@@ -1179,7 +1179,7 @@ var doc = `{
         },
         "/api/v2/owner/resign": {
             "post": {
-                "description": "Notify the current owner to resign",
+                "description": "Notify the current controller to resign",
                 "consumes": [
                     "application/json"
                 ],

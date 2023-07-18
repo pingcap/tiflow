@@ -105,6 +105,11 @@ func (p *mockStatusProvider) IsHealthy(ctx context.Context) (bool, error) {
 	return args.Get(0).(bool), args.Error(1)
 }
 
+func (p *mockStatusProvider) IsChangefeedOwner(ctx context.Context, id model.ChangeFeedID) (bool, error) {
+	args := p.Called(ctx)
+	return args.Get(0).(bool), args.Error(1)
+}
+
 func newRouter(c capture.Capture, p owner.StatusProvider) *gin.Engine {
 	router := gin.New()
 	RegisterOpenAPIRoutes(router, NewOpenAPI4Test(c, p))

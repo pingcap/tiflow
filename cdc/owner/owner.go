@@ -555,6 +555,9 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		query.Data = ret
 	case QueryHealth:
 		query.Data = o.isHealthy()
+	case QueryOwner:
+		_, exist := o.changefeeds[query.ChangeFeedID]
+		query.Data = exist
 	}
 	return nil
 }
