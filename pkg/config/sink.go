@@ -536,16 +536,27 @@ const (
 	LargeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
 )
 
+const (
+	// CompressionNone no compression
+	CompressionNone string = "none"
+	// CompressionSnappy compression using snappy
+	CompressionSnappy string = "snappy"
+	// CompressionLZ4 compression using LZ4
+	CompressionLZ4 string = "lz4"
+)
+
 // LargeMessageHandleConfig is the configuration for handling large message.
 type LargeMessageHandleConfig struct {
 	LargeMessageHandleOption string `toml:"large-message-handle-option" json:"large-message-handle-option"`
 	ClaimCheckStorageURI     string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
+	ClaimCheckCompression    string `toml:"claim-check-compression" json:"claim-check-compression"`
 }
 
 // NewDefaultLargeMessageHandleConfig return the default LargeMessageHandleConfig.
 func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
 	return &LargeMessageHandleConfig{
 		LargeMessageHandleOption: LargeMessageHandleOptionNone,
+		ClaimCheckCompression:    CompressionNone,
 	}
 }
 
@@ -569,9 +580,17 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 			c.LargeMessageHandleOption, protocol.String())
 	}
 
-	if c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck && c.ClaimCheckStorageURI == "" {
-		return cerror.ErrInvalidReplicaConfig.GenWithStack(
-			"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
+	if c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck {
+		if c.ClaimCheckStorageURI == "" {
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
+		}
+		switch strings.ToLower(c.ClaimCheckCompression) {
+		case CompressionSnappy, CompressionLZ4:
+		default:
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"claim-check compression support snappy, lz4, got %s", c.ClaimCheckCompression)
+		}
 	}
 	return nil
 }
