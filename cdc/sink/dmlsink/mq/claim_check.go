@@ -82,14 +82,13 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	case config.CompressionSnappy:
 		data = snappy.Encode(nil, data)
 	case config.CompressionLZ4:
-		writer := lz4.NewWriter(nil)
 		var buf bytes.Buffer
-		writer.Reset(&buf)
+		writer := lz4.NewWriter(&buf)
 		if _, err := writer.Write(data); err != nil {
 			return errors.Trace(err)
 		}
 		if err := writer.Close(); err != nil {
-			log.Warn("close lz4 writer failed", zap.Error(err))
+			log.Warn("claim-check: close lz4 writer failed", zap.Error(err))
 		}
 		data = buf.Bytes()
 	default:
