@@ -49,10 +49,11 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		},
 	}
 	conf.Sink.CSVConfig = &CSVConfig{
-		Delimiter:       ",",
-		Quote:           "\"",
-		NullString:      `\N`,
-		IncludeCommitTs: true,
+		Delimiter:            ",",
+		Quote:                "\"",
+		NullString:           `\N`,
+		IncludeCommitTs:      true,
+		BinaryEncodingMethod: BinaryEncodingBase64,
 	}
 	conf.Sink.TxnAtomicity = util.AddressOf(unknownTxnAtomicity)
 	conf.Sink.DateSeparator = util.AddressOf("month")
@@ -121,9 +122,10 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		EnableCachePreparedStatement: aws.Bool(true),
 	}
 	conf.Sink.CloudStorageConfig = &CloudStorageConfig{
-		WorkerCount:   aws.Int(8),
-		FlushInterval: aws.String("1m"),
-		FileSize:      aws.Int(1024),
+		WorkerCount:    aws.Int(8),
+		FlushInterval:  aws.String("1m"),
+		FileSize:       aws.Int(1024),
+		OutputColumnID: aws.Bool(false),
 	}
 
 	b, err := conf.Marshal()

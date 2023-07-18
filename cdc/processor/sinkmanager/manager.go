@@ -16,7 +16,6 @@ package sinkmanager
 import (
 	"context"
 	"math"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -34,6 +33,7 @@ import (
 	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -59,13 +59,6 @@ type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
 	BarrierTs    model.Ts
-}
-
-type sinkRetry struct {
-	// To control the error retry.
-	lastInternalError  error
-	firstRetryTime     time.Time
-	lastErrorRetryTime time.Time
 }
 
 // SinkManager is the implementation of SinkManager.
@@ -106,7 +99,7 @@ type SinkManager struct {
 	sinkWorkerAvailable chan struct{}
 	// sinkMemQuota is used to control the total memory usage of the table sink.
 	sinkMemQuota *memquota.MemQuota
-	sinkRetry    sinkRetry
+	sinkRetry    *retry.ErrorRetry
 	// redoWorkers used to pull data from source manager.
 	redoWorkers []*redoWorker
 	// redoTaskChan is used to send tasks to redoWorkers.
@@ -151,11 +144,7 @@ func New(
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
-		sinkRetry: sinkRetry{
-			lastInternalError:  nil,
-			firstRetryTime:     time.Now(),
-			lastErrorRetryTime: time.Now(),
-		},
+		sinkRetry:           retry.NewDefaultErrorRetry(),
 
 		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -290,7 +279,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			return errors.Trace(err)
 		}
 
-		backoff, err := m.getRetryBackoff(err)
+		backoff, err := m.sinkRetry.GetRetryBackoff(err)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -299,29 +288,6 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			return errors.Trace(err)
 		}
 	}
-}
-
-// getRetryBackoff returns the backoff duration for retrying the last error.
-// If the retry time is exhausted, it returns the an ChangefeedUnRetryableError.
-func (m *SinkManager) getRetryBackoff(err error) (time.Duration, error) {
-	// reset firstRetryTime when the last error is too long ago
-	// it means the last error is retry success, and the sink is running well for some time
-	if m.sinkRetry.lastInternalError == nil ||
-		time.Since(m.sinkRetry.lastErrorRetryTime) >= errGCInterval {
-		m.sinkRetry.firstRetryTime = time.Now()
-	}
-
-	// return an unretryable error if retry time is exhausted
-	if time.Since(m.sinkRetry.firstRetryTime) >= maxRetryDuration {
-		return 0, cerror.WrapChangefeedUnretryableErr(err)
-	}
-
-	m.sinkRetry.lastInternalError = err
-	m.sinkRetry.lastErrorRetryTime = time.Now()
-
-	// interval is in range [5s, 30s)
-	interval := time.Second * time.Duration(rand.Int63n(25)+5)
-	return interval, nil
 }
 
 func (m *SinkManager) initSinkFactory(errCh chan error) error {

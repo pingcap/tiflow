@@ -102,6 +102,27 @@ type ChangefeedCommonInfo struct {
 	RunningError   *model.RunningError `json:"error"`
 }
 
+// MarshalJSON marshal changefeed common info to json
+// we need to set feed state to normal if it is uninitialized and pending to warning
+// to hide the detail of uninitialized and pending state from user
+func (c ChangefeedCommonInfo) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
+	type Alias ChangefeedCommonInfo
+
+	if c.FeedState == model.StateUnInitialized {
+		c.FeedState = model.StateNormal
+	}
+	if c.FeedState == model.StatePending {
+		c.FeedState = model.StateWarning
+	}
+
+	return json.Marshal(struct {
+		Alias
+	}{
+		Alias: Alias(c),
+	})
+}
+
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
 	Namespace     string         `json:"namespace"`
@@ -266,10 +287,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var csvConfig *config.CSVConfig
 		if c.Sink.CSVConfig != nil {
 			csvConfig = &config.CSVConfig{
-				Delimiter:       c.Sink.CSVConfig.Delimiter,
-				Quote:           c.Sink.CSVConfig.Quote,
-				NullString:      c.Sink.CSVConfig.NullString,
-				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            c.Sink.CSVConfig.Delimiter,
+				Quote:                c.Sink.CSVConfig.Quote,
+				NullString:           c.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      c.Sink.CSVConfig.IncludeCommitTs,
+				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
 		var kafkaConfig *config.KafkaConfig
@@ -356,9 +378,10 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var cloudStorageConfig *config.CloudStorageConfig
 		if c.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:   c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval: c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:      c.Sink.CloudStorageConfig.FileSize,
+				WorkerCount:    c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:  c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:       c.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID: c.Sink.CloudStorageConfig.OutputColumnID,
 			}
 		}
 
@@ -491,10 +514,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var csvConfig *CSVConfig
 		if cloned.Sink.CSVConfig != nil {
 			csvConfig = &CSVConfig{
-				Delimiter:       cloned.Sink.CSVConfig.Delimiter,
-				Quote:           cloned.Sink.CSVConfig.Quote,
-				NullString:      cloned.Sink.CSVConfig.NullString,
-				IncludeCommitTs: cloned.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            cloned.Sink.CSVConfig.Delimiter,
+				Quote:                cloned.Sink.CSVConfig.Quote,
+				NullString:           cloned.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      cloned.Sink.CSVConfig.IncludeCommitTs,
+				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
 		var kafkaConfig *KafkaConfig
@@ -581,9 +605,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var cloudStorageConfig *CloudStorageConfig
 		if cloned.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:   cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval: cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:      cloned.Sink.CloudStorageConfig.FileSize,
+				WorkerCount:    cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:  cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:       cloned.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID: cloned.Sink.CloudStorageConfig.OutputColumnID,
 			}
 		}
 
@@ -766,10 +791,11 @@ type SinkConfig struct {
 // CSVConfig denotes the csv config
 // This is the same as config.CSVConfig
 type CSVConfig struct {
-	Delimiter       string `json:"delimiter"`
-	Quote           string `json:"quote"`
-	NullString      string `json:"null"`
-	IncludeCommitTs bool   `json:"include_commit_ts"`
+	Delimiter            string `json:"delimiter"`
+	Quote                string `json:"quote"`
+	NullString           string `json:"null"`
+	IncludeCommitTs      bool   `json:"include_commit_ts"`
+	BinaryEncodingMethod string `json:"binary_encoding_method"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config
@@ -1012,9 +1038,10 @@ type MySQLConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount   *int    `json:"worker_count,omitempty"`
-	FlushInterval *string `json:"flush_interval,omitempty"`
-	FileSize      *int    `json:"file_size,omitempty"`
+	WorkerCount    *int    `json:"worker_count,omitempty"`
+	FlushInterval  *string `json:"flush_interval,omitempty"`
+	FileSize       *int    `json:"file_size,omitempty"`
+	OutputColumnID *bool   `json:"output_column_id,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc

@@ -1345,6 +1345,10 @@ var doc = `{
         "config.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary-encoding-method": {
+                    "description": "encoding method of binary type",
+                    "type": "string"
+                },
                 "delimiter": {
                     "description": "delimiter between fields",
                     "type": "string"
@@ -1371,6 +1375,9 @@ var doc = `{
                 },
                 "flush-interval": {
                     "type": "string"
+                },
+                "output-column-id": {
+                    "type": "boolean"
                 },
                 "worker-count": {
                     "type": "integer"
@@ -1977,6 +1984,9 @@ var doc = `{
         "v2.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary_encoding_method": {
+                    "type": "string"
+                },
                 "delimiter": {
                     "type": "string"
                 },
@@ -2162,6 +2172,9 @@ var doc = `{
                 },
                 "flush_interval": {
                     "type": "string"
+                },
+                "output_column_id": {
+                    "type": "boolean"
                 },
                 "worker_count": {
                     "type": "integer"

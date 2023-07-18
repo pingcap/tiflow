@@ -203,7 +203,8 @@ const (
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
-      "include-commit-ts": true
+      "include-commit-ts": true,
+      "binary-encoding-method":"base64"
     },
     "date-separator": "month",
     "enable-partition-separator": true,
@@ -272,7 +273,8 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
+      "file-size": 1024,
+      "output-column-id":false
     }
   },
   "consistent": {
@@ -334,7 +336,8 @@ const (
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
-      "include-commit-ts": true
+      "include-commit-ts": true,
+      "binary-encoding-method":"base64"
     },
     "terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -403,7 +406,8 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
+      "file-size": 1024,
+      "output-column-id":false
     }
   },
   "consistent": {

@@ -135,9 +135,10 @@ func TestMergeConfig(t *testing.T) {
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.CloudStorageConfig = &config.CloudStorageConfig{
-		WorkerCount:   aws.Int(12),
-		FileSize:      aws.Int(1485760),
-		FlushInterval: aws.String("1m2s"),
+		WorkerCount:    aws.Int(12),
+		FileSize:       aws.Int(1485760),
+		FlushInterval:  aws.String("1m2s"),
+		OutputColumnID: aws.Bool(false),
 	}
 	c := NewConfig()
 	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
@@ -151,9 +152,10 @@ func TestMergeConfig(t *testing.T) {
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig.Sink.CloudStorageConfig = &config.CloudStorageConfig{
-		WorkerCount:   aws.Int(12),
-		FileSize:      aws.Int(10485760),
-		FlushInterval: aws.String("1m2s"),
+		WorkerCount:    aws.Int(12),
+		FileSize:       aws.Int(10485760),
+		FlushInterval:  aws.String("1m2s"),
+		OutputColumnID: aws.Bool(false),
 	}
 	c = NewConfig()
 	err = c.Apply(context.TODO(), sinkURI, replicaConfig)
