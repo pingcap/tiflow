@@ -66,6 +66,9 @@ type worker struct {
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
+	// claimCheckEncoder is used to encode message which has claim-check location, send to kafka.
+	claimCheckEncoder codec.ClaimCheckEncoder
+
 	encoderGroup codec.EncoderGroup
 
 	// producer is used to send the messages to the Kafka broker.
@@ -79,15 +82,18 @@ type worker struct {
 	metricMQWorkerBatchDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
+
+	claimCheck *ClaimCheck
 }
 
 // newWorker creates a new flush worker.
 func newWorker(
 	id model.ChangeFeedID,
 	protocol config.Protocol,
-	builder codec.RowEventEncoderBuilder,
-	encoderConcurrency int,
 	producer dmlproducer.DMLProducer,
+	encoderGroup codec.EncoderGroup,
+	claimCheck *ClaimCheck,
+	claimCheckEncoder codec.ClaimCheckEncoder,
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
@@ -95,8 +101,10 @@ func newWorker(
 		protocol:                          protocol,
 		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
 		ticker:                            time.NewTicker(flushInterval),
-		encoderGroup:                      codec.NewEncoderGroup(builder, encoderConcurrency, id),
+		encoderGroup:                      encoderGroup,
 		producer:                          producer,
+		claimCheck:                        claimCheck,
+		claimCheckEncoder:                 claimCheckEncoder,
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
@@ -269,7 +277,6 @@ func (w *worker) group(
 }
 
 func (w *worker) sendMessages(ctx context.Context) error {
-	inputCh := w.encoderGroup.Output()
 	ticker := time.NewTicker(15 * time.Second)
 	metric := codec.EncoderGroupOutputChanSizeGauge.
 		WithLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
@@ -278,6 +285,9 @@ func (w *worker) sendMessages(ctx context.Context) error {
 		codec.EncoderGroupOutputChanSizeGauge.
 			DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	}()
+
+	var err error
+	inputCh := w.encoderGroup.Output()
 	for {
 		select {
 		case <-ctx.Done():
@@ -291,12 +301,30 @@ func (w *worker) sendMessages(ctx context.Context) error {
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
 			}
-			if err := future.Ready(ctx); err != nil {
+			if err = future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
 			for _, message := range future.Messages {
+				if message.ClaimCheckFileName != "" {
+					// send the message to the external storage.
+					if err = w.claimCheck.WriteMessage(ctx, message); err != nil {
+						log.Error("send message to the external claim check storage failed",
+							zap.String("namespace", w.changeFeedID.Namespace),
+							zap.String("changefeed", w.changeFeedID.ID),
+							zap.String("filename", message.ClaimCheckFileName),
+							zap.Error(err))
+						return errors.Trace(err)
+					}
+					// create the location message which contain the external storage location of the message.
+					locationMessage, err := w.claimCheckEncoder.NewClaimCheckMessage(message)
+					if err != nil {
+						return errors.Trace(err)
+					}
+					message = locationMessage
+				}
+				// normal message, just send it to the kafka.
 				start := time.Now()
-				if err := w.statistics.RecordBatchExecution(func() (int, error) {
+				if err = w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
 						return 0, err
 					}
@@ -313,6 +341,9 @@ func (w *worker) sendMessages(ctx context.Context) error {
 func (w *worker) close() {
 	w.msgChan.CloseAndDrain()
 	w.producer.Close()
+	if w.claimCheck != nil {
+		w.claimCheck.Close()
+	}
 
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
