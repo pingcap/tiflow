@@ -52,6 +52,8 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 		return nil, nil, errors.Trace(err)
 	}
 
+	// for single message that is longer than max-message-bytes
+	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
 		log.Warn("Single message is too large for open-protocol",
@@ -258,6 +260,8 @@ func (d *BatchEncoder) NewClaimCheckMessage(origin *common.Message) (*common.Mes
 		return nil, errors.Trace(err)
 	}
 
+	// for single message that is longer than max-message-bytes
+	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
 		log.Warn("Single message is too large for open-protocol",
