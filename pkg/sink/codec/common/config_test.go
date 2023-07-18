@@ -36,6 +36,7 @@ func TestNewConfig(t *testing.T) {
 	require.Equal(t, "long", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "", c.AvroSchemaRegistry)
 	require.False(t, c.EnableRowChecksum)
+	require.NotNil(t, c.LargeMessageHandle)
 }
 
 func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
