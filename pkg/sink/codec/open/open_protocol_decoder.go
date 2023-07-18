@@ -18,7 +18,6 @@ import (
 	"encoding/binary"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -27,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/util"
-	"go.uber.org/zap"
 )
 
 // BatchMixedDecoder decodes the byte of a batch into the original messages.
@@ -287,8 +285,6 @@ func NewBatchDecoder(ctx context.Context, replicaConfig *config.ReplicaConfig) (
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
-		log.Info("claim-check enabled, set the external storage for the kafka consumer",
-			zap.String("storageURI", storageURI))
 	}
 	return &BatchDecoder{
 		storage: storage,
