@@ -39,7 +39,7 @@ func TestHealth(t *testing.T) {
 	statusProvider := mock_owner.NewMockStatusProvider(gomock.NewController(t))
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
 
 	statusProvider.EXPECT().IsHealthy(gomock.Any()).Return(false,
 		cerror.ErrUnknown.FastGenByArgs())

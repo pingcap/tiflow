@@ -79,20 +79,66 @@ func ErrorHandleMiddleware() gin.HandlerFunc {
 	}
 }
 
-// ForwardToOwnerMiddleware forward an request to owner if current server
-// is not owner, or handle it locally.
-func ForwardToOwnerMiddleware(p capture.Capture) gin.HandlerFunc {
+// ForwardToControllerMiddleware forward a request to controller if current server
+// is not controller, or handle it locally.
+func ForwardToControllerMiddleware(p capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if !p.IsOwner() {
-			api.ForwardToOwner(ctx, p)
+		if !p.IsController() {
+			api.ForwardToController(ctx, p)
 
-			// Without calling Abort(), Gin will continued to process the next handler,
+			// Without calling Abort(), Gin will continue to process the next handler,
 			// execute code which should only be run by the owner, and cause a panic.
 			// See https://github.com/pingcap/tiflow/issues/5888
 			ctx.Abort()
 			return
 		}
 		ctx.Next()
+	}
+}
+
+// ForwardToChangefeedOwnerMiddleware forward a request to controller if current server
+// is not the changefeed owner, or handle it locally.
+func ForwardToChangefeedOwnerMiddleware(p capture.Capture,
+	changefeedID func(ctx *gin.Context) model.ChangeFeedID,
+) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		// currently not only controller capture has the owner, remove this check in the future
+		if p.StatusProvider() != nil {
+			ok, err := p.StatusProvider().IsChangefeedOwner(ctx, changefeedID(ctx))
+			if err != nil {
+				_ = ctx.Error(err)
+				return
+			}
+			// this capture is the changefeed owner's capture, handle this request directly
+			if ok {
+				ctx.Next()
+				return
+			}
+		}
+
+		// forward to the controller to find the changefeed owner capture
+		if !p.IsController() {
+			api.ForwardToController(ctx, p)
+			// Without calling Abort(), Gin will continue to process the next handler,
+			// execute code which should only be run by the owner, and cause a panic.
+			// See https://github.com/pingcap/tiflow/issues/5888
+			ctx.Abort()
+			return
+		}
+
+		controller, err := p.GetController()
+		if err != nil {
+			_ = ctx.Error(err)
+			return
+		}
+		info, err := p.Info()
+		if err != nil {
+			_ = ctx.Error(err)
+			return
+		}
+		changefeedCaptureOwner := controller.GetChangefeedOwnerCaptureInfo(model.ChangeFeedID{})
+		api.ForwardToCapture(ctx, info.ID, changefeedCaptureOwner.AdvertiseAddr)
+		ctx.Abort()
 	}
 }
 

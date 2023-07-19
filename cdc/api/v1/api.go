@@ -84,7 +84,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// changefeed API
 	changefeedGroup := v1.Group("/changefeeds")
-	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	changefeedGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	changefeedGroup.GET("", api.ListChangefeed)
 	changefeedGroup.GET("/:changefeed_id", api.GetChangefeed)
 	changefeedGroup.POST("", api.CreateChangefeed)
@@ -97,18 +97,18 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// owner API
 	ownerGroup := v1.Group("/owner")
-	ownerGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
-	ownerGroup.POST("/resign", api.ResignOwner)
+	ownerGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
+	ownerGroup.POST("/resign", api.ResignController)
 
 	// processor API
 	processorGroup := v1.Group("/processors")
-	processorGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	processorGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	processorGroup.GET("", api.ListProcessor)
 	processorGroup.GET("/:changefeed_id/:capture_id", api.GetProcessor)
 
 	// capture API
 	captureGroup := v1.Group("/captures")
-	captureGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
+	captureGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
 	captureGroup.GET("", api.ListCapture)
 	captureGroup.PUT("/drain", api.DrainCapture)
 }
@@ -603,16 +603,16 @@ func (h *OpenAPI) MoveTable(c *gin.Context) {
 	c.Status(http.StatusAccepted)
 }
 
-// ResignOwner makes the current owner resign
-// @Summary notify the owner to resign
-// @Description notify the current owner to resign
+// ResignController makes the current controller resign
+// @Summary notify the ticdc cluster controller to resign
+// @Description notify the current controller to resign
 // @Tags owner
 // @Accept json
 // @Produce json
 // @Success 202
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v1/owner/resign [post]
-func (h *OpenAPI) ResignOwner(c *gin.Context) {
+func (h *OpenAPI) ResignController(c *gin.Context) {
 	o, _ := h.capture.GetController()
 	if o != nil {
 		o.AsyncStop()
@@ -852,7 +852,7 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 		Pid:       os.Getpid(),
 		ID:        info.ID,
 		ClusterID: h.capture.GetEtcdClient().GetClusterID(),
-		IsOwner:   h.capture.IsOwner(),
+		IsOwner:   h.capture.IsController(),
 		Liveness:  h.capture.Liveness(),
 	}
 	c.IndentedJSON(http.StatusOK, status)
@@ -868,8 +868,8 @@ func (h *OpenAPI) ServerStatus(c *gin.Context) {
 // @Failure 500 {object} model.HTTPError
 // @Router	/api/v1/health [get]
 func (h *OpenAPI) Health(c *gin.Context) {
-	if !h.capture.IsOwner() {
-		middleware.ForwardToOwnerMiddleware(h.capture)(c)
+	if !h.capture.IsController() {
+		middleware.ForwardToControllerMiddleware(h.capture)(c)
 		return
 	}
 

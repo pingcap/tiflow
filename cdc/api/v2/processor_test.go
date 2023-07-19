@@ -38,7 +38,7 @@ func TestGetProcessor(t *testing.T) {
 	{
 		cp := mock_capture.NewMockCapture(gomock.NewController(t))
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		cp.EXPECT().IsController().Return(true).AnyTimes()
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
@@ -66,7 +66,7 @@ func TestGetProcessor(t *testing.T) {
 	{
 		cp := mock_capture.NewMockCapture(gomock.NewController(t))
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		cp.EXPECT().IsController().Return(true).AnyTimes()
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
@@ -99,7 +99,7 @@ func TestGetProcessor(t *testing.T) {
 		}
 		cp := mock_capture.NewMockCapture(gomock.NewController(t))
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		cp.EXPECT().IsController().Return(true).AnyTimes()
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
@@ -140,7 +140,7 @@ func TestGetProcessor(t *testing.T) {
 		cp := mock_capture.NewMockCapture(gomock.NewController(t))
 		cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		cp.EXPECT().IsController().Return(true).AnyTimes()
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
@@ -180,7 +180,7 @@ func TestGetProcessor(t *testing.T) {
 		cp := mock_capture.NewMockCapture(gomock.NewController(t))
 		cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		cp.EXPECT().IsController().Return(true).AnyTimes()
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
@@ -228,7 +228,7 @@ func TestGetProcessor(t *testing.T) {
 		cp := mock_capture.NewMockCapture(gomock.NewController(t))
 		cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		cp.EXPECT().IsController().Return(true).AnyTimes()
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
 

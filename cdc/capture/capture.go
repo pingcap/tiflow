@@ -59,8 +59,8 @@ type Capture interface {
 
 	GetOwner() (owner.Owner, error)
 	GetController() (controller.Controller, error)
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
-	IsOwner() bool
+	GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+	IsController() bool
 
 	Info() (model.CaptureInfo, error)
 	StatusProvider() owner.StatusProvider
@@ -120,7 +120,7 @@ type captureImpl struct {
 		cfg *config.SchedulerConfig,
 	) processor.Manager
 	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
-	newController func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) controller.Controller
+	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo) controller.Controller
 }
 
 // NewCapture returns a new Capture instance
@@ -482,7 +482,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		controller := c.newController(c.upstreamManager, c.config.Debug.Scheduler)
+		controller := c.newController(c.upstreamManager, c.info)
 
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
@@ -750,15 +750,15 @@ func (c *captureImpl) WriteDebugInfo(ctx context.Context, w io.Writer) {
 	wait(doneM)
 }
 
-// IsOwner returns whether the capture is an owner
-func (c *captureImpl) IsOwner() bool {
+// IsController returns whether the capture is a controller
+func (c *captureImpl) IsController() bool {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
-	return c.owner != nil
+	return c.controller != nil
 }
 
-// GetOwnerCaptureInfo return the owner capture info of current TiCDC cluster
-func (c *captureImpl) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
+// GetControllerCaptureInfo return the controller capture info of current TiCDC cluster
+func (c *captureImpl) GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
 	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err

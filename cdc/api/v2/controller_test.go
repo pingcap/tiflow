@@ -26,14 +26,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestResignOwner(t *testing.T) {
+func TestResignController(t *testing.T) {
 	t.Parallel()
 	// case 1: get owner successfully.
 	{
 		ctrl := gomock.NewController(t)
 		cp := mock_capture.NewMockCapture(ctrl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		cp.EXPECT().IsController().Return(true).AnyTimes()
 		mo := mock_controller.NewMockController(ctrl)
 		cp.EXPECT().GetController().Return(mo, nil)
 		mo.EXPECT().AsyncStop()
@@ -56,7 +56,7 @@ func TestResignOwner(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		cp := mock_capture.NewMockCapture(ctrl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		cp.EXPECT().IsOwner().Return(true).AnyTimes()
+		cp.EXPECT().IsController().Return(true).AnyTimes()
 		cp.EXPECT().GetController().Return(nil, errors.New("fake"))
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
 		router := newRouter(apiV2)
