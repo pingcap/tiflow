@@ -48,45 +48,46 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2.GET("status", api.serverStatus)
 	v2.POST("log", api.setLogLevel)
 
+	controllerMiddleware := middleware.ForwardToControllerMiddleware(api.capture)
+	changefeedOwnerMiddleware := middleware.ForwardToChangefeedOwnerMiddleware(api.capture, GetChangefeedFromRequest)
+
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
-	changefeedGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
-	changefeedGroup.GET("/:changefeed_id", api.getChangeFeed)
-	changefeedGroup.POST("", api.createChangefeed)
-	changefeedGroup.GET("", api.listChangeFeeds)
-	changefeedGroup.PUT("/:changefeed_id", api.updateChangefeed)
-	changefeedGroup.DELETE("/:changefeed_id", api.deleteChangefeed)
-	changefeedGroup.GET("/:changefeed_id/meta_info", api.getChangeFeedMetaInfo)
-	changefeedGroup.POST("/:changefeed_id/resume", api.resumeChangefeed)
-	changefeedGroup.POST("/:changefeed_id/pause", api.pauseChangefeed)
-	changefeedGroup.GET("/:changefeed_id/status", api.status)
+	changefeedGroup.GET("/:changefeed_id", changefeedOwnerMiddleware, api.getChangeFeed)
+	changefeedGroup.POST("", controllerMiddleware, api.createChangefeed)
+	changefeedGroup.GET("", controllerMiddleware, api.listChangeFeeds)
+	changefeedGroup.PUT("/:changefeed_id", controllerMiddleware, api.updateChangefeed)
+	changefeedGroup.DELETE("/:changefeed_id", changefeedOwnerMiddleware, api.deleteChangefeed)
+	changefeedGroup.GET("/:changefeed_id/meta_info", controllerMiddleware, api.getChangeFeedMetaInfo)
+	changefeedGroup.POST("/:changefeed_id/resume", changefeedOwnerMiddleware, api.resumeChangefeed)
+	changefeedGroup.POST("/:changefeed_id/pause", changefeedOwnerMiddleware, api.pauseChangefeed)
+	changefeedGroup.GET("/:changefeed_id/status", changefeedOwnerMiddleware, api.status)
 
 	// capture apis
 	captureGroup := v2.Group("/captures")
-	captureGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
+	captureGroup.Use(controllerMiddleware)
 	captureGroup.POST("/:capture_id/drain", api.drainCapture)
 	captureGroup.GET("", api.listCaptures)
 
 	// processor apis
 	processorGroup := v2.Group("/processors")
-	processorGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
-	processorGroup.GET("/:changefeed_id/:capture_id", api.getProcessor)
-	processorGroup.GET("", api.listProcessors)
+	processorGroup.GET("/:changefeed_id/:capture_id", changefeedOwnerMiddleware, api.getProcessor)
+	processorGroup.GET("", controllerMiddleware, api.listProcessors)
 
 	verifyTableGroup := v2.Group("/verify_table")
-	verifyTableGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
+	verifyTableGroup.Use(controllerMiddleware)
 	verifyTableGroup.POST("", api.verifyTable)
 
 	// unsafe apis
 	unsafeGroup := v2.Group("/unsafe")
-	unsafeGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
+	unsafeGroup.Use(controllerMiddleware)
 	unsafeGroup.GET("/metadata", api.CDCMetaData)
 	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
 	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
 	// owner apis
 	ownerGroup := v2.Group("/owner")
-	unsafeGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
+	unsafeGroup.Use(controllerMiddleware)
 	ownerGroup.POST("/resign", api.resignController)
 
 	// common APIs

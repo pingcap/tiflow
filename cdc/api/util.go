@@ -219,13 +219,16 @@ func ForwardToCapture(c *gin.Context, fromID, toAddr string) {
 			req.Header.Add(k, vv)
 		}
 	}
-	c.Header(forwardFromCapture, fromID)
-	lastForwardTimes++
-	c.Header(forwardTimes, strconv.Itoa(int(lastForwardTimes)))
 	log.Info("forwarding request to capture",
+		zap.String("url", c.Request.RequestURI),
+		zap.String("method", c.Request.Method),
 		zap.String("fromID", fromID),
-		zap.String("toAddr", toAddr))
+		zap.String("toAddr", toAddr),
+		zap.String("forwardTimes", timeStr))
 
+	req.Header.Add(forwardFromCapture, fromID)
+	lastForwardTimes++
+	req.Header.Add(forwardTimes, strconv.Itoa(int(lastForwardTimes)))
 	// forward toAddr owner
 	cli, err := httputil.NewClient(security)
 	if err != nil {
