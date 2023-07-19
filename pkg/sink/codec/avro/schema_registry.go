@@ -322,6 +322,24 @@ func (m *SchemaManager) Lookup(
 // Used for lazy evaluation
 type SchemaGenerator func() (string, error)
 
+// GetCached return the cached avro codec, the caller should make sure the schema is cached.
+func (m *SchemaManager) GetCached(topicName string, tableVersion uint64) *schemaCacheEntry {
+	var (
+		entry  *schemaCacheEntry
+		exists bool
+	)
+	key := m.topicNameToSchemaSubject(topicName)
+	m.cacheRWLock.RLock()
+	defer m.cacheRWLock.RUnlock()
+	if entry, exists = m.cache[key]; exists && entry.tableVersion == tableVersion {
+		log.Debug("Avro schema GetCached cache hit",
+			zap.String("key", key),
+			zap.Uint64("tableVersion", tableVersion),
+			zap.Int("schemaID", entry.schemaID))
+	}
+	return entry
+}
+
 // GetCachedOrRegister checks if the suitable Avro schema has been cached.
 // If not, a new schema is generated, registered and cached.
 // Re-registering an existing schema shall return the same id(and version), so even if the
@@ -333,16 +351,10 @@ func (m *SchemaManager) GetCachedOrRegister(
 	schemaGen SchemaGenerator,
 ) (*goavro.Codec, int, error) {
 	key := m.topicNameToSchemaSubject(topicName)
-	m.cacheRWLock.RLock()
-	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
-		log.Debug("Avro schema GetCachedOrRegister cache hit",
-			zap.String("key", key),
-			zap.Uint64("tableVersion", tableVersion),
-			zap.Int("schemaID", entry.schemaID))
-		m.cacheRWLock.RUnlock()
+	entry := m.GetCached(key, tableVersion)
+	if entry != nil {
 		return entry.codec, entry.schemaID, nil
 	}
-	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),

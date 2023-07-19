@@ -718,7 +718,7 @@ func TestRowToAvroData(t *testing.T) {
 		colInfos = append(colInfos, v.colInfo)
 	}
 
-	data, err := rowToAvroData(&avroEncodeInput{cols, colInfos}, 417318403368288260, "c", false, "precise", "long")
+	data, err := rowToAvroData(&avroEncodeInput{cols, colInfos}, "precise", "long")
 	require.NoError(t, err)
 	_, exists := data["_tidb_commit_ts"]
 	require.False(t, exists)
@@ -727,7 +727,7 @@ func TestRowToAvroData(t *testing.T) {
 	_, exists = data["_tidb_commit_physical_time"]
 	require.False(t, exists)
 
-	data, err = rowToAvroData(&avroEncodeInput{cols, colInfos}, 417318403368288260, "c", true, "precise", "long")
+	data, err = rowToAvroData(&avroEncodeInput{cols, colInfos}, "precise", "long")
 	require.NoError(t, err)
 	v, exists := data["_tidb_commit_ts"]
 	require.True(t, exists)
