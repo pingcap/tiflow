@@ -52,7 +52,7 @@ type RowEventEncoder interface {
 
 // ClaimCheckEncoder is an abstraction for claim check encoder.
 type ClaimCheckEncoder interface {
-	NewClaimCheckMessage(origin *common.Message) (*common.Message, error)
+	NewClaimCheckMessage(ctx context.Context, topicName string, origin *common.Message) (*common.Message, error)
 }
 
 // RowEventEncoderBuilder builds row encoder with context.

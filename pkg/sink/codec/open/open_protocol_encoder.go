@@ -240,9 +240,7 @@ func (d *BatchEncoder) tryBuildCallback() {
 // NewClaimCheckMessage implement the ClaimCheckEncoder interface.
 // NewClaimCheckMessage creates a new message with the claim check location.
 // This should be called when the message is too large, and the claim check enabled.
-// This method should not meet error, since only one string is set to the message,
-// it should not cause the encode error or the message too large error.
-func (d *BatchEncoder) NewClaimCheckMessage(origin *common.Message) (*common.Message, error) {
+func (d *BatchEncoder) NewClaimCheckMessage(_ context.Context, _ string, origin *common.Message) (*common.Message, error) {
 	keyMsg, valueMsg, err := rowChangeToMsg(origin.Event, d.config, true)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -264,7 +262,7 @@ func (d *BatchEncoder) NewClaimCheckMessage(origin *common.Message) (*common.Mes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
-		log.Warn("Single message is too large for open-protocol",
+		log.Warn("Single message is too large for open-protocol, when create the claim-check location message",
 			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("key", key))

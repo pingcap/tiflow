@@ -348,6 +348,38 @@ func (a *BatchEncoder) avroEncode(
 	}, nil
 }
 
+func (a *BatchEncoder) withExtension(
+	native map[string]interface{},
+	e *model.RowChangedEvent,
+	operation string,
+	handleKeyOnly bool,
+	claimCheckLocation string,
+) map[string]interface{} {
+	native[tidbOp] = operation
+	native[tidbCommitTs] = e.CommitTs
+	native[tidbPhysicalTime] = oracle.ExtractPhysical(e.CommitTs)
+
+	if a.config.EnableRowChecksum && e.Checksum != nil {
+		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum.Current), 10)
+		native[tidbCorrupted] = e.Checksum.Corrupted
+		native[tidbChecksumVersion] = e.Checksum.Version
+	}
+
+	// if handleKeyOnly is false, no need to set it, to reduce the size of message a little bit
+	// the decoder can fill it by the default value.
+	if a.config.LargeMessageHandle.HandleKeyOnly() && handleKeyOnly {
+		native[tidbHandleKeyOnly] = true
+	}
+
+	// if claimCheckLocation is empty, no need to set it, to reduce the size of message a little bit
+	// the decoder can fill it by the default value.
+	if a.config.LargeMessageHandle.EnableClaimCheck() && claimCheckLocation != "" {
+		native[tidbClaimCheckLocation] = claimCheckLocation
+	}
+
+	return native
+}
+
 func (a *BatchEncoder) encodeExtension(topicName string, e *model.RowChangedEvent, handleKeyOnly bool, claimCheckLocation string) ([]byte, error) {
 	extension := make(map[string]interface{})
 	extension = a.withExtension(extension, e, "", handleKeyOnly, claimCheckLocation)
@@ -379,36 +411,43 @@ func (a *BatchEncoder) encodeExtension(topicName string, e *model.RowChangedEven
 	return data, nil
 }
 
-func (a *BatchEncoder) withExtension(
-	native map[string]interface{},
-	e *model.RowChangedEvent,
-	operation string,
-	handleKeyOnly bool,
-	claimCheckLocation string,
-) map[string]interface{} {
-	native[tidbOp] = operation
-	native[tidbCommitTs] = e.CommitTs
-	native[tidbPhysicalTime] = oracle.ExtractPhysical(e.CommitTs)
+// NewClaimCheckMessage implement the ClaimCheckEncoder interface.
+// NewClaimCheckMessage creates a new message with the claim check location.
+// This should be called when the message is too large, and the claim check enabled.
+func (a *BatchEncoder) NewClaimCheckMessage(ctx context.Context, topic string, origin *common.Message) (*common.Message, error) {
+	topic = sanitizeTopic(topic)
 
-	if a.config.EnableRowChecksum && e.Checksum != nil {
-		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum.Current), 10)
-		native[tidbCorrupted] = e.Checksum.Corrupted
-		native[tidbChecksumVersion] = e.Checksum.Version
+	key, err := a.encodeKey(ctx, topic, origin.Event)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	// if handleKeyOnly is false, no need to set it, to reduce the size of message a little bit
-	// the decoder can fill it by the default value.
-	if a.config.LargeMessageHandle.HandleKeyOnly() && handleKeyOnly {
-		native[tidbHandleKeyOnly] = true
+	value, err := a.encodeExtension(topic, origin.Event, false, origin.ClaimCheckFileName)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
-	// if claimCheckLocation is empty, no need to set it, to reduce the size of message a little bit
-	// the decoder can fill it by the default value.
-	if a.config.LargeMessageHandle.EnableClaimCheck() && claimCheckLocation != "" {
-		native[tidbClaimCheckLocation] = claimCheckLocation
+	message := common.NewMsg(
+		config.ProtocolAvro,
+		key,
+		value,
+		origin.Event.CommitTs,
+		model.MessageTypeRow,
+		origin.Schema,
+		origin.Table,
+	)
+	message.Callback = origin.Callback
+	message.IncRowsCount()
+
+	length := message.Length()
+	if length > a.config.MaxMessageBytes {
+		log.Warn("Single message is too large for avro, when create the claim-check location message",
+			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
+			zap.Int("length", length))
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(length)
 	}
 
-	return native
+	return message, nil
 }
 
 type avroSchemaTop struct {

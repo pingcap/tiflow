@@ -316,7 +316,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 					// create the location message which contain the external storage location of the message.
-					locationMessage, err := w.claimCheckEncoder.NewClaimCheckMessage(message)
+					locationMessage, err := w.claimCheckEncoder.NewClaimCheckMessage(ctx, future.Topic, message)
 					if err != nil {
 						return errors.Trace(err)
 					}

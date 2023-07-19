@@ -412,7 +412,9 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 }
 
 // NewClaimCheckMessage implements the ClaimCheckEncoder interface
-func (c *JSONRowEventEncoder) NewClaimCheckMessage(origin *common.Message) (*common.Message, error) {
+// NewClaimCheckMessage creates a new message with the claim check location.
+// This should be called when the message is too large, and the claim check enabled.
+func (c *JSONRowEventEncoder) NewClaimCheckMessage(_ context.Context, _ string, origin *common.Message) (*common.Message, error) {
 	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -421,6 +423,16 @@ func (c *JSONRowEventEncoder) NewClaimCheckMessage(origin *common.Message) (*com
 	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
 	result.Callback = origin.Callback
 	result.IncRowsCount()
+
+	length := result.Length()
+	if length > c.config.MaxMessageBytes {
+		log.Warn("Single message is too large for canal-json, when create the claim check location message",
+			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("table", origin.Event.Table))
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(length)
+	}
+
 	return result, nil
 }
 
