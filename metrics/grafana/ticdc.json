@@ -20045,7 +20045,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "test-cluster-TiCDC",
+  "title": "${DS_TEST-CLUSTER}-TiCDC",
   "uid": "YiGL8hBZ1x",
-  "version": 2
+  "version": 53,
 }
