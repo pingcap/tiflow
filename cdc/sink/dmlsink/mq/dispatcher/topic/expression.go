@@ -14,9 +14,9 @@
 package topic
 
 import (
-	"regexp"
-
 	"github.com/pingcap/tiflow/pkg/errors"
+	"regexp"
+	"strings"
 )
 
 var (
@@ -34,6 +34,14 @@ var (
 	// are necessary
 	avroTopicNameRE = regexp.MustCompile(
 		`^[A-Za-z0-9\._\-]*\{schema\}[A-Za-z0-9\._\-]*\{table\}[A-Za-z0-9\._\-]*$`,
+	)
+	// pulsarTopicNameRE is used to match pulsar topic
+	pulsarTopicNameRE = regexp.MustCompile(
+		`(^((persistent|non-persistent)://)[A-Za-z0-9{}._\-]*/[A-Za-z0-9{}._\-]*/[A-Za-z0-9{}._\-]*$)|(^[A-Za-z0-9._-]*\{schema}[A-Za-z0-9._-]*\{table}[A-Za-z0-9._-]*)$`,
+	)
+	// pulsarTopicNameRESimple is used to match simple pulsar topic name
+	pulsarTopicNameRESimple = regexp.MustCompile(
+		`(?:persistent|non-persistent)://.*`,
 	)
 )
 
@@ -93,4 +101,32 @@ func (e Expression) Substitute(schema, table string) string {
 	} else {
 		return topicName
 	}
+}
+
+// PulsarValidate checks whether a pulsar topic name is valid or not.
+func (e Expression) PulsarValidate() error {
+	// validate the topic expression
+	topicName := string(e)
+
+	if len(topicName) == 0 {
+		return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
+			"topic name is empty")
+	}
+
+	// if not full name
+	if !pulsarTopicNameRESimple.MatchString(topicName) {
+		// if not full name, must be simple name
+		if !strings.Contains(topicName, "{schema}") || strings.Contains(topicName, "/") {
+			return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
+				"it should be in the format of a <topic> and topic name must contain '{schema}'" +
+					"and simple topic name must not contain '/'")
+		}
+	} else if !pulsarTopicNameRE.MatchString(topicName) ||
+		!strings.Contains(topicName, "{schema}") {
+		return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
+			"it should be in the format of <tenant>/<namespace>/<topic> or <topic> " +
+				"and topic name must contain '{schema}'")
+	}
+
+	return nil
 }
