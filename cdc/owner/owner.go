@@ -408,6 +408,7 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 			changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).
 				Set(float64(cf.state.Info.State.ToInt()))
 		}
+<<<<<<< HEAD
 
 		// The InfoProvider is a proxy object returning information
 		// from the scheduler.
@@ -430,6 +431,8 @@ func (o *ownerImpl) updateMetrics(state *orchestrator.GlobalReactorState) {
 					info.AdvertiseAddr, maintainTableTypeWip).
 				Set(float64(pendingCounts[captureID]))
 		}
+=======
+>>>>>>> 80aa4a2426 (owner(ticdc): do not resign owner when ErrNotOwner is encountered (#9396))
 	}
 	return
 }

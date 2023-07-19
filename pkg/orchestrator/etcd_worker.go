@@ -209,7 +209,16 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 
 			for _, event := range response.Events {
 				// handleEvent will apply the event to our internal `rawState`.
+<<<<<<< HEAD
 				worker.handleEvent(ctx, event)
+=======
+				err = worker.handleEvent(ctx, event)
+				if err != nil {
+					// This error means owner is resigned by itself,
+					// and we should exit etcd worker and campaign owner again.
+					return err
+				}
+>>>>>>> 80aa4a2426 (owner(ticdc): do not resign owner when ErrNotOwner is encountered (#9396))
 			}
 
 		}

@@ -286,7 +286,49 @@ func (c *Capture) run(stdCtx context.Context) error {
 		conf := config.GetGlobalServerConfig()
 		processorFlushInterval := time.Duration(conf.ProcessorFlushInterval)
 
+<<<<<<< HEAD
 		globalState := orchestrator.NewGlobalState()
+=======
+	g, stdCtx := errgroup.WithContext(stdCtx)
+	stdCtx, cancel := context.WithCancel(stdCtx)
+
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
+		CaptureInfo:       c.info,
+		EtcdClient:        c.EtcdClient,
+		MessageServer:     c.MessageServer,
+		MessageRouter:     c.MessageRouter,
+		SortEngineFactory: c.sortEngineFactory,
+	})
+	g.Go(func() error {
+		// when the campaignOwner returns an error, it means that the owner throws
+		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
+		// so we should restart the capture.
+		err := c.campaignOwner(ctx)
+		if err != nil || c.liveness.Load() != model.LivenessCaptureStopping {
+			log.Warn("campaign owner routine exited, restart the capture",
+				zap.String("captureID", c.info.ID), zap.Error(err))
+			// Throw ErrCaptureSuicide to restart capture.
+			return cerror.ErrCaptureSuicide.FastGenByArgs()
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		// Processor manager should be closed as soon as possible to prevent double write issue.
+		defer func() {
+			if cancel != nil {
+				// Propagate the cancel signal to the owner and other goroutines.
+				cancel()
+			}
+			if c.processorManager != nil {
+				c.processorManager.Close()
+			}
+			log.Info("processor manager closed", zap.String("captureID", c.info.ID))
+		}()
+		processorFlushInterval := time.Duration(c.config.ProcessorFlushInterval)
+
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+>>>>>>> 80aa4a2426 (owner(ticdc): do not resign owner when ErrNotOwner is encountered (#9396))
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -403,12 +445,36 @@ func (c *Capture) campaignOwner(ctx cdcContext.Context) error {
 
 		err = c.runEtcdWorker(ownerCtx, owner, orchestrator.NewGlobalState(), ownerFlushInterval, util.RoleOwner.String())
 		c.setOwner(nil)
+<<<<<<< HEAD
 		log.Info("run owner exited", zap.Error(err))
 		// if owner exits, resign the owner key
 		if resignErr := c.resign(ctx); resignErr != nil {
 			// if resigning owner failed, return error to let capture exits
 			return errors.Annotatef(resignErr, "resign owner failed, capture: %s", c.info.ID)
 		}
+=======
+
+		if !cerror.ErrNotOwner.Equal(err) {
+			// if owner exits, resign the owner key,
+			// use a new context to prevent the context from being cancelled.
+			resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if resignErr := c.resign(resignCtx); resignErr != nil {
+				if errors.Cause(resignErr) != context.DeadlineExceeded {
+					log.Info("owner resign failed", zap.String("captureID", c.info.ID),
+						zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+					cancel()
+					return errors.Trace(resignErr)
+				}
+
+				log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
+					zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+			}
+			cancel()
+		}
+
+		log.Info("owner resigned successfully",
+			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
+>>>>>>> 80aa4a2426 (owner(ticdc): do not resign owner when ErrNotOwner is encountered (#9396))
 		if err != nil {
 			// for errors, return error and let capture exits or restart
 			return errors.Trace(err)
@@ -508,6 +574,7 @@ func (c *Capture) AsyncClose() {
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
+<<<<<<< HEAD
 	if c.processorManager != nil {
 		c.processorManager.AsyncClose()
 	}
@@ -527,6 +594,8 @@ func (c *Capture) AsyncClose() {
 		c.sorterSystem = nil
 	}
 	log.Info("sorter actor system closed")
+=======
+>>>>>>> 80aa4a2426 (owner(ticdc): do not resign owner when ErrNotOwner is encountered (#9396))
 
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
