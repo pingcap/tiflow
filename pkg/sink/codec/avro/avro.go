@@ -380,7 +380,9 @@ func (a *BatchEncoder) withExtension(
 	return native
 }
 
-func (a *BatchEncoder) encodeExtension(topicName string, e *model.RowChangedEvent, handleKeyOnly bool, claimCheckLocation string) ([]byte, error) {
+func (a *BatchEncoder) encodeExtension(
+	topicName string, e *model.RowChangedEvent, handleKeyOnly bool, claimCheckLocation string,
+) ([]byte, error) {
 	extension := make(map[string]interface{})
 	extension = a.withExtension(extension, e, "", handleKeyOnly, claimCheckLocation)
 

@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
@@ -635,6 +636,7 @@ func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
 		true,
 		"string",
 		"string",
+		config.NewDefaultLargeMessageHandleConfig(),
 	)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtensionEnableChecksum, indentJSON(schema))
@@ -677,6 +679,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		false,
 		"precise",
 		"long",
+		config.NewDefaultLargeMessageHandleConfig(),
 	)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithoutExtension, indentJSON(schema))
@@ -694,6 +697,7 @@ func TestRowToAvroSchema(t *testing.T) {
 		false,
 		"precise",
 		"long",
+		config.NewDefaultLargeMessageHandleConfig(),
 	)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtension, indentJSON(schema))
@@ -741,7 +745,7 @@ func TestRowToAvroData(t *testing.T) {
 }
 
 func TestAvroEncode4EnableChecksum(t *testing.T) {
-	config := &common.Config{
+	codecConfig := &common.Config{
 		EnableTiDBExtension:            true,
 		EnableRowChecksum:              true,
 		AvroDecimalHandlingMode:        "string",
@@ -751,7 +755,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, config)
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
 	defer TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
@@ -816,6 +820,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 		true,
 		"string",
 		"string",
+		config.NewDefaultLargeMessageHandleConfig(),
 	)
 	require.NoError(t, err)
 	avroValueCodec, err := goavro.NewCodec(valueSchema)
@@ -841,7 +846,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 }
 
 func TestAvroEncode(t *testing.T) {
-	config := &common.Config{
+	codecConfig := &common.Config{
 		EnableTiDBExtension:            true,
 		EnableRowChecksum:              false,
 		AvroDecimalHandlingMode:        "precise",
@@ -850,7 +855,7 @@ func TestAvroEncode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, config)
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
 	defer TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
@@ -918,6 +923,7 @@ func TestAvroEncode(t *testing.T) {
 		false,
 		"precise",
 		"long",
+		config.NewDefaultLargeMessageHandleConfig(),
 	)
 	require.NoError(t, err)
 	avroKeyCodec, err := goavro.NewCodec(keySchema)
@@ -944,6 +950,7 @@ func TestAvroEncode(t *testing.T) {
 		false,
 		"precise",
 		"long",
+		config.NewDefaultLargeMessageHandleConfig(),
 	)
 	require.NoError(t, err)
 	avroValueCodec, err := goavro.NewCodec(valueSchema)

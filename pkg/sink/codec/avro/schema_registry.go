@@ -350,12 +350,12 @@ func (m *SchemaManager) GetCachedOrRegister(
 	tableVersion uint64,
 	schemaGen SchemaGenerator,
 ) (*goavro.Codec, int, error) {
-	key := m.topicNameToSchemaSubject(topicName)
-	entry := m.GetCached(key, tableVersion)
+	entry := m.GetCached(topicName, tableVersion)
 	if entry != nil {
 		return entry.codec, entry.schemaID, nil
 	}
 
+	key := m.topicNameToSchemaSubject(topicName)
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
 		zap.Uint64("tableVersion", tableVersion))
