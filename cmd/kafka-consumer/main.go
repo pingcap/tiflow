@@ -567,12 +567,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if replicaConfig != nil && replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
 		codecConfig.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 	}
-	codecConfig.EnableTiDBExtension = true
 
 	switch c.protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
 		decoder, err = open.NewBatchDecoder(ctx, codecConfig)
 	case config.ProtocolCanalJSON:
+		codecConfig.EnableTiDBExtension = c.enableTiDBExtension
 		decoder, err = canal.NewBatchDecoder(ctx, codecConfig)
 	case config.ProtocolAvro:
 		config := &common.Config{
