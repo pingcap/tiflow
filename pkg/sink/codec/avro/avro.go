@@ -356,7 +356,7 @@ func (a *BatchEncoder) withExtension(
 	claimCheckLocation string,
 ) map[string]interface{} {
 	native[tidbOp] = operation
-	native[tidbCommitTs] = e.CommitTs
+	native[tidbCommitTs] = int64(e.CommitTs)
 	native[tidbPhysicalTime] = oracle.ExtractPhysical(e.CommitTs)
 
 	if a.config.EnableRowChecksum && e.Checksum != nil {

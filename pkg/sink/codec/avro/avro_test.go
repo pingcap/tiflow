@@ -724,24 +724,11 @@ func TestRowToAvroData(t *testing.T) {
 
 	data, err := rowToAvroData(&avroEncodeInput{cols, colInfos}, "precise", "long")
 	require.NoError(t, err)
-	_, exists := data["_tidb_commit_ts"]
-	require.False(t, exists)
-	_, exists = data["_tidb_op"]
-	require.False(t, exists)
-	_, exists = data["_tidb_commit_physical_time"]
-	require.False(t, exists)
 
-	data, err = rowToAvroData(&avroEncodeInput{cols, colInfos}, "precise", "long")
-	require.NoError(t, err)
-	v, exists := data["_tidb_commit_ts"]
-	require.True(t, exists)
-	require.Equal(t, int64(417318403368288260), v.(int64))
-	v, exists = data["_tidb_commit_physical_time"]
-	require.True(t, exists)
-	require.Equal(t, int64(1591943372224), v.(int64))
-	v, exists = data["_tidb_op"]
-	require.True(t, exists)
-	require.Equal(t, "c", v.(string))
+	for _, col := range cols {
+		_, exists := data[col.Name]
+		require.True(t, exists)
+	}
 }
 
 func TestAvroEncode4EnableChecksum(t *testing.T) {

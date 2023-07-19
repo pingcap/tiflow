@@ -324,20 +324,17 @@ type SchemaGenerator func() (string, error)
 
 // GetCached return the cached avro codec, the caller should make sure the schema is cached.
 func (m *SchemaManager) GetCached(topicName string, tableVersion uint64) *schemaCacheEntry {
-	var (
-		entry  *schemaCacheEntry
-		exists bool
-	)
 	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
 	defer m.cacheRWLock.RUnlock()
-	if entry, exists = m.cache[key]; exists && entry.tableVersion == tableVersion {
+	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
 		log.Debug("Avro schema GetCached cache hit",
 			zap.String("key", key),
 			zap.Uint64("tableVersion", tableVersion),
 			zap.Int("schemaID", entry.schemaID))
+		return entry
 	}
-	return entry
+	return nil
 }
 
 // GetCachedOrRegister checks if the suitable Avro schema has been cached.
