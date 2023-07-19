@@ -360,7 +360,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	})
 
 	g.Go(func() error {
-		// Processor manager should be closed as soon as possible.
+		// Processor manager should be closed as soon as possible to prevent double write issue.
 		defer func() {
 			if cancel != nil {
 				// Propagate the cancel signal to the owner and other goroutines.
