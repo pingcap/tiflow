@@ -259,6 +259,11 @@ func newJSONMessageForDML(
 				out.RawByte(',')
 				out.RawString("\"onlyHandleKey\":true")
 			}
+			if config.LargeMessageHandle.EnableClaimCheck() {
+				out.RawByte(',')
+				out.RawString("\"claimCheckLocation\":")
+				out.String(common.NewClaimCheckFileName(e))
+			}
 		}
 		out.RawByte('}')
 	}
@@ -375,8 +380,6 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	}
 	m.IncRowsCount()
 
-	log.Info("message found", zap.Int("message-length", m.Length()))
-
 	// for single message that is longer than max-message-bytes, do not send it.
 	if m.Length() > c.config.MaxMessageBytes {
 		if c.config.LargeMessageHandle.Disabled() {
@@ -399,6 +402,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		}
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
+			m.Event = e
 			m.ClaimCheckFileName = common.NewClaimCheckFileName(e)
 		}
 	}
@@ -408,18 +412,14 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 }
 
 // NewClaimCheckMessage implements the ClaimCheckEncoder interface
-func (c *JSONRowEventEncoder) NewClaimCheckMessage(location string, callback func()) (*common.Message, error) {
-	message := &canalJSONMessageWithTiDBExtension{
-		Extensions: &tidbExtension{ClaimCheckLocation: location},
-	}
-	value, err := json.Marshal(message)
+func (c *JSONRowEventEncoder) NewClaimCheckMessage(origin *common.Message) (*common.Message, error) {
+	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
-	result.Callback = callback
-
+	result.Callback = origin.Callback
 	result.IncRowsCount()
 	return result, nil
 }

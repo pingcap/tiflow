@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -31,36 +30,32 @@ import (
 
 // batchDecoder decodes the byte into the original message.
 type batchDecoder struct {
-	data                []byte
-	msg                 canalJSONMessageInterface
-	enableTiDBExtension bool
-	terminator          string
+	data []byte
+	msg  canalJSONMessageInterface
+
+	config *common.Config
 
 	storage storage.ExternalStorage
 }
 
 // NewBatchDecoder return a decoder for canal-json
 func NewBatchDecoder(
-	ctx context.Context, replicaConfig *config.ReplicaConfig,
-	enableTiDBExtension bool, terminator string,
+	ctx context.Context, codecConfig *common.Config,
 ) (codec.RowEventDecoder, error) {
 	var (
 		storage storage.ExternalStorage
 		err     error
 	)
-	if replicaConfig.Sink.KafkaConfig.LargeMessageHandle.EnableClaimCheck() {
-		storageURI := replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI
+	if codecConfig.LargeMessageHandle.EnableClaimCheck() {
+		storageURI := codecConfig.LargeMessageHandle.ClaimCheckStorageURI
 		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
-		log.Info("claim-check enabled, set the external storage for the kafka consumer",
-			zap.String("storageURI", storageURI))
 	}
 	return &batchDecoder{
-		enableTiDBExtension: enableTiDBExtension,
-		terminator:          terminator,
-		storage:             storage,
+		config:  codecConfig,
+		storage: storage,
 	}, nil
 }
 
@@ -77,17 +72,17 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		encodedData []byte
 	)
 
-	if b.enableTiDBExtension {
+	if b.config.EnableTiDBExtension {
 		msg = &canalJSONMessageWithTiDBExtension{
 			JSONMessage: &JSONMessage{},
 			Extensions:  &tidbExtension{},
 		}
 	}
-	if len(b.terminator) > 0 {
-		idx := bytes.IndexAny(b.data, b.terminator)
+	if len(b.config.Terminator) > 0 {
+		idx := bytes.IndexAny(b.data, b.config.Terminator)
 		if idx >= 0 {
 			encodedData = b.data[:idx]
-			b.data = b.data[idx+len(b.terminator):]
+			b.data = b.data[idx+len(b.config.Terminator):]
 		} else {
 			encodedData = b.data
 			b.data = nil
