@@ -74,6 +74,51 @@ type avroEncodeResult struct {
 	schemaID int
 }
 
+func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
+	result, err := a.avroEncode(ctx, e, topic, true)
+	if err != nil {
+		log.Error("avro encoding key failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	if result == nil {
+		return nil, nil
+	}
+
+	data, err := result.toEnvelope()
+	if err != nil {
+		log.Error("avro encoding key failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	return data, nil
+}
+
+func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
+	if e.IsDelete() {
+		return nil, nil
+	}
+
+	result, err := a.avroEncode(ctx, e, topic, false)
+	if err != nil {
+		log.Error("avro encoding value failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	if result == nil {
+		return nil, nil
+	}
+
+	data, err := result.toEnvelope()
+	if err != nil {
+		log.Error("avro encoding value failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	return data, nil
+}
+
+func (a *BatchEncoder) encodeExtension(ctx context.Context, e *model.RowChangedEvent) ([]byte, error) {
+	return nil, nil
+}
+
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *BatchEncoder) AppendRowChangedEvent(
@@ -82,53 +127,53 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
+	topic = sanitizeTopic(topic)
+
+	key, err := a.encodeKey(ctx, topic, e)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	value, err := a.encodeValue(ctx, topic, e)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	message := common.NewMsg(
 		config.ProtocolAvro,
-		nil,
-		nil,
+		key,
+		value,
 		e.CommitTs,
 		model.MessageTypeRow,
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
 	message.Callback = callback
-	topic = sanitizeTopic(topic)
-
-	if !e.IsDelete() {
-		res, err := a.avroEncode(ctx, e, topic, false)
-		if err != nil {
-			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		message.Value = evlp
-	} else {
-		message.Value = nil
-	}
-
-	res, err := a.avroEncode(ctx, e, topic, true)
-	if err != nil {
-		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-		return errors.Trace(err)
-	}
-
-	if res != nil {
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-		message.Key = evlp
-	} else {
-		message.Key = nil
-	}
 	message.IncRowsCount()
+
+	if message.Length() > a.config.MaxMessageBytes {
+		log.Warn("Single message is too large for avro",
+			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
+			zap.Int("length", message.Length()),
+			zap.Any("table", e.Table))
+		if a.config.LargeMessageHandle.Disabled() {
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.Length())
+		}
+
+		if a.config.LargeMessageHandle.HandleKeyOnly() {
+			message.Value = a.encodeExtension(ctx, e)
+			if message.Length() > a.config.MaxMessageBytes {
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.Length())
+			}
+		}
+
+		if a.config.LargeMessageHandle.EnableClaimCheck() {
+			message.Event = e
+			message.ClaimCheckFileName = common.NewClaimCheckFileName(e)
+		}
+
+	}
+
 	a.result = append(a.result, message)
 	return nil
 }
@@ -204,6 +249,7 @@ func (a *BatchEncoder) avroEncode(
 	e *model.RowChangedEvent,
 	topic string,
 	isKey bool,
+	onlyExtension bool,
 ) (*avroEncodeResult, error) {
 	var (
 		input *avroEncodeInput
@@ -258,6 +304,7 @@ func (a *BatchEncoder) avroEncode(
 			enableRowLevelChecksum,
 			a.config.AvroDecimalHandlingMode,
 			a.config.AvroBigintUnsignedHandlingMode,
+			a.config.LargeMessageHandle,
 		)
 		if err != nil {
 			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
@@ -289,10 +336,24 @@ func (a *BatchEncoder) avroEncode(
 		return nil, errors.Trace(err)
 	}
 
-	if enableRowLevelChecksum && enableTiDBExtension && e.Checksum != nil {
-		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum.Current), 10)
-		native[tidbCorrupted] = e.Checksum.Corrupted
-		native[tidbChecksumVersion] = e.Checksum.Version
+	if enableTiDBExtension {
+		native[tidbOp] = operation
+		native[tidbCommitTs] = e.CommitTs
+		native[tidbPhysicalTime] = oracle.ExtractPhysical(e.CommitTs)
+
+		if enableRowLevelChecksum && e.Checksum != nil {
+			native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum.Current), 10)
+			native[tidbCorrupted] = e.Checksum.Corrupted
+			native[tidbChecksumVersion] = e.Checksum.Version
+		}
+
+		if a.config.LargeMessageHandle.HandleKeyOnly() {
+			native[tidbHandleKeyOnly] = handleKeyOnly
+		}
+
+		if a.config.LargeMessageHandle.EnableClaimCheck() {
+			native[tidbClaimCheckLocation] = common.NewClaimCheckFileName(e)
+		}
 	}
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
@@ -305,6 +366,10 @@ func (a *BatchEncoder) avroEncode(
 		data:     bin,
 		schemaID: schemaID,
 	}, nil
+}
+
+func (a *BatchEncoder) event2Extension(map[string]interface{}, e *model.RowChangedEvent, operation string) map[string]interface{} {
+	return nil
 }
 
 type avroSchemaTop struct {
@@ -324,6 +389,10 @@ const (
 	tidbRowLevelChecksum = "_tidb_row_level_checksum"
 	tidbChecksumVersion  = "_tidb_checksum_version"
 	tidbCorrupted        = "_tidb_corrupted"
+
+	// large message handle related fields
+	tidbHandleKeyOnly      = "_tidb_handle_key_only"
+	tidbClaimCheckLocation = "_tidb_claim_check_location"
 )
 
 var type2TiDBType = map[byte]string{
@@ -491,6 +560,7 @@ func rowToAvroSchema(
 	enableRowLevelChecksum bool,
 	decimalHandlingMode string,
 	bigintUnsignedHandlingMode string,
+	largeMessageHandle *config.LargeMessageHandleConfig,
 ) (string, error) {
 	if enableRowLevelChecksum {
 		sort.Sort(input)
@@ -594,7 +664,23 @@ func rowToAvroSchema(
 					"default": 0,
 				})
 		}
+		if largeMessageHandle.HandleKeyOnly() {
+			top.Fields = append(top.Fields,
+				map[string]interface{}{
+					"name":    tidbHandleKeyOnly,
+					"type":    "boolean",
+					"default": false,
+				})
+		}
 
+		if largeMessageHandle.EnableClaimCheck() {
+			top.Fields = append(top.Fields,
+				map[string]interface{}{
+					"name":    tidbClaimCheckLocation,
+					"type":    "string",
+					"default": "",
+				})
+		}
 	}
 
 	str, err := json.Marshal(&top)
@@ -637,12 +723,6 @@ func rowToAvroData(
 		} else {
 			ret[sanitizeName(col.Name)] = data
 		}
-	}
-
-	if enableTiDBExtension {
-		ret[tidbOp] = operation
-		ret[tidbCommitTs] = int64(commitTs)
-		ret[tidbPhysicalTime] = oracle.ExtractPhysical(commitTs)
 	}
 
 	log.Debug("rowToAvroData", zap.Any("data", ret))
