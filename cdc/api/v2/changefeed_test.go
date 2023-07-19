@@ -248,6 +248,7 @@ func TestGetChangeFeed(t *testing.T) {
 	statusProvider := &mockStatusProvider{}
 	cp := mock_capture.NewMockCapture(gomock.NewController(t))
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().IsController().Return(true).AnyTimes()
 
 	apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
@@ -813,6 +814,8 @@ func TestDeleteChangefeed(t *testing.T) {
 	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
 	statusProvider := mock_owner.NewMockStatusProvider(gomock.NewController(t))
+	statusProvider.EXPECT().IsChangefeedOwner(gomock.Any(), gomock.Any()).
+		Return(true, nil).AnyTimes()
 
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID(gomock.Any()).
