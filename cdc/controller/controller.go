@@ -129,6 +129,16 @@ func (o *controllerImpl) Tick(stdCtx context.Context, rawState orchestrator.Reac
 		o.changefeeds[changefeed.ID] = changefeed
 	}
 
+	// Cleanup changefeeds that are not in the state.
+	if len(o.changefeeds) != len(state.Changefeeds) {
+		for changefeedID, _ := range o.changefeeds {
+			if _, exist := state.Changefeeds[changefeedID]; exist {
+				continue
+			}
+			delete(o.changefeeds, changefeedID)
+		}
+	}
+
 	// if closed, exit the etcd worker loop
 	if atomic.LoadInt32(&o.closed) != 0 {
 		return state, cerror.ErrReactorFinished.GenWithStackByArgs()

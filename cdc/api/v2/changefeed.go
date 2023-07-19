@@ -246,7 +246,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 	commonInfos := make([]ChangefeedCommonInfo, 0)
 	changefeeds := make([]model.ChangeFeedID, 0)
 
-	for cfID := range checkpointTs {
+	for cfID := range infos {
 		// filter by namespace
 		if cfID.Namespace == namespace {
 			changefeeds = append(changefeeds, cfID)
