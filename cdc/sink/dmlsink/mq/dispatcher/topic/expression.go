@@ -39,8 +39,8 @@ var (
 	pulsarTopicNameRE = regexp.MustCompile(
 		`(^((persistent|non-persistent)://)[A-Za-z0-9{}._\-]*/[A-Za-z0-9{}._\-]*/[A-Za-z0-9{}._\-]*$)|(^[A-Za-z0-9._-]*\{schema}[A-Za-z0-9._-]*\{table}[A-Za-z0-9._-]*)$`,
 	)
-	// pulsarTopicNameRESimple is used to match simple pulsar topic name
-	pulsarTopicNameRESimple = regexp.MustCompile(
+	// pulsarTopicNameREFull is used to match pulsar full topic name
+	pulsarTopicNameREFull = regexp.MustCompile(
 		`(?:persistent|non-persistent)://.*`,
 	)
 )
@@ -113,9 +113,8 @@ func (e Expression) PulsarValidate() error {
 			"topic name is empty")
 	}
 
-	// if not full name
-	if !pulsarTopicNameRESimple.MatchString(topicName) {
-		// if not full name, must be simple name
+	// if not full name, must be simple name
+	if !pulsarTopicNameREFull.MatchString(topicName) {
 		if !strings.Contains(topicName, "{schema}") || strings.Contains(topicName, "/") {
 			return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
 				"it should be in the format of a <topic> and topic name must contain '{schema}'" +
