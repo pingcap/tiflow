@@ -47,11 +47,11 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok := e.(*JSONRowEventEncoder)
 	require.True(t, ok)
 
-	data, err := newJSONMessageForDML(encoder.builder, testCaseInsert, encoder.config)
-	require.Nil(t, err)
+	data, err := newJSONMessageForDML(encoder.builder, testCaseInsert, encoder.config, false)
+	require.NoError(t, err)
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	jsonMsg, ok := msg.(*JSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
@@ -96,11 +96,11 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
-	require.Nil(t, err)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false)
+	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, jsonMsg.Data)
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
@@ -114,11 +114,11 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Old[0], col.Name)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, encoder.config)
-	require.Nil(t, err)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, encoder.config, false)
+	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, jsonMsg.Data)
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
@@ -127,7 +127,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Data[0], col.Name)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{DeleteOnlyHandleKeyColumns: true})
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{DeleteOnlyHandleKeyColumns: true}, false)
 	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -156,24 +156,24 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	encoder, ok = e.(*JSONRowEventEncoder)
 	require.True(t, ok)
-	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
-	require.Nil(t, err)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false)
+	require.NoError(t, err)
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}
 	err = json.Unmarshal(data, withExtension)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
 
 	encoder, ok = e.(*JSONRowEventEncoder)
 	require.True(t, ok)
-	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config)
-	require.Nil(t, err)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false)
+	require.NoError(t, err)
 
 	withExtension = &canalJSONMessageWithTiDBExtension{}
 	err = json.Unmarshal(data, withExtension)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 0, len(withExtension.JSONMessage.Old[0]))
 
 	require.NotNil(t, withExtension.Extensions)
@@ -263,7 +263,7 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		require.NotNil(t, encoder)
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		if !enable {
 			require.Nil(t, msg)
@@ -271,7 +271,10 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		}
 
 		require.NotNil(t, msg)
-		decoder := NewBatchDecoder(enable, "")
+
+		ctx := context.Background()
+		decoder, err := NewBatchDecoder(ctx, config)
+		require.NoError(t, err)
 
 		err = decoder.AddKeyValue(msg.Key, msg.Value)
 		require.NoError(t, err)
