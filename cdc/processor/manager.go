@@ -227,6 +227,7 @@ func (m *managerImpl) handleCommand(ctx cdcContext.Context) error {
 		for changefeedID := range m.processors {
 			m.closeProcessor(changefeedID, ctx)
 		}
+		log.Info("All processors are closed in processor manager")
 		// FIXME: we should drain command queue and signal callers an error.
 		return cerrors.ErrReactorFinished
 	case commandTpWriteDebugInfo:
