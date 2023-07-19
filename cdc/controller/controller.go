@@ -131,7 +131,7 @@ func (o *controllerImpl) Tick(stdCtx context.Context, rawState orchestrator.Reac
 
 	// Cleanup changefeeds that are not in the state.
 	if len(o.changefeeds) != len(state.Changefeeds) {
-		for changefeedID, _ := range o.changefeeds {
+		for changefeedID := range o.changefeeds {
 			if _, exist := state.Changefeeds[changefeedID]; exist {
 				continue
 			}
