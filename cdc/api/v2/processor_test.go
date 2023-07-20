@@ -24,6 +24,7 @@ import (
 	"github.com/golang/mock/gomock"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/model"
+	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,8 +37,12 @@ func TestGetProcessor(t *testing.T) {
 
 	// case 1: invalid changefeed id.
 	{
-		cp := mock_capture.NewMockCapture(gomock.NewController(t))
+		ctl := gomock.NewController(t)
+		cp := mock_capture.NewMockCapture(ctl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
+		statusProvider := mock_owner.NewMockStatusProvider(ctl)
+		statusProvider.EXPECT().IsChangefeedOwner(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+		cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 		cp.EXPECT().IsController().Return(true).AnyTimes()
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
@@ -64,8 +69,12 @@ func TestGetProcessor(t *testing.T) {
 
 	// case 2: invalid capture id.
 	{
-		cp := mock_capture.NewMockCapture(gomock.NewController(t))
+		ctl := gomock.NewController(t)
+		cp := mock_capture.NewMockCapture(ctl)
 		cp.EXPECT().IsReady().Return(true).AnyTimes()
+		statusProvider := mock_owner.NewMockStatusProvider(ctl)
+		statusProvider.EXPECT().IsChangefeedOwner(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+		cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 		cp.EXPECT().IsController().Return(true).AnyTimes()
 
 		apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})

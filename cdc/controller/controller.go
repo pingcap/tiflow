@@ -53,6 +53,7 @@ type Controller interface {
 		map[model.ChangeFeedID]uint64, error,
 	)
 	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
+	IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error)
 }
 
 type controllerImpl struct {

@@ -107,6 +107,21 @@ func (mr *MockControllerMockRecorder) GetChangefeedOwnerCaptureInfo(id interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChangefeedOwnerCaptureInfo", reflect.TypeOf((*MockController)(nil).GetChangefeedOwnerCaptureInfo), id)
 }
 
+// IsChangefeedExists mocks base method.
+func (m *MockController) IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsChangefeedExists", ctx, id)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsChangefeedExists indicates an expected call of IsChangefeedExists.
+func (mr *MockControllerMockRecorder) IsChangefeedExists(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsChangefeedExists", reflect.TypeOf((*MockController)(nil).IsChangefeedExists), ctx, id)
+}
+
 // Tick mocks base method.
 func (m *MockController) Tick(ctx context.Context, state orchestrator.ReactorState) (orchestrator.ReactorState, error) {
 	m.ctrl.T.Helper()

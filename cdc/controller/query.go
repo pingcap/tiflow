@@ -34,6 +34,8 @@ const (
 	QueryAllChangeFeedInfo
 	// QueryCaptures is the type of query captures info.
 	QueryCaptures
+	// QueryExists is the type of query check if a changefeed is exist
+	QueryExists
 )
 
 // Query wraps query command and return results.
@@ -55,6 +57,7 @@ func (o *controllerImpl) GetCaptures(ctx context.Context) ([]*model.CaptureInfo,
 	return query.Data.([]*model.CaptureInfo), nil
 }
 
+// GetAllChangeFeedInfo returns all changefeed infos
 func (o *controllerImpl) GetAllChangeFeedInfo(ctx context.Context) (
 	map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
 ) {
@@ -67,6 +70,7 @@ func (o *controllerImpl) GetAllChangeFeedInfo(ctx context.Context) (
 	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
 }
 
+// GetAllChangeFeedCheckpointTs returns all changefeed checkpoints
 func (o *controllerImpl) GetAllChangeFeedCheckpointTs(ctx context.Context) (
 	map[model.ChangeFeedID]uint64, error,
 ) {
@@ -77,6 +81,18 @@ func (o *controllerImpl) GetAllChangeFeedCheckpointTs(ctx context.Context) (
 		return nil, errors.Trace(err)
 	}
 	return query.Data.(map[model.ChangeFeedID]uint64), nil
+}
+
+// IsChangefeedExists returns true if a changefeed is exits
+func (o *controllerImpl) IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error) {
+	query := &Query{
+		Tp:           QueryExists,
+		ChangeFeedID: id,
+	}
+	if err := o.sendQueryToController(ctx, query); err != nil {
+		return false, errors.Trace(err)
+	}
+	return query.Data.(bool), nil
 }
 
 // Query queries controller internal information.
@@ -178,6 +194,9 @@ func (o *controllerImpl) handleQueries(query *Query) error {
 			})
 		}
 		query.Data = ret
+	case QueryExists:
+		_, ok := o.changefeeds[query.ChangeFeedID]
+		query.Data = ok
 	}
 	return nil
 }
