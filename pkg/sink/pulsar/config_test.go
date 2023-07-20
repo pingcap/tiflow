@@ -74,7 +74,7 @@ func TestPulsarConfig(t *testing.T) {
 }
 
 func TestGetBrokerURL(t *testing.T) {
-	sink, _ := url.Parse("pulsar://localhost:6650")
+	sink, _ := url.Parse("pulsar://localhost:6650/test")
 	config, _ := NewPulsarConfig(sink)
 
 	assert.Equal(t, config.GetBrokerURL(), "pulsar://localhost:6650")
