@@ -14,7 +14,7 @@
 package metadata
 
 import (
-    "context"
+	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/chann"
@@ -33,8 +33,8 @@ const (
 	// States set by changefeed owner.
 	StateFinished
 	StateFailed
-    StateWarning
-    StatePending
+	StateWarning
+	StatePending
 )
 
 // ChangefeedInfo is a minimal info collection to describe a changefeed.
@@ -118,12 +118,12 @@ type CaptureObservation interface {
 	TakeControl() ControllerObservation
 
 	// Advance is like OwnerObservation.Advance but handles many changefeeds.
-    //
+	//
 	// It should returns an InvalidOwner error if any changefeed ownership is revoked.
 	Advance(cfs []*ChangefeedInfo, progresses []*ChangefeedProgress) error
 
-    // Fetch the latest alive changefeed owner list from metadata.
-    RefreshAliveOwners <-chan []*ChangefeedInfo
+	// Fetch the latest alive changefeed owner list from metadata.
+	RefreshAliveOwners() <-chan []*ChangefeedInfo
 }
 
 // ControllerObservation is for observing and updating meta by Controller.
@@ -136,24 +136,24 @@ type ControllerObservation interface {
 	// UpdateChangefeed updates changefeed metadata, must be called on a stopped one.
 	UpdateChangefeed(cf *ChangefeedInfo) error
 
-    // Stop a changefeed.
+	// Stop a changefeed.
 	SetChangefeedStopped(cf *ChangefeedInfo) error
 
 	// Fetch the latest capture list in the TiCDC cluster.
 	RefreshCaptures() <-chan []*CaptureInfo
 
-    // Schedule a changefeed owner to the given target.
-    //
-    // The target capture can fetch the event by `RefreshOwners`.
-    LaunchOwner(cf *ChangefeedInfo, target *CaptureInfo) error
+	// Schedule a changefeed owner to the given target.
+	//
+	// The target capture can fetch the event by `RefreshOwners`.
+	LaunchOwner(cf *ChangefeedInfo, target *CaptureInfo) error
 
-    // Stop a changefeed owner.
-    StopOwner(cf *ChangefeedInfo) error
+	// Stop a changefeed owner.
+	StopOwner(cf *ChangefeedInfo) error
 
-    // Schedule some captures as workers to a given changefeed.
-    //
-    // The target changefeed can fetch the event by xxx.
-    AttachWorkers(cf *ChangefeedInfo, workers []*CaptureInfo) error
+	// Schedule some captures as workers to a given changefeed.
+	//
+	// The target changefeed can fetch the event by xxx.
+	AttachWorkers(cf *ChangefeedInfo, workers []*CaptureInfo) error
 }
 
 // OwnerObservation is for observing and updating running status of a changefeed.
@@ -166,21 +166,21 @@ type OwnerObservation interface {
 	// Advance advances a changefeed progress.
 	Advance(cf *ChangefeedInfo, progress *ChangefeedProgress) error
 
-    // set the changefeed to state finished.
+	// set the changefeed to state finished.
 	SetChangefeedFinished(cf *ChangefeedInfo) error
 
-    // Set the changefeed to state failed.
+	// Set the changefeed to state failed.
 	SetChangefeedFailed(cf *ChangefeedInfo, err model.RunningError) error
 
-    // Set the changefeed to state warning.
+	// Set the changefeed to state warning.
 	SetChangefeedWarning(cf *ChangefeedInfo, warn model.RunningError) error
 
-    // Set the changefeed to state pending.
-    SetChangefeedPending(cf model.ChangeFeedID) error
+	// Set the changefeed to state pending.
+	SetChangefeedPending(cf model.ChangeFeedID) error
 
-    // Fetch the latest capture list to launch processors.
-    RefreshWorkers(cf *ChangefeedInfo) <-chan []*CaptureInfo
+	// Fetch the latest capture list to launch processors.
+	RefreshWorkers(cf *ChangefeedInfo) <-chan []*CaptureInfo
 
-    // When an owner exits, inform the metadata storage.
-    PostStopped(cf *ChangefeedInfo) error
+	// When an owner exits, inform the metadata storage.
+	PostStopped(cf *ChangefeedInfo) error
 }
