@@ -241,7 +241,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.1 // indirect
 	github.com/petermattis/goid v0.0.0-20211229010228-4d14c490ee36 // indirect
 	github.com/philhofer/fwd v1.1.1 // indirect
-	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
 	github.com/pingcap/badger v1.5.1-0.20230103063557-828f39b09b6d // indirect
 	github.com/pingcap/fn v0.0.0-20200306044125-d5540d389059 // indirect
