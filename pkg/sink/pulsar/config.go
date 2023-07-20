@@ -1,3 +1,16 @@
+// Copyright 2023 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package pulsar
 
 import (
@@ -45,10 +58,6 @@ const (
 
 	// SendTimeout producer max send message timeout  (default: 30000ms)
 	SendTimeout = "send-timeout"
-
-	// MessageKey Option.All Keys filled in Pulsar when sending events are used for routing in Pulsar. If it is empty, it will be randomly distributed in each partition.
-	//For one changefeed task.
-	MessageKey = "message-key"
 
 	// BasicUserName Account name for pulsar basic authentication (the second priority authentication method)
 	BasicUserName = "basic-user-name"
@@ -133,10 +142,6 @@ type PulsarConfig struct {
 
 	// ProducerMode batch send message(s)
 	ProducerMode string
-
-	// MessageKey Option.All Keys filled in Pulsar when sending events are used for routing in Pulsar. If it is empty, it will be randomly distributed in each partition.
-	//For one changefeed task.
-	MessageKey string
 
 	// TokenFromFile Authentication from the file token, the path name of the file (the third priority authentication method)
 	TokenFromFile string
@@ -306,11 +311,6 @@ func (c *PulsarConfig) Apply(sinkURI *url.URL) error {
 			return err
 		}
 		c.SendTimeout = time.Second * time.Duration(a)
-	}
-
-	s = params.Get(MessageKey)
-	if len(s) > 0 {
-		c.MessageKey = s
 	}
 
 	s = params.Get(TokenFromFile)
