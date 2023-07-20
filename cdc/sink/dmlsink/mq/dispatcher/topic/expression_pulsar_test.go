@@ -21,7 +21,6 @@ import (
 )
 
 func TestPulsarValidate(t *testing.T) {
-
 	t.Parallel()
 	schema := "schema"
 	table := "table"
@@ -41,31 +40,38 @@ func TestPulsarValidate(t *testing.T) {
 			name:       "simple topic ,no {schema}",
 			expression: "_xyz",
 			wantErr:    "invalid topic expression",
-		}, {
+		},
+		{
 			name:       "simple topic ,no {schema}",
 			expression: "123456",
 			wantErr:    "invalid topic expression",
-		}, {
+		},
+		{
 			name:       "simple topic ,no {schema}",
 			expression: "ABCD",
 			wantErr:    "invalid topic expression",
-		}, {
+		},
+		{
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent:public_test-table",
 			wantErr:    "invalid topic expression",
-		}, {
+		},
+		{
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://",
 			wantErr:    "invalid topic expression",
-		}, {
+		},
+		{
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://public",
 			wantErr:    "invalid topic expression",
-		}, {
+		},
+		{
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://public_test-table",
 			wantErr:    "invalid topic expression",
-		}, {
+		},
+		{
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://public/_test-table",
 			wantErr:    "invalid topic expression",
@@ -180,5 +186,4 @@ func TestPulsarValidate(t *testing.T) {
 			require.Equal(t, topicName, tc.expectedTopic, fmt.Sprintf("case:%s", tc.name))
 		}
 	}
-
 }
