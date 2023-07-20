@@ -552,7 +552,7 @@ var doc = `{
         },
         "/api/v1/owner/resign": {
             "post": {
-                "description": "notify the current owner to resign",
+                "description": "notify the current controller to resign",
                 "consumes": [
                     "application/json"
                 ],
@@ -562,7 +562,7 @@ var doc = `{
                 "tags": [
                     "owner"
                 ],
-                "summary": "notify the owner to resign",
+                "summary": "notify the ticdc cluster controller to resign",
                 "responses": {
                     "202": {
                         "description": ""
@@ -1179,7 +1179,7 @@ var doc = `{
         },
         "/api/v2/owner/resign": {
             "post": {
-                "description": "Notify the current owner to resign",
+                "description": "Notify the current controller to resign",
                 "consumes": [
                     "application/json"
                 ],
@@ -1190,7 +1190,7 @@ var doc = `{
                     "owner",
                     "v2"
                 ],
-                "summary": "Notify the owner to resign",
+                "summary": "Notify the controller to resign",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1376,6 +1376,9 @@ var doc = `{
                 "flush-interval": {
                     "type": "string"
                 },
+                "output-column-id": {
+                    "type": "boolean"
+                },
                 "worker-count": {
                     "type": "integer"
                 }
@@ -1556,6 +1559,9 @@ var doc = `{
         "config.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
+                "claim-check-compression": {
+                    "type": "string"
+                },
                 "claim-check-storage-uri": {
                     "type": "string"
                 },
@@ -2170,6 +2176,9 @@ var doc = `{
                 "flush_interval": {
                     "type": "string"
                 },
+                "output_column_id": {
+                    "type": "boolean"
+                },
                 "worker_count": {
                     "type": "integer"
                 }
@@ -2467,6 +2476,9 @@ var doc = `{
         "v2.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
+                "claim_check_compression": {
+                    "type": "string"
+                },
                 "claim_check_storage_uri": {
                     "type": "string"
                 },

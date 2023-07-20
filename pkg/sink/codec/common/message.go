@@ -15,8 +15,12 @@ package common
 
 import (
 	"encoding/binary"
+	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
@@ -40,6 +44,11 @@ type Message struct {
 	Protocol  config.Protocol   // protocol
 	rowsCount int               // rows in one Message
 	Callback  func()            // Callback function will be called when the message is sent to the sink.
+
+	// ClaimCheckFileName is set if the message should be sent to the claim check storage.
+	ClaimCheckFileName string
+
+	Event *model.RowChangedEvent
 }
 
 // Length returns the expected size of the Kafka message
@@ -119,4 +128,33 @@ func NewMsg(
 	}
 
 	return ret
+}
+
+// ClaimCheckMessage is the message sent to the claim-check external storage.
+type ClaimCheckMessage struct {
+	Key   []byte `json:"key"`
+	Value []byte `json:"value"`
+}
+
+// UnmarshalClaimCheckMessage unmarshal bytes to ClaimCheckMessage.
+func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
+	var m ClaimCheckMessage
+	err := json.Unmarshal(data, &m)
+	return &m, err
+}
+
+// NewClaimCheckFileName return file name for sent the message to claim check storage.
+func NewClaimCheckFileName(e *model.RowChangedEvent) string {
+	prefix := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
+	elements := append(prefix, e.GetHandleKeyColumnValues()...)
+	fileName := strings.Join(elements, "-")
+	fileName += ".json"
+	// the maximum length of the S3 object key is 1024 bytes,
+	// ref https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
+	if len(fileName) > 1024 {
+		// randomly generated uuid has 122 bits, it should be within the length limit with the prefix.
+		prefix = append(prefix, uuid.New().String())
+		fileName = strings.Join(prefix, "-")
+	}
+	return fileName
 }

@@ -133,7 +133,7 @@ func (worker *EtcdWorker) initMetrics() {
 // And the specified etcd session is nil-safety.
 func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session, timerInterval time.Duration, role string) error {
 	defer worker.cleanUp()
-	worker.isOwner = role == pkgutil.RoleOwner.String()
+	worker.isOwner = role == pkgutil.RoleController.String()
 	// migrate data here
 	err := worker.checkAndMigrateMetaData(ctx, role)
 	if err != nil {
@@ -232,7 +232,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				if err != nil {
 					// This error means owner is resigned by itself,
 					// and we should exit etcd worker and campaign owner again.
-					return nil
+					return err
 				}
 			}
 
@@ -588,7 +588,7 @@ func (worker *EtcdWorker) checkAndMigrateMetaData(
 		return nil
 	}
 
-	if role != pkgutil.RoleOwner.String() {
+	if role != pkgutil.RoleController.String() {
 		err := worker.migrator.WaitMetaVersionMatched(ctx)
 		return errors.Trace(err)
 	}

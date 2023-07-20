@@ -75,7 +75,7 @@ func generateTableDef() (TableDefinition, *model.TableInfo) {
 	}
 
 	var def TableDefinition
-	def.FromTableInfo(tableInfo, tableInfo.Version)
+	def.FromTableInfo(tableInfo, tableInfo.Version, false)
 	return def, tableInfo
 }
 
@@ -368,7 +368,7 @@ func TestTableCol(t *testing.T) {
 		}
 		col := &timodel.ColumnInfo{FieldType: *ft}
 		var tableCol TableCol
-		tableCol.FromTiColumnInfo(col)
+		tableCol.FromTiColumnInfo(col, false)
 		encodedCol, err := json.Marshal(tableCol)
 		require.Nil(t, err, tc.name)
 		require.JSONEq(t, tc.expected, string(encodedCol), tc.name)
@@ -429,7 +429,7 @@ func TestTableDefinition(t *testing.T) {
 		Query:     "alter table schema1.table1 add Birthday date",
 		TableInfo: tableInfo,
 	}
-	def.FromDDLEvent(event)
+	def.FromDDLEvent(event, false)
 	encodedDef, err = json.MarshalIndent(def, "", "    ")
 	require.NoError(t, err)
 	require.JSONEq(t, `{

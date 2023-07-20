@@ -73,9 +73,8 @@ var (
 	enableTiDBExtension bool
 	enableRowChecksum   bool
 
-	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
-	// which then can be used to check RowChangedEvent dispatched correctness
-	eventRouterReplicaConfig *config.ReplicaConfig
+	// the replicaConfig of the changefeed which produce data to the kafka topic
+	replicaConfig *config.ReplicaConfig
 
 	logPath       string
 	logLevel      string
@@ -214,15 +213,15 @@ func init() {
 	}
 
 	if configFile != "" {
-		eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
-		eventRouterReplicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
-		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
+		replicaConfig = config.GetDefaultReplicaConfig()
+		replicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
+		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
 		if err != nil {
 			log.Panic("invalid config file for kafka consumer",
 				zap.Error(err),
 				zap.String("config", configFile))
 		}
-		if _, err := filter.VerifyTableRules(eventRouterReplicaConfig.Filter); err != nil {
+		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
 			log.Panic("verify rule failed", zap.Error(err))
 		}
 	}
@@ -453,8 +452,8 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	// when try to enable dispatcher check for any protocol and dispatch
 	// rule, make sure decoded `RowChangedEvent` contains information
 	// identical to the CDC side.
-	if eventRouterReplicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(eventRouterReplicaConfig, kafkaTopic)
+	if replicaConfig != nil {
+		eventRouter, err := dispatcher.NewEventRouter(replicaConfig, kafkaTopic)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -558,15 +557,23 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
+	ctx := context.Background()
 	var (
 		decoder codec.RowEventDecoder
 		err     error
 	)
+
+	codecConfig := common.NewConfig(c.protocol)
+	if replicaConfig != nil && replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
+		codecConfig.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+	}
+
 	switch c.protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
-		decoder = open.NewBatchDecoder()
+		decoder, err = open.NewBatchDecoder(ctx, codecConfig)
 	case config.ProtocolCanalJSON:
-		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
+		codecConfig.EnableTiDBExtension = c.enableTiDBExtension
+		decoder, err = canal.NewBatchDecoder(ctx, codecConfig)
 	case config.ProtocolAvro:
 		config := &common.Config{
 			EnableTiDBExtension: c.enableTiDBExtension,
