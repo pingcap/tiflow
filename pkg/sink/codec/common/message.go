@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -150,7 +151,8 @@ func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
 func NewClaimCheckFileName(e *model.RowChangedEvent) string {
 	// according to the https://docs.pingcap.com/tidb/stable/tidb-limitations#limitations-on-identifier-length
 	// schema and table maximum length is 64 characters, and the string representation of the commit ts is 20 bytes.
-	prefix := []string{e.Table.Schema, e.Table.Table,
+	date := clock.New().Now().Format("2006-01-02")
+	prefix := []string{date, e.Table.Schema, e.Table.Table,
 		strconv.FormatUint(e.CommitTs, 10), strconv.FormatUint(e.StartTs, 10)}
 	handleKeys := strings.Join(e.GetHandleKeyColumnValues(), "-")
 
