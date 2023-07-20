@@ -194,22 +194,27 @@ OrderingKey string
 
 #### Pulsar Route Rule
 
-- We support route events to different partitions by message-key.
+- We support route events to different partitions by changefeed config dispatchers,
+refer to `Pulsar Topic Rule`
 - You can set the message-key to any characters. We do not set any characters default, the event will be sent to the partition by hash algorithm.
 
 #### Pulsar Topic Rule
 
-
 ```yaml
 dispatchers = [
-   {matcher = ['test1.*', 'test2.*'], topic = "Topic expression 1" },
-   {matcher = ['test6.*']，topic = "Topic expression 2" }  
+   {matcher = ['test1.*', 'test2.*'], topic = "Topic expression 1",partition="table" },
+   {matcher = ['test6.*']，topic = "Topic expression 2",partition="ts" }  
 ] 
 The topic expression syntax is legal if it meets the following conditions:
 1.{schema} and {table} respectively identify the database name and table name that need to be matched, and are required fields.
    Pulsar support "(persistent|non-persistent)://tenant/namespace/topic" as topic name。
 2.The tenant, namespace and topic must be separated by 2 slashes, such as: "tenant/namespace/topic".
 3. If the topic does not match, it will enter the default topic, which is the topic in the sink-uri
+4. "partition" ="xxx" choose [refer to https://docs.pingcap.com/tidb/dev/ticdc-sink-to-kafka#customize-the-rules-for-topic-and-partition-dispatchers-of-kafka-sink]:
+    default: When multiple unique indexes (including the primary key) exist or the Old Value feature is enabled, events are dispatched in the table mode. When only one unique index (or the primary key) exists, events are dispatched in the index-value mode.
+    ts: Use the commitTs of the row change to hash and dispatch events.
+    index-value: Use the value of the primary key or the unique index of the table to hash and dispatch events.
+    table: Use the schema name of the table and the table name to hash and dispatch events.
 
 ```
 
