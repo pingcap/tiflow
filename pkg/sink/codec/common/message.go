@@ -16,6 +16,7 @@ package common
 import (
 	"encoding/binary"
 	"encoding/json"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -145,16 +146,20 @@ func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
 
 // NewClaimCheckFileName return file name for sent the message to claim check storage.
 func NewClaimCheckFileName(e *model.RowChangedEvent) string {
+	// according to the https://docs.pingcap.com/tidb/stable/tidb-limitations#limitations-on-identifier-length
+	// schema and table maximum length is 64 characters, and the string representation of the commit ts is 20 bytes.
 	prefix := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
-	elements := append(prefix, e.GetHandleKeyColumnValues()...)
-	fileName := strings.Join(elements, "-")
+	handleKeys := strings.Join(e.GetHandleKeyColumnValues(), "-")
+
+	fileName := path.Join(append(prefix, handleKeys)...)
 	fileName += ".json"
 	// the maximum length of the S3 object key is 1024 bytes,
 	// ref https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
 	if len(fileName) > 1024 {
 		// randomly generated uuid has 122 bits, it should be within the length limit with the prefix.
 		prefix = append(prefix, uuid.New().String())
-		fileName = strings.Join(prefix, "-")
+		fileName = path.Join(prefix...)
+		fileName += ".json"
 	}
 	return fileName
 }

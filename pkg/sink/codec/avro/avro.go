@@ -77,7 +77,6 @@ type avroEncodeResult struct {
 func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
 	result, err := a.avroEncode(ctx, e, topic, true)
 	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
@@ -87,7 +86,6 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 
 	data, err := result.toEnvelope()
 	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	return data, nil
@@ -100,7 +98,6 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 
 	result, err := a.avroEncode(ctx, e, topic, false)
 	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	if result == nil {
@@ -109,7 +106,6 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 
 	data, err := result.toEnvelope()
 	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
@@ -128,11 +124,13 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
+		log.Error("avro encoding key failed", zap.Error(err))
 		return errors.Trace(err)
 	}
 
 	value, err := a.encodeValue(ctx, topic, e)
 	if err != nil {
+		log.Error("avro encoding value failed", zap.Error(err))
 		return errors.Trace(err)
 	}
 
