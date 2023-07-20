@@ -13,18 +13,12 @@
 
 package metadata
 
-import "github.com/pingcap/tiflow/cdc/model"
+import (
+	"testing"
 
-type ErrorType int
-
-const (
-	InvalidController ErrorType = iota
-	InvalidOwner
-	IO
+	"github.com/pingcap/tiflow/pkg/leakutil"
 )
 
-type Error struct {
-	ErrorType
-	invalidOwners []model.ChangeFeedID
-	ioError       error
+func TestMain(m *testing.M) {
+	leakutil.SetUpLeakTest(m)
 }

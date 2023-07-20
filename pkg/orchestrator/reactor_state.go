@@ -55,7 +55,7 @@ func NewGlobalState(clusterID string) *GlobalReactorState {
 // Update implements the ReactorState interface
 func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) error {
 	k := new(etcd.CDCKey)
-	err := k.Parsex(s.ClusterID, key.String())
+	err := k.Parse(s.ClusterID, key.String())
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -177,7 +177,7 @@ func NewChangefeedReactorState(clusterID string,
 // Update implements the ReactorState interface
 func (s *ChangefeedReactorState) Update(key util.EtcdKey, value []byte, _ bool) error {
 	k := new(etcd.CDCKey)
-	if err := k.Parsex(s.ClusterID, key.String()); err != nil {
+	if err := k.Parse(s.ClusterID, key.String()); err != nil {
 		return errors.Trace(err)
 	}
 	if err := s.UpdateCDCKey(k, value); err != nil {
@@ -263,7 +263,7 @@ func (s *ChangefeedReactorState) CheckCaptureAlive(captureID model.CaptureID) {
 		Tp:        etcd.CDCKeyTypeCapture,
 		CaptureID: captureID,
 	}
-	key := k.Stringx()
+	key := k.String()
 	patch := &SingleDataPatch{
 		Key: util.NewEtcdKey(key),
 		Func: func(v []byte) ([]byte, bool, error) {
@@ -310,7 +310,7 @@ func (s *ChangefeedReactorState) PatchInfo(fn func(*model.ChangeFeedInfo) (*mode
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.Stringx(), changefeedInfoTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), changefeedInfoTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -326,7 +326,7 @@ func (s *ChangefeedReactorState) PatchStatus(fn func(*model.ChangeFeedStatus) (*
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.Stringx(), changefeedStatusTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), changefeedStatusTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -343,7 +343,7 @@ func (s *ChangefeedReactorState) PatchTaskPosition(captureID model.CaptureID, fn
 		CaptureID:    captureID,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.Stringx(), taskPositionTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)

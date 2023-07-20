@@ -105,7 +105,7 @@ func NewMigrator(cli etcd.CDCEtcdClient,
 	}
 	return &migrator{
 		newMetaVersion:     cdcMetaVersion,
-		metaVersionKey:     metaVersionCDCKey.Stringx(),
+		metaVersionKey:     metaVersionCDCKey.String(),
 		oldOwnerKey:        "/ticdc/cdc/owner",
 		cli:                cli,
 		keyPrefixes:        make(keys),
@@ -539,7 +539,7 @@ func (m *migrator) saveUpstreamInfo(ctx context.Context) error {
 		UpstreamID: upstreamID,
 		Namespace:  model.DefaultNamespace,
 	}
-	upstreamKeyStr := upstreamKey.Stringx()
+	upstreamKeyStr := upstreamKey.String()
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            upstreamID,
 		PDEndpoints:   strings.Join(m.pdEndpoints, ","),
@@ -558,7 +558,7 @@ func (m *migrator) saveUpstreamInfo(ctx context.Context) error {
 
 func getMetaVersion(ctx context.Context, cli *etcd.Client, clusterID string) (int, error) {
 	key := etcd.CDCKey{Tp: etcd.CDCKeyTypeMetaVersion, ClusterID: clusterID}
-	resp, err := cli.Get(ctx, key.Stringx())
+	resp, err := cli.Get(ctx, key.String())
 	if err != nil {
 		return 0, errors.Trace(err)
 	}

@@ -17,24 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
-)
-
-// ChangefeedState indicate states of a changefeed.
-type ChangefeedState int
-
-const (
-	// States set by users explicitly.
-	StateNormal ChangefeedState = iota
-	StateStopped
-	StateRemoved
-
-	// States set by changefeed owner.
-	StateFinished
-	StateFailed
-	StateWarning
-	StatePending
 )
 
 // ChangefeedInfo is a minimal info collection to describe a changefeed.
