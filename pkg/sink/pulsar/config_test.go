@@ -14,11 +14,12 @@
 package pulsar
 
 import (
-	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/stretchr/testify/assert"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPulsarConfig(t *testing.T) {

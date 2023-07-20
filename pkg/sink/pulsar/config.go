@@ -15,15 +15,16 @@ package pulsar
 
 import (
 	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
-	"net/url"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // sink config Key
@@ -70,18 +71,20 @@ const (
 	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
 	Protocol = "protocol"
 
-	//TLSCertificatePath TLSPrivateKeyPath create new pulsar authentication provider with specified TLS certificate and private key
+	// TLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
 	TLSCertificatePath = "tls-certificate-path"
-	TLSPrivateKeyPath  = "tls-private-key-path"
 
-	// OAuth2IssuerUrl  the URL of the authorization server.
-	OAuth2IssuerUrl = "oauth2-issuer-url"
+	// TLSPrivateKeyPath TLS private key
+	TLSPrivateKeyPath = "tls-private-key-path"
+
+	// OAuth2IssuerURL  the URL of the authorization server.
+	OAuth2IssuerURL = "oauth2-issuer-url"
 	// OAuth2Audience  the URL of the resource server.
 	OAuth2Audience = "oauth2-audience"
 	// OAuth2PrivateKey the private key used to sign the server.
 	OAuth2PrivateKey = "oauth2-private-key"
-	// OAuth2ClientId  the client ID of the application.
-	OAuth2ClientId = "oauth2-client-id"
+	// OAuth2ClientID  the client ID of the application.
+	OAuth2ClientID = "oauth2-client-id"
 )
 
 // sink config default Value
@@ -101,7 +104,8 @@ const (
 	defaultProducerModeBatch = "batch"
 )
 
-type PulsarConfig struct {
+// Config pulsar sink config
+type Config struct {
 	PulsarVersion string
 	// MaxMessageBytes pulsar server message limited 5MB default,
 	// this default value is 0 !
@@ -151,7 +155,7 @@ type PulsarConfig struct {
 	// BasicPassword with account
 	BasicPassword string
 
-	//TLSCertificatePath TLSPrivateKeyPath create new pulsar authentication provider with specified TLS certificate and private key
+	// TLSCertificatePath TLSPrivateKeyPath create new pulsar authentication provider with specified TLS certificate and private key
 	TLSCertificatePath string
 	TLSPrivateKeyPath  string
 
@@ -170,16 +174,16 @@ type PulsarConfig struct {
 }
 
 // GetBrokerURL get broker url
-func (c *PulsarConfig) GetBrokerURL() string {
+func (c *Config) GetBrokerURL() string {
 	return c.URL
 }
 
-// GetSinkURI
-func (c *PulsarConfig) GetSinkURI() *url.URL {
+// GetSinkURI get sink uri
+func (c *Config) GetSinkURI() *url.URL {
 	return c.u
 }
 
-func (c *PulsarConfig) checkSinkURI(sinkURI *url.URL) error {
+func (c *Config) checkSinkURI(sinkURI *url.URL) error {
 	if sinkURI.Scheme == "" {
 		return fmt.Errorf("scheme is empty")
 	}
@@ -192,11 +196,11 @@ func (c *PulsarConfig) checkSinkURI(sinkURI *url.URL) error {
 	return nil
 }
 
-func (c *PulsarConfig) applyOAuth(params url.Values) {
+func (c *Config) applyOAuth(params url.Values) {
 	// Go client use Oauth2 authentication
 	// https://pulsar.apache.org/docs/2.10.x/security-oauth2/#authentication-types
 
-	s := params.Get(OAuth2IssuerUrl)
+	s := params.Get(OAuth2IssuerURL)
 	if len(s) > 0 {
 		c.OAuth2["issuerUrl"] = s
 	}
@@ -211,7 +215,7 @@ func (c *PulsarConfig) applyOAuth(params url.Values) {
 		c.OAuth2["privateKey"] = s
 	}
 
-	s = params.Get(OAuth2ClientId)
+	s = params.Get(OAuth2ClientID)
 	if len(s) > 0 {
 		c.OAuth2["clientId"] = s
 	}
@@ -223,7 +227,7 @@ func (c *PulsarConfig) applyOAuth(params url.Values) {
 }
 
 // Apply apply
-func (c *PulsarConfig) Apply(sinkURI *url.URL) error {
+func (c *Config) Apply(sinkURI *url.URL) error {
 	err := c.checkSinkURI(sinkURI)
 	if err != nil {
 		return err
@@ -360,8 +364,9 @@ func (c *PulsarConfig) Apply(sinkURI *url.URL) error {
 	return nil
 }
 
-func NewPulsarConfig(sinkURI *url.URL) (*PulsarConfig, error) {
-	c := &PulsarConfig{
+// NewPulsarConfig new pulsar config
+func NewPulsarConfig(sinkURI *url.URL) (*Config, error) {
+	c := &Config{
 		u:                       sinkURI,
 		ConnectionTimeout:       defaultConnectionTimeout,
 		OperationTimeout:        defaultOperationTimeout,
@@ -380,7 +385,8 @@ func NewPulsarConfig(sinkURI *url.URL) (*PulsarConfig, error) {
 	return c, nil
 }
 
-func (c *PulsarConfig) GetDefaultTopicName() string {
+// GetDefaultTopicName get default topic name
+func (c *Config) GetDefaultTopicName() string {
 	topicName := c.u.Path
 	return topicName[1:]
 }
