@@ -145,10 +145,13 @@ func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
 }
 
 // NewClaimCheckFileName return file name for sent the message to claim check storage.
+// make sure the file name can identify one event uniquely.
+// {schema}/{table}/{commitTs}/{startTs}/{handleKeys}.json
 func NewClaimCheckFileName(e *model.RowChangedEvent) string {
 	// according to the https://docs.pingcap.com/tidb/stable/tidb-limitations#limitations-on-identifier-length
 	// schema and table maximum length is 64 characters, and the string representation of the commit ts is 20 bytes.
-	prefix := []string{e.Table.Schema, e.Table.Table, strconv.FormatUint(e.CommitTs, 10)}
+	prefix := []string{e.Table.Schema, e.Table.Table,
+		strconv.FormatUint(e.CommitTs, 10), strconv.FormatUint(e.StartTs, 10)}
 	handleKeys := strings.Join(e.GetHandleKeyColumnValues(), "-")
 
 	fileName := path.Join(append(prefix, handleKeys)...)
