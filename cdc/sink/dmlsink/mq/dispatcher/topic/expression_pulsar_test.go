@@ -2,8 +2,9 @@ package topic
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPulsarValidate(t *testing.T) {
@@ -102,51 +103,43 @@ func TestPulsarValidate(t *testing.T) {
 
 			wantErr: "invalid topic expression",
 		},
-
 		// valid cases
 		{
 			name:          "simple topic",
 			expression:    "{schema}",
 			expectedTopic: "schema",
 		},
-
 		{
 			name:          "simple topic",
 			expression:    "AZ_{schema}",
 			expectedTopic: "AZ_schema",
 		},
-
 		{
 			name:       "simple topic",
 			expression: "{table}_{schema}",
 
 			expectedTopic: "table_schema",
 		},
-
 		{
 			name:          "simple topic",
 			expression:    "123_{schema}_non-persistenttest__{table})",
 			expectedTopic: "123_schema_non-persistenttest__table)",
 		},
-
 		{
 			name:          "simple topic",
 			expression:    "persistent_public_test_{schema}_{table}",
 			expectedTopic: "persistent_public_test_schema_table",
 		},
-
 		{
 			name:          "simple topic",
 			expression:    "persistent{schema}_{table}",
 			expectedTopic: "persistentschema_table",
 		},
-
 		{
 			name:          "full topic",
 			expression:    "persistent://public/default/{schema}_{table}",
 			expectedTopic: "persistent://public/default/schema_table",
 		},
-
 		{
 			name:          "full topic",
 			expression:    "persistent://public/default/2342-{schema}_abc234",

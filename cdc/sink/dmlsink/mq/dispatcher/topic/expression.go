@@ -14,9 +14,10 @@
 package topic
 
 import (
-	"github.com/pingcap/tiflow/pkg/errors"
 	"regexp"
 	"strings"
+
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 var (
