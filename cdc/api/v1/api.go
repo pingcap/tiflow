@@ -82,33 +82,34 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	v1.GET("/health", api.Health)
 	v1.POST("/log", SetLogLevel)
 
+	controllerMiddleware := middleware.ForwardToControllerMiddleware(api.capture)
+	changefeedOwnerMiddleware := middleware.
+		ForwardToChangefeedOwnerMiddleware(api.capture, getChangefeedFromRequest)
 	// changefeed API
 	changefeedGroup := v1.Group("/changefeeds")
-	changefeedGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
-	changefeedGroup.GET("", api.ListChangefeed)
-	changefeedGroup.GET("/:changefeed_id", api.GetChangefeed)
-	changefeedGroup.POST("", api.CreateChangefeed)
-	changefeedGroup.PUT("/:changefeed_id", api.UpdateChangefeed)
-	changefeedGroup.POST("/:changefeed_id/pause", api.PauseChangefeed)
-	changefeedGroup.POST("/:changefeed_id/resume", api.ResumeChangefeed)
-	changefeedGroup.DELETE("/:changefeed_id", api.RemoveChangefeed)
-	changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", api.RebalanceTables)
-	changefeedGroup.POST("/:changefeed_id/tables/move_table", api.MoveTable)
+	changefeedGroup.GET("", controllerMiddleware, api.ListChangefeed)
+	changefeedGroup.GET("/:changefeed_id", changefeedOwnerMiddleware, api.GetChangefeed)
+	changefeedGroup.POST("", controllerMiddleware, api.CreateChangefeed)
+	changefeedGroup.PUT("/:changefeed_id", controllerMiddleware, api.UpdateChangefeed)
+	changefeedGroup.POST("/:changefeed_id/pause", changefeedOwnerMiddleware, api.PauseChangefeed)
+	changefeedGroup.POST("/:changefeed_id/resume", changefeedOwnerMiddleware, api.ResumeChangefeed)
+	changefeedGroup.DELETE("/:changefeed_id", changefeedOwnerMiddleware, api.RemoveChangefeed)
+	changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", changefeedOwnerMiddleware, api.RebalanceTables)
+	changefeedGroup.POST("/:changefeed_id/tables/move_table", changefeedOwnerMiddleware, api.MoveTable)
 
 	// owner API
 	ownerGroup := v1.Group("/owner")
-	ownerGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
-	ownerGroup.POST("/resign", api.ResignController)
+	ownerGroup.POST("/resign", controllerMiddleware, api.ResignController)
 
 	// processor API
 	processorGroup := v1.Group("/processors")
-	processorGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
-	processorGroup.GET("", api.ListProcessor)
-	processorGroup.GET("/:changefeed_id/:capture_id", api.GetProcessor)
+	processorGroup.GET("", controllerMiddleware, api.ListProcessor)
+	processorGroup.GET("/:changefeed_id/:capture_id",
+		changefeedOwnerMiddleware, api.GetProcessor)
 
 	// capture API
 	captureGroup := v1.Group("/captures")
-	captureGroup.Use(middleware.ForwardToControllerMiddleware(api.capture))
+	captureGroup.Use(controllerMiddleware)
 	captureGroup.GET("", api.ListCapture)
 	captureGroup.PUT("/drain", api.DrainCapture)
 }
@@ -383,7 +384,7 @@ func (h *OpenAPI) ResumeChangefeed(c *gin.Context) {
 		return
 	}
 	// check if the changefeed exists
-	_, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -648,7 +649,7 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
-	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
+	info, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -660,7 +661,7 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 				string(info.State))))
 	}
 	// check if this captureID exist
-	procInfos, err := h.statusProvider().GetProcessors(ctx)
+	procInfos, err := h.capture.StatusProvider().GetProcessors(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -677,7 +678,7 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 		return
 	}
 
-	statuses, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
+	statuses, err := h.capture.StatusProvider().GetAllTaskStatuses(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -708,7 +709,12 @@ func (h *OpenAPI) GetProcessor(c *gin.Context) {
 // @Router	/api/v1/processors [get]
 func (h *OpenAPI) ListProcessor(c *gin.Context) {
 	ctx := c.Request.Context()
-	infos, err := h.statusProvider().GetProcessors(ctx)
+	controller, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	infos, err := controller.GetProcessors(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -735,7 +741,12 @@ func (h *OpenAPI) ListProcessor(c *gin.Context) {
 // @Router	/api/v1/captures [get]
 func (h *OpenAPI) ListCapture(c *gin.Context) {
 	ctx := c.Request.Context()
-	captureInfos, err := h.statusProvider().GetCaptures(ctx)
+	controller, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	captureInfos, err := controller.GetCaptures(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -915,4 +926,12 @@ func SetLogLevel(c *gin.Context) {
 	}
 	log.Warn("log level changed", zap.String("level", data.Level))
 	c.Status(http.StatusOK)
+}
+
+// getChangefeedFromRequest returns the changefeed that parse from request
+func getChangefeedFromRequest(ctx *gin.Context) model.ChangeFeedID {
+	return model.ChangeFeedID{
+		Namespace: model.DefaultNamespace,
+		ID:        ctx.Param(apiOpVarChangefeedID),
+	}
 }
