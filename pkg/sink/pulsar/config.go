@@ -65,7 +65,8 @@ const (
 
 	BasicPassword = "basic-password"
 
-	// TokenFromFile Authentication from the file token, the path name of the file (the third priority authentication method)
+	// TokenFromFile Authentication from the file token,
+	// the path name of the file (the third priority authentication method)
 	TokenFromFile = "token-from-file"
 
 	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
@@ -147,7 +148,8 @@ type Config struct {
 	// ProducerMode batch send message(s)
 	ProducerMode string
 
-	// TokenFromFile Authentication from the file token, the path name of the file (the third priority authentication method)
+	// TokenFromFile Authentication from the file token,
+	// the path name of the file (the third priority authentication method)
 	TokenFromFile string
 
 	// BasicUserName Account name for pulsar basic authentication (the second priority authentication method)
@@ -155,9 +157,10 @@ type Config struct {
 	// BasicPassword with account
 	BasicPassword string
 
-	// TLSCertificatePath TLSPrivateKeyPath create new pulsar authentication provider with specified TLS certificate and private key
+	// TLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
 	TLSCertificatePath string
-	TLSPrivateKeyPath  string
+	// TLSPrivateKeyPath private key
+	TLSPrivateKeyPath string
 
 	// Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id
 	// and 'type' always is 'client_credentials'
