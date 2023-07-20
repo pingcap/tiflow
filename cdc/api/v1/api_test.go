@@ -167,6 +167,20 @@ func TestListChangefeed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock2.NewMockController(ctrl)
 	cp := capture.NewCaptureWithController4Test(mock_owner.NewMockOwner(ctrl), mo)
+	mo.EXPECT().GetAllChangeFeedCheckpointTs(gomock.Any()).Return(
+		map[model.ChangeFeedID]uint64{
+			model.ChangeFeedID4Test("ab", "123"):  1,
+			model.ChangeFeedID4Test("ab", "13"):   2,
+			model.ChangeFeedID4Test("abc", "123"): 1,
+			model.ChangeFeedID4Test("def", "456"): 2,
+		}, nil).AnyTimes()
+	mo.EXPECT().GetAllChangeFeedInfo(gomock.Any()).Return(
+		map[model.ChangeFeedID]*model.ChangeFeedInfo{
+			model.ChangeFeedID4Test("ab", "123"):  {State: model.StateNormal},
+			model.ChangeFeedID4Test("ab", "13"):   {State: model.StateStopped},
+			model.ChangeFeedID4Test("abc", "123"): {State: model.StateNormal},
+			model.ChangeFeedID4Test("def", "456"): {State: model.StateStopped},
+		}, nil).AnyTimes()
 	router := newRouter(cp, newStatusProvider())
 
 	// test list changefeed succeeded
