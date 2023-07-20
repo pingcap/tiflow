@@ -372,6 +372,26 @@ func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 	return result
 }
 
+// GetHandleKeyColumnValues returns all handle key's column values
+func (r *RowChangedEvent) GetHandleKeyColumnValues() []string {
+	var result []string
+
+	var cols []*Column
+	if r.IsDelete() {
+		cols = r.PreColumns
+	} else {
+		cols = r.Columns
+	}
+
+	result = make([]string, 0)
+	for _, col := range cols {
+		if col != nil && col.Flag.IsHandleKey() {
+			result = append(result, ColumnValueString(col.Value))
+		}
+	}
+	return result
+}
+
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
 func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 	pkeyCols := make([]*Column, 0)

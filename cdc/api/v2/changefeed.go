@@ -225,14 +225,19 @@ func hasRunningImport(ctx context.Context, cli *clientv3.Client) error {
 func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 	ctx := c.Request.Context()
 	state := c.Query(apiOpVarChangefeedState)
-	statuses, err := h.capture.StatusProvider().GetAllChangeFeedStatuses(ctx)
+	controller, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	checkpointTs, err := controller.GetAllChangeFeedCheckpointTs(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 	namespace := getNamespaceValueWithDefault(c)
 
-	infos, err := h.capture.StatusProvider().GetAllChangeFeedInfo(ctx)
+	infos, err := controller.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -241,7 +246,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 	commonInfos := make([]ChangefeedCommonInfo, 0)
 	changefeeds := make([]model.ChangeFeedID, 0)
 
-	for cfID := range statuses {
+	for cfID := range infos {
 		// filter by namespace
 		if cfID.Namespace == namespace {
 			changefeeds = append(changefeeds, cfID)
@@ -260,7 +265,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 		if !exist {
 			continue
 		}
-		cfStatus := statuses[cfID]
+		changefeedCheckpointTs, ok := checkpointTs[cfID]
 
 		if !cfInfo.State.IsNeeded(state) {
 			// if the value of `state` is not 'all', only return changefeed
@@ -282,9 +287,9 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 			commonInfo.RunningError = nil
 		}
 
-		if cfStatus != nil {
-			commonInfo.CheckpointTSO = cfStatus.CheckpointTs
-			tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
+		if ok {
+			commonInfo.CheckpointTSO = changefeedCheckpointTs
+			tm := oracle.GetTimeFromTS(changefeedCheckpointTs)
 			commonInfo.CheckpointTime = model.JSONTime(tm)
 		}
 

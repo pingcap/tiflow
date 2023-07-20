@@ -62,7 +62,8 @@ const (
 	"delete-only-output-handle-key-columns": false,
     "large-message-handle": {
       "large-message-handle-option": "none",
-      "claim-check-storage-uri": ""
+      "claim-check-storage-uri": "",
+      "claim-check-compression": ""
     }
   },
   "consistent": {
@@ -250,7 +251,8 @@ const (
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
-        "claim-check-storage-uri": ""
+        "claim-check-storage-uri": "",
+        "claim-check-compression": ""
       }
     },
     "mysql-config": {
@@ -273,7 +275,8 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
+      "file-size": 1024,
+      "output-column-id":false
     }
   },
   "consistent": {
@@ -382,7 +385,8 @@ const (
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
-        "claim-check-storage-uri": ""
+        "claim-check-storage-uri": "",
+        "claim-check-compression": ""
       }
     },
     "mysql-config": {
@@ -405,7 +409,8 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
+      "file-size": 1024,
+      "output-column-id":false
     }
   },
   "consistent": {

@@ -167,7 +167,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	}
 
 	var def TableDefinition
-	def.FromTableInfo(tableInfo, table.TableInfoVersion)
+	def.FromTableInfo(tableInfo, table.TableInfoVersion, f.config.OutputColumnID)
 	if !def.IsTableSchema() {
 		// only check schema for table
 		log.Panic("invalid table schema", zap.Any("versionedTableName", table),

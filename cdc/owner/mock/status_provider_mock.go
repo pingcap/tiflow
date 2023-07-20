@@ -140,6 +140,21 @@ func (mr *MockStatusProviderMockRecorder) GetProcessors(ctx interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProcessors", reflect.TypeOf((*MockStatusProvider)(nil).GetProcessors), ctx)
 }
 
+// IsChangefeedOwner mocks base method.
+func (m *MockStatusProvider) IsChangefeedOwner(ctx context.Context, id model.ChangeFeedID) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsChangefeedOwner", ctx, id)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsChangefeedOwner indicates an expected call of IsChangefeedOwner.
+func (mr *MockStatusProviderMockRecorder) IsChangefeedOwner(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsChangefeedOwner", reflect.TypeOf((*MockStatusProvider)(nil).IsChangefeedOwner), ctx, id)
+}
+
 // IsHealthy mocks base method.
 func (m *MockStatusProvider) IsHealthy(ctx context.Context) (bool, error) {
 	m.ctrl.T.Helper()
