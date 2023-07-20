@@ -43,23 +43,19 @@ func TestPulsarValidate(t *testing.T) {
 		}, {
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		}, {
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://public",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		}, {
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://public_test-table",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		}, {
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://public/_test-table",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		},
 		//{
 		//	// if the {schema} is a not exist namespace in pulsar server, pulsar client will get an error,
@@ -70,38 +66,32 @@ func TestPulsarValidate(t *testing.T) {
 		{
 			name:       "like a full topic",
 			expression: "persistent_public/test_{schema}_{table}",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		},
 		{
 			name:       "like a full topic",
 			expression: "persistent://{schema}_{table}",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		},
 		{
 			name:       "like a full topic, but more '/' ",
 			expression: "persistent://{schema}/{table}/test/name",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		},
 		{
 			name:       "like a full topic, but more '/' ",
 			expression: "persistent://{schema}/{table}/test/name/admin",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		},
 		{
 			name:       "like a full topic, but less '/' ",
 			expression: "non-persistent://public/test_{schema}_{table}",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		},
 		{
 			name:       "like a full topic, but less '/' ",
 			expression: "non-persistent://public/test_{schema}_{table}_123456aaaa",
-
-			wantErr: "invalid topic expression",
+			wantErr:    "invalid topic expression",
 		},
 		// valid cases
 		{
@@ -115,9 +105,8 @@ func TestPulsarValidate(t *testing.T) {
 			expectedTopic: "AZ_schema",
 		},
 		{
-			name:       "simple topic",
-			expression: "{table}_{schema}",
-
+			name:          "simple topic",
+			expression:    "{table}_{schema}",
 			expectedTopic: "table_schema",
 		},
 		{
