@@ -38,7 +38,8 @@ var (
 	)
 	// pulsarTopicNameRE is used to match pulsar topic
 	pulsarTopicNameRE = regexp.MustCompile(
-		`(^((persistent|non-persistent)://)[A-Za-z0-9{}._\-]*/[A-Za-z0-9{}._\-]*/[A-Za-z0-9{}._\-]*$)|(^[A-Za-z0-9._-]*\{schema}[A-Za-z0-9._-]*\{table}[A-Za-z0-9._-]*)$`,
+		`(^((persistent|non-persistent)://)[A-Za-z0-9{}._\-]*/[A-Za-z0-9{}._\-]*/[A-Za-z0-9{}._\-]*$)|` +
+			`(^[A-Za-z0-9._-]*\{schema}[A-Za-z0-9._-]*\{table}[A-Za-z0-9._-]*)$`,
 	)
 	// pulsarTopicNameREFull is used to match pulsar full topic name
 	pulsarTopicNameREFull = regexp.MustCompile(
