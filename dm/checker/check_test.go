@@ -80,6 +80,7 @@ func TestIgnoreAllCheckingItems(t *testing.T) {
 
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: []string{config.AllChecking},
 		},
 	}
@@ -95,6 +96,7 @@ func TestIgnoreAllCheckingItems(t *testing.T) {
 func TestDumpPrivilegeChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.DumpPrivilegeChecking: {}}),
 		},
 	}
@@ -138,6 +140,7 @@ func TestDumpPrivilegeChecking(t *testing.T) {
 func TestReplicationPrivilegeChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ReplicationPrivilegeChecking: {}}),
 		},
 	}
@@ -173,6 +176,7 @@ func TestReplicationPrivilegeChecking(t *testing.T) {
 func TestTargetDBPrivilegeChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TargetDBPrivilegeChecking: {}}),
 		},
 	}
@@ -213,6 +217,7 @@ func TestTargetDBPrivilegeChecking(t *testing.T) {
 func TestVersionChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.VersionChecking: {}}),
 		},
 	}
@@ -265,6 +270,7 @@ func TestVersionChecking(t *testing.T) {
 func TestServerIDChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ServerIDChecking: {}}),
 		},
 	}
@@ -298,6 +304,7 @@ func TestServerIDChecking(t *testing.T) {
 func TestBinlogEnableChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.BinlogEnableChecking: {}}),
 		},
 	}
@@ -331,6 +338,7 @@ func TestBinlogEnableChecking(t *testing.T) {
 func TestBinlogFormatChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.BinlogFormatChecking: {}}),
 		},
 	}
@@ -363,6 +371,7 @@ func TestBinlogFormatChecking(t *testing.T) {
 func TestBinlogRowImageChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.BinlogRowImageChecking: {}}),
 		},
 	}
@@ -401,6 +410,7 @@ func TestBinlogRowImageChecking(t *testing.T) {
 func TestTableSchemaChecking(t *testing.T) {
 	cfgs := []*config.SubTaskConfig{
 		{
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
 		},
 	}
@@ -481,6 +491,7 @@ func TestShardTableSchemaChecking(t *testing.T) {
 					TargetTable:   "t",
 				},
 			},
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ShardTableSchemaChecking: {}}),
 		},
 	}
@@ -569,6 +580,7 @@ func TestShardAutoIncrementIDChecking(t *testing.T) {
 					TargetTable:   "t",
 				},
 			},
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.ShardTableSchemaChecking: {}, config.ShardAutoIncrementIDChecking: {}}),
 		},
 	}
@@ -652,6 +664,7 @@ func TestSameTargetTableDetection(t *testing.T) {
 					TargetTable:   "T",
 				},
 			},
+			Mode:                config.ModeAll,
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
 		},
 	}

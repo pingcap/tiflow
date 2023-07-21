@@ -1723,7 +1723,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if fresh && s.cfg.Mode == config.ModeAll {
+	if fresh && config.HasLoad(s.cfg.Mode) {
 		delLoadTask = true
 		flushCheckpoint = true
 		freshAndAllMode = true
