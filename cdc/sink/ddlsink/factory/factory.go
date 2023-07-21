@@ -59,6 +59,8 @@ func New(
 		return mysql.NewDDLSink(ctx, changefeedID, sinkURI, cfg)
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		return cloudstorage.NewDDLSink(ctx, changefeedID, sinkURI, cfg)
+	case sink.PulsarScheme:
+		return mq.NewPulsarDDLSink(ctx, sinkURI, cfg, ddlproducer.NewPulsarProducer)
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", scheme)
