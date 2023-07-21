@@ -548,6 +548,16 @@ func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
 	return result
 }
 
+var (
+	expectedID = map[string]struct{}{
+		"78554": {},
+		"71675": {},
+		"71221": {},
+		"66635": {},
+		"31948": {},
+	}
+)
+
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	partition := claim.Partition()
@@ -666,7 +676,22 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					group = newEventsGroup()
 					eventGroups[tableID] = group
 				}
-				group.Append(row)
+				//group.Append(row)
+
+				if row.Table.Table == "sbtest2" {
+					var id string
+					for _, col := range row.Columns {
+						if col.Name == "id" {
+							id = model.ColumnValueString(col.Value)
+							break
+						}
+					}
+					_, ok := expectedID[id]
+					if ok {
+						log.Info("found row by id", zap.String("id", id), zap.Any("event", row))
+					}
+				}
+
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
