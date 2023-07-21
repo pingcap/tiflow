@@ -389,7 +389,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	// Because the table schema obtained from `show create table` is not the schema at the point of binlog.
 	_, checkingShardID := c.checkingItems[config.ShardAutoIncrementIDChecking]
 	_, checkingShard := c.checkingItems[config.ShardTableSchemaChecking]
-	if checkingShard && instance.cfg.ShardMode != "" && config.HasLoad(instance.cfg.Mode) {
+	if checkingShard && instance.cfg.ShardMode != "" && config.HasDump(instance.cfg.Mode) {
 		isFresh, err := c.IsFreshTask()
 		if err != nil {
 			return err

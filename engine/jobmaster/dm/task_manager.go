@@ -288,7 +288,6 @@ func (tm *TaskManager) allFinished(ctx context.Context) bool {
 				return false
 			}
 		case dmconfig.ModeDump:
-			return true
 		default:
 			return false
 		}
