@@ -152,8 +152,10 @@ func NewClaimCheckFileName(e *model.RowChangedEvent) string {
 	// according to the https://docs.pingcap.com/tidb/stable/tidb-limitations#limitations-on-identifier-length
 	// schema and table maximum length is 64 characters, and the string representation of the commit ts is 20 bytes.
 	date := clock.New().Now().Format("2006-01-02")
-	prefix := []string{date, e.Table.Schema, e.Table.Table,
-		strconv.FormatUint(e.CommitTs, 10), strconv.FormatUint(e.StartTs, 10)}
+	prefix := []string{
+		date, e.Table.Schema, e.Table.Table,
+		strconv.FormatUint(e.CommitTs, 10), strconv.FormatUint(e.StartTs, 10),
+	}
 	handleKeys := strings.Join(e.GetHandleKeyColumnValues(), "-")
 
 	fileName := path.Join(append(prefix, handleKeys)...)
