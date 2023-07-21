@@ -26,10 +26,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
-	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
 
@@ -73,23 +71,20 @@ func newDMLSink(
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderConfig *common.Config,
-	encoderConcurrency int,
+	encoderGroup codec.EncoderGroup,
+	protocol config.Protocol,
+	claimCheck *ClaimCheck,
+	claimCheckEncoder codec.ClaimCheckEncoder,
 	errCh chan error,
-) (*dmlSink, error) {
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
+) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, encoderConfig.Protocol,
-		encoderBuilder, encoderConcurrency, producer, statistics)
+	worker := newWorker(changefeedID, protocol,
+		producer, encoderGroup, claimCheck, claimCheckEncoder, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,
-		protocol:    encoderConfig.Protocol,
+		protocol:    protocol,
 		adminClient: adminClient,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -119,7 +114,7 @@ func newDMLSink(
 		}
 	}()
 
-	return s, nil
+	return s
 }
 
 // WriteEvents writes events to the sink.

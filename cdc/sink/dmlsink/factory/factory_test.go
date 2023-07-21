@@ -20,7 +20,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Shopify/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -31,25 +30,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
-
-func initBroker(t *testing.T, partitionNum int) (*sarama.MockBroker, string) {
-	topic := kafka.DefaultMockTopicName
-	leader := sarama.NewMockBroker(t, 1)
-
-	metadataResponse := sarama.NewMockMetadataResponse(t)
-	metadataResponse.SetBroker(leader.Addr(), leader.BrokerID())
-	for i := 0; i < partitionNum; i++ {
-		metadataResponse.SetLeader(topic, int32(i), leader.BrokerID())
-	}
-
-	prodSuccess := sarama.NewMockProduceResponse(t)
-	handlerMap := make(map[string]sarama.MockResponse)
-	handlerMap["MetadataRequest"] = metadataResponse
-	handlerMap["ProduceRequest"] = prodSuccess
-	leader.SetHandlerByMap(handlerMap)
-
-	return leader, topic
-}
 
 func newForTest(ctx context.Context,
 	sinkURIStr string,
@@ -86,22 +66,22 @@ func TestSinkFactory(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
+	ctx = context.WithValue(ctx, "testing.T", t)
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
-	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
+	uri := fmt.Sprintf(uriTemplate, "127.0.0.1:9092", kafka.DefaultMockTopicName)
 
 	sinkURI, err := url.Parse(uri)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	require.Nil(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	errCh := make(chan error, 1)
 
 	sinkFactory, err := newForTest(ctx, uri, replicaConfig, errCh)
 	require.NotNil(t, sinkFactory)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, sinkFactory.rowSink)
 
 	tableSink := sinkFactory.CreateTableSink(model.DefaultChangeFeedID("1"),

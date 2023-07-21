@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
@@ -35,40 +36,67 @@ func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
 	require.NotNil(t, encoder.config)
 }
 
-func TestMaxMessageBytes(t *testing.T) {
-	t.Parallel()
-	// the size of `testEvent` is 87
-	testEvent := &model.RowChangedEvent{
+var (
+	testEvent = &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
-			Name:  "col1",
-			Type:  mysql.TypeVarchar,
-			Value: []byte("aa"),
-		}},
+		Columns: []*model.Column{
+			{
+				Name:  "col1",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("aa"),
+				Flag:  model.HandleKeyFlag,
+			},
+			{
+				Name:  "col2",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("bb"),
+			},
+		},
 	}
+	largeTestEvent = &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns: []*model.Column{
+			{
+				Name:  "col1",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("aabb"),
+				Flag:  model.HandleKeyFlag,
+			},
+			{
+				Name:  "col2",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("bb"),
+			},
+		},
+	}
+)
+
+func TestMaxMessageBytes(t *testing.T) {
+	t.Parallel()
 
 	ctx := context.Background()
 	topic := ""
-	// for a single message, the overhead is 36(maxRecordOverhead) + 8(versionHea) = 44, just can hold it.
-	a := 88 + 44
-	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
-	encoder := NewBatchEncoderBuilder(config).Build()
+	// just can hold it.
+	a := 172
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// cannot hold a single message
-	config = config.WithMaxMessageBytes(a - 1)
-	encoder = NewBatchEncoderBuilder(config).Build()
+	codecConfig = codecConfig.WithMaxMessageBytes(a - 1)
+	encoder = NewBatchEncoderBuilder(codecConfig).Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-	require.NotNil(t, err)
+	require.ErrorIs(t, err, cerror.ErrMessageTooLarge)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
-	config = config.WithMaxMessageBytes(256)
-	encoder = NewBatchEncoderBuilder(config).Build()
+	codecConfig = codecConfig.WithMaxMessageBytes(256)
+	encoder = NewBatchEncoderBuilder(codecConfig).Build()
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 
 	messages := encoder.Build()
@@ -79,27 +107,19 @@ func TestMaxMessageBytes(t *testing.T) {
 
 func TestMaxBatchSize(t *testing.T) {
 	t.Parallel()
-	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
-	config.MaxBatchSize = 64
-	encoder := NewBatchEncoderBuilder(config).Build()
-
-	testEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
-			Name:  "col1",
-			Type:  mysql.TypeVarchar,
-			Value: []byte("aa"),
-		}},
-	}
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
+	codecConfig.MaxBatchSize = 64
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 
 	messages := encoder.Build()
-	decoder := NewBatchDecoder()
+
+	decoder, err := NewBatchDecoder(context.Background(), codecConfig)
+	require.NoError(t, err)
 	sum := 0
 	for _, msg := range messages {
 		err := decoder.AddKeyValue(msg.Key, msg.Value)
@@ -135,46 +155,36 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 
 	count := 0
 
-	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
-			Name:  "col1",
-			Type:  mysql.TypeVarchar,
-			Value: []byte("aa"),
-		}},
-	}
-
 	tests := []struct {
 		row      *model.RowChangedEvent
 		callback func()
 	}{
 		{
-			row: row,
+			row: testEvent,
 			callback: func() {
 				count += 1
 			},
 		},
 		{
-			row: row,
+			row: testEvent,
 			callback: func() {
 				count += 2
 			},
 		},
 		{
-			row: row,
+			row: testEvent,
 			callback: func() {
 				count += 3
 			},
 		},
 		{
-			row: row,
+			row: testEvent,
 			callback: func() {
 				count += 4
 			},
 		},
 		{
-			row: row,
+			row: testEvent,
 			callback: func() {
 				count += 5
 			},
@@ -188,7 +198,7 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 	// Append the events.
 	for _, test := range tests {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")
 
@@ -203,13 +213,73 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 }
 
 func TestOpenProtocolBatchCodec(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
-	config.MaxBatchSize = 64
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
+	codecConfig.MaxBatchSize = 64
 	tester := internal.NewDefaultBatchTester()
-	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config),
+	tester.TestBatchCodec(t, NewBatchEncoderBuilder(codecConfig),
 		func(key []byte, value []byte) (codec.RowEventDecoder, error) {
-			decoder := NewBatchDecoder()
-			err := decoder.AddKeyValue(key, value)
+			decoder, err := NewBatchDecoder(context.Background(), codecConfig)
+			require.NoError(t, err)
+			err = decoder.AddKeyValue(key, value)
 			return decoder, err
 		})
+}
+
+func TestAppendClaimCheckMessage(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	topic := ""
+	// just can hold it.
+	a := 172
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
+	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
+	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
+
+	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
+	require.NoError(t, err)
+
+	// cannot hold this message, encode it as claim check message by force.
+	err = encoder.AppendRowChangedEvent(ctx, topic, largeTestEvent, func() {})
+	require.NoError(t, err)
+
+	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
+	require.NoError(t, err)
+
+	messages := encoder.Build()
+	require.Len(t, messages, 3)
+
+	require.Empty(t, messages[0].ClaimCheckFileName)
+	require.NotEmptyf(t, messages[1].ClaimCheckFileName, "claim check file name should not be empty")
+	require.Empty(t, messages[2].ClaimCheckFileName)
+}
+
+func TestAppendMessageOnlyHandleKeyColumns(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	topic := ""
+
+	// cannot hold one message
+	a := 171
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
+	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
+
+	// only handle key is encoded into the message
+	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
+	require.NoError(t, err)
+
+	message := encoder.Build()[0]
+
+	decoder, err := NewBatchDecoder(context.Background(), codecConfig)
+	require.NoError(t, err)
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	batchDecoder := decoder.(*BatchDecoder)
+	err = batchDecoder.decodeNextKey()
+	require.NoError(t, err)
+	require.True(t, batchDecoder.nextKey.OnlyHandleKey)
 }

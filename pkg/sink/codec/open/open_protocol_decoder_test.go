@@ -50,8 +50,8 @@ var (
 )
 
 func TestDecodeEvent(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen)
-	encoder := NewBatchEncoderBuilder(config).Build()
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	ctx := context.Background()
 	topic := "test"
@@ -60,7 +60,9 @@ func TestDecodeEvent(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder := NewBatchDecoder()
+	decoder, err := NewBatchDecoder(ctx, codecConfig)
+	require.NoError(t, err)
+
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 	tp, hasNext, err := decoder.HasNext()
@@ -82,11 +84,15 @@ func TestDecodeEvent(t *testing.T) {
 }
 
 func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen)
-	config.LargeMessageOnlyHandleKeyColumns = true
-	config.MaxMessageBytes = 185
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.LargeMessageHandle = &config.LargeMessageHandleConfig{
+		LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
+	}
 
-	encoder := NewBatchEncoderBuilder(config).Build()
+	//config.LargeMessageOnlyHandleKeyColumns = true
+	codecConfig.MaxMessageBytes = 185
+
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	ctx := context.Background()
 	topic := "test"
@@ -95,7 +101,14 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder := NewBatchDecoder()
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		LargeMessageHandle: &config.LargeMessageHandleConfig{
+			LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
+		},
+	}
+	decoder, err := NewBatchDecoder(ctx, codecConfig)
+	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 	tp, hasNext, err := decoder.HasNext()

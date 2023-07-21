@@ -67,6 +67,11 @@ func createRealUnits(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, wor
 		us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
 	case config.ModeIncrement:
 		us = append(us, syncer.NewSyncer(cfg, etcdClient, relay))
+	case config.ModeDump:
+		us = append(us, dumpling.NewDumpling(cfg))
+	case config.ModeLoadSync:
+		us = append(us, loader.NewLightning(cfg, etcdClient, workerName))
+		us = append(us, syncer.NewSyncer(cfg, etcdClient, relay))
 	default:
 		log.L().Error("unsupported task mode", zap.String("subtask", cfg.Name), zap.String("task mode", cfg.Mode))
 	}

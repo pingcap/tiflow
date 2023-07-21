@@ -575,7 +575,7 @@ func TestFixState(t *testing.T) {
 					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
-			expectedState: StateError,
+			expectedState: StateWarning,
 		},
 		{
 			info: &ChangeFeedInfo{
@@ -585,7 +585,7 @@ func TestFixState(t *testing.T) {
 					Code: string(errors.ErrClusterIDMismatch.RFCCode()),
 				},
 			},
-			expectedState: StateError,
+			expectedState: StateWarning,
 		},
 		{
 			info: &ChangeFeedInfo{

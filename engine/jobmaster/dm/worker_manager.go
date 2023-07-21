@@ -299,6 +299,13 @@ var workerSeqMap = map[string][]frameModel.WorkerType{
 	dmconfig.ModeIncrement: {
 		frameModel.WorkerDMSync,
 	},
+	dmconfig.ModeDump: {
+		frameModel.WorkerDMDump,
+	},
+	dmconfig.ModeLoadSync: {
+		frameModel.WorkerDMLoad,
+		frameModel.WorkerDMSync,
+	},
 }
 
 func (wm *WorkerManager) getCurrentUnit(ctx context.Context, task *metadata.Task) (frameModel.WorkerType, bool, error) {

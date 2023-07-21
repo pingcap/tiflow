@@ -552,7 +552,7 @@ var doc = `{
         },
         "/api/v1/owner/resign": {
             "post": {
-                "description": "notify the current owner to resign",
+                "description": "notify the current controller to resign",
                 "consumes": [
                     "application/json"
                 ],
@@ -562,7 +562,7 @@ var doc = `{
                 "tags": [
                     "owner"
                 ],
-                "summary": "notify the owner to resign",
+                "summary": "notify the ticdc cluster controller to resign",
                 "responses": {
                     "202": {
                         "description": ""
@@ -1179,7 +1179,7 @@ var doc = `{
         },
         "/api/v2/owner/resign": {
             "post": {
-                "description": "Notify the current owner to resign",
+                "description": "Notify the current controller to resign",
                 "consumes": [
                     "application/json"
                 ],
@@ -1190,7 +1190,7 @@ var doc = `{
                     "owner",
                     "v2"
                 ],
-                "summary": "Notify the owner to resign",
+                "summary": "Notify the controller to resign",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1345,6 +1345,10 @@ var doc = `{
         "config.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary-encoding-method": {
+                    "description": "encoding method of binary type",
+                    "type": "string"
+                },
                 "delimiter": {
                     "description": "delimiter between fields",
                     "type": "string"
@@ -1371,6 +1375,9 @@ var doc = `{
                 },
                 "flush-interval": {
                     "type": "string"
+                },
+                "output-column-id": {
+                    "type": "boolean"
                 },
                 "worker-count": {
                     "type": "integer"
@@ -1472,6 +1479,9 @@ var doc = `{
                 "key": {
                     "type": "string"
                 },
+                "large-message-handle": {
+                    "$ref": "#/definitions/config.LargeMessageHandleConfig"
+                },
                 "max-message-bytes": {
                     "type": "integer"
                 },
@@ -1542,6 +1552,20 @@ var doc = `{
                     "type": "string"
                 },
                 "write-timeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "config.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "claim-check-compression": {
+                    "type": "string"
+                },
+                "claim-check-storage-uri": {
+                    "type": "string"
+                },
+                "large-message-handle-option": {
                     "type": "string"
                 }
             }
@@ -1646,10 +1670,6 @@ var doc = `{
                 },
                 "kafka-config": {
                     "$ref": "#/definitions/config.KafkaConfig"
-                },
-                "large-message-only-handle-key-columns": {
-                    "description": "LargeMessageOnlyHandleKeyColumns is only available when the downstream is MQ.",
-                    "type": "boolean"
                 },
                 "mysql-config": {
                     "$ref": "#/definitions/config.MySQLConfig"
@@ -1967,6 +1987,9 @@ var doc = `{
         "v2.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary_encoding_method": {
+                    "type": "string"
+                },
                 "delimiter": {
                     "type": "string"
                 },
@@ -2152,6 +2175,9 @@ var doc = `{
                 },
                 "flush_interval": {
                     "type": "string"
+                },
+                "output_column_id": {
+                    "type": "boolean"
                 },
                 "worker_count": {
                     "type": "integer"
@@ -2370,6 +2396,9 @@ var doc = `{
                 "key": {
                     "type": "string"
                 },
+                "large_message_handle": {
+                    "$ref": "#/definitions/v2.LargeMessageHandleConfig"
+                },
                 "max_message_bytes": {
                     "type": "integer"
                 },
@@ -2440,6 +2469,20 @@ var doc = `{
                     "type": "string"
                 },
                 "write_timeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "claim_check_compression": {
+                    "type": "string"
+                },
+                "claim_check_storage_uri": {
+                    "type": "string"
+                },
+                "large_message_handle_option": {
                     "type": "string"
                 }
             }
@@ -2702,9 +2745,6 @@ var doc = `{
                 },
                 "kafka_config": {
                     "$ref": "#/definitions/v2.KafkaConfig"
-                },
-                "large_message_only_handle_key_columns": {
-                    "type": "boolean"
                 },
                 "mysql_config": {
                     "$ref": "#/definitions/v2.MySQLConfig"
