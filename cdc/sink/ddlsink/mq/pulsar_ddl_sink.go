@@ -2,6 +2,7 @@ package mq
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"time"
 
@@ -125,4 +126,17 @@ func createPulsarClient(config *pulsarConfig.PulsarConfig, changefeedID model.Ch
 		return nil, err
 	}
 	return pulsarClient, nil
+}
+
+func setupAuthentication(config *pulsarConfig.PulsarConfig) (pulsar.Authentication, error) {
+	if len(config.AuthenticationToken) > 0 {
+		return pulsar.NewAuthenticationToken(config.AuthenticationToken)
+	} else if len(config.TokenFromFile) > 0 {
+		return pulsar.NewAuthenticationTokenFromFile(config.TokenFromFile)
+	} else if len(config.BasicUserName) > 0 && len(config.BasicPassword) > 0 {
+		return pulsar.NewAuthenticationBasic(config.BasicUserName, config.BasicPassword)
+	} else if len(config.OAuth2) > 0 {
+		return pulsar.NewAuthenticationBasic(config.BasicUserName, config.BasicPassword)
+	}
+	return nil, fmt.Errorf("no authentication method found")
 }
