@@ -51,16 +51,19 @@ func TestConvertLightningError(t *testing.T) {
 func TestGetLightiningConfig(t *testing.T) {
 	t.Parallel()
 
-	conf, err := GetLightningConfig(&lcfg.GlobalConfig{},
-		&config.SubTaskConfig{
-			Name:       "job123",
-			ExtStorage: &storage.LocalStorage{},
-			LoaderConfig: config.LoaderConfig{
-				RangeConcurrency: 32,
-				CompressKVPairs:  "gzip",
-				Analyze:          "required",
-			},
-		})
+	subtaskCfg := &config.SubTaskConfig{
+		Name:       "job123",
+		ExtStorage: &storage.LocalStorage{},
+		LoaderConfig: config.LoaderConfig{
+			RangeConcurrency:           32,
+			CompressKVPairs:            "gzip",
+			Analyze:                    "required",
+			DistSQLScanConcurrency:     120,
+			IndexSerialScanConcurrency: 120,
+			ChecksumTableConcurrency:   120,
+		},
+	}
+	conf, err := GetLightningConfig(MakeGlobalConfig(subtaskCfg), subtaskCfg)
 	require.NoError(t, err)
 	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
 	require.Equal(t, lcfg.CheckpointRemove, conf.Checkpoint.KeepAfterSuccess)
@@ -71,4 +74,45 @@ func TestGetLightiningConfig(t *testing.T) {
 	lightningDefaultQuota := lcfg.NewConfig().TikvImporter.DiskQuota
 	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
+	// will check requirements by default
+	require.True(t, conf.App.CheckRequirements)
+	require.Equal(t, 120, conf.TiDB.DistSQLScanConcurrency)
+	require.Equal(t, 120, conf.TiDB.IndexSerialScanConcurrency)
+	require.Equal(t, 120, conf.TiDB.ChecksumTableConcurrency)
+	subtaskCfg.IgnoreCheckingItems = []string{config.AllChecking}
+	subtaskCfg.DistSQLScanConcurrency = 0
+	subtaskCfg.IndexSerialScanConcurrency = 0
+	subtaskCfg.ChecksumTableConcurrency = 0
+	conf, err = GetLightningConfig(MakeGlobalConfig(subtaskCfg), subtaskCfg)
+	require.Greater(t, conf.TiDB.DistSQLScanConcurrency, 0)
+	require.Greater(t, conf.TiDB.IndexSerialScanConcurrency, 0)
+	require.Greater(t, conf.TiDB.ChecksumTableConcurrency, 0)
+	require.NoError(t, err)
+	// will not check requirements when ignore all checking items
+	require.False(t, conf.App.CheckRequirements)
+}
+
+func TestLightningConfigCompatibility(t *testing.T) {
+	t.Parallel()
+
+	subtaskCfg := &config.SubTaskConfig{
+		SourceID:   "mysql-replica-01",
+		Name:       "job123",
+		Mode:       "full",
+		ExtStorage: &storage.LocalStorage{},
+		LoaderConfig: config.LoaderConfig{
+			ImportMode:         "physical",
+			SortingDirPhysical: "./dumped_dir",
+			DiskQuotaPhysical:  1,
+			ChecksumPhysical:   "off",
+		},
+	}
+	require.NoError(t, subtaskCfg.Adjust(false))
+	cfg, err := GetLightningConfig(MakeGlobalConfig(subtaskCfg), subtaskCfg)
+	require.NoError(t, err)
+
+	// test deprecated configurations will write to new ones
+	require.Equal(t, "./dumped_dir", cfg.TikvImporter.SortedKVDir)
+	require.Equal(t, 1, int(cfg.TikvImporter.DiskQuota))
+	require.Equal(t, lcfg.OpLevelOff, cfg.PostRestore.Checksum)
 }

@@ -286,21 +286,30 @@ const (
 
 // LoaderConfig represents loader process unit's specific config.
 type LoaderConfig struct {
-	PoolSize           int      `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
-	Dir                string   `yaml:"dir" toml:"dir" json:"dir"`
+	PoolSize int    `yaml:"pool-size" toml:"pool-size" json:"pool-size"`
+	Dir      string `yaml:"dir" toml:"dir" json:"dir"`
+	// deprecated, use SortingDir instead.
 	SortingDirPhysical string   `yaml:"sorting-dir-physical" toml:"sorting-dir-physical" json:"sorting-dir-physical"`
+	SortingDir         string   `yaml:"sorting-dir" toml:"sorting-dir" json:"sorting-dir"`
 	SQLMode            string   `yaml:"-" toml:"-" json:"-"` // wrote by dump unit (DM op) or jobmaster (DM in engine)
 	ImportMode         LoadMode `yaml:"import-mode" toml:"import-mode" json:"import-mode"`
 	// deprecated, use OnDuplicateLogical instead.
 	OnDuplicate         LogicalDuplicateResolveType  `yaml:"on-duplicate" toml:"on-duplicate" json:"on-duplicate"`
 	OnDuplicateLogical  LogicalDuplicateResolveType  `yaml:"on-duplicate-logical" toml:"on-duplicate-logical" json:"on-duplicate-logical"`
 	OnDuplicatePhysical PhysicalDuplicateResolveType `yaml:"on-duplicate-physical" toml:"on-duplicate-physical" json:"on-duplicate-physical"`
-	DiskQuotaPhysical   config.ByteSize              `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
-	ChecksumPhysical    PhysicalPostOpLevel          `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
-	Analyze             PhysicalPostOpLevel          `yaml:"analyze" toml:"analyze" json:"analyze"`
-	RangeConcurrency    int                          `yaml:"range-concurrency" toml:"range-concurrency" json:"range-concurrency"`
-	CompressKVPairs     string                       `yaml:"compress-kv-pairs" toml:"compress-kv-pairs" json:"compress-kv-pairs"`
-	PDAddr              string                       `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
+	// deprecated, use DiskQuota instead.
+	DiskQuotaPhysical config.ByteSize `yaml:"disk-quota-physical" toml:"disk-quota-physical" json:"disk-quota-physical"`
+	DiskQuota         config.ByteSize `yaml:"disk-quota" toml:"disk-quota" json:"disk-quota"`
+	// deprecated, use Checksum instead.
+	ChecksumPhysical           PhysicalPostOpLevel `yaml:"checksum-physical" toml:"checksum-physical" json:"checksum-physical"`
+	Checksum                   PhysicalPostOpLevel `yaml:"checksum" toml:"checksum" json:"checksum"`
+	Analyze                    PhysicalPostOpLevel `yaml:"analyze" toml:"analyze" json:"analyze"`
+	RangeConcurrency           int                 `yaml:"range-concurrency" toml:"range-concurrency" json:"range-concurrency"`
+	CompressKVPairs            string              `yaml:"compress-kv-pairs" toml:"compress-kv-pairs" json:"compress-kv-pairs"`
+	PDAddr                     string              `yaml:"pd-addr" toml:"pd-addr" json:"pd-addr"`
+	DistSQLScanConcurrency     int                 `yaml:"distsql-scan-concurrency" toml:"distsql-scan-concurrency" json:"distsql-scan-concurrency"`
+	IndexSerialScanConcurrency int                 `yaml:"index-serial-scan-concurrency" toml:"index-serial-scan-concurrency" json:"index-serial-scan-concurrency"`
+	ChecksumTableConcurrency   int                 `yaml:"checksum-table-concurrency" toml:"checksum-table-concurrency" json:"checksum-table-concurrency"`
 }
 
 // DefaultLoaderConfig return default loader config for task.
@@ -368,14 +377,18 @@ func (m *LoaderConfig) adjust() error {
 		return terror.ErrConfigInvalidPhysicalDuplicateResolution.Generate(m.OnDuplicatePhysical)
 	}
 
-	if m.ChecksumPhysical == "" {
-		m.ChecksumPhysical = OpLevelRequired
+	if m.Checksum == "" {
+		if m.ChecksumPhysical != "" {
+			m.Checksum = m.ChecksumPhysical
+		} else {
+			m.Checksum = OpLevelRequired
+		}
 	}
-	m.ChecksumPhysical = PhysicalPostOpLevel(strings.ToLower(string(m.ChecksumPhysical)))
-	switch m.ChecksumPhysical {
+	m.Checksum = PhysicalPostOpLevel(strings.ToLower(string(m.Checksum)))
+	switch m.Checksum {
 	case OpLevelRequired, OpLevelOptional, OpLevelOff:
 	default:
-		return terror.ErrConfigInvalidPhysicalChecksum.Generate(m.ChecksumPhysical)
+		return terror.ErrConfigInvalidPhysicalChecksum.Generate(m.Checksum)
 	}
 
 	if m.Analyze == "" {

@@ -517,6 +517,7 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 		source1             = "mysql-replica-01"
 		source2             = "mysql-replica-02"
 		metaSchema          = "meta-sub-tasks"
+		dumpedDir           = "./dumped_data"
 		heartbeatUI         = 12
 		heartbeatRI         = 21
 		maxAllowedPacket    = 10244201
@@ -660,12 +661,12 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 			},
 			LoaderConfig: LoaderConfig{
 				PoolSize:            32,
-				Dir:                 "./dumped_data",
-				SortingDirPhysical:  "./dumped_data",
+				Dir:                 dumpedDir,
+				SortingDir:          dumpedDir,
 				ImportMode:          LoadModePhysical,
 				OnDuplicateLogical:  OnDuplicateReplace,
 				OnDuplicatePhysical: OnDuplicateNone,
-				ChecksumPhysical:    OpLevelRequired,
+				Checksum:            OpLevelRequired,
 				Analyze:             OpLevelOptional,
 				PDAddr:              "http://test:2379",
 				RangeConcurrency:    32,
@@ -831,7 +832,7 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 	// adjust loader config
 	stCfg1.Mode = "full"
 	require.NoError(t, stCfg1.Adjust(false))
-	require.Equal(t, stCfgs[0].SortingDirPhysical, stCfg1.SortingDirPhysical)
+	require.Equal(t, dumpedDir, stCfg1.SortingDir)
 }
 
 func TestMetaVerify(t *testing.T) {
@@ -1130,7 +1131,7 @@ func TestLoadConfigAdjust(t *testing.T) {
 		OnDuplicate:         "",
 		OnDuplicateLogical:  "replace",
 		OnDuplicatePhysical: "none",
-		ChecksumPhysical:    "required",
+		Checksum:            "required",
 		Analyze:             "optional",
 	}, cfg)
 

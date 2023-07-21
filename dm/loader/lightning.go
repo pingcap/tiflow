@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
+	"github.com/pingcap/tidb/br/pkg/lightning/metric"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/parser/mysql"
 	tidbpromutil "github.com/pingcap/tidb/util/promutil"
@@ -105,6 +106,10 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 // MakeGlobalConfig converts subtask config to lightning global config.
 func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	lightningCfg := lcfg.NewGlobalConfig()
+	// don't run lightning precheck if all checking items are ignored
+	if len(cfg.IgnoreCheckingItems) == 1 && cfg.IgnoreCheckingItems[0] == config.AllChecking {
+		lightningCfg.App.CheckRequirements = false
+	}
 	if cfg.To.Security != nil {
 		lightningCfg.Security.CABytes = cfg.To.Security.SSLCABytes
 		lightningCfg.Security.CertBytes = cfg.To.Security.SSLCertBytes
@@ -123,7 +128,7 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
-		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
+		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDir
 	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
@@ -348,9 +353,21 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	// checkpoint meta and updating dm checkpoint meta to 'finished'.
 	cfg.Checkpoint.KeepAfterSuccess = lcfg.CheckpointRemove
 
-	if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
+	if subtaskCfg.LoaderConfig.DiskQuota > 0 {
+		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuota
+	} else if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
 		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	}
+	if subtaskCfg.LoaderConfig.DistSQLScanConcurrency > 0 {
+		cfg.TiDB.DistSQLScanConcurrency = subtaskCfg.LoaderConfig.DistSQLScanConcurrency
+	}
+	if subtaskCfg.LoaderConfig.IndexSerialScanConcurrency > 0 {
+		cfg.TiDB.IndexSerialScanConcurrency = subtaskCfg.LoaderConfig.IndexSerialScanConcurrency
+	}
+	if subtaskCfg.LoaderConfig.ChecksumTableConcurrency > 0 {
+		cfg.TiDB.ChecksumTableConcurrency = subtaskCfg.LoaderConfig.ChecksumTableConcurrency
+	}
+
 	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	cfg.TikvImporter.IncrementalImport = true
 	switch subtaskCfg.OnDuplicatePhysical {
@@ -360,7 +377,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	case config.OnDuplicateNone:
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgNone
 	}
-	switch subtaskCfg.ChecksumPhysical {
+	switch subtaskCfg.Checksum {
 	case config.OpLevelRequired:
 		cfg.PostRestore.Checksum = lcfg.OpLevelRequired
 	case config.OpLevelOptional:
@@ -605,7 +622,14 @@ func (l *LightningLoader) Update(ctx context.Context, cfg *config.SubTaskConfig)
 }
 
 func (l *LightningLoader) status() *pb.LoadStatus {
-	finished, total := l.core.Status()
+	var finished, total int64
+	// when lightning is not running, we should use the Status to get the progress
+	if metrics := l.core.Metrics(); metrics != nil {
+		finished = int64(metric.ReadCounter(metrics.BytesCounter.WithLabelValues(metric.BytesStateRestored)))
+		total = int64(metric.ReadCounter(metrics.BytesCounter.WithLabelValues(metric.BytesStateTotalRestore)))
+	} else {
+		finished, total = l.core.Status()
+	}
 	progress := percent(finished, total, l.finish.Load())
 	currentSpeed := int64(l.speedRecorder.GetSpeed(float64(finished)))
 
