@@ -341,7 +341,7 @@ func main() {
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
 			if err := client.Consume(ctx, strings.Split(kafkaTopic, ","), consumer); err != nil {
-				log.Panic("Error from consumer: %v", zap.Error(err))
+				log.Panic("Error from consumer", zap.Error(err))
 			}
 			// check if context was cancelled, signaling that the consumer should stop
 			if ctx.Err() != nil {
@@ -547,16 +547,6 @@ func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
 	return result
 }
 
-var (
-	expectedID = map[string]struct{}{
-		"78554": {},
-		"71675": {},
-		"71221": {},
-		"66635": {},
-		"31948": {},
-	}
-)
-
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	partition := claim.Partition()
@@ -598,6 +588,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	log.Info("start consume claim",
+		zap.String("topic", claim.Topic()), zap.Int32("partition", partition),
+		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
 
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
@@ -661,11 +655,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				if row.CommitTs <= globalResolvedTs || row.CommitTs <= sink.resolvedTs {
+				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
 					log.Warn("RowChangedEvent fallback row, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Uint64("sinkResolvedTs", sink.resolvedTs),
+						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
 					continue
@@ -683,22 +678,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					group = newEventsGroup()
 					eventGroups[tableID] = group
 				}
-				//group.Append(row)
-
-				if row.Table.Table == "sbtest2" {
-					var id string
-					for _, col := range row.Columns {
-						if col.Name == "id" {
-							id = model.ColumnValueString(col.Value)
-							break
-						}
-					}
-					_, ok := expectedID[id]
-					if ok {
-						log.Info("found row by id", zap.String("id", id), zap.Any("event", row))
-					}
-				}
-
+				group.Append(row)
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -708,41 +688,42 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				if ts < globalResolvedTs {
-					log.Warn("partition resolved ts fallback",
+				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+				if ts < globalResolvedTs || ts < partitionResolvedTs {
+					log.Warn("partition resolved ts fallback, skip it",
 						zap.Uint64("ts", ts),
+						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 						zap.Uint64("globalResolvedTs", globalResolvedTs),
 						zap.Int32("partition", partition))
+					session.MarkMessage(message, "")
+					continue
 				}
 
-				resolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ts > resolvedTs {
-					for tableID, group := range eventGroups {
-						events := group.Resolve(ts)
-						if len(events) == 0 {
-							continue
-						}
-						if _, ok := sink.tableSinksMap.Load(tableID); !ok {
-							sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
-								model.DefaultChangeFeedID("kafka-consumer"),
-								spanz.TableIDToComparableSpan(tableID),
-								events[0].CommitTs,
-								prometheus.NewCounter(prometheus.CounterOpts{}),
-							))
-						}
-						s, _ := sink.tableSinksMap.Load(tableID)
-						s.(tablesink.TableSink).AppendRowChangedEvents(events...)
-						commitTs := events[len(events)-1].CommitTs
-						lastCommitTs, ok := sink.tablesCommitTsMap.Load(tableID)
-						if !ok || lastCommitTs.(uint64) < commitTs {
-							sink.tablesCommitTsMap.Store(tableID, commitTs)
-						}
+				for tableID, group := range eventGroups {
+					events := group.Resolve(ts)
+					if len(events) == 0 {
+						continue
 					}
-					log.Debug("update sink resolved ts",
-						zap.Uint64("ts", ts),
-						zap.Int32("partition", partition))
-					atomic.StoreUint64(&sink.resolvedTs, ts)
+					if _, ok := sink.tableSinksMap.Load(tableID); !ok {
+						sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
+							model.DefaultChangeFeedID("kafka-consumer"),
+							spanz.TableIDToComparableSpan(tableID),
+							events[0].CommitTs,
+							prometheus.NewCounter(prometheus.CounterOpts{}),
+						))
+					}
+					s, _ := sink.tableSinksMap.Load(tableID)
+					s.(tablesink.TableSink).AppendRowChangedEvents(events...)
+					commitTs := events[len(events)-1].CommitTs
+					lastCommitTs, ok := sink.tablesCommitTsMap.Load(tableID)
+					if !ok || lastCommitTs.(uint64) < commitTs {
+						sink.tablesCommitTsMap.Store(tableID, commitTs)
+					}
 				}
+				log.Debug("update partition resolved ts",
+					zap.Uint64("ts", ts), zap.Int32("partition", partition))
+				atomic.StoreUint64(&sink.resolvedTs, ts)
+
 				session.MarkMessage(message, "")
 			}
 
@@ -874,11 +855,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
 		}
 
-		if c.globalResolvedTs == minPartitionResolvedTs {
-			continue
+		if c.globalResolvedTs < minPartitionResolvedTs {
+			c.globalResolvedTs = minPartitionResolvedTs
 		}
-
-		c.globalResolvedTs = minPartitionResolvedTs
 
 		if err := c.forEachSink(func(sink *partitionSinks) error {
 			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
