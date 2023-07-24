@@ -27,6 +27,10 @@ type ChangefeedInfo struct {
 	StartTs      uint64
 	TargetTs     uint64
 	Config       *config.ReplicaConfig
+
+	// Epoch can't be specified by users. It's used by TiCDC internally
+	// to tell distinct changefeeds with a same ID.
+	Epoch uint64
 }
 
 // UpstreamInfo is a minimal info collection to describe an upstream.
@@ -52,30 +56,25 @@ type CaptureInfo struct {
 	Version       string
 }
 
-// -------------------- About owner scheduling -------------------- //
-// 1. ControllerObservation.LaunchOwner puts a changefeed owner on a given capture;
-// 2. Controller calls ControllerObservation.StopOwner to stop a owner;
-// 3. Capture fetches owner launch/stop events with CaptureObservation.RefreshAliveOwners;
+// -------------------- About owner schedule -------------------- //
+// 1. ControllerObservation.SetOwner puts an owner on a given capture;
+// 2. ControllerObservation.SetOwner can also stop an owner;
+// 3. Capture fetches owner launch/stop events with CaptureObservation.RefreshOwners;
 // 4. Capture calls Capture.PostOwnerStopped when the owner exits;
 // 5. After controller confirms the old owner exits, it can re-reschedule it.
-//
-// So there is a state for a changefeed owner on metadata storage:
-//   launched -> stopping -> stoped.
-// ---------------------------------------------------------------- //
+// -------------------------------------------------------------- //
 
-// ---------- About changefeed worker captures scheduling ---------- //
-// 1. ControllerObservation.LaunchWorkers attaches some captures to a changefeed;
-// 2. Owner calls OwnerObservation.RefreshProcessors to know workers are created;
-// 3. Capture fetches worker launch/stop events with CaptureObservation.RefreshProcessors;
-// 4. How to rolling-update a changefeed with only one worker capture:
+// ---------- About changefeed processor captures schedule ---------- //
+// 1. ControllerObservation.SetProcessors attaches some captures to a changefeed;
+// 2. ControllerObservation.SetProcessors can also detach captures from a changefeed;
+// 3. Owner calls OwnerObservation.RefreshProcessors to know processors are created;
+// 4. Capture fetches processor launch/stop events with CaptureObservation.RefreshProcessors;
+// 5. How to rolling-update a changefeed with only one worker capture:
 //    * controller needs only to attach more captures to the changefeed;
 //    * it's owner's responsibility to evict tables between captures.
-// 5. What if owner knows workers are created before captures?
-//    * table scheduling should be robust enough.
-//
-// So there is a state for a changefeed worker on metadata storage:
-//   launched -> stopping -> stoped.
-// ---------------------------------------------------------------- //
+// 5. What if owner knows processors are created before captures?
+//    * table schedule should be robust enough.
+// ------------------------------------------------------------------ //
 
 // ---------------- About keep-alive and heartbeat ---------------- //
 // 1. Capture updates heartbeats to metadata by calling CaptureObservation.Heartbeat,
@@ -84,7 +83,7 @@ type CaptureInfo struct {
 //    associated with deadline 10s. CaptureObservation.Heartbeat will refresh the deadline.
 // 3. Controller is binded with a lease (10+1+1)s, for deadline, heartbeat time-elapsed
 //    and network clock skew.
-// 4. Controller needs to consider re-scheduling owners and processors from a capture,
+// 4. Controller needs to consider re-schedule owners and processors from a capture,
 //    if the capture has been partitioned with metadata storage more than lease+5s;
 // ---------------------------------------------------------------- //
 
@@ -100,53 +99,60 @@ const (
 	SchedStopped
 )
 
-// ScheduledOwner is for owner and processor scheduling.
+// ScheduledOwner is for owner and processor schedule.
 type ScheduledOwner struct {
 	*ChangefeedInfo
 	ChangefeedProgress
-	state SchedState
+	Capture *CaptureInfo
+	State   SchedState
 }
 
-// ScheduledProcessor is for owner and processor scheduling.
+// ScheduledProcessor is for owner and processor schedule.
 type ScheduledProcessor struct {
 	*ChangefeedInfo
 	ChangefeedProgress
-	state SchedState
+	Capture *CaptureInfo
+	State   SchedState
+}
+
+// ChangefeedSchedule is used to query changefeed schedule information.
+type ChangefeedSchedule struct {
+	Owner     ScheduledOwner
+	Processor []ScheduledProcessor
 }
 
 // CaptureObservation is for observing and updating metadata on a CAPTURE instance.
 //
 // All intrefaces are thread-safe and shares one same Context.
 type CaptureObservation interface {
-	// SelfCaptureInfo tells the caller who am I.
-	SelfCaptureInfo() *CaptureInfo
+	// CaptureInfo tells the caller who am I.
+	CaptureInfo() *CaptureInfo
 
-	// GetChangefeed queries a changefeed.
-	GetChangefeed(cf model.ChangeFeedID) (*ChangefeedInfo, error)
+	// GetChangefeed queries one changefeed or all changefeeds.
+	GetChangefeeds(cf ...model.ChangeFeedID) ([]*ChangefeedInfo, error)
+
+	// GetCaptures queries one capture or all captures.
+	GetCaptures(cp ...string) ([]*CaptureInfo, error)
 
 	// Heartbeat tells the metadata storage I'm still alive.
 	Heartbeat(context.Context) error
 
 	// TakeControl blocks until becomes controller or gets canceled.
-	TakeControl() ControllerObservation
+	TakeControl() (ControllerObservation, error)
 
 	// Advance advances some changefeed progresses.
 	Advance(cfs []*ChangefeedInfo, progresses []*ChangefeedProgress) error
 
-	// Fetch the latest alive changefeed owner list from metadata.
-	//
-	// owners in stopping state won't be in the list.
+	// Fetch the latest changefeed owner list from metadata.
 	RefreshOwners() <-chan []ScheduledOwner
 
 	// When an owner exits, inform the metadata storage.
 	PostOwnerStopped(cf *ChangefeedInfo) error
 
-	// Fetch the latest alive changefeed workers from metadata.
-	//
-	// workers in stopping state won't be in the list.
+	// Fetch the latest changefeed processors from metadata.
 	RefreshProcessors() <-chan []ScheduledProcessor
 
-	// When a worker exits, inform the metadata storage.
+	// When a processor exits, inform the metadata storage.
 	PostProcessorStopped(cf *ChangefeedInfo) error
 }
 
@@ -157,48 +163,43 @@ type ControllerObservation interface {
 	// CreateChangefeed creates a changefeed.
 	CreateChangefeed(cf *ChangefeedInfo, up *UpstreamInfo) error
 
-	// RemoveChangefeed removes a changefeed.
+	// RemoveChangefeed removes a changefeed, will auto stop owner and processors.
 	RemoveChangefeed(cf *ChangefeedInfo) error
-
-	// PauseChangefeed pauses a changefeed.
-	PauseChangefeed(cf *ChangefeedInfo) error
-
-	// ResumeChangefeed resumes a changefeed.
-	ResumeChangefeed(cf *ChangefeedInfo) error
-
-	// UpdateChangefeed updates changefeed metadata, must be called on a stopped one.
-	UpdateChangefeed(cf *ChangefeedInfo) error
 
 	// Fetch the latest capture list in the TiCDC cluster.
 	RefreshCaptures() <-chan []*CaptureInfo
 
-	// Schedule a changefeed owner to the given target.
-	//
-	// The target capture can fetch the event by `RefreshOwners`.
-	LaunchOwner(cf *ChangefeedInfo, target *CaptureInfo) error
-
-	// Stop a changefeed owner.
-	StopOwner(cf *ChangefeedInfo) (stopped chan struct{}, _ error)
+	// Schedule a changefeed owner to a given target, or stop it if target is nil.
+	// Notes:
+	//   * the target capture can fetch the event by `RefreshOwners`.
+	//   * select `done` to wait the old owner in stopping to be resolved.
+	SetOwner(cf *ChangefeedInfo, target *CaptureInfo) (done <-chan struct{}, _ error)
 
 	// Schedule some captures as workers to a given changefeed.
-	//
-	// Target captures can fetch the event by RefreshWorkers.
-	LaunchWorkers(cf *ChangefeedInfo, workers []*CaptureInfo) error
+	// Notes:
+	//   * target captures can fetch the event by `RefreshProcessors`.
+	//   * select `done` to wait all processors in stopping to be resolved.
+	SetProcessors(cf *ChangefeedInfo, workers []*CaptureInfo) (done <-chan struct{}, _ error)
 
-	// Stop some changefeed workers.
-	StopWorkers(cf *ChangefeedInfo, workers []*CaptureInfo) (stopped chan struct{}, _ error)
-
-	// Combine LaunchOwner and LaunchWorkers into one transaction.
-	LaunchOwnerAndWorkers(cf *ChangefeedInfo, owner *CaptureInfo, workers []*CaptureInfo) error
-
-	// Get a snapshot of all changefeeds current scheduling state.
-	GetSnapshot() ([]ScheduledOwner, []ScheduledProcessor, error)
+	// Get a snapshot of all changefeeds current schedule.
+	GetChangefeedSchedule() ([]ChangefeedSchedule, error)
 }
 
 // OwnerObservation is for observing and updating running status of a changefeed.
 //
 // All intrefaces are thread-safe and shares one same Context.
 type OwnerObservation interface {
+	ChangefeedInfo() *ChangefeedInfo
+
+	// PauseChangefeed pauses a changefeed.
+	PauseChangefeed() error
+
+	// ResumeChangefeed resumes a changefeed.
+	ResumeChangefeed() error
+
+	// UpdateChangefeed updates changefeed metadata, must be called on a stopped one.
+	UpdateChangefeed() error
+
 	// set the changefeed to state finished.
 	SetChangefeedFinished() error
 
