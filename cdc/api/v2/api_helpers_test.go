@@ -66,13 +66,12 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	require.Equal(t, model.DefaultNamespace, cfInfo.Namespace)
 	require.NotEqual(t, 0, cfInfo.Epoch)
 
+	// invalid changefeed id or namespace id
 	cfg.ID = "abdc/sss"
-	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 	cfg.ID = ""
 	cfg.Namespace = "abdc/sss"
-	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 	cfg.ID = ""
