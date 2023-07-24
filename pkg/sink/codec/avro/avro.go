@@ -752,7 +752,7 @@ func (a *BatchEncoder) value2AvroSchema(
 	tableName *model.TableName,
 	input *avroEncodeInput,
 ) (string, error) {
-	if a.config.EnableTiDBExtension {
+	if a.config.EnableRowChecksum {
 		sort.Sort(input)
 	}
 
