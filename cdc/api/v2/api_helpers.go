@@ -157,7 +157,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 
 	exists, err := ctrl.IsChangefeedExists(ctx,
 		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
-	if err != nil && !cerror.ErrChangeFeedNotExists.NotEqual(err) {
+	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
 	if exists {
