@@ -23,6 +23,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
+	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/stretchr/testify/require"
@@ -260,4 +261,52 @@ func TestGetProcessor(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, 2, len(resp1.Tables))
 	}
+}
+
+func TestListProcessors(t *testing.T) {
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	controller := mock_controller.NewMockController(gomock.NewController(t))
+	cp.EXPECT().GetController().Return(controller, nil).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
+	apiV2 := NewOpenAPIV2ForTest(cp, APIV2HelpersImpl{})
+	router := newRouter(apiV2)
+	controller.EXPECT().GetProcessors(gomock.Any()).Return(
+		[]*model.ProcInfoSnap{
+			{
+				CfID: model.ChangeFeedID{
+					Namespace: "default",
+					ID:        "test",
+				},
+				CaptureID: "c1",
+			},
+			{
+				CfID: model.ChangeFeedID{
+					Namespace: "default",
+					ID:        "test",
+				},
+				CaptureID: "c2",
+			},
+		}, nil,
+	)
+
+	metainfo := testCase{
+		url:    "/api/v2/processors",
+		method: "GET",
+	}
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequestWithContext(
+		context.Background(),
+		metainfo.method,
+		metainfo.url,
+		nil,
+	)
+
+	router.ServeHTTP(w, req)
+	resp1 := ListResponse[ProcessorCommonInfo]{}
+	err := json.NewDecoder(w.Body).Decode(&resp1)
+	require.Nil(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 2, len(resp1.Items))
+	require.Equal(t, "c1", resp1.Items[0].CaptureID)
 }
