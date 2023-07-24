@@ -411,10 +411,10 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// NewClaimCheckMessage implements the ClaimCheckEncoder interface
+// NewClaimCheckMessage implements the ClaimCheckLocationEncoder interface
 // NewClaimCheckMessage creates a new message with the claim check location.
 // This should be called when the message is too large, and the claim check enabled.
-func (c *JSONRowEventEncoder) NewClaimCheckMessage(_ context.Context, _ string, origin *common.Message) (*common.Message, error) {
+func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(_ context.Context, _ string, origin *common.Message) (*common.Message, error) {
 	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)

@@ -80,6 +80,7 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 		return nil, errors.Trace(err)
 	}
 	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
+	// todo: disallow force replicate mode if using the avro.
 	if result == nil {
 		return nil, nil
 	}
@@ -411,10 +412,8 @@ func (a *BatchEncoder) encodeExtension(
 	return data, nil
 }
 
-// NewClaimCheckMessage implement the ClaimCheckEncoder interface.
-// NewClaimCheckMessage creates a new message with the claim check location.
-// This should be called when the message is too large, and the claim check enabled.
-func (a *BatchEncoder) NewClaimCheckMessage(ctx context.Context, topic string, origin *common.Message) (*common.Message, error) {
+// NewClaimCheckLocationMessage implement the ClaimCheckLocationEncoder interface.
+func (a *BatchEncoder) NewClaimCheckLocationMessage(ctx context.Context, topic string, origin *common.Message) (*common.Message, error) {
 	topic = sanitizeTopic(topic)
 
 	key, err := a.encodeKey(ctx, topic, origin.Event)
