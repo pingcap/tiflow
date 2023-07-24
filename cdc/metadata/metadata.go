@@ -129,10 +129,10 @@ type CaptureObservation interface {
 	CaptureInfo() *CaptureInfo
 
 	// GetChangefeed queries one changefeed or all changefeeds.
-	GetChangefeeds(cf ...model.ChangeFeedID) ([]*ChangefeedInfo, error)
+	GetChangefeeds(...model.ChangeFeedID) ([]*ChangefeedInfo, error)
 
 	// GetCaptures queries one capture or all captures.
-	GetCaptures(cp ...string) ([]*CaptureInfo, error)
+	GetCaptures(...string) ([]*CaptureInfo, error)
 
 	// Heartbeat tells the metadata storage I'm still alive.
 	Heartbeat(context.Context) error
@@ -169,17 +169,17 @@ type ControllerObservation interface {
 	// Fetch the latest capture list in the TiCDC cluster.
 	RefreshCaptures() <-chan []*CaptureInfo
 
-	// Schedule a changefeed owner to a given target, or stop it if target is nil.
+	// Schedule a changefeed owner to a given target.
 	// Notes:
 	//   * the target capture can fetch the event by `RefreshOwners`.
 	//   * select `done` to wait the old owner in stopping to be resolved.
-	SetOwner(cf *ChangefeedInfo, target *CaptureInfo) (done <-chan struct{}, _ error)
+	SetOwner(cf *ChangefeedInfo, target ScheduledOwner) (done <-chan struct{}, _ error)
 
 	// Schedule some captures as workers to a given changefeed.
 	// Notes:
 	//   * target captures can fetch the event by `RefreshProcessors`.
 	//   * select `done` to wait all processors in stopping to be resolved.
-	SetProcessors(cf *ChangefeedInfo, workers []*CaptureInfo) (done <-chan struct{}, _ error)
+	SetProcessors(cf *ChangefeedInfo, workers []ScheduledProcessor) (done <-chan struct{}, _ error)
 
 	// Get a snapshot of all changefeeds current schedule.
 	GetChangefeedSchedule() ([]ChangefeedSchedule, error)
