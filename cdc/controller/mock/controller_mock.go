@@ -107,6 +107,21 @@ func (mr *MockControllerMockRecorder) GetChangefeedOwnerCaptureInfo(id interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChangefeedOwnerCaptureInfo", reflect.TypeOf((*MockController)(nil).GetChangefeedOwnerCaptureInfo), id)
 }
 
+// GetProcessors mocks base method.
+func (m *MockController) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetProcessors", ctx)
+	ret0, _ := ret[0].([]*model.ProcInfoSnap)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetProcessors indicates an expected call of GetProcessors.
+func (mr *MockControllerMockRecorder) GetProcessors(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProcessors", reflect.TypeOf((*MockController)(nil).GetProcessors), ctx)
+}
+
 // IsChangefeedExists mocks base method.
 func (m *MockController) IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error) {
 	m.ctrl.T.Helper()

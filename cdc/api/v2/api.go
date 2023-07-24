@@ -49,7 +49,8 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2.POST("log", api.setLogLevel)
 
 	controllerMiddleware := middleware.ForwardToControllerMiddleware(api.capture)
-	changefeedOwnerMiddleware := middleware.ForwardToChangefeedOwnerMiddleware(api.capture, GetChangefeedFromRequest)
+	changefeedOwnerMiddleware := middleware.
+		ForwardToChangefeedOwnerMiddleware(api.capture, getChangefeedFromRequest)
 
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
@@ -58,7 +59,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	changefeedGroup.GET("", controllerMiddleware, api.listChangeFeeds)
 	changefeedGroup.PUT("/:changefeed_id", controllerMiddleware, api.updateChangefeed)
 	changefeedGroup.DELETE("/:changefeed_id", changefeedOwnerMiddleware, api.deleteChangefeed)
-	changefeedGroup.GET("/:changefeed_id/meta_info", controllerMiddleware, api.getChangeFeedMetaInfo)
+	changefeedGroup.GET("/:changefeed_id/meta_info", changefeedOwnerMiddleware, api.getChangeFeedMetaInfo)
 	changefeedGroup.POST("/:changefeed_id/resume", changefeedOwnerMiddleware, api.resumeChangefeed)
 	changefeedGroup.POST("/:changefeed_id/pause", changefeedOwnerMiddleware, api.pauseChangefeed)
 	changefeedGroup.GET("/:changefeed_id/status", changefeedOwnerMiddleware, api.status)
@@ -75,7 +76,6 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	processorGroup.GET("", controllerMiddleware, api.listProcessors)
 
 	verifyTableGroup := v2.Group("/verify_table")
-	verifyTableGroup.Use(controllerMiddleware)
 	verifyTableGroup.POST("", api.verifyTable)
 
 	// unsafe apis
@@ -94,8 +94,8 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2.POST("/tso", api.QueryTso)
 }
 
-// GetChangefeedFromRequest returns the changefeed that parse from request
-func GetChangefeedFromRequest(ctx *gin.Context) model.ChangeFeedID {
+// getChangefeedFromRequest returns the changefeed that parse from request
+func getChangefeedFromRequest(ctx *gin.Context) model.ChangeFeedID {
 	namespace := getNamespaceValueWithDefault(ctx)
 	return model.ChangeFeedID{
 		Namespace: namespace,

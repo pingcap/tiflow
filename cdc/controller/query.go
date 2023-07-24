@@ -34,8 +34,10 @@ const (
 	QueryAllChangeFeedInfo
 	// QueryCaptures is the type of query captures info.
 	QueryCaptures
-	// QueryExists is the type of query check if a changefeed is exist
+	// QueryExists is the type of query check if a changefeed is exists
 	QueryExists
+	// QueryProcessors is the type of query processor info
+	QueryProcessors
 )
 
 // Query wraps query command and return results.
@@ -55,6 +57,17 @@ func (o *controllerImpl) GetCaptures(ctx context.Context) ([]*model.CaptureInfo,
 		return nil, errors.Trace(err)
 	}
 	return query.Data.([]*model.CaptureInfo), nil
+}
+
+// GetProcessors returns the information about all processors.
+func (o *controllerImpl) GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error) {
+	query := &Query{
+		Tp: QueryProcessors,
+	}
+	if err := o.sendQueryToController(ctx, query); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return query.Data.([]*model.ProcInfoSnap), nil
 }
 
 // GetAllChangeFeedInfo returns all changefeed infos
@@ -192,6 +205,17 @@ func (o *controllerImpl) handleQueries(query *Query) error {
 				AdvertiseAddr: captureInfo.AdvertiseAddr,
 				Version:       captureInfo.Version,
 			})
+		}
+		query.Data = ret
+	case QueryProcessors:
+		var ret []*model.ProcInfoSnap
+		for cfID := range o.changefeeds {
+			for captureID := range o.captures {
+				ret = append(ret, &model.ProcInfoSnap{
+					CfID:      cfID,
+					CaptureID: captureID,
+				})
+			}
 		}
 		query.Data = ret
 	case QueryExists:

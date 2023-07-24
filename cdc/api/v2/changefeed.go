@@ -306,7 +306,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 func getNamespaceValueWithDefault(c *gin.Context) string {
 	namespace := c.Query(apiOpVarNamespace)
 	if namespace == "" {
-		namespace = "default"
+		namespace = model.DefaultNamespace
 	}
 	return namespace
 }
