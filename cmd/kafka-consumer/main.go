@@ -377,11 +377,16 @@ func main() {
 	}
 }
 
+// partitionSinks maintained for each partition, it may sync data for multiple tables.
 type partitionSinks struct {
 	tablesCommitTsMap sync.Map
 	tableSinksMap     sync.Map
-	resolvedTs        uint64
-	partitionNo       int
+	// resolvedTs record the maximum timestamp of the received event
+	resolvedTs uint64
+	// resolvedTs record the maximum timestamp of the events flushed to the downstreamw mysql.
+	checkpointTs uint64
+
+	session sarama.ConsumerGroupSession
 }
 
 // Consumer represents a Sarama consumer group consumer
@@ -465,9 +470,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
 	for i := 0; i < int(kafkaPartitionNum); i++ {
-		c.sinks[i] = &partitionSinks{
-			partitionNo: i,
-		}
+		c.sinks[i] = &partitionSinks{}
 	}
 	f, err := eventsinkfactory.New(
 		ctx,
@@ -556,6 +559,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
+	sink.session = session
 
 	ctx := context.Background()
 	var (
@@ -634,6 +638,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if partition == 0 {
 					c.appendDDL(ddl)
 				}
+				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
 				if err != nil {
@@ -663,6 +669,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
+					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+					session.MarkMessage(message, "")
 					continue
 				}
 				var partitionID int64
@@ -679,6 +687,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					eventGroups[tableID] = group
 				}
 				group.Append(row)
+				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+				session.MarkMessage(message, "")
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -723,8 +733,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				log.Debug("update partition resolved ts",
 					zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				atomic.StoreUint64(&sink.resolvedTs, ts)
-
+				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
+
 			}
 
 		}
