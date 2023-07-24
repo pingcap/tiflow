@@ -334,14 +334,15 @@ func (m *SchemaManager) GetCachedOrRegister(
 ) (*goavro.Codec, int, error) {
 	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
-	defer m.cacheRWLock.RUnlock()
 	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
 		log.Debug("Avro schema GetCached cache hit",
 			zap.String("key", key),
 			zap.Uint64("tableVersion", tableVersion),
 			zap.Int("schemaID", entry.schemaID))
+		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.schemaID, nil
 	}
+	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", key),
