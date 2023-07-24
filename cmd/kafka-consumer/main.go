@@ -572,7 +572,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolOpen, config.ProtocolDefault:
 		decoder, err = open.NewBatchDecoder(ctx, codecConfig)
 	case config.ProtocolCanalJSON:
-		decoder = canal.NewBatchDecoder(c.enableTiDBExtension, "")
+		codecConfig.EnableTiDBExtension = c.enableTiDBExtension
+		decoder, err = canal.NewBatchDecoder(ctx, codecConfig)
 	case config.ProtocolAvro:
 		config := &common.Config{
 			EnableTiDBExtension: c.enableTiDBExtension,

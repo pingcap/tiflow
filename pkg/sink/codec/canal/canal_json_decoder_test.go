@@ -25,25 +25,31 @@ import (
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	t.Parallel()
+
+	ctx := context.Background()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := newJSONRowEventEncoder(&common.Config{
+		config := &common.Config{
 			EnableTiDBExtension: encodeEnable,
 			Terminator:          config.CRLF,
 			MaxMessageBytes:     config.DefaultMaxMessageBytes,
-		})
+		}
+		encoder := newJSONRowEventEncoder(config)
 		require.NotNil(t, encoder)
 
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		messages := encoder.Build()
 		require.Equal(t, 1, len(messages))
 		msg := messages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewBatchDecoder(decodeEnable, "")
-			err := decoder.AddKeyValue(msg.Key, msg.Value)
+			decoder, err := NewBatchDecoder(ctx, &common.Config{
+				EnableTiDBExtension: decodeEnable,
+			})
+			require.NoError(t, err)
+			err = decoder.AddKeyValue(msg.Key, msg.Value)
 			require.NoError(t, err)
 
 			ty, hasNext, err := decoder.HasNext()
@@ -85,20 +91,25 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 
 func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 	t.Parallel()
+
+	ctx := context.Background()
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := &JSONRowEventEncoder{
-			builder: newCanalEntryBuilder(),
-			config:  &common.Config{EnableTiDBExtension: encodeEnable},
+		config := &common.Config{
+			EnableTiDBExtension: encodeEnable,
 		}
-		require.NotNil(t, encoder)
+		encoder := newJSONRowEventEncoder(config)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, result)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewBatchDecoder(decodeEnable, "")
-			err := decoder.AddKeyValue(nil, result.Value)
+			decoder, err := NewBatchDecoder(ctx, &common.Config{
+				EnableTiDBExtension: decodeEnable,
+				Terminator:          "",
+			})
+			require.NoError(t, err)
+			err = decoder.AddKeyValue(nil, result.Value)
 			require.NoError(t, err)
 
 			ty, hasNext, err := decoder.HasNext()
@@ -134,8 +145,14 @@ func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 	encodedValue := `{"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"INSERT","es":1668067205238,"ts":1668067206650,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2014-06-04","LastName":"Smith","OfficeLocation":"New York","id":"101"}],"old":null}
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"UPDATE","es":1668067229137,"ts":1668067230720,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":[{"FirstName":"Bob","HireDate":"2014-06-04","LastName":"Smith","OfficeLocation":"New York","id":"101"}]}
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"DELETE","es":1668067230388,"ts":1668067231725,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":null}`
-	decoder := NewBatchDecoder(false, "\n")
-	err := decoder.AddKeyValue(nil, []byte(encodedValue))
+	ctx := context.Background()
+	decoder, err := NewBatchDecoder(ctx, &common.Config{
+		EnableTiDBExtension: false,
+		Terminator:          "\n",
+	})
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(nil, []byte(encodedValue))
 	require.NoError(t, err)
 
 	cnt := 0

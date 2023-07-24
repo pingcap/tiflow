@@ -119,3 +119,7 @@ func (m *mockStatusProvider) GetAllChangeFeedStatuses(_ context.Context) (
 ) {
 	return m.changefeedStatuses, m.err
 }
+
+func (m *mockStatusProvider) IsChangefeedOwner(_ context.Context, id model.ChangeFeedID) (bool, error) {
+	return true, nil
+}

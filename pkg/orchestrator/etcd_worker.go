@@ -232,7 +232,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				if err != nil {
 					// This error means owner is resigned by itself,
 					// and we should exit etcd worker and campaign owner again.
-					return nil
+					return err
 				}
 			}
 

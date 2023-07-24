@@ -19,16 +19,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ResignOwner makes the current owner resign
-// @Summary Notify the owner to resign
-// @Description Notify the current owner to resign
+// ResignController makes the current controller resign
+// @Summary Notify the controller to resign
+// @Description Notify the current controller to resign
 // @Tags owner,v2
 // @Accept json
 // @Produce json
 // @Success 200 {object} EmptyResponse
 // @Failure 500,400 {object} model.HTTPError
 // @Router	/api/v2/owner/resign [post]
-func (h *OpenAPIV2) resignOwner(c *gin.Context) {
+func (h *OpenAPIV2) resignController(c *gin.Context) {
 	o, _ := h.capture.GetController()
 	if o != nil {
 		o.AsyncStop()

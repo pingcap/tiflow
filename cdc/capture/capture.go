@@ -59,8 +59,8 @@ type Capture interface {
 
 	GetOwner() (owner.Owner, error)
 	GetController() (controller.Controller, error)
-	GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
-	IsOwner() bool
+	GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error)
+	IsController() bool
 
 	Info() (model.CaptureInfo, error)
 	StatusProvider() owner.StatusProvider
@@ -120,7 +120,7 @@ type captureImpl struct {
 		cfg *config.SchedulerConfig,
 	) processor.Manager
 	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
-	newController func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) controller.Controller
+	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo) controller.Controller
 }
 
 // NewCapture returns a new Capture instance
@@ -336,6 +336,8 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	}()
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
+	stdCtx, cancel := context.WithCancel(stdCtx)
+
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:       c.info,
 		EtcdClient:        c.EtcdClient,
@@ -343,7 +345,6 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		MessageRouter:     c.MessageRouter,
 		SortEngineFactory: c.sortEngineFactory,
 	})
-
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
 		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
@@ -359,6 +360,17 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	})
 
 	g.Go(func() error {
+		// Processor manager should be closed as soon as possible to prevent double write issue.
+		defer func() {
+			if cancel != nil {
+				// Propagate the cancel signal to the owner and other goroutines.
+				cancel()
+			}
+			if c.processorManager != nil {
+				c.processorManager.Close()
+			}
+			log.Info("processor manager closed", zap.String("captureID", c.info.ID))
+		}()
 		processorFlushInterval := time.Duration(c.config.ProcessorFlushInterval)
 
 		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
@@ -427,7 +439,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Campaign to be the owner, it blocks until it been elected.
 		if err := c.campaign(ctx); err != nil {
-
 			rootErr := errors.Cause(err)
 			if rootErr == context.Canceled {
 				return nil
@@ -471,7 +482,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		controller := c.newController(c.upstreamManager, c.config.Debug.Scheduler)
+		controller := c.newController(c.upstreamManager, c.info)
 
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
@@ -518,21 +529,23 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		c.setController(nil)
 		c.setOwner(nil)
 
-		// if owner exits, resign the owner key,
-		// use a new context to prevent the context from being cancelled.
-		resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if resignErr := c.resign(resignCtx); resignErr != nil {
-			if errors.Cause(resignErr) != context.DeadlineExceeded {
-				log.Info("owner resign failed", zap.String("captureID", c.info.ID),
-					zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
-				cancel()
-				return errors.Trace(resignErr)
-			}
+		if !cerror.ErrNotOwner.Equal(err) {
+			// if owner exits, resign the owner key,
+			// use a new context to prevent the context from being cancelled.
+			resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if resignErr := c.resign(resignCtx); resignErr != nil {
+				if errors.Cause(resignErr) != context.DeadlineExceeded {
+					log.Info("owner resign failed", zap.String("captureID", c.info.ID),
+						zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+					cancel()
+					return errors.Trace(resignErr)
+				}
 
-			log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
-				zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+				log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
+					zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+			}
+			cancel()
 		}
-		cancel()
 
 		log.Info("owner resigned successfully",
 			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
@@ -666,10 +679,6 @@ func (c *captureImpl) Close() {
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	if c.processorManager != nil {
-		c.processorManager.Close()
-	}
-	log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {
@@ -741,15 +750,15 @@ func (c *captureImpl) WriteDebugInfo(ctx context.Context, w io.Writer) {
 	wait(doneM)
 }
 
-// IsOwner returns whether the capture is an owner
-func (c *captureImpl) IsOwner() bool {
+// IsController returns whether the capture is a controller
+func (c *captureImpl) IsController() bool {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()
-	return c.owner != nil
+	return c.controller != nil
 }
 
-// GetOwnerCaptureInfo return the owner capture info of current TiCDC cluster
-func (c *captureImpl) GetOwnerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
+// GetControllerCaptureInfo return the controller capture info of current TiCDC cluster
+func (c *captureImpl) GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
 	_, captureInfos, err := c.EtcdClient.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
