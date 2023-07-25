@@ -685,13 +685,13 @@ func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
 		input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
 	})
 
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, &common.Config{
-		EnableTiDBExtension:            true,
-		EnableRowChecksum:              true,
-		AvroDecimalHandlingMode:        "string",
-		AvroBigintUnsignedHandlingMode: "string",
-		LargeMessageHandle:             config.NewDefaultLargeMessageHandleConfig(),
-	})
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.EnableRowChecksum = true
+	codecConfig.AvroDecimalHandlingMode = "string"
+	codecConfig.AvroBigintUnsignedHandlingMode = "string"
+
+	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, codecConfig)
 
 	schema, err := encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
 	require.NoError(t, err)
@@ -711,13 +711,8 @@ func TestRowToAvroSchema(t *testing.T) {
 		event.ColInfos,
 	}
 
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, &common.Config{
-		EnableTiDBExtension:            false,
-		EnableRowChecksum:              false,
-		AvroDecimalHandlingMode:        "precise",
-		AvroBigintUnsignedHandlingMode: "long",
-		LargeMessageHandle:             config.NewDefaultLargeMessageHandleConfig(),
-	})
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, codecConfig)
 
 	schema, err := encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
 	require.NoError(t, err)
@@ -725,13 +720,8 @@ func TestRowToAvroSchema(t *testing.T) {
 	_, err = goavro.NewCodec(schema)
 	require.NoError(t, err)
 
-	encoder = NewAvroEncoder(model.DefaultNamespace, nil, nil, &common.Config{
-		EnableTiDBExtension:            true,
-		EnableRowChecksum:              false,
-		AvroDecimalHandlingMode:        "precise",
-		AvroBigintUnsignedHandlingMode: "long",
-		LargeMessageHandle:             config.NewDefaultLargeMessageHandleConfig(),
-	})
+	codecConfig.EnableTiDBExtension = true
+	encoder = NewAvroEncoder(model.DefaultNamespace, nil, nil, codecConfig)
 
 	schema, err = encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
 	require.NoError(t, err)
@@ -749,13 +739,8 @@ func TestRowToAvroData(t *testing.T) {
 		colInfos: event.ColInfos,
 	}
 
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, &common.Config{
-		EnableTiDBExtension:            false,
-		EnableRowChecksum:              false,
-		AvroDecimalHandlingMode:        "precise",
-		AvroBigintUnsignedHandlingMode: "long",
-		LargeMessageHandle:             config.NewDefaultLargeMessageHandleConfig(),
-	})
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, codecConfig)
 
 	data, err := encoder.(*BatchEncoder).columns2AvroData(input)
 	require.NoError(t, err)
@@ -767,13 +752,11 @@ func TestRowToAvroData(t *testing.T) {
 }
 
 func TestAvroEncode4EnableChecksum(t *testing.T) {
-	codecConfig := &common.Config{
-		EnableTiDBExtension:            true,
-		EnableRowChecksum:              true,
-		AvroDecimalHandlingMode:        "string",
-		AvroBigintUnsignedHandlingMode: "string",
-		LargeMessageHandle:             config.NewDefaultLargeMessageHandleConfig(),
-	}
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.EnableRowChecksum = true
+	codecConfig.AvroDecimalHandlingMode = "string"
+	codecConfig.AvroBigintUnsignedHandlingMode = "string"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
