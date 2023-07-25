@@ -237,8 +237,7 @@ func (d *BatchEncoder) tryBuildCallback() {
 	}
 }
 
-// NewClaimCheckMessage implement the ClaimCheckLocationEncoder interface.
-// NewClaimCheckMessage creates a new message with the claim check location.
+// NewClaimCheckLocationMessage implement the ClaimCheckLocationEncoder interface.
 // This should be called when the message is too large, and the claim check enabled.
 func (d *BatchEncoder) NewClaimCheckLocationMessage(_ context.Context, _ string, origin *common.Message) (*common.Message, error) {
 	keyMsg, valueMsg, err := rowChangeToMsg(origin.Event, d.config, true)

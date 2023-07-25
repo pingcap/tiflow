@@ -74,26 +74,6 @@ type avroEncodeResult struct {
 	schemaID int
 }
 
-func (a *BatchEncoder) getKeySchemaCodec(
-	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, input *avroEncodeInput,
-) (*goavro.Codec, int, error) {
-	schemaGen := func() (string, error) {
-		schema, err := a.key2AvroSchema(tableName, input)
-		if err != nil {
-			log.Error("AvroEventBatchEncoder: generating key schema failed", zap.Error(err))
-			return "", errors.Trace(err)
-		}
-		return schema, nil
-	}
-
-	avroCodec, schemaID, err := a.keySchemaManager.GetCachedOrRegister(
-		ctx, topic, tableVersion, schemaGen)
-	if err != nil {
-		return nil, 0, errors.Trace(err)
-	}
-	return avroCodec, schemaID, nil
-}
-
 func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
 	cols, colInfos := e.HandleKeyColInfos()
 	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
@@ -127,12 +107,10 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 		data:     bin,
 		schemaID: schemaID,
 	}
-
 	data, err := result.toEnvelope()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	return data, nil
 }
 
@@ -149,6 +127,26 @@ func (a *BatchEncoder) getValueSchemaCodec(
 	}
 
 	avroCodec, schemaID, err := a.valueSchemaManager.GetCachedOrRegister(ctx, topic, tableVersion, schemaGen)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+	return avroCodec, schemaID, nil
+}
+
+func (a *BatchEncoder) getKeySchemaCodec(
+	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, input *avroEncodeInput,
+) (*goavro.Codec, int, error) {
+	schemaGen := func() (string, error) {
+		schema, err := a.key2AvroSchema(tableName, input)
+		if err != nil {
+			log.Error("AvroEventBatchEncoder: generating key schema failed", zap.Error(err))
+			return "", errors.Trace(err)
+		}
+		return schema, nil
+	}
+
+	avroCodec, schemaID, err := a.keySchemaManager.GetCachedOrRegister(
+		ctx, topic, tableVersion, schemaGen)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
@@ -195,12 +193,10 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 		data:     bin,
 		schemaID: schemaID,
 	}
-
 	data, err := result.toEnvelope()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	return data, nil
 }
 
