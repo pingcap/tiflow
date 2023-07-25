@@ -402,18 +402,11 @@ type Consumer struct {
 	// initialize to 0 by default
 	globalResolvedTs uint64
 
-	protocol            config.Protocol
-	enableTiDBExtension bool
-	enableRowChecksum   bool
-
 	eventRouter *dispatcher.EventRouter
 
-	// avro only
-	// key and value schema manager, only used by the avro protocol to fetch schema.
-	keySchemaM   *avro.SchemaManager
-	valueSchemaM *avro.SchemaManager
-
 	tz *time.Location
+
+	codecConfig *common.Config
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -430,18 +423,16 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
-	c.protocol = protocol
-	c.enableTiDBExtension = enableTiDBExtension
-	c.enableRowChecksum = enableRowChecksum
 
-	if c.protocol == config.ProtocolAvro {
-		keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
-			ctx, schemaRegistryURI, nil)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		c.keySchemaM = keySchemaM
-		c.valueSchemaM = valueSchemaM
+	c.codecConfig = common.NewConfig(protocol)
+	c.codecConfig.EnableTiDBExtension = enableTiDBExtension
+	c.codecConfig.EnableRowChecksum = enableRowChecksum
+	if replicaConfig != nil && replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
+		c.codecConfig.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+	}
+
+	if c.codecConfig.Protocol == config.ProtocolAvro {
+		c.codecConfig.AvroEnableWatermark = true
 	}
 
 	// this means user has input config file to enable dispatcher check
@@ -563,27 +554,20 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		err     error
 	)
 
-	codecConfig := common.NewConfig(c.protocol)
-	if replicaConfig != nil && replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
-		codecConfig.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
-	}
-
-	switch c.protocol {
+	switch c.codecConfig.Protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
-		decoder, err = open.NewBatchDecoder(ctx, codecConfig)
+		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig)
 	case config.ProtocolCanalJSON:
-		codecConfig.EnableTiDBExtension = c.enableTiDBExtension
-		decoder, err = canal.NewBatchDecoder(ctx, codecConfig)
+		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig)
 	case config.ProtocolAvro:
-		config := &common.Config{
-			EnableTiDBExtension: c.enableTiDBExtension,
-			EnableRowChecksum:   c.enableRowChecksum,
-			// avro must set this to true to make the consumer works.
-			AvroEnableWatermark: true,
+		keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
+			ctx, schemaRegistryURI, nil)
+		if err != nil {
+			return errors.Trace(err)
 		}
-		decoder = avro.NewDecoder(config, c.keySchemaM, c.valueSchemaM, kafkaTopic, c.tz)
+		decoder = avro.NewDecoder(c.codecConfig, keySchemaM, valueSchemaM, kafkaTopic, c.tz)
 	default:
-		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
+		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}
 	if err != nil {
 		return errors.Trace(err)
