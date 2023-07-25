@@ -30,6 +30,7 @@ import (
 var (
 	_ metadata.CaptureObservation    = &captureOb{}
 	_ metadata.ControllerObservation = &controllerOb{}
+	_ metadata.OwnerObservation      = &ownerOb{}
 )
 
 type cfKey struct {
@@ -349,6 +350,58 @@ func (c *controllerOb) SetProcessors(cf *metadata.ChangefeedInfo, workers []meta
 
 func (c *controllerOb) GetChangefeedSchedule() ([]metadata.ChangefeedSchedule, []*metadata.CaptureInfo, error) {
 	return nil, nil, nil
+}
+
+type ownerOb struct {
+	s    *storage
+	c    *metadata.ChangefeedInfo
+	pctx context.Context
+
+	wg         sync.WaitGroup
+	processors chan []metadata.ScheduledProcessor
+
+	contextManager *contextManager
+}
+
+func (o *ownerOb) ChangefeedInfo() *metadata.ChangefeedInfo {
+	return o.c
+}
+
+func (o *ownerOb) PauseChangefeed() error {
+	return nil
+}
+
+func (o *ownerOb) ResumeChangefeed() error {
+	return nil
+}
+
+func (o *ownerOb) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
+	o.s.entities.Lock()
+	defer o.s.entities.Unlock()
+	copied := &metadata.ChangefeedInfo{}
+	*copied = *info
+	o.s.entities.cfs[info.ChangefeedID] = copied
+	return nil
+}
+
+func (o *ownerOb) SetChangefeedFinished() error {
+	return nil
+}
+
+func (o *ownerOb) SetChangefeedFailed(err model.RunningError) error {
+	return nil
+}
+
+func (o *ownerOb) SetChangefeedWarning(warn model.RunningError) error {
+	return nil
+}
+
+func (o *ownerOb) SetChangefeedPending() error {
+	return nil
+}
+
+func (o *ownerOb) RefreshProcessors() <-chan []metadata.ScheduledProcessor {
+	return o.processors
 }
 
 func checkScheduleState(originCapture, targetCapture *metadata.CaptureInfo, origin, target metadata.SchedState) error {

@@ -213,7 +213,7 @@ type OwnerObservation interface {
 	ResumeChangefeed() error
 
 	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
-	UpdateChangefeed() error
+	UpdateChangefeed(*ChangefeedInfo) error
 
 	// set the changefeed to state finished.
 	SetChangefeedFinished() error
@@ -225,8 +225,8 @@ type OwnerObservation interface {
 	SetChangefeedWarning(warn model.RunningError) error
 
 	// Set the changefeed to state pending.
-	SetChangefeedPending(cf model.ChangeFeedID) error
+	SetChangefeedPending() error
 
 	// Fetch the latest capture list to launch processors.
-	RefreshProcessors(cf *ChangefeedInfo) <-chan []ScheduledProcessor
+	RefreshProcessors() <-chan []ScheduledProcessor
 }
