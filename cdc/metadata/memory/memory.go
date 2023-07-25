@@ -347,8 +347,8 @@ func (c *controllerOb) SetProcessors(cf *metadata.ChangefeedInfo, workers []meta
 	return
 }
 
-func (c *controllerOb) GetChangefeedSchedule() ([]metadata.ChangefeedSchedule, error) {
-	return nil, nil
+func (c *controllerOb) GetChangefeedSchedule() ([]metadata.ChangefeedSchedule, []*metadata.CaptureInfo, error) {
+	return nil, nil, nil
 }
 
 func checkScheduleState(originCapture, targetCapture *metadata.CaptureInfo, origin, target metadata.SchedState) error {

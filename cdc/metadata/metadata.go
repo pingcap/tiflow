@@ -197,7 +197,7 @@ type ControllerObservation interface {
 	SetProcessors(cf *ChangefeedInfo, workers []ScheduledProcessor) (done <-chan struct{}, _ error)
 
 	// Get a snapshot of all changefeeds current schedule.
-	GetChangefeedSchedule() ([]ChangefeedSchedule, error)
+	GetChangefeedSchedule() ([]ChangefeedSchedule, []*CaptureInfo, error)
 }
 
 // OwnerObservation is for observing and updating running status of a changefeed.
