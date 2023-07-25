@@ -110,12 +110,12 @@ func NewKafkaDMLSink(
 
 	var (
 		claimCheck        *ClaimCheck
-		claimCheckEncoder codec.ClaimCheckEncoder
+		claimCheckEncoder codec.ClaimCheckLocationEncoder
 		ok                bool
 	)
 
 	if encoderConfig.LargeMessageHandle.EnableClaimCheck() {
-		claimCheckEncoder, ok = encoderBuilder.Build().(codec.ClaimCheckEncoder)
+		claimCheckEncoder, ok = encoderBuilder.Build().(codec.ClaimCheckLocationEncoder)
 		if !ok {
 			return nil, cerror.ErrKafkaInvalidConfig.
 				GenWithStack("claim-check enabled but the encoding protocol %s does not support", protocol.String())
