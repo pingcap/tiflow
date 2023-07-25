@@ -155,9 +155,6 @@ func (a *BatchEncoder) getKeySchemaCodec(
 
 func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
 	if e.IsDelete() {
-		if a.config.EnableTiDBExtension {
-			return a.encodeExtension(ctx, topic, e, false, "")
-		}
 		return nil, nil
 	}
 
@@ -239,25 +236,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
 			zap.Int("length", message.Length()),
 			zap.Any("table", e.Table))
-		if a.config.LargeMessageHandle.Disabled() {
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.Length())
-		}
-
-		if a.config.LargeMessageHandle.HandleKeyOnly() {
-			value, err = a.encodeExtension(ctx, topic, e, true, "")
-			if err != nil {
-				return errors.Trace(err)
-			}
-			message.Value = value
-			if message.Length() > a.config.MaxMessageBytes {
-				return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.Length())
-			}
-		}
-
-		if a.config.LargeMessageHandle.EnableClaimCheck() {
-			message.Event = e
-			message.ClaimCheckFileName = common.NewClaimCheckFileName(e)
-		}
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.Length())
 	}
 
 	a.result = append(a.result, message)
@@ -326,20 +305,15 @@ func (a *BatchEncoder) Build() (messages []*common.Message) {
 }
 
 const (
-	deleteOperation = "d"
 	insertOperation = "c"
 	updateOperation = "u"
 )
 
 func getOperation(e *model.RowChangedEvent) string {
-	if e.IsDelete() {
-		return deleteOperation
-	} else if e.IsInsert() {
+	if e.IsInsert() {
 		return insertOperation
 	} else if e.IsUpdate() {
 		return updateOperation
-	} else {
-		log.Panic("unknown event type found", zap.Any("event", e))
 	}
 	return ""
 }
@@ -407,43 +381,6 @@ func (a *BatchEncoder) encodeExtension(
 	}
 
 	return data, nil
-}
-
-// NewClaimCheckLocationMessage implement the ClaimCheckLocationEncoder interface.
-func (a *BatchEncoder) NewClaimCheckLocationMessage(ctx context.Context, topic string, origin *common.Message) (*common.Message, error) {
-	topic = sanitizeTopic(topic)
-
-	key, err := a.encodeKey(ctx, topic, origin.Event)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	value, err := a.encodeExtension(ctx, topic, origin.Event, false, origin.ClaimCheckFileName)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	message := common.NewMsg(
-		config.ProtocolAvro,
-		key,
-		value,
-		origin.Event.CommitTs,
-		model.MessageTypeRow,
-		origin.Schema,
-		origin.Table,
-	)
-	message.Callback = origin.Callback
-	message.IncRowsCount()
-
-	length := message.Length()
-	if length > a.config.MaxMessageBytes {
-		log.Warn("Single message is too large for avro, when create the claim-check location message",
-			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
-			zap.Int("length", length))
-		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(length)
-	}
-
-	return message, nil
 }
 
 type avroSchemaTop struct {
@@ -720,15 +657,21 @@ func (a *BatchEncoder) columns2AvroSchema(
 				field["type"] = avroType
 			}
 		} else {
-			// https://stackoverflow.com/questions/22938124/avro-field-default-values
-			if defaultValue == nil {
-				field["type"] = []interface{}{"null", avroType}
+			if col.Flag.IsNullable() {
+				// https://stackoverflow.com/questions/22938124/avro-field-default-values
+				if defaultValue == nil {
+					field["type"] = []interface{}{"null", avroType}
+				} else {
+					field["type"] = []interface{}{avroType, "null"}
+				}
+				field["default"] = defaultValue
 			} else {
-				field["type"] = []interface{}{avroType, "null"}
+				field["type"] = avroType
+				if defaultValue != nil {
+					field["default"] = defaultValue
+				}
 			}
-			field["default"] = defaultValue
 		}
-
 		top.Fields = append(top.Fields, field)
 	}
 	return top, nil

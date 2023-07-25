@@ -619,6 +619,25 @@ func newLargeEvent() *model.RowChangedEvent {
 	cols := make([]*model.Column, 0)
 	colInfos := make([]rowcodec.ColInfo, 0)
 
+	cols = append(
+		cols,
+		&model.Column{
+			Name:  "id",
+			Value: int64(1),
+			Type:  mysql.TypeLong,
+			Flag:  model.HandleKeyFlag,
+		},
+	)
+	colInfos = append(
+		colInfos,
+		rowcodec.ColInfo{
+			ID:            1000,
+			IsPKHandle:    true,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeLong),
+		},
+	)
+
 	for _, v := range avroTestColumns {
 		cols = append(cols, &v.col)
 		colInfos = append(colInfos, v.colInfo)
@@ -793,13 +812,9 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 }
 
 func TestAvroEncode(t *testing.T) {
-	codecConfig := &common.Config{
-		EnableTiDBExtension:            true,
-		EnableRowChecksum:              false,
-		AvroDecimalHandlingMode:        "precise",
-		AvroBigintUnsignedHandlingMode: "long",
-		LargeMessageHandle:             config.NewDefaultLargeMessageHandleConfig(),
-	}
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -926,15 +941,11 @@ func TestGetAvroNamespace(t *testing.T) {
 }
 
 func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
-	codecConfig := &common.Config{
-		EnableTiDBExtension:            true,
-		EnableRowChecksum:              false,
-		AvroDecimalHandlingMode:        "precise",
-		AvroBigintUnsignedHandlingMode: "long",
-	}
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
 	defer TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
@@ -977,123 +988,4 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 		msgs[0].Callback()
 		require.Equal(t, expected, count, "expected one callback be called")
 	}
-}
-
-func TestAvroHandleKeyOnly(t *testing.T) {
-	largeMessageHandle := config.NewDefaultLargeMessageHandleConfig()
-	largeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
-
-	codecConfig := common.NewConfig(config.ProtocolAvro)
-	codecConfig.EnableTiDBExtension = true
-	codecConfig.MaxMessageBytes = 300
-	codecConfig.LargeMessageHandle = largeMessageHandle
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
-	defer TeardownEncoderAndSchemaRegistry4Testing()
-	require.NoError(t, err)
-	require.NotNil(t, encoder)
-
-	event := newLargeEvent()
-	topic := "default"
-	err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
-	require.NoError(t, err)
-
-	messages := encoder.Build()
-	require.Len(t, messages, 1)
-	message := messages[0]
-
-	schemaID, data, err := extractSchemaIDAndBinaryData(message.Value)
-	require.NoError(t, err)
-
-	valueCodec, err := encoder.valueSchemaManager.Lookup(ctx, topic, schemaID)
-	require.NoError(t, err)
-
-	res, _, err := valueCodec.NativeFromBinary(data)
-	require.NoError(t, err)
-
-	native := res.(map[string]interface{})
-	require.True(t, native[tidbHandleKeyOnly].(bool))
-}
-
-func TestAvroDeleteWithExtension(t *testing.T) {
-	codecConfig := &common.Config{
-		EnableTiDBExtension: true,
-		MaxMessageBytes:     1024 * 1024,
-		LargeMessageHandle:  config.NewDefaultLargeMessageHandleConfig(),
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
-	defer TeardownEncoderAndSchemaRegistry4Testing()
-	require.NoError(t, err)
-	require.NotNil(t, encoder)
-
-	event := &model.RowChangedEvent{
-		CommitTs:  2333,
-		Table:     &model.TableName{Schema: "a", Table: "b"},
-		TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "a", Table: "b"}},
-		PreColumns: []*model.Column{
-			{
-				Name:  "col1",
-				Flag:  model.PrimaryKeyFlag | model.HandleKeyFlag,
-				Type:  mysql.TypeVarchar,
-				Value: []byte("aa"),
-			},
-			{
-				Name:  "col2",
-				Type:  mysql.TypeVarchar,
-				Value: []byte("bb"),
-			},
-		},
-		ColInfos: []rowcodec.ColInfo{
-			{
-				ID:            1000,
-				IsPKHandle:    true,
-				VirtualGenCol: false,
-				Ft:            types.NewFieldType(mysql.TypeVarchar),
-			},
-			{
-				ID: 10,
-				Ft: types.NewFieldType(mysql.TypeVarchar),
-			},
-		},
-	}
-
-	topic := "test-topic"
-	err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
-	require.NoError(t, err)
-
-	messages := encoder.Build()
-	require.Len(t, messages, 1)
-	message := messages[0]
-	require.NotNil(t, message.Key)
-	require.NotNil(t, message.Value)
-
-	schemaID, data, err := extractSchemaIDAndBinaryData(message.Value)
-	require.NoError(t, err)
-
-	valueCodec, err := encoder.valueSchemaManager.Lookup(ctx, topic, schemaID)
-	require.NoError(t, err)
-
-	res, _, err := valueCodec.NativeFromBinary(data)
-	require.NoError(t, err)
-
-	require.Equal(t, "d", res.(map[string]interface{})["_tidb_op"])
-	require.Equal(t, int64(2333), res.(map[string]interface{})["_tidb_commit_ts"])
-
-	schemaID, data, err = extractSchemaIDAndBinaryData(message.Key)
-	require.NoError(t, err)
-
-	keyCodec, err := encoder.keySchemaManager.Lookup(ctx, topic, schemaID)
-	require.NoError(t, err)
-
-	res, _, err = keyCodec.NativeFromBinary(data)
-	require.NoError(t, err)
-
-	require.Equal(t, "aa", res.(map[string]interface{})["col1"])
-	require.NotContains(t, res.(map[string]interface{}), "col2")
 }
