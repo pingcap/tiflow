@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint
 package memory
 
 import (
@@ -27,8 +28,8 @@ import (
 )
 
 var (
-	captureObAssertion    metadata.CaptureObservation    = &captureOb{}
-	controllerObAssertion metadata.ControllerObservation = &controllerOb{}
+	_ metadata.CaptureObservation    = &captureOb{}
+	_ metadata.ControllerObservation = &controllerOb{}
 )
 
 type cfKey struct {
@@ -124,7 +125,9 @@ func (c *captureOb) Heartbeat(context.Context) error {
 
 func (c *captureOb) TakeControl() (metadata.ControllerObservation, error) {
 	for {
-		util.Hang(c.contextManager.fetchContext(), time.Second)
+		if err := util.Hang(c.contextManager.fetchContext(), time.Second); err != nil {
+			return nil, err
+		}
 
 		c.s.Lock()
 		if _, ok := c.s.keepalive.heartbeats[c.c.ID]; !ok {
