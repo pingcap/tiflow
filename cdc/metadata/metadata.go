@@ -60,7 +60,7 @@ type CaptureInfo struct {
 // 1. ControllerObservation.SetOwner puts an owner on a given capture;
 // 2. ControllerObservation.SetOwner can also stop an owner;
 // 3. Capture fetches owner launch/stop events with CaptureObservation.RefreshOwners;
-// 4. Capture calls Capture.PostOwnerStopped when the owner exits;
+// 4. Capture calls Capture.PostOwnerRemoved when the owner exits;
 // 5. After controller confirms the old owner exits, it can re-reschedule it.
 // -------------------------------------------------------------- //
 
@@ -93,11 +93,24 @@ type SchedState int
 const (
 	// SchedLaunched means the owner or processor is launched.
 	SchedLaunched SchedState = iota
-	// SchedStopping means the owner or processor is in stopping.
-	SchedStopping
-	// SchedStopped means the owner or processor is stopped.
-	SchedStopped
+	// SchedRemoving means the owner or processor is in removing.
+	SchedRemoving
+	// SchedRemoved means the owner or processor is removed.
+	SchedRemoved
 )
+
+// StateToString convert state to string.
+func StateToString(state SchedState) string {
+	switch state {
+	case SchedLaunched:
+		return "Launched"
+	case SchedRemoving:
+		return "Removing"
+	case SchedRemoved:
+		return "Removed"
+	}
+	return "unreachable"
+}
 
 // ScheduledOwner is for owner and processor schedule.
 type ScheduledOwner struct {
@@ -147,13 +160,13 @@ type CaptureObservation interface {
 	RefreshOwners() <-chan []ScheduledOwner
 
 	// When an owner exits, inform the metadata storage.
-	PostOwnerStopped(cf *ChangefeedInfo) error
+	PostOwnerRemoved(cf *ChangefeedInfo) error
 
 	// Fetch the latest changefeed processors from metadata.
 	RefreshProcessors() <-chan []ScheduledProcessor
 
 	// When a processor exits, inform the metadata storage.
-	PostProcessorStopped(cf *ChangefeedInfo) error
+	PostProcessorRemoved(cf *ChangefeedInfo) error
 }
 
 // ControllerObservation is for observing and updating meta by Controller.
@@ -172,13 +185,15 @@ type ControllerObservation interface {
 	// Schedule a changefeed owner to a given target.
 	// Notes:
 	//   * the target capture can fetch the event by `RefreshOwners`.
-	//   * select `done` to wait the old owner in stopping to be resolved.
+	//   * select `done` to wait the old owner in removing to be resolved.
+	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
 	SetOwner(cf *ChangefeedInfo, target ScheduledOwner) (done <-chan struct{}, _ error)
 
 	// Schedule some captures as workers to a given changefeed.
 	// Notes:
 	//   * target captures can fetch the event by `RefreshProcessors`.
-	//   * select `done` to wait all processors in stopping to be resolved.
+	//   * select `done` to wait all processors in removing to be resolved.
+	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
 	SetProcessors(cf *ChangefeedInfo, workers []ScheduledProcessor) (done <-chan struct{}, _ error)
 
 	// Get a snapshot of all changefeeds current schedule.
@@ -197,7 +212,7 @@ type OwnerObservation interface {
 	// ResumeChangefeed resumes a changefeed.
 	ResumeChangefeed() error
 
-	// UpdateChangefeed updates changefeed metadata, must be called on a stopped one.
+	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
 	UpdateChangefeed() error
 
 	// set the changefeed to state finished.
