@@ -542,6 +542,8 @@ type SinkConfig struct {
 	KafkaConfig              *KafkaConfig      `json:"kafka_config"`
 }
 
+// KafkaConfig represents kafka config for a changefeed.
+// This is a duplicate of config.KafkaConfig
 type KafkaConfig struct {
 	SASLMechanism         *string  `json:"sasl_mechanism,omitempty"`
 	SASLOAuthClientID     *string  `json:"sasl_oauth_client_id,omitempty"`
