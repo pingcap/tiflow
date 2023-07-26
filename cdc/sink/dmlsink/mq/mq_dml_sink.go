@@ -74,7 +74,7 @@ func newDMLSink(
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
 	claimCheck *ClaimCheck,
-	claimCheckEncoder codec.ClaimCheckEncoder,
+	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)

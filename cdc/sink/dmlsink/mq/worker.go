@@ -67,7 +67,7 @@ type worker struct {
 	ticker *time.Ticker
 
 	// claimCheckEncoder is used to encode message which has claim-check location, send to kafka.
-	claimCheckEncoder codec.ClaimCheckEncoder
+	claimCheckEncoder codec.ClaimCheckLocationEncoder
 
 	encoderGroup codec.EncoderGroup
 
@@ -93,7 +93,7 @@ func newWorker(
 	producer dmlproducer.DMLProducer,
 	encoderGroup codec.EncoderGroup,
 	claimCheck *ClaimCheck,
-	claimCheckEncoder codec.ClaimCheckEncoder,
+	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
@@ -316,7 +316,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 						return errors.Trace(err)
 					}
 					// create the location message which contain the external storage location of the message.
-					locationMessage, err := w.claimCheckEncoder.NewClaimCheckMessage(message)
+					locationMessage, err := w.claimCheckEncoder.NewClaimCheckLocationMessage(message)
 					if err != nil {
 						return errors.Trace(err)
 					}
