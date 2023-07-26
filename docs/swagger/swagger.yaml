@@ -453,6 +453,25 @@ definitions:
           type: string
         type: array
     type: object
+  v2.KafkaConfig:
+    properties:
+      sasl_mechanism:
+        type: string
+      sasl_oauth_audience:
+        type: string
+      sasl_oauth_client_id:
+        type: string
+      sasl_oauth_client_secret:
+        type: string
+      sasl_oauth_grant_type:
+        type: string
+      sasl_oauth_scopes:
+        items:
+          type: string
+        type: array
+      sasl_oauth_token_url:
+        type: string
+    type: object
   v2.LogLevelReq:
     properties:
       log_level:
@@ -559,6 +578,8 @@ definitions:
         type: integer
       file_index_width:
         type: integer
+      kafka_config:
+        $ref: '#/definitions/v2.KafkaConfig'
       protocol:
         type: string
       schema_registry:
