@@ -281,6 +281,18 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           c.Sink.FileIndexWidth,
 		}
+
+		if c.Sink.KafkaConfig != nil {
+			res.Sink.KafkaConfig = &config.KafkaConfig{
+				SASLMechanism:         c.Sink.KafkaConfig.SASLMechanism,
+				SASLOAuthClientID:     c.Sink.KafkaConfig.SASLOAuthClientID,
+				SASLOAuthClientSecret: c.Sink.KafkaConfig.SASLOAuthClientSecret,
+				SASLOAuthTokenURL:     c.Sink.KafkaConfig.SASLOAuthTokenURL,
+				SASLOAuthScopes:       c.Sink.KafkaConfig.SASLOAuthScopes,
+				SASLOAuthGrantType:    c.Sink.KafkaConfig.SASLOAuthGrantType,
+				SASLOAuthAudience:     c.Sink.KafkaConfig.SASLOAuthAudience,
+			}
+		}
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -385,6 +397,18 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			DateSeparator:            cloned.Sink.DateSeparator,
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           cloned.Sink.FileIndexWidth,
+		}
+
+		if cloned.Sink.KafkaConfig != nil {
+			res.Sink.KafkaConfig = &KafkaConfig{
+				SASLMechanism:         cloned.Sink.KafkaConfig.SASLMechanism,
+				SASLOAuthClientID:     cloned.Sink.KafkaConfig.SASLOAuthClientID,
+				SASLOAuthClientSecret: cloned.Sink.KafkaConfig.SASLOAuthClientSecret,
+				SASLOAuthTokenURL:     cloned.Sink.KafkaConfig.SASLOAuthTokenURL,
+				SASLOAuthScopes:       cloned.Sink.KafkaConfig.SASLOAuthScopes,
+				SASLOAuthGrantType:    cloned.Sink.KafkaConfig.SASLOAuthGrantType,
+				SASLOAuthAudience:     cloned.Sink.KafkaConfig.SASLOAuthAudience,
+			}
 		}
 	}
 	if cloned.Consistent != nil {
@@ -515,6 +539,17 @@ type SinkConfig struct {
 	DateSeparator            string            `json:"date_separator"`
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
 	FileIndexWidth           int               `json:"file_index_width"`
+	KafkaConfig              *KafkaConfig      `json:"kafka_config"`
+}
+
+type KafkaConfig struct {
+	SASLMechanism         *string  `json:"sasl_mechanism,omitempty"`
+	SASLOAuthClientID     *string  `json:"sasl_oauth_client_id,omitempty"`
+	SASLOAuthClientSecret *string  `json:"sasl_oauth_client_secret,omitempty"`
+	SASLOAuthTokenURL     *string  `json:"sasl_oauth_token_url,omitempty"`
+	SASLOAuthScopes       []string `json:"sasl_oauth_scopes,omitempty"`
+	SASLOAuthGrantType    *string  `json:"sasl_oauth_grant_type,omitempty"`
+	SASLOAuthAudience     *string  `json:"sasl_oauth_audience,omitempty"`
 }
 
 // CSVConfig denotes the csv config
