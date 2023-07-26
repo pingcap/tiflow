@@ -61,13 +61,12 @@ func TestDecodeEvent(t *testing.T) {
 	require.Len(t, messages, 1)
 	message := messages[0]
 
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(
-		ctx, "http://127.0.0.1:8081", nil)
+	schemaM, err := NewAvroSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(config, keySchemaM, valueSchemaM, topic, tz)
+	decoder := NewDecoder(config, schemaM, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -115,7 +114,7 @@ func TestDecodeDDLEvent(t *testing.T) {
 	topic := "test-topic"
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(config, nil, nil, topic, tz)
+	decoder := NewDecoder(config, nil, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -158,7 +157,7 @@ func TestDecodeResolvedEvent(t *testing.T) {
 	topic := "test-topic"
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(config, nil, nil, topic, tz)
+	decoder := NewDecoder(config, nil, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 

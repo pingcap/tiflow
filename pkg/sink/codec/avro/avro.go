@@ -41,10 +41,9 @@ import (
 
 // BatchEncoder converts the events to binary Avro data
 type BatchEncoder struct {
-	namespace          string
-	keySchemaManager   *SchemaManager
-	valueSchemaManager *SchemaManager
-	result             []*common.Message
+	namespace string
+	schemaM   *SchemaManager
+	result    []*common.Message
 
 	config *common.Config
 }
@@ -114,6 +113,10 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 	return data, nil
 }
 
+func topicName2SchemaSubjects(topicName, subjectSuffix string) string {
+	return topicName + subjectSuffix
+}
+
 func (a *BatchEncoder) getValueSchemaCodec(
 	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, input *avroEncodeInput,
 ) (*goavro.Codec, int, error) {
@@ -126,7 +129,8 @@ func (a *BatchEncoder) getValueSchemaCodec(
 		return schema, nil
 	}
 
-	avroCodec, schemaID, err := a.valueSchemaManager.GetCachedOrRegister(ctx, topic, tableVersion, schemaGen)
+	subject := topicName2SchemaSubjects(topic, valueSchemaSuffix)
+	avroCodec, schemaID, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
@@ -145,8 +149,8 @@ func (a *BatchEncoder) getKeySchemaCodec(
 		return schema, nil
 	}
 
-	avroCodec, schemaID, err := a.keySchemaManager.GetCachedOrRegister(
-		ctx, topic, tableVersion, schemaGen)
+	subject := topicName2SchemaSubjects(topic, keySchemaSuffix)
+	avroCodec, schemaID, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
 	if err != nil {
 		return nil, 0, errors.Trace(err)
 	}
@@ -1031,10 +1035,9 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 }
 
 type batchEncoderBuilder struct {
-	namespace          string
-	config             *common.Config
-	keySchemaManager   *SchemaManager
-	valueSchemaManager *SchemaManager
+	namespace string
+	config    *common.Config
+	schemaM   *SchemaManager
 }
 
 const (
@@ -1047,33 +1050,30 @@ func NewBatchEncoderBuilder(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
-	keySchemaManager, valueSchemaManager, err := NewKeyAndValueSchemaManagers(
-		ctx, config.AvroSchemaRegistry, nil)
+	schemaM, err := NewAvroSchemaManager(ctx, config.AvroSchemaRegistry, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &batchEncoderBuilder{
-		namespace:          changefeedID.Namespace,
-		config:             config,
-		keySchemaManager:   keySchemaManager,
-		valueSchemaManager: valueSchemaManager,
+		namespace: changefeedID.Namespace,
+		config:    config,
+		schemaM:   schemaM,
 	}, nil
 }
 
 // Build an AvroEventBatchEncoder.
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	return NewAvroEncoder(b.namespace, b.keySchemaManager, b.valueSchemaManager, b.config)
+	return NewAvroEncoder(b.namespace, b.schemaM, b.config)
 }
 
 // NewAvroEncoder return a avro encoder.
-func NewAvroEncoder(namespace string, keySchemaM, valueSchemaM *SchemaManager, config *common.Config) codec.RowEventEncoder {
+func NewAvroEncoder(namespace string, schemaM *SchemaManager, config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
-		namespace:          namespace,
-		keySchemaManager:   keySchemaM,
-		valueSchemaManager: valueSchemaM,
-		result:             make([]*common.Message, 0, 1),
-		config:             config,
+		namespace: namespace,
+		schemaM:   schemaM,
+		result:    make([]*common.Message, 0, 1),
+		config:    config,
 	}
 }
 
@@ -1083,17 +1083,16 @@ func SetupEncoderAndSchemaRegistry4Testing(
 	config *common.Config,
 ) (*BatchEncoder, error) {
 	startHTTPInterceptForTestingRegistry()
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, "http://127.0.0.1:8081", nil)
+	schemaM, err := NewAvroSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &BatchEncoder{
-		namespace:          model.DefaultNamespace,
-		valueSchemaManager: valueSchemaM,
-		keySchemaManager:   keySchemaM,
-		result:             make([]*common.Message, 0, 1),
-		config:             config,
+		namespace: model.DefaultNamespace,
+		schemaM:   schemaM,
+		result:    make([]*common.Message, 0, 1),
+		config:    config,
 	}, nil
 }
 
