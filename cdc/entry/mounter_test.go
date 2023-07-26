@@ -1173,12 +1173,12 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	msg := avroEncoder.Build()
 	require.Len(t, msg, 1)
 
-	keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
+	schemaM, err := avro.NewAvroSchemaManager(
 		ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
 	// decoder enable checksum functionality.
-	decoder := avro.NewDecoder(codecConfig, keySchemaM, valueSchemaM, topic, time.Local)
+	decoder := avro.NewDecoder(codecConfig, schemaM, topic, time.Local)
 	err = decoder.AddKeyValue(msg[0].Key, msg[0].Value)
 	require.NoError(t, err)
 

@@ -296,7 +296,6 @@ run_sql "FLUSH privileges" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 cat - >"$OUT_DIR/tiflash-config.toml" <<EOF
 tmp_path = "${OUT_DIR}/tiflash/tmp"
 display_name = "TiFlash"
-default_profile = "default"
 users_config = "${OUT_DIR}/tiflash/users.toml"
 path = "${OUT_DIR}/tiflash/db"
 mark_cache_size = 5368709120
@@ -308,13 +307,6 @@ interserver_http_port = 5500
 [flash]
 tidb_status_addr = "127.0.0.1:8500"
 service_addr = "127.0.0.1:9500"
-overlap_threshold = 0.6
-
-[flash.flash_cluster]
-master_ttl = 60
-refresh_interval = 20
-update_rule_interval = 5
-cluster_manager_path = "${CUR}/../../bin/flash_cluster_manager"
 
 [flash.proxy]
 addr = "127.0.0.1:9000"
@@ -334,10 +326,7 @@ count = 10
 runAsDaemon = true
 
 [raft]
-kvstore_path = "${OUT_DIR}/tiflash/kvstore"
 pd_addr = "${UP_PD_HOST_1}:${UP_PD_PORT_1}"
-ignore_databases = "system,default"
-storage_engine = "dt"
 EOF
 
 cat - >"$OUT_DIR/tiflash-proxy.toml" <<EOF
@@ -357,13 +346,13 @@ wal-dir = ""
 max-open-files = 1000
 
 [rocksdb.defaultcf]
-block-cache-size = "10GB"
+block-cache-size = "1GB"
 
 [rocksdb.lockcf]
-block-cache-size = "4GB"
+block-cache-size = "1GB"
 
 [rocksdb.writecf]
-block-cache-size = "4GB"
+block-cache-size = "1GB"
 
 [raftdb]
 max-open-files = 1000
