@@ -81,16 +81,16 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 		return nil, nil
 	}
 
-	input := &avroEncodeInput{
+	keyColumns := &avroEncodeInput{
 		columns:  cols,
 		colInfos: colInfos,
 	}
-	avroCodec, schemaID, err := a.getKeySchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, input)
+	avroCodec, schemaID, err := a.getKeySchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, keyColumns)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	native, err := a.columns2AvroData(input)
+	native, err := a.columns2AvroData(keyColumns)
 	if err != nil {
 		log.Error("avro: key converting to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
@@ -138,10 +138,10 @@ func (a *BatchEncoder) getValueSchemaCodec(
 }
 
 func (a *BatchEncoder) getKeySchemaCodec(
-	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, input *avroEncodeInput,
+	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, keyColumns *avroEncodeInput,
 ) (*goavro.Codec, int, error) {
 	schemaGen := func() (string, error) {
-		schema, err := a.key2AvroSchema(tableName, input)
+		schema, err := a.key2AvroSchema(tableName, keyColumns)
 		if err != nil {
 			log.Error("AvroEventBatchEncoder: generating key schema failed", zap.Error(err))
 			return "", errors.Trace(err)
@@ -337,19 +337,6 @@ func (a *BatchEncoder) nativeValueWithExtension(
 		native[tidbCorrupted] = e.Checksum.Corrupted
 		native[tidbChecksumVersion] = e.Checksum.Version
 	}
-
-	// if handleKeyOnly is false, no need to set it, to reduce the size of message a little bit
-	// the decoder can fill it by the default value.
-	if a.config.LargeMessageHandle.HandleKeyOnly() && handleKeyOnly {
-		native[tidbHandleKeyOnly] = true
-	}
-
-	// if claimCheckLocation is empty, no need to set it, to reduce the size of message a little bit
-	// the decoder can fill it by the default value.
-	if a.config.LargeMessageHandle.EnableClaimCheck() && claimCheckLocation != "" {
-		native[tidbClaimCheckLocation] = claimCheckLocation
-	}
-
 	return native
 }
 
@@ -370,10 +357,6 @@ const (
 	tidbRowLevelChecksum = "_tidb_row_level_checksum"
 	tidbChecksumVersion  = "_tidb_checksum_version"
 	tidbCorrupted        = "_tidb_corrupted"
-
-	// large message handle related fields
-	tidbHandleKeyOnly      = "_tidb_handle_key_only"
-	tidbClaimCheckLocation = "_tidb_claim_check_location"
 )
 
 var type2TiDBType = map[byte]string{
@@ -573,22 +556,6 @@ func (a *BatchEncoder) schemaWithExtension(
 			})
 	}
 
-	if a.config.LargeMessageHandle.HandleKeyOnly() {
-		top.Fields = append(top.Fields,
-			map[string]interface{}{
-				"name":    tidbHandleKeyOnly,
-				"type":    "boolean",
-				"default": false,
-			})
-	} else if a.config.LargeMessageHandle.EnableClaimCheck() {
-		top.Fields = append(top.Fields,
-			map[string]interface{}{
-				"name":    tidbClaimCheckLocation,
-				"type":    "string",
-				"default": "",
-			})
-	}
-
 	return top
 }
 
@@ -677,9 +644,9 @@ func (a *BatchEncoder) value2AvroSchema(
 
 func (a *BatchEncoder) key2AvroSchema(
 	tableName *model.TableName,
-	input *avroEncodeInput,
+	keyColumns *avroEncodeInput,
 ) (string, error) {
-	top, err := a.columns2AvroSchema(tableName, input)
+	top, err := a.columns2AvroSchema(tableName, keyColumns)
 	if err != nil {
 		return "", err
 	}

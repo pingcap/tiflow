@@ -535,7 +535,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 
 func TestColumnToAvroSchema(t *testing.T) {
 	for _, v := range avroTestColumns {
-		encoder := NewAvroEncoder("namespace", nil, nil, &common.Config{
+		encoder := NewAvroEncoder("namespace", nil, &common.Config{
 			AvroDecimalHandlingMode:        "precise",
 			AvroBigintUnsignedHandlingMode: "long",
 		})
@@ -543,7 +543,7 @@ func TestColumnToAvroSchema(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, v.expectedSchema, schema)
 		if v.col.Name == "decimal" {
-			encoder := NewAvroEncoder("namespace", nil, nil, &common.Config{
+			encoder := NewAvroEncoder("namespace", nil, &common.Config{
 				AvroDecimalHandlingMode:        "string",
 				AvroBigintUnsignedHandlingMode: "long",
 			})
@@ -556,7 +556,7 @@ func TestColumnToAvroSchema(t *testing.T) {
 			)
 		}
 		if v.col.Name == "longlongunsigned" {
-			encoder := NewAvroEncoder("namespace", nil, nil, &common.Config{
+			encoder := NewAvroEncoder("namespace", nil, &common.Config{
 				AvroDecimalHandlingMode:        "precise",
 				AvroBigintUnsignedHandlingMode: "string",
 			})
@@ -578,7 +578,7 @@ func TestColumnToAvroData(t *testing.T) {
 	t.Parallel()
 
 	for _, v := range avroTestColumns {
-		encoder := NewAvroEncoder("namespace", nil, nil, &common.Config{
+		encoder := NewAvroEncoder("namespace", nil, &common.Config{
 			AvroDecimalHandlingMode:        "precise",
 			AvroBigintUnsignedHandlingMode: "long",
 		})
@@ -587,7 +587,7 @@ func TestColumnToAvroData(t *testing.T) {
 		require.Equal(t, v.expectedData, data)
 		require.Equal(t, v.expectedType, str)
 		if v.col.Name == "decimal" {
-			encoder := NewAvroEncoder("namespace", nil, nil, &common.Config{
+			encoder := NewAvroEncoder("namespace", nil, &common.Config{
 				AvroDecimalHandlingMode:        "string",
 				AvroBigintUnsignedHandlingMode: "long",
 			})
@@ -597,7 +597,7 @@ func TestColumnToAvroData(t *testing.T) {
 			require.Equal(t, "string", str)
 		}
 		if v.col.Name == "longlongunsigned" {
-			encoder := NewAvroEncoder("namespace", nil, nil, &common.Config{
+			encoder := NewAvroEncoder("namespace", nil, &common.Config{
 				AvroDecimalHandlingMode:        "precise",
 				AvroBigintUnsignedHandlingMode: "string",
 			})
@@ -691,7 +691,7 @@ func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
 	codecConfig.AvroDecimalHandlingMode = "string"
 	codecConfig.AvroBigintUnsignedHandlingMode = "string"
 
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, codecConfig)
+	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
 	schema, err := encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
 	require.NoError(t, err)
@@ -712,7 +712,7 @@ func TestRowToAvroSchema(t *testing.T) {
 	}
 
 	codecConfig := common.NewConfig(config.ProtocolAvro)
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, codecConfig)
+	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
 	schema, err := encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
 	require.NoError(t, err)
@@ -721,7 +721,7 @@ func TestRowToAvroSchema(t *testing.T) {
 	require.NoError(t, err)
 
 	codecConfig.EnableTiDBExtension = true
-	encoder = NewAvroEncoder(model.DefaultNamespace, nil, nil, codecConfig)
+	encoder = NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
 	schema, err = encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
 	require.NoError(t, err)
@@ -740,7 +740,7 @@ func TestRowToAvroData(t *testing.T) {
 	}
 
 	codecConfig := common.NewConfig(config.ProtocolAvro)
-	encoder := NewAvroEncoder(model.DefaultNamespace, nil, nil, codecConfig)
+	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
 	data, err := encoder.(*BatchEncoder).columns2AvroData(input)
 	require.NoError(t, err)
@@ -774,7 +774,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	schemaID, data, err := extractSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroValueCodec, err := encoder.valueSchemaManager.Lookup(ctx, topic, schemaID)
+	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
 	require.NoError(t, err)
 
 	res, _, err := avroValueCodec.NativeFromBinary(data)
@@ -814,7 +814,7 @@ func TestAvroEncode(t *testing.T) {
 	schemaID, data, err := extractSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroKeyCodec, err := encoder.keySchemaManager.Lookup(ctx, topic, schemaID)
+	avroKeyCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
 	require.NoError(t, err)
 
 	res, _, err := avroKeyCodec.NativeFromBinary(data)
@@ -833,7 +833,7 @@ func TestAvroEncode(t *testing.T) {
 	schemaID, data, err = extractSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroValueCodec, err := encoder.valueSchemaManager.Lookup(ctx, topic, schemaID)
+	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
 	require.NoError(t, err)
 
 	res, _, err = avroValueCodec.NativeFromBinary(data)
