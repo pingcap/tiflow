@@ -49,6 +49,9 @@ type Message struct {
 	ClaimCheckFileName string
 
 	Event *model.RowChangedEvent
+
+	// PartitionKey for pulsar, route messages to one or different partitions
+	PartitionKey *string
 }
 
 // Length returns the expected size of the Kafka message
@@ -76,6 +79,30 @@ func (m *Message) SetRowsCount(cnt int) {
 // IncRowsCount increase the number of rows
 func (m *Message) IncRowsCount() {
 	m.rowsCount++
+}
+
+// GetSchema returns schema string
+func (m *Message) GetSchema() string {
+	if m.Schema == nil {
+		return ""
+	}
+	return *m.Schema
+}
+
+// GetTable returns the Table string
+func (m *Message) GetTable() string {
+	if m.Table == nil {
+		return ""
+	}
+	return *m.Table
+}
+
+// GetPartitionKey returns the GetPartitionKey
+func (m *Message) GetPartitionKey() string {
+	if m.PartitionKey == nil {
+		return ""
+	}
+	return *m.PartitionKey
 }
 
 // NewDDLMsg creates a DDL message.

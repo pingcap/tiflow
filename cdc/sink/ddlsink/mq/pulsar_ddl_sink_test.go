@@ -1,48 +1,160 @@
+// Copyright 2023 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package mq
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
-	"github.com/pingcap/tiflow/pkg/config"
 	"net/url"
 	"testing"
+
+	mm "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
+	"github.com/pingcap/tiflow/pkg/config"
+	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
+	"github.com/stretchr/testify/require"
 )
 
+const (
+	// MockPulsarTopic is the mock topic for pulsar
+	MockPulsarTopic = "pulsar_test"
+)
+
+// newPulsarConfig set config
+func newPulsarConfig(t *testing.T) (*pulsarConfig.Config, *url.URL) {
+	sinkURL := "pulsar://127.0.0.1:6650/persistent://public/default/test?" +
+		"protocol=canal-json&pulsar-version=v2.10.0&enable-tidb-extension=true&" +
+		"authentication-token=eyJhbcGcixxxxxxxxxxxxxx"
+
+	sinkURI, err := url.Parse(sinkURL)
+	require.NoError(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
+	require.NoError(t, err)
+	c, err := pulsarConfig.NewPulsarConfig(sinkURI)
+	require.NoError(t, err)
+	return c, sinkURI
+}
+
+// TestNewPulsarDDLSink tests the NewPulsarDDLSink
 func TestNewPulsarDDLSink(t *testing.T) {
-	type args struct {
-		ctx             context.Context
-		sinkURI         *url.URL
-		replicaConfig   *config.ReplicaConfig
-		producerCreator ddlproducer.Factory
+	t.Parallel()
+
+	cfg, sinkURI := newPulsarConfig(t)
+	changefeedID := model.DefaultChangeFeedID("test")
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink = &config.SinkConfig{
+		Protocol: str2Pointer(cfg.Protocol.String()),
 	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *ddlSink
-		wantErr bool
-	}{
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctx = context.WithValue(ctx, "testing.T", t)
+	ddlSink, err := NewPulsarDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
+		manager.NewMockPulsarTopicManager, pulsarConfig.NewMockCreatorFactory, ddlproducer.NewMockPulsarProducerDDL)
+
+	require.NoError(t, err)
+	require.NotNil(t, ddlSink)
+
+	checkpointTs := uint64(417318403368288260)
+	tables := []*model.TableInfo{
 		{
-			name: "test normal new pulsar ddl sink",
-			args: args{
-				ctx:             context.Background(),
-				sinkURI:         &url.URL{},
-				replicaConfig:   &config.ReplicaConfig{},
-				producerCreator: nil,
+			TableName: model.TableName{
+				Schema: "cdc",
+				Table:  "person",
 			},
-			want:    &ddlSink{},
-			wantErr: false,
+		},
+		{
+			TableName: model.TableName{
+				Schema: "cdc",
+				Table:  "person1",
+			},
+		},
+		{
+			TableName: model.TableName{
+				Schema: "cdc",
+				Table:  "person2",
+			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewPulsarDDLSink(tt.args.ctx, tt.args.sinkURI,
-				tt.args.replicaConfig, ddlproducer.NewPulsarProducer)
-			if err != nil {
-				t.Errorf("NewPulsarDDLSink() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			t.Logf("got sink = %+v", got)
 
-		})
+	err = ddlSink.WriteCheckpointTs(ctx, checkpointTs, tables)
+	require.NoError(t, err)
+
+	events := ddlSink.producer.(*ddlproducer.PulsarMockProducers).GetAllEvents()
+	require.Len(t, events, 1, "All topics and partitions should be broadcast")
+}
+
+// TestPulsarDDLSinkNewSuccess tests the NewPulsarDDLSink write a event to pulsar
+func TestPulsarDDLSinkNewSuccess(t *testing.T) {
+	t.Parallel()
+
+	cfg, sinkURI := newPulsarConfig(t)
+	changefeedID := model.DefaultChangeFeedID("test")
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink = &config.SinkConfig{
+		Protocol: str2Pointer(cfg.Protocol.String()),
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctx = context.WithValue(ctx, "testing.T", t)
+	s, err := NewPulsarDDLSink(ctx, changefeedID, sinkURI, replicaConfig, manager.NewMockPulsarTopicManager,
+		pulsarConfig.NewMockCreatorFactory, ddlproducer.NewMockPulsarProducerDDL)
+	require.NoError(t, err)
+	require.NotNil(t, s)
+}
+
+func TestPulsarWriteDDLEventToZeroPartition(t *testing.T) {
+	t.Parallel()
+
+	cfg, sinkURI := newPulsarConfig(t)
+	changefeedID := model.DefaultChangeFeedID("test")
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink = &config.SinkConfig{
+		Protocol: str2Pointer(cfg.Protocol.String()),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctx = context.WithValue(ctx, "testing.T", t)
+	ddlSink, err := NewPulsarDDLSink(ctx, changefeedID, sinkURI, replicaConfig,
+		manager.NewMockPulsarTopicManager, pulsarConfig.NewMockCreatorFactory, ddlproducer.NewMockPulsarProducerDDL)
+
+	require.NoError(t, err)
+	require.NotNil(t, ddlSink)
+
+	ddl := &model.DDLEvent{
+		CommitTs: 417318403368288260,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "cdc", Table: "person",
+			},
+		},
+		Query: "create table person(id int, name varchar(32), primary key(id))",
+		Type:  mm.ActionCreateTable,
+	}
+	err = ddlSink.WriteDDLEvent(ctx, ddl)
+	require.NoError(t, err)
+
+	err = ddlSink.WriteDDLEvent(ctx, ddl)
+	require.NoError(t, err)
+
+	require.Len(t, ddlSink.producer.(*ddlproducer.PulsarMockProducers).GetAllEvents(),
+		2, "Write DDL 2 Events")
 }

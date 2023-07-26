@@ -1,117 +1,40 @@
+// Copyright 2023 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package ddlproducer
 
 import (
 	"context"
-	"fmt"
-	"math/rand"
-	url2 "net/url"
-	"os"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/tiflow/cdc/model"
-	pulsarMetric "github.com/pingcap/tiflow/cdc/sink/metrics/mq/pulsar"
+	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
+	"github.com/stretchr/testify/require"
 )
 
-func newPulsarConfig() *pulsarConfig.PulsarConfig {
-	sinkUrl := os.Getenv("sink-uri")
-	fmt.Println(sinkUrl)
-	if len(sinkUrl) <= 0 {
-		panic("sink-uri is empty: " + sinkUrl)
-	}
-	u := &url2.URL{}
-	u, err := u.Parse(sinkUrl)
-	if err != nil {
-		panic(err)
-	}
-	c := &pulsarConfig.PulsarConfig{}
-	err = c.Apply(u)
-	if err != nil {
-		panic(err)
-	}
-	return c
-}
-
-func TestNewPulsarProducer(t *testing.T) {
-	config := newPulsarConfig()
-	client, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL:            config.URL,
-		Authentication: pulsar.NewAuthenticationToken(config.AuthenticationToken),
-	})
-	if err != nil {
-		t.Errorf("new client fail %+v", err)
-		return
-	}
-
-	ctx, fc := context.WithTimeout(context.Background(), time.Second*5)
-
-	type args struct {
-		ctx          context.Context
-		client       pulsar.Client
-		pulsarConfig *pulsarConfig.PulsarConfig
-		errCh        chan error
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    DDLProducer
-		wantErr bool
-	}{
-		{
-			name: "New",
-			args: args{
-				ctx:          ctx,
-				client:       client,
-				pulsarConfig: config,
-				errCh:        make(chan error),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			producer, err := NewPulsarProducer(tt.args.ctx, tt.args.pulsarConfig, tt.args.client)
-			if err != nil {
-				t.Errorf("NewPulsarDMLProducer() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			defer producer.Close()
-
-			select {
-			case e := <-tt.args.errCh:
-				t.Logf("errChan %+v", e)
-			case <-ctx.Done():
-				fc()
-				t.Logf("Done")
-			}
-		})
-	}
-}
-
-func Test_pulsarProducers_SyncSendMessage(t *testing.T) {
-
-	config := newPulsarConfig()
-	client, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL:            config.URL,
-		Authentication: pulsar.NewAuthenticationToken(config.AuthenticationToken),
-	})
-	if err != nil {
-		t.Errorf("new client fail %+v", err)
-		return
-	}
-
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*5)
+// TestPulsarSyncSendMessage is a integration test for pulsar producer
+func TestPulsarSyncSendMessage(t *testing.T) {
+	leakutil.VerifyNone(t)
 
 	type args struct {
 		ctx          context.Context
 		topic        string
 		partition    int32
 		message      *common.Message
-		client       pulsar.Client
-		pulsarConfig *pulsarConfig.PulsarConfig
+		changefeedID model.ChangeFeedID
+		pulsarConfig *pulsarConfig.Config
 		errCh        chan error
 	}
 	tests := []struct {
@@ -120,107 +43,81 @@ func Test_pulsarProducers_SyncSendMessage(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "New pulsar client and AsyncSendMessage",
+			name: "test SyncSendMessage",
 			args: args{
-				ctx:       ctx,
-				topic:     "test",
-				partition: 1,
+				ctx:          context.Background(),
+				topic:        "test",
+				partition:    1,
+				changefeedID: model.ChangeFeedID{ID: "test", Namespace: "test_namespace"},
 				message: &common.Message{
-					Key:   []byte("key"),
-					Value: []byte("this value for test input data"),
-					Callback: func() {
-						fmt.Println("callback: message send success!")
-					},
+					Value:        []byte("this value for test input data"),
+					PartitionKey: str2Pointer("test_key"),
 				},
-				client:       client,
-				pulsarConfig: config,
-				errCh:        make(chan error),
+				errCh: make(chan error),
 			},
 		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p, err := NewPulsarProducer(tt.args.ctx, tt.args.pulsarConfig, tt.args.client)
-			if err != nil {
-				t.Errorf("NewPulsarDMLProducer() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			//defer p.Close()
-			if err := p.SyncSendMessage(tt.args.ctx, tt.args.topic, tt.args.partition, tt.args.message); err != nil {
-				t.Errorf("AsyncSendMessage() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			time.Sleep(time.Second * 1)
-			p.Close()
-			client.Close()
-		})
-	}
+		p, err := NewMockPulsarProducer(tt.args.ctx, tt.args.changefeedID,
+			tt.args.pulsarConfig, nil)
 
+		require.NoError(t, err)
+
+		err = p.SyncSendMessage(tt.args.ctx, tt.args.topic,
+			tt.args.partition, tt.args.message)
+		require.NoError(t, err)
+		require.Len(t, p.GetEvents(tt.args.topic), 1)
+
+		p.Close()
+
+	}
 }
 
-func TestDDLIncreaseMetric(t *testing.T) {
-	rand.Seed(time.Now().UnixNano())
-	index := 0
-	m := &common.Message{
-		Type: model.MessageTypeDDL,
-	}
+// TestPulsarSyncBroadcastMessage is a integration test for pulsar producer
+func TestPulsarSyncBroadcastMessage(t *testing.T) {
+	// leakutil.VerifyNone(t)
 
-	for {
-		x := rand.Int31() % 8
-		time.Sleep(time.Second * time.Duration(x))
-		if index%3 == 1 {
-			pulsarMetric.IncPublishedDDLEventCountMetricSuccess("testtopic",
-				"test", m)
-		}
-		pulsarMetric.IncPublishedDDLEventCountMetric("testtopic",
-			"test", m)
-
-		pulsarMetric.IncPublishedDDLEventCountMetric("testtopic",
-			"test", m)
-
-		pulsarMetric.IncPublishedDDLEventCountMetric("noTable",
-			"test", m)
-
-		pulsarMetric.IncPublishedDDLEventCountMetric("noSchema",
-			"test", m)
-
-		index++
-	}
-
-}
-
-func Test_pulsarProducers_closeProducersMapByTopic(t *testing.T) {
-	type fields struct {
-		client           pulsar.Client
-		pConfig          *pulsarConfig.PulsarConfig
-		defaultTopicName string
-		producers        map[string]pulsar.Producer
-		producersMutex   sync.RWMutex
-		changefeedID     model.ChangeFeedID
-	}
 	type args struct {
-		topicName string
+		ctx          context.Context
+		topic        string
+		partition    int32
+		message      *common.Message
+		changefeedID model.ChangeFeedID
+		pulsarConfig *pulsarConfig.Config
+		errCh        chan error
 	}
 	tests := []struct {
 		name    string
-		fields  fields
 		args    args
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{
+			name: "test SyncBroadcastMessage",
+			args: args{
+				ctx:          context.Background(),
+				topic:        "test",
+				partition:    1,
+				changefeedID: model.ChangeFeedID{ID: "test", Namespace: "test_namespace"},
+				message: &common.Message{
+					Value:        []byte("this value for test input data"),
+					PartitionKey: str2Pointer("test_key"),
+				},
+				errCh: make(chan error),
+			},
+		},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p := &pulsarProducers{
-				client:           tt.fields.client,
-				pConfig:          tt.fields.pConfig,
-				defaultTopicName: tt.fields.defaultTopicName,
-				producers:        tt.fields.producers,
-				producersMutex:   tt.fields.producersMutex,
-				id:               tt.fields.changefeedID,
-			}
-			if err := p.closeProducersMapByTopic(tt.args.topicName); (err != nil) != tt.wantErr {
-				t.Errorf("closeProducersMapByTopic() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+		p, err := NewMockPulsarProducer(tt.args.ctx, tt.args.changefeedID,
+			tt.args.pulsarConfig, nil)
+
+		require.NoError(t, err)
+
+		err = p.SyncSendMessage(tt.args.ctx, tt.args.topic,
+			tt.args.partition, tt.args.message)
+		require.NoError(t, err)
+		require.Len(t, p.GetEvents(tt.args.topic), 1)
+
+		p.Close()
+
 	}
 }

@@ -1,36 +1,50 @@
+// Copyright 2023 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package mq
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"time"
 
-	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
-	"github.com/pingcap/tiflow/cdc/sink/mq/dispatcher"
-	"github.com/pingcap/tiflow/cdc/sink/mq/manager"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
+	// pulsarMetric "github.com/pingcap/tiflow/cdc/sink/metrics/mq/pulsar"
 	"github.com/pingcap/tiflow/cdc/sink/util"
-	pulsarMetric "github.com/pingcap/tiflow/cdc/sinkv/metrics/mq/pulsar"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
+	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 // NewPulsarDDLSink will verify the config and create a Pulsar DDL Sink.
 func NewPulsarDDLSink(
 	ctx context.Context,
+	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
+	pulsarTopicManagerCreator manager.PulsarTopicManager,
+	clientCreator pulsarConfig.FactoryCreator,
 	producerCreator ddlproducer.PulsarFactory,
-) (_ *ddlSink, err error) {
-
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+) (_ *DDLSink, err error) {
+	// changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting pulsar DDL producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
@@ -40,7 +54,7 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	protocol, err := util.GetProtocol(replicaConfig.Sink.Protocol)
+	protocol, err := util.GetProtocol(tiflowutil.GetOrZero(replicaConfig.Sink.Protocol))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -52,14 +66,14 @@ func NewPulsarDDLSink(
 
 	log.Info("Try to create a DDL sink producer", zap.Any("pulsarConfig", pConfig))
 
-	client, err := createPulsarClient(pConfig, changefeedID)
+	start := time.Now()
+	client, err := clientCreator(pConfig, changefeedID)
 	if err != nil {
 		log.Error("DDL sink producer client create fail", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrPulsarNewClient, err)
 	}
 
-	start := time.Now()
-	p, err := producerCreator(ctx, pConfig, client)
+	p, err := producerCreator(ctx, changefeedID, pConfig, client)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
@@ -71,72 +85,28 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
-		pConfig.MaxMessageBytes)
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, pConfig.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	topicManager, err := manager.NewPulsarTopicManager(pConfig, client)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+	}
+
+	topicManager, err := pulsarTopicManagerCreator(pConfig, client)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	s, err := newDDLSink(ctx, p, topicManager, eventRouter, encoderConfig)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	// s, err := newDDLSink(ctx, changefeedID, p, topicManager, eventRouter, encoderConfig)
+	s := newDDLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderBuilder, protocol)
 
 	return s, nil
 }
 
-func createPulsarClient(config *pulsarConfig.PulsarConfig, changefeedID model.ChangeFeedID) (pulsar.Client, error) {
-
-	op := pulsar.ClientOptions{
-		URL:               config.URL,
-		MetricsRegisterer: pulsarMetric.GetMetricRegistry(),
-		CustomMetricsLabels: map[string]string{
-			"changefeed": changefeedID.ID,
-			"namespace":  changefeedID.Namespace,
-		},
-	}
-
-	if len(config.AuthenticationToken) > 0 {
-		op.Authentication = pulsar.NewAuthenticationToken(config.AuthenticationToken)
-	} else if len(config.TokenFromFile) > 0 {
-		op.Authentication = pulsar.NewAuthenticationTokenFromFile(config.TokenFromFile)
-	} else if len(config.BasicUserName) > 0 && len(config.BasicPassword) > 0 {
-		authentication, err := pulsar.NewAuthenticationBasic(config.BasicUserName, config.BasicPassword)
-		if err != nil {
-			return nil, err
-		}
-		op.Authentication = authentication
-	}
-
-	if config.ConnectionTimeout > 0 {
-		op.ConnectionTimeout = config.ConnectionTimeout
-	}
-	if config.OperationTimeout > 0 {
-		op.OperationTimeout = config.OperationTimeout
-	}
-
-	pulsarClient, err := pulsar.NewClient(op)
-	if err != nil {
-		log.L().Error("Cannot connect to pulsar", zap.Error(err))
-		return nil, err
-	}
-	return pulsarClient, nil
-}
-
-func setupAuthentication(config *pulsarConfig.PulsarConfig) (pulsar.Authentication, error) {
-	if len(config.AuthenticationToken) > 0 {
-		return pulsar.NewAuthenticationToken(config.AuthenticationToken)
-	} else if len(config.TokenFromFile) > 0 {
-		return pulsar.NewAuthenticationTokenFromFile(config.TokenFromFile)
-	} else if len(config.BasicUserName) > 0 && len(config.BasicPassword) > 0 {
-		return pulsar.NewAuthenticationBasic(config.BasicUserName, config.BasicPassword)
-	} else if len(config.OAuth2) > 0 {
-		return pulsar.NewAuthenticationBasic(config.BasicUserName, config.BasicPassword)
-	}
-	return nil, fmt.Errorf("no authentication method found")
+// str2Pointer returns the pointer of the string.
+func str2Pointer(str string) *string {
+	return &str
 }

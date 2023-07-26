@@ -1,29 +1,40 @@
+// Copyright 2023 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package ddlproducer
 
 import (
 	"context"
 	"encoding/json"
-	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/contextutil"
-	"github.com/pingcap/tiflow/cdc/model"
-	pulsarMetric "github.com/pingcap/tiflow/cdc/sinkv2/metrics/mq/pulsar"
-	"github.com/pingcap/tiflow/pkg/config"
-	"go.uber.org/zap"
-	"strings"
 	"sync"
-	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
+	// pulsarMetric "github.com/pingcap/tiflow/cdc/sink/metrics/mq/pulsar"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
+	"go.uber.org/zap"
 )
 
 // Assert DDLEventSink implementation
 var _ DDLProducer = (*pulsarProducers)(nil)
 
+// pulsarProducers is a producer for pulsar
 type pulsarProducers struct {
 	client           pulsar.Client
-	pConfig          *pulsarConfig.PulsarConfig
+	pConfig          *pulsarConfig.Config
 	defaultTopicName string
 	// support multiple topics
 	producers      map[string]pulsar.Producer
@@ -33,7 +44,8 @@ type pulsarProducers struct {
 
 // SyncBroadcastMessage pulsar consume all partitions
 func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string,
-	totalPartitionsNum int32, message *common.Message) error {
+	totalPartitionsNum int32, message *common.Message,
+) error {
 	// call SyncSendMessage
 	return p.SyncSendMessage(ctx, topic, totalPartitionsNum, message)
 }
@@ -41,28 +53,29 @@ func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string
 // SyncSendMessage sends a message
 // partitionNum is not used,pulsar consume all partitions
 func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
-	partitionNum int32, message *common.Message) error {
+	partitionNum int32, message *common.Message,
+) error {
 	p.wrapperSchemaAndTopic(message)
 
-	pulsarMetric.IncPublishedDDLEventCountMetric(topic, p.id.ID, message)
+	// pulsarMetric.IncPublishedDDLEventCountMetric(topic, p.id.ID, message)
 	producer, err := p.GetProducerByTopic(topic)
 	if err != nil {
 		log.L().Error("ddl SyncSendMessage GetProducerByTopic fail", zap.Error(err))
-		pulsarMetric.IncPublishedDDLEventCountMetricFail(topic, p.id.ID, message)
+		// pulsarMetric.IncPublishedDDLEventCountMetricFail(topic, p.id.ID, message)
 		return err
 	}
 
 	data := &pulsar.ProducerMessage{
 		Payload: message.Value,
-		Key:     p.pConfig.MessageKey,
+		Key:     message.GetPartitionKey(),
 	}
 	mID, err := producer.Send(ctx, data)
 	if err != nil {
 		log.L().Error("ddl producer send fail", zap.Error(err))
-		pulsarMetric.IncPublishedDDLEventCountMetricFail(producer.Topic(), p.id.ID, message)
+		//	pulsarMetric.IncPublishedDDLEventCountMetricFail(producer.Topic(), p.id.ID, message)
 		return err
 	}
-	pulsarMetric.IncPublishedDDLEventCountMetricSuccess(producer.Topic(), p.id.ID, message)
+	// pulsarMetric.IncPublishedDDLEventCountMetricSuccess(producer.Topic(), p.id.ID, message)
 
 	log.L().Debug("pulsarProducers SyncSendMessage success",
 		zap.Any("mID", mID), zap.String("topic", topic))
@@ -73,11 +86,10 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 // NewPulsarProducer creates a pulsar producer
 func NewPulsarProducer(
 	ctx context.Context,
-	pConfig *pulsarConfig.PulsarConfig,
+	changefeedID model.ChangeFeedID,
+	pConfig *pulsarConfig.Config,
 	client pulsar.Client,
 ) (DDLProducer, error) {
-
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting pulsar DDL producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
@@ -102,11 +114,10 @@ func NewPulsarProducer(
 // newProducer creates a pulsar producer
 // One topic is used by one producer
 func newProducer(
-	pConfig *pulsarConfig.PulsarConfig,
+	pConfig *pulsarConfig.Config,
 	client pulsar.Client,
 	topicName string,
 ) (pulsar.Producer, error) {
-
 	po := pulsar.ProducerOptions{
 		Topic: topicName,
 	}
@@ -116,30 +127,12 @@ func newProducer(
 	if pConfig.BatchingMaxPublishDelay > 0 {
 		po.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay
 	}
-	if len(pConfig.Compression) > 0 {
-		switch strings.ToLower(pConfig.Compression) {
-		case "lz4":
-			po.CompressionType = pulsar.LZ4
-		case "zlib":
-			po.CompressionType = pulsar.ZLib
-		case "zstd":
-			po.CompressionType = pulsar.ZSTD
-		}
+	if pConfig.CompressionType > 0 {
+		po.CompressionType = pConfig.CompressionType
+		po.CompressionLevel = pulsar.Default
 	}
-
 	if pConfig.SendTimeout > 0 {
-		po.SendTimeout = time.Millisecond * time.Duration(pConfig.SendTimeout)
-	}
-
-	switch pConfig.ProducerMode {
-	case pulsarConfig.ProducerModeSingle:
-		// set default message key '0'
-		// if not set default value, will be random sent to multiple partitions
-		if len(pConfig.MessageKey) == 0 {
-			pConfig.MessageKey = "0"
-		}
-	case pulsarConfig.ProducerModeBatch, "":
-		// default ,message key is empty
+		po.SendTimeout = pConfig.SendTimeout
 	}
 
 	producer, err := client.CreateProducer(po)
@@ -147,14 +140,14 @@ func newProducer(
 		return nil, err
 	}
 
-	log.L().Info("create pulsar producer successfully",
-		zap.String("topicName", topicName))
+	log.L().Info("create pulsar producer success",
+		zap.String("topic:", topicName))
 
 	return producer, nil
 }
 
+// GetProducerByTopic get producer by topicName
 func (p *pulsarProducers) GetProducerByTopic(topicName string) (producer pulsar.Producer, err error) {
-
 	p.producersMutex.RLock()
 	producer, ok := p.producers[topicName]
 	p.producersMutex.RUnlock()
@@ -179,7 +172,6 @@ func (p *pulsarProducers) GetProducerByTopic(topicName string) (producer pulsar.
 
 // Close close all producers
 func (p *pulsarProducers) Close() {
-
 	for topic, producer := range p.producers {
 		producer.Close()
 		p.closeProducersMapByTopic(topic)
@@ -206,22 +198,20 @@ func (p *pulsarProducers) Flush(ctx context.Context) error {
 	case <-done:
 		return nil
 	}
-
 }
 
-func (p *pulsarProducers) closeProducersMapByTopic(topicName string) error {
-
+// closeProducersMapByTopic close producer by topicName
+func (p *pulsarProducers) closeProducersMapByTopic(topicName string) {
 	p.producersMutex.Lock()
 	defer p.producersMutex.Unlock()
-	producer, _ := p.producers[topicName]
-	if producer == nil {
-		return nil
+	_, ok := p.producers[topicName]
+	if ok {
+		delete(p.producers, topicName)
+		return
 	}
-	p.producers[topicName] = nil
-
-	return nil
 }
 
+// wrapperSchemaAndTopic wrapper schema and topic
 func (p *pulsarProducers) wrapperSchemaAndTopic(m *common.Message) {
 	if m.Schema == nil {
 		if m.Protocol == config.ProtocolMaxwell {
@@ -244,11 +234,13 @@ func (p *pulsarProducers) wrapperSchemaAndTopic(m *common.Message) {
 	}
 }
 
+// maxwellMessage is the message format of maxwell
 type maxwellMessage struct {
 	Database string `json:"database"`
 	Table    string `json:"table"`
 }
 
+// str2Pointer returns the pointer of the string.
 func str2Pointer(str string) *string {
 	return &str
 }
