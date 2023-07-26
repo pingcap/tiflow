@@ -349,40 +349,6 @@ func (a *BatchEncoder) nativeValueWithExtension(
 	return native
 }
 
-func (a *BatchEncoder) encodeExtension(
-	ctx context.Context, topicName string, e *model.RowChangedEvent, handleKeyOnly bool, claimCheckLocation string,
-) ([]byte, error) {
-	input := &avroEncodeInput{
-		columns:  e.Columns,
-		colInfos: e.ColInfos,
-	}
-	avroCodec, schemaID, err := a.getValueSchemaCodec(ctx, topicName, e.Table, e.TableInfo.Version, input)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
-	}
-
-	extension := make(map[string]interface{})
-	extension = a.nativeValueWithExtension(extension, e, handleKeyOnly, claimCheckLocation)
-	bin, err := avroCodec.BinaryFromNative(nil, extension)
-	if err != nil {
-		log.Error("AvroEventBatchEncoder: converting to Avro binary failed", zap.Error(err))
-		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
-	}
-
-	result := &avroEncodeResult{
-		data:     bin,
-		schemaID: schemaID,
-	}
-
-	data, err := result.toEnvelope()
-	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-
-	return data, nil
-}
-
 type avroSchemaTop struct {
 	Tp        string                   `json:"type"`
 	Name      string                   `json:"name"`
