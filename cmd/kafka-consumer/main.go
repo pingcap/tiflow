@@ -57,17 +57,25 @@ import (
 	"go.uber.org/zap"
 )
 
-// Sarama configuration options
-var (
-	kafkaAddrs           []string
-	kafkaTopic           string
-	kafkaPartitionNum    int32
-	kafkaGroupID         = fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String())
-	kafkaVersion         = "2.4.0"
-	kafkaMaxMessageBytes = math.MaxInt64
-	kafkaMaxBatchSize    = math.MaxInt64
+func newConsumerOption() *consumerOption {
+	return &consumerOption{
+		groupID: fmt.Sprintf("ticdc_kafka_consumer_%s", uuid.New().String()),
+		version: "2.4.0",
 
-	downstreamURIStr string
+		maxMessageBytes: math.MaxInt64,
+		maxBatchSize:    math.MaxInt64,
+	}
+}
+
+type consumerOption struct {
+	address      []string
+	version      string
+	topic        string
+	partitionNum int32
+	groupID      string
+
+	maxMessageBytes int
+	maxBatchSize    int
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
@@ -81,38 +89,147 @@ var (
 	timezone      string
 	ca, cert, key string
 
+	downstreamURI string
+
 	// avro schema registry uri should be set if the encoding protocol is avro
 	schemaRegistryURI string
-)
+}
 
-func init() {
+// Adjust the consumer option by the upstream uri passed in parameters.
+func (o *consumerOption) Adjust(upstreamURI *url.URL) {
+	s := upstreamURI.Query().Get("version")
+	if s != "" {
+		o.version = s
+	}
+
+	s = upstreamURI.Query().Get("consumer-group-id")
+	if s != "" {
+		o.groupID = s
+	}
+
+	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
+		return r == '/'
+	})
+
+	o.address = strings.Split(upstreamURI.Host, ",")
+
+	saramaConfig := sarama.NewConfig()
+	s = upstreamURI.Query().Get("partition-num")
+	if s == "" {
+		partition, err := getPartitionNum(o.address, o.topic, saramaConfig)
+		if err != nil {
+			log.Panic("can not get partition number", zap.String("topic", o.topic), zap.Error(err))
+		}
+		o.partitionNum = partition
+	} else {
+		c, err := strconv.ParseInt(s, 10, 32)
+		if err != nil {
+			log.Panic("invalid partition-num of upstream-uri")
+		}
+		o.partitionNum = int32(c)
+	}
+
+	s = upstreamURI.Query().Get("max-message-bytes")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Panic("invalid max-message-bytes of upstream-uri")
+		}
+		o.maxMessageBytes = c
+	}
+
+	s = upstreamURI.Query().Get("max-batch-size")
+	if s != "" {
+		c, err := strconv.Atoi(s)
+		if err != nil {
+			log.Panic("invalid max-batch-size of upstream-uri")
+		}
+		o.maxBatchSize = c
+	}
+
+	s = upstreamURI.Query().Get("protocol")
+	if s != "" {
+		protocol, err := config.ParseSinkProtocolFromString(s)
+		if err != nil {
+			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
+		}
+		o.protocol = protocol
+	}
+
+	s = upstreamURI.Query().Get("enable-tidb-extension")
+	if s != "" {
+		enableTiDBExtension, err := strconv.ParseBool(s)
+		if err != nil {
+			log.Panic("invalid enable-tidb-extension of upstream-uri")
+		}
+		if enableTiDBExtension {
+			if o.protocol != config.ProtocolCanalJSON && o.protocol != config.ProtocolAvro {
+				log.Panic("enable-tidb-extension only work with canal-json / avro")
+			}
+		}
+		o.enableRowChecksum = enableTiDBExtension
+	}
+
+	s = upstreamURI.Query().Get("enable-row-checksum")
+	if s != "" {
+		enableRowChecksum, err := strconv.ParseBool(s)
+		if err != nil {
+			log.Panic("invalid enable-row-checksum of upstream-uri")
+		}
+		if enableRowChecksum {
+			if o.protocol != config.ProtocolAvro {
+				log.Panic("enable-row-checksum only work with avro")
+			}
+		}
+		o.enableRowChecksum = enableRowChecksum
+	}
+	log.Info("consumer option adjusted",
+		zap.String("address", strings.Join(o.address, ",")),
+		zap.String("version", o.version),
+		zap.String("topic", o.topic),
+		zap.Int32("partitionNum", o.partitionNum),
+		zap.String("groupID", o.groupID),
+		zap.Int("maxMessageBytes", o.maxMessageBytes),
+		zap.Int("maxBatchSize", o.maxBatchSize),
+		zap.Any("protocol", o.protocol),
+		zap.Bool("enableTiDBExtension", o.enableTiDBExtension),
+		zap.Bool("enableRowChecksum", o.enableRowChecksum))
+}
+
+func main() {
 	version.LogVersionInfo("kafka consumer")
+
+	consumerOption := newConsumerOption()
+
 	var (
 		upstreamURIStr string
 		configFile     string
 	)
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
-	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
-	flag.StringVar(&schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
-	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
-	flag.StringVar(&logLevel, "log-level", "info", "log file path")
-	flag.StringVar(&timezone, "tz", "System", "Specify time zone of Kafka consumer")
-	flag.StringVar(&ca, "ca", "", "CA certificate path for Kafka SSL connection")
-	flag.StringVar(&cert, "cert", "", "Certificate path for Kafka SSL connection")
-	flag.StringVar(&key, "key", "", "Private key path for Kafka SSL connection")
+
+	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
+
+	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
+	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
+	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
+	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for Kafka SSL connection")
+	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for Kafka SSL connection")
+	flag.StringVar(&consumerOption.key, "key", "", "Private key path for Kafka SSL connection")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
-		Level: logLevel,
-		File:  logPath,
+		Level: consumerOption.logLevel,
+		File:  consumerOption.logPath,
 	},
 		logutil.WithInitGRPCLogger(),
 		logutil.WithInitSaramaLogger(),
 	)
 	if err != nil {
-		log.Panic("init logger failed", zap.Error(err))
+		log.Error("init logger failed", zap.Error(err))
+		return
 	}
 
 	upstreamURI, err := url.Parse(upstreamURIStr)
@@ -124,93 +241,82 @@ func init() {
 		log.Panic("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`",
 			zap.String("upstreamURI", upstreamURIStr))
 	}
-	s := upstreamURI.Query().Get("version")
-	if s != "" {
-		kafkaVersion = s
-	}
-	s = upstreamURI.Query().Get("consumer-group-id")
-	if s != "" {
-		kafkaGroupID = s
-	}
-	kafkaTopic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
-		return r == '/'
-	})
-	kafkaAddrs = strings.Split(upstreamURI.Host, ",")
 
-	saramaConfig, err := newSaramaConfig()
+	consumerOption.Adjust(upstreamURI)
 	if err != nil {
-		log.Panic("Error creating sarama saramaConfig", zap.Error(err))
+		log.Panic("adjust consumer option failed", zap.Error(err))
 	}
 
-	s = upstreamURI.Query().Get("partition-num")
-	if s == "" {
-		partition, err := getPartitionNum(kafkaAddrs, kafkaTopic, saramaConfig)
-		if err != nil {
-			log.Panic("can not get partition number", zap.String("topic", kafkaTopic), zap.Error(err))
-		}
-		kafkaPartitionNum = partition
-	} else {
-		c, err := strconv.ParseInt(s, 10, 32)
-		if err != nil {
-			log.Panic("invalid partition-num of upstream-uri")
-		}
-		kafkaPartitionNum = int32(c)
+	///**
+	// * Construct a new Sarama configuration.
+	// * The Kafka cluster version has to be defined before the consumer/producer is initialized.
+	// */
+	config, err := newSaramaConfig()
+	if err != nil {
+		log.Panic("Error creating sarama config", zap.Error(err))
 	}
-	log.Info("Setting partitionNum", zap.Int32("partitionNum", kafkaPartitionNum))
-
-	s = upstreamURI.Query().Get("max-message-bytes")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			log.Panic("invalid max-message-bytes of upstream-uri")
-		}
-		kafkaMaxMessageBytes = c
+	err = waitTopicCreated(consumerOption.address, consumerOption.topic, config)
+	if err != nil {
+		log.Panic("wait topic created failed", zap.Error(err))
 	}
-	log.Info("Setting max-message-bytes", zap.Int("max-message-bytes", kafkaMaxMessageBytes))
 
-	s = upstreamURI.Query().Get("max-batch-size")
-	if s != "" {
-		c, err := strconv.Atoi(s)
-		if err != nil {
-			log.Panic("invalid max-batch-size of upstream-uri")
-		}
-		kafkaMaxBatchSize = c
+	ctx, cancel := context.WithCancel(context.Background())
+	consumer, err := NewConsumer(ctx)
+	if err != nil {
+		log.Panic("Error creating consumer", zap.Error(err))
 	}
-	log.Info("Setting max-batch-size", zap.Int("max-batch-size", kafkaMaxBatchSize))
 
-	s = upstreamURI.Query().Get("protocol")
-	if s != "" {
-		if protocol, err = config.ParseSinkProtocolFromString(s); err != nil {
-			log.Panic("invalid protocol", zap.Error(err), zap.String("protocol", s))
-		}
+	client, err := sarama.NewConsumerGroup(kafkaAddrs, kafkaGroupID, config)
+	if err != nil {
+		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
-	log.Info("Setting protocol", zap.Any("protocol", protocol))
 
-	s = upstreamURI.Query().Get("enable-tidb-extension")
-	if s != "" {
-		enableTiDBExtension, err = strconv.ParseBool(s)
-		if err != nil {
-			log.Panic("invalid enable-tidb-extension of upstream-uri")
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			// `Consume` should be called inside an infinite loop, when a
+			// server-side rebalance happens, the consumer session will need to be
+			// recreated to get the new claims
+			if err := client.Consume(ctx, strings.Split(kafkaTopic, ","), consumer); err != nil {
+				log.Panic("Error from consumer", zap.Error(err))
+			}
+			// check if context was cancelled, signaling that the consumer should stop
+			if ctx.Err() != nil {
+				return
+			}
+			consumer.ready = make(chan bool)
 		}
-		if enableTiDBExtension {
-			if protocol != config.ProtocolCanalJSON && protocol != config.ProtocolAvro {
-				log.Panic("enable-tidb-extension only work with canal-json / avro")
+	}()
+
+	go func() {
+		if err := consumer.Run(ctx); err != nil {
+			if err != context.Canceled {
+				log.Panic("Error running consumer", zap.Error(err))
 			}
 		}
-	}
+	}()
 
-	s = upstreamURI.Query().Get("enable-row-checksum")
-	if s != "" {
-		enableRowChecksum, err = strconv.ParseBool(s)
-		if err != nil {
-			log.Panic("invalid enable-row-checksum of upstream-uri")
-		}
-		if enableRowChecksum {
-			if protocol != config.ProtocolAvro {
-				log.Panic("enable-row-checksum only work with avro")
-			}
-		}
+	<-consumer.ready // wait till the consumer has been set up
+	log.Info("TiCDC consumer up and running!...")
+
+	sigterm := make(chan os.Signal, 1)
+	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-ctx.Done():
+		log.Info("terminating: context cancelled")
+	case <-sigterm:
+		log.Info("terminating: via signal")
 	}
+	cancel()
+	wg.Wait()
+	if err = client.Close(); err != nil {
+		log.Panic("Error closing client", zap.Error(err))
+	}
+}
+
+func init() {
 
 	if configFile != "" {
 		replicaConfig = config.GetDefaultReplicaConfig()
@@ -300,81 +406,6 @@ func newSaramaConfig() (*sarama.Config, error) {
 	}
 
 	return config, err
-}
-
-func main() {
-	/**
-	 * Construct a new Sarama configuration.
-	 * The Kafka cluster version has to be defined before the consumer/producer is initialized.
-	 */
-	config, err := newSaramaConfig()
-	if err != nil {
-		log.Panic("Error creating sarama config", zap.Error(err))
-	}
-	err = waitTopicCreated(kafkaAddrs, kafkaTopic, config)
-	if err != nil {
-		log.Panic("wait topic created failed", zap.Error(err))
-	}
-	/**
-	 * Setup a new Sarama consumer group
-	 */
-	log.Info("Starting a new TiCDC consumer",
-		zap.String("GroupID", kafkaGroupID), zap.Any("protocol", protocol))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	consumer, err := NewConsumer(ctx)
-	if err != nil {
-		log.Panic("Error creating consumer", zap.Error(err))
-	}
-
-	client, err := sarama.NewConsumerGroup(kafkaAddrs, kafkaGroupID, config)
-	if err != nil {
-		log.Panic("Error creating consumer group client", zap.Error(err))
-	}
-
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for {
-			// `Consume` should be called inside an infinite loop, when a
-			// server-side rebalance happens, the consumer session will need to be
-			// recreated to get the new claims
-			if err := client.Consume(ctx, strings.Split(kafkaTopic, ","), consumer); err != nil {
-				log.Panic("Error from consumer", zap.Error(err))
-			}
-			// check if context was cancelled, signaling that the consumer should stop
-			if ctx.Err() != nil {
-				return
-			}
-			consumer.ready = make(chan bool)
-		}
-	}()
-
-	go func() {
-		if err := consumer.Run(ctx); err != nil {
-			if err != context.Canceled {
-				log.Panic("Error running consumer", zap.Error(err))
-			}
-		}
-	}()
-
-	<-consumer.ready // wait till the consumer has been set up
-	log.Info("TiCDC consumer up and running!...")
-
-	sigterm := make(chan os.Signal, 1)
-	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
-	select {
-	case <-ctx.Done():
-		log.Info("terminating: context cancelled")
-	case <-sigterm:
-		log.Info("terminating: via signal")
-	}
-	cancel()
-	wg.Wait()
-	if err = client.Close(); err != nil {
-		log.Panic("Error closing client", zap.Error(err))
-	}
 }
 
 // partitionSinks maintained for each partition, it may sync data for multiple tables.
