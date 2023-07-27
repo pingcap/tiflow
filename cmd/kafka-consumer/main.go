@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"math"
@@ -83,6 +84,9 @@ var (
 
 	// avro schema registry uri should be set if the encoding protocol is avro
 	schemaRegistryURI string
+
+	// upstreamTiDBDSN is the dsn of the upstream TiDB cluster
+	upstreamTiDBDSN string
 )
 
 func init() {
@@ -95,6 +99,7 @@ func init() {
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
+	flag.StringVar(&upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
@@ -558,7 +563,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolOpen, config.ProtocolDefault:
 		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig)
 	case config.ProtocolCanalJSON:
-		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig)
+		db, err := openDB(ctx, upstreamTiDBDSN)
+		if err != nil {
+			return err
+		}
+		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, db)
 	case config.ProtocolAvro:
 		keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
 			ctx, schemaRegistryURI, nil)
@@ -894,4 +903,25 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	g.currentTableID++
 	g.tableIDs[key] = g.currentTableID
 	return g.currentTableID
+}
+
+func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Error("open db failed", zap.String("dsn", dsn), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(10 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err = db.PingContext(ctx); err != nil {
+		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	log.Info("open db success", zap.String("dsn", dsn))
+	return db, nil
 }

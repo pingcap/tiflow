@@ -16,8 +16,14 @@ package canal
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"fmt"
+	"strings"
+	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/goccy/go-json"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -36,11 +42,13 @@ type batchDecoder struct {
 	config *common.Config
 
 	storage storage.ExternalStorage
+
+	upstreamTiDB *sql.DB
 }
 
 // NewBatchDecoder return a decoder for canal-json
 func NewBatchDecoder(
-	ctx context.Context, codecConfig *common.Config,
+	ctx context.Context, codecConfig *common.Config, db *sql.DB,
 ) (codec.RowEventDecoder, error) {
 	var (
 		storage storage.ExternalStorage
@@ -53,9 +61,16 @@ func NewBatchDecoder(
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 	}
+
+	if codecConfig.LargeMessageHandle.HandleKeyOnly() && db == nil {
+		return nil, cerror.ErrCodecDecode.
+			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
+	}
+
 	return &batchDecoder{
-		config:  codecConfig,
-		storage: storage,
+		config:       codecConfig,
+		storage:      storage,
+		upstreamTiDB: db,
 	}, nil
 }
 
@@ -106,6 +121,175 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	return b.msg.messageType(), true, nil
 }
 
+func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, claimCheckLocation string) (*model.RowChangedEvent, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	data, err := b.storage.ReadFile(ctx, claimCheckLocation)
+	if err != nil {
+		return nil, err
+	}
+	claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
+	if err != nil {
+		return nil, err
+	}
+
+	message := &canalJSONMessageWithTiDBExtension{}
+	err = json.Unmarshal(claimCheckM.Value, message)
+	if err != nil {
+		return nil, err
+	}
+
+	b.msg = message
+	return b.NextRowChangedEvent()
+}
+
+func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
+	ctx context.Context, message *canalJSONMessageWithTiDBExtension,
+) (*model.RowChangedEvent, error) {
+	var (
+		commitTs  = message.Extensions.CommitTs
+		schema    = message.Schema
+		table     = message.Table
+		eventType = message.EventType
+	)
+	// 1. set snapshot read
+	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
+	conn, err := b.upstreamTiDB.Conn(ctx)
+	if err != nil {
+		log.Error("establish connection to the upstream tidb failed",
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	defer conn.Close()
+
+	_, err = conn.ExecContext(ctx, query)
+	if err != nil {
+		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
+		if ok {
+			// Error 8055 (HY000): snapshot is older than GC safe point
+			if mysqlErr.Number == 8055 {
+				log.Error("set snapshot read failed, since snapshot is older than GC safe point")
+			}
+		}
+
+		log.Error("set snapshot read failed",
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	data := message.Data[0]
+	// 2. query the whole row
+	query = fmt.Sprintf("select * from `%s`.`%s` where ", schema, table)
+	var whereClause string
+	for name, value := range data {
+		if whereClause != "" {
+			whereClause += " and "
+		}
+		whereClause += fmt.Sprintf("`%s` = '%v'", name, value)
+	}
+	query += whereClause
+
+	rows, err := conn.QueryContext(ctx, query)
+	if err != nil {
+		log.Error("query row failed",
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	holder, err := newColumnHolder(rows)
+	if err != nil {
+		log.Error("obtain the columns holder failed",
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+		return nil, err
+	}
+	for rows.Next() {
+		err = rows.Scan(holder.ValuePointers...)
+		if err != nil {
+			log.Error("scan row failed",
+				zap.String("schema", schema), zap.String("table", table),
+				zap.Uint64("commitTs", commitTs), zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+	}
+
+	var (
+		data map[string]interface{}
+		old  map[string]interface{}
+	)
+
+	data = make(map[string]interface{}, holder.length())
+	mysqlType := make(map[string]string, holder.length())
+	javaSQLType := make(map[string]int32, holder.length())
+	for i := 0; i < holder.length(); i++ {
+		value := holder.Values[i]
+		name := holder.Types[i].Name()
+
+		mysqlType[name] = strings.ToLower(holder.Types[i].DatabaseTypeName())
+		data[name] = value
+	}
+
+	pkNames := make([]string, 0, len(data))
+	for name := range data {
+		pkNames = append(pkNames, name)
+	}
+
+	message = &canalJSONMessageWithTiDBExtension{
+		JSONMessage: &JSONMessage{
+			Schema:  schema,
+			Table:   table,
+			PKNames: pkNames,
+
+			EventType: eventType,
+
+			MySQLType: mysqlType,
+			SQLType:   javaSQLType,
+
+			Data: []map[string]interface{}{data},
+			Old:  nil,
+		},
+		Extensions: &tidbExtension{
+			CommitTs: commitTs,
+		},
+	}
+
+	b.msg = message
+	return b.NextRowChangedEvent()
+}
+
+type ColumnsHolder struct {
+	Values        []interface{}
+	ValuePointers []interface{}
+	Types         []*sql.ColumnType
+}
+
+func newColumnHolder(rows *sql.Rows) (*ColumnsHolder, error) {
+	columnTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	values := make([]interface{}, len(columnTypes))
+	valuePointers := make([]interface{}, len(columnTypes))
+	for i := range values {
+		valuePointers[i] = &values[i]
+	}
+
+	return &ColumnsHolder{
+		Values:        values,
+		ValuePointers: valuePointers,
+		Types:         columnTypes,
+	}, nil
+}
+
+func (h *ColumnsHolder) length() int {
+	return len(h.Values)
+}
+
 // NextRowChangedEvent implements the RowEventDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
@@ -115,25 +299,14 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 
 	message, withExtension := b.msg.(*canalJSONMessageWithTiDBExtension)
-	if withExtension && message.Extensions.ClaimCheckLocation != "" {
-		data, err := b.storage.ReadFile(context.Background(), message.Extensions.ClaimCheckLocation)
-		if err != nil {
-			return nil, err
+	if withExtension {
+		ctx := context.Background()
+		if message.Extensions.OnlyHandleKey {
+			return b.assembleHandleKeyOnlyRowChangedEvent(ctx, message)
 		}
-		claimCheckM, err := common.UnmarshalClaimCheckMessage(data)
-		if err != nil {
-			return nil, err
+		if message.Extensions.ClaimCheckLocation != "" {
+			return b.assembleClaimCheckRowChangedEvent(ctx, message.Extensions.ClaimCheckLocation)
 		}
-
-		message = &canalJSONMessageWithTiDBExtension{}
-		err = json.Unmarshal(claimCheckM.Value, message)
-		if err != nil {
-			return nil, err
-		}
-		b.msg = message
-
-		return b.NextRowChangedEvent()
-
 	}
 
 	result, err := canalJSONMessage2RowChange(b.msg)

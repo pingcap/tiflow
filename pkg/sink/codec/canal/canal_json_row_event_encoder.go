@@ -381,12 +381,12 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	m.IncRowsCount()
 
 	if m.Length() > c.config.MaxMessageBytes {
+		log.Warn("Single message is too large for canal-json",
+			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+			zap.Int("length", m.Length()),
+			zap.Any("table", e.Table))
 		// for single message that is longer than max-message-bytes, do not send it.
 		if c.config.LargeMessageHandle.Disabled() {
-			log.Warn("Single message is too large for canal-json",
-				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
-				zap.Int("length", m.Length()),
-				zap.Any("table", e.Table))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
