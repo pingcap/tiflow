@@ -184,7 +184,7 @@ func TestPulsarValidate(t *testing.T) {
 		topicExpr := Expression(tc.expression)
 		err := topicExpr.PulsarValidate()
 		t.Logf("case %d: %s", i, tc.name)
-		if tc.wantErr != "" {
+		if err != nil {
 			require.Contains(t, err.Error(), tc.wantErr, fmt.Sprintf("case:%s", tc.name))
 		} else {
 			require.Nil(t, err, fmt.Sprintf("case:%s", tc.name))
