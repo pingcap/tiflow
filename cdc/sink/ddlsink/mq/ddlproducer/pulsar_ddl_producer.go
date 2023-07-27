@@ -47,6 +47,7 @@ func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string
 	totalPartitionsNum int32, message *common.Message,
 ) error {
 	// call SyncSendMessage
+	// pulsar consumer all partitions
 	return p.SyncSendMessage(ctx, topic, totalPartitionsNum, message)
 }
 
