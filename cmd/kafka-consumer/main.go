@@ -560,12 +560,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolCanalJSON:
 		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig)
 	case config.ProtocolAvro:
-		keySchemaM, valueSchemaM, err := avro.NewKeyAndValueSchemaManagers(
-			ctx, schemaRegistryURI, nil)
+		schemaM, err := avro.NewAvroSchemaManager(ctx, schemaRegistryURI, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		decoder = avro.NewDecoder(c.codecConfig, keySchemaM, valueSchemaM, kafkaTopic, c.tz)
+		decoder = avro.NewDecoder(c.codecConfig, schemaM, kafkaTopic, c.tz)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}

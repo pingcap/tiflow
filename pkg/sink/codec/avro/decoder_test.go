@@ -20,9 +20,6 @@ import (
 	"time"
 
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -31,6 +28,7 @@ import (
 
 func TestDecodeEvent(t *testing.T) {
 	config := &common.Config{
+		MaxMessageBytes:                1024 * 1024,
 		EnableTiDBExtension:            true,
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
@@ -44,70 +42,16 @@ func TestDecodeEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, encoder)
 
-	cols := make([]*model.Column, 0)
-	colInfos := make([]rowcodec.ColInfo, 0)
-
-	cols = append(
-		cols,
-		&model.Column{
-			Name:  "id",
-			Value: int64(1),
-			Type:  mysql.TypeLong,
-			Flag:  model.HandleKeyFlag,
-		},
-	)
-	colInfos = append(
-		colInfos,
-		rowcodec.ColInfo{
-			ID:            1000,
-			IsPKHandle:    true,
-			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeLong),
-		},
-	)
-
-	for _, v := range avroTestColumns {
-		cols = append(cols, &v.col)
-		colInfos = append(colInfos, v.colInfo)
-
-		colNew := v.col
-		colNew.Name = colNew.Name + "nullable"
-		colNew.Value = nil
-		colNew.Flag.SetIsNullable()
-
-		colInfoNew := v.colInfo
-		colInfoNew.ID += int64(len(avroTestColumns))
-
-		cols = append(cols, &colNew)
-		colInfos = append(colInfos, colInfoNew)
-	}
-
+	event := newLargeEvent()
 	input := &avroEncodeInput{
-		cols,
-		colInfos,
+		columns:  event.Columns,
+		colInfos: event.ColInfos,
 	}
 
 	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(input.columns), func(i, j int) {
 		input.columns[i], input.columns[j] = input.columns[j], input.columns[i]
 		input.colInfos[i], input.colInfos[j] = input.colInfos[j], input.colInfos[i]
 	})
-
-	// insert event
-	event := &model.RowChangedEvent{
-		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "avro",
-		},
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "test",
-				Table:  "avro",
-			},
-		},
-		Columns:  input.columns,
-		ColInfos: input.colInfos,
-	}
 
 	topic := "avro-test-topic"
 	err = encoder.AppendRowChangedEvent(ctx, topic, event, func() {})
@@ -117,13 +61,12 @@ func TestDecodeEvent(t *testing.T) {
 	require.Len(t, messages, 1)
 	message := messages[0]
 
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(
-		ctx, "http://127.0.0.1:8081", nil)
+	schemaM, err := NewAvroSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(config, keySchemaM, valueSchemaM, topic, tz)
+	decoder := NewDecoder(config, schemaM, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -171,7 +114,7 @@ func TestDecodeDDLEvent(t *testing.T) {
 	topic := "test-topic"
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(config, nil, nil, topic, tz)
+	decoder := NewDecoder(config, nil, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
@@ -214,7 +157,7 @@ func TestDecodeResolvedEvent(t *testing.T) {
 	topic := "test-topic"
 	tz, err := util.GetLocalTimezone()
 	require.NoError(t, err)
-	decoder := NewDecoder(config, nil, nil, topic, tz)
+	decoder := NewDecoder(config, nil, topic, tz)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 
