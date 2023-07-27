@@ -229,7 +229,8 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		value := holder.Values[i]
 		name := holder.Types[i].Name()
 
-		mysqlType[name] = strings.ToLower(holder.Types[i].DatabaseTypeName())
+		t := holder.Types[i]
+		mysqlType[name] = strings.ToLower(t.DatabaseTypeName())
 		data[name] = value
 	}
 

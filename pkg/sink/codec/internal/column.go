@@ -103,7 +103,7 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 }
 
 // ToCanalJSONFormatColumn converts from a codec column to a row changed column in canal-json format.
-func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) *model.Column {
+func (c *Column) ToCanalJSONFormatColumn(name string) *model.Column {
 	col := new(model.Column)
 	col.Type = c.Type
 	col.Flag = c.Flag
@@ -118,7 +118,7 @@ func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) *mod
 		log.Panic("canal-json encoded message should have type in `string`")
 	}
 
-	if javaType == JavaSQLTypeBIT {
+	if c.Type == mysql.TypeBit {
 		val, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
 			log.Panic("invalid column value for bit", zap.Any("col", c), zap.Error(err))
@@ -127,7 +127,8 @@ func (c *Column) ToCanalJSONFormatColumn(name string, javaType JavaSQLType) *mod
 		return col
 	}
 
-	if javaType != JavaSQLTypeBLOB {
+	if c.Type != mysql.TypeBlob && c.Type != mysql.TypeTinyBlob &&
+		c.Type != mysql.TypeMediumBlob && c.Type != mysql.TypeLongBlob {
 		col.Value = value
 		return col
 	}
