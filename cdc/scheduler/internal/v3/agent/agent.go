@@ -293,12 +293,12 @@ const (
 )
 
 type dispatchTableTask struct {
-	TableID   model.TableID
-	StartTs   model.Ts
-	IsRemove  bool
-	IsPrepare bool
-	Epoch     schedulepb.ProcessorEpoch
-	status    dispatchTableTaskStatus
+	TableID    model.TableID
+	Checkpoint tablepb.Checkpoint
+	IsRemove   bool
+	IsPrepare  bool
+	Epoch      schedulepb.ProcessorEpoch
+	status     dispatchTableTaskStatus
 }
 
 func (a *agent) handleMessageDispatchTableRequest(
@@ -326,12 +326,12 @@ func (a *agent) handleMessageDispatchTableRequest(
 	case *schedulepb.DispatchTableRequest_AddTable:
 		tableID := req.AddTable.GetTableID()
 		task = &dispatchTableTask{
-			TableID:   tableID,
-			StartTs:   req.AddTable.GetCheckpoint().CheckpointTs,
-			IsRemove:  false,
-			IsPrepare: req.AddTable.GetIsSecondary(),
-			Epoch:     epoch,
-			status:    dispatchTableTaskReceived,
+			TableID:    tableID,
+			Checkpoint: req.AddTable.GetCheckpoint(),
+			IsRemove:   false,
+			IsPrepare:  req.AddTable.GetIsSecondary(),
+			Epoch:      epoch,
+			status:     dispatchTableTaskReceived,
 		}
 		table = a.tableM.addTable(tableID)
 	case *schedulepb.DispatchTableRequest_RemoveTable:
