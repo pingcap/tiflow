@@ -32,33 +32,13 @@ func TestPulsarValidate(t *testing.T) {
 	}{
 		// invalid cases
 		{
-			name:       "simple topic ,no {schema}",
-			expression: "public", // no {schema}
-			wantErr:    "invalid topic expression",
-		},
-		{
-			name:       "simple topic ,no {schema}",
-			expression: "_xyz",
-			wantErr:    "invalid topic expression",
-		},
-		{
-			name:       "simple topic ,no {schema}",
-			expression: "123456",
-			wantErr:    "invalid topic expression",
-		},
-		{
-			name:       "simple topic ,no {schema}",
-			expression: "ABCD",
-			wantErr:    "invalid topic expression",
-		},
-		{
-			name:       "like a full topic ,no {schema}",
-			expression: "persistent:public_test-table",
-			wantErr:    "invalid topic expression",
-		},
-		{
 			name:       "like a full topic ,no {schema}",
 			expression: "persistent://",
+			wantErr:    "invalid topic expression",
+		},
+		{
+			name:       "like a full topic",
+			expression: "persistent://{schema}",
 			wantErr:    "invalid topic expression",
 		},
 		{
@@ -72,7 +52,7 @@ func TestPulsarValidate(t *testing.T) {
 			wantErr:    "invalid topic expression",
 		},
 		{
-			name:       "like a full topic ,no {schema}",
+			name:       "like a full topic ,need '/' after 'test-table'",
 			expression: "persistent://public/_test-table",
 			wantErr:    "invalid topic expression",
 		},
@@ -84,7 +64,7 @@ func TestPulsarValidate(t *testing.T) {
 		//},
 		{
 			name:       "like a full topic",
-			expression: "persistent_public/test_{schema}_{table}",
+			expression: "persistent_public/test__{table}",
 			wantErr:    "invalid topic expression",
 		},
 		{
@@ -99,7 +79,7 @@ func TestPulsarValidate(t *testing.T) {
 		},
 		{
 			name:       "like a full topic, but more '/' ",
-			expression: "persistent://{schema}/{table}/test/name/admin",
+			expression: "persistent://test/{table}/test/name/admin",
 			wantErr:    "invalid topic expression",
 		},
 		{
@@ -109,10 +89,35 @@ func TestPulsarValidate(t *testing.T) {
 		},
 		{
 			name:       "like a full topic, but less '/' ",
-			expression: "non-persistent://public/test_{schema}_{table}_123456aaaa",
+			expression: "non-persistent://public/test {table}_123456aaaa",
 			wantErr:    "invalid topic expression",
 		},
 		// valid cases
+		{
+			name:          "simple topic ,no {schema}",
+			expression:    "public", // no {schema}
+			expectedTopic: "public",
+		},
+		{
+			name:          "simple topic ,no {schema}",
+			expression:    "_xyz",
+			expectedTopic: "_xyz",
+		},
+		{
+			name:          "simple topic ,no {schema}",
+			expression:    "123456",
+			expectedTopic: "123456",
+		},
+		{
+			name:          "simple topic ,no {schema}",
+			expression:    "ABCD",
+			expectedTopic: "ABCD",
+		},
+		{
+			name:          "like a full topic ,no {schema}",
+			expression:    "persistent:public_test-table",
+			expectedTopic: "persistent:public_test-table",
+		},
 		{
 			name:          "simple topic",
 			expression:    "{schema}",
@@ -175,9 +180,10 @@ func TestPulsarValidate(t *testing.T) {
 		},
 	}
 
-	for _, tc := range testTopicCases {
+	for i, tc := range testTopicCases {
 		topicExpr := Expression(tc.expression)
 		err := topicExpr.PulsarValidate()
+		t.Logf("case %d: %s", i, tc.name)
 		if tc.wantErr != "" {
 			require.Contains(t, err.Error(), tc.wantErr, fmt.Sprintf("case:%s", tc.name))
 		} else {
