@@ -263,6 +263,7 @@ func (r *RedoLog) GetCommitTs() Ts {
 	return 0
 }
 
+// TrySplitAndSortUpdateEvent redo log do nothing
 func (r *RedoLog) TrySplitAndSortUpdateEvent() error {
 	return nil
 }
@@ -359,6 +360,7 @@ func (r *RowChangedEvent) GetCommitTs() uint64 {
 	return r.CommitTs
 }
 
+// TrySplitAndSortUpdateEvent do nothing
 func (r *RowChangedEvent) TrySplitAndSortUpdateEvent() error {
 	return nil
 }
