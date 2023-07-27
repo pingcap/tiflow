@@ -339,6 +339,7 @@ type RowChangedEvent struct {
 	ReplicatingTs Ts `json:"-" msg:"-"`
 }
 
+// RowChangedEvents represents a set of events
 type RowChangedEvents []*RowChangedEvent
 
 // Len is the number of elements in the collection.
