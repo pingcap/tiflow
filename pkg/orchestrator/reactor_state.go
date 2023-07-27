@@ -15,6 +15,7 @@ package orchestrator
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/pingcap/errors"
@@ -39,16 +40,40 @@ type GlobalReactorState struct {
 	// to be called when captures are added and removed.
 	onCaptureAdded   func(captureID model.CaptureID, addr string)
 	onCaptureRemoved func(captureID model.CaptureID)
+
+	captureRemoveTTL int
+	toRemoveCaptures map[model.CaptureID]time.Time
 }
 
-// NewGlobalState creates a new global state
-func NewGlobalState(clusterID string) *GlobalReactorState {
+// NewGlobalState creates a new global state.
+func NewGlobalState(clusterID string, captureSessionTTL int) *GlobalReactorState {
 	return &GlobalReactorState{
-		ClusterID:   clusterID,
-		Owner:       map[string]struct{}{},
-		Captures:    make(map[model.CaptureID]*model.CaptureInfo),
-		Upstreams:   make(map[model.UpstreamID]*model.UpstreamInfo),
-		Changefeeds: make(map[model.ChangeFeedID]*ChangefeedReactorState),
+		ClusterID:        clusterID,
+		Owner:            map[string]struct{}{},
+		Captures:         make(map[model.CaptureID]*model.CaptureInfo),
+		Upstreams:        make(map[model.UpstreamID]*model.UpstreamInfo),
+		Changefeeds:      make(map[model.ChangeFeedID]*ChangefeedReactorState),
+		captureRemoveTTL: captureSessionTTL / 2,
+		toRemoveCaptures: make(map[model.CaptureID]time.Time),
+	}
+}
+
+// NewGlobalStateForTest creates a new global state for test.
+func NewGlobalStateForTest(clusterID string) *GlobalReactorState {
+	return NewGlobalState(clusterID, 0)
+}
+
+// UpdatePendingChange implements the ReactorState interface
+func (s *GlobalReactorState) UpdatePendingChange() {
+	for c, t := range s.toRemoveCaptures {
+		if time.Since(t) >= time.Duration(s.captureRemoveTTL)*time.Second {
+			log.Info("remote capture offline", zap.Any("info", s.Captures[c]))
+			delete(s.Captures, c)
+			if s.onCaptureRemoved != nil {
+				s.onCaptureRemoved(c)
+			}
+			delete(s.toRemoveCaptures, c)
+		}
 	}
 }
 
@@ -59,6 +84,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	switch k.Tp {
 	case etcd.CDCKeyTypeOwner:
 		if value != nil {
@@ -69,11 +95,8 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
-			log.Info("remote capture offline", zap.Any("info", s.Captures[k.CaptureID]))
-			delete(s.Captures, k.CaptureID)
-			if s.onCaptureRemoved != nil {
-				s.onCaptureRemoved(k.CaptureID)
-			}
+			log.Info("remote capture offline detected", zap.Any("info", s.Captures[k.CaptureID]))
+			s.toRemoveCaptures[k.CaptureID] = time.Now()
 			return nil
 		}
 
@@ -172,6 +195,11 @@ func NewChangefeedReactorState(clusterID string,
 		ID:            id,
 		TaskPositions: make(map[model.CaptureID]*model.TaskPosition),
 	}
+}
+
+// UpdatePendingChange implements the ReactorState interface
+func (s *ChangefeedReactorState) UpdatePendingChange() {
+	return
 }
 
 // Update implements the ReactorState interface
