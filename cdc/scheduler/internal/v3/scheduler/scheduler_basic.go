@@ -14,9 +14,6 @@
 package scheduler
 
 import (
-	"math/rand"
-	"time"
-
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
@@ -35,14 +32,12 @@ var _ scheduler = &basicScheduler{}
 // 3. Capture offline.
 type basicScheduler struct {
 	batchSize    int
-	random       *rand.Rand
 	changefeedID model.ChangeFeedID
 }
 
 func newBasicScheduler(batchSize int, changefeed model.ChangeFeedID) *basicScheduler {
 	return &basicScheduler{
 		batchSize:    batchSize,
-		random:       rand.New(rand.NewSource(time.Now().UnixNano())),
 		changefeedID: changefeed,
 	}
 }

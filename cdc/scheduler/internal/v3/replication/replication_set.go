@@ -800,21 +800,25 @@ func (r *ReplicationSet) handleAddTable(
 			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
 		return nil, nil
 	}
-	oldState := r.State
-	r.State = ReplicationSetStateAbsent
 	err := r.setCapture(captureID, RoleSecondary)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Info("schedulerv3: replication state transition, add table",
-		zap.Any("replicationSet", r),
-		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
+	oldState := r.State
 	status := tablepb.TableStatus{
 		TableID:    r.TableID,
 		State:      tablepb.TableStateAbsent,
 		Checkpoint: tablepb.Checkpoint{},
 	}
-	return r.poll(&status, captureID)
+	msgs, err := r.poll(&status, captureID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	log.Info("schedulerv3: replication state transition, add table",
+		zap.Any("replicationSet", r),
+		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
+	return msgs, nil
 }
 
 func (r *ReplicationSet) handleMoveTable(

@@ -84,32 +84,21 @@ func NewCoordinator(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	coord := newCoordinator(captureID, changefeedID, ownerRevision, cfg)
-	coord.trans = trans
-	coord.pdClock = pdClock
-	coord.changefeedEpoch = changefeedEpoch
-	return coord, nil
-}
-
-func newCoordinator(
-	captureID model.CaptureID,
-	changefeedID model.ChangeFeedID,
-	ownerRevision int64,
-	cfg *config.SchedulerConfig,
-) *coordinator {
 	revision := schedulepb.OwnerRevision{Revision: ownerRevision}
-
 	return &coordinator{
-		version:   version.ReleaseSemver(),
-		revision:  revision,
-		captureID: captureID,
+		version:         version.ReleaseSemver(),
+		revision:        revision,
+		changefeedEpoch: changefeedEpoch,
+		captureID:       captureID,
+		trans:           trans,
 		replicationM: replication.NewReplicationManager(
 			cfg.MaxTaskConcurrency, changefeedID),
 		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
 		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
 		changefeedID: changefeedID,
 		compat:       compat.New(map[model.CaptureID]*model.CaptureInfo{}),
-	}
+		pdClock:      pdClock,
+	}, nil
 }
 
 // Tick implement the scheduler interface
@@ -206,8 +195,8 @@ func (c *coordinator) DrainCapture(target model.CaptureID) (int, error) {
 		return count, nil
 	}
 
-	// when draining the capture, tables need to be dispatched to other
-	// capture except the draining one, so at least should have 2 captures alive.
+	// when draining the capture, tables need to be dispatched to other capture
+	// except the draining one, so there should be at least two live captures.
 	if len(c.captureM.Captures) <= 1 {
 		log.Warn("schedulerv3: drain capture request ignored, "+
 			"only one captures alive",
