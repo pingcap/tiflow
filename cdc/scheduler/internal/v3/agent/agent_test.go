@@ -931,11 +931,11 @@ func newMockTableExecutor() *MockTableExecutor {
 
 // AddTable adds a table to the executor.
 func (e *MockTableExecutor) AddTable(
-	ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
+	ctx context.Context, tableID model.TableID, checkpoint tablepb.Checkpoint, isPrepare bool,
 ) (bool, error) {
 	log.Info("AddTable",
 		zap.Int64("tableID", tableID),
-		zap.Any("startTs", startTs),
+		zap.Any("startTs", checkpoint),
 		zap.Bool("isPrepare", isPrepare))
 
 	state, ok := e.tables[tableID]
@@ -954,7 +954,7 @@ func (e *MockTableExecutor) AddTable(
 			delete(e.tables, tableID)
 		}
 	}
-	args := e.Called(ctx, tableID, startTs, isPrepare)
+	args := e.Called(ctx, tableID, checkpoint, isPrepare)
 	if args.Bool(0) {
 		e.tables[tableID] = tablepb.TableStatePreparing
 	}

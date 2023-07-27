@@ -98,6 +98,7 @@ func (m *ddlManager) GetResolvedTs() model.Ts {
 type DMLManager interface {
 	redoManager
 	AddTable(tableID model.TableID, startTs uint64)
+	StartTable(tableID model.TableID, startTs uint64)
 	RemoveTable(tableID model.TableID)
 	UpdateResolvedTs(ctx context.Context, tableID model.TableID, resolvedTs uint64) error
 	GetResolvedTs(tableID model.TableID) model.Ts
@@ -166,10 +167,6 @@ func (s *statefulRts) getUnflushed() model.Ts {
 	return atomic.LoadUint64(&s.unflushed)
 }
 
-func (s *statefulRts) setFlushed(flushed model.Ts) {
-	atomic.StoreUint64(&s.flushed, flushed)
-}
-
 func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (changed bool) {
 	for {
 		old := atomic.LoadUint64(&s.unflushed)
@@ -177,6 +174,19 @@ func (s *statefulRts) checkAndSetUnflushed(unflushed model.Ts) (changed bool) {
 			return false
 		}
 		if atomic.CompareAndSwapUint64(&s.unflushed, old, unflushed) {
+			break
+		}
+	}
+	return true
+}
+
+func (s *statefulRts) checkAndSetFlushed(flushed model.Ts) (changed bool) {
+	for {
+		old := atomic.LoadUint64(&s.flushed)
+		if old > flushed {
+			return false
+		}
+		if atomic.CompareAndSwapUint64(&s.flushed, old, flushed) {
 			break
 		}
 	}
@@ -287,6 +297,18 @@ func (m *logManager) emitRedoEvents(
 	})
 }
 
+// StartTable starts a table, which means the table is ready to emit redo events.
+// Note that this function should only be called once when adding a new table to processor.
+func (m *logManager) StartTable(tableID model.TableID, resolvedTs uint64) {
+	// advance unflushed resolved ts
+	m.onResolvedTsMsg(tableID, resolvedTs)
+
+	// advance flushed resolved ts
+	if value, loaded := m.rtsMap.Load(tableID); loaded {
+		value.(*statefulRts).checkAndSetFlushed(resolvedTs)
+	}
+}
+
 // UpdateResolvedTs asynchronously updates resolved ts of a single table.
 func (m *logManager) UpdateResolvedTs(
 	ctx context.Context,
@@ -351,7 +373,13 @@ func (m *logManager) prepareForFlush() (tableRtsMap map[model.TableID]model.Ts) 
 func (m *logManager) postFlush(tableRtsMap map[model.TableID]model.Ts) {
 	for tableID, flushed := range tableRtsMap {
 		if value, loaded := m.rtsMap.Load(tableID); loaded {
-			value.(*statefulRts).setFlushed(flushed)
+			changed := value.(*statefulRts).checkAndSetFlushed(flushed)
+			if !changed {
+				log.Debug("flush redo with regressed resolved ts",
+					zap.Int64("tableID", tableID),
+					zap.Uint64("flushed", flushed),
+					zap.Uint64("current", value.(*statefulRts).getFlushed()))
+			}
 		}
 	}
 }
