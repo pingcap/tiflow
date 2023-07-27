@@ -117,13 +117,12 @@ func (e Expression) PulsarValidate() error {
 
 	// if not full name, must be simple name
 	if !pulsarTopicNameREFull.MatchString(topicName) {
-		if !strings.Contains(topicName, "{schema}") || strings.Contains(topicName, "/") {
+		if strings.Contains(topicName, "/") {
 			return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
 				"it should be in the format of a <topic> and topic name must contain '{schema}'" +
 					"and simple topic name must not contain '/'")
 		}
-	} else if !pulsarTopicNameRE.MatchString(topicName) ||
-		!strings.Contains(topicName, "{schema}") {
+	} else if !pulsarTopicNameRE.MatchString(topicName) {
 		return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
 			"it should be in the format of <tenant>/<namespace>/<topic> or <topic> " +
 				"and topic name must contain '{schema}'")
