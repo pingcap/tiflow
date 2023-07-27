@@ -181,7 +181,7 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 		return nil, errors.Trace(err)
 	}
 	if a.config.EnableTiDBExtension {
-		native = a.nativeValueWithExtension(native, e, false, "")
+		native = a.nativeValueWithExtension(native, e)
 	}
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
@@ -325,8 +325,6 @@ func getOperation(e *model.RowChangedEvent) string {
 func (a *BatchEncoder) nativeValueWithExtension(
 	native map[string]interface{},
 	e *model.RowChangedEvent,
-	handleKeyOnly bool,
-	claimCheckLocation string,
 ) map[string]interface{} {
 	native[tidbOp] = getOperation(e)
 	native[tidbCommitTs] = int64(e.CommitTs)
