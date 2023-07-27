@@ -959,13 +959,21 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 		return errors.Trace(err)
 	}
 	// 4.update the targetTable
+	oldTable, ok := s.physicalTableByID(targetTable.ID)
+	if !ok {
+		return cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(targetTable.ID)
+	}
+	// TODO: remove this after job is fixed by TiDB.
+	// ref: https://github.com/pingcap/tidb/issues/43819
+	targetTable.SchemaID = oldTable.SchemaID
+	targetTable.TableName = oldTable.TableName
 	err = s.updatePartition(targetTable, currentTS)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	newSourceTable := model.WrapTableInfo(sourceTable.SchemaID, sourceTable.TableName.Schema,
-		targetTable.Version, sourceTable.TableInfo.Clone())
+		currentTS, sourceTable.TableInfo.Clone())
 	// 5.update the sourceTable
 	err = s.dropTable(sourceTable.ID, currentTS)
 	if err != nil {
