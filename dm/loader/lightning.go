@@ -148,12 +148,12 @@ func (l *LightningLoader) initMetricProxies() {
 // Init initializes loader for a load task, but not start Process.
 // if fail, it should not call l.Close.
 func (l *LightningLoader) Init(ctx context.Context) (err error) {
+	l.initMetricProxies()
+
 	l.toDB, err = conn.GetDownstreamDB(&l.cfg.To)
 	if err != nil {
 		return err
 	}
-
-	l.initMetricProxies()
 
 	checkpointList := NewLightningCheckpointList(l.toDB, l.cfg.Name, l.cfg.SourceID, l.cfg.MetaSchema, l.logger)
 	err = checkpointList.Prepare(ctx)
