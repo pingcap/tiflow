@@ -945,6 +945,14 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
+	if resolvedTs < checkpointTs.ResolvedMark() {
+		log.Error("sinkManager: resolved ts should not less than checkpoint ts",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Int64("tableID", tableID),
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Any("checkpointTs", checkpointTs))
+	}
 	return TableStats{
 		CheckpointTs:          checkpointTs.ResolvedMark(),
 		ResolvedTs:            resolvedTs,
