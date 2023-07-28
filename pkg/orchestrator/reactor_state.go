@@ -27,6 +27,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultCaptureRemoveTTL = 5
+
 // GlobalReactorState represents a global state which stores all key-value pairs in ETCD
 type GlobalReactorState struct {
 	ClusterID      string
@@ -47,13 +49,17 @@ type GlobalReactorState struct {
 
 // NewGlobalState creates a new global state.
 func NewGlobalState(clusterID string, captureSessionTTL int) *GlobalReactorState {
+	captureRemoveTTL := captureSessionTTL / 2
+	if captureRemoveTTL < defaultCaptureRemoveTTL {
+		captureRemoveTTL = defaultCaptureRemoveTTL
+	}
 	return &GlobalReactorState{
 		ClusterID:        clusterID,
 		Owner:            map[string]struct{}{},
 		Captures:         make(map[model.CaptureID]*model.CaptureInfo),
 		Upstreams:        make(map[model.UpstreamID]*model.UpstreamInfo),
 		Changefeeds:      make(map[model.ChangeFeedID]*ChangefeedReactorState),
-		captureRemoveTTL: captureSessionTTL / 2,
+		captureRemoveTTL: captureRemoveTTL,
 		toRemoveCaptures: make(map[model.CaptureID]time.Time),
 	}
 }
