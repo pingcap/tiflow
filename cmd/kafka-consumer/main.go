@@ -556,6 +556,27 @@ func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
 	return result
 }
 
+var (
+	expectedID = map[string]struct{}{
+		"312702": {},
+		"323263": {},
+		"351946": {},
+		"385333": {},
+		"417558": {},
+		"419134": {},
+		"447271": {},
+		"550354": {},
+		"567028": {},
+		"575390": {},
+		"578734": {},
+		"589101": {},
+		"591475": {},
+		"613861": {},
+		"632339": {},
+		"719912": {},
+	}
+)
+
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	partition := claim.Partition()
@@ -685,7 +706,22 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					group = newEventsGroup()
 					eventGroups[tableID] = group
 				}
-				group.Append(row)
+
+				if row.Table.Table == "sbtest17" {
+					var id string
+					for _, col := range row.Columns {
+						if col.Name == "id" {
+							id = model.ColumnValueString(col.Value)
+							break
+						}
+					}
+					_, ok := expectedID[id]
+					if ok {
+						log.Info("found row by id", zap.String("id", id), zap.Int64("offset", message.Offset), zap.Any("event", row))
+					}
+				}
+
+				//group.Append(row)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 			case model.MessageTypeResolved:
