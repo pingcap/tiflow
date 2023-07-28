@@ -96,7 +96,7 @@ type consumerOption struct {
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
-func (o *consumerOption) Adjust(upstreamURI *url.URL) {
+func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	s := upstreamURI.Query().Get("version")
 	if s != "" {
 		o.version = s
@@ -183,7 +183,22 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL) {
 		}
 		o.enableRowChecksum = enableRowChecksum
 	}
+
+	if configFile != "" {
+		replicaConfig := config.GetDefaultReplicaConfig()
+		replicaConfig.Sink.Protocol = util.AddressOf(o.protocol.String())
+		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
+			return errors.Trace(err)
+		}
+		o.replicaConfig = replicaConfig
+	}
+
 	log.Info("consumer option adjusted",
+		zap.String("configFile", configFile),
 		zap.String("address", strings.Join(o.address, ",")),
 		zap.String("version", o.version),
 		zap.String("topic", o.topic),
@@ -194,11 +209,11 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL) {
 		zap.Any("protocol", o.protocol),
 		zap.Bool("enableTiDBExtension", o.enableTiDBExtension),
 		zap.Bool("enableRowChecksum", o.enableRowChecksum))
+
+	return nil
 }
 
 func main() {
-	version.LogVersionInfo("kafka consumer")
-
 	consumerOption := newConsumerOption()
 
 	var (
@@ -232,6 +247,8 @@ func main() {
 		return
 	}
 
+	version.LogVersionInfo("kafka consumer")
+
 	upstreamURI, err := url.Parse(upstreamURIStr)
 	if err != nil {
 		log.Panic("invalid upstream-uri", zap.Error(err))
@@ -242,7 +259,7 @@ func main() {
 			zap.String("upstreamURI", upstreamURIStr))
 	}
 
-	consumerOption.Adjust(upstreamURI)
+	err = consumerOption.Adjust(upstreamURI, configFile)
 	if err != nil {
 		log.Panic("adjust consumer option failed", zap.Error(err))
 	}
@@ -251,7 +268,7 @@ func main() {
 	// * Construct a new Sarama configuration.
 	// * The Kafka cluster version has to be defined before the consumer/producer is initialized.
 	// */
-	config, err := newSaramaConfig()
+	config, err := newSaramaConfig(consumerOption)
 	if err != nil {
 		log.Panic("Error creating sarama config", zap.Error(err))
 	}
@@ -261,12 +278,12 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	consumer, err := NewConsumer(ctx)
+	consumer, err := NewConsumer(ctx, consumerOption)
 	if err != nil {
 		log.Panic("Error creating consumer", zap.Error(err))
 	}
 
-	client, err := sarama.NewConsumerGroup(kafkaAddrs, kafkaGroupID, config)
+	client, err := sarama.NewConsumerGroup(consumerOption.address, consumerOption.groupID, config)
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
@@ -279,7 +296,7 @@ func main() {
 			// `Consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := client.Consume(ctx, strings.Split(kafkaTopic, ","), consumer); err != nil {
+			if err := client.Consume(ctx, strings.Split(consumerOption.topic, ","), consumer); err != nil {
 				log.Panic("Error from consumer", zap.Error(err))
 			}
 			// check if context was cancelled, signaling that the consumer should stop
@@ -313,23 +330,6 @@ func main() {
 	wg.Wait()
 	if err = client.Close(); err != nil {
 		log.Panic("Error closing client", zap.Error(err))
-	}
-}
-
-func init() {
-
-	if configFile != "" {
-		replicaConfig = config.GetDefaultReplicaConfig()
-		replicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
-		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
-		if err != nil {
-			log.Panic("invalid config file for kafka consumer",
-				zap.Error(err),
-				zap.String("config", configFile))
-		}
-		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
-			log.Panic("verify rule failed", zap.Error(err))
-		}
 	}
 }
 
@@ -377,10 +377,10 @@ func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error 
 	return errors.Errorf("wait the topic(%s) created timeout", topic)
 }
 
-func newSaramaConfig() (*sarama.Config, error) {
+func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
 	config := sarama.NewConfig()
 
-	version, err := sarama.ParseKafkaVersion(kafkaVersion)
+	version, err := sarama.ParseKafkaVersion(o.version)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -393,12 +393,12 @@ func newSaramaConfig() (*sarama.Config, error) {
 	config.Consumer.Retry.Backoff = 500 * time.Millisecond
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 
-	if len(ca) != 0 {
+	if len(o.ca) != 0 {
 		config.Net.TLS.Enable = true
 		config.Net.TLS.Config, err = (&security.Credential{
-			CAPath:   ca,
-			CertPath: cert,
-			KeyPath:  key,
+			CAPath:   o.ca,
+			CertPath: o.cert,
+			KeyPath:  o.key,
 		}).ToTLSConfig()
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -414,7 +414,7 @@ type partitionSinks struct {
 	tableSinksMap     sync.Map
 	// resolvedTs record the maximum timestamp of the received event
 	resolvedTs uint64
-	// resolvedTs record the maximum timestamp of the events flushed to the downstreamw mysql.
+	// resolvedTs record the maximum timestamp of the events flushed to the downstream mysql.
 	checkpointTs uint64
 
 	session sarama.ConsumerGroupSession
@@ -443,61 +443,53 @@ type Consumer struct {
 	tz *time.Location
 
 	codecConfig *common.Config
+
+	option *consumerOption
 }
 
 // NewConsumer creates a new cdc kafka consumer
-func NewConsumer(ctx context.Context) (*Consumer, error) {
-	// TODO support filter in downstream sink
-	tz, err := util.GetTimezone(timezone)
+func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
+	c := new(Consumer)
+
+	tz, err := util.GetTimezone(o.timezone)
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
-	config.GetGlobalServerConfig().TZ = timezone
-
-	c := new(Consumer)
 	c.tz = tz
+
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
 		tableIDs: make(map[string]int64),
 	}
 
-	c.codecConfig = common.NewConfig(protocol)
-	c.codecConfig.EnableTiDBExtension = enableTiDBExtension
-	c.codecConfig.EnableRowChecksum = enableRowChecksum
-	if replicaConfig != nil && replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
-		c.codecConfig.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+	c.codecConfig = common.NewConfig(o.protocol)
+	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
+	c.codecConfig.EnableRowChecksum = o.enableRowChecksum
+	if o.replicaConfig != nil && o.replicaConfig.Sink != nil && o.replicaConfig.Sink.KafkaConfig != nil {
+		c.codecConfig.LargeMessageHandle = o.replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 	}
 
 	if c.codecConfig.Protocol == config.ProtocolAvro {
 		c.codecConfig.AvroEnableWatermark = true
 	}
 
-	// this means user has input config file to enable dispatcher check
-	// some protocol does not provide enough information to check the
-	// dispatched partition match or not. such as `open-protocol`, which
-	// does not have `IndexColumn` info, then make the default dispatcher
-	// use different dispatch rule to the CDC side.
-	// when try to enable dispatcher check for any protocol and dispatch
-	// rule, make sure decoded `RowChangedEvent` contains information
-	// identical to the CDC side.
-	if replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(replicaConfig, kafkaTopic)
+	if o.replicaConfig != nil {
+		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.topic)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		c.eventRouter = eventRouter
-
 	}
 
-	c.sinks = make([]*partitionSinks, kafkaPartitionNum)
+	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
-	for i := 0; i < int(kafkaPartitionNum); i++ {
+	for i := 0; i < int(o.partitionNum); i++ {
 		c.sinks[i] = &partitionSinks{}
 	}
 	f, err := eventsinkfactory.New(
 		ctx,
 		model.DefaultChangeFeedID("test"),
-		downstreamURIStr,
+		o.downstreamURI,
 		config.GetDefaultReplicaConfig(),
 		errChan,
 	)
@@ -520,7 +512,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	ddlSink, err := ddlsinkfactory.New(
 		ctx,
 		model.DefaultChangeFeedID("test"),
-		downstreamURIStr,
+		o.downstreamURI,
 		config.GetDefaultReplicaConfig(),
 	)
 	if err != nil {
@@ -595,11 +587,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolCanalJSON:
 		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig)
 	case config.ProtocolAvro:
-		schemaM, err := avro.NewAvroSchemaManager(ctx, schemaRegistryURI, nil)
+		schemaM, err := avro.NewAvroSchemaManager(ctx, c.option.schemaRegistryURI, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		decoder = avro.NewDecoder(c.codecConfig, schemaM, kafkaTopic, c.tz)
+		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic, c.tz)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}
@@ -630,8 +622,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 			counter++
 			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
-			if len(message.Key)+len(message.Value) > kafkaMaxMessageBytes && counter > 1 {
-				log.Panic("kafka max-messages-bytes exceeded", zap.Int("max-message-bytes", kafkaMaxMessageBytes),
+			if len(message.Key)+len(message.Value) > c.option.maxMessageBytes && counter > 1 {
+				log.Panic("kafka max-messages-bytes exceeded",
+					zap.Int("max-message-bytes", c.option.maxMessageBytes),
 					zap.Int("receivedBytes", len(message.Key)+len(message.Value)))
 			}
 
@@ -663,12 +656,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				if c.eventRouter != nil {
-					target := c.eventRouter.GetPartitionForRowChange(row, kafkaPartitionNum)
+					target := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
 					if partition != target {
 						log.Panic("RowChangedEvent dispatched to wrong partition",
 							zap.Int32("obtained", partition),
 							zap.Int32("expected", target),
-							zap.Int32("partitionNum", kafkaPartitionNum),
+							zap.Int32("partitionNum", c.option.partitionNum),
 							zap.Any("row", row),
 						)
 					}
@@ -754,8 +747,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 		}
 
-		if counter > kafkaMaxBatchSize {
-			log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", kafkaMaxBatchSize),
+		if counter > c.option.maxBatchSize {
+			log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", c.option.maxBatchSize),
 				zap.Int("actual-batch-size", counter))
 		}
 	}
