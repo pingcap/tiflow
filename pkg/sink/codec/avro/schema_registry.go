@@ -308,7 +308,6 @@ func (m *SchemaManager) GetCachedOrRegister(
 	tableVersion uint64,
 	schemaGen SchemaGenerator,
 ) (*goavro.Codec, int, error) {
-	//key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
 	if entry, exists := m.cache[schemaSubject]; exists && entry.tableVersion == tableVersion {
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
