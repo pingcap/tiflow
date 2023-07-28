@@ -148,7 +148,6 @@ func (s *simpleReactorState) SetSum(sum int) {
 }
 
 func (s *simpleReactorState) UpdatePendingChange() {
-	return
 }
 
 func (s *simpleReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
@@ -288,7 +287,6 @@ type intReactorState struct {
 }
 
 func (s *intReactorState) UpdatePendingChange() {
-	return
 }
 
 func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
@@ -381,7 +379,6 @@ type commonReactorState struct {
 }
 
 func (s *commonReactorState) UpdatePendingChange() {
-	return
 }
 
 func (s *commonReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {

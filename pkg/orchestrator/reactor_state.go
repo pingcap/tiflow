@@ -199,7 +199,6 @@ func NewChangefeedReactorState(clusterID string,
 
 // UpdatePendingChange implements the ReactorState interface
 func (s *ChangefeedReactorState) UpdatePendingChange() {
-	return
 }
 
 // Update implements the ReactorState interface

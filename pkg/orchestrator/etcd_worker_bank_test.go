@@ -44,7 +44,6 @@ type bankReactorState struct {
 const bankTestPrefix = "/ticdc/test/bank/"
 
 func (b *bankReactorState) UpdatePendingChange() {
-	return
 }
 
 func (b *bankReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
