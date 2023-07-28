@@ -41,10 +41,9 @@ import (
 
 // BatchEncoder converts the events to binary Avro data
 type BatchEncoder struct {
-	namespace          string
-	keySchemaManager   *SchemaManager
-	valueSchemaManager *SchemaManager
-	result             []*common.Message
+	namespace string
+	schemaM   *SchemaManager
+	result    []*common.Message
 
 	config *common.Config
 }
@@ -74,6 +73,134 @@ type avroEncodeResult struct {
 	schemaID int
 }
 
+func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
+	cols, colInfos := e.HandleKeyColInfos()
+	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
+	// todo: disallow force replicate mode if using the avro.
+	if len(cols) == 0 {
+		return nil, nil
+	}
+
+	keyColumns := &avroEncodeInput{
+		columns:  cols,
+		colInfos: colInfos,
+	}
+	avroCodec, schemaID, err := a.getKeySchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, keyColumns)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	native, err := a.columns2AvroData(keyColumns)
+	if err != nil {
+		log.Error("avro: key converting to native failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	bin, err := avroCodec.BinaryFromNative(nil, native)
+	if err != nil {
+		log.Error("avro: key converting to Avro binary failed", zap.Error(err))
+		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
+	}
+
+	result := &avroEncodeResult{
+		data:     bin,
+		schemaID: schemaID,
+	}
+	data, err := result.toEnvelope()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return data, nil
+}
+
+func topicName2SchemaSubjects(topicName, subjectSuffix string) string {
+	return topicName + subjectSuffix
+}
+
+func (a *BatchEncoder) getValueSchemaCodec(
+	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, input *avroEncodeInput,
+) (*goavro.Codec, int, error) {
+	schemaGen := func() (string, error) {
+		schema, err := a.value2AvroSchema(tableName, input)
+		if err != nil {
+			log.Error("avro: generating value schema failed", zap.Error(err))
+			return "", errors.Trace(err)
+		}
+		return schema, nil
+	}
+
+	subject := topicName2SchemaSubjects(topic, valueSchemaSuffix)
+	avroCodec, schemaID, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+	return avroCodec, schemaID, nil
+}
+
+func (a *BatchEncoder) getKeySchemaCodec(
+	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, keyColumns *avroEncodeInput,
+) (*goavro.Codec, int, error) {
+	schemaGen := func() (string, error) {
+		schema, err := a.key2AvroSchema(tableName, keyColumns)
+		if err != nil {
+			log.Error("AvroEventBatchEncoder: generating key schema failed", zap.Error(err))
+			return "", errors.Trace(err)
+		}
+		return schema, nil
+	}
+
+	subject := topicName2SchemaSubjects(topic, keySchemaSuffix)
+	avroCodec, schemaID, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+	return avroCodec, schemaID, nil
+}
+
+func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
+	if e.IsDelete() {
+		return nil, nil
+	}
+
+	input := &avroEncodeInput{
+		columns:  e.Columns,
+		colInfos: e.ColInfos,
+	}
+	if len(input.columns) == 0 {
+		return nil, nil
+	}
+
+	avroCodec, schemaID, err := a.getValueSchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, input)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	native, err := a.columns2AvroData(input)
+	if err != nil {
+		log.Error("avro: converting value to native failed", zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	if a.config.EnableTiDBExtension {
+		native = a.nativeValueWithExtension(native, e)
+	}
+
+	bin, err := avroCodec.BinaryFromNative(nil, native)
+	if err != nil {
+		log.Error("avro: converting value to Avro binary failed", zap.Error(err))
+		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
+	}
+
+	result := &avroEncodeResult{
+		data:     bin,
+		schemaID: schemaID,
+	}
+	data, err := result.toEnvelope()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return data, nil
+}
+
 // AppendRowChangedEvent appends a row change event to the encoder
 // NOTE: the encoder can only store one RowChangedEvent!
 func (a *BatchEncoder) AppendRowChangedEvent(
@@ -82,53 +209,40 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
+	topic = sanitizeTopic(topic)
+
+	key, err := a.encodeKey(ctx, topic, e)
+	if err != nil {
+		log.Error("avro encoding key failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+
+	value, err := a.encodeValue(ctx, topic, e)
+	if err != nil {
+		log.Error("avro encoding value failed", zap.Error(err))
+		return errors.Trace(err)
+	}
+
 	message := common.NewMsg(
 		config.ProtocolAvro,
-		nil,
-		nil,
+		key,
+		value,
 		e.CommitTs,
 		model.MessageTypeRow,
 		&e.Table.Schema,
 		&e.Table.Table,
 	)
 	message.Callback = callback
-	topic = sanitizeTopic(topic)
-
-	if !e.IsDelete() {
-		res, err := a.avroEncode(ctx, e, topic, false)
-		if err != nil {
-			log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		message.Value = evlp
-	} else {
-		message.Value = nil
-	}
-
-	res, err := a.avroEncode(ctx, e, topic, true)
-	if err != nil {
-		log.Error("AppendRowChangedEvent: avro encoding failed", zap.Error(err))
-		return errors.Trace(err)
-	}
-
-	if res != nil {
-		evlp, err := res.toEnvelope()
-		if err != nil {
-			log.Error("AppendRowChangedEvent: could not construct Avro envelope", zap.Error(err))
-			return errors.Trace(err)
-		}
-		message.Key = evlp
-	} else {
-		message.Key = nil
-	}
 	message.IncRowsCount()
+
+	if message.Length() > a.config.MaxMessageBytes {
+		log.Warn("Single message is too large for avro",
+			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
+			zap.Int("length", message.Length()),
+			zap.Any("table", e.Table))
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.Length())
+	}
+
 	a.result = append(a.result, message)
 	return nil
 }
@@ -174,11 +288,11 @@ func (a *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 			Table:    e.TableInfo.TableName.Table,
 			CommitTs: e.CommitTs,
 		}
-		bytes, err := json.Marshal(event)
+		data, err := json.Marshal(event)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrAvroToEnvelopeError, err)
 		}
-		buf.Write(bytes)
+		buf.Write(data)
 
 		value := buf.Bytes()
 		return common.NewDDLMsg(config.ProtocolAvro, nil, value, e), nil
@@ -199,112 +313,29 @@ const (
 	updateOperation = "u"
 )
 
-func (a *BatchEncoder) avroEncode(
-	ctx context.Context,
+func getOperation(e *model.RowChangedEvent) string {
+	if e.IsInsert() {
+		return insertOperation
+	} else if e.IsUpdate() {
+		return updateOperation
+	}
+	return ""
+}
+
+func (a *BatchEncoder) nativeValueWithExtension(
+	native map[string]interface{},
 	e *model.RowChangedEvent,
-	topic string,
-	isKey bool,
-) (*avroEncodeResult, error) {
-	var (
-		input *avroEncodeInput
+) map[string]interface{} {
+	native[tidbOp] = getOperation(e)
+	native[tidbCommitTs] = int64(e.CommitTs)
+	native[tidbPhysicalTime] = oracle.ExtractPhysical(e.CommitTs)
 
-		cols                   []*model.Column
-		colInfos               []rowcodec.ColInfo
-		enableTiDBExtension    bool
-		enableRowLevelChecksum bool
-		schemaManager          *SchemaManager
-		operation              string
-	)
-	if isKey {
-		cols, colInfos = e.HandleKeyColInfos()
-		input = &avroEncodeInput{
-			columns:  cols,
-			colInfos: colInfos,
-		}
-		enableTiDBExtension = false
-		enableRowLevelChecksum = false
-		schemaManager = a.keySchemaManager
-	} else {
-		input = &avroEncodeInput{
-			columns:  e.Columns,
-			colInfos: e.ColInfos,
-		}
-
-		enableTiDBExtension = a.config.EnableTiDBExtension
-		enableRowLevelChecksum = a.config.EnableRowChecksum
-		schemaManager = a.valueSchemaManager
-		if e.IsInsert() {
-			operation = insertOperation
-		} else if e.IsUpdate() {
-			operation = updateOperation
-		} else {
-			log.Error("unknown operation", zap.Any("rowChangedEvent", e))
-			return nil, cerror.ErrAvroEncodeFailed.GenWithStack("unknown operation")
-		}
-	}
-
-	if len(input.columns) == 0 {
-		return nil, nil
-	}
-
-	namespace := getAvroNamespace(a.namespace, e.Table)
-
-	schemaGen := func() (string, error) {
-		schema, err := rowToAvroSchema(
-			namespace,
-			e.Table.Table,
-			input,
-			enableTiDBExtension,
-			enableRowLevelChecksum,
-			a.config.AvroDecimalHandlingMode,
-			a.config.AvroBigintUnsignedHandlingMode,
-		)
-		if err != nil {
-			log.Error("AvroEventBatchEncoder: generating schema failed", zap.Error(err))
-			return "", errors.Trace(err)
-		}
-		return schema, nil
-	}
-
-	avroCodec, schemaID, err := schemaManager.GetCachedOrRegister(
-		ctx,
-		topic,
-		e.TableInfo.Version,
-		schemaGen,
-	)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	native, err := rowToAvroData(
-		input,
-		e.CommitTs,
-		operation,
-		enableTiDBExtension,
-		a.config.AvroDecimalHandlingMode,
-		a.config.AvroBigintUnsignedHandlingMode,
-	)
-	if err != nil {
-		log.Error("AvroEventBatchEncoder: converting to native failed", zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-
-	if enableRowLevelChecksum && enableTiDBExtension && e.Checksum != nil {
+	if a.config.EnableRowChecksum && e.Checksum != nil {
 		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum.Current), 10)
 		native[tidbCorrupted] = e.Checksum.Corrupted
 		native[tidbChecksumVersion] = e.Checksum.Version
 	}
-
-	bin, err := avroCodec.BinaryFromNative(nil, native)
-	if err != nil {
-		log.Error("AvroEventBatchEncoder: converting to Avro binary failed", zap.Error(err))
-		return nil, cerror.WrapError(cerror.ErrAvroEncodeToBinary, err)
-	}
-
-	return &avroEncodeResult{
-		data:     bin,
-		schemaID: schemaID,
-	}, nil
+	return native
 }
 
 type avroSchemaTop struct {
@@ -466,8 +497,8 @@ func escapeEnumAndSetOptions(option string) string {
 	return option
 }
 
-func getAvroNamespace(namespace string, tableName *model.TableName) string {
-	return sanitizeName(namespace) + "." + sanitizeName(tableName.Schema)
+func getAvroNamespace(namespace string, schema string) string {
+	return sanitizeName(namespace) + "." + sanitizeName(schema)
 }
 
 type avroSchema struct {
@@ -483,50 +514,73 @@ type avroLogicalTypeSchema struct {
 	Scale       interface{} `json:"scale,omitempty"`
 }
 
-func rowToAvroSchema(
-	namespace string,
-	name string,
-	input *avroEncodeInput,
-	enableTiDBExtension bool,
-	enableRowLevelChecksum bool,
-	decimalHandlingMode string,
-	bigintUnsignedHandlingMode string,
-) (string, error) {
-	if enableRowLevelChecksum {
-		sort.Sort(input)
+func (a *BatchEncoder) schemaWithExtension(
+	top *avroSchemaTop,
+) *avroSchemaTop {
+	top.Fields = append(top.Fields,
+		map[string]interface{}{
+			"name":    tidbOp,
+			"type":    "string",
+			"default": "",
+		},
+		map[string]interface{}{
+			"name":    tidbCommitTs,
+			"type":    "long",
+			"default": 0,
+		},
+		map[string]interface{}{
+			"name":    tidbPhysicalTime,
+			"type":    "long",
+			"default": 0,
+		},
+	)
+
+	if a.config.EnableRowChecksum {
+		top.Fields = append(top.Fields,
+			map[string]interface{}{
+				"name":    tidbRowLevelChecksum,
+				"type":    "string",
+				"default": "",
+			},
+			map[string]interface{}{
+				"name":    tidbCorrupted,
+				"type":    "boolean",
+				"default": false,
+			},
+			map[string]interface{}{
+				"name":    tidbChecksumVersion,
+				"type":    "int",
+				"default": 0,
+			})
 	}
 
-	top := avroSchemaTop{
+	return top
+}
+
+func (a *BatchEncoder) columns2AvroSchema(
+	tableName *model.TableName,
+	input *avroEncodeInput,
+) (*avroSchemaTop, error) {
+	top := &avroSchemaTop{
 		Tp:        "record",
-		Name:      sanitizeName(name),
-		Namespace: namespace,
+		Name:      sanitizeName(tableName.Table),
+		Namespace: getAvroNamespace(a.namespace, tableName.Schema),
 		Fields:    nil,
 	}
-
 	for i, col := range input.columns {
-		avroType, err := columnToAvroSchema(
-			col,
-			input.colInfos[i].Ft,
-			decimalHandlingMode,
-			bigintUnsignedHandlingMode,
-		)
+		avroType, err := a.columnToAvroSchema(col, input.colInfos[i].Ft)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		field := make(map[string]interface{})
 		field["name"] = sanitizeName(col.Name)
 
-		copy := *col
-		copy.Value = copy.Default
-		defaultValue, _, err := columnToAvroData(
-			&copy,
-			input.colInfos[i].Ft,
-			decimalHandlingMode,
-			bigintUnsignedHandlingMode,
-		)
+		copied := *col
+		copied.Value = copied.Default
+		defaultValue, _, err := a.columnToAvroData(&copied, input.colInfos[i].Ft)
 		if err != nil {
 			log.Error("fail to get default value for avro schema")
-			return "", errors.Trace(err)
+			return nil, errors.Trace(err)
 		}
 		// goavro doesn't support set default value for logical type
 		// https://github.com/linkedin/goavro/issues/202
@@ -553,85 +607,70 @@ func rowToAvroSchema(
 				}
 			}
 		}
-
 		top.Fields = append(top.Fields, field)
 	}
+	return top, nil
+}
 
-	if enableTiDBExtension {
-		top.Fields = append(top.Fields,
-			map[string]interface{}{
-				"name":    tidbOp,
-				"type":    "string",
-				"default": "",
-			},
-			map[string]interface{}{
-				"name":    tidbCommitTs,
-				"type":    "long",
-				"default": 0,
-			},
-			map[string]interface{}{
-				"name":    tidbPhysicalTime,
-				"type":    "long",
-				"default": 0,
-			},
-		)
-
-		if enableRowLevelChecksum {
-			top.Fields = append(top.Fields,
-				map[string]interface{}{
-					"name":    tidbRowLevelChecksum,
-					"type":    "string",
-					"default": "",
-				},
-				map[string]interface{}{
-					"name":    tidbCorrupted,
-					"type":    "boolean",
-					"default": false,
-				},
-				map[string]interface{}{
-					"name":    tidbChecksumVersion,
-					"type":    "int",
-					"default": 0,
-				})
-		}
-
+func (a *BatchEncoder) value2AvroSchema(
+	tableName *model.TableName,
+	input *avroEncodeInput,
+) (string, error) {
+	if a.config.EnableRowChecksum {
+		sort.Sort(input)
 	}
 
-	str, err := json.Marshal(&top)
+	top, err := a.columns2AvroSchema(tableName, input)
+	if err != nil {
+		return "", err
+	}
+
+	if a.config.EnableTiDBExtension {
+		top = a.schemaWithExtension(top)
+	}
+
+	str, err := json.Marshal(top)
 	if err != nil {
 		return "", cerror.WrapError(cerror.ErrAvroMarshalFailed, err)
 	}
-	log.Info("rowToAvroSchema",
+	log.Info("avro: row to schema",
 		zap.ByteString("schema", str),
-		zap.Bool("enableTiDBExtension", enableTiDBExtension),
-		zap.Bool("enableRowLevelChecksum", enableRowLevelChecksum))
+		zap.Bool("enableTiDBExtension", a.config.EnableRowChecksum),
+		zap.Bool("enableRowLevelChecksum", a.config.EnableRowChecksum))
 	return string(str), nil
 }
 
-func rowToAvroData(
+func (a *BatchEncoder) key2AvroSchema(
+	tableName *model.TableName,
+	keyColumns *avroEncodeInput,
+) (string, error) {
+	top, err := a.columns2AvroSchema(tableName, keyColumns)
+	if err != nil {
+		return "", err
+	}
+
+	str, err := json.Marshal(top)
+	if err != nil {
+		return "", cerror.WrapError(cerror.ErrAvroMarshalFailed, err)
+	}
+	log.Info("avro: key to schema", zap.ByteString("schema", str))
+	return string(str), nil
+}
+
+func (a *BatchEncoder) columns2AvroData(
 	input *avroEncodeInput,
-	commitTs uint64,
-	operation string,
-	enableTiDBExtension bool,
-	decimalHandlingMode string,
-	bigintUnsignedHandlingMode string,
 ) (map[string]interface{}, error) {
 	ret := make(map[string]interface{}, len(input.columns))
 	for i, col := range input.columns {
 		if col == nil {
 			continue
 		}
-		data, str, err := columnToAvroData(
-			col,
-			input.colInfos[i].Ft,
-			decimalHandlingMode,
-			bigintUnsignedHandlingMode,
-		)
+		data, str, err := a.columnToAvroData(col, input.colInfos[i].Ft)
 		if err != nil {
 			return nil, err
 		}
 
-		// https://pkg.go.dev/github.com/linkedin/goavro/v2#Union
+		// https: //pkg.go.dev/github.com/linkedin/goavro/v2#Union
 		if col.Flag.IsNullable() {
 			ret[sanitizeName(col.Name)] = goavro.Union(str, data)
 		} else {
@@ -639,21 +678,13 @@ func rowToAvroData(
 		}
 	}
 
-	if enableTiDBExtension {
-		ret[tidbOp] = operation
-		ret[tidbCommitTs] = int64(commitTs)
-		ret[tidbPhysicalTime] = oracle.ExtractPhysical(commitTs)
-	}
-
 	log.Debug("rowToAvroData", zap.Any("data", ret))
 	return ret, nil
 }
 
-func columnToAvroSchema(
+func (a *BatchEncoder) columnToAvroSchema(
 	col *model.Column,
 	ft *types.FieldType,
-	decimalHandlingMode string,
-	bigintUnsignedHandlingMode string,
 ) (interface{}, error) {
 	tt := getTiDBTypeFromColumn(col)
 	switch col.Type {
@@ -675,15 +706,13 @@ func columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeLonglong: // BIGINT
+		t := "long"
 		if col.Flag.IsUnsigned() &&
-			bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeString {
-			return avroSchema{
-				Type:       "string",
-				Parameters: map[string]string{tidbType: tt},
-			}, nil
+			a.config.AvroBigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeString {
+			t = "string"
 		}
 		return avroSchema{
-			Type:       "long",
+			Type:       t,
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeFloat:
@@ -709,7 +738,7 @@ func columnToAvroSchema(
 			},
 		}, nil
 	case mysql.TypeNewDecimal:
-		if decimalHandlingMode == common.DecimalHandlingModePrecise {
+		if a.config.AvroDecimalHandlingMode == common.DecimalHandlingModePrecise {
 			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
 			displayFlen, displayDecimal := ft.GetFlen(), ft.GetDecimal()
 			// length not specified, set it to system type default
@@ -743,14 +772,12 @@ func columnToAvroSchema(
 		mysql.TypeMediumBlob,
 		mysql.TypeLongBlob,
 		mysql.TypeBlob:
+		t := "string"
 		if col.Flag.IsBinary() {
-			return avroSchema{
-				Type:       "bytes",
-				Parameters: map[string]string{tidbType: tt},
-			}, nil
+			t = "bytes"
 		}
 		return avroSchema{
-			Type:       "string",
+			Type:       t,
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeEnum, mysql.TypeSet:
@@ -787,11 +814,9 @@ func columnToAvroSchema(
 	}
 }
 
-func columnToAvroData(
+func (a *BatchEncoder) columnToAvroData(
 	col *model.Column,
 	ft *types.FieldType,
-	decimalHandlingMode string,
-	bigintUnsignedHandlingMode string,
 ) (interface{}, string, error) {
 	if col.Value == nil {
 		return nil, "null", nil
@@ -828,7 +853,7 @@ func columnToAvroData(
 	case mysql.TypeLonglong:
 		if v, ok := col.Value.(string); ok {
 			if col.Flag.IsUnsigned() {
-				if bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeString {
+				if a.config.AvroBigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeString {
 					return v, "string", nil
 				}
 				n, err := strconv.ParseUint(v, 10, 64)
@@ -844,7 +869,7 @@ func columnToAvroData(
 			return n, "long", nil
 		}
 		if col.Flag.IsUnsigned() {
-			if bigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeLong {
+			if a.config.AvroBigintUnsignedHandlingMode == common.BigintUnsignedHandlingModeLong {
 				return int64(col.Value.(uint64)), "long", nil
 			}
 			// bigintUnsignedHandlingMode == "string"
@@ -875,7 +900,7 @@ func columnToAvroData(
 		}
 		return []byte(types.NewBinaryLiteralFromUint(col.Value.(uint64), -1)), "bytes", nil
 	case mysql.TypeNewDecimal:
-		if decimalHandlingMode == common.DecimalHandlingModePrecise {
+		if a.config.AvroDecimalHandlingMode == common.DecimalHandlingModePrecise {
 			v, succ := new(big.Rat).SetString(col.Value.(string))
 			if !succ {
 				return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack(
@@ -975,10 +1000,9 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 }
 
 type batchEncoderBuilder struct {
-	namespace          string
-	config             *common.Config
-	keySchemaManager   *SchemaManager
-	valueSchemaManager *SchemaManager
+	namespace string
+	config    *common.Config
+	schemaM   *SchemaManager
 }
 
 const (
@@ -991,30 +1015,31 @@ func NewBatchEncoderBuilder(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
-	keySchemaManager, valueSchemaManager, err := NewKeyAndValueSchemaManagers(
-		ctx, config.AvroSchemaRegistry, nil)
+	schemaM, err := NewAvroSchemaManager(ctx, config.AvroSchemaRegistry, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &batchEncoderBuilder{
-		namespace:          changefeedID.Namespace,
-		config:             config,
-		keySchemaManager:   keySchemaManager,
-		valueSchemaManager: valueSchemaManager,
+		namespace: changefeedID.Namespace,
+		config:    config,
+		schemaM:   schemaM,
 	}, nil
 }
 
 // Build an AvroEventBatchEncoder.
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := &BatchEncoder{
-		namespace:          b.namespace,
-		keySchemaManager:   b.keySchemaManager,
-		valueSchemaManager: b.valueSchemaManager,
-		result:             make([]*common.Message, 0, 1),
-		config:             b.config,
+	return NewAvroEncoder(b.namespace, b.schemaM, b.config)
+}
+
+// NewAvroEncoder return a avro encoder.
+func NewAvroEncoder(namespace string, schemaM *SchemaManager, config *common.Config) codec.RowEventEncoder {
+	return &BatchEncoder{
+		namespace: namespace,
+		schemaM:   schemaM,
+		result:    make([]*common.Message, 0, 1),
+		config:    config,
 	}
-	return encoder
 }
 
 // SetupEncoderAndSchemaRegistry4Testing start a local schema registry for testing.
@@ -1023,17 +1048,16 @@ func SetupEncoderAndSchemaRegistry4Testing(
 	config *common.Config,
 ) (*BatchEncoder, error) {
 	startHTTPInterceptForTestingRegistry()
-	keySchemaM, valueSchemaM, err := NewKeyAndValueSchemaManagers(ctx, "http://127.0.0.1:8081", nil)
+	schemaM, err := NewAvroSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	return &BatchEncoder{
-		namespace:          model.DefaultNamespace,
-		valueSchemaManager: valueSchemaM,
-		keySchemaManager:   keySchemaM,
-		result:             make([]*common.Message, 0, 1),
-		config:             config,
+		namespace: model.DefaultNamespace,
+		schemaM:   schemaM,
+		result:    make([]*common.Message, 0, 1),
+		config:    config,
 	}, nil
 }
 

@@ -11,8 +11,8 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	kv "github.com/pingcap/tidb/kv"
+	controller "github.com/pingcap/tiflow/cdc/controller"
 	model "github.com/pingcap/tiflow/cdc/model"
-	owner "github.com/pingcap/tiflow/cdc/owner"
 	config "github.com/pingcap/tiflow/pkg/config"
 	security "github.com/pingcap/tiflow/pkg/security"
 	client "github.com/tikv/pd/client"
@@ -104,18 +104,18 @@ func (mr *MockAPIV2HelpersMockRecorder) getVerfiedTables(replicaConfig, storage,
 }
 
 // verifyCreateChangefeedConfig mocks base method.
-func (m *MockAPIV2Helpers) verifyCreateChangefeedConfig(ctx context.Context, cfg *ChangefeedConfig, pdClient client.Client, statusProvider owner.StatusProvider, ensureGCServiceID string, kvStorage kv.Storage) (*model.ChangeFeedInfo, error) {
+func (m *MockAPIV2Helpers) verifyCreateChangefeedConfig(ctx context.Context, cfg *ChangefeedConfig, pdClient client.Client, ctrl controller.Controller, ensureGCServiceID string, kvStorage kv.Storage) (*model.ChangeFeedInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "verifyCreateChangefeedConfig", ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
+	ret := m.ctrl.Call(m, "verifyCreateChangefeedConfig", ctx, cfg, pdClient, ctrl, ensureGCServiceID, kvStorage)
 	ret0, _ := ret[0].(*model.ChangeFeedInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // verifyCreateChangefeedConfig indicates an expected call of verifyCreateChangefeedConfig.
-func (mr *MockAPIV2HelpersMockRecorder) verifyCreateChangefeedConfig(ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage interface{}) *gomock.Call {
+func (mr *MockAPIV2HelpersMockRecorder) verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, ensureGCServiceID, kvStorage interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyCreateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyCreateChangefeedConfig), ctx, cfg, pdClient, statusProvider, ensureGCServiceID, kvStorage)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "verifyCreateChangefeedConfig", reflect.TypeOf((*MockAPIV2Helpers)(nil).verifyCreateChangefeedConfig), ctx, cfg, pdClient, ctrl, ensureGCServiceID, kvStorage)
 }
 
 // verifyResumeChangefeedConfig mocks base method.

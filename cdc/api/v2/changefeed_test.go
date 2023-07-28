@@ -27,9 +27,9 @@ import (
 	"github.com/golang/mock/gomock"
 	tidbkv "github.com/pingcap/tidb/kv"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
+	"github.com/pingcap/tiflow/cdc/controller"
 	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -66,15 +66,15 @@ func TestCreateChangefeed(t *testing.T) {
 	defer testEtcdCluster.Terminate(t)
 
 	mockUpManager := upstream.NewManager4Test(pdClient)
-	statusProvider := &mockStatusProvider{}
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
-	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsController().Return(true).AnyTimes()
+	ctrl := mock_controller.NewMockController(gomock.NewController(t))
+	cp.EXPECT().GetController().Return(ctrl, nil).AnyTimes()
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -187,7 +187,7 @@ func TestCreateChangefeed(t *testing.T) {
 		DoAndReturn(func(ctx context.Context,
 			cfg *ChangefeedConfig,
 			pdClient pd.Client,
-			statusProvider owner.StatusProvider,
+			ctrl controller.Controller,
 			ensureGCServiceID string,
 			kvStorage tidbkv.Storage,
 		) (*model.ChangeFeedInfo, error) {
@@ -813,19 +813,17 @@ func TestDeleteChangefeed(t *testing.T) {
 	pdClient := &mockPDClient{}
 	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
-	statusProvider := mock_owner.NewMockStatusProvider(gomock.NewController(t))
-	statusProvider.EXPECT().IsChangefeedOwner(gomock.Any(), gomock.Any()).
-		Return(true, nil).AnyTimes()
 
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID(gomock.Any()).
 		Return(etcd.GcServiceIDForTest()).AnyTimes()
-	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	ctrl := mock_controller.NewMockController(gomock.NewController(t))
 	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
 	cp.EXPECT().IsController().Return(true).AnyTimes()
 	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+	cp.EXPECT().GetController().Return(ctrl, nil).AnyTimes()
 	owner.EXPECT().EnqueueJob(gomock.Any(), gomock.Any()).
 		Do(func(adminJob model.AdminJob, done chan<- error) {
 			require.EqualValues(t, changeFeedID, adminJob.CfID)
@@ -846,8 +844,7 @@ func TestDeleteChangefeed(t *testing.T) {
 
 	// case 2: changefeed not exists
 	validID := changeFeedID.ID
-	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
-		nil, cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID))
+	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), changeFeedID).Return(false, nil)
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)
@@ -855,8 +852,8 @@ func TestDeleteChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	// case 3: query changefeed error
-	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
-		nil, cerrors.ErrChangefeedUpdateRefused.GenWithStackByArgs(validID))
+	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), changeFeedID).Return(false,
+		cerrors.ErrChangefeedUpdateRefused.GenWithStackByArgs(validID))
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)
@@ -867,10 +864,9 @@ func TestDeleteChangefeed(t *testing.T) {
 	require.Contains(t, respErr.Code, "ErrChangefeedUpdateRefused")
 
 	// case 4: remove changefeed
-	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
-		&model.ChangeFeedStatusForAPI{}, nil)
-	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).Return(
-		nil, cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID))
+	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), changeFeedID).Return(true, nil)
+	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), changeFeedID).Return(false,
+		cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID))
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)
@@ -878,8 +874,7 @@ func TestDeleteChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	// case 5: remove changefeed failed
-	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).AnyTimes().Return(
-		&model.ChangeFeedStatusForAPI{}, nil)
+	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), changeFeedID).Return(true, nil).AnyTimes()
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), remove.method,
 		fmt.Sprintf(remove.url, validID), nil)

@@ -91,6 +91,12 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
 	}
+	ctrl, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
@@ -98,7 +104,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		ctx,
 		cfg,
 		pdClient,
-		h.capture.StatusProvider(),
+		ctrl,
 		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		kvStorage)
 	if err != nil {
@@ -564,7 +570,12 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
-	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	ctrl, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	exist, err := ctrl.IsChangefeedExists(ctx, changefeedID)
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.JSON(http.StatusOK, &EmptyResponse{})
@@ -573,7 +584,12 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	if !exist {
+		c.JSON(http.StatusOK, &EmptyResponse{})
+		return
+	}
 
+	// todo: controller call metastroe api to remove the changefeed
 	job := model.AdminJob{
 		CfID: changefeedID,
 		Type: model.AdminRemove,
@@ -587,12 +603,15 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	// Owner needs at least two ticks to remove a changefeed,
 	// we need to wait for it.
 	err = retry.Do(ctx, func() error {
-		_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+		exist, err = ctrl.IsChangefeedExists(ctx, changefeedID)
 		if err != nil {
 			if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
 				return nil
 			}
 			return err
+		}
+		if !exist {
+			return nil
 		}
 		return cerror.ErrChangeFeedDeletionUnfinished.GenWithStackByArgs(changefeedID)
 	},

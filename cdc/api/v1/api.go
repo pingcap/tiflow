@@ -90,10 +90,10 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	changefeedGroup.GET("", controllerMiddleware, api.ListChangefeed)
 	changefeedGroup.GET("/:changefeed_id", changefeedOwnerMiddleware, api.GetChangefeed)
 	changefeedGroup.POST("", controllerMiddleware, api.CreateChangefeed)
-	changefeedGroup.PUT("/:changefeed_id", controllerMiddleware, api.UpdateChangefeed)
+	changefeedGroup.PUT("/:changefeed_id", changefeedOwnerMiddleware, api.UpdateChangefeed)
 	changefeedGroup.POST("/:changefeed_id/pause", changefeedOwnerMiddleware, api.PauseChangefeed)
 	changefeedGroup.POST("/:changefeed_id/resume", changefeedOwnerMiddleware, api.ResumeChangefeed)
-	changefeedGroup.DELETE("/:changefeed_id", changefeedOwnerMiddleware, api.RemoveChangefeed)
+	changefeedGroup.DELETE("/:changefeed_id", controllerMiddleware, api.RemoveChangefeed)
 	changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", changefeedOwnerMiddleware, api.RebalanceTables)
 	changefeedGroup.POST("/:changefeed_id/tables/move_table", changefeedOwnerMiddleware, api.MoveTable)
 
@@ -297,7 +297,13 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig, h.capture)
+	ctrl, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	info, err := verifyCreateChangefeedConfig(ctx, changefeedConfig,
+		up, ctrl, h.capture.GetEtcdClient())
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -486,9 +492,18 @@ func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 		return
 	}
 	// check if the changefeed exists
-	_, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	ctrl, err := h.capture.GetController()
 	if err != nil {
 		_ = c.Error(err)
+		return
+	}
+	exist, err := ctrl.IsChangefeedExists(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if !exist {
+		_ = c.Error(cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID))
 		return
 	}
 
@@ -505,12 +520,15 @@ func (h *OpenAPI) RemoveChangefeed(c *gin.Context) {
 	// Owner needs at least tow ticks to remove a changefeed,
 	// we need to wait for it.
 	err = retry.Do(ctx, func() error {
-		_, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
+		exist, err = ctrl.IsChangefeedExists(ctx, changefeedID)
 		if err != nil {
 			if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
 				return nil
 			}
 			return err
+		}
+		if !exist {
+			return nil
 		}
 		return cerror.ErrChangeFeedDeletionUnfinished.GenWithStackByArgs(changefeedID)
 	},
