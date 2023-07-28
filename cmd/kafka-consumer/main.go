@@ -455,6 +455,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	if err != nil {
 		return nil, errors.Annotate(err, "can not load timezone")
 	}
+	config.GetGlobalServerConfig().TZ = o.timezone
 	c.tz = tz
 
 	c.fakeTableIDGenerator = &fakeTableIDGenerator{
@@ -486,13 +487,9 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	for i := 0; i < int(o.partitionNum); i++ {
 		c.sinks[i] = &partitionSinks{}
 	}
-	f, err := eventsinkfactory.New(
-		ctx,
-		model.DefaultChangeFeedID("test"),
-		o.downstreamURI,
-		config.GetDefaultReplicaConfig(),
-		errChan,
-	)
+
+	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -509,12 +506,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		cancel()
 	}()
 
-	ddlSink, err := ddlsinkfactory.New(
-		ctx,
-		model.DefaultChangeFeedID("test"),
-		o.downstreamURI,
-		config.GetDefaultReplicaConfig(),
-	)
+	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
