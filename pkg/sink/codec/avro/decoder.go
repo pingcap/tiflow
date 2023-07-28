@@ -40,7 +40,7 @@ type decoder struct {
 	topic  string
 	sc     *stmtctx.StatementContext
 
-	schemaM *SchemaManager
+	schemaM SchemaManager
 
 	key   []byte
 	value []byte
@@ -49,7 +49,7 @@ type decoder struct {
 // NewDecoder return an avro decoder
 func NewDecoder(
 	config *common.Config,
-	schemaM *SchemaManager,
+	schemaM SchemaManager,
 	topic string,
 	tz *time.Location,
 ) codec.RowEventDecoder {
@@ -376,7 +376,7 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 // return the schema ID and the encoded binary data
 // schemaID can be used to fetch the corresponding schema from schema registry,
 // which should be used to decode the binary data.
-func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
+func extractConfluentSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	if len(data) < 5 {
 		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
 	}
@@ -386,10 +386,26 @@ func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
 }
 
+func extractGlueSchemaIDAndBinaryData(data []byte) (string, []byte, error) {
+	return "", nil, errors.New("not implemented")
+}
+
 func decodeRawBytes(
-	ctx context.Context, schemaM *SchemaManager, data []byte, topic string,
+	ctx context.Context, schemaM SchemaManager, data []byte, topic string,
 ) (map[string]interface{}, map[string]interface{}, error) {
-	schemaID, binary, err := extractSchemaIDAndBinaryData(data)
+	var schemaID schemaID
+	var binary []byte
+	var err error
+	var cid int
+	var gid string
+
+	if schemaM.RegistryType() == schemaRegistryTypeConfluent {
+		cid, binary, err = extractConfluentSchemaIDAndBinaryData(data)
+		schemaID.cID = cid
+	} else {
+		gid, binary, err = extractGlueSchemaIDAndBinaryData(data)
+		schemaID.gID = gid
+	}
 	if err != nil {
 		return nil, nil, err
 	}

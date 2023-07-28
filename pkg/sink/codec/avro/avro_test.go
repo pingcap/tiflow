@@ -771,7 +771,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	bin, err := encoder.encodeValue(ctx, "default", event)
 	require.NoError(t, err)
 
-	schemaID, data, err := extractSchemaIDAndBinaryData(bin)
+	schemaID, data, err := extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
 	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
@@ -811,7 +811,7 @@ func TestAvroEncode(t *testing.T) {
 	bin, err := encoder.encodeKey(ctx, topic, event)
 	require.NoError(t, err)
 
-	schemaID, data, err := extractSchemaIDAndBinaryData(bin)
+	schemaID, data, err := extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
 	avroKeyCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
@@ -830,7 +830,7 @@ func TestAvroEncode(t *testing.T) {
 	bin, err = encoder.encodeValue(ctx, topic, event)
 	require.NoError(t, err)
 
-	schemaID, data, err = extractSchemaIDAndBinaryData(bin)
+	schemaID, data, err = extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
 	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
@@ -871,8 +871,8 @@ func TestAvroEnvelope(t *testing.T) {
 	require.NoError(t, err)
 
 	res := avroEncodeResult{
-		data:     bin,
-		schemaID: 7,
+		data:   bin,
+		header: []byte{0, 0, 0, 7},
 	}
 
 	evlp, err := res.toEnvelope()

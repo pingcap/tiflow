@@ -42,7 +42,7 @@ import (
 // BatchEncoder converts the events to binary Avro data
 type BatchEncoder struct {
 	namespace string
-	schemaM   *SchemaManager
+	schemaM   SchemaManager
 	result    []*common.Message
 
 	config *common.Config
@@ -70,7 +70,7 @@ type avroEncodeResult struct {
 	data []byte
 	// schemaID is encoded into the avro message, consumer should use this to fetch the schema.
 	// it's the global schema id for all schema in the registry.
-	schemaID int
+	header []byte
 }
 
 func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
@@ -85,7 +85,7 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 		columns:  cols,
 		colInfos: colInfos,
 	}
-	avroCodec, schemaID, err := a.getKeySchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, keyColumns)
+	avroCodec, header, err := a.getKeySchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, keyColumns)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -103,8 +103,8 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 	}
 
 	result := &avroEncodeResult{
-		data:     bin,
-		schemaID: schemaID,
+		data:   bin,
+		header: header,
 	}
 	data, err := result.toEnvelope()
 	if err != nil {
@@ -119,7 +119,7 @@ func topicName2SchemaSubjects(topicName, subjectSuffix string) string {
 
 func (a *BatchEncoder) getValueSchemaCodec(
 	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, input *avroEncodeInput,
-) (*goavro.Codec, int, error) {
+) (*goavro.Codec, []byte, error) {
 	schemaGen := func() (string, error) {
 		schema, err := a.value2AvroSchema(tableName, input)
 		if err != nil {
@@ -130,16 +130,16 @@ func (a *BatchEncoder) getValueSchemaCodec(
 	}
 
 	subject := topicName2SchemaSubjects(topic, valueSchemaSuffix)
-	avroCodec, schemaID, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
+	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
 	if err != nil {
-		return nil, 0, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
-	return avroCodec, schemaID, nil
+	return avroCodec, header, nil
 }
 
 func (a *BatchEncoder) getKeySchemaCodec(
 	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, keyColumns *avroEncodeInput,
-) (*goavro.Codec, int, error) {
+) (*goavro.Codec, []byte, error) {
 	schemaGen := func() (string, error) {
 		schema, err := a.key2AvroSchema(tableName, keyColumns)
 		if err != nil {
@@ -150,11 +150,11 @@ func (a *BatchEncoder) getKeySchemaCodec(
 	}
 
 	subject := topicName2SchemaSubjects(topic, keySchemaSuffix)
-	avroCodec, schemaID, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
+	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
 	if err != nil {
-		return nil, 0, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
-	return avroCodec, schemaID, nil
+	return avroCodec, header, nil
 }
 
 func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
@@ -170,7 +170,7 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 		return nil, nil
 	}
 
-	avroCodec, schemaID, err := a.getValueSchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, input)
+	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, input)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -191,8 +191,8 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 	}
 
 	result := &avroEncodeResult{
-		data:     bin,
-		schemaID: schemaID,
+		data:   bin,
+		header: header,
 	}
 	data, err := result.toEnvelope()
 	if err != nil {
@@ -974,10 +974,6 @@ func (a *BatchEncoder) columnToAvroData(
 }
 
 const (
-	// confluent avro wire format, the first byte is always 0
-	// https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format
-	magicByte = uint8(0)
-
 	// avro does not send ddl and checkpoint message, the following 2 field is used to distinguish
 	// TiCDC DDL event and checkpoint event, only used for testing purpose, not for production
 	ddlByte        = uint8(1)
@@ -989,7 +985,7 @@ const (
 // -and-ksqldb-viewing-kafka-messages-bytes-as-hex/
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	data := []interface{}{magicByte, int32(r.schemaID), r.data}
+	data := []interface{}{r.header, r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {
@@ -1002,7 +998,7 @@ func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 type batchEncoderBuilder struct {
 	namespace string
 	config    *common.Config
-	schemaM   *SchemaManager
+	schemaM   SchemaManager
 }
 
 const (
@@ -1033,7 +1029,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 }
 
 // NewAvroEncoder return a avro encoder.
-func NewAvroEncoder(namespace string, schemaM *SchemaManager, config *common.Config) codec.RowEventEncoder {
+func NewAvroEncoder(namespace string, schemaM SchemaManager, config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
 		namespace: namespace,
 		schemaM:   schemaM,
