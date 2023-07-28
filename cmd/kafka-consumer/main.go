@@ -450,6 +450,7 @@ type Consumer struct {
 // NewConsumer creates a new cdc kafka consumer
 func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	c := new(Consumer)
+	c.option = o
 
 	tz, err := util.GetTimezone(o.timezone)
 	if err != nil {
@@ -489,7 +490,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	}
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig, errChan)
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
@@ -506,7 +507,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		cancel()
 	}()
 
-	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, o.replicaConfig)
+	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig())
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
