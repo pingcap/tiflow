@@ -144,18 +144,12 @@ func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, cl
 	return b.NextRowChangedEvent()
 }
 
-func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
-	ctx context.Context, message *canalJSONMessageWithTiDBExtension,
-) (*model.RowChangedEvent, error) {
-	var (
-		commitTs  = message.Extensions.CommitTs
-		schema    = message.Schema
-		table     = message.Table
-		eventType = message.EventType
-	)
+func snapshotQuery(
+	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
+) (*ColumnsHolder, error) {
 	// 1. set snapshot read
 	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
-	conn, err := b.upstreamTiDB.Conn(ctx)
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		log.Error("establish connection to the upstream tidb failed",
 			zap.String("schema", schema), zap.String("table", table),
@@ -180,11 +174,10 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		return nil, errors.Trace(err)
 	}
 
-	data := message.Data[0]
 	// 2. query the whole row
 	query = fmt.Sprintf("select * from `%s`.`%s` where ", schema, table)
 	var whereClause string
-	for name, value := range data {
+	for name, value := range conditions {
 		if whereClause != "" {
 			whereClause += " and "
 		}
@@ -217,15 +210,34 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		}
 	}
 
+	return holder, nil
+}
+
+func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
+	ctx context.Context, message *canalJSONMessageWithTiDBExtension,
+) (*model.RowChangedEvent, error) {
 	var (
-		data map[string]interface{}
-		old  map[string]interface{}
+		commitTs  = message.Extensions.CommitTs
+		schema    = message.Schema
+		table     = message.Table
+		eventType = message.EventType
 	)
 
-	data = make(map[string]interface{}, holder.length())
-	mysqlType := make(map[string]string, holder.length())
-	javaSQLType := make(map[string]int32, holder.length())
-	for i := 0; i < holder.length(); i++ {
+	holder, err := snapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, message.getData())
+	if err != nil {
+		return nil, err
+	}
+
+	columnsCount := holder.length()
+
+	// 1. how to handle the insert
+	// 2. how to handle the delete
+	// 3. how to handle the update.
+
+	data := make(map[string]interface{}, columnsCount)
+	mysqlType := make(map[string]string, columnsCount)
+	javaSQLType := make(map[string]int32, columnsCount)
+	for i := 0; i < columnsCount; i++ {
 		value := holder.Values[i]
 		name := holder.Types[i].Name()
 
