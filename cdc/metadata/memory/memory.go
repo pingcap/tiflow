@@ -17,14 +17,25 @@ package memory
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/metadata"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/util"
+)
+
+const (
+    lease time.Duration = 10*time.Second
+    heartbeatDeadline time.Duration = time.Second
+    networkJitter time.Duration = time.Second
 )
 
 var (
@@ -33,15 +44,20 @@ var (
 	_ metadata.OwnerObservation      = &ownerOb{}
 )
 
-type cfKey struct {
-	model.ChangeFeedID
-	epoch uint64
+// sorted `ScheduledChangefeed`s, with a version to simplify diff check.
+type sortedScheduledChangefeeds struct {
+    version int
+    v []metadata.ScheduledChangefeed
+    compare func (a, b metadata.ScheduledChangefeed) int
 }
 
 type storage struct {
+    epoch atomic.Uint64
+
 	entities struct {
 		sync.RWMutex
 		cfs map[model.ChangeFeedID]*metadata.ChangefeedInfo
+        cfids map[model.ChangeFeedID]metadata.ChangefeedID
 		ups map[uint64]*metadata.UpstreamInfo
 	}
 
@@ -51,29 +67,39 @@ type storage struct {
 		heartbeats map[string]time.Time
 	}
 	schedule struct {
+        // CaptureID of the global controller.
 		controller string
-		owners     map[cfKey]*metadata.ScheduledOwner
-		processors map[cfKey]map[string]*metadata.ScheduledProcessor
+        // owners by ChangefeedID.
+		owners     map[metadata.ChangefeedID]metadata.ScheduledChangefeed
+        // processors by ChangefeedID, watched by owner.
+		processors map[metadata.ChangefeedID]sortedScheduledChangefeeds
+        // owners by CaptureID, watched by captures.
+        ownersByCapture map[string]sortedScheduledChangefeeds
+        // processors by CaptureID, watched by captures.
+        processorsByCapture map[string]sortedScheduledChangefeeds
 	}
-	advance struct {
-		progresses map[cfKey]metadata.ChangefeedProgress
-	}
+    progresses map[metadata.ChangefeedID]metadata.ChangefeedProgress
 }
 
 func newStorage() *storage {
 	s := &storage{}
 	s.entities.cfs = make(map[model.ChangeFeedID]*metadata.ChangefeedInfo)
+	s.entities.cfids = make(map[model.ChangeFeedID]metadata.ChangefeedID)
 	s.entities.ups = make(map[uint64]*metadata.UpstreamInfo)
 	s.keepalive.captures = make(map[string]*metadata.CaptureInfo)
 	s.keepalive.heartbeats = make(map[string]time.Time)
-	s.schedule.owners = make(map[cfKey]*metadata.ScheduledOwner)
-	s.schedule.processors = make(map[cfKey]map[string]*metadata.ScheduledProcessor)
+	s.schedule.owners = make(map[metadata.ChangefeedID]metadata.ScheduledChangefeed)
+	s.schedule.processors = make(map[metadata.ChangefeedID]sortedScheduledChangefeeds)
+    s.schedule.ownersByCapture = make(map[string]sortedScheduledChangefeeds)
+    s.schedule.processorsByCapture = make(map[string]sortedScheduledChangefeeds)
+    s.progresses = make(map[metadata.ChangefeedID]metadata.ChangefeedProgress)
 	return s
 }
 
 type contextManager struct {
-	sync.RWMutex
 	pctx   context.Context
+
+	sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -86,39 +112,208 @@ func (c *contextManager) fetchContext() (ctx context.Context) {
 }
 
 func (c *contextManager) refreshContext() {
+    ctx, cancel := context.WithTimeout(c.pctx, 10*time.Second)
+
 	c.Lock()
 	defer c.Unlock()
-	c.ctx, c.cancel = context.WithTimeout(c.pctx, 10*time.Second)
+    if c.ctx != nil {
+        c.cancel()
+        c.ctx = nil
+        c.cancel = nil
+    }
+	c.ctx, c.cancel = ctx, cancel
+}
+
+func (c *contextManager) cancel() {
+	c.Lock()
+	defer c.Unlock()
+    if c.ctx != nil {
+        c.cancel()
+        c.ctx = nil
+        c.cancel = nil
+    }
 }
 
 type captureOb struct {
 	s *storage
 	c *metadata.CaptureInfo
+	contextManager *contextManager
+
+    roles struct {
+        sync.RWMutex
+        owners sortedScheduledChangefeeds
+        processors sortedScheduledChangefeeds
+    }
 
 	wg         sync.WaitGroup
-	owners     chan []metadata.ScheduledOwner
-	processors chan []metadata.ScheduledProcessor
-
-	contextManager *contextManager
+	owners     *chann.DrainableChann[metadata.ScheduledChangefeed]
+	processors *chann.DrainableChann[metadata.ScheduledChangefeed]
 }
 
-func (c *captureOb) CaptureInfo() *metadata.CaptureInfo {
+func newCaptureObservation(ctx context.Context, s *storage, c *metadata.CaptureInfo) (metadata.CaptureObservation, error) {
+    contextManager := &contextManager{ pctx: ctx }
+    captureOb := &captureOb{
+        s:s,
+        c: c,
+        contextManager: contextManager,
+        owners: chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
+        processors: chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
+    }
+
+    if err := captureOb.Heartbeat(ctx); err != nil {
+        // Do a heartbeat to refresh context.
+        return nil, err
+    }
+
+    captureOb.wg.Add(1)
+    go func() {
+        defer captureOb.wg.Done()
+        ticker := time.NewTicker(time.Second)
+        defer ticker.Stop()
+        for {
+            updatedCtx := captureOb.contextManager.fetchContext()
+            select {
+            case <-updatedCtx.Done():
+                return
+            case <-ticker.C:
+            }
+            hbCtx, cancel := context.WithTimeout(updatedCtx, heartbeatDeadline)
+            _ = captureOb.Heartbeat(hbCtx)
+            cancel()
+        }
+    }()
+
+    captureOb.wg.Add(1)
+    go func() {
+        defer captureOb.wg.Done()
+        ticker := time.NewTicker(200*time.Millisecond)
+        defer ticker.Stop()
+        for {
+            updatedCtx := captureOb.contextManager.fetchContext()
+            select {
+            case <-updatedCtx.Done():
+                return
+            case <-ticker.C:
+            }
+
+            if err := captureOb.handleRoleChanges(updatedCtx, true); err != nil {
+                panic("handleRoleChanges(owner)")
+            }
+            if err := captureOb.handleRoleChanges(updatedCtx, false); err != nil {
+                panic("handleRoleChanges(processors)")
+            }
+        }
+    }()
+
+    return captureOb, nil
+}
+
+func stopCaptureObservation(c *captureOb) {
+    c.contextManager.cancel()
+    c.wg.Wait()
+}
+
+func (c *captureOb) handleRoleChanges(ctx context.Context, isOwner bool) error {
+    var roles sortedScheduledChangefeeds
+    var exists bool
+    var localRoles *sortedScheduledChangefeeds
+    var emitEvents chan <-metadata.ScheduledChangefeed
+
+    if isOwner {
+        c.s.RLock()
+        roles, exists = c.s.schedule.ownersByCapture[c.Self().ID]
+        c.s.RUnlock()
+
+        c.roles.Lock()
+        defer c.roles.Unlock()
+        localRoles = &c.roles.owners
+        emitEvents = c.owners.In()
+    } else {
+        c.s.RLock()
+        roles, exists = c.s.schedule.processorsByCapture[c.Self().ID]
+        c.s.RUnlock()
+
+        c.roles.Lock()
+        defer c.roles.Unlock()
+        localRoles = &c.roles.processors
+        emitEvents = c.processors.In()
+    }
+    if !exists {
+        // No scheudle information for the capture.
+        return nil
+    }
+
+    if localRoles.version < roles.version {
+        changes, err := metadata.DiffScheduledChangefeeds(localRoles.v, roles.v, sortedByChangefeedID)
+        if err != nil {
+            return err
+        }
+        for _, change := range changes {
+            if change.State == metadata.SchedRemoved {
+                continue
+            }
+            emitEvents <- change
+        }
+        *localRoles = roles
+    }
+
+    return nil
+}
+
+func (c *captureOb) Self() *metadata.CaptureInfo {
 	return c.c
 }
 
-func (c *captureOb) GetChangefeeds(...model.ChangeFeedID) ([]*metadata.ChangefeedInfo, error) {
+func (c *captureOb) GetChangefeeds(cfs ...model.ChangeFeedID) ([]*ChangefeedInfo, []ChangefeedID, error) {
+    c.s.entities.RLock()
+    defer c.s.entities.RUnlock()
+
+    length := len(cfs)
+    if length > 0 {
+        infos := make([]*metadata.ChangefeedInfo, 0, length)
+        ids := make([]metadata.ChangefeedID, 0, length)
+        for _, id := range cfs {
+            infos = append(infos, c.s.entities.cfs[id])
+            ids = append(ids, c.s.entities.cfids[id])
+        }
+        return infos, ids, nil
+    }
+
+    length = len(c.s.entities.cfs)
+    infos := make([]*metadata.ChangefeedInfo, 0, length)
+    ids := make([]metadata.ChangefeedID, 0, length)
+    for id, info := range c.s.entities.cfs {
+        infos = append(infos, info)
+        ids = append(ids, c.s.entities.cfids[id])
+    }
 	return nil, nil
 }
 
-func (c *captureOb) GetCaptures(...string) ([]*metadata.CaptureInfo, error) {
-	return nil, nil
+func (c *captureOb) GetCaptures(cps ...string) ([]*metadata.CaptureInfo, error) {
+    c.s.RLock()
+    defer c.s.RUnlock()
+
+    length := len(cps)
+    if length > 0 {
+        infos := make([]*metadata.CaptureInfo, 0, length)
+        for _, id := range cps {
+            infos = append(infos, c.s.keepalive.captures[id])
+        }
+        return infos, nil
+    }
+
+    length = len(c.s.keepalive.captures)
+    for id, info := range c.s.keepalive.captures {
+        infos = append(infos, info)
+    }
+	return infos, nil
 }
 
 func (c *captureOb) Heartbeat(context.Context) error {
 	c.s.Lock()
 	defer c.s.Unlock()
-	c.s.keepalive.captures[c.c.ID] = c.c
-	c.s.keepalive.heartbeats[c.c.ID] = time.Now()
+	c.s.keepalive.captures[c.Self().ID] = c.c
+	c.s.keepalive.heartbeats[c.Self().ID] = time.Now()
 
 	c.contextManager.refreshContext()
 	return nil
@@ -131,236 +326,264 @@ func (c *captureOb) TakeControl() (metadata.ControllerObservation, error) {
 		}
 
 		c.s.Lock()
-		if _, ok := c.s.keepalive.heartbeats[c.c.ID]; !ok {
+		if _, ok := c.s.keepalive.heartbeats[c.Self().ID]; !ok {
 			c.s.Unlock()
 			continue
 		}
 		controller := c.s.schedule.controller
 		if len(controller) > 0 {
 			heartbeat, ok := c.s.keepalive.heartbeats[controller]
-			if ok && time.Since(heartbeat) <= 12*time.Second {
+			if ok && time.Since(heartbeat) <= lease + heartbeatDeadline + networkJitter {
 				c.s.Unlock()
 				continue
 			}
 		}
-		c.s.schedule.controller = c.c.ID
+		c.s.schedule.controller = c.Self().ID
 		c.s.Unlock()
-		return nil, nil
+        return newControllerObservation(c.contextManager, c.s, c.c), nil
 	}
 }
 
-func (c *captureOb) Advance(cfs []*metadata.ChangefeedInfo, progresses []*metadata.ChangefeedProgress) error {
+func (c *captureOb) Advance(cfs []metadata.ChangefeedID, progresses []metadata.ChangefeedProgress) error {
 	c.s.Lock()
 	defer c.s.Unlock()
 	for i, cf := range cfs {
-		key := cfKey{ChangeFeedID: cf.ChangefeedID, epoch: cf.Epoch}
-		if owner, ok := c.s.schedule.owners[key]; ok && owner.State == metadata.SchedLaunched {
-			key := cfKey{ChangeFeedID: cf.ChangefeedID, epoch: cf.Epoch}
-			c.s.advance.progresses[key] = *progresses[i]
+		if owner, ok := c.s.schedule.owners[cf]; ok && owner.State == metadata.SchedLaunched {
+			c.s.advance.progresses[cf] = progresses[i]
 		}
 	}
 	return nil
 }
 
-func (c *captureOb) RefreshOwners() <-chan []metadata.ScheduledOwner {
-	return c.owners
+func (c *captureOb) OwnerChanges() <-chan metadata.ScheduledChangefeed {
+	return c.owners.Out()
 }
 
-func (c *captureOb) PostOwnerRemoved(cf *metadata.ChangefeedInfo) error {
+func (c *captureOb) PostOwnerRemoved(cf metadata.ChangefeedID) error {
 	c.s.Lock()
 	defer c.s.Unlock()
-	key := cfKey{ChangeFeedID: cf.ChangefeedID, epoch: cf.Epoch}
-	if owner, ok := c.s.schedule.owners[key]; ok {
+	if owner, ok := c.s.schedule.owners[cf]; ok {
 		owner.State = metadata.SchedRemoved
 	}
 	return nil
 }
 
-func (c *captureOb) RefreshProcessors() <-chan []metadata.ScheduledProcessor {
-	return c.processors
+func (c *captureOb) ProcessorChanges() <-chan metadata.ScheduledChangefeed {
+	return c.processors.Out()
 }
 
-func (c *captureOb) PostProcessorRemoved(cf *metadata.ChangefeedInfo) error {
+func (c *captureOb) PostProcessorRemoved(cf metadata.ChangefeedID) error {
 	c.s.Lock()
 	defer c.s.Unlock()
-	key := cfKey{ChangeFeedID: cf.ChangefeedID, epoch: cf.Epoch}
-	if processors, ok := c.s.schedule.processors[key]; ok {
-		if processor, ok := processors[c.c.ID]; ok {
-			processor.State = metadata.SchedRemoved
-		}
+	if processors, ok := c.s.schedule.processors[cf]; ok {
+        processors.version += 1
+        processors.v = postProcessorRemoved(processors.v, c.Self().ID)
+        c.s.schedule.processors[cf] = processors
 	}
+    if processors, ok := c.s.schedule.processorsByCapture[c.Self().ID]; ok {
+        processors.version += 1
+        processors.v = postProcessorRemoved(processors.v, c.Self().ID)
+        c.s.schedule.processorsByCapture[c.Self().ID] = processors
+    }
 	return nil
 }
 
 type controllerOb struct {
 	s    *storage
 	c    *metadata.CaptureInfo
-	pctx context.Context
+	contextManager *contextManager
+
+    aliveCaptures struct {
+        sync.Mutex
+        inited bool
+        v []metadata.CaptureInfo
+        hash uint64
+    }
 
 	wg       sync.WaitGroup
-	captures chan []*metadata.CaptureInfo
-
-	ownersInRemoving struct {
-		sync.Mutex
-		m map[cfKey]func()
-	}
-	processorsInRemoving struct {
-		sync.Mutex
-		m map[cfKey]map[string]func()
-	}
-
-	contextManager *contextManager
+    captures *chann.DrainableChann[[]*metadata.CaptureInfo]
 }
 
-func (c *controllerOb) CreateChangefeed(cf *metadata.ChangefeedInfo, up *metadata.UpstreamInfo) error {
-	return nil
+func newControllerObservation(ctxMgr *contextManager, s *storage, c *metadata.CaptureInfo) (metadata.ControllerObservation, error) {
+    controllerOb := &controllerOb{
+        s: s,
+        c: c,
+        contextManager: contextManager
+        captures: chann.NewAutoDrainChann[[]*metadata.CaptureInfo](),
+    }
+
+    controllerOb.wg.Add(1)
+    go func() {
+        defer controllerOb.wg.Done()
+        ticker := time.NewTicker(200*time.Millisecond)
+        defer ticker.Stop()
+        var preAliveHash uint64 = 0
+        for {
+            updatedCtx := controllerOb.contextManager.fetchContext()
+            select {
+            case <-updatedCtx.Done():
+                return
+            case <-ticker.C:
+            }
+
+            controllerOb.handleAliveCaptures(updatedCtx)
+        }
+    }()
+
+    return controllerOb, nil
 }
 
-func (c *controllerOb) RemoveChangefeed(cf *metadata.ChangefeedInfo) error {
+func (c *controllerOb) handleAliveCaptures(ctx context.Context) {
+    c.aliveCaptures.Lock()
+    defer c.aliveCaptures.Unlock()
+    if !c.aliveCaptures.inited {
+        return nil
+    }
+
+    alives := make([]*metadata.CaptureInfo)
+    c.s.RLock()
+    for id, info := range c.s.keepalive.captures {
+        if hb, ok := c.s.keepalive.heartbeats[id]; !ok || time.Since(hb) > lease {
+            continue
+        }
+        alives = append(alives, info)
+    }
+    c.s.RUnlock()
+
+    hash := sortAndHashCaptureList(alives)
+
+    c.aliveCaptures.Lock()
+    defer c.aliveCaptures.Unlock()
+    if c.aliveCaptures.inited && c.aliveCaptures.hash != hash {
+        c.aliveCaptures.v = alives
+        c.aliveCaptures.hash = hash
+        c.captures.In() <- alives
+    }
+}
+
+func (c *controllerOb) CreateChangefeed(cf *metadata.ChangefeedInfo, up *metadata.UpstreamInfo) (metadata.ChangefeedID, error) {
+    c.s.entities.Lock()
+    defer c.s.entities.Unlock()
+
+    if _, ok := c.s.entities.cfs[cf.ID]; ok {
+        return metadata.ChangefeedID{}, errors.New("changefeed exists")
+    }
+
+    c.s.entities.cfs[cf.ID] = cf
+    c.s.entities.ups[up.ID] = up
+
+    id := metadata.ChangefeedID{ ChangeFeedID: cf.ID, Epoch: c.s.epoch.Add(1)}
+    id.Comparable = fmt.Sprintf("%s.%d", id.String(), id.Epoch)
+    c.s.entities.cfids[cf.ID] = id
+    return id, nil
+}
+
+func (c *controllerOb) RemoveChangefeed(cf metadata.ChangefeedID) error {
+    c.s.entities.Lock()
+    defer c.s.entities.Unlock()
+    delete(c.s.entities.cfids, cf)
+    delete(c.s.entities.cfs[cf.ChangeFeedID])
 	return nil
 }
 
 func (c *controllerOb) RefreshCaptures() <-chan []*metadata.CaptureInfo {
-	return c.captures
+	return c.captures.Out()
 }
 
-func (c *controllerOb) SetOwner(cf *metadata.ChangefeedInfo, target metadata.ScheduledOwner) (done <-chan struct{}, err error) {
+func (c *controllerOb) SetOwner(cf metadata.ChangefeedID, target metadata.ScheduledChangefeed) error {
 	c.s.Lock()
 	defer c.s.Unlock()
-	key := cfKey{ChangeFeedID: cf.ChangefeedID, epoch: cf.Epoch}
 
-	if origin, ok := c.s.schedule.owners[key]; ok {
-		err = checkScheduleState(origin.Capture, target.Capture, origin.State, target.State)
-	} else {
-		err = checkScheduleState(nil, target.Capture, metadata.SchedRemoved, target.State)
-	}
-	if err != nil {
-		return
-	}
+    target.TaskPosition = c.s.progresses[cf]
 
-	copied := &metadata.ScheduledOwner{}
-	*copied = target
-	c.s.schedule.owners[key] = copied
+    origin := c.s.schedule.owners[cf]
+    if err := metadata.CheckScheduleState(origin, target); err != nil {
+        return err
+    }
+	c.s.schedule.owners[cf] = target
 
-	ch := make(chan struct{})
-	if target.State != metadata.SchedRemoving {
-		close(ch)
-	} else {
-		c.ownersInRemoving.Lock()
-		c.ownersInRemoving.m[key] = func() { close(ch) }
-		c.ownersInRemoving.Unlock()
-	}
-	done = ch
-	return
+    byCapture := c.s.schedule.ownersByCapture[target.CaptureID]
+    if byCapture.compare == nil {
+        byCapture.compare == compareByChangefeed
+    }
+    byCapture.upsert(target)
+    c.s.schedule.ownersByCapture[target.CaptureID] = byCapture
+
+	return nil
 }
 
-func (c *controllerOb) SetProcessors(cf *metadata.ChangefeedInfo, workers []metadata.ScheduledProcessor) (done <-chan struct{}, err error) {
+func (c *controllerOb) SetProcessors(cf metadata.ChangefeedID, workers []metadata.ScheduledChangefeed) error {
 	c.s.Lock()
 	defer c.s.Unlock()
-	key := cfKey{ChangeFeedID: cf.ChangefeedID, epoch: cf.Epoch}
 
-	workersMap := make(map[string]metadata.ScheduledProcessor)
-	for _, worker := range workers {
-		workersMap[worker.Capture.ID] = worker
-	}
+    origin := c.s.schedule.processors[cf]
+    diffs, err := metadata.DiffScheduledChangefeeds(origin.v, byCapture.v)
+    if err != nil {
+        return err
+    }
 
-	removed := make([]metadata.ScheduledProcessor, 0)
-	added := make([]metadata.ScheduledProcessor, 0)
-	changed := make([]metadata.ScheduledProcessor, 0)
-	if origin, ok := c.s.schedule.processors[key]; ok {
-		for capID, processor := range origin {
-			if _, ok := workersMap[capID]; !ok {
-				removed = append(removed, *processor)
-			} else {
-				changed = append(changed, *processor)
-			}
-		}
-		for _, processor := range workers {
-			if _, ok := origin[processor.Capture.ID]; !ok {
-				added = append(added, processor)
-			}
-		}
-	} else {
-		for _, processor := range workers {
-			added = append(added, processor)
-		}
-	}
+    byCapture := sortedScheduledChangefeeds{ version: origin.version + 1, v: workers, compare: compareByCaptureID }
+    byCapture.sort()
+    c.s.schedule.processors[cf] = byCapture
 
-	for _, processor := range removed {
-		err = checkScheduleState(processor.Capture, nil, processor.State, metadata.SchedRemoved)
-		if err != nil {
-			return
-		}
-	}
-	for _, processor := range added {
-		err = checkScheduleState(nil, processor.Capture, metadata.SchedRemoved, processor.State)
-		if err != nil {
-			return
-		}
-	}
-	for _, origin := range changed {
-		target := workersMap[origin.Capture.ID]
-		err = checkScheduleState(origin.Capture, target.Capture, origin.State, target.State)
-		if err != nil {
-			return
-		}
-	}
+    for _, diff := range diffs {
+        if diff.State != metadata.SchedRemoved {
+            x := c.s.schedule.processorsByCapture[diff.CaptureID]
+            if x.compare == nil {
+                x.compare = compareByChangefeed
+            }
+            x.upsert(diff)
+            c.s.schedule.processorsByCapture[diff.CaptureID] = x
+        }
+    }
 
-	copiedMap := make(map[string]*metadata.ScheduledProcessor)
-	for capID, processor := range workersMap {
-		copied := &metadata.ScheduledProcessor{}
-		*copied = processor
-		copiedMap[capID] = copied
-	}
-	c.s.schedule.processors[key] = copiedMap
-
-	inRemovingCount := 0
-	for _, origin := range changed {
-		if origin.State == metadata.SchedLaunched {
-			inRemovingCount += 1
-		}
-	}
-
-	ch := make(chan struct{})
-	if inRemovingCount == 0 {
-		close(ch)
-	} else {
-		var inRemovingCountAtomic atomic.Int32
-		inRemovingCountAtomic.Store(int32(inRemovingCount))
-		m := make(map[string]func())
-		f := func() {
-			if inRemovingCountAtomic.Add(-1) == 0 {
-				close(ch)
-			}
-		}
-		for _, origin := range changed {
-			if origin.State == metadata.SchedLaunched {
-				m[origin.Capture.ID] = f
-			}
-		}
-		c.processorsInRemoving.Lock()
-		// FIXME: clear c.processorsInRemoving.m[key] if it exists.
-		c.processorsInRemoving.m[key] = m
-		c.processorsInRemoving.Unlock()
-	}
-
-	done = ch
-	return
+	return nil
 }
 
-func (c *controllerOb) GetChangefeedSchedule() ([]metadata.ChangefeedSchedule, []*metadata.CaptureInfo, error) {
-	return nil, nil, nil
+func (c *controllerOb) GetChangefeedSchedule(cf metadata.ChangefeedID) (s metadata.ChangefeedSchedule, err error) {
+    c.s.RLock()
+    defer c.s.RUnlock()
+    s.Owner = c.s.schedule.owners[cf]
+    s.Processors = c.s.schedule.processors[cf].v
+    return
+}
+
+func (c *controllerOb) ScheduleSnapshot() (ss []ChangefeedSchedule, cs []*CaptureInfo, err error) {
+    c.s.RLock()
+    ss = make([]metadata.ChangefeedSchedule, 0, len(c.s.entities.cfids))
+    cs = make([]*metadata.CaptureInfo, 0, len(c.s.keepalive.captures))
+    for _, cf := range c.s.entities.cfids {
+        var s metadata.ChangefeedSchedule
+        s.Owner = c.s.scheudle.owners[cf]
+        s.Processors = c.s.schedule.processors[cf].v
+        ss = append(ss, s)
+    }
+    for id, info := range c.s.keepalive.captures {
+        if hb, ok := c.s.keepalive.heartbeats[id]; !ok || time.Since(hb) > lease {
+            continue
+        }
+        cs = append(cs, info)
+    }
+    c.s.RUnlock()
+
+    hash := sortAndHashCaptureList(cs)
+    c.aliveCaptures.Lock()
+    defer c.aliveCaptures.Unlock()
+    c.aliveCaptures.inited = true
+    c.aliveCaptures.v = cs
+    c.aliveCaptures.hash
+    return
 }
 
 type ownerOb struct {
 	s    *storage
 	c    *metadata.ChangefeedInfo
-	pctx context.Context
+	contextManager *contextManager
 
 	wg         sync.WaitGroup
+    processors *chann.DrainableChann
 	processors chan []metadata.ScheduledProcessor
 
-	contextManager *contextManager
 }
 
 func (o *ownerOb) ChangefeedInfo() *metadata.ChangefeedInfo {
@@ -404,35 +627,50 @@ func (o *ownerOb) RefreshProcessors() <-chan []metadata.ScheduledProcessor {
 	return o.processors
 }
 
-func checkScheduleState(originCapture, targetCapture *metadata.CaptureInfo, origin, target metadata.SchedState) error {
-	os := metadata.StateToString(origin)
-	ts := metadata.StateToString(target)
+func compareByChangefeed(a, b metadata.ScheduledChangefeed) int {
+    return strings.Compare(a.ChangefeedID.Comparable, b.ChangefeedID.Comparable)
+}
 
-	if targetCapture == nil {
-		if originCapture == nil {
-			return errors.New("bad schedule: Nil->Nil")
-		}
-		if origin != metadata.SchedRemoved {
-			return errors.New(fmt.Sprintf("bad schedule: A.%s->Nil", os))
-		}
-		return nil
-	}
+func compareByCaptureID(a, b metadata.ScheduledChangefeed) int {
+    return strings.Compare(a.CaptureID, b.CaptureID)
+}
 
-	if originCapture != nil {
-		if originCapture.ID != targetCapture.ID {
-			if origin != metadata.SchedRemoved || target != metadata.SchedLaunched {
-				return errors.New(fmt.Sprintf("bad schedule: A.%s->B.%s", os, ts))
-			}
-		} else {
-			if origin == metadata.SchedLaunched && target == metadata.SchedRemoved {
-				return errors.New(fmt.Sprintf("bad schedule: A.%s->A.%s", os, ts))
-			}
-			if origin == metadata.SchedRemoving && target == metadata.SchedLaunched {
-				return errors.New(fmt.Sprintf("bad schedule: A.%s->A.%s", os, ts))
-			}
-		}
-	} else if target != metadata.SchedLaunched {
-		return errors.New(fmt.Sprintf("bad schedule: None->A.%s", ts))
-	}
-	return nil
+func (s *sortedScheduledChangefeeds) sort() {
+    sort.Slice(s.v, func(i, j int) bool { return s.compare(s.v[i], s.v[j]) })
+}
+
+func (s *sortedScheduledChangefeeds) upsert(target metadata.ScheduledChangefeed) {
+    i := sort.Search(len(s.v), func(i int) bool { return s.compare(s.v[i], target) >= 0 })
+    if i > 0 && i < len(s.v) && s.compare(s.v[i], target) == 0 {
+        s.v[i] = target
+    } else {
+        s.v = append(s.v, target)
+        s.sort()
+    }
+    s.version += 1
+}
+
+func (s *sortedScheduledChangefeeds) remove(target metadata.ScheduledChangefeed) {
+    i := sort.Search(len(s.v), func(i int) bool { return s.compare(s.v[i], target) >= 0 })
+    if i > 0 && i < len(s.v) && s.compare(s.v[i], target) == 0 {
+        s.v = append(s.v[:i-1], s.v[i:]...)
+        s.version += 1
+    }
+}
+
+func (s *sortedScheduledChangefeeds) update(target metadata.ScheduledChangefeed) {
+    i := sort.Search(len(s.v), func(i int) bool { return s.compare(s.v[i], target) >= 0 })
+    if i > 0 && i < len(s.v) && s.compare(s.v[i], target) == 0 {
+        s.v[i] = target
+        s.version += 1
+    }
+}
+
+func sortAndHashCaptureList(cs []*metadata.CaptureInfo) uint64 {
+    hasher := fnv.New64()
+    sort.Slice(cs, func(i, j int) bool { return strings.Compare(cs[i].ID, cs[j].ID) < 0 })
+    for _, info := range cs {
+        hasher.Write([]byte(info.ID))
+    }
+    return hasher.Sum64()
 }

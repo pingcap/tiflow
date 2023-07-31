@@ -15,22 +15,32 @@ package metadata
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
-// ChangefeedInfo is a minimal info collection to describe a changefeed.
-type ChangefeedInfo struct {
-	ChangefeedID model.ChangeFeedID
-	SinkURI      string
-	StartTs      uint64
-	TargetTs     uint64
-	Config       *config.ReplicaConfig
+// ChangefeedID identifies a changefeed.
+type ChangefeedID struct {
+    model.ChangeFeedID
 
 	// Epoch can't be specified by users. It's used by TiCDC internally
 	// to tell distinct changefeeds with a same ID.
 	Epoch uint64
+
+	// Combine of name and epoch, for comparing 2 ChangefeedInfos.
+	Comparable string
+}
+
+// ChangefeedInfo is a minimal info collection to describe a changefeed.
+type ChangefeedInfo struct {
+	ID model.ChangeFeedID
+	SinkURI      string
+	StartTs      uint64
+	TargetTs     uint64
+	Config       *config.ReplicaConfig
 }
 
 // UpstreamInfo is a minimal info collection to describe an upstream.
@@ -59,7 +69,7 @@ type CaptureInfo struct {
 // -------------------- About owner schedule -------------------- //
 // 1. ControllerObservation.SetOwner puts an owner on a given capture;
 // 2. ControllerObservation.SetOwner can also stop an owner;
-// 3. Capture fetches owner launch/stop events with CaptureObservation.RefreshOwners;
+// 3. Capture fetches owner launch/stop events with CaptureObservation.OwnerChanges;
 // 4. Capture calls Capture.PostOwnerRemoved when the owner exits;
 // 5. After controller confirms the old owner exits, it can re-reschedule it.
 // -------------------------------------------------------------- //
@@ -67,8 +77,8 @@ type CaptureInfo struct {
 // ---------- About changefeed processor captures schedule ---------- //
 // 1. ControllerObservation.SetProcessors attaches some captures to a changefeed;
 // 2. ControllerObservation.SetProcessors can also detach captures from a changefeed;
-// 3. Owner calls OwnerObservation.RefreshProcessors to know processors are created;
-// 4. Capture fetches processor launch/stop events with CaptureObservation.RefreshProcessors;
+// 3. Owner calls OwnerObservation.ProcessorChanges to know processors are created;
+// 4. Capture fetches processor launch/stop events with CaptureObservation.ProcessorChanges;
 // 5. How to rolling-update a changefeed with only one worker capture:
 //    * controller needs only to attach more captures to the changefeed;
 //    * it's owner's responsibility to evict tables between captures.
@@ -91,47 +101,32 @@ type CaptureInfo struct {
 type SchedState int
 
 const (
-	// SchedLaunched means the owner or processor is launched.
-	SchedLaunched SchedState = iota
-	// SchedRemoving means the owner or processor is in removing.
-	SchedRemoving
 	// SchedRemoved means the owner or processor is removed.
-	SchedRemoved
+	SchedRemoved SchedState = SchedState(0)
+	// SchedLaunched means the owner or processor is launched.
+	SchedLaunched SchedState = SchedState(1)
+	// SchedRemoving means the owner or processor is in removing.
+	SchedRemoving SchedState = SchedState(2)
+
+	totalStates int = 3
 )
 
-// StateToString convert state to string.
-func StateToString(state SchedState) string {
-	switch state {
-	case SchedLaunched:
-		return "Launched"
-	case SchedRemoving:
-		return "Removing"
-	case SchedRemoved:
-		return "Removed"
-	}
-	return "unreachable"
-}
-
-// ScheduledOwner is for owner and processor schedule.
-type ScheduledOwner struct {
-	*ChangefeedInfo
-	ChangefeedProgress
-	Capture *CaptureInfo
+// ScheduledChangefeed is for owner and processor schedule.
+type ScheduledChangefeed struct {
+    ChangefeedID ChangefeedID
+    CaptureID string
 	State   SchedState
-}
 
-// ScheduledProcessor is for owner and processor schedule.
-type ScheduledProcessor struct {
-	*ChangefeedInfo
-	ChangefeedProgress
-	Capture *CaptureInfo
-	State   SchedState
+    // TaskPosition is used for creating owner and processors on captures.
+    //
+    // When controller specifies resources to a changefeed, it won't care about it.
+	TaskPosition ChangefeedProgress
 }
 
 // ChangefeedSchedule is used to query changefeed schedule information.
 type ChangefeedSchedule struct {
-	Owner     ScheduledOwner
-	Processor []ScheduledProcessor
+	Owner     ScheduledChangefeed
+	Processors []ScheduledChangefeed
 }
 
 // CaptureObservation is for observing and updating metadata on a CAPTURE instance.
@@ -139,12 +134,12 @@ type ChangefeedSchedule struct {
 // All intrefaces are thread-safe and shares one same Context.
 type CaptureObservation interface {
 	// CaptureInfo tells the caller who am I.
-	CaptureInfo() *CaptureInfo
+	Self() *CaptureInfo
 
-	// GetChangefeed queries one changefeed or all changefeeds.
-	GetChangefeeds(...model.ChangeFeedID) ([]*ChangefeedInfo, error)
+	// GetChangefeed queries some or all changefeeds.
+	GetChangefeeds(...model.ChangeFeedID) ([]*ChangefeedInfo, []ChangefeedID, error)
 
-	// GetCaptures queries one capture or all captures.
+	// GetCaptures queries some or all captures.
 	GetCaptures(...string) ([]*CaptureInfo, error)
 
 	// Heartbeat tells the metadata storage I'm still alive.
@@ -154,57 +149,58 @@ type CaptureObservation interface {
 	TakeControl() (ControllerObservation, error)
 
 	// Advance advances some changefeed progresses.
-	Advance(cfs []*ChangefeedInfo, progresses []*ChangefeedProgress) error
+	Advance(cfs []ChangefeedID, progresses []ChangefeedProgress) error
 
-	// Fetch the latest changefeed owner list from metadata.
-	RefreshOwners() <-chan []ScheduledOwner
+	// Fetch owner modifications.
+	OwnerChanges() <-chan ScheduledChangefeed
 
 	// When an owner exits, inform the metadata storage.
-	PostOwnerRemoved(cf *ChangefeedInfo) error
+	PostOwnerRemoved(cf ChangefeedID) error
 
-	// Fetch the latest changefeed processors from metadata.
-	RefreshProcessors() <-chan []ScheduledProcessor
+	// Fetch processor list modifications.
+	ProcessorChanges() <-chan ScheduledChangefeed
 
 	// When a processor exits, inform the metadata storage.
-	PostProcessorRemoved(cf *ChangefeedInfo) error
+	PostProcessorRemoved(cf ChangefeedID) error
 }
 
 // ControllerObservation is for observing and updating meta by Controller.
 //
 // All intrefaces are thread-safe and shares one same Context.
 type ControllerObservation interface {
-	// CreateChangefeed creates a changefeed.
-	CreateChangefeed(cf *ChangefeedInfo, up *UpstreamInfo) error
+	// CreateChangefeed creates a changefeed, Epoch will be filled into the input ChangefeedInfo.
+	CreateChangefeed(cf *ChangefeedInfo, up *UpstreamInfo) (ChangefeedID, error)
 
 	// RemoveChangefeed removes a changefeed, will auto stop owner and processors.
-	RemoveChangefeed(cf *ChangefeedInfo) error
+	RemoveChangefeed(cf ChangefeedID) error
 
 	// Fetch the latest capture list in the TiCDC cluster.
 	RefreshCaptures() <-chan []*CaptureInfo
 
 	// Schedule a changefeed owner to a given target.
 	// Notes:
-	//   * the target capture can fetch the event by `RefreshOwners`.
-	//   * select `done` to wait the old owner in removing to be resolved.
+	//   * the target capture can fetch the event by `OwnerChanges`.
 	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetOwner(cf *ChangefeedInfo, target ScheduledOwner) (done <-chan struct{}, _ error)
+	SetOwner(cf ChangefeedID, target ScheduledChangefeed) error
 
 	// Schedule some captures as workers to a given changefeed.
 	// Notes:
-	//   * target captures can fetch the event by `RefreshProcessors`.
-	//   * select `done` to wait all processors in removing to be resolved.
+	//   * target captures can fetch the event by `ProcessorChanges`.
 	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetProcessors(cf *ChangefeedInfo, workers []ScheduledProcessor) (done <-chan struct{}, _ error)
+	SetProcessors(cf ChangefeedID, workers []ScheduledChangefeed) error
+
+	// Get current schedule of the given changefeed.
+	GetChangefeedSchedule(cf ChangefeedID) (ChangefeedSchedule, error)
 
 	// Get a snapshot of all changefeeds current schedule.
-	GetChangefeedSchedule() ([]ChangefeedSchedule, []*CaptureInfo, error)
+	ScheduleSnapshot() ([]ChangefeedSchedule, []*CaptureInfo, error)
 }
 
 // OwnerObservation is for observing and updating running status of a changefeed.
 //
 // All intrefaces are thread-safe and shares one same Context.
 type OwnerObservation interface {
-	ChangefeedInfo() *ChangefeedInfo
+	Self() (*ChangefeedInfo, ChangefeedID)
 
 	// PauseChangefeed pauses a changefeed.
 	PauseChangefeed() error
@@ -228,5 +224,91 @@ type OwnerObservation interface {
 	SetChangefeedPending() error
 
 	// Fetch the latest capture list to launch processors.
-	RefreshProcessors() <-chan []ScheduledProcessor
+	RefreshProcessors() <-chan []ScheduledChangefeed
+}
+
+// CheckScheduleState checks whether role state transformation is valid or not.
+func CheckScheduleState(origin ScheduledChangefeed, target ScheduledChangefeed) error {
+	if (int(origin.State)+1)%totalStates == int(target.State) {
+		if origin.State == SchedLaunched && origin.CaptureID != target.CaptureID {
+			msg := fmt.Sprintf("bad schedule: A.%s->B.%s", origin.State.toString(), target.State.toString())
+			return NewScheduleError(msg)
+		}
+		return nil
+	}
+	msg := fmt.Sprintf("bad schedule: %s->%s", origin.State.toString(), target.State.toString())
+	return NewScheduleError(msg)
+}
+
+// DiffScheduledChangefeeds gets difference between origin and target.
+//
+// Both origin and target should be sorted by the given rule.
+func DiffScheduledChangefeeds(
+    origin, target []ScheduledChangefeed,
+    sortedBy func(a, b ScheduledChangefeed) int,
+) (diffs []ScheduledChangefeed, error) {
+	badSchedule := func() error {
+		originStrs := make([]string, 0, len(origin))
+		targetStrs := make([]string, 0, len(target))
+		for _, s := range origin {
+			originStrs = append(originStrs, s.toString())
+		}
+		for _, s := range target {
+			targetStrs = append(targetStrs, s.toString())
+		}
+		msg := fmt.Sprintf("bad schedule: [%s]->[%s]", strings.Join(originStrs, ","), strings.Join(targetStrs, ","))
+		return NewScheduleError(msg)
+	}
+
+    if len(origin) <= len(target) {
+        diffs = make([]ScheduledChangefeed, 0, len(target))
+    } else {
+        diffs = make([]ScheduledChangefeed, 0, len(origin))
+    }
+
+    for i, j := 0, 0; i < len(origin) && j < len(target); {
+        if i == len(origin) || sortedBy(origin[i], target[j]) > 0 {
+            unexist := target[j]
+            unexist.State = SchedRemoved
+			if err := CheckScheduleState(unexist, target[j]); err != nil {
+				return nil, badSchedule()
+			}
+			diffs = append(diffs, target[j])
+			j += 1
+        } else if j == len(target) || sortedBy(origin[i], target[j]) < 0 {
+            unexist := origin[i]
+            unexist.State = SchedRemoved
+			if err := CheckScheduleState(origin[i], unexist); err != nil {
+				return nil, badSchedule()
+			}
+			diffs = append(diffs, unexist)
+            i += 1
+        } else {
+			if origin[i].State != target[j].State {
+				if err := CheckScheduleState(origin[i], target[j]); err != nil {
+					return nil, badSchedule()
+				}
+				diffs = append(diffs, target[j])
+			}
+			i += 1
+			j += 1
+        }
+    }
+    return
+}
+
+func (s SchedState) toString() string {
+	switch s {
+	case SchedLaunched:
+		return "Launched"
+	case SchedRemoving:
+		return "Removing"
+	case SchedRemoved:
+		return "Removed"
+	}
+	return "unreachable"
+}
+
+func (s ScheduledChangefeed) toString() string {
+	return fmt.Sprintf("%s.%s", s.CaptureID, s.State.toString())
 }
