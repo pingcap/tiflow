@@ -20,6 +20,8 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/glue/types"
 	"github.com/google/uuid"
@@ -51,8 +53,20 @@ func NewGlueSchemaManager(
 	keySecret,
 	token string,
 ) (SchemaManager, error) {
-	cfg := aws.NewConfig()
-	client := glue.NewFromConfig(cfg.Copy())
+	var cfg aws.Config
+	var err error
+	if keyID == "" || keySecret == "" {
+		cfg, err = config.LoadDefaultConfig(ctx)
+		if err != nil {
+			log.Info("LoadDefaultConfig failed", zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+	} else {
+		cfg = *aws.NewConfig()
+		cfg.Region = region
+		cfg.Credentials = credentials.NewStaticCredentialsProvider(keyID, keySecret, token)
+	}
+	client := glue.NewFromConfig(cfg)
 	return &glueSchemaManager{
 		registryName: registryName,
 		client:       client,
@@ -96,6 +110,7 @@ func (m *glueSchemaManager) Register(
 }
 
 func (m *glueSchemaManager) Lookup(ctx context.Context, topicName string, schemaID schemaID) (*goavro.Codec, error) {
+
 	return nil, nil
 }
 
