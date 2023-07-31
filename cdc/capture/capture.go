@@ -359,13 +359,13 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 				cancel()
 			}
 			if c.processorManager != nil {
-				c.processorManager.Close()
+				c.processorManager.AsyncClose()
 			}
 			log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 		}()
 		processorFlushInterval := time.Duration(c.config.ProcessorFlushInterval)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -478,7 +478,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		owner := c.newOwner(c.upstreamManager)
 		c.setOwner(owner)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -496,9 +496,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 		})
 
-		err = c.runEtcdWorker(ownerCtx, owner,
-			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
-			ownerFlushInterval, util.RoleOwner.String())
+		err = c.runEtcdWorker(ownerCtx, owner, globalState, ownerFlushInterval, util.RoleOwner.String())
 		c.owner.AsyncStop()
 		c.setOwner(nil)
 
