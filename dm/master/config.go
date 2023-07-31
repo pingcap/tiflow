@@ -16,7 +16,6 @@ package master
 import (
 	"bytes"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -27,6 +26,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/pingcap/tiflow/dm/common/config"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -140,8 +140,7 @@ type Config struct {
 
 	// tls config
 	security.Security
-	SecretKeyPath string `toml:"secret-key-path" json:"secret-key-path"`
-	SecretKey     []byte `toml:"-" json:"-"`
+	config.Common
 
 	printVersion      bool
 	printSampleConfig bool
@@ -343,23 +342,7 @@ func (c *Config) adjust() error {
 		log.L().Warn("openapi is a GA feature and removed from experimental features, so this configuration may have no affect in feature release, please set openapi=true in dm-master config file")
 	}
 
-	if c.SecretKeyPath != "" {
-		content, err := os.ReadFile(c.SecretKeyPath)
-		if err != nil {
-			return terror.ErrConfigSecretKeyPath.Delegate(err)
-		}
-		contentStr := strings.TrimSpace(string(content))
-		decodeContent, err := hex.DecodeString(string(contentStr))
-		if err != nil {
-			return terror.ErrConfigSecretKeyPath.Delegate(err)
-		}
-		if len(decodeContent) != 32 {
-			return terror.ErrConfigSecretKeyPath.Generatef("the secret key must be a hex string of length 64")
-		}
-		c.SecretKey = decodeContent
-	}
-
-	return err
+	return c.Common.Adjust()
 }
 
 // Reload load config from local file.

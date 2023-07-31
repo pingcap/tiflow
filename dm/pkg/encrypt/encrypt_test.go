@@ -38,7 +38,7 @@ func TestCipher(t *testing.T) {
 	require.NoError(t, err)
 
 	InitCipher(nil)
-	require.IsType(t, &noopCipher{}, defaultCipher)
+	require.IsType(t, &notInitializedCipher{}, defaultCipher)
 
 	InitCipher(key)
 	require.IsType(t, &aesCipher{}, defaultCipher)

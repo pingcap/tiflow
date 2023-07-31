@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 var (
@@ -36,26 +37,36 @@ type Cipher interface {
 // defaultCipher is the default cipher, it should be initialized using
 // InitCipher before any call to Encrypt and Decrypt.
 // we keep it as a global variable to avoid change existing call site.
-var defaultCipher Cipher = &noopCipher{}
+var defaultCipher Cipher = &notInitializedCipher{}
 
+// InitCipher initializes the defaultCipher.
 func InitCipher(key []byte) {
 	if len(key) == 0 {
 		log.L().Warn("empty secret key, password in config file will be in plain text")
-		defaultCipher = &noopCipher{}
+		defaultCipher = &notInitializedCipher{}
 		return
 	}
 	log.L().Info("password in config file will be encrypted")
 	defaultCipher = &aesCipher{secretKey: key}
 }
 
-type noopCipher struct{}
-
-func (n *noopCipher) Encrypt(plaintext []byte) ([]byte, error) {
-	return plaintext, nil
+// IsInitialized returns whether the defaultCipher is initialized or not.
+func IsInitialized() bool {
+	_, ok := defaultCipher.(*aesCipher)
+	return ok
 }
 
-func (n *noopCipher) Decrypt(ciphertext []byte) ([]byte, error) {
-	return ciphertext, nil
+// DM will guess whether the password is encrypted or not.
+// to compatible with this behavior when InitCipher is not called,
+// we use a notInitializedCipher to always return error
+type notInitializedCipher struct{}
+
+func (n *notInitializedCipher) Encrypt([]byte) ([]byte, error) {
+	return nil, errors.New("secret key is not initialized")
+}
+
+func (n *notInitializedCipher) Decrypt([]byte) ([]byte, error) {
+	return nil, errors.New("secret key is not initialized")
 }
 
 type aesCipher struct {
