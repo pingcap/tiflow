@@ -17,12 +17,10 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/goccy/go-json"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -149,77 +147,8 @@ func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, cl
 	return b.NextRowChangedEvent()
 }
 
-func snapshotQuery(
-	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
-) (*ColumnsHolder, error) {
-	// 1. set snapshot read
-	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		log.Error("establish connection to the upstream tidb failed",
-			zap.String("schema", schema), zap.String("table", table),
-			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-	defer conn.Close()
-
-	_, err = conn.ExecContext(ctx, query)
-	if err != nil {
-		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
-		if ok {
-			// Error 8055 (HY000): snapshot is older than GC safe point
-			if mysqlErr.Number == 8055 {
-				log.Error("set snapshot read failed, since snapshot is older than GC safe point")
-			}
-		}
-
-		log.Error("set snapshot read failed",
-			zap.String("schema", schema), zap.String("table", table),
-			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-
-	// 2. query the whole row
-	query = fmt.Sprintf("select * from `%s`.`%s` where ", schema, table)
-	var whereClause string
-	for name, value := range conditions {
-		if whereClause != "" {
-			whereClause += " and "
-		}
-		whereClause += fmt.Sprintf("`%s` = '%v'", name, value)
-	}
-	query += whereClause
-
-	rows, err := conn.QueryContext(ctx, query)
-	if err != nil {
-		log.Error("query row failed",
-			zap.String("schema", schema), zap.String("table", table),
-			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-
-	holder, err := newColumnHolder(rows)
-	if err != nil {
-		log.Error("obtain the columns holder failed",
-			zap.String("schema", schema), zap.String("table", table),
-			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, err
-	}
-	for rows.Next() {
-		err = rows.Scan(holder.ValuePointers...)
-		if err != nil {
-			log.Error("scan row failed",
-				zap.String("schema", schema), zap.String("table", table),
-				zap.Uint64("commitTs", commitTs), zap.Error(err))
-			return nil, errors.Trace(err)
-		}
-	}
-
-	return holder, nil
-}
-
-func (b *batchDecoder) buildData(holder *ColumnsHolder) (map[string]interface{}, map[string]string, error) {
-	columnsCount := holder.length()
+func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]interface{}, map[string]string, error) {
+	columnsCount := holder.Length()
 	data := make(map[string]interface{}, columnsCount)
 	mysqlTypeMap := make(map[string]string, columnsCount)
 
@@ -276,7 +205,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 
 	switch eventType {
 	case "INSERT":
-		holder, err := snapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +214,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			return nil, err
 		}
 	case "UPDATE":
-		holder, err := snapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
 		if err != nil {
 			return nil, err
 		}
@@ -294,7 +223,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			return nil, err
 		}
 
-		holder, err = snapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
+		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
 		if err != nil {
 			return nil, err
 		}
@@ -303,7 +232,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			return nil, err
 		}
 	case "DELETE":
-		holder, err := snapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
 		if err != nil {
 			return nil, err
 		}
@@ -333,35 +262,6 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 
 	b.msg = message
 	return b.NextRowChangedEvent()
-}
-
-type ColumnsHolder struct {
-	Values        []interface{}
-	ValuePointers []interface{}
-	Types         []*sql.ColumnType
-}
-
-func newColumnHolder(rows *sql.Rows) (*ColumnsHolder, error) {
-	columnTypes, err := rows.ColumnTypes()
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	values := make([]interface{}, len(columnTypes))
-	valuePointers := make([]interface{}, len(columnTypes))
-	for i := range values {
-		valuePointers[i] = &values[i]
-	}
-
-	return &ColumnsHolder{
-		Values:        values,
-		ValuePointers: valuePointers,
-		Types:         columnTypes,
-	}, nil
-}
-
-func (h *ColumnsHolder) length() int {
-	return len(h.Values)
 }
 
 // NextRowChangedEvent implements the RowEventDecoder interface

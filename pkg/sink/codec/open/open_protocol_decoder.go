@@ -15,6 +15,7 @@ package open
 
 import (
 	"context"
+	"database/sql"
 	"encoding/binary"
 
 	"github.com/pingcap/errors"
@@ -25,6 +26,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/util"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // BatchMixedDecoder decodes the byte of a batch into the original messages.
@@ -135,6 +138,9 @@ type BatchDecoder struct {
 	nextKeyLen uint64
 
 	storage storage.ExternalStorage
+
+	upstreamTiDB *sql.DB
+	bytesDecoder *encoding.Decoder
 }
 
 // HasNext implements the RowEventDecoder interface
@@ -203,6 +209,83 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEv
 	return event, nil
 }
 
+func (b *BatchDecoder) assembleHandleKeyOnlyEvent(ctx context.Context) (*model.RowChangedEvent, error) {
+	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	value := b.valueBytes[8 : valueLen+8]
+	b.valueBytes = b.valueBytes[valueLen+8:]
+	rowMsg := new(messageRow)
+	if err := rowMsg.decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+	handleKeyOnlyEvent := msgToRowChange(b.nextKey, rowMsg)
+	b.nextKey = nil
+
+	var (
+		schema   = handleKeyOnlyEvent.Table.Schema
+		table    = handleKeyOnlyEvent.Table.Table
+		commitTs = handleKeyOnlyEvent.CommitTs
+	)
+
+	if handleKeyOnlyEvent.IsInsert() {
+		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
+		for _, col := range handleKeyOnlyEvent.Columns {
+			conditions[col.Name] = col.Value
+		}
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
+		if err != nil {
+			return nil, err
+		}
+		columns, err := b.buildColumns(holder)
+		if err != nil {
+			return nil, err
+		}
+		handleKeyOnlyEvent.Columns = columns
+	} else if handleKeyOnlyEvent.IsDelete() {
+		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
+		for _, col := range handleKeyOnlyEvent.PreColumns {
+			conditions[col.Name] = col.Value
+		}
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
+		if err != nil {
+			return nil, err
+		}
+		preColumns, err := b.buildColumns(holder)
+		if err != nil {
+			return nil, err
+		}
+		handleKeyOnlyEvent.PreColumns = preColumns
+	} else if handleKeyOnlyEvent.IsUpdate() {
+		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
+		for _, col := range handleKeyOnlyEvent.Columns {
+			conditions[col.Name] = col.Value
+		}
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
+		if err != nil {
+			return nil, err
+		}
+		columns, err := b.buildColumns(holder)
+		if err != nil {
+			return nil, err
+		}
+		handleKeyOnlyEvent.Columns = columns
+
+		conditions = make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
+		for _, col := range handleKeyOnlyEvent.PreColumns {
+			conditions[col.Name] = col.Value
+		}
+		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
+		if err != nil {
+			return nil, err
+		}
+		preColumns, err := b.buildColumns(holder)
+		if err != nil {
+			return nil, err
+		}
+		handleKeyOnlyEvent.PreColumns = preColumns
+
+	}
+}
+
 // NextRowChangedEvent implements the RowEventDecoder interface
 func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey == nil {
@@ -218,6 +301,10 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	// claim-check message found
 	if b.nextKey.ClaimCheckLocation != "" {
 		return b.assembleEventFromClaimCheckStorage()
+	}
+
+	if b.nextKey.OnlyHandleKey {
+		return b.assembleHandleKeyOnlyEvent()
 	}
 
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
@@ -273,7 +360,7 @@ func (b *BatchDecoder) decodeNextKey() error {
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
-func NewBatchDecoder(ctx context.Context, config *common.Config) (codec.RowEventDecoder, error) {
+func NewBatchDecoder(ctx context.Context, config *common.Config, db *sql.DB) (codec.RowEventDecoder, error) {
 	var (
 		storage storage.ExternalStorage
 		err     error
@@ -285,8 +372,16 @@ func NewBatchDecoder(ctx context.Context, config *common.Config) (codec.RowEvent
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 	}
+
+	if config.LargeMessageHandle.HandleKeyOnly() && db == nil {
+		return nil, cerror.ErrCodecDecode.
+			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
+	}
+
 	return &BatchDecoder{
-		storage: storage,
+		storage:      storage,
+		upstreamTiDB: db,
+		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
 	}, nil
 
 }
