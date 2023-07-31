@@ -446,6 +446,8 @@ type Consumer struct {
 	codecConfig *common.Config
 
 	option *consumerOption
+
+	upstreamTiDB *sql.DB
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -467,12 +469,20 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	c.codecConfig = common.NewConfig(o.protocol)
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
 	c.codecConfig.EnableRowChecksum = o.enableRowChecksum
+	if c.codecConfig.Protocol == config.ProtocolAvro {
+		c.codecConfig.AvroEnableWatermark = true
+	}
+
 	if o.replicaConfig != nil && o.replicaConfig.Sink != nil && o.replicaConfig.Sink.KafkaConfig != nil {
 		c.codecConfig.LargeMessageHandle = o.replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 	}
 
-	if c.codecConfig.Protocol == config.ProtocolAvro {
-		c.codecConfig.AvroEnableWatermark = true
+	if c.codecConfig.LargeMessageHandle.HandleKeyOnly() {
+		db, err := openDB(ctx, c.option.upstreamTiDBDSN)
+		if err != nil {
+			return nil, err
+		}
+		c.upstreamTiDB = db
 	}
 
 	if o.replicaConfig != nil {
@@ -576,13 +586,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 	switch c.codecConfig.Protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
-		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig)
+		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
 	case config.ProtocolCanalJSON:
-		db, err := openDB(ctx, c.option.upstreamTiDBDSN)
-		if err != nil {
-			return err
-		}
-		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, db)
+		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
 		if err != nil {
 			return err
 		}
