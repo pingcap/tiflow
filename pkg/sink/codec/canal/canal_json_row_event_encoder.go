@@ -380,13 +380,14 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	}
 	m.IncRowsCount()
 
+	originLength := m.Length()
 	if m.Length() > c.config.MaxMessageBytes {
-		log.Warn("Single message is too large for canal-json",
-			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
-			zap.Int("length", m.Length()),
-			zap.Any("table", e.Table))
 		// for single message that is longer than max-message-bytes, do not send it.
 		if c.config.LargeMessageHandle.Disabled() {
+			log.Error("Single message is too large for canal-json",
+				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+				zap.Int("length", originLength),
+				zap.Any("table", e.Table))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
@@ -396,9 +397,20 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
 			m.Value = value
-			if m.Length() > c.config.MaxMessageBytes {
+			length := m.Length()
+			if length > c.config.MaxMessageBytes {
+				log.Error("Single message is still too large for canal-json only encode handle-key columns",
+					zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+					zap.Int("originLength", originLength),
+					zap.Int("length", length),
+					zap.Any("table", e.Table))
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
+			log.Warn("Single message is too large for canal-json, only encode handle-key columns",
+				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+				zap.Int("originLength", originLength),
+				zap.Int("length", length),
+				zap.Any("table", e.Table))
 		}
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
@@ -451,7 +463,11 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
+	result := common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e)
+
+	log.Info("encode DDL event", zap.Int("length", result.Length()))
+
+	return result, nil
 }
 
 type jsonRowEventEncoderBuilder struct {

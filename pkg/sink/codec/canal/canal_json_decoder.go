@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // batchDecoder decodes the byte into the original message.
@@ -44,6 +47,7 @@ type batchDecoder struct {
 	storage storage.ExternalStorage
 
 	upstreamTiDB *sql.DB
+	bytesDecoder *encoding.Decoder
 }
 
 // NewBatchDecoder return a decoder for canal-json
@@ -71,6 +75,7 @@ func NewBatchDecoder(
 		config:       codecConfig,
 		storage:      storage,
 		upstreamTiDB: db,
+		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
 	}, nil
 }
 
@@ -213,6 +218,40 @@ func snapshotQuery(
 	return holder, nil
 }
 
+func (b *batchDecoder) buildData(holder *ColumnsHolder) (map[string]interface{}, map[string]string, error) {
+	columnsCount := holder.length()
+	data := make(map[string]interface{}, columnsCount)
+	mysqlTypeMap := make(map[string]string, columnsCount)
+
+	for i := 0; i < columnsCount; i++ {
+		t := holder.Types[i]
+		name := holder.Types[i].Name()
+		mysqlType := strings.ToLower(t.DatabaseTypeName())
+
+		var value string
+		rawValue := holder.Values[i].([]uint8)
+		if strings.Contains(mysqlType, "blob") {
+			rawValue, err := b.bytesDecoder.Bytes(rawValue)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+			value = string(rawValue)
+		}
+
+		if strings.Contains(mysqlType, "bit") {
+			bitValue, err := common.BinaryLiteralToInt(rawValue)
+			if err != nil {
+				return nil, nil, errors.Trace(err)
+			}
+			value = strconv.FormatUint(bitValue, 10)
+		}
+		mysqlTypeMap[name] = mysqlType
+		data[name] = value
+	}
+
+	return data, mysqlTypeMap, nil
+}
+
 func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 	ctx context.Context, message *canalJSONMessageWithTiDBExtension,
 ) (*model.RowChangedEvent, error) {
@@ -223,32 +262,55 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		eventType = message.EventType
 	)
 
-	holder, err := snapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, message.getData())
-	if err != nil {
-		return nil, err
-	}
-
-	columnsCount := holder.length()
-
-	// 1. how to handle the insert
-	// 2. how to handle the delete
-	// 3. how to handle the update.
-
-	data := make(map[string]interface{}, columnsCount)
-	mysqlType := make(map[string]string, columnsCount)
-	javaSQLType := make(map[string]int32, columnsCount)
-	for i := 0; i < columnsCount; i++ {
-		value := holder.Values[i]
-		name := holder.Types[i].Name()
-
-		t := holder.Types[i]
-		mysqlType[name] = strings.ToLower(t.DatabaseTypeName())
-		data[name] = value
-	}
-
-	pkNames := make([]string, 0, len(data))
-	for name := range data {
+	handleKeyData := message.getData()
+	pkNames := make([]string, 0, len(handleKeyData))
+	for name := range handleKeyData {
 		pkNames = append(pkNames, name)
+	}
+
+	var (
+		data      map[string]interface{}
+		old       map[string]interface{}
+		mysqlType map[string]string
+	)
+
+	switch eventType {
+	case "INSERT":
+		holder, err := snapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
+		if err != nil {
+			return nil, err
+		}
+		data, mysqlType, err = b.buildData(holder)
+		if err != nil {
+			return nil, err
+		}
+	case "UPDATE":
+		holder, err := snapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
+		if err != nil {
+			return nil, err
+		}
+		data, mysqlType, err = b.buildData(holder)
+		if err != nil {
+			return nil, err
+		}
+
+		holder, err = snapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
+		if err != nil {
+			return nil, err
+		}
+		old, _, err = b.buildData(holder)
+		if err != nil {
+			return nil, err
+		}
+	case "DELETE":
+		holder, err := snapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
+		if err != nil {
+			return nil, err
+		}
+		old, mysqlType, err = b.buildData(holder)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	message = &canalJSONMessageWithTiDBExtension{
@@ -260,10 +322,9 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			EventType: eventType,
 
 			MySQLType: mysqlType,
-			SQLType:   javaSQLType,
 
 			Data: []map[string]interface{}{data},
-			Old:  nil,
+			Old:  []map[string]interface{}{old},
 		},
 		Extensions: &tidbExtension{
 			CommitTs: commitTs,

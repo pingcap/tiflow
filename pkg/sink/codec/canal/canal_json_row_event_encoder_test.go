@@ -273,7 +273,7 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		require.NotNil(t, msg)
 
 		ctx := context.Background()
-		decoder, err := NewBatchDecoder(ctx, config)
+		decoder, err := NewBatchDecoder(ctx, config, nil)
 		require.NoError(t, err)
 
 		err = decoder.AddKeyValue(msg.Key, msg.Value)
