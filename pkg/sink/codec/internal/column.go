@@ -103,7 +103,7 @@ func (c *Column) ToRowChangeColumn(name string) *model.Column {
 }
 
 // ToCanalJSONFormatColumn converts from a codec column to a row changed column in canal-json format.
-func (c *Column) ToCanalJSONFormatColumn(name string) *model.Column {
+func (c *Column) ToCanalJSONFormatColumn(name string, isBlob bool) *model.Column {
 	col := new(model.Column)
 	col.Type = c.Type
 	col.Flag = c.Flag
@@ -127,17 +127,14 @@ func (c *Column) ToCanalJSONFormatColumn(name string) *model.Column {
 		return col
 	}
 
-	if c.Type != mysql.TypeBlob && c.Type != mysql.TypeTinyBlob &&
-		c.Type != mysql.TypeMediumBlob && c.Type != mysql.TypeLongBlob {
-		col.Value = value
-		return col
-	}
-
-	// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
-	encoder := charmap.ISO8859_1.NewEncoder()
-	value, err := encoder.String(value)
-	if err != nil {
-		log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+	var err error
+	if isBlob {
+		// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
+		encoder := charmap.ISO8859_1.NewEncoder()
+		value, err = encoder.String(value)
+		if err != nil {
+			log.Panic("invalid column value, please report a bug", zap.Any("col", c), zap.Error(err))
+		}
 	}
 
 	col.Value = value

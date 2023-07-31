@@ -159,7 +159,6 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	}
 
 	mysqlType := msg.getMySQLType()
-
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
@@ -199,9 +198,13 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
+		isBlob := false
+		if strings.Contains(mysqlTypeStr, "blob") || strings.Contains(mysqlTypeStr, "binary") {
+			isBlob = true
+		}
 		mysqlType := types.StrToType(mysqlTypeStr)
 		col := internal.NewColumn(value, mysqlType).
-			ToCanalJSONFormatColumn(name)
+			ToCanalJSONFormatColumn(name, isBlob)
 		result = append(result, col)
 	}
 	if len(result) == 0 {

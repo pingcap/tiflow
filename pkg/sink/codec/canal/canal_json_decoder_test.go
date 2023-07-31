@@ -37,7 +37,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		encoder := newJSONRowEventEncoder(config)
 		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)
+		err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, nil)
 		require.NoError(t, err)
 
 		messages := encoder.Build()
