@@ -118,7 +118,7 @@ func (c *Column) ToCanalJSONFormatColumn(name string, isBlob bool) *model.Column
 		log.Panic("canal-json encoded message should have type in `string`")
 	}
 
-	if c.Type == mysql.TypeBit {
+	if c.Type == mysql.TypeBit || c.Type == mysql.TypeSet {
 		val, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
 			log.Panic("invalid column value for bit", zap.Any("col", c), zap.Error(err))
