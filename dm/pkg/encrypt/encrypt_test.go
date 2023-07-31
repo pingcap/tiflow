@@ -21,24 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSetSecretKey(t *testing.T) {
-	// 16 bit
-	b16 := make([]byte, 16)
-	_, err := rand.Read(b16)
-	require.NoError(t, err)
-
-	err = SetSecretKey(b16)
-	require.NoError(t, err)
-
-	// 20 bit
-	b20 := make([]byte, 20)
-	_, err = rand.Read(b20)
-	require.NoError(t, err)
-
-	err = SetSecretKey(b20)
-	require.Error(t, err)
-}
-
 func removeChar(input []byte, c byte) []byte {
 	i := 0
 	for _, x := range input {
@@ -50,7 +32,17 @@ func removeChar(input []byte, c byte) []byte {
 	return input[:i]
 }
 
-func TestEncrypt(t *testing.T) {
+func TestCipher(t *testing.T) {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	require.NoError(t, err)
+
+	InitCipher(nil)
+	require.IsType(t, &noopCipher{}, defaultCipher)
+
+	InitCipher(key)
+	require.IsType(t, &aesCipher{}, defaultCipher)
+
 	plaintext := []byte("a plain text")
 
 	// encrypt
@@ -73,11 +65,12 @@ func TestEncrypt(t *testing.T) {
 	// a special case, we construct a ciphertext that can be decrypted but the
 	// plaintext is not what we want. This is because currently encrypt mechanism
 	// doesn't keep enough information to decide whether the new ciphertext is valid
-	block, err := aes.NewCipher(secretKey)
+	block, err := aes.NewCipher(key)
 	require.NoError(t, err)
 	blockSize := block.BlockSize()
 	require.Greater(t, len(ciphertext), blockSize+2)
-	plaintext3, err := Decrypt(append(ciphertext[1:blockSize+1], append([]byte{ivSep[0]}, ciphertext[blockSize+2:]...)...))
+	cipherText3 := append(ciphertext[1:blockSize+1], append([]byte{ivSep[0]}, ciphertext[blockSize+2:]...)...)
+	plaintext3, err := Decrypt(cipherText3)
 	require.NoError(t, err)
 	require.NotEqual(t, plaintext, plaintext3)
 }
