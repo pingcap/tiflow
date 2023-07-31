@@ -414,10 +414,6 @@ type partitionSinks struct {
 	tableSinksMap     sync.Map
 	// resolvedTs record the maximum timestamp of the received event
 	resolvedTs uint64
-	// resolvedTs record the maximum timestamp of the events flushed to the downstream mysql.
-	checkpointTs uint64
-
-	session sarama.ConsumerGroupSession
 }
 
 // Consumer represents a Sarama consumer group consumer
@@ -566,7 +562,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	if sink == nil {
 		panic("sink should initialized")
 	}
-	sink.session = session
 
 	ctx := context.Background()
 	var (

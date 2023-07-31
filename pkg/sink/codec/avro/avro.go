@@ -355,10 +355,6 @@ const (
 	tidbRowLevelChecksum = "_tidb_row_level_checksum"
 	tidbChecksumVersion  = "_tidb_checksum_version"
 	tidbCorrupted        = "_tidb_corrupted"
-
-	// large message handle related fields
-	tidbHandleKeyOnly      = "_tidb_handle_key_only"
-	tidbClaimCheckLocation = "_tidb_claim_check_location"
 )
 
 var type2TiDBType = map[byte]string{
