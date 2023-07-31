@@ -353,7 +353,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	g.Go(func() error {
 		processorFlushInterval := time.Duration(c.config.ProcessorFlushInterval)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -467,7 +467,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		owner := c.newOwner(c.upstreamManager)
 		c.setOwner(owner)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -485,9 +485,30 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 		})
 
+<<<<<<< HEAD
 		err = c.runEtcdWorker(ownerCtx, owner,
 			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
 			ownerFlushInterval, util.RoleOwner.String())
+=======
+		g, ctx := errgroup.WithContext(ctx)
+		ctx, cancelOwner := context.WithCancel(ctx)
+		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
+		g.Go(func() error {
+			return c.runEtcdWorker(ownerCtx, owner,
+				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL),
+				ownerFlushInterval, util.RoleOwner.String())
+		})
+		g.Go(func() error {
+			er := c.runEtcdWorker(ownerCtx, controller,
+				globalState,
+				// todo: do not use owner flush interval
+				ownerFlushInterval, util.RoleController.String())
+			// controller is exited, cancel owner to exit the loop.
+			cancelOwner()
+			return er
+		})
+		err = g.Wait()
+>>>>>>> 63e0497e3a (pkg/orchestrator(ticdc): add timeout before remove capture (#9445))
 		c.owner.AsyncStop()
 		c.setOwner(nil)
 
