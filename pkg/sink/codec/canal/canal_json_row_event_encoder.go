@@ -465,8 +465,6 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	}
 	result := common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e)
 
-	log.Info("encode DDL event", zap.Int("length", result.Length()))
-
 	return result, nil
 }
 
