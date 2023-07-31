@@ -35,6 +35,9 @@ type ReactorState interface {
 	// Update is called by EtcdWorker to notify the Reactor of a latest change to the Etcd state.
 	Update(key util.EtcdKey, value []byte, isInit bool) error
 
+	// UpdatePendingChange is called by EtcdWorker to notify the Reactor to apply the pending changes.
+	UpdatePendingChange()
+
 	// GetPatches is called by EtcdWorker, and should return many slices of data patches that represents the changes
 	// that a Reactor wants to apply to Etcd.
 	// a slice of DataPatch will be committed as one ETCD txn
