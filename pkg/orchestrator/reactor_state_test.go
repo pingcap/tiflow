@@ -497,10 +497,13 @@ func TestPatchTaskPosition(t *testing.T) {
 }
 
 func TestGlobalStateUpdate(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		updateKey   []string
 		updateValue []string
 		expected    GlobalReactorState
+		timeout     int
 	}{
 		{ // common case
 			updateKey: []string{
@@ -563,14 +566,22 @@ func TestGlobalStateUpdate(t *testing.T) {
 				`6bbc01c8-0605-4f86-a0f9-b3119109b225`,
 				`55551111`,
 				`{"id":"6bbc01c8-0605-4f86-a0f9-b3119109b225","address":"127.0.0.1:8300"}`,
+<<<<<<< HEAD
 				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,"admin-job-type":0}`,
 				`{"45":{"workload":1}}`,
 				`{"46":{"workload":1}}`,
 				``,
+=======
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,
+		"admin-job-type":0}`,
+				`{"resolved-ts":421980720003809281,"checkpoint-ts":421980719742451713,
+		"admin-job-type":0}`,
+>>>>>>> 63e0497e3a (pkg/orchestrator(ticdc): add timeout before remove capture (#9445))
 				``,
 				``,
 				``,
 			},
+			timeout: 6,
 			expected: GlobalReactorState{
 				Owner:    map[string]struct{}{"22317526c4fc9a38": {}},
 				Captures: map[model.CaptureID]*model.CaptureInfo{},
@@ -588,7 +599,11 @@ func TestGlobalStateUpdate(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
+<<<<<<< HEAD
 		state := NewGlobalState()
+=======
+		state := NewGlobalState(etcd.DefaultCDCClusterID, 10)
+>>>>>>> 63e0497e3a (pkg/orchestrator(ticdc): add timeout before remove capture (#9445))
 		for i, k := range tc.updateKey {
 			value := []byte(tc.updateValue[i])
 			if len(value) == 0 {
@@ -597,13 +612,21 @@ func TestGlobalStateUpdate(t *testing.T) {
 			err := state.Update(util.NewEtcdKey(k), value, false)
 			require.Nil(t, err)
 		}
+		time.Sleep(time.Duration(tc.timeout) * time.Second)
+		state.UpdatePendingChange()
 		require.True(t, cmp.Equal(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{})),
 			cmp.Diff(state, &tc.expected, cmpopts.IgnoreUnexported(GlobalReactorState{}, ChangefeedReactorState{})))
 	}
 }
 
 func TestCaptureChangeHooks(t *testing.T) {
+<<<<<<< HEAD
 	state := NewGlobalState()
+=======
+	t.Parallel()
+
+	state := NewGlobalState(etcd.DefaultCDCClusterID, 10)
+>>>>>>> 63e0497e3a (pkg/orchestrator(ticdc): add timeout before remove capture (#9445))
 
 	var callCount int
 	state.onCaptureAdded = func(captureID model.CaptureID, addr string) {
@@ -625,11 +648,16 @@ func TestCaptureChangeHooks(t *testing.T) {
 
 	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix+"/capture-1"), captureInfoBytes, false)
 	require.Nil(t, err)
-	require.Equal(t, callCount, 1)
+	require.Eventually(t, func() bool {
+		return callCount == 1
+	}, time.Second*3, 10*time.Millisecond)
 
 	err = state.Update(util.NewEtcdKey(etcd.CaptureInfoKeyPrefix+"/capture-1"), nil /* delete */, false)
 	require.Nil(t, err)
-	require.Equal(t, callCount, 2)
+	require.Eventually(t, func() bool {
+		state.UpdatePendingChange()
+		return callCount == 2
+	}, time.Second*10, 10*time.Millisecond)
 }
 
 func TestCheckChangefeedNormal(t *testing.T) {

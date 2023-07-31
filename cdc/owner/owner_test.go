@@ -63,7 +63,11 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 	o := owner.(*ownerImpl)
 	o.upstreamManager = upstream.NewManager4Test(pdClient)
 
+<<<<<<< HEAD
 	state := orchestrator.NewGlobalState()
+=======
+	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
+>>>>>>> 63e0497e3a (pkg/orchestrator(ticdc): add timeout before remove capture (#9445))
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// set captures

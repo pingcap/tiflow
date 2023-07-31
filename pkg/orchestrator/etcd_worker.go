@@ -450,6 +450,7 @@ func (worker *EtcdWorker) applyUpdates() error {
 			return errors.Trace(err)
 		}
 	}
+	worker.state.UpdatePendingChange()
 
 	worker.pendingUpdates = worker.pendingUpdates[:0]
 	return nil

@@ -16,6 +16,7 @@ package orchestrator
 import (
 	"encoding/json"
 	"reflect"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,6 +26,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"go.uber.org/zap"
 )
+
+const defaultCaptureRemoveTTL = 5
 
 // GlobalReactorState represents a global state which stores all key-value pairs in ETCD
 type GlobalReactorState struct {
@@ -37,14 +40,53 @@ type GlobalReactorState struct {
 	// to be called when captures are added and removed.
 	onCaptureAdded   func(captureID model.CaptureID, addr string)
 	onCaptureRemoved func(captureID model.CaptureID)
+
+	captureRemoveTTL int
+	toRemoveCaptures map[model.CaptureID]time.Time
 }
 
+<<<<<<< HEAD
 // NewGlobalState creates a new global state
 func NewGlobalState() *GlobalReactorState {
 	return &GlobalReactorState{
 		Owner:       map[string]struct{}{},
 		Captures:    make(map[model.CaptureID]*model.CaptureInfo),
 		Changefeeds: make(map[model.ChangeFeedID]*ChangefeedReactorState),
+=======
+// NewGlobalState creates a new global state.
+func NewGlobalState(clusterID string, captureSessionTTL int) *GlobalReactorState {
+	captureRemoveTTL := captureSessionTTL / 2
+	if captureRemoveTTL < defaultCaptureRemoveTTL {
+		captureRemoveTTL = defaultCaptureRemoveTTL
+	}
+	return &GlobalReactorState{
+		ClusterID:        clusterID,
+		Owner:            map[string]struct{}{},
+		Captures:         make(map[model.CaptureID]*model.CaptureInfo),
+		Upstreams:        make(map[model.UpstreamID]*model.UpstreamInfo),
+		Changefeeds:      make(map[model.ChangeFeedID]*ChangefeedReactorState),
+		captureRemoveTTL: captureRemoveTTL,
+		toRemoveCaptures: make(map[model.CaptureID]time.Time),
+	}
+}
+
+// NewGlobalStateForTest creates a new global state for test.
+func NewGlobalStateForTest(clusterID string) *GlobalReactorState {
+	return NewGlobalState(clusterID, 0)
+}
+
+// UpdatePendingChange implements the ReactorState interface
+func (s *GlobalReactorState) UpdatePendingChange() {
+	for c, t := range s.toRemoveCaptures {
+		if time.Since(t) >= time.Duration(s.captureRemoveTTL)*time.Second {
+			log.Info("remote capture offline", zap.Any("info", s.Captures[c]))
+			delete(s.Captures, c)
+			if s.onCaptureRemoved != nil {
+				s.onCaptureRemoved(c)
+			}
+			delete(s.toRemoveCaptures, c)
+		}
+>>>>>>> 63e0497e3a (pkg/orchestrator(ticdc): add timeout before remove capture (#9445))
 	}
 }
 
@@ -55,6 +97,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	if err != nil {
 		return errors.Trace(err)
 	}
+
 	switch k.Tp {
 	case etcd.CDCKeyTypeOwner:
 		if value != nil {
@@ -65,6 +108,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 		return nil
 	case etcd.CDCKeyTypeCapture:
 		if value == nil {
+<<<<<<< HEAD
 			log.Info("remote capture offline",
 				zap.String("captureID", k.CaptureID),
 				zap.Any("info", s.Captures[k.CaptureID]))
@@ -72,6 +116,10 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 			if s.onCaptureRemoved != nil {
 				s.onCaptureRemoved(k.CaptureID)
 			}
+=======
+			log.Info("remote capture offline detected", zap.Any("info", s.Captures[k.CaptureID]))
+			s.toRemoveCaptures[k.CaptureID] = time.Now()
+>>>>>>> 63e0497e3a (pkg/orchestrator(ticdc): add timeout before remove capture (#9445))
 			return nil
 		}
 
@@ -158,6 +206,10 @@ func NewChangefeedReactorState(id model.ChangeFeedID) *ChangefeedReactorState {
 		TaskStatuses:  make(map[model.CaptureID]*model.TaskStatus),
 		Workloads:     make(map[model.CaptureID]model.TaskWorkload),
 	}
+}
+
+// UpdatePendingChange implements the ReactorState interface
+func (s *ChangefeedReactorState) UpdatePendingChange() {
 }
 
 // Update implements the ReactorState interface

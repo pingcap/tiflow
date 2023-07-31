@@ -51,6 +51,7 @@ func NewManager4Test(
 }
 
 func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
+<<<<<<< HEAD
 	s.manager = NewManager4Test(t, func(ctx cdcContext.Context, tableID model.TableID, replicaInfo *model.TableReplicaInfo) (tablepipeline.TablePipeline, error) {
 		return &mockTablePipeline{
 			tableID:      tableID,
@@ -61,6 +62,10 @@ func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 		}, nil
 	})
 	s.state = orchestrator.NewGlobalState()
+=======
+	s.manager = NewManager4Test(t, &s.liveness)
+	s.state = orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
+>>>>>>> 63e0497e3a (pkg/orchestrator(ticdc): add timeout before remove capture (#9445))
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{
