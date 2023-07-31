@@ -12,16 +12,3 @@
 // limitations under the License.
 
 package memory
-
-import (
-	"context"
-	"fmt"
-	"sync"
-	"sync/atomic"
-	"time"
-
-	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/metadata"
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util"
-)

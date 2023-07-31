@@ -15,15 +15,15 @@ package metadata
 
 // ScheduleError is for role state transformation.
 type ScheduleError struct {
-    Msg string
+	Msg string
 }
 
 // Error implements error interface.
 func (e ScheduleError) Error() string {
-    return e.Msg
+	return e.Msg
 }
 
 // NewScheduleError creates an error.
 func NewScheduleError(msg string) ScheduleError {
-    return ScheduleError { Msg: msg }
+	return ScheduleError{Msg: msg}
 }
