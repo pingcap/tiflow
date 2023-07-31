@@ -167,7 +167,7 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 				log.Panic("enable-tidb-extension only work with canal-json / avro")
 			}
 		}
-		o.enableRowChecksum = enableTiDBExtension
+		o.enableTiDBExtension = enableTiDBExtension
 	}
 
 	s = upstreamURI.Query().Get("enable-row-checksum")
