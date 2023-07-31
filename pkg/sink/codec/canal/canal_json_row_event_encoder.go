@@ -463,9 +463,7 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	result := common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e)
-
-	return result, nil
+	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }
 
 type jsonRowEventEncoderBuilder struct {

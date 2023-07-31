@@ -583,6 +583,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			return err
 		}
 		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, db)
+		if err != nil {
+			return err
+		}
 	case config.ProtocolAvro:
 		schemaM, err := avro.NewAvroSchemaManager(ctx, c.option.schemaRegistryURI, nil)
 		if err != nil {
