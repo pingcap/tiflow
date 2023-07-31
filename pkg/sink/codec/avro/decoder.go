@@ -40,8 +40,7 @@ type decoder struct {
 	topic  string
 	sc     *stmtctx.StatementContext
 
-	keySchemaM   *SchemaManager
-	valueSchemaM *SchemaManager
+	schemaM *SchemaManager
 
 	key   []byte
 	value []byte
@@ -50,17 +49,15 @@ type decoder struct {
 // NewDecoder return an avro decoder
 func NewDecoder(
 	config *common.Config,
-	keySchemaM *SchemaManager,
-	valueSchemaM *SchemaManager,
+	schemaM *SchemaManager,
 	topic string,
 	tz *time.Location,
 ) codec.RowEventDecoder {
 	return &decoder{
-		config:       config,
-		topic:        topic,
-		keySchemaM:   keySchemaM,
-		valueSchemaM: valueSchemaM,
-		sc:           &stmtctx.StatementContext{TimeZone: tz},
+		config:  config,
+		topic:   topic,
+		schemaM: schemaM,
+		sc:      &stmtctx.StatementContext{TimeZone: tz},
 	}
 }
 
@@ -423,13 +420,13 @@ func decodeRawBytes(
 func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
 	data := d.key
 	d.key = nil
-	return decodeRawBytes(ctx, d.keySchemaM, data, d.topic)
+	return decodeRawBytes(ctx, d.schemaM, data, d.topic)
 }
 
 func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
 	data := d.value
 	d.value = nil
-	return decodeRawBytes(ctx, d.valueSchemaM, data, d.topic)
+	return decodeRawBytes(ctx, d.schemaM, data, d.topic)
 }
 
 // calculate the checksum value, and compare it with the expected one, return error if not identical.
