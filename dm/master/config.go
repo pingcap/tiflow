@@ -140,7 +140,7 @@ type Config struct {
 
 	// tls config
 	security.Security
-	config.Common
+	config.Common `yaml:",inline" toml:",inline" json:",inline"`
 
 	printVersion      bool
 	printSampleConfig bool

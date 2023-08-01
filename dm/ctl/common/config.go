@@ -128,7 +128,7 @@ type Config struct {
 	ConfigFile string `json:"config-file"`
 
 	security.Security
-	config.Common
+	config.Common `yaml:",inline" toml:",inline" json:",inline"`
 }
 
 func (c *Config) String() string {
