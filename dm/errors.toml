@@ -1211,7 +1211,7 @@ workaround = "Please set `shard-mode` to `optimistic` if you want to enable `str
 tags = ["internal", "medium"]
 
 [error.DM-config-20067]
-message = "invalid secret key path or content"
+message = "invalid secret key path or content: %v"
 description = ""
 workaround = "Please check whether the path is valid, and has required permission to read the file, and the key is correct."
 tags = ["internal", "high"]
