@@ -131,3 +131,4 @@ else
 fi
 
 # add new line to test trigger ci
+# test add new commit auto trigger
