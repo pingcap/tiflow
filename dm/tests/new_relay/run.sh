@@ -232,12 +232,14 @@ function test_kill_dump_connection() {
 function test_relay_operations() {
 	cleanup_process
 	cleanup_data $TEST_NAME
+	mkdir -p $WORK_DIR/master; cp $cur/conf/key.txt $WORK_DIR/master/
+
 	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/relay/ReportRelayLogSpaceInBackground=return(1)"
 
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master-key.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -346,8 +348,8 @@ function test_relay_operations() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# config export
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"config export -p /tmp/configs" \
+	run_dm_ctl_cmd_mode $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"config export -p /tmp/configs --secret-key-path $cur/conf/key.txt" \
 		"export configs to directory .* succeed" 1
 
 	# check configs
@@ -358,12 +360,13 @@ function test_relay_operations() {
 	# destroy cluster
 	cleanup_process $*
 	cleanup_data $TEST_NAME
+	mkdir -p $WORK_DIR/master; cp $cur/conf/key.txt $WORK_DIR/master/
 
 	# insert new data
 	run_sql_file $cur/data/db1.increment5.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	# deploy new cluster
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master-key.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
