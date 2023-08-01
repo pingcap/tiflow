@@ -197,7 +197,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		pkNames = append(pkNames, name)
 	}
 
-	message = &canalJSONMessageWithTiDBExtension{
+	result := &canalJSONMessageWithTiDBExtension{
 		JSONMessage: &JSONMessage{
 			Schema:  schema,
 			Table:   table,
@@ -220,8 +220,8 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		if err != nil {
 			return nil, err
 		}
-		message.MySQLType = mysqlType
-		message.Data = []map[string]interface{}{data}
+		result.MySQLType = mysqlType
+		result.Data = []map[string]interface{}{data}
 	case "UPDATE":
 		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
 		if err != nil {
@@ -231,8 +231,8 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		if err != nil {
 			return nil, err
 		}
-		message.MySQLType = mysqlType
-		message.Data = []map[string]interface{}{data}
+		result.MySQLType = mysqlType
+		result.Data = []map[string]interface{}{data}
 
 		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
 		if err != nil {
@@ -242,7 +242,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		if err != nil {
 			return nil, err
 		}
-		message.Old = []map[string]interface{}{old}
+		result.Old = []map[string]interface{}{old}
 	case "DELETE":
 		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
 		if err != nil {
@@ -252,11 +252,11 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		if err != nil {
 			return nil, err
 		}
-		message.MySQLType = mysqlType
-		message.Data = []map[string]interface{}{data}
+		result.MySQLType = mysqlType
+		result.Data = []map[string]interface{}{data}
 	}
 
-	b.msg = message
+	b.msg = result
 	return b.NextRowChangedEvent()
 }
 

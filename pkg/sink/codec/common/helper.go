@@ -65,6 +65,7 @@ func SnapshotQuery(
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		log.Error("establish connection to the upstream tidb failed",
+			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, errors.Trace(err)
@@ -82,6 +83,7 @@ func SnapshotQuery(
 		}
 
 		log.Error("set snapshot read failed",
+			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, errors.Trace(err)
@@ -101,6 +103,7 @@ func SnapshotQuery(
 	rows, err := conn.QueryContext(ctx, query)
 	if err != nil {
 		log.Error("query row failed",
+			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, errors.Trace(err)
@@ -110,6 +113,7 @@ func SnapshotQuery(
 	holder, err := newColumnHolder(rows)
 	if err != nil {
 		log.Error("obtain the columns holder failed",
+			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, err
@@ -118,6 +122,7 @@ func SnapshotQuery(
 		err = rows.Scan(holder.ValuePointers...)
 		if err != nil {
 			log.Error("scan row failed",
+				zap.String("query", query),
 				zap.String("schema", schema), zap.String("table", table),
 				zap.Uint64("commitTs", commitTs), zap.Error(err))
 			return nil, errors.Trace(err)
