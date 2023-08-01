@@ -142,7 +142,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			txn.Callback()
 			continue
 		}
-		rowCount := uint64(len(txn.Event.Rows))
+		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
@@ -157,7 +157,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
 					Event:     row,
-					Callback:  mergedCallback(txn.Callback, rowCount),
+					Callback:  callback,
 					SinkState: txn.SinkState,
 				},
 			}
