@@ -126,7 +126,15 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
-
+	// merge the split row callbackable into one callbackable
+	mergedCallback := func(outCallback func(), totalCount uint64) func() {
+		var acked atomic.Uint64
+		return func() {
+			if acked.Add(1) == totalCount {
+				outCallback()
+			}
+		}
+	}
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
@@ -135,7 +143,6 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			continue
 		}
 		rowCount := uint64(len(txn.Event.Rows))
-		var ackedCount atomic.Uint64
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
@@ -149,12 +156,8 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 					Topic: topic, Partition: partition,
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
-					Event: row,
-					Callback: func() {
-						if ackedCount.Add(1) == rowCount {
-							txn.Callback()
-						}
-					},
+					Event:     row,
+					Callback:  mergedCallback(txn.Callback, rowCount),
 					SinkState: txn.SinkState,
 				},
 			}
