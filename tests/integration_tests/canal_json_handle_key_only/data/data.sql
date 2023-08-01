@@ -95,3 +95,7 @@ insert into t values (
 
 update t set c_float = 3.1415, c_double = 2.7182, c_decimal = 8000, c_decimal_2 = 179394.233 where id = 2;
 
+create table finish_mark
+(
+    id int PRIMARY KEY
+);
