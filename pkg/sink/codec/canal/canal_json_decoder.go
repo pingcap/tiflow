@@ -165,14 +165,14 @@ func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]inter
 				return nil, nil, errors.Trace(err)
 			}
 			value = string(rawValue)
-		}
-
-		if strings.Contains(mysqlType, "bit") {
+		} else if strings.Contains(mysqlType, "bit") {
 			bitValue, err := common.BinaryLiteralToInt(rawValue)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
 			value = strconv.FormatUint(bitValue, 10)
+		} else {
+			value = string(rawValue)
 		}
 		mysqlTypeMap[name] = mysqlType
 		data[name] = value
