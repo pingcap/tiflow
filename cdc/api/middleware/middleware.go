@@ -147,7 +147,7 @@ func ForwardToChangefeedOwnerMiddleware(p capture.Capture,
 		changefeedCaptureOwner := controller.GetChangefeedOwnerCaptureInfo(changefeedID)
 		if changefeedCaptureOwner.ID == info.ID {
 			log.Warn("changefeed owner is the same as controller",
-				zap.String("capture-id", info.ID))
+				zap.String("captureID", info.ID))
 			return
 		}
 		api.ForwardToCapture(ctx, info.ID, changefeedCaptureOwner.AdvertiseAddr)
