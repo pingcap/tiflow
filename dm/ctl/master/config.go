@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pb"
-	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/spf13/cobra"
@@ -217,8 +216,8 @@ func newImportCfgsCmd() *cobra.Command {
 
 // exportCfgsFunc exports configs.
 func exportCfgsFunc(cmd *cobra.Command, args []string) error {
-	if !encrypt.IsInitialized() {
-		return errors.New("cipher is not initialized, please run with `--secret-key-path` flags")
+	if err := common.CheckSecretInitialized(); err != nil {
+		return err
 	}
 	filePath, err := cmd.Flags().GetString("path")
 	if err != nil {

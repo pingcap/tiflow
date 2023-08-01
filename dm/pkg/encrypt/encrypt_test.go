@@ -37,6 +37,9 @@ func TestCipher(t *testing.T) {
 	_, err := rand.Read(key)
 	require.NoError(t, err)
 
+	t.Cleanup(func() {
+		InitCipher(nil)
+	})
 	InitCipher(nil)
 	require.IsType(t, &notInitializedCipher{}, defaultCipher)
 

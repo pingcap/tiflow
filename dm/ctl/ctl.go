@@ -225,6 +225,9 @@ func newEncryptCmd() *cobra.Command {
 			if len(args) != 1 {
 				return cmd.Help()
 			}
+			if err := common.CheckSecretInitialized(); err != nil {
+				return err
+			}
 			ciphertext, err := utils.Encrypt(args[0])
 			if err != nil {
 				return errors.Trace(err)
@@ -242,6 +245,9 @@ func newDecryptCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return cmd.Help()
+			}
+			if err := common.CheckSecretInitialized(); err != nil {
+				return err
 			}
 			plaintext, err := utils.Decrypt(args[0])
 			if err != nil {

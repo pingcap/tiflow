@@ -24,6 +24,9 @@ import (
 )
 
 func TestEncrypt(t *testing.T) {
+	t.Cleanup(func() {
+		encrypt.InitCipher(nil)
+	})
 	key := make([]byte, 32)
 	_, err := rand.Read(key)
 	require.NoError(t, err)
