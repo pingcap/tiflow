@@ -378,16 +378,38 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 // which should be used to decode the binary data.
 func extractConfluentSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	if len(data) < 5 {
-		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return 0, nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("an avro message using confluent schema registry should have at least 5 bytes")
 	}
 	if data[0] != magicByte {
-		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return 0, nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("magic byte is not match, it should be 0")
 	}
-	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
+	id, err := getConfluentSchemaIDFromHeader(data[0:5])
+	if err != nil {
+		return 0, nil, errors.Trace(err)
+	}
+	return int(id), data[5:], nil
 }
 
 func extractGlueSchemaIDAndBinaryData(data []byte) (string, []byte, error) {
-	return "", nil, errors.New("not implemented")
+	if len(data) < 18 {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("an avro message using glue schema registry should have at least 18 bytes")
+	}
+	if data[0] != header_version_byte {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("header version byte is not match, it should be %d", header_version_byte)
+	}
+	if data[1] != compression_default_byte {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("compression byte is not match, it should be %d", compression_default_byte)
+	}
+	id, err := getGlueSchemaIDFromHeader(data[0:18])
+	if err != nil {
+		return "", nil, errors.Trace(err)
+	}
+	return id, data[18:], nil
 }
 
 func decodeRawBytes(

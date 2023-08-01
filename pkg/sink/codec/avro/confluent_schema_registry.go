@@ -69,9 +69,9 @@ type lookupResponse struct {
 	Schema   string `json:"schema"`
 }
 
-// NewAvroSchemaManager create schema managers,
+// NewConfluentSchemaManager create schema managers,
 // and test connectivity to the schema registry
-func NewAvroSchemaManager(
+func NewConfluentSchemaManager(
 	ctx context.Context,
 	registryURL string,
 	credential *security.Credential,
@@ -203,14 +203,14 @@ func (m *confluentSchemaManager) Register(
 // Lookup the cached schema entry first, if not found, fetch from the Registry server.
 func (m *confluentSchemaManager) Lookup(
 	ctx context.Context,
-	schemaSubject string,
+	schemaName string,
 	schemaID schemaID,
 ) (*goavro.Codec, error) {
 	m.cacheRWLock.RLock()
-	entry, exists := m.cache[schemaSubject]
+	entry, exists := m.cache[schemaName]
 	if exists && entry.schemaID.cID == schemaID.cID {
 		log.Debug("Avro schema lookup cache hit",
-			zap.String("key", schemaSubject),
+			zap.String("key", schemaName),
 			zap.Int("schemaID", entry.schemaID.cID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, nil
@@ -218,7 +218,7 @@ func (m *confluentSchemaManager) Lookup(
 	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
-		zap.String("key", schemaSubject),
+		zap.String("key", schemaName),
 		zap.Int("schemaID", schemaID.cID))
 
 	uri := m.registryURL + "/schemas/ids/" + strconv.Itoa(schemaID.cID)
@@ -259,7 +259,7 @@ func (m *confluentSchemaManager) Lookup(
 
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
-			zap.String("key", schemaSubject),
+			zap.String("key", schemaName),
 			zap.Int("schemaID", schemaID.cID))
 		return nil, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(
 			"Schema not found in Registry",
@@ -280,9 +280,13 @@ func (m *confluentSchemaManager) Lookup(
 		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	cacheEntry.schemaID.cID = schemaID.cID
+	cacheEntry.header, err = m.getMsgHeader(schemaID.cID)
+	if err != nil {
+		return nil, err
+	}
 
 	m.cacheRWLock.Lock()
-	m.cache[schemaSubject] = cacheEntry
+	m.cache[schemaName] = cacheEntry
 	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema lookup successful with cache miss",
@@ -401,6 +405,9 @@ func (m *confluentSchemaManager) RegistryType() string {
 	return m.registryType
 }
 
+// confluent avro wire format, confluent avro is not same as apache avro
+// https://rmoff.net/2020/07/03/why-json-isnt-the-same-as-json-schema-in-kafka-connect-converters \
+// -and-ksqldb-viewing-kafka-messages-bytes-as-hex/
 func (m *confluentSchemaManager) getMsgHeader(schemaID int) ([]byte, error) {
 	head := new(bytes.Buffer)
 	err := head.WriteByte(magicByte)
@@ -469,4 +476,11 @@ func httpRetry(
 	}
 
 	return resp, nil
+}
+
+func getConfluentSchemaIDFromHeader(header []byte) (uint32, error) {
+	if len(header) < 5 {
+		return 0, cerror.ErrDecodeFailed.GenWithStackByArgs("header too short")
+	}
+	return binary.BigEndian.Uint32(header[1:5]), nil
 }

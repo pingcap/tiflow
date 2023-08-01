@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -771,10 +772,10 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	bin, err := encoder.encodeValue(ctx, "default", event)
 	require.NoError(t, err)
 
-	schemaID, data, err := extractConfluentSchemaIDAndBinaryData(bin)
+	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
+	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{cID: cid})
 	require.NoError(t, err)
 
 	res, _, err := avroValueCodec.NativeFromBinary(data)
@@ -811,10 +812,10 @@ func TestAvroEncode(t *testing.T) {
 	bin, err := encoder.encodeKey(ctx, topic, event)
 	require.NoError(t, err)
 
-	schemaID, data, err := extractConfluentSchemaIDAndBinaryData(bin)
+	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroKeyCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
+	avroKeyCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{cID: cid})
 	require.NoError(t, err)
 
 	res, _, err := avroKeyCodec.NativeFromBinary(data)
@@ -830,10 +831,10 @@ func TestAvroEncode(t *testing.T) {
 	bin, err = encoder.encodeValue(ctx, topic, event)
 	require.NoError(t, err)
 
-	schemaID, data, err = extractConfluentSchemaIDAndBinaryData(bin)
+	cid, data, err = extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID)
+	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{cID: cid})
 	require.NoError(t, err)
 
 	res, _, err = avroValueCodec.NativeFromBinary(data)
@@ -852,7 +853,8 @@ func TestAvroEncode(t *testing.T) {
 
 func TestAvroEnvelope(t *testing.T) {
 	t.Parallel()
-
+	cManager := &confluentSchemaManager{}
+	gManager := &glueSchemaManager{}
 	avroCodec, err := goavro.NewCodec(`
        {
          "type": "record",
@@ -870,22 +872,43 @@ func TestAvroEnvelope(t *testing.T) {
 	bin, err := avroCodec.BinaryFromNative(nil, testNativeData)
 	require.NoError(t, err)
 
+	// test confluent schema message
+	header, err := cManager.getMsgHeader(8)
+	require.NoError(t, err)
 	res := avroEncodeResult{
 		data:   bin,
-		header: []byte{0, 0, 0, 7},
+		header: header,
 	}
 
 	evlp, err := res.toEnvelope()
 	require.NoError(t, err)
-
-	require.Equal(t, magicByte, evlp[0])
-	require.Equal(t, []byte{0, 0, 0, 7}, evlp[1:5])
+	require.Equal(t, header, evlp[0:5])
 
 	parsed, _, err := avroCodec.NativeFromBinary(evlp[5:])
 	require.NoError(t, err)
 	require.NotNil(t, parsed)
 
 	id, exists := parsed.(map[string]interface{})["id"]
+	require.True(t, exists)
+	require.Equal(t, int32(7), id)
+
+	// test glue schema message
+	uuidGenerator := uuid.NewGenerator()
+	uuidS := uuidGenerator.NewString()
+	header, err = gManager.getMsgHeader(uuidS)
+	require.NoError(t, err)
+	res = avroEncodeResult{
+		data:   bin,
+		header: header,
+	}
+	evlp, err = res.toEnvelope()
+	require.NoError(t, err)
+	require.Equal(t, header, evlp[0:18])
+
+	parsed, _, err = avroCodec.NativeFromBinary(evlp[18:])
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+	id, exists = parsed.(map[string]interface{})["id"]
 	require.True(t, exists)
 	require.Equal(t, int32(7), id)
 }

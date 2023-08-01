@@ -157,6 +157,9 @@ type SinkConfig struct {
 	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
 	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
+
+	//GlueSchemaRegistryConfig is only available when the downstream is MQ using avro protocol.
+	GlueSchemaRegistryConfig *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config,omitempty"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -637,4 +640,36 @@ func (c *LargeMessageHandleConfig) Disabled() bool {
 		return false
 	}
 	return c.LargeMessageHandleOption == LargeMessageHandleOptionNone
+}
+
+type GlueSchemaRegistryConfig struct {
+	// Name of the schema registry
+	RegistryName string `toml:"registry-name" json:"registry-name"`
+	// Region of the schema registry
+	Region string `toml:"region" json:"region"`
+	// AccessKeyID of the schema registry
+	AccessKeyID string `toml: "access-key-id" json:"access-key-id,omitempty"`
+	// AccessKeySecret of the schema registry
+	AccessKeySecret string `toml: "access-key-secret" json:"access-key-secret,omitempty"`
+	Token           string `toml: "token" json:"token,omitempty"`
+}
+
+func (g *GlueSchemaRegistryConfig) Validate() error {
+	if g.RegistryName == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("registry-name is empty, is must be set")
+	}
+	if g.Region == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("region is empty, is must be set")
+	}
+	if g.AccessKeyID != "" && g.AccessKeySecret == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("access-key is set, but access-key-secret is empty, they must be set together")
+	}
+	return nil
+}
+
+func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
+	return g.AccessKeyID == "" && g.AccessKeySecret == "" && g.Token == ""
 }

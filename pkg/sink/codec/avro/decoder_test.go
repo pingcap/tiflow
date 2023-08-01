@@ -61,7 +61,7 @@ func TestDecodeEvent(t *testing.T) {
 	require.Len(t, messages, 1)
 	message := messages[0]
 
-	schemaM, err := NewAvroSchemaManager(ctx, "http://127.0.0.1:8081", nil)
+	schemaM, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
 	tz, err := util.GetLocalTimezone()

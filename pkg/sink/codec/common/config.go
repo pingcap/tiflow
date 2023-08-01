@@ -47,10 +47,10 @@ type Config struct {
 	EnableRowChecksum   bool
 
 	// avro only
-	AvroSchemaRegistry             string
+	AvroConfluentSchemaRegistry    string
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
-
+	AvroGlueSchemaRegistry         *config.GlueSchemaRegistryConfig
 	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
 	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
 	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
@@ -80,7 +80,7 @@ func NewConfig(protocol config.Protocol) *Config {
 		EnableTiDBExtension: false,
 		EnableRowChecksum:   false,
 
-		AvroSchemaRegistry:             "",
+		AvroConfluentSchemaRegistry:    "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
 		AvroEnableWatermark:            false,
@@ -96,6 +96,7 @@ const (
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
+	coderOPTAvroGlueSchemaRegistry         = "glue-schema-registry"
 
 	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
@@ -166,7 +167,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	if urlParameter.AvroSchemaRegistry != "" {
-		c.AvroSchemaRegistry = urlParameter.AvroSchemaRegistry
+		c.AvroConfluentSchemaRegistry = urlParameter.AvroSchemaRegistry
 	}
 
 	if replicaConfig.Sink != nil {
@@ -243,10 +244,11 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Protocol == config.ProtocolAvro {
-		if c.AvroSchemaRegistry == "" {
+		if c.AvroConfluentSchemaRegistry == "" && c.AvroGlueSchemaRegistry == nil {
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
-				`Avro protocol requires parameter "%s"`,
+				`Avro protocol requires parameter "%s" or "%s"`,
 				codecOPTAvroSchemaRegistry,
+				coderOPTAvroGlueSchemaRegistry,
 			)
 		}
 

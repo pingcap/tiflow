@@ -11,8 +11,8 @@ type SchemaManager interface {
 	Lookup(ctx context.Context, schemaName string, schemaID schemaID) (*goavro.Codec, error)
 	GetCachedOrRegister(ctx context.Context, topicName string,
 		tableVersion uint64, schemaGen SchemaGenerator) (*goavro.Codec, []byte, error)
-	ClearRegistry(ctx context.Context, schemaSubject string) error
 	RegistryType() string
+	ClearRegistry(ctx context.Context, schemaName string) error
 }
 
 // SchemaGenerator represents a function that returns an Avro schema in JSON.

@@ -34,7 +34,7 @@ func TestNewConfig(t *testing.T) {
 	require.Equal(t, false, c.EnableTiDBExtension)
 	require.Equal(t, "precise", c.AvroDecimalHandlingMode)
 	require.Equal(t, "long", c.AvroBigintUnsignedHandlingMode)
-	require.Equal(t, "", c.AvroSchemaRegistry)
+	require.Equal(t, "", c.AvroConfluentSchemaRegistry)
 	require.False(t, c.EnableRowChecksum)
 	require.NotNil(t, c.LargeMessageHandle)
 }
@@ -269,7 +269,7 @@ func TestConfigApplyValidate(t *testing.T) {
 
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.Equal(t, "", c.AvroSchemaRegistry)
+	require.Equal(t, "", c.AvroConfluentSchemaRegistry)
 	// `schema-registry` not set
 	err = c.Validate()
 	require.ErrorContains(t, err, `Avro protocol requires parameter "schema-registry"`)
@@ -277,7 +277,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	replicaConfig.Sink.SchemaRegistry = util.AddressOf("this-is-a-uri")
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.Equal(t, "this-is-a-uri", c.AvroSchemaRegistry)
+	require.Equal(t, "this-is-a-uri", c.AvroConfluentSchemaRegistry)
 	err = c.Validate()
 	require.NoError(t, err)
 
@@ -409,7 +409,7 @@ func TestMergeConfig(t *testing.T) {
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, true, c.EnableTiDBExtension)
-	require.Equal(t, "abc", c.AvroSchemaRegistry)
+	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
@@ -441,7 +441,7 @@ func TestMergeConfig(t *testing.T) {
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, true, c.EnableTiDBExtension)
-	require.Equal(t, "abc", c.AvroSchemaRegistry)
+	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
@@ -479,7 +479,7 @@ func TestMergeConfig(t *testing.T) {
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.Equal(t, true, c.EnableTiDBExtension)
-	require.Equal(t, "abc", c.AvroSchemaRegistry)
+	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)

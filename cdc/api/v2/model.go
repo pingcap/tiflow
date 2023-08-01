@@ -410,6 +410,16 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			res.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(*c.Sink.TxnAtomicity))
 		}
 
+		if c.Sink.GlueSchemaRegistryConfig != nil {
+			res.Sink.GlueSchemaRegistryConfig = &config.GlueSchemaRegistryConfig{
+				RegistryName:    c.Sink.GlueSchemaRegistryConfig.RegistryName,
+				Region:          c.Sink.GlueSchemaRegistryConfig.Region,
+				AccessKeyID:     c.Sink.GlueSchemaRegistryConfig.AccessKeyID,
+				AccessKeySecret: c.Sink.GlueSchemaRegistryConfig.AccessKeySecret,
+				Token:           c.Sink.GlueSchemaRegistryConfig.Token,
+			}
+		}
+
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -614,6 +624,17 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			}
 		}
 
+		var glueSchemaRegistryConfig *GlueSchemaRegistryConfig
+		if cloned.Sink.GlueSchemaRegistryConfig != nil {
+			glueSchemaRegistryConfig = &GlueSchemaRegistryConfig{
+				RegistryName:    cloned.Sink.GlueSchemaRegistryConfig.RegistryName,
+				Region:          cloned.Sink.GlueSchemaRegistryConfig.Region,
+				AccessKeyID:     cloned.Sink.GlueSchemaRegistryConfig.AccessKeyID,
+				AccessKeySecret: cloned.Sink.GlueSchemaRegistryConfig.AccessKeySecret,
+				Token:           cloned.Sink.GlueSchemaRegistryConfig.Token,
+			}
+		}
+
 		res.Sink = &SinkConfig{
 			Protocol:                         cloned.Sink.Protocol,
 			SchemaRegistry:                   cloned.Sink.SchemaRegistry,
@@ -632,6 +653,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MySQLConfig:                      mysqlConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         cloned.Sink.SafeMode,
+			GlueSchemaRegistryConfig:         glueSchemaRegistryConfig,
 		}
 
 		if cloned.Sink.TxnAtomicity != nil {
@@ -770,24 +792,25 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                         *string             `json:"protocol,omitempty"`
-	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
-	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
-	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
-	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
-	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
-	Terminator                       *string             `json:"terminator,omitempty"`
-	DateSeparator                    *string             `json:"date_separator,omitempty"`
-	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
-	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
-	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
-	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
-	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
-	SafeMode                         *bool               `json:"safe_mode,omitempty"`
-	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
-	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
-	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	Protocol                         *string                   `json:"protocol,omitempty"`
+	SchemaRegistry                   *string                   `json:"schema_registry,omitempty"`
+	CSVConfig                        *CSVConfig                `json:"csv,omitempty"`
+	DispatchRules                    []*DispatchRule           `json:"dispatchers,omitempty"`
+	ColumnSelectors                  []*ColumnSelector         `json:"column_selectors,omitempty"`
+	TxnAtomicity                     *string                   `json:"transaction_atomicity,omitempty"`
+	EncoderConcurrency               *int                      `json:"encoder_concurrency,omitempty"`
+	Terminator                       *string                   `json:"terminator,omitempty"`
+	DateSeparator                    *string                   `json:"date_separator,omitempty"`
+	EnablePartitionSeparator         *bool                     `json:"enable_partition_separator,omitempty"`
+	FileIndexWidth                   *int                      `json:"file_index_width,omitempty"`
+	EnableKafkaSinkV2                *bool                     `json:"enable_kafka_sink_v2,omitempty"`
+	OnlyOutputUpdatedColumns         *bool                     `json:"only_output_updated_columns,omitempty"`
+	DeleteOnlyOutputHandleKeyColumns *bool                     `json:"delete_only_output_handle_key_columns"`
+	SafeMode                         *bool                     `json:"safe_mode,omitempty"`
+	KafkaConfig                      *KafkaConfig              `json:"kafka_config,omitempty"`
+	MySQLConfig                      *MySQLConfig              `json:"mysql_config,omitempty"`
+	CloudStorageConfig               *CloudStorageConfig       `json:"cloud_storage_config,omitempty"`
+	GlueSchemaRegistryConfig         *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -1054,4 +1077,16 @@ type ChangefeedStatus struct {
 	CheckpointTs uint64        `json:"checkpoint_ts"`
 	LastError    *RunningError `json:"last_error,omitempty"`
 	LastWarning  *RunningError `json:"last_warning,omitempty"`
+}
+
+type GlueSchemaRegistryConfig struct {
+	// Name of the schema registry
+	RegistryName string `toml:"registry-name" json:"registry-name"`
+	// Region of the schema registry
+	Region string `toml:"region" json:"region"`
+	// AccessKeyID of the schema registry
+	AccessKeyID string `toml: "access-key-id" json:"access-key-id,omitempty"`
+	// AccessKeySecret of the schema registry
+	AccessKeySecret string `toml: "access-key-secret" json:"access-key-secret,omitempty"`
+	Token           string `toml: "token" json:"token,omitempty"`
 }

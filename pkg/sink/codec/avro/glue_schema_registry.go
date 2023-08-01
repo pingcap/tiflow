@@ -20,7 +20,7 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/glue/types"
@@ -28,6 +28,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -38,7 +39,7 @@ import (
 // in cache the local cache entry is missing.
 type glueSchemaManager struct {
 	registryName string
-	client       *glue.Client
+	client       glueClient
 
 	cacheRWLock  sync.RWMutex
 	cache        map[string]*schemaCacheEntry
@@ -47,28 +48,25 @@ type glueSchemaManager struct {
 
 func NewGlueSchemaManager(
 	ctx context.Context,
-	region,
-	registryName,
-	keyID,
-	keySecret,
-	token string,
+	cfg *config.GlueSchemaRegistryConfig,
 ) (SchemaManager, error) {
-	var cfg aws.Config
+	var awsCfg aws.Config
 	var err error
-	if keyID == "" || keySecret == "" {
-		cfg, err = config.LoadDefaultConfig(ctx)
+	if cfg.NoCredentials() {
+		awsCfg, err = awsconfig.LoadDefaultConfig(ctx)
 		if err != nil {
 			log.Info("LoadDefaultConfig failed", zap.Error(err))
 			return nil, errors.Trace(err)
 		}
 	} else {
-		cfg = *aws.NewConfig()
-		cfg.Region = region
-		cfg.Credentials = credentials.NewStaticCredentialsProvider(keyID, keySecret, token)
+		awsCfg = *aws.NewConfig()
+		awsCfg.Region = cfg.Region
+		awsCfg.Credentials = credentials.
+			NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.AccessKeySecret, cfg.Token)
 	}
-	client := glue.NewFromConfig(cfg)
+	client := glue.NewFromConfig(awsCfg)
 	return &glueSchemaManager{
-		registryName: registryName,
+		registryName: cfg.RegistryName,
 		client:       client,
 		cache:        make(map[string]*schemaCacheEntry),
 		registryType: schemaRegistryTypeGlue,
@@ -82,20 +80,18 @@ func (m *glueSchemaManager) Register(
 	schemaDefinition string,
 ) (schemaID, error) {
 	id := schemaID{}
-	// 1. look if the schema already exists in the registry
-	// 2. if so, update the schema
-	// 3. otherwise, register the schema
-	// 4. return the schema id
 	ok, _, err := m.getSchemaByName(ctx, schemaName)
 	if err != nil {
 		return id, errors.Trace(err)
 	}
 	if ok {
-		log.Info("Schema already exists, update it", zap.String("schema name", schemaName))
+		log.Info("Schema already exists in registry, update it", zap.String("schema name", schemaName))
 		schemaID, err := m.updateSchema(ctx, schemaName, schemaDefinition)
 		if err != nil {
 			return id, errors.Trace(err)
 		}
+		log.Info("Schema updated", zap.String("schema name", schemaName),
+			zap.String("schemaID", schemaID))
 		id.gID = schemaID
 		return id, nil
 	} else {
@@ -109,7 +105,53 @@ func (m *glueSchemaManager) Register(
 	}
 }
 
-func (m *glueSchemaManager) Lookup(ctx context.Context, topicName string, schemaID schemaID) (*goavro.Codec, error) {
+func (m *glueSchemaManager) Lookup(
+	ctx context.Context,
+	schemaName string,
+	schemaID schemaID) (*goavro.Codec, error) {
+	m.cacheRWLock.RLock()
+	entry, exists := m.cache[schemaName]
+	if exists && entry.schemaID.cID == schemaID.cID {
+		log.Debug("Avro schema lookup cache hit",
+			zap.String("key", schemaName),
+			zap.Int("schemaID", entry.schemaID.cID))
+		m.cacheRWLock.RUnlock()
+		return entry.codec, nil
+	}
+	m.cacheRWLock.RUnlock()
+
+	log.Info("Avro schema lookup cache miss",
+		zap.String("key", schemaName),
+		zap.Int("schemaID", schemaID.cID))
+
+	ok, schema, err := m.getSchemaByID(ctx, schemaID.gID)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if !ok {
+		return nil, cerror.ErrAvroSchemaAPIError.
+			GenWithStackByArgs("schema not found in registry, name: %s, id: %s", schemaName, schemaID.gID)
+	}
+
+	codec, err := goavro.NewCodec(schema)
+	if err != nil {
+		log.Error("could not make goavro codec", zap.Error(err))
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+	}
+
+	header, err := m.getMsgHeader(schemaID.gID)
+	if err != nil {
+		log.Error("could not get message header", zap.Error(err))
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+	}
+
+	m.cacheRWLock.Lock()
+	defer m.cacheRWLock.Unlock()
+	m.cache[schemaName] = &schemaCacheEntry{
+		schemaID: schemaID,
+		codec:    codec,
+		header:   header,
+	}
 
 	return nil, nil
 }
@@ -183,6 +225,7 @@ func (m *glueSchemaManager) GetCachedOrRegister(
 	return codec, header, nil
 }
 
+// ClearRegistry implements SchemaManager, it is not used.
 func (m *glueSchemaManager) ClearRegistry(ctx context.Context, schemaSubject string) error {
 	return nil
 }
@@ -274,4 +317,12 @@ func (m *glueSchemaManager) getMsgHeader(schemaID string) ([]byte, error) {
 	}
 	header = append(header, uuid[:]...)
 	return header, nil
+}
+
+func getGlueSchemaIDFromHeader(header []byte) (string, error) {
+	if len(header) < 18 {
+		return "", cerror.ErrDecodeFailed.GenWithStackByArgs("header is too short")
+	}
+	uuid := uuid.UUID(header[2:18])
+	return uuid.String(), nil
 }

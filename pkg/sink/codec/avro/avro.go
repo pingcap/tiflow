@@ -980,9 +980,6 @@ const (
 	checkpointByte = uint8(2)
 )
 
-// confluent avro wire format, confluent avro is not same as apache avro
-// https://rmoff.net/2020/07/03/why-json-isnt-the-same-as-json-schema-in-kafka-connect-converters \
-// -and-ksqldb-viewing-kafka-messages-bytes-as-hex/
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	data := []interface{}{r.header, r.data}
@@ -1011,9 +1008,18 @@ func NewBatchEncoderBuilder(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
-	schemaM, err := NewAvroSchemaManager(ctx, config.AvroSchemaRegistry, nil)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var schemaM SchemaManager
+	var err error
+	if config.AvroConfluentSchemaRegistry != "" {
+		schemaM, err = NewConfluentSchemaManager(ctx, config.AvroConfluentSchemaRegistry, nil)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		schemaM, err = NewGlueSchemaManager(ctx, config.AvroGlueSchemaRegistry)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	return &batchEncoderBuilder{
@@ -1044,7 +1050,7 @@ func SetupEncoderAndSchemaRegistry4Testing(
 	config *common.Config,
 ) (*BatchEncoder, error) {
 	startHTTPInterceptForTestingRegistry()
-	schemaM, err := NewAvroSchemaManager(ctx, "http://127.0.0.1:8081", nil)
+	schemaM, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -560,7 +560,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolCanalJSON:
 		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig)
 	case config.ProtocolAvro:
-		schemaM, err := avro.NewAvroSchemaManager(ctx, schemaRegistryURI, nil)
+		schemaM, err := avro.NewConfluentSchemaManager(ctx, schemaRegistryURI, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
