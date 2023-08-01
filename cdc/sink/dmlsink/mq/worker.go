@@ -50,9 +50,9 @@ type TopicPartitionKey struct {
 
 // mqEvent is the event of the mq worker.
 // It carries the topic and partition information of the message.
-type mqEvent struct {
-	key      TopicPartitionKey
-	rowEvent *dmlsink.RowChangeCallbackableEvent
+type mqEvents struct {
+	key       TopicPartitionKey
+	rowEvents []*dmlsink.RowChangeCallbackableEvent
 }
 
 // worker will send messages to the DML producer on a batch basis.
@@ -63,7 +63,7 @@ type worker struct {
 	protocol config.Protocol
 	// msgChan caches the messages to be sent.
 	// It is an unbounded channel.
-	msgChan *chann.DrainableChann[mqEvent]
+	msgChan *chann.DrainableChann[mqEvents]
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
@@ -100,7 +100,7 @@ func newWorker(
 	w := &worker{
 		changeFeedID:                      id,
 		protocol:                          protocol,
-		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
+		msgChan:                           chann.NewAutoDrainChann[mqEvents](),
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      encoderGroup,
 		producer:                          producer,
@@ -154,26 +154,33 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
-		case event, ok := <-w.msgChan.Out():
+		case mqEvent, ok := <-w.msgChan.Out():
 			if !ok {
 				log.Warn("MQ sink flush worker channel closed",
 					zap.String("namespace", w.changeFeedID.Namespace),
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
 			}
-			if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
-				event.rowEvent.Callback()
-				log.Debug("Skip event of stopped table",
-					zap.String("namespace", w.changeFeedID.Namespace),
-					zap.String("changefeed", w.changeFeedID.ID),
-					zap.Any("event", event))
-				continue
-			}
-			if err := w.encoderGroup.AddEvents(ctx, event.key.Topic, event.key.Partition, event.rowEvent); err != nil {
+			rowEvents := filterNonSinkingEvents(mqEvent.rowEvents)
+			if err := w.encoderGroup.AddEvents(ctx, mqEvent.key.Topic, mqEvent.key.Partition, rowEvents...); err != nil {
 				return errors.Trace(err)
 			}
 		}
 	}
+}
+
+func filterNonSinkingEvents(events []*dmlsink.RowChangeCallbackableEvent) []*dmlsink.RowChangeCallbackableEvent {
+	index := 0
+	for _, event := range events {
+		if event.GetTableSinkState() != state.TableSinkSinking {
+			event.Callback()
+			log.Debug("Skip event of not sinking table", zap.Any("event", event))
+			continue
+		}
+		events[index] = event
+		index++
+	}
+	return events[:index]
 }
 
 // batchEncodeRun collect messages into batch and add them to the encoder group.
@@ -223,8 +230,8 @@ func (w *worker) batch(
 			log.Warn("MQ sink flush worker channel closed")
 			return index, nil
 		}
-		if msg.rowEvent != nil {
-			w.statistics.ObserveRows(msg.rowEvent.Event)
+		if msg.rowEvents != nil {
+			w.statistics.ObserveRows(msg.rowEvents.Event)
 			events[index] = msg
 			index++
 		}
@@ -242,8 +249,8 @@ func (w *worker) batch(
 				return index, nil
 			}
 
-			if msg.rowEvent != nil {
-				w.statistics.ObserveRows(msg.rowEvent.Event)
+			if msg.rowEvents != nil {
+				w.statistics.ObserveRows(msg.rowEvents.Event)
 				events[index] = msg
 				index++
 			}
@@ -259,20 +266,15 @@ func (w *worker) batch(
 
 // group is responsible for grouping messages by the partition.
 func (w *worker) group(
-	events []mqEvent,
+	events []mqEvents,
 ) map[TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent {
 	partitionedRows := make(map[TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent)
 	for _, event := range events {
-		// Skip this event when the table is stopping.
-		if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
-			event.rowEvent.Callback()
-			log.Debug("Skip event of stopped table", zap.Any("event", event.rowEvent))
-			continue
-		}
+		event.rowEvents = filterNonSinkingEvents(event.rowEvents)
 		if _, ok := partitionedRows[event.key]; !ok {
 			partitionedRows[event.key] = make([]*dmlsink.RowChangeCallbackableEvent, 0)
 		}
-		partitionedRows[event.key] = append(partitionedRows[event.key], event.rowEvent)
+		partitionedRows[event.key] = append(partitionedRows[event.key], event.rowEvents...)
 	}
 	return partitionedRows
 }
