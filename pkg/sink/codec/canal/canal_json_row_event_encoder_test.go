@@ -38,10 +38,9 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
 	t.Parallel()
-	e := newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: false,
-		Terminator:          "",
-	})
+
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	e := newJSONRowEventEncoder(codecConfig)
 	require.NotNil(t, e)
 
 	encoder, ok := e.(*JSONRowEventEncoder)
@@ -49,9 +48,11 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	data, err := newJSONMessageForDML(encoder.builder, testCaseInsert, encoder.config, false)
 	require.NoError(t, err)
+
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
 	require.NoError(t, err)
+
 	jsonMsg, ok := msg.(*JSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
@@ -98,9 +99,11 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false)
 	require.NoError(t, err)
+
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
 	require.NoError(t, err)
+
 	require.NotNil(t, jsonMsg.Data)
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
@@ -116,6 +119,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, encoder.config, false)
 	require.NoError(t, err)
+
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
 	require.NoError(t, err)
@@ -129,6 +133,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{DeleteOnlyHandleKeyColumns: true}, false)
 	require.NoError(t, err)
+
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
 	require.NoError(t, err)
@@ -147,11 +152,10 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		}
 	}
 
-	e = newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension:      true,
-		Terminator:               "",
-		OnlyOutputUpdatedColumns: true,
-	})
+	codecConfig = common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.OnlyOutputUpdatedColumns = true
+	e = newJSONRowEventEncoder(codecConfig)
 	require.NotNil(t, e)
 
 	encoder, ok = e.(*JSONRowEventEncoder)
@@ -178,6 +182,38 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
+}
+
+func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
+	t.Parallel()
+
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	codecConfig.MaxMessageBytes = 500
+	encoder := newJSONRowEventEncoder(codecConfig)
+
+	err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, func() {})
+	require.NoError(t, err)
+
+	message := encoder.Build()[0]
+
+	var decoded canalJSONMessageWithTiDBExtension
+	err = json.Unmarshal(message.Value, &decoded)
+	require.NoError(t, err)
+	require.True(t, decoded.Extensions.OnlyHandleKey)
+
+	for _, col := range testCaseInsert.Columns {
+		if col.Flag.IsHandleKey() {
+			require.Contains(t, decoded.Data[0], col.Name)
+			require.Contains(t, decoded.SQLType, col.Name)
+			require.Contains(t, decoded.MySQLType, col.Name)
+		} else {
+			require.NotContains(t, decoded.Data[0], col.Name)
+			require.NotContains(t, decoded.SQLType, col.Name)
+			require.NotContains(t, decoded.MySQLType, col.Name)
+		}
+	}
 }
 
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
