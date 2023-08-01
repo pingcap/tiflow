@@ -37,7 +37,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		encoder := newJSONRowEventEncoder(config)
 		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)
+		err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, nil)
 		require.NoError(t, err)
 
 		messages := encoder.Build()
@@ -47,7 +47,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		for _, decodeEnable := range []bool{false, true} {
 			decoder, err := NewBatchDecoder(ctx, &common.Config{
 				EnableTiDBExtension: decodeEnable,
-			})
+			}, nil)
 			require.NoError(t, err)
 			err = decoder.AddKeyValue(msg.Key, msg.Value)
 			require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 			decoder, err := NewBatchDecoder(ctx, &common.Config{
 				EnableTiDBExtension: decodeEnable,
 				Terminator:          "",
-			})
+			}, nil)
 			require.NoError(t, err)
 			err = decoder.AddKeyValue(nil, result.Value)
 			require.NoError(t, err)
@@ -149,7 +149,7 @@ func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 	decoder, err := NewBatchDecoder(ctx, &common.Config{
 		EnableTiDBExtension: false,
 		Terminator:          "\n",
-	})
+	}, nil)
 	require.NoError(t, err)
 
 	err = decoder.AddKeyValue(nil, []byte(encodedValue))

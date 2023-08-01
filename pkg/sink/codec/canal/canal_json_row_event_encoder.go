@@ -380,12 +380,13 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	}
 	m.IncRowsCount()
 
+	originLength := m.Length()
 	if m.Length() > c.config.MaxMessageBytes {
 		// for single message that is longer than max-message-bytes, do not send it.
 		if c.config.LargeMessageHandle.Disabled() {
-			log.Warn("Single message is too large for canal-json",
+			log.Error("Single message is too large for canal-json",
 				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
-				zap.Int("length", m.Length()),
+				zap.Int("length", originLength),
 				zap.Any("table", e.Table))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
@@ -396,9 +397,20 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
 			m.Value = value
-			if m.Length() > c.config.MaxMessageBytes {
+			length := m.Length()
+			if length > c.config.MaxMessageBytes {
+				log.Error("Single message is still too large for canal-json only encode handle-key columns",
+					zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+					zap.Int("originLength", originLength),
+					zap.Int("length", length),
+					zap.Any("table", e.Table))
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
+			log.Warn("Single message is too large for canal-json, only encode handle-key columns",
+				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+				zap.Int("originLength", originLength),
+				zap.Int("length", length),
+				zap.Any("table", e.Table))
 		}
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
@@ -411,8 +423,8 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// NewClaimCheckMessage implements the ClaimCheckEncoder interface
-func (c *JSONRowEventEncoder) NewClaimCheckMessage(origin *common.Message) (*common.Message, error) {
+// NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
+func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
 	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -421,6 +433,15 @@ func (c *JSONRowEventEncoder) NewClaimCheckMessage(origin *common.Message) (*com
 	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
 	result.Callback = origin.Callback
 	result.IncRowsCount()
+
+	length := result.Length()
+	if length > c.config.MaxMessageBytes {
+		log.Warn("Single message is too large for canal-json, when create the claim check location message",
+			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("table", origin.Event.Table))
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(length)
+	}
 	return result, nil
 }
 

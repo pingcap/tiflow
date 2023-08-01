@@ -18,104 +18,30 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var (
-	f = &promutil.PromFactory{}
-	// should error.
-	tidbExecutionErrorCounter = f.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "tidb_execution_error",
-			Help:      "Total count of tidb execution errors",
-		}, []string{"task", "source_id"})
+type metricProxies struct {
+	loaderExitWithErrorCounter *prometheus.CounterVec
+}
 
-	queryHistogram = f.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "query_duration_time",
-			Help:      "Bucketed histogram of query time (s) of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
-		}, []string{"task", "source_id"})
+func newMetricProxies(factory promutil.Factory) *metricProxies {
+	return &metricProxies{
+		loaderExitWithErrorCounter: factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "dm",
+				Subsystem: "loader",
+				Name:      "exit_with_error_count",
+				Help:      "counter for loader exits with error",
+			}, []string{"task", "source_id", "resumable_err"}),
+	}
+}
 
-	txnHistogram = f.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "txn_duration_time",
-			Help:      "Bucketed histogram of processing time (s) of a txn.",
-			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
-		}, []string{"task", "worker", "source_id", "target_schema", "target_table"})
-
-	stmtHistogram = f.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "stmt_duration_time",
-			Help:      "Bucketed histogram of every statement query time (s).",
-			Buckets:   prometheus.ExponentialBuckets(0.000005, 2, 25),
-		}, []string{"type", "task"})
-
-	dataFileGauge = f.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "data_file_gauge",
-			Help:      "data files in total",
-		}, []string{"task", "source_id"})
-
-	tableGauge = f.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "table_gauge",
-			Help:      "tables in total",
-		}, []string{"task", "source_id"})
-
-	dataSizeGauge = f.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "data_size_gauge",
-			Help:      "data size in total",
-		}, []string{"task", "source_id"})
-
-	progressGauge = f.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "progress",
-			Help:      "the processing progress of loader in percentage",
-		}, []string{"task", "source_id"})
-
-	// should alert.
-	loaderExitWithErrorCounter = f.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "exit_with_error_count",
-			Help:      "counter for loader exits with error",
-		}, []string{"task", "source_id", "resumable_err"})
-
-	remainingTimeGauge = f.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: "dm",
-			Subsystem: "loader",
-			Name:      "remaining_time",
-			Help:      "the remaining time in second to finish load process",
-		}, []string{"task", "worker", "source_id", "source_schema", "source_table"})
-)
+var defaultMetricProxies = newMetricProxies(&promutil.PromFactory{})
 
 // RegisterMetrics registers metrics.
 func RegisterMetrics(registry *prometheus.Registry) {
-	registry.MustRegister(tidbExecutionErrorCounter)
-	registry.MustRegister(txnHistogram)
-	registry.MustRegister(queryHistogram)
-	registry.MustRegister(stmtHistogram)
-	registry.MustRegister(dataFileGauge)
-	registry.MustRegister(tableGauge)
-	registry.MustRegister(dataSizeGauge)
-	registry.MustRegister(progressGauge)
-	registry.MustRegister(loaderExitWithErrorCounter)
-	registry.MustRegister(remainingTimeGauge)
+	registry.MustRegister(defaultMetricProxies.loaderExitWithErrorCounter)
+}
+
+func (l *LightningLoader) removeLabelValuesWithTaskInMetrics(task, source string) {
+	labels := prometheus.Labels{"task": task, "source_id": source}
+	l.metricProxies.loaderExitWithErrorCounter.DeletePartialMatch(labels)
 }

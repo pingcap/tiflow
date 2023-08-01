@@ -16,7 +16,6 @@ package mq
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"go.uber.org/atomic"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -75,7 +75,7 @@ func newDMLSink(
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
 	claimCheck *ClaimCheck,
-	claimCheckEncoder codec.ClaimCheckEncoder,
+	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
@@ -126,7 +126,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
-	// merge the split row callbackable into one callbackable
+	// merge the split row callback into one callback
 	mergedCallback := func(outCallback func(), totalCount uint64) func() {
 		var acked atomic.Uint64
 		return func() {
@@ -142,7 +142,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			txn.Callback()
 			continue
 		}
-		rowCount := uint64(len(txn.Event.Rows))
+		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
@@ -157,7 +157,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
 					Event:     row,
-					Callback:  mergedCallback(txn.Callback, rowCount),
+					Callback:  callback,
 					SinkState: txn.SinkState,
 				},
 			}

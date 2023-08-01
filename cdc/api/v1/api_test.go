@@ -116,6 +116,12 @@ func newRouter(c capture.Capture, p owner.StatusProvider) *gin.Engine {
 	return router
 }
 
+func newRouterWithoutStatusProvider(c capture.Capture) *gin.Engine {
+	router := gin.New()
+	RegisterOpenAPIRoutes(router, NewOpenAPI(c))
+	return router
+}
+
 func newStatusProvider() *mockStatusProvider {
 	statusProvider := &mockStatusProvider{}
 	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
@@ -415,22 +421,13 @@ func TestRemoveChangefeed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mo := mock_owner.NewMockOwner(ctrl)
 
-	statusProvider := &mockStatusProvider{}
-	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
-		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil).Once()
-	statusProvider.On("GetChangeFeedStatus", mock.Anything, changeFeedID).
-		Return(new(model.ChangeFeedStatusForAPI),
-			cerror.ErrChangeFeedNotExists.FastGenByArgs(changeFeedID)).Once()
-	statusProvider.On("IsChangefeedOwner", mock.Anything, mock.Anything).
-		Return(true, nil).Times(3)
 	controller := mock2.NewMockController(ctrl)
 	capture := mock_capture.NewMockCapture(ctrl)
 	capture.EXPECT().GetController().Return(controller, nil).AnyTimes()
 	capture.EXPECT().GetOwner().Return(mo, nil).AnyTimes()
 	capture.EXPECT().IsReady().Return(true).AnyTimes()
 	capture.EXPECT().IsController().Return(true).AnyTimes()
-	capture.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	router1 := newRouter(capture, statusProvider)
+	router1 := newRouterWithoutStatusProvider(capture)
 
 	// test remove changefeed succeeded
 	mo.EXPECT().
@@ -440,13 +437,17 @@ func TestRemoveChangefeed(t *testing.T) {
 			require.EqualValues(t, model.AdminRemove, adminJob.Type)
 			close(done)
 		})
+	controller.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(true, nil)
+	controller.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	api := testCase{url: fmt.Sprintf("/api/v1/changefeeds/%s", changeFeedID.ID), method: "DELETE"}
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), api.method, api.url, nil)
 	router1.ServeHTTP(w, req)
 	require.Equal(t, 202, w.Code)
 
-	router2 := newRouter(capture, newStatusProvider())
+	router2 := newRouterWithoutStatusProvider(capture)
+	controller.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(true, nil)
+
 	// test remove changefeed failed from owner side
 	mo.EXPECT().
 		EnqueueJob(gomock.Any(), gomock.Any()).
@@ -465,6 +466,7 @@ func TestRemoveChangefeed(t *testing.T) {
 	require.Contains(t, respErr.Error, "changefeed not exists")
 
 	// test remove changefeed failed
+	controller.EXPECT().IsChangefeedExists(gomock.Any(), nonExistChangefeedID).Return(false, nil)
 	api = testCase{
 		url:    fmt.Sprintf("/api/v1/changefeeds/%s", nonExistChangefeedID.ID),
 		method: "DELETE",

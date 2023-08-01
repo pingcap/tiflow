@@ -585,7 +585,7 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 
 	switch protocol {
 	case ProtocolOpen:
-	case ProtocolCanalJSON, ProtocolAvro:
+	case ProtocolCanalJSON:
 		if !enableTiDBExtension {
 			return cerror.ErrInvalidReplicaConfig.GenWithStack(
 				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
@@ -602,11 +602,14 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 			return cerror.ErrInvalidReplicaConfig.GenWithStack(
 				"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
 		}
-		switch strings.ToLower(c.ClaimCheckCompression) {
-		case CompressionSnappy, CompressionLZ4:
-		default:
-			return cerror.ErrInvalidReplicaConfig.GenWithStack(
-				"claim-check compression support snappy, lz4, got %s", c.ClaimCheckCompression)
+
+		if c.ClaimCheckCompression != "" {
+			switch strings.ToLower(c.ClaimCheckCompression) {
+			case CompressionSnappy, CompressionLZ4:
+			default:
+				return cerror.ErrInvalidReplicaConfig.GenWithStack(
+					"claim-check compression support snappy, lz4, got %s", c.ClaimCheckCompression)
+			}
 		}
 	}
 	return nil

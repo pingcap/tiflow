@@ -81,6 +81,7 @@ type LightningLoader struct {
 	lastErr        error
 
 	speedRecorder *export.SpeedRecorder
+	metricProxies *metricProxies
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -135,9 +136,20 @@ func (l *LightningLoader) Type() pb.UnitType {
 	return pb.UnitType_Load
 }
 
+func (l *LightningLoader) initMetricProxies() {
+	if l.cfg.MetricsFactory != nil {
+		// running inside dataflow-engine and the factory is an auto register/deregister factory
+		l.metricProxies = newMetricProxies(l.cfg.MetricsFactory)
+	} else {
+		l.metricProxies = defaultMetricProxies
+	}
+}
+
 // Init initializes loader for a load task, but not start Process.
 // if fail, it should not call l.Close.
 func (l *LightningLoader) Init(ctx context.Context) (err error) {
+	l.initMetricProxies()
+
 	l.toDB, err = conn.GetDownstreamDB(&l.cfg.To)
 	if err != nil {
 		return err
@@ -483,7 +495,7 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 
 func (l *LightningLoader) handleExitErrMetric(err *pb.ProcessError) {
 	resumable := fmt.Sprintf("%t", unit.IsResumableError(err))
-	loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
+	l.metricProxies.loaderExitWithErrorCounter.WithLabelValues(l.cfg.Name, l.cfg.SourceID, resumable).Inc()
 }
 
 // Process implements Unit.Process.
@@ -555,6 +567,7 @@ func (l *LightningLoader) IsFreshTask(ctx context.Context) (bool, error) {
 // Close does graceful shutdown.
 func (l *LightningLoader) Close() {
 	l.Pause()
+	l.removeLabelValuesWithTaskInMetrics(l.cfg.Name, l.cfg.SourceID)
 	l.checkPointList.Close()
 	l.closed.Store(true)
 }
