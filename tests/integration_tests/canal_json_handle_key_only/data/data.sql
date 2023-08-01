@@ -75,7 +75,6 @@ update t set c_float = 3.1415, c_double = 2.7182, c_decimal = 8000, c_decimal_2 
 
 delete from t where id = 1;
 
-
 insert into t values (
      2,
      1, 2, 3, 4, 5,
