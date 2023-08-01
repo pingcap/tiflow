@@ -126,7 +126,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
-	// merge the split row callbackable into one callbackable
+	// merge the split row callback into one callback
 	mergedCallback := func(outCallback func(), totalCount uint64) func() {
 		var acked atomic.Uint64
 		return func() {
@@ -142,13 +142,13 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			txn.Callback()
 			continue
 		}
+		rowCount := uint64(len(txn.Event.Rows))
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			rowCount := uint64(len(txn.Event.Rows))
 			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
 			// This never be blocked because this is an unbounded channel.
 			s.alive.worker.msgChan.In() <- mqEvent{
