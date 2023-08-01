@@ -1,0 +1,2 @@
+[sink.kafka-config.large-message-handle]
+large-message-handle-option = "handle-key-only"
