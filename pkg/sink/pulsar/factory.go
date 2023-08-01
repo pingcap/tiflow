@@ -29,7 +29,6 @@ type FactoryCreator func(config *Config, changefeedID model.ChangeFeedID) (pulsa
 func NewCreatorFactory(config *Config, changefeedID model.ChangeFeedID) (pulsar.Client, error) {
 	co := pulsar.ClientOptions{
 		URL: config.URL,
-		// MetricsRegisterer: pulsarMetric.GetMetricRegistry(),
 		CustomMetricsLabels: map[string]string{
 			"changefeed": changefeedID.ID,
 			"namespace":  changefeedID.Namespace,
@@ -53,6 +52,7 @@ func NewCreatorFactory(config *Config, changefeedID model.ChangeFeedID) (pulsar.
 	return pulsarClient, nil
 }
 
+// setupAuthentication sets up authentication for pulsar client
 func setupAuthentication(config *Config) (pulsar.Authentication, error) {
 	if len(config.AuthenticationToken) > 0 {
 		return pulsar.NewAuthenticationToken(config.AuthenticationToken), nil
@@ -66,4 +66,10 @@ func setupAuthentication(config *Config) (pulsar.Authentication, error) {
 		return pulsar.NewAuthenticationTLS(config.TLSCertificatePath, config.TLSPrivateKeyPath), nil
 	}
 	return nil, fmt.Errorf("no authentication method found")
+}
+
+// NewMockCreatorFactory returns a factory implemented based on kafka-go
+func NewMockCreatorFactory(config *Config, changefeedID model.ChangeFeedID) (pulsar.Client, error) {
+	log.L().Info("mock pulsar client factory created", zap.Any("changfeedID", changefeedID))
+	return nil, nil
 }

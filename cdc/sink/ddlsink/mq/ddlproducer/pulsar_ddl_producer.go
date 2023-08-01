@@ -180,27 +180,6 @@ func (p *pulsarProducers) Close() {
 	p.client.Close()
 }
 
-// Flush waits for all the messages in the async producer to be sent to Pulsar.
-// Notice: this method is not thread-safe.
-// Do not try to call AsyncSendMessage and Flush functions in different threads,
-// otherwise Flush will not work as expected. It may never finish or flush the wrong message.
-// Because inflight will be modified by mistake.
-func (p *pulsarProducers) Flush(ctx context.Context) error {
-	done := make(chan struct{}, 1)
-	p.producersMutex.Lock()
-	for _, pd := range p.producers {
-		pd.Flush()
-	}
-	p.producersMutex.Unlock()
-	done <- struct{}{}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-done:
-		return nil
-	}
-}
-
 // closeProducersMapByTopic close producer by topicName
 func (p *pulsarProducers) closeProducersMapByTopic(topicName string) {
 	p.producersMutex.Lock()
