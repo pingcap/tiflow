@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -405,13 +404,11 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 	s := NewSourceConfigForDowngrade(c)
 
 	// encrypt password
-	if encrypt.IsInitialized() {
-		cipher, err := utils.Encrypt(utils.DecryptOrPlaintext(c.From.Password))
-		if err != nil {
-			return "", err
-		}
-		s.From.Password = cipher
+	cipher, err := utils.Encrypt(utils.DecryptOrPlaintext(c.From.Password))
+	if err != nil {
+		return "", err
 	}
+	s.From.Password = cipher
 	s.omitDefaultVals()
 	return s.Yaml()
 }

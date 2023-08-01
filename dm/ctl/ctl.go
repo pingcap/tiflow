@@ -124,11 +124,6 @@ func Start(args []string) (cmd *cobra.Command, err error) {
 	commandMasterFlags.Reset()
 	rootCmd := NewRootCmd()
 	rootCmd.SetArgs(args)
-	rootCmd.PersistentPostRun = func(cmd *cobra.Command, args []string) {
-		// clear cipher used in this command to make commands can be independent of each other
-		// the initial key must be empty in this mode.
-		encrypt.InitCipher(nil)
-	}
 	return rootCmd.ExecuteC()
 }
 

@@ -83,7 +83,8 @@ func (s *Server) JoinMaster(endpoints []string) error {
 			continue
 		}
 
-		// registered, init cipher
+		// worker do calls decrypt, but the password is decrypted already,
+		// but in case we need it later, init it.
 		encrypt.InitCipher(resp.GetSecretKey())
 
 		return nil

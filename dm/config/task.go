@@ -35,7 +35,6 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
-	"github.com/pingcap/tiflow/dm/pkg/encrypt"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -1081,13 +1080,11 @@ func (c *TaskConfig) YamlForDowngrade() (string, error) {
 	t := NewTaskConfigForDowngrade(c)
 
 	// encrypt password
-	if encrypt.IsInitialized() {
-		cipher, err := utils.Encrypt(utils.DecryptOrPlaintext(t.TargetDB.Password))
-		if err != nil {
-			return "", err
-		}
-		t.TargetDB.Password = cipher
+	cipher, err := utils.Encrypt(utils.DecryptOrPlaintext(t.TargetDB.Password))
+	if err != nil {
+		return "", err
 	}
+	t.TargetDB.Password = cipher
 
 	// omit default values, so we can ignore them for later marshal
 	t.omitDefaultVals()
