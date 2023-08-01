@@ -198,13 +198,10 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
-		isBlob := false
-		if strings.Contains(mysqlTypeStr, "blob") || strings.Contains(mysqlTypeStr, "binary") {
-			isBlob = true
-		}
+		isBinary := isBinaryMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
 		col := internal.NewColumn(value, mysqlType).
-			ToCanalJSONFormatColumn(name, isBlob)
+			ToCanalJSONFormatColumn(name, isBinary)
 		result = append(result, col)
 	}
 	if len(result) == 0 {
@@ -214,6 +211,10 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 		return strings.Compare(result[i].Name, result[j].Name) > 0
 	})
 	return result, nil
+}
+
+func isBinaryMySQLType(mysqlType string) bool {
+	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
 }
 
 func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {

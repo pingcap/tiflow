@@ -159,13 +159,13 @@ func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]inter
 
 		var value string
 		rawValue := holder.Values[i].([]uint8)
-		if strings.Contains(mysqlType, "blob") {
+		if isBinaryMySQLType(mysqlType) {
 			rawValue, err := b.bytesDecoder.Bytes(rawValue)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
 			value = string(rawValue)
-		} else if strings.Contains(mysqlType, "bit") {
+		} else if strings.Contains(mysqlType, "bit") || strings.Contains(mysqlType, "set") {
 			bitValue, err := common.BinaryLiteralToInt(rawValue)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
