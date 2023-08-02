@@ -802,8 +802,6 @@ func convertRowChangedEvents(
 				needSplit = true
 				rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
 			} else {
-				// If the handle key columns are not updated, PreColumns is directly ignored.
-				e.PreColumns = nil
 				rowChangedEvents = append(rowChangedEvents, e)
 			}
 		} else {
