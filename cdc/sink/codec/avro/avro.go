@@ -743,8 +743,11 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		enumVar, err := types.ParseEnumValue(ft.GetElems(), col.Value.(uint64))
+		elements := ft.GetElems()
+		number := col.Value.(uint64)
+		enumVar, err := types.ParseEnumValue(elements, number)
 		if err != nil {
+			log.Info("avro encoder parse enum value failed", zap.Strings("elements", elements), zap.Uint64("number", number))
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
 		return enumVar.Name, "string", nil
@@ -752,8 +755,12 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		setVar, err := types.ParseSetValue(ft.GetElems(), col.Value.(uint64))
+		elements := ft.GetElems()
+		number := col.Value.(uint64)
+		setVar, err := types.ParseSetValue(elements, number)
 		if err != nil {
+			log.Info("avro encoder parse set value failed",
+				zap.Strings("elements", elements), zap.Uint64("number", number), zap.Error(err))
 			return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 		}
 		return setVar.Name, "string", nil
@@ -765,13 +772,14 @@ func columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			n, err := strconv.ParseInt(v, 10, 32)
 			if err != nil {
+				log.Info("avro encoder parse year value failed", zap.String("value", v), zap.Error(err))
 				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 			}
 			return int32(n), "int", nil
 		}
 		return int32(col.Value.(int64)), "int", nil
 	default:
-		log.Error("unknown mysql type", zap.Any("mysqlType", col.Type))
+		log.Error("unknown mysql type", zap.Any("value", col.Value), zap.Any("mysqlType", col.Type))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
 	}
 }
