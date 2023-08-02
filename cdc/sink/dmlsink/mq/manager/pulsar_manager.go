@@ -15,19 +15,10 @@ package manager
 
 import (
 	"context"
-	"sync"
-	"time"
-
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/pingcap/log"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
-	"go.uber.org/zap"
+	"sync"
 )
-
-type partition struct {
-	partitions []string
-	since      time.Time
-}
 
 // PulsarTopicManager is a manager for pulsar topics.
 type PulsarTopicManager func(
@@ -57,30 +48,11 @@ func NewPulsarTopicManager(
 }
 
 // GetPartitionNum spend more time,but no use.
+// Neither synchronous nor asynchronous sending of pulsar will use PartitionNum
+// but this method is used in mq_ddl_sink.go, so an empty implementation is required
 func (m *pulsarTopicManager) GetPartitionNum(ctx context.Context, topic string) (int32, error) {
-	if v, ok := m.partitions.Load(topic); ok {
-		pt, ok := v.(*partition)
-		if ok {
-			if time.Since(pt.since) > time.Minute {
-				m.partitions.Delete(topic)
-			}
-			return int32(len(pt.partitions)), nil
-		}
-	}
 
-	partitions, err := m.client.TopicPartitions(topic)
-	if err != nil {
-		log.L().Error("pulsar GetPartitions fail", zap.Error(err))
-		return 0, err
-	}
-	log.L().Debug("pulsar GetPartitions", zap.Strings("partitions", partitions))
-	pt := &partition{
-		partitions: partitions,
-		since:      time.Now(),
-	}
-	m.partitions.Store(topic, pt)
-
-	return int32(len(pt.partitions)), nil
+	return 0, nil
 }
 
 // CreateTopicAndWaitUntilVisible no need to create first
