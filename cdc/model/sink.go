@@ -754,7 +754,7 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
 	if len(t.Rows) < 2 {
 		return nil
 	}
-	newRows, split, err := convertRowChangedEvents(t.Rows)
+	newRows, split, err := trySplitAndSortUpdateEvent(t.Rows)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -766,9 +766,9 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
 	return nil
 }
 
-// convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
-// It will deal with the old value compatibility.
-func convertRowChangedEvents(
+// trySplitAndSortUpdateEvent try to split update events if unique key is updated
+// returns true if some updated events is split
+func trySplitAndSortUpdateEvent(
 	events []*RowChangedEvent,
 ) ([]*RowChangedEvent, bool, error) {
 	rowChangedEvents := make([]*RowChangedEvent, 0, len(events))
@@ -793,17 +793,13 @@ func convertRowChangedEvents(
 
 		// This indicates that it is an update event. if the pk or uk is updated,
 		// we need to split it into two events (delete and insert).
-		if e.IsUpdate() {
-			if shouldSplitUpdateEvent(e) {
-				deleteEvent, insertEvent, err := splitUpdateEvent(e)
-				if err != nil {
-					return nil, false, errors.Trace(err)
-				}
-				needSplit = true
-				rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
-			} else {
-				rowChangedEvents = append(rowChangedEvents, e)
+		if e.IsUpdate() && shouldSplitUpdateEvent(e) {
+			deleteEvent, insertEvent, err := splitUpdateEvent(e)
+			if err != nil {
+				return nil, false, errors.Trace(err)
 			}
+			needSplit = true
+			rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
 		} else {
 			rowChangedEvents = append(rowChangedEvents, e)
 		}
