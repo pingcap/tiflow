@@ -93,9 +93,6 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
-
-	log.Info("single message found", zap.Int("length", length))
-
 	if length > d.config.MaxMessageBytes {
 		if d.config.LargeMessageHandle.Disabled() {
 			log.Warn("Single message is too large for open-protocol",

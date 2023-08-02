@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -99,8 +100,11 @@ func (b *BatchDecoder) hasNext() bool {
 		return true
 	}
 
-	log.Warn("open-protocol meet invalid data",
-		zap.Int("keyLen", keyLen), zap.Int("valueLen", valueLen))
+	if keyLen == 0 && valueLen != 0 || keyLen != 0 && valueLen == 0 {
+		log.Panic("open-protocol meet invalid data",
+			zap.Int("keyLen", keyLen), zap.Int("valueLen", valueLen))
+	}
+
 	return false
 }
 
@@ -205,7 +209,14 @@ func (b *BatchDecoder) buildColumns(
 		name := columnType.Name()
 		mysqlType := types.StrToType(strings.ToLower(columnType.DatabaseTypeName()))
 
-		value := holder.Values[i].([]uint8)
+		var value interface{}
+		value = holder.Values[i].([]uint8)
+
+		switch mysqlType {
+		case mysql.TypeJSON:
+			value = string(value.([]uint8))
+		}
+
 		column := &model.Column{
 			Name:  name,
 			Type:  mysqlType,
