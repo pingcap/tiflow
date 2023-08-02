@@ -326,6 +326,9 @@ type KafkaConfig struct {
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
+type PulsarConfig struct {
+}
+
 // MySQLConfig represents a MySQL sink configuration
 type MySQLConfig struct {
 	WorkerCount                  *int    `toml:"worker-count" json:"worker-count,omitempty"`

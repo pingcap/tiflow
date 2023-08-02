@@ -15,6 +15,7 @@ package pulsar
 
 import (
 	"fmt"
+	"github.com/apache/pulsar-client-go/pulsar/auth"
 	"net/url"
 	"strconv"
 	"strings"
@@ -86,6 +87,12 @@ const (
 	OAuth2PrivateKey = "oauth2-private-key"
 	// OAuth2ClientID  the client ID of the application.
 	OAuth2ClientID = "oauth2-client-id"
+	// OAuth2Type  the type of the OAuth2 .
+	OAuth2Type = "oauth2-type"
+	// OAuth2TypeClientCredentials  client_credentials
+	OAuth2TypeClientCredentials = "oauth2-client-credentials"
+	// OAuth2Scope scope
+	OAuth2Scope = "auth2-scope"
 )
 
 // sink config default Value
@@ -202,28 +209,30 @@ func (c *Config) checkSinkURI(sinkURI *url.URL) error {
 func (c *Config) applyOAuth(params url.Values) {
 	// Go client use Oauth2 authentication
 	// https://pulsar.apache.org/docs/2.10.x/security-oauth2/#authentication-types
+	// pulsar client now support type as client_credentials only
 
 	s := params.Get(OAuth2IssuerURL)
 	if len(s) > 0 {
-		c.OAuth2["issuerUrl"] = s
+		c.OAuth2[auth.ConfigParamIssuerURL] = s
 	}
-
 	s = params.Get(OAuth2Audience)
 	if len(s) > 0 {
-		c.OAuth2["audience"] = s
+		c.OAuth2[auth.ConfigParamAudience] = s
 	}
-
+	s = params.Get(OAuth2Scope)
+	if len(s) > 0 {
+		c.OAuth2[auth.ConfigParamScope] = s
+	}
 	s = params.Get(OAuth2PrivateKey)
 	if len(s) > 0 {
-		c.OAuth2["privateKey"] = s
+		c.OAuth2[auth.ConfigParamKeyFile] = s
 	}
-
 	s = params.Get(OAuth2ClientID)
 	if len(s) > 0 {
-		c.OAuth2["clientId"] = s
+		c.OAuth2[auth.ConfigParamClientID] = s
 	}
 	if len(c.OAuth2) >= 4 {
-		c.OAuth2["type"] = "client_credentials"
+		c.OAuth2[auth.ConfigParamType] = auth.ConfigParamTypeClientCredentials
 	} else {
 		c.OAuth2 = make(map[string]string)
 	}

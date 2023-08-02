@@ -37,7 +37,7 @@ func (p *PulsarMockProducers) SyncBroadcastMessage(ctx context.Context, topic st
 ) error {
 	// call SyncSendMessage
 
-	log.L().Info("pulsarProducers SyncBroadcastMessage in")
+	log.Info("pulsarProducers SyncBroadcastMessage in")
 	return p.SyncSendMessage(ctx, topic, totalPartitionsNum, message)
 }
 
@@ -50,7 +50,6 @@ func (p *PulsarMockProducers) SyncSendMessage(ctx context.Context, topic string,
 		Payload: message.Value,
 		Key:     message.GetPartitionKey(),
 	}
-	// fmt.Println("pulsarProducers SyncSendMessage", data)
 	p.events[topic] = append(p.events[topic], data)
 
 	return nil

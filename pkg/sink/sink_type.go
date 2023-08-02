@@ -65,6 +65,8 @@ const (
 	CloudStorageNoopScheme = "noop"
 	// PulsarScheme  indicates the scheme is pulsar
 	PulsarScheme = "pulsar"
+	// PulsarSSLScheme
+	PulsarSSLScheme = "pulsar+ssl"
 )
 
 // IsMQScheme returns true if the scheme belong to mq scheme.

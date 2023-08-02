@@ -21,7 +21,6 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	// pulsarMetric "github.com/pingcap/tiflow/cdc/sink/metrics/mq/pulsar"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
@@ -58,11 +57,9 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 ) error {
 	p.wrapperSchemaAndTopic(message)
 
-	// pulsarMetric.IncPublishedDDLEventCountMetric(topic, p.id.ID, message)
 	producer, err := p.GetProducerByTopic(topic)
 	if err != nil {
-		log.L().Error("ddl SyncSendMessage GetProducerByTopic fail", zap.Error(err))
-		// pulsarMetric.IncPublishedDDLEventCountMetricFail(topic, p.id.ID, message)
+		log.Error("ddl SyncSendMessage GetProducerByTopic fail", zap.Error(err))
 		return err
 	}
 
@@ -72,13 +69,11 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 	}
 	mID, err := producer.Send(ctx, data)
 	if err != nil {
-		log.L().Error("ddl producer send fail", zap.Error(err))
-		//	pulsarMetric.IncPublishedDDLEventCountMetricFail(producer.Topic(), p.id.ID, message)
+		log.Error("ddl producer send fail", zap.Error(err))
 		return err
 	}
-	// pulsarMetric.IncPublishedDDLEventCountMetricSuccess(producer.Topic(), p.id.ID, message)
 
-	log.L().Debug("pulsarProducers SyncSendMessage success",
+	log.Debug("pulsarProducers SyncSendMessage success",
 		zap.Any("mID", mID), zap.String("topic", topic))
 
 	return nil
@@ -141,7 +136,7 @@ func newProducer(
 		return nil, err
 	}
 
-	log.L().Info("create pulsar producer success",
+	log.Info("create pulsar producer success",
 		zap.String("topic:", topicName))
 
 	return producer, nil

@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
-	// pulsarMetric "github.com/pingcap/tiflow/cdc/sink/metrics/mq/pulsar"
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -44,7 +43,6 @@ func NewPulsarDDLSink(
 	clientCreator pulsarConfig.FactoryCreator,
 	producerCreator ddlproducer.PulsarFactory,
 ) (_ *DDLSink, err error) {
-	// changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	log.Info("Starting pulsar DDL producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
@@ -66,19 +64,6 @@ func NewPulsarDDLSink(
 
 	log.Info("Try to create a DDL sink producer", zap.Any("pulsarConfig", pConfig))
 
-	start := time.Now()
-	client, err := clientCreator(pConfig, changefeedID)
-	if err != nil {
-		log.Error("DDL sink producer client create fail", zap.Error(err))
-		return nil, cerror.WrapError(cerror.ErrPulsarNewClient, err)
-	}
-
-	p, err := producerCreator(ctx, changefeedID, pConfig, client)
-	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
-	}
-
 	// NewEventRouter
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic)
 	if err != nil {
@@ -95,12 +80,24 @@ func NewPulsarDDLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
+	start := time.Now()
+	client, err := clientCreator(pConfig, changefeedID)
+	if err != nil {
+		log.Error("DDL sink producer client create fail", zap.Error(err))
+		return nil, cerror.WrapError(cerror.ErrPulsarNewClient, err)
+	}
+
+	p, err := producerCreator(ctx, changefeedID, pConfig, client)
+	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
+	}
+
 	topicManager, err := pulsarTopicManagerCreator(pConfig, client)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	// s, err := newDDLSink(ctx, changefeedID, p, topicManager, eventRouter, encoderConfig)
 	s := newDDLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderBuilder, protocol)
 
 	return s, nil

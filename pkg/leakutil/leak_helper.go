@@ -32,10 +32,6 @@ var defaultOpts = []goleak.Option{
 	goleak.IgnoreTopFunction("github.com/Shopify/sarama.(*client).backgroundMetadataUpdater"),
 	goleak.IgnoreTopFunction("github.com/Shopify/sarama.(*Broker).responseReceiver"),
 	goleak.IgnoreTopFunction("github.com/lestrrat-go/httprc.runFetchWorker"),
-
-	// pulsar client will create a goroutine to handle the connection, but it will not exit when the connection is closed.
-	// it doesn't work for pulsar client v0.11.0
-	// goleak.IgnoreTopFunction("github.com/godbus/dbus.(*Conn).Auth"),
 }
 
 // VerifyNone verifies that no unexpected leaks occur

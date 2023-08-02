@@ -61,7 +61,7 @@ func New(
 		return mysql.NewDDLSink(ctx, changefeedID, sinkURI, cfg)
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		return cloudstorage.NewDDLSink(ctx, changefeedID, sinkURI, cfg)
-	case sink.PulsarScheme:
+	case sink.PulsarScheme, sink.PulsarSSLScheme:
 		return mq.NewPulsarDDLSink(ctx, changefeedID, sinkURI, cfg, manager.NewPulsarTopicManager,
 			pulsarConfig.NewCreatorFactory, ddlproducer.NewPulsarProducer)
 	default:
