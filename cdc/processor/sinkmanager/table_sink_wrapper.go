@@ -263,7 +263,7 @@ func (t *tableSinkWrapper) markAsClosed() {
 	}
 }
 
-func (t *tableSinkWrapper) asyncClose() bool {
+func (t *tableSinkWrapper) asyncStop() bool {
 	t.markAsClosing()
 	if t.asyncCloseAndClearTableSink() {
 		t.markAsClosed()
@@ -272,7 +272,7 @@ func (t *tableSinkWrapper) asyncClose() bool {
 	return false
 }
 
-func (t *tableSinkWrapper) close() {
+func (t *tableSinkWrapper) stop() {
 	t.markAsClosing()
 	t.closeAndClearTableSink()
 	t.markAsClosed()
@@ -289,29 +289,32 @@ func (t *tableSinkWrapper) initTableSink() bool {
 	return true
 }
 
-func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
+func (t *tableSinkWrapper) asyncCloseTableSink() bool {
 	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	if t.tableSink == nil {
-		t.tableSinkMu.RUnlock()
 		return true
 	}
-	if !t.tableSink.AsyncClose() {
-		t.tableSinkMu.RUnlock()
-		return false
+	return t.tableSink.AsyncClose()
+}
+
+func (t *tableSinkWrapper) closeTableSink() {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink == nil {
+		return
 	}
-	t.tableSinkMu.RUnlock()
+	t.tableSink.Close()
+}
+
+func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
+	t.asyncCloseTableSink()
 	t.doTableSinkClear()
 	return true
 }
 
 func (t *tableSinkWrapper) closeAndClearTableSink() {
-	t.tableSinkMu.RLock()
-	if t.tableSink == nil {
-		t.tableSinkMu.RUnlock()
-		return
-	}
-	t.tableSink.Close()
-	t.tableSinkMu.RUnlock()
+	t.closeTableSink()
 	t.doTableSinkClear()
 }
 
