@@ -45,7 +45,7 @@ func createController4Test(ctx cdcContext.Context,
 	m := upstream.NewManager4Test(pdClient)
 	o := NewController(m, &model.CaptureInfo{}).(*controllerImpl)
 
-	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// set captures
@@ -67,7 +67,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
-	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
 	// no changefeed, the gc safe point should be max uint64
@@ -166,7 +166,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 }
 
 func TestCalculateGCSafepointTs(t *testing.T) {
-	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
 	o := &controllerImpl{changefeeds: make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState)}

@@ -588,7 +588,7 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 
 	switch protocol {
 	case ProtocolOpen:
-	case ProtocolCanalJSON, ProtocolAvro:
+	case ProtocolCanalJSON:
 		if !enableTiDBExtension {
 			return cerror.ErrInvalidReplicaConfig.GenWithStack(
 				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
