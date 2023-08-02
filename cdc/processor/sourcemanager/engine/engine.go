@@ -37,12 +37,6 @@ type SortEngine interface {
 	// events are available for fetching, OnResolve is what you want.
 	Add(tableID model.TableID, events ...*model.PolymorphicEvent)
 
-<<<<<<< HEAD
-	// GetResolvedTs gets resolved timestamp of the given table.
-	GetResolvedTs(tableID model.TableID) model.Ts
-
-=======
->>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 	// OnResolve pushes action into SortEngine's hook list, which
 	// will be called after any events are resolved.
 	OnResolve(action func(model.TableID, model.Ts))

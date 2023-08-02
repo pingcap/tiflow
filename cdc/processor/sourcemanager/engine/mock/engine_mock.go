@@ -134,23 +134,6 @@ func (mr *MockSortEngineMockRecorder) FetchByTable(tableID, lowerBound, upperBou
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByTable", reflect.TypeOf((*MockSortEngine)(nil).FetchByTable), tableID, lowerBound, upperBound)
 }
 
-<<<<<<< HEAD
-// GetResolvedTs mocks base method.
-func (m *MockSortEngine) GetResolvedTs(tableID model.TableID) model.Ts {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetResolvedTs", tableID)
-	ret0, _ := ret[0].(model.Ts)
-	return ret0
-}
-
-// GetResolvedTs indicates an expected call of GetResolvedTs.
-func (mr *MockSortEngineMockRecorder) GetResolvedTs(tableID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolvedTs", reflect.TypeOf((*MockSortEngine)(nil).GetResolvedTs), tableID)
-}
-
-=======
->>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 // GetStatsByTable mocks base method.
 func (m *MockSortEngine) GetStatsByTable(tableID model.TableID) engine.TableStats {
 	m.ctrl.T.Helper()

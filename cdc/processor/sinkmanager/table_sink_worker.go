@@ -278,12 +278,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		).Add(float64(allEventCount))
 
 		if w.eventCache == nil {
-<<<<<<< HEAD
-			task.tableSink.updateReceivedSorterCommitTs(currTxnCommitTs)
 			eventCount := newRangeEventCount(lastPos, allEventCount)
-=======
-			eventCount := newRangeEventCount(advancer.lastPos, allEventCount)
->>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 			task.tableSink.updateRangeEventCounts(eventCount)
 		}
 

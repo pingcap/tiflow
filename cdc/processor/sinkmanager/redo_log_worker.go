@@ -210,12 +210,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
 	defer func() {
-<<<<<<< HEAD
-		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
 		eventCount := newRangeEventCount(lastPos, allEventCount)
-=======
-		eventCount := newRangeEventCount(advancer.lastPos, allEventCount)
->>>>>>> 48d89accc5 (sorter(cdc): use correct resolved timestamp to check progress (#9232))
 		task.tableSink.updateRangeEventCounts(eventCount)
 
 		if err := iter.Close(); err != nil {
