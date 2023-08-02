@@ -17,10 +17,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -139,8 +141,157 @@ func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	return resolvedTs, nil
 }
 
-func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEvent, error) {
-	data, err := b.storage.ReadFile(context.Background(), b.nextKey.ClaimCheckLocation)
+// NextDDLEvent implements the RowEventDecoder interface
+func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
+	if b.nextKey.Type != model.MessageTypeDDL {
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found ddl event message")
+	}
+
+	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	value := b.valueBytes[8 : valueLen+8]
+
+	ddlMsg := new(messageDDL)
+	if err := ddlMsg.decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+	ddlEvent := msgToDDLEvent(b.nextKey, ddlMsg)
+
+	b.nextKey = nil
+	b.valueBytes = nil
+	return ddlEvent, nil
+}
+
+// NextRowChangedEvent implements the RowEventDecoder interface
+func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
+	if b.nextKey.Type != model.MessageTypeRow {
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
+	}
+
+	ctx := context.Background()
+	// claim-check message found
+	if b.nextKey.ClaimCheckLocation != "" {
+		b.valueBytes = nil
+		return b.assembleEventFromClaimCheckStorage(ctx)
+	}
+
+	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+	value := b.valueBytes[8 : valueLen+8]
+	b.valueBytes = b.valueBytes[valueLen+8:]
+	rowMsg := new(messageRow)
+	if err := rowMsg.decode(value); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var err error
+	event := msgToRowChange(b.nextKey, rowMsg)
+	if b.nextKey.OnlyHandleKey {
+		event, err = b.assembleHandleKeyOnlyEvent(ctx, event)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	b.nextKey = nil
+	return event, nil
+}
+
+func (b *BatchDecoder) buildColumns(
+	holder *common.ColumnsHolder, handleKeyColumns map[string]interface{},
+) ([]*model.Column, error) {
+	columnsCount := holder.Length()
+	columns := make([]*model.Column, 0, columnsCount)
+	for i := 0; i < columnsCount; i++ {
+		columnType := holder.Types[i]
+		name := columnType.Name()
+		mysqlType := types.StrToType(strings.ToLower(columnType.DatabaseTypeName()))
+
+		value := holder.Values[i].([]uint8)
+		column := &model.Column{
+			Name:  name,
+			Type:  mysqlType,
+			Value: value,
+		}
+
+		if _, ok := handleKeyColumns[name]; ok {
+			column.Flag = model.PrimaryKeyFlag | model.HandleKeyFlag
+		}
+		columns = append(columns, column)
+	}
+	return columns, nil
+}
+
+func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
+	ctx context.Context, handleKeyOnlyEvent *model.RowChangedEvent,
+) (*model.RowChangedEvent, error) {
+	var (
+		schema   = handleKeyOnlyEvent.Table.Schema
+		table    = handleKeyOnlyEvent.Table.Table
+		commitTs = handleKeyOnlyEvent.CommitTs
+	)
+
+	if handleKeyOnlyEvent.IsInsert() {
+		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
+		for _, col := range handleKeyOnlyEvent.Columns {
+			conditions[col.Name] = col.Value
+		}
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
+		if err != nil {
+			return nil, err
+		}
+		columns, err := b.buildColumns(holder, conditions)
+		if err != nil {
+			return nil, err
+		}
+		handleKeyOnlyEvent.Columns = columns
+	} else if handleKeyOnlyEvent.IsDelete() {
+		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
+		for _, col := range handleKeyOnlyEvent.PreColumns {
+			conditions[col.Name] = col.Value
+		}
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
+		if err != nil {
+			return nil, err
+		}
+		preColumns, err := b.buildColumns(holder, conditions)
+		if err != nil {
+			return nil, err
+		}
+		handleKeyOnlyEvent.PreColumns = preColumns
+	} else if handleKeyOnlyEvent.IsUpdate() {
+		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
+		for _, col := range handleKeyOnlyEvent.Columns {
+			conditions[col.Name] = col.Value
+		}
+		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
+		if err != nil {
+			return nil, err
+		}
+		columns, err := b.buildColumns(holder, conditions)
+		if err != nil {
+			return nil, err
+		}
+		handleKeyOnlyEvent.Columns = columns
+
+		conditions = make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
+		for _, col := range handleKeyOnlyEvent.PreColumns {
+			conditions[col.Name] = col.Value
+		}
+		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
+		if err != nil {
+			return nil, err
+		}
+		preColumns, err := b.buildColumns(holder, conditions)
+		if err != nil {
+			return nil, err
+		}
+		handleKeyOnlyEvent.PreColumns = preColumns
+	}
+
+	return handleKeyOnlyEvent, nil
+}
+
+func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (*model.RowChangedEvent, error) {
+	data, err := b.storage.ReadFile(ctx, b.nextKey.ClaimCheckLocation)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -174,137 +325,4 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage() (*model.RowChangedEv
 	b.nextKey = nil
 
 	return event, nil
-}
-
-func (b *BatchDecoder) assembleHandleKeyOnlyEvent(ctx context.Context) (*model.RowChangedEvent, error) {
-	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
-	value := b.valueBytes[8 : valueLen+8]
-	b.valueBytes = b.valueBytes[valueLen+8:]
-	rowMsg := new(messageRow)
-	if err := rowMsg.decode(value); err != nil {
-		return nil, errors.Trace(err)
-	}
-	handleKeyOnlyEvent := msgToRowChange(b.nextKey, rowMsg)
-	b.nextKey = nil
-
-	var (
-		schema   = handleKeyOnlyEvent.Table.Schema
-		table    = handleKeyOnlyEvent.Table.Table
-		commitTs = handleKeyOnlyEvent.CommitTs
-	)
-
-	if handleKeyOnlyEvent.IsInsert() {
-		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
-		for _, col := range handleKeyOnlyEvent.Columns {
-			conditions[col.Name] = col.Value
-		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
-		columns, err := b.buildColumns(holder)
-		if err != nil {
-			return nil, err
-		}
-		handleKeyOnlyEvent.Columns = columns
-	} else if handleKeyOnlyEvent.IsDelete() {
-		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
-		for _, col := range handleKeyOnlyEvent.PreColumns {
-			conditions[col.Name] = col.Value
-		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
-		preColumns, err := b.buildColumns(holder)
-		if err != nil {
-			return nil, err
-		}
-		handleKeyOnlyEvent.PreColumns = preColumns
-	} else if handleKeyOnlyEvent.IsUpdate() {
-		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
-		for _, col := range handleKeyOnlyEvent.Columns {
-			conditions[col.Name] = col.Value
-		}
-		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
-		columns, err := b.buildColumns(holder)
-		if err != nil {
-			return nil, err
-		}
-		handleKeyOnlyEvent.Columns = columns
-
-		conditions = make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
-		for _, col := range handleKeyOnlyEvent.PreColumns {
-			conditions[col.Name] = col.Value
-		}
-		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
-		if err != nil {
-			return nil, err
-		}
-		preColumns, err := b.buildColumns(holder)
-		if err != nil {
-			return nil, err
-		}
-		handleKeyOnlyEvent.PreColumns = preColumns
-
-	}
-}
-
-// NextRowChangedEvent implements the RowEventDecoder interface
-func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	if b.nextKey == nil {
-		if err := b.decodeNextKey(); err != nil {
-			return nil, err
-		}
-	}
-	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MessageTypeRow {
-		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
-	}
-
-	// claim-check message found
-	if b.nextKey.ClaimCheckLocation != "" {
-		return b.assembleEventFromClaimCheckStorage()
-	}
-
-	if b.nextKey.OnlyHandleKey {
-		return b.assembleHandleKeyOnlyEvent()
-	}
-
-	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
-	value := b.valueBytes[8 : valueLen+8]
-	b.valueBytes = b.valueBytes[valueLen+8:]
-	rowMsg := new(messageRow)
-	if err := rowMsg.decode(value); err != nil {
-		return nil, errors.Trace(err)
-	}
-	rowEvent := msgToRowChange(b.nextKey, rowMsg)
-	b.nextKey = nil
-	return rowEvent, nil
-}
-
-// NextDDLEvent implements the RowEventDecoder interface
-func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
-	if b.nextKey == nil {
-		if err := b.decodeNextKey(); err != nil {
-			return nil, err
-		}
-	}
-	b.keyBytes = b.keyBytes[b.nextKeyLen+8:]
-	if b.nextKey.Type != model.MessageTypeDDL {
-		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found ddl event message")
-	}
-	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
-	value := b.valueBytes[8 : valueLen+8]
-	b.valueBytes = b.valueBytes[valueLen+8:]
-	ddlMsg := new(messageDDL)
-	if err := ddlMsg.decode(value); err != nil {
-		return nil, errors.Trace(err)
-	}
-	ddlEvent := msgToDDLEvent(b.nextKey, ddlMsg)
-	b.nextKey = nil
-	return ddlEvent, nil
 }

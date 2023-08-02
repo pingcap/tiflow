@@ -56,7 +56,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
-		log.Warn("Single message is too large for open-protocol",
+		log.Warn("Single message is too large for open-protocol, only encode handle key columns",
 			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
@@ -64,7 +64,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
-	log.Warn("open-protocol: message too large, only send handle key columns",
+	log.Warn("open-protocol: message too large, only encode handle key columns",
 		zap.Any("table", e.Table), zap.Uint64("commitTs", e.CommitTs))
 
 	return key, value, nil
@@ -93,6 +93,9 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
+
+	log.Info("single message found", zap.Int("length", length))
+
 	if length > d.config.MaxMessageBytes {
 		if d.config.LargeMessageHandle.Disabled() {
 			log.Warn("Single message is too large for open-protocol",
