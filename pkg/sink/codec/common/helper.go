@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// ColumnsHolder is used to query data from sql.Rows
+// ColumnsHolder read columns from sql.Rows
 type ColumnsHolder struct {
 	Values        []interface{}
 	ValuePointers []interface{}
@@ -51,12 +51,12 @@ func newColumnHolder(rows *sql.Rows) (*ColumnsHolder, error) {
 	}, nil
 }
 
-// Length return the columns count
+// Length return the column count
 func (h *ColumnsHolder) Length() int {
 	return len(h.Values)
 }
 
-// SnapshotQuery snapshot query from the given db by the commitTs and query conditions.
+// SnapshotQuery query the db by the snapshot read with the given commitTs
 func SnapshotQuery(
 	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
 ) (*ColumnsHolder, error) {
@@ -65,6 +65,7 @@ func SnapshotQuery(
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		log.Error("establish connection to the upstream tidb failed",
+			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, errors.Trace(err)
@@ -82,6 +83,7 @@ func SnapshotQuery(
 		}
 
 		log.Error("set snapshot read failed",
+			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, errors.Trace(err)
@@ -101,6 +103,7 @@ func SnapshotQuery(
 	rows, err := conn.QueryContext(ctx, query)
 	if err != nil {
 		log.Error("query row failed",
+			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, errors.Trace(err)
@@ -110,6 +113,7 @@ func SnapshotQuery(
 	holder, err := newColumnHolder(rows)
 	if err != nil {
 		log.Error("obtain the columns holder failed",
+			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
 		return nil, err
@@ -118,6 +122,7 @@ func SnapshotQuery(
 		err = rows.Scan(holder.ValuePointers...)
 		if err != nil {
 			log.Error("scan row failed",
+				zap.String("query", query),
 				zap.String("schema", schema), zap.String("table", table),
 				zap.Uint64("commitTs", commitTs), zap.Error(err))
 			return nil, errors.Trace(err)

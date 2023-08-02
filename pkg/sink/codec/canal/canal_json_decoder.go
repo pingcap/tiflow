@@ -159,20 +159,20 @@ func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]inter
 
 		var value string
 		rawValue := holder.Values[i].([]uint8)
-		if strings.Contains(mysqlType, "blob") {
+		if isBinaryMySQLType(mysqlType) {
 			rawValue, err := b.bytesDecoder.Bytes(rawValue)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
 			value = string(rawValue)
-		}
-
-		if strings.Contains(mysqlType, "bit") {
+		} else if strings.Contains(mysqlType, "bit") || strings.Contains(mysqlType, "set") {
 			bitValue, err := common.BinaryLiteralToInt(rawValue)
 			if err != nil {
 				return nil, nil, errors.Trace(err)
 			}
 			value = strconv.FormatUint(bitValue, 10)
+		} else {
+			value = string(rawValue)
 		}
 		mysqlTypeMap[name] = mysqlType
 		data[name] = value
@@ -197,11 +197,18 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		pkNames = append(pkNames, name)
 	}
 
-	var (
-		data      map[string]interface{}
-		old       map[string]interface{}
-		mysqlType map[string]string
-	)
+	result := &canalJSONMessageWithTiDBExtension{
+		JSONMessage: &JSONMessage{
+			Schema:  schema,
+			Table:   table,
+			PKNames: pkNames,
+
+			EventType: eventType,
+		},
+		Extensions: &tidbExtension{
+			CommitTs: commitTs,
+		},
+	}
 
 	switch eventType {
 	case "INSERT":
@@ -209,58 +216,47 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		if err != nil {
 			return nil, err
 		}
-		data, mysqlType, err = b.buildData(holder)
+		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
 		}
+		result.MySQLType = mysqlType
+		result.Data = []map[string]interface{}{data}
 	case "UPDATE":
 		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, handleKeyData)
 		if err != nil {
 			return nil, err
 		}
-		data, mysqlType, err = b.buildData(holder)
+		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
 		}
+		result.MySQLType = mysqlType
+		result.Data = []map[string]interface{}{data}
 
 		holder, err = common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, message.getOld())
 		if err != nil {
 			return nil, err
 		}
-		old, _, err = b.buildData(holder)
+		old, _, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
 		}
+		result.Old = []map[string]interface{}{old}
 	case "DELETE":
 		holder, err := common.SnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, handleKeyData)
 		if err != nil {
 			return nil, err
 		}
-		old, mysqlType, err = b.buildData(holder)
+		data, mysqlType, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
 		}
+		result.MySQLType = mysqlType
+		result.Data = []map[string]interface{}{data}
 	}
 
-	message = &canalJSONMessageWithTiDBExtension{
-		JSONMessage: &JSONMessage{
-			Schema:  schema,
-			Table:   table,
-			PKNames: pkNames,
-
-			EventType: eventType,
-
-			MySQLType: mysqlType,
-
-			Data: []map[string]interface{}{data},
-			Old:  []map[string]interface{}{old},
-		},
-		Extensions: &tidbExtension{
-			CommitTs: commitTs,
-		},
-	}
-
-	b.msg = message
+	b.msg = result
 	return b.NextRowChangedEvent()
 }
 
