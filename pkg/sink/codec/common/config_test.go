@@ -19,6 +19,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -160,6 +161,11 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, codecConfig.LargeMessageHandle.HandleKeyOnly())
+
+	// force-replicate is set to true, should return error
+	replicaConfig.ForceReplicate = true
+	err = codecConfig.Apply(sinkURI, replicaConfig)
+	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
 }
 
 func TestOpenProtocolHandleKeyOnly(t *testing.T) {
@@ -208,6 +214,25 @@ func TestOpenProtocolHandleKeyOnly(t *testing.T) {
 	require.NoError(t, err)
 	err = codecConfig.Validate()
 	require.NoError(t, err)
+}
+
+func TestDeleteHandleKeyOnly(t *testing.T) {
+	t.Parallel()
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = util.AddressOf(true)
+
+	uri := "kafka://127.0.0.1:9092/delete-handle-key-only?protocol=open-protocol"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolOpen)
+	err = codecConfig.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+
+	replicaConfig.ForceReplicate = true
+	err = codecConfig.Apply(sinkURI, replicaConfig)
+	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
 }
 
 func TestConfigApplyValidate(t *testing.T) {

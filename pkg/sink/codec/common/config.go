@@ -181,6 +181,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		if replicaConfig.Sink.KafkaConfig != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 		}
+		if c.LargeMessageHandle.HandleKeyOnly() && replicaConfig.ForceReplicate {
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
+				`force-replicate must be disabled, when the large message handle option is set to "handle-key-only"`)
+		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
@@ -197,6 +201,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
+	if c.DeleteOnlyHandleKeyColumns && replicaConfig.ForceReplicate {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
+	}
 	return nil
 }
 
