@@ -151,6 +151,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.MaxMessageBytes = *urlParameter.MaxMessageBytes
 	}
 
+	// avro related
 	if urlParameter.AvroDecimalHandlingMode != nil &&
 		*urlParameter.AvroDecimalHandlingMode != "" {
 		c.AvroDecimalHandlingMode = *urlParameter.AvroDecimalHandlingMode
@@ -164,9 +165,12 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.AvroEnableWatermark = *urlParameter.AvroEnableWatermark
 		}
 	}
-
 	if urlParameter.AvroSchemaRegistry != "" {
 		c.AvroSchemaRegistry = urlParameter.AvroSchemaRegistry
+	}
+	if c.Protocol == config.ProtocolAvro && replicaConfig.ForceReplicate {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`force-replicate must be disabled, when using avro protocol`)
 	}
 
 	if replicaConfig.Sink != nil {

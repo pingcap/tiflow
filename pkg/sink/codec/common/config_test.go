@@ -235,6 +235,21 @@ func TestDeleteHandleKeyOnly(t *testing.T) {
 	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
 }
 
+func TestAvroForceReplicate(t *testing.T) {
+	t.Parallel()
+
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.ForceReplicate = true
+
+	uri := "kafka://127.0.0.1:9092/abc?protocol=avro"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolAvro)
+	err = codecConfig.Apply(sinkURI, replicaConfig)
+	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
+}
+
 func TestConfigApplyValidate(t *testing.T) {
 	t.Parallel()
 
