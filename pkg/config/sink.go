@@ -158,7 +158,7 @@ type SinkConfig struct {
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
 	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
 
-	//GlueSchemaRegistryConfig is only available when the downstream is MQ using avro protocol.
+	// GlueSchemaRegistryConfig is only available when the downstream is MQ using avro protocol.
 	GlueSchemaRegistryConfig *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config,omitempty"`
 }
 

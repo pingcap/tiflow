@@ -108,7 +108,8 @@ func (m *glueSchemaManager) Register(
 func (m *glueSchemaManager) Lookup(
 	ctx context.Context,
 	schemaName string,
-	schemaID schemaID) (*goavro.Codec, error) {
+	schemaID schemaID,
+) (*goavro.Codec, error) {
 	m.cacheRWLock.RLock()
 	entry, exists := m.cache[schemaName]
 	if exists && entry.schemaID.cID == schemaID.cID {
@@ -153,7 +154,7 @@ func (m *glueSchemaManager) Lookup(
 		header:   header,
 	}
 
-	return nil, nil
+	return codec, nil
 }
 
 // GetCachedOrRegister checks if the suitable Avro schema has been cached.
@@ -259,7 +260,8 @@ func (m *glueSchemaManager) updateSchema(ctx context.Context, schemaName, schema
 	input := &glue.RegisterSchemaVersionInput{
 		SchemaId: &types.SchemaId{
 			RegistryName: aws.String(m.registryName),
-			SchemaName:   &schemaName},
+			SchemaName:   &schemaName,
+		},
 		SchemaDefinition: aws.String(schemaDefinition),
 	}
 
@@ -304,8 +306,10 @@ func (m *glueSchemaManager) getSchemaByID(ctx context.Context, schemaID string) 
 
 // This is the header of the glue message, ref:
 // https://github.com/awslabs/aws-glue-schema-registry/blob/master/common/src/main/java/com/amazonaws/services/schemaregistry/utils/AWSSchemaRegistryConstants.java
-const header_version_byte = uint8(3)      // 3 is fixed for the glue message
-const compression_default_byte = uint8(0) // 0  no compression
+const (
+	header_version_byte      = uint8(3) // 3 is fixed for the glue message
+	compression_default_byte = uint8(0) // 0  no compression
+)
 
 func (m *glueSchemaManager) getMsgHeader(schemaID string) ([]byte, error) {
 	header := []byte{}
