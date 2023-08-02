@@ -39,7 +39,9 @@ import (
 type BatchDecoder struct {
 	keyBytes   []byte
 	valueBytes []byte
-	nextKey    *internal.MessageKey
+
+	nextKey   *internal.MessageKey
+	nextEvent *model.RowChangedEvent
 
 	storage storage.ExternalStorage
 
@@ -130,6 +132,19 @@ func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if err := b.decodeNextKey(); err != nil {
 		return 0, false, err
 	}
+
+	if b.nextKey.Type == model.MessageTypeRow {
+		valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
+		value := b.valueBytes[8 : valueLen+8]
+		b.valueBytes = b.valueBytes[valueLen+8:]
+
+		rowMsg := new(messageRow)
+		if err := rowMsg.decode(value); err != nil {
+			return b.nextKey.Type, false, errors.Trace(err)
+		}
+		b.nextEvent = msgToRowChange(b.nextKey, rowMsg)
+	}
+
 	return b.nextKey.Type, true, nil
 }
 
@@ -171,24 +186,15 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
 
+	event := b.nextEvent
 	ctx := context.Background()
 	// claim-check message found
 	if b.nextKey.ClaimCheckLocation != "" {
-		b.valueBytes = nil
 		return b.assembleEventFromClaimCheckStorage(ctx)
 	}
 
-	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
-	value := b.valueBytes[8 : valueLen+8]
-	b.valueBytes = b.valueBytes[valueLen+8:]
-	rowMsg := new(messageRow)
-	if err := rowMsg.decode(value); err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	var err error
-	event := msgToRowChange(b.nextKey, rowMsg)
 	if b.nextKey.OnlyHandleKey {
+		var err error
 		event, err = b.assembleHandleKeyOnlyEvent(ctx, event)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -201,7 +207,7 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 func (b *BatchDecoder) buildColumns(
 	holder *common.ColumnsHolder, handleKeyColumns map[string]interface{},
-) ([]*model.Column, error) {
+) []*model.Column {
 	columnsCount := holder.Length()
 	columns := make([]*model.Column, 0, columnsCount)
 	for i := 0; i < columnsCount; i++ {
@@ -228,7 +234,7 @@ func (b *BatchDecoder) buildColumns(
 		}
 		columns = append(columns, column)
 	}
-	return columns, nil
+	return columns
 }
 
 func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
@@ -249,10 +255,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		if err != nil {
 			return nil, err
 		}
-		columns, err := b.buildColumns(holder, conditions)
-		if err != nil {
-			return nil, err
-		}
+		columns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.Columns = columns
 	} else if handleKeyOnlyEvent.IsDelete() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
@@ -263,10 +266,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		if err != nil {
 			return nil, err
 		}
-		preColumns, err := b.buildColumns(holder, conditions)
-		if err != nil {
-			return nil, err
-		}
+		preColumns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.PreColumns = preColumns
 	} else if handleKeyOnlyEvent.IsUpdate() {
 		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
@@ -277,10 +277,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		if err != nil {
 			return nil, err
 		}
-		columns, err := b.buildColumns(holder, conditions)
-		if err != nil {
-			return nil, err
-		}
+		columns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.Columns = columns
 
 		conditions = make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
@@ -291,10 +288,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		if err != nil {
 			return nil, err
 		}
-		preColumns, err := b.buildColumns(holder, conditions)
-		if err != nil {
-			return nil, err
-		}
+		preColumns := b.buildColumns(holder, conditions)
 		handleKeyOnlyEvent.PreColumns = preColumns
 	}
 
