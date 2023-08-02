@@ -43,6 +43,9 @@ type bankReactorState struct {
 
 const bankTestPrefix = "/ticdc/test/bank/"
 
+func (b *bankReactorState) UpdatePendingChange() {
+}
+
 func (b *bankReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	require.True(b.t, strings.HasPrefix(key.String(), bankTestPrefix))
 	indexStr := key.String()[len(bankTestPrefix):]

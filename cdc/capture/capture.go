@@ -326,6 +326,8 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	}()
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
+	stdCtx, cancel := context.WithCancel(stdCtx)
+
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:       c.info,
 		EtcdClient:        c.EtcdClient,
@@ -335,7 +337,6 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		SorterSystem:      c.sorterSystem,
 		SortEngineFactory: c.sortEngineFactory,
 	})
-
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
 		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
@@ -351,9 +352,20 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	})
 
 	g.Go(func() error {
+		// Processor manager should be closed as soon as possible to prevent double write issue.
+		defer func() {
+			if cancel != nil {
+				// Propagate the cancel signal to the owner and other goroutines.
+				cancel()
+			}
+			if c.processorManager != nil {
+				c.processorManager.AsyncClose()
+			}
+			log.Info("processor manager closed", zap.String("captureID", c.info.ID))
+		}()
 		processorFlushInterval := time.Duration(c.config.ProcessorFlushInterval)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -419,7 +431,6 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		}
 		// Campaign to be the owner, it blocks until it been elected.
 		if err := c.campaign(ctx); err != nil {
-
 			rootErr := errors.Cause(err)
 			if rootErr == context.Canceled {
 				return nil
@@ -467,7 +478,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		owner := c.newOwner(c.upstreamManager)
 		c.setOwner(owner)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -485,27 +496,27 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 		})
 
-		err = c.runEtcdWorker(ownerCtx, owner,
-			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
-			ownerFlushInterval, util.RoleOwner.String())
+		err = c.runEtcdWorker(ownerCtx, owner, globalState, ownerFlushInterval, util.RoleOwner.String())
 		c.owner.AsyncStop()
 		c.setOwner(nil)
 
-		// if owner exits, resign the owner key,
-		// use a new context to prevent the context from being cancelled.
-		resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if resignErr := c.resign(resignCtx); resignErr != nil {
-			if errors.Cause(resignErr) != context.DeadlineExceeded {
-				log.Info("owner resign failed", zap.String("captureID", c.info.ID),
-					zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
-				cancel()
-				return errors.Trace(resignErr)
-			}
+		if !cerror.ErrNotOwner.Equal(err) {
+			// if owner exits, resign the owner key,
+			// use a new context to prevent the context from being cancelled.
+			resignCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if resignErr := c.resign(resignCtx); resignErr != nil {
+				if errors.Cause(resignErr) != context.DeadlineExceeded {
+					log.Info("owner resign failed", zap.String("captureID", c.info.ID),
+						zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+					cancel()
+					return errors.Trace(resignErr)
+				}
 
-			log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
-				zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+				log.Warn("owner resign timeout", zap.String("captureID", c.info.ID),
+					zap.Error(resignErr), zap.Int64("ownerRev", ownerRev))
+			}
+			cancel()
 		}
-		cancel()
 
 		log.Info("owner resigned successfully",
 			zap.String("captureID", c.info.ID), zap.Int64("ownerRev", ownerRev))
@@ -622,10 +633,6 @@ func (c *captureImpl) AsyncClose() {
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
-	if c.processorManager != nil {
-		c.processorManager.AsyncClose()
-	}
-	log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 
 	c.grpcService.Reset(nil)
 	if c.MessageRouter != nil {

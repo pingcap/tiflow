@@ -71,7 +71,7 @@ func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 			checkpointTs: replicaInfo.StartTs,
 		}, nil
 	}, &s.liveness)
-	s.state = orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	s.state = orchestrator.NewGlobalState(etcd.DefaultCDCClusterID, 0)
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{
