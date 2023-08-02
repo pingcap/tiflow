@@ -278,7 +278,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		).Add(float64(allEventCount))
 
 		if w.eventCache == nil {
-			task.tableSink.updateReceivedSorterCommitTs(currTxnCommitTs)
 			eventCount := newRangeEventCount(lastPos, allEventCount)
 			task.tableSink.updateRangeEventCounts(eventCount)
 		}

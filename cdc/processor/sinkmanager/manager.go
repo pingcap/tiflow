@@ -54,9 +54,6 @@ type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
 	BarrierTs    model.Ts
-	// From sorter.
-	ReceivedMaxCommitTs   model.Ts
-	ReceivedMaxResolvedTs model.Ts
 }
 
 // SinkManager is the implementation of SinkManager.
@@ -954,11 +951,9 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 			zap.Any("checkpointTs", checkpointTs))
 	}
 	return TableStats{
-		CheckpointTs:          checkpointTs.ResolvedMark(),
-		ResolvedTs:            resolvedTs,
-		BarrierTs:             tableSink.barrierTs.Load(),
-		ReceivedMaxCommitTs:   tableSink.getReceivedSorterCommitTs(),
-		ReceivedMaxResolvedTs: tableSink.getReceivedSorterResolvedTs(),
+		CheckpointTs: checkpointTs.ResolvedMark(),
+		ResolvedTs:   resolvedTs,
+		BarrierTs:    tableSink.barrierTs.Load(),
 	}
 }
 

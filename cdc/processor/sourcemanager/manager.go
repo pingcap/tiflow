@@ -107,11 +107,6 @@ func (m *SourceManager) CleanByTable(tableID model.TableID, upperBound engine.Po
 	return m.engine.CleanByTable(tableID, upperBound)
 }
 
-// GetTableResolvedTs returns the resolved ts of the table.
-func (m *SourceManager) GetTableResolvedTs(tableID model.TableID) model.Ts {
-	return m.engine.GetResolvedTs(tableID)
-}
-
 // GetTablePullerStats returns the puller stats of the table.
 func (m *SourceManager) GetTablePullerStats(tableID model.TableID) puller.Stats {
 	p, ok := m.pullers.Load(tableID)

@@ -210,7 +210,6 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
 	defer func() {
-		task.tableSink.updateReceivedSorterCommitTs(lastTxnCommitTs)
 		eventCount := newRangeEventCount(lastPos, allEventCount)
 		task.tableSink.updateRangeEventCounts(eventCount)
 
