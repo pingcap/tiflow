@@ -122,26 +122,32 @@ func ForwardToChangefeedOwnerMiddleware(p capture.Capture,
 		controller, err := p.GetController()
 		if err != nil {
 			_ = ctx.Error(err)
+			ctx.Abort()
 			return
 		}
 		// controller check if the changefeed is exists, so we don't need to forward again
 		ok, err := controller.IsChangefeedExists(ctx, changefeedID)
 		if err != nil {
 			_ = ctx.Error(err)
+			ctx.Abort()
 			return
 		}
 		if !ok {
 			_ = ctx.Error(cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID))
+			ctx.Abort()
 			return
 		}
 
 		info, err := p.Info()
 		if err != nil {
 			_ = ctx.Error(err)
+			ctx.Abort()
 			return
 		}
 		changefeedCaptureOwner := controller.GetChangefeedOwnerCaptureInfo(changefeedID)
 		if changefeedCaptureOwner.ID == info.ID {
+			log.Warn("changefeed owner is the same as controller",
+				zap.String("captureID", info.ID))
 			return
 		}
 		api.ForwardToCapture(ctx, info.ID, changefeedCaptureOwner.AdvertiseAddr)

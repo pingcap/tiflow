@@ -254,6 +254,7 @@ def get_processor():
     resp = rq.get(base_url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
     data = resp.json()[0]
+    time.sleep(1)
     url = base_url + "/" + data["changefeed_id"] + "/" + data["capture_id"]
     resp = rq.get(url, cert=CERT, verify=VERIFY)
     # print error message for debug 
