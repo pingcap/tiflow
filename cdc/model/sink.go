@@ -754,11 +754,14 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
 	if len(t.Rows) < 2 {
 		return nil
 	}
-	newRows, err := convertRowChangedEvents(t.Rows)
+	newRows, split, err := convertRowChangedEvents(t.Rows)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sort.Sort(txnRows(newRows))
+	// some updated events is split, need to sort
+	if split {
+		sort.Sort(txnRows(newRows))
+	}
 	t.Rows = newRows
 	return nil
 }
@@ -767,8 +770,9 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
 // It will deal with the old value compatibility.
 func convertRowChangedEvents(
 	events []*RowChangedEvent,
-) ([]*RowChangedEvent, error) {
+) ([]*RowChangedEvent, bool, error) {
 	rowChangedEvents := make([]*RowChangedEvent, 0, len(events))
+	needSplit := false
 	for _, e := range events {
 		if e == nil {
 			log.Warn("skip emit nil event",
@@ -787,15 +791,15 @@ func convertRowChangedEvents(
 			continue
 		}
 
-		// This indicates that it is an update event,
-		// and after enable old value internally by default(but disable in the configuration).
-		// We need to handle the update event to be compatible with the old format.
+		// This indicates that it is an update event. if the pk or uk is updated,
+		// we need to split it into two events (delete and insert).
 		if e.IsUpdate() {
 			if shouldSplitUpdateEvent(e) {
 				deleteEvent, insertEvent, err := splitUpdateEvent(e)
 				if err != nil {
-					return nil, errors.Trace(err)
+					return nil, false, errors.Trace(err)
 				}
+				needSplit = true
 				rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
 			} else {
 				// If the handle key columns are not updated, PreColumns is directly ignored.
@@ -806,13 +810,12 @@ func convertRowChangedEvents(
 			rowChangedEvents = append(rowChangedEvents, e)
 		}
 	}
-	return rowChangedEvents, nil
+	return rowChangedEvents, needSplit, nil
 }
 
 // shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
-// whether the handle key column has been modified.
-// If the handle key column is modified,
-// we need to use splitUpdateEvent to split the update event into a delete and an insert event.
+// whether the handle key column or unique key has been modified.
+// If  is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
 func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 	// nil event will never be split.
 	if updateEvent == nil {
