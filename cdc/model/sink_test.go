@@ -420,3 +420,146 @@ func TestSortRowChangedEvent(t *testing.T) {
 	assert.True(t, events[1].IsUpdate())
 	assert.True(t, events[2].IsInsert())
 }
+
+func TestTrySplitAndSortUpdateEventNil(t *testing.T) {
+	t.Parallel()
+
+	events := []*RowChangedEvent{nil}
+	result, split, err := trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(result))
+	require.False(t, split)
+}
+
+func TestTrySplitAndSortUpdateEventEmpty(t *testing.T) {
+	t.Parallel()
+
+	events := []*RowChangedEvent{
+		{
+			StartTs:  1,
+			CommitTs: 2,
+		},
+	}
+	result, split, err := trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(result))
+	require.False(t, split)
+}
+
+func TestTrySplitAndSortUpdateEvent(t *testing.T) {
+	t.Parallel()
+
+	// Update handle key.
+	columns := []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag,
+			Value: "col2-value-updated",
+		},
+	}
+	preColumns := []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag,
+			Value: "col2-value",
+		},
+	}
+
+	events := []*RowChangedEvent{
+		{
+			CommitTs:   1,
+			Columns:    columns,
+			PreColumns: preColumns,
+		},
+	}
+	result, split, err := trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result))
+	require.True(t, split)
+
+	// Update unique key.
+	columns = []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
+			Name:  "col2",
+			Flag:  UniqueKeyFlag,
+			Value: "col2-value-updated",
+		},
+	}
+	preColumns = []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  UniqueKeyFlag,
+			Value: "col2-value",
+		},
+	}
+
+	events = []*RowChangedEvent{
+		{
+			CommitTs:   1,
+			Columns:    columns,
+			PreColumns: preColumns,
+		},
+	}
+	result, split, err = trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result))
+	require.True(t, split)
+
+	// Update non-handle key.
+	columns = []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag,
+			Value: "col2-value",
+		},
+	}
+	preColumns = []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag,
+			Value: "col2-value",
+		},
+	}
+
+	events = []*RowChangedEvent{
+		{
+			CommitTs:   1,
+			Columns:    columns,
+			PreColumns: preColumns,
+		},
+	}
+	result, split, err = trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(result))
+	require.False(t, split)
+}

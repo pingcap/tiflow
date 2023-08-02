@@ -49,6 +49,13 @@ const (
 	MessageTypeResolved
 )
 
+const (
+	// the RowChangedEvent order in the same transaction
+	typeDelete = iota + 1
+	typeUpdate
+	typeInsert
+)
+
 // ColumnFlagType is for encapsulating the flag operations for different flags.
 type ColumnFlagType util.Flag
 
@@ -349,8 +356,17 @@ func (e txnRows) Len() int {
 
 // Less sort the events base on the order of event type delete<update<insert
 func (e txnRows) Less(i, j int) bool {
-	return len(e[i].Columns)-len(e[i].PreColumns) <
-		len(e[j].Columns)-len(e[j].PreColumns)
+	return getDMLOrder(e[i]) < getDMLOrder(e[j])
+}
+
+// getDMLOrder returns the order of the dml types: delete<update<insert
+func getDMLOrder(event *RowChangedEvent) int {
+	if event.IsDelete() {
+		return typeDelete
+	} else if event.IsUpdate() {
+		return typeUpdate
+	}
+	return typeInsert
 }
 
 func (e txnRows) Swap(i, j int) {
