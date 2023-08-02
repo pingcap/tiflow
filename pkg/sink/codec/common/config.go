@@ -244,9 +244,17 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Protocol == config.ProtocolAvro {
+		if c.AvroConfluentSchemaRegistry != "" && c.AvroGlueSchemaRegistry != nil {
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
+				`Avro protocol requires only one of "%s" or "%s" to specify the schema registry`,
+				codecOPTAvroSchemaRegistry,
+				coderOPTAvroGlueSchemaRegistry,
+			)
+		}
+
 		if c.AvroConfluentSchemaRegistry == "" && c.AvroGlueSchemaRegistry == nil {
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
-				`Avro protocol requires parameter "%s" or "%s"`,
+				`Avro protocol requires parameter "%s" or "%s" to specify the schema registry`,
 				codecOPTAvroSchemaRegistry,
 				coderOPTAvroGlueSchemaRegistry,
 			)
@@ -305,4 +313,21 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+const (
+	// schemaRegistryTypeConfluent is the type of Confluent Schema Registry
+	SchemaRegistryTypeConfluent = "confluent"
+	// schemaRegistryTypeGlue is the type of AWS Glue Schema Registry
+	SchemaRegistryTypeGlue = "glue"
+)
+
+func (c *Config) SchemaRegistryType() string {
+	if c.AvroConfluentSchemaRegistry != "" {
+		return SchemaRegistryTypeConfluent
+	}
+	if c.AvroGlueSchemaRegistry != nil {
+		return SchemaRegistryTypeGlue
+	}
+	return "unknown"
 }

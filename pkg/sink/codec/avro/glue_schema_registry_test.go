@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,6 +46,12 @@ func TestGlueSchemaManager_Register(t *testing.T) {
 	schemaID2, err := m.Register(ctx, schemaName, schemaDefinition)
 	require.NoError(t, err)
 	require.Equal(t, schemaID.gID, schemaID2.gID)
+
+	// Register a different schema
+	schemaDefinition2 := `{"type": "record", "name": "test_schema2", "fields": [{"name": "field1", "type": "string"}]}`
+	schemaID3, err := m.Register(ctx, schemaName, schemaDefinition2)
+	require.NoError(t, err)
+	require.NotEqual(t, schemaID.gID, schemaID3.gID)
 }
 
 func TestGlueSchemaManager_Lookup(t *testing.T) {
@@ -97,7 +104,7 @@ func TestGlueSchemaManager_RegistryType(t *testing.T) {
 	m := newClueSchemaManagerForTest(t, ctx, cfg)
 
 	registryType := m.RegistryType()
-	require.Equal(t, schemaRegistryTypeGlue, registryType)
+	require.Equal(t, common.SchemaRegistryTypeGlue, registryType)
 }
 
 func TestGlueSchemaManager_getMsgHeader(t *testing.T) {

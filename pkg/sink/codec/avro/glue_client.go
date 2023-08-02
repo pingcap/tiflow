@@ -11,9 +11,15 @@ import (
 
 // glueClient is a partial interface of glue client, used to mock glue client in unit test
 type glueClient interface {
-	CreateSchema(ctx context.Context, params *glue.CreateSchemaInput, optFns ...func(*glue.Options)) (*glue.CreateSchemaOutput, error)
-	RegisterSchemaVersion(ctx context.Context, params *glue.RegisterSchemaVersionInput, optFns ...func(*glue.Options)) (*glue.RegisterSchemaVersionOutput, error)
-	GetSchemaVersion(ctx context.Context, params *glue.GetSchemaVersionInput, optFns ...func(*glue.Options)) (*glue.GetSchemaVersionOutput, error)
+	CreateSchema(ctx context.Context,
+		params *glue.CreateSchemaInput,
+		optFns ...func(*glue.Options)) (*glue.CreateSchemaOutput, error)
+	RegisterSchemaVersion(ctx context.Context,
+		params *glue.RegisterSchemaVersionInput,
+		optFns ...func(*glue.Options)) (*glue.RegisterSchemaVersionOutput, error)
+	GetSchemaVersion(ctx context.Context,
+		params *glue.GetSchemaVersionInput,
+		optFns ...func(*glue.Options)) (*glue.GetSchemaVersionOutput, error)
 }
 
 type mockGlueClientImpl struct {

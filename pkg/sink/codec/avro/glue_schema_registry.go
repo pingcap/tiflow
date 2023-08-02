@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
@@ -69,7 +70,7 @@ func NewGlueSchemaManager(
 		registryName: cfg.RegistryName,
 		client:       client,
 		cache:        make(map[string]*schemaCacheEntry),
-		registryType: schemaRegistryTypeGlue,
+		registryType: common.SchemaRegistryTypeGlue,
 	}, nil
 }
 
@@ -85,17 +86,17 @@ func (m *glueSchemaManager) Register(
 		return id, errors.Trace(err)
 	}
 	if ok {
-		log.Info("Schema already exists in registry, update it", zap.String("schema name", schemaName))
+		log.Info("Schema already exists in registry, update it", zap.String("schemaName", schemaName))
 		schemaID, err := m.updateSchema(ctx, schemaName, schemaDefinition)
 		if err != nil {
 			return id, errors.Trace(err)
 		}
-		log.Info("Schema updated", zap.String("schema name", schemaName),
+		log.Info("Schema updated", zap.String("schemaName", schemaName),
 			zap.String("schemaID", schemaID))
 		id.gID = schemaID
 		return id, nil
 	} else {
-		log.Info("Schema does not exist, create it", zap.String("schema name", schemaName))
+		log.Info("Schema does not exist, create it", zap.String("schemaName", schemaName))
 		schemaID, err := m.createSchema(ctx, schemaName, schemaDefinition)
 		if err != nil {
 			return id, errors.Trace(err)
@@ -305,7 +306,9 @@ func (m *glueSchemaManager) getSchemaByID(ctx context.Context, schemaID string) 
 }
 
 // This is the header of the glue message, ref:
-// https://github.com/awslabs/aws-glue-schema-registry/blob/master/common/src/main/java/com/amazonaws/services/schemaregistry/utils/AWSSchemaRegistryConstants.java
+// https://github.com/awslabs/aws-glue-schema-registry/blob/
+// master/common/src/main/java/com/amazonaws/services/
+// schemaregistry/utils/AWSSchemaRegistryConstants.java
 const (
 	header_version_byte      = uint8(3) // 3 is fixed for the glue message
 	compression_default_byte = uint8(0) // 0  no compression

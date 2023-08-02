@@ -421,15 +421,21 @@ func decodeRawBytes(
 	var cid int
 	var gid string
 
-	if schemaM.RegistryType() == schemaRegistryTypeConfluent {
+	switch schemaM.RegistryType() {
+	case common.SchemaRegistryTypeConfluent:
 		cid, binary, err = extractConfluentSchemaIDAndBinaryData(data)
+		if err != nil {
+			return nil, nil, err
+		}
 		schemaID.cID = cid
-	} else {
+	case common.SchemaRegistryTypeGlue:
 		gid, binary, err = extractGlueSchemaIDAndBinaryData(data)
+		if err != nil {
+			return nil, nil, err
+		}
 		schemaID.gID = gid
-	}
-	if err != nil {
-		return nil, nil, err
+	default:
+		return nil, nil, errors.New("unknown schema registry type")
 	}
 
 	codec, err := schemaM.Lookup(ctx, topic, schemaID)

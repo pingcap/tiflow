@@ -1010,16 +1010,20 @@ func NewBatchEncoderBuilder(ctx context.Context,
 ) (codec.RowEventEncoderBuilder, error) {
 	var schemaM SchemaManager
 	var err error
-	if config.AvroConfluentSchemaRegistry != "" {
+
+	switch config.SchemaRegistryType() {
+	case common.SchemaRegistryTypeConfluent:
 		schemaM, err = NewConfluentSchemaManager(ctx, config.AvroConfluentSchemaRegistry, nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-	} else {
+	case common.SchemaRegistryTypeGlue:
 		schemaM, err = NewGlueSchemaManager(ctx, config.AvroGlueSchemaRegistry)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+	default:
+		return nil, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(config.SchemaRegistryType())
 	}
 
 	return &batchEncoderBuilder{

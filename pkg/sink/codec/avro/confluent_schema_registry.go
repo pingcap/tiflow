@@ -33,6 +33,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
@@ -109,7 +110,7 @@ func NewConfluentSchemaManager(
 	return &confluentSchemaManager{
 		registryURL:  registryURL,
 		cache:        make(map[string]*schemaCacheEntry, 1),
-		registryType: schemaRegistryTypeConfluent,
+		registryType: common.SchemaRegistryTypeConfluent,
 	}, nil
 }
 

@@ -19,13 +19,6 @@ type SchemaManager interface {
 // Used for lazy evaluation
 type SchemaGenerator func() (string, error)
 
-const (
-	// schemaRegistryTypeConfluent is the type of Confluent Schema Registry
-	schemaRegistryTypeConfluent = "confluent"
-	// schemaRegistryTypeGlue is the type of AWS Glue Schema Registry
-	schemaRegistryTypeGlue = "glue"
-)
-
 type schemaID struct {
 	// cID is the Confluent Schema ID, it represents
 	// a unique schema in Confluent Schema Registry
