@@ -339,20 +339,21 @@ type RowChangedEvent struct {
 	ReplicatingTs Ts `json:"-" msg:"-"`
 }
 
-// RowChangedEvents represents a set of events
-type RowChangedEvents []*RowChangedEvent
+// txnRows represents a set of events that belong to the same transaction.
+type txnRows []*RowChangedEvent
 
 // Len is the number of elements in the collection.
-func (e RowChangedEvents) Len() int {
+func (e txnRows) Len() int {
 	return len(e)
 }
 
-func (e RowChangedEvents) Less(i, j int) bool {
+// Less sort the events base on the order of event type delete<update<insert
+func (e txnRows) Less(i, j int) bool {
 	return len(e[i].Columns)-len(e[i].PreColumns) <
 		len(e[j].Columns)-len(e[j].PreColumns)
 }
 
-func (e RowChangedEvents) Swap(i, j int) {
+func (e txnRows) Swap(i, j int) {
 	e[i], e[j] = e[j], e[i]
 }
 
@@ -757,7 +758,7 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	sort.Sort(RowChangedEvents(newRows))
+	sort.Sort(txnRows(newRows))
 	t.Rows = newRows
 	return nil
 }
