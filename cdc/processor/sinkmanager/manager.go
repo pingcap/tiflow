@@ -278,9 +278,9 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 			log.Info("Sink manager is closing all table sinks",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID))
-			m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
+			m.tableSinks.Range(func(key, value interface{}) bool {
 				value.(*tableSinkWrapper).closeTableSink()
-				m.sinkMemQuota.ClearTable(span)
+				m.sinkMemQuota.ClearTable(key.(model.TableID))
 				return true
 			})
 			log.Info("Sink manager has closed all table sinks",
