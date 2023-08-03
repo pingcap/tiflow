@@ -56,7 +56,7 @@ func IsInitialized() bool {
 
 // DM will guess whether the password is encrypted or not.
 // to compatible with this behavior when InitCipher is not called,
-// we use a notInitializedCipher to always return error
+// we use a notInitializedCipher to always return error.
 type notInitializedCipher struct{}
 
 func (n *notInitializedCipher) Encrypt([]byte) ([]byte, error) {

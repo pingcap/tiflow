@@ -72,8 +72,7 @@ func TestCipher(t *testing.T) {
 	require.NoError(t, err)
 	blockSize := block.BlockSize()
 	require.Greater(t, len(ciphertext), blockSize+2)
-	cipherText3 := append(ciphertext[1:blockSize+1], append([]byte{ivSep[0]}, ciphertext[blockSize+2:]...)...)
-	plaintext3, err := Decrypt(cipherText3)
+	plaintext3, err := Decrypt(append(ciphertext[1:blockSize+1], append([]byte{ivSep[0]}, ciphertext[blockSize+2:]...)...))
 	require.NoError(t, err)
 	require.NotEqual(t, plaintext, plaintext3)
 }

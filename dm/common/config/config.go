@@ -39,7 +39,7 @@ func (c *Common) Adjust() error {
 		return terror.ErrConfigSecretKeyPath.Generate(err)
 	}
 	contentStr := strings.TrimSpace(string(content))
-	decodeContent, err := hex.DecodeString(string(contentStr))
+	decodeContent, err := hex.DecodeString(contentStr)
 	if err != nil {
 		return terror.ErrConfigSecretKeyPath.Generate(err)
 	}
