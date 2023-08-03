@@ -85,6 +85,7 @@ var redoBarrierDDLs = map[timodel.ActionType]struct{}{
 	timodel.ActionAddTablePartition:      {},
 	timodel.ActionTruncateTablePartition: {},
 	timodel.ActionRecoverTable:           {},
+	timodel.ActionReorganizePartition:    {},
 }
 
 // ddlManager holds the pending DDL events of all tables and responsible for
