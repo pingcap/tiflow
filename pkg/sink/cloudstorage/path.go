@@ -155,9 +155,9 @@ func NewFilePathGenerator(
 	}
 }
 
-// CheckOrWriteSchema checks whether the schema file exists in the storage and
+// CheckOrWriteTableSchema checks whether the schema file exists in the storage and
 // write scheme.json if necessary.
-func (f *FilePathGenerator) CheckOrWriteSchema(
+func (f *FilePathGenerator) CheckOrWriteTableSchema(
 	ctx context.Context,
 	table VersionedTableName,
 	tableInfo *model.TableInfo,
@@ -168,24 +168,36 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 
 	var def TableDefinition
 	def.FromTableInfo(tableInfo, table.TableInfoVersion, f.config.OutputColumnID)
+
+	tableVersion, err := CheckOrWriteTableSchema(ctx, f.storage, def)
+	if err != nil {
+		return err
+	}
+
+	f.versionMap[table] = tableVersion
+	return nil
+}
+
+func CheckOrWriteTableSchema(
+	ctx context.Context, extStorage storage.ExternalStorage,
+	def TableDefinition,
+) (tableInfoVersion uint64, err error) {
 	if !def.IsTableSchema() {
 		// only check schema for table
-		log.Panic("invalid table schema", zap.Any("versionedTableName", table),
-			zap.Any("tableInfo", tableInfo))
+		log.Panic("invalid table schema", zap.Any("def", def))
 	}
 
 	// Case 1: point check if the schema file exists.
 	tblSchemaFile, err := def.GenerateSchemaFilePath()
 	if err != nil {
-		return err
+		return 0, err
 	}
-	exist, err := f.storage.FileExists(ctx, tblSchemaFile)
+	exist, err := extStorage.FileExists(ctx, tblSchemaFile)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if exist {
-		f.versionMap[table] = table.TableInfoVersion
-		return nil
+		return def.TableVersion, nil
 	}
 
 	// walk the table meta path to find the last schema file
@@ -194,7 +206,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	lastVersion := uint64(0)
 	prefix := fmt.Sprintf(tableSchemaPrefix+"schema_", def.Schema, def.Table)
 	checksumSuffix := fmt.Sprintf("%010d.json", checksum)
-	err = f.storage.WalkDir(ctx, &storage.WalkOption{ObjPrefix: prefix},
+	err = extStorage.WalkDir(ctx, &storage.WalkOption{ObjPrefix: prefix},
 		func(path string, _ int64) error {
 			schemaFileCnt++
 			if !strings.HasSuffix(path, checksumSuffix) {
@@ -214,18 +226,18 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 		},
 	)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Case 2: the table meta path is not empty.
 	if schemaFileCnt != 0 {
 		if lastVersion == 0 {
 			log.Panic("no table schema file found in an non-empty meta path",
-				zap.Any("versionedTableName", table),
+				zap.Any("TableSchema", def.Schema),
+				zap.Any("TableName", def.Table),
 				zap.Uint32("checksum", checksum))
 		}
-		f.versionMap[table] = lastVersion
-		return nil
+		return lastVersion, nil
 	}
 
 	// Case 3: the table meta path is empty, which only happens when the table is
@@ -233,10 +245,9 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	// storage.
 	encodedDetail, err := def.MarshalWithQuery()
 	if err != nil {
-		return err
+		return 0, err
 	}
-	f.versionMap[table] = table.TableInfoVersion
-	return f.storage.WriteFile(ctx, tblSchemaFile, encodedDetail)
+	return def.TableVersion, extStorage.WriteFile(ctx, tblSchemaFile, encodedDetail)
 }
 
 // SetClock is used for unit test

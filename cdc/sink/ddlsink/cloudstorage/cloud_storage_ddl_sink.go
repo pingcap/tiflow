@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -100,11 +99,12 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return errors.Trace(err)
 	}
 
-	if ddl.Type == timodel.ActionExchangeTablePartition {
-		// For exchange partition, we need to write the schema of the source table.
+	if ddl.PreTableInfo != nil && def.IsTableSchema() {
+		// Always check and write preTableSchema to the cloud storage.
 		var sourceTableDef cloudstorage.TableDefinition
 		sourceTableDef.FromTableInfo(ddl.PreTableInfo, ddl.TableInfo.Version, d.outputColumnID)
-		return writeFile(sourceTableDef)
+		_, err := cloudstorage.CheckOrWriteTableSchema(ctx, d.storage, sourceTableDef)
+		return err
 	}
 	return nil
 }

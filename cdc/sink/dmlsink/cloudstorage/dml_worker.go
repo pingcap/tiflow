@@ -159,7 +159,7 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				}
 
 				// generate scheme.json file before generating the first data file if necessary
-				err := d.filePathGenerator.CheckOrWriteSchema(ctx, table, task.tableInfo)
+				err := d.filePathGenerator.CheckOrWriteTableSchema(ctx, table, task.tableInfo)
 				if err != nil {
 					log.Error("failed to write schema file to external storage",
 						zap.Int("workerID", d.id),
