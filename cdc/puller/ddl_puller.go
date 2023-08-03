@@ -247,19 +247,20 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 	remainTables := make([]*timodel.TableInfo, 0, len(multiTableInfos))
 	snap := p.schemaStorage.GetLastSnapshot()
 	for i, tableInfo := range multiTableInfos {
-		var shouldDiscardNewTable, shouldDiscardOldTable bool
-		newSchemaName, ok := snap.SchemaByID(newSchemaIDs[i])
-		if !ok {
-			shouldDiscardNewTable = true
-		} else {
-			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, newTableNames[i].O)
-		}
-
+		var shouldDiscardOldTable, shouldDiscardNewTable bool
 		oldTable, ok := snap.PhysicalTableByID(tableInfo.ID)
 		if !ok {
 			shouldDiscardOldTable = true
 		} else {
 			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, oldTable.Name.O)
+		}
+
+		newSchemaName, ok := snap.SchemaByID(newSchemaIDs[i])
+		if !ok {
+			// the new table name does not hit the filter rule, so we should discard the table.
+			shouldDiscardNewTable = true
+		} else {
+			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, newTableNames[i].O)
 		}
 
 		if shouldDiscardOldTable && shouldDiscardNewTable {
