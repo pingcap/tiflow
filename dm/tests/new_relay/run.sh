@@ -12,7 +12,8 @@ API_VERSION="v1alpha1"
 
 function cleanup_data_and_init_key() {
 	cleanup_data $TEST_NAME
-	mkdir -p $WORK_DIR/master; cp $cur/conf/key.txt $WORK_DIR/master/
+	mkdir -p $WORK_DIR/master
+	cp $cur/conf/key.txt $WORK_DIR/master/
 }
 
 function test_restart_relay_status() {

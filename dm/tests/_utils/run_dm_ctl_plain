@@ -16,7 +16,7 @@ binary=$PWD/bin/dmctl.test
 ts=$(date +"%s")
 pid=$$
 echo "dmctl test cmd: \"$cmd\""
-$binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL $cmd --master-addr=$master_addr > $TEST_DIR/$TEST_NAME/dmctl-plain.log
+$binary -test.coverprofile="$TEST_DIR/cov.$TEST_NAME.dmctl.$ts.$pid.out" DEVEL $cmd --master-addr=$master_addr >$TEST_DIR/$TEST_NAME/dmctl-plain.log
 
 # gocovmerge doesn't support merge profiles with different modes, however atomic
 # mode and count mode have the same profile format, so we need to unify cover

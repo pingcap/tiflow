@@ -197,7 +197,8 @@ function run() {
 		"unknown command \"any\" for \"dmctl\"" 1 \
 		"Run 'dmctl --help' for usage\." 1
 
-	mkdir -p $WORK_DIR/master; cp $cur/conf/key.txt $WORK_DIR/master/
+	mkdir -p $WORK_DIR/master
+	cp $cur/conf/key.txt $WORK_DIR/master/
 	export DM_MASTER_EXTRA_ARG="--secret-key-path $WORK_DIR/master/key.txt"
 	run_dm_master $WORK_DIR/master $MASTER_PORT $dm_master_conf
 	export DM_MASTER_EXTRA_ARG=""
@@ -495,11 +496,11 @@ function run() {
 	cp $cur/conf/key.txt $WORK_DIR/key.txt
 	run_dm_ctl_plain $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"encrypt abc --secret-key-path $WORK_DIR/master/key.txt"
-	val=$(cat $WORK_DIR/dmctl-plain.log|head -n 1)
+	val=$(cat $WORK_DIR/dmctl-plain.log | head -n 1)
 	echo "encrypt value: $val"
 	run_dm_ctl_plain $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"decrypt $val --secret-key-path $WORK_DIR/master/key.txt"
-	decrypted_val=$(cat $WORK_DIR/dmctl-plain.log|head -n 1)
+	decrypted_val=$(cat $WORK_DIR/dmctl-plain.log | head -n 1)
 	echo "decrypt value: $decrypted_val"
 	if [ "$decrypted_val" != "abc" ]; then
 		echo "encrypt test failed"
