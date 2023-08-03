@@ -38,7 +38,7 @@ func TestConfigSecretKeyPath(t *testing.T) {
 	require.Nil(t, cfg.SecretKey)
 
 	// not hex string
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret"), []byte("secret"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret"), []byte("secret"), 0o644))
 	cfg.SecretKeyPath = filepath.Join(dir, "secret")
 	err = cfg.Adjust()
 	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
@@ -46,7 +46,7 @@ func TestConfigSecretKeyPath(t *testing.T) {
 	require.Nil(t, cfg.SecretKey)
 
 	// not enough length
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-2"), []byte("2334"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-2"), []byte("2334"), 0o644))
 	cfg.SecretKeyPath = filepath.Join(dir, "secret-2")
 	err = cfg.Adjust()
 	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
@@ -57,7 +57,7 @@ func TestConfigSecretKeyPath(t *testing.T) {
 	key := make([]byte, 32)
 	_, err = rand.Read(key)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-3"), []byte(" \t"+hex.EncodeToString(key)+"\r\n   \n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "secret-3"), []byte(" \t"+hex.EncodeToString(key)+"\r\n   \n"), 0o644))
 	cfg.SecretKeyPath = filepath.Join(dir, "secret-3")
 	require.NoError(t, cfg.Adjust())
 	require.Equal(t, key, cfg.SecretKey)

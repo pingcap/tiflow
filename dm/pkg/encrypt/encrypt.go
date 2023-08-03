@@ -24,9 +24,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
-var (
-	ivSep = []byte("@") // ciphertext format: iv + ivSep + encrypted-plaintext
-)
+var ivSep = []byte("@") // ciphertext format: iv + ivSep + encrypted-plaintext
 
 // Cipher is the interface for encrypt/decrypt.
 type Cipher interface {
