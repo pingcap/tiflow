@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"math"
@@ -93,6 +94,9 @@ type consumerOption struct {
 
 	// avro schema registry uri should be set if the encoding protocol is avro
 	schemaRegistryURI string
+
+	// upstreamTiDBDSN is the dsn of the upstream TiDB cluster
+	upstreamTiDBDSN string
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
@@ -221,11 +225,12 @@ func main() {
 		configFile     string
 	)
 
-	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 
+	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
 	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
+	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
 
 	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
@@ -441,6 +446,8 @@ type Consumer struct {
 	codecConfig *common.Config
 
 	option *consumerOption
+
+	upstreamTiDB *sql.DB
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -462,12 +469,20 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	c.codecConfig = common.NewConfig(o.protocol)
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
 	c.codecConfig.EnableRowChecksum = o.enableRowChecksum
+	if c.codecConfig.Protocol == config.ProtocolAvro {
+		c.codecConfig.AvroEnableWatermark = true
+	}
+
 	if o.replicaConfig != nil && o.replicaConfig.Sink != nil && o.replicaConfig.Sink.KafkaConfig != nil {
 		c.codecConfig.LargeMessageHandle = o.replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 	}
 
-	if c.codecConfig.Protocol == config.ProtocolAvro {
-		c.codecConfig.AvroEnableWatermark = true
+	if c.codecConfig.LargeMessageHandle.HandleKeyOnly() {
+		db, err := openDB(ctx, c.option.upstreamTiDBDSN)
+		if err != nil {
+			return nil, err
+		}
+		c.upstreamTiDB = db
 	}
 
 	if o.replicaConfig != nil {
@@ -573,7 +588,10 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolOpen, config.ProtocolDefault:
 		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig)
 	case config.ProtocolCanalJSON:
-		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig)
+		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
+		if err != nil {
+			return err
+		}
 	case config.ProtocolAvro:
 		schemaM, err := avro.NewAvroSchemaManager(ctx, c.option.schemaRegistryURI, nil)
 		if err != nil {
@@ -923,4 +941,25 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	g.currentTableID++
 	g.tableIDs[key] = g.currentTableID
 	return g.currentTableID
+}
+
+func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Error("open db failed", zap.String("dsn", dsn), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(10 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err = db.PingContext(ctx); err != nil {
+		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	log.Info("open db success", zap.String("dsn", dsn))
+	return db, nil
 }
