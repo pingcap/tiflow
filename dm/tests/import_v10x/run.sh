@@ -53,6 +53,10 @@ function run() {
 	cp $cur/conf/source1.yaml $WORK_DIR/master/v1-sources/source1.yaml
 	cp $cur/conf/source2.yaml $WORK_DIR/master/v1-sources/source2.yaml
 
+	# prepare key file for dm-master.
+	mkdir -p $WORK_DIR/master
+	cp $cur/conf/key.txt $WORK_DIR/master/
+
 	# start DM worker and master
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT

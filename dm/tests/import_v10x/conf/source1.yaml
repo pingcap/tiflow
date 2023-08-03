@@ -7,7 +7,7 @@ enable-relay: false
 from:
   host: 127.0.0.1
   user: root
-  password: '123456'
+  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=
   port: 3306
 checker:
   check-enable: true
