@@ -15,6 +15,7 @@ package pulsar
 
 import (
 	"fmt"
+	"github.com/pingcap/tiflow/pkg/config"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/log"
@@ -23,10 +24,10 @@ import (
 )
 
 // FactoryCreator defines the type of factory creator.
-type FactoryCreator func(config *Config, changefeedID model.ChangeFeedID) (pulsar.Client, error)
+type FactoryCreator func(config *Config, changefeedID model.ChangeFeedID, sinkConfig *config.SinkConfig) (pulsar.Client, error)
 
 // NewCreatorFactory returns a factory implemented based on kafka-go
-func NewCreatorFactory(config *Config, changefeedID model.ChangeFeedID) (pulsar.Client, error) {
+func NewCreatorFactory(config *Config, changefeedID model.ChangeFeedID, sinkConfig *config.SinkConfig) (pulsar.Client, error) {
 	co := pulsar.ClientOptions{
 		URL: config.URL,
 		CustomMetricsLabels: map[string]string{
@@ -42,6 +43,17 @@ func NewCreatorFactory(config *Config, changefeedID model.ChangeFeedID) (pulsar.
 	if err != nil {
 		log.Error("setup pulsar authentication fail", zap.Error(err))
 		return nil, err
+	}
+
+	// pulsar TLS config
+	if sinkConfig.PulsarConfig != nil {
+		sinkPulsar := sinkConfig.PulsarConfig
+		if sinkPulsar.TLSCertificateFile != nil && sinkPulsar.TLSKeyFilePath != nil &&
+			sinkPulsar.TLSTrustCertsFilePath != nil {
+			co.TLSCertificateFile = *sinkPulsar.TLSCertificateFile
+			co.TLSKeyFilePath = *sinkPulsar.TLSKeyFilePath
+			co.TLSTrustCertsFilePath = *sinkPulsar.TLSTrustCertsFilePath
+		}
 	}
 
 	pulsarClient, err := pulsar.NewClient(co)
@@ -67,7 +79,8 @@ func setupAuthentication(config *Config) (pulsar.Authentication, error) {
 }
 
 // NewMockCreatorFactory returns a factory implemented based on kafka-go
-func NewMockCreatorFactory(config *Config, changefeedID model.ChangeFeedID) (pulsar.Client, error) {
+func NewMockCreatorFactory(config *Config, changefeedID model.ChangeFeedID,
+	sinkConfig *config.SinkConfig) (pulsar.Client, error) {
 	log.Info("mock pulsar client factory created", zap.Any("changfeedID", changefeedID))
 	return nil, nil
 }

@@ -57,6 +57,7 @@ func (m *pulsarTopicManager) GetPartitionNum(ctx context.Context, topic string) 
 
 // CreateTopicAndWaitUntilVisible no need to create first
 func (m *pulsarTopicManager) CreateTopicAndWaitUntilVisible(ctx context.Context, topicName string) (int32, error) {
+
 	return 0, nil
 }
 

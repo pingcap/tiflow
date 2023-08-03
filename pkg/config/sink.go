@@ -155,6 +155,7 @@ type SinkConfig struct {
 	// SafeMode is only available when the downstream is DB.
 	SafeMode           *bool               `toml:"safe-mode" json:"safe-mode,omitempty"`
 	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
+	PulsarConfig       *PulsarConfig       `toml:"pulsar-config" json:"pulsar-config,omitempty"`
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
 	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
 }
@@ -326,7 +327,14 @@ type KafkaConfig struct {
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
+// PulsarConfig pulsar sink configuration
 type PulsarConfig struct {
+	TLSKeyFilePath        *string `toml:"tls-certificate-path" json:"tls-certificate-path,omitempty"`
+	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-private-key-path,omitempty"`
+	TLSTrustCertsFilePath *string `toml:"tls-trust-certs-file-path" json:"tls-trust-certs-file-path,omitempty"`
+
+	// PulsarProducerCacheSize is the size of the cache of pulsar producers
+	PulsarProducerCacheSize *int32 `toml:"pulsar-producer-cache-size" json:"pulsar-producer-cache-size,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration

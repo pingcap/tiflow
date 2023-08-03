@@ -15,6 +15,7 @@ package ddlproducer
 
 import (
 	"context"
+	"github.com/pingcap/tiflow/pkg/config"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -43,4 +44,4 @@ type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
 
 // PulsarFactory is a function to create a pulsar producer.
 type PulsarFactory func(ctx context.Context, changefeedID model.ChangeFeedID,
-	pConfig *pulsarConfig.Config, client pulsar.Client) (DDLProducer, error)
+	pConfig *pulsarConfig.Config, client pulsar.Client, sinkConfig *config.SinkConfig) (DDLProducer, error)

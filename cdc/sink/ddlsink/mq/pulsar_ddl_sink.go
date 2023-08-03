@@ -81,13 +81,13 @@ func NewPulsarDDLSink(
 	}
 
 	start := time.Now()
-	client, err := clientCreator(pConfig, changefeedID)
+	client, err := clientCreator(pConfig, changefeedID, replicaConfig.Sink)
 	if err != nil {
 		log.Error("DDL sink producer client create fail", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrPulsarNewClient, err)
 	}
 
-	p, err := producerCreator(ctx, changefeedID, pConfig, client)
+	p, err := producerCreator(ctx, changefeedID, pConfig, client, replicaConfig.Sink)
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)

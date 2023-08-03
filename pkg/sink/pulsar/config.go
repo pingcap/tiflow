@@ -73,12 +73,6 @@ const (
 	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
 	Protocol = "protocol"
 
-	// TLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
-	TLSCertificatePath = "tls-certificate-path"
-
-	// TLSPrivateKeyPath TLS private key
-	TLSPrivateKeyPath = "tls-private-key-path"
-
 	// OAuth2IssuerURL  the URL of the authorization server.
 	OAuth2IssuerURL = "oauth2-issuer-url"
 	// OAuth2Audience  the URL of the resource server.
@@ -342,16 +336,6 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 	s = params.Get(BasicPassword)
 	if len(s) > 0 {
 		c.BasicPassword = s
-	}
-
-	s = params.Get(TLSCertificatePath)
-	if len(s) > 0 {
-		c.TLSCertificatePath = s
-	}
-
-	s = params.Get(TLSPrivateKeyPath)
-	if len(s) > 0 {
-		c.TLSPrivateKeyPath = s
 	}
 
 	c.applyOAuth(params)

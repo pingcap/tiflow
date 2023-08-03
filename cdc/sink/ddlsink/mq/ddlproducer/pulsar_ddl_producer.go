@@ -16,15 +16,21 @@ package ddlproducer
 import (
 	"context"
 	"encoding/json"
-	"sync"
-
 	"github.com/apache/pulsar-client-go/pulsar"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 	"go.uber.org/zap"
+	"sync"
+)
+
+const (
+	// DefaultPulsarProducerCacheSize is the default size of the cache for producers
+	// 10240 producers maybe cost 1.1G memory
+	DefaultPulsarProducerCacheSize = 10240
 )
 
 // Assert DDLEventSink implementation
@@ -36,7 +42,7 @@ type pulsarProducers struct {
 	pConfig          *pulsarConfig.Config
 	defaultTopicName string
 	// support multiple topics
-	producers      map[string]pulsar.Producer
+	producers      *lru.Cache
 	producersMutex sync.RWMutex
 	id             model.ChangeFeedID
 }
@@ -85,6 +91,7 @@ func NewPulsarProducer(
 	changefeedID model.ChangeFeedID,
 	pConfig *pulsarConfig.Config,
 	client pulsar.Client,
+	sinkConfig *config.SinkConfig,
 ) (DDLProducer, error) {
 	log.Info("Starting pulsar DDL producer ...",
 		zap.String("namespace", changefeedID.Namespace),
@@ -96,8 +103,21 @@ func NewPulsarProducer(
 	if err != nil {
 		return nil, err
 	}
-	producers := make(map[string]pulsar.Producer)
-	producers[topicName] = defaultProducer
+
+	producerCacheSize := DefaultPulsarProducerCacheSize
+	if sinkConfig.PulsarConfig != nil && sinkConfig.PulsarConfig.PulsarProducerCacheSize != nil {
+		producerCacheSize = int(*sinkConfig.PulsarConfig.PulsarProducerCacheSize)
+	}
+
+	producers, err := lru.NewWithEvict(producerCacheSize, func(key interface{}, value interface{}) {
+		// remove producer
+		pulsarProducer, ok := value.(pulsar.Producer)
+		if ok && pulsarProducer != nil {
+			pulsarProducer.Close()
+		}
+	})
+
+	producers.Add(topicName, defaultProducer)
 	return &pulsarProducers{
 		client:           client,
 		pConfig:          pConfig,
@@ -142,25 +162,30 @@ func newProducer(
 	return producer, nil
 }
 
+func (p *pulsarProducers) getProducer(topic string) (pulsar.Producer, bool) {
+	target, ok := p.producers.Get(topic)
+	if ok {
+		producer, ok := target.(pulsar.Producer)
+		if ok {
+			return producer, true
+		}
+	}
+	return nil, false
+}
+
 // GetProducerByTopic get producer by topicName
 func (p *pulsarProducers) GetProducerByTopic(topicName string) (producer pulsar.Producer, err error) {
-	p.producersMutex.RLock()
-	producer, ok := p.producers[topicName]
-	p.producersMutex.RUnlock()
+	getProducer, ok := p.getProducer(topicName)
+	if ok && getProducer != nil {
+		return getProducer, nil
+	}
+
 	if !ok { // create a new producer for the topicName
-		p.producersMutex.Lock()
-		defer p.producersMutex.Unlock()
-
-		producer, ok = p.producers[topicName]
-		if ok {
-			return producer, nil
-		}
-
 		producer, err = newProducer(p.pConfig, p.client, topicName)
 		if err != nil {
 			return nil, err
 		}
-		p.producers[topicName] = producer
+		p.producers.Add(topicName, producer)
 	}
 
 	return producer, nil
@@ -168,21 +193,11 @@ func (p *pulsarProducers) GetProducerByTopic(topicName string) (producer pulsar.
 
 // Close close all producers
 func (p *pulsarProducers) Close() {
-	for topic, producer := range p.producers {
-		producer.Close()
-		p.closeProducersMapByTopic(topic)
-	}
-	p.client.Close()
-}
-
-// closeProducersMapByTopic close producer by topicName
-func (p *pulsarProducers) closeProducersMapByTopic(topicName string) {
+	keys := p.producers.Keys()
 	p.producersMutex.Lock()
 	defer p.producersMutex.Unlock()
-	_, ok := p.producers[topicName]
-	if ok {
-		delete(p.producers, topicName)
-		return
+	for _, topic := range keys {
+		p.producers.Remove(topic) // callback func will be called
 	}
 }
 
