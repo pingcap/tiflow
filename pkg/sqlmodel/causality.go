@@ -110,7 +110,7 @@ func genKeyString(
 		return "" // all values are `null`.
 	}
 	buf.WriteString(table)
-	return buf.String()
+	return strings.ToLower(buf.String())
 }
 
 // truncateIndexValues truncate prefix index from data.
