@@ -7,7 +7,7 @@ relay-binlog-gtid: ""
 from:
   host: 127.0.0.1
   user: dm_tls_test
-  password: /Q7B9DizNLLTTfiZHv9WoEAKamfpIUs=
+  password: '123456'
   port: 3306
   security:
     ssl-ca: "dir-placeholerca.pem"

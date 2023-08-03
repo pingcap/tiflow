@@ -243,7 +243,8 @@ function test_relay_operations() {
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	check_contains 'Query OK, 2 rows affected'
 
-	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
+	# set log level of DM-master to info, because debug level will let etcd print KV, thus expose the password in task config
+	run_dm_master_info_log $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	check_metric $MASTER_PORT 'start_leader_counter' 3 0 2
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -360,6 +361,16 @@ function test_relay_operations() {
 	sed '/password/d' /tmp/configs/tasks/test.yaml | diff $cur/configs/tasks/test.yaml - || exit 1
 	sed '/password/d' /tmp/configs/sources/mysql-replica-01.yaml | diff -I '^case-sensitive' $cur/configs/sources/mysql-replica-01.yaml - || exit 1
 	diff <(jq --sort-keys . /tmp/configs/relay_workers.json) <(jq --sort-keys . $cur/configs/relay_workers.json) || exit 1
+
+	echo "check no password in log"
+	check_log_not_contains $WORK_DIR/master/log/dm-master.log "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs="
+	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs="
+	check_log_not_contains $WORK_DIR/worker2/log/dm-worker.log "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs="
+	check_log_not_contains $WORK_DIR/worker3/log/dm-worker.log "/Q7B9DizNLLTTfiZHv9WoEAKamfpIUs="
+	check_log_not_contains $WORK_DIR/master/log/dm-master.log "123456"
+	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log "123456"
+	check_log_not_contains $WORK_DIR/worker2/log/dm-worker.log "123456"
+	check_log_not_contains $WORK_DIR/worker3/log/dm-worker.log "123456"
 
 	# destroy cluster
 	cleanup_process $*
