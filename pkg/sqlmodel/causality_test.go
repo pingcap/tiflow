@@ -157,6 +157,12 @@ func TestGetCausalityString(t *testing.T) {
 			keys:   []string{"16.a.db.tbl", "xyz.b.db.tbl"},
 		},
 		{
+			// case insensitive
+			schema: `create table t65(a int unique, b varchar(16) primary key)`,
+			values: []interface{}{16, "XyZ"},
+			keys:   []string{"16.a.db.tbl", "xyz.b.db.tbl"},
+		},
+		{
 			// primary key of multiple columns
 			schema: `create table t7(a int, b int, primary key(a, b))`,
 			values: []interface{}{59, 69},
