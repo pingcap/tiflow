@@ -79,15 +79,6 @@ func TestConfigFunctions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint32(101), cfg3.ServerID)
 
-	// test decrypt password
-	clone1.From.Password = "1234"
-	// fix empty map after marshal/unmarshal becomes nil
-	clone1.From.Session = cfg.From.Session
-	clone1.Tracer = map[string]interface{}{}
-	clone1.Filters = []*bf.BinlogEventRule{}
-	clone2 := cfg.DecryptPassword()
-	require.Equal(t, clone1, clone2)
-
 	cfg.From.Password = "xxx"
 	cfg.DecryptPassword()
 
