@@ -17,7 +17,9 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 const (
@@ -69,11 +71,18 @@ func (r *ErrorRetry) GetRetryBackoff(err error) (time.Duration, error) {
 	// it means the last error is retry success, and the sink is running well for some time
 	if r.lastInternalError == nil ||
 		time.Since(r.lastErrorRetryTime) >= r.errGCInterval {
+		log.Info("reset firstRetryTime",
+			zap.Time("lastErrorRetryTime", r.lastErrorRetryTime),
+			zap.Time("now", time.Now()))
 		r.firstRetryTime = time.Now()
 	}
 
 	// return an unretryable error if retry time is exhausted
 	if time.Since(r.firstRetryTime) >= r.maxRetryDuration {
+		log.Error("error retry exhausted",
+			zap.Time("firstRetryTime", r.firstRetryTime),
+			zap.Time("lastErrorRetryTime", r.lastErrorRetryTime),
+			zap.Time("now", time.Now()))
 		return 0, cerror.WrapChangefeedUnretryableErr(err)
 	}
 
