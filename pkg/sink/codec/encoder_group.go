@@ -60,7 +60,7 @@ type encoderGroup struct {
 // NewEncoderGroup creates a new EncoderGroup instance
 func NewEncoderGroup(builder RowEventEncoderBuilder,
 	count int, changefeedID model.ChangeFeedID,
-) *encoderGroup {
+) EncoderGroup {
 	if count <= 0 {
 		count = defaultEncoderGroupSize
 	}

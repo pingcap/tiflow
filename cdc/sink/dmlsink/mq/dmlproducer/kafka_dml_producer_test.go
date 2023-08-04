@@ -43,13 +43,9 @@ func getOptions() *kafka.Options {
 
 func TestProducerAck(t *testing.T) {
 	options := getOptions()
-	options.MaxMessages = 1
 
 	errCh := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
-	config, err := kafka.NewSaramaConfig(ctx, options)
-	require.Nil(t, err)
-	require.Equal(t, 1, config.Producer.Flush.MaxMessages)
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
@@ -120,8 +116,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	_, err := kafka.NewSaramaConfig(ctx, options)
-	require.Nil(t, err)
-	options.MaxMessages = 1
+	require.NoError(t, err)
 	options.MaxMessageBytes = 1
 
 	ctx = context.WithValue(ctx, "testing.T", t)

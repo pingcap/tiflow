@@ -40,7 +40,6 @@ func getOptions() *kafka.Options {
 func TestSyncBroadcastMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	options := getOptions()
-	options.MaxMessages = 1
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
@@ -94,7 +93,6 @@ func TestProducerSendMsgFailed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	options := getOptions()
-	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
 
 	ctx = context.WithValue(ctx, "testing.T", t)
