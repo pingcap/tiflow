@@ -835,7 +835,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			}
 			return nil
 		}, retry.WithBackoffMaxDelay(500),
-			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.RegionRetryDuration)))
+			retry.WithTotalRetryDuration(time.Duration(s.client.config.RegionRetryDuration)))
 		if retryErr != nil {
 			log.Warn("load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),

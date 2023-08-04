@@ -519,7 +519,7 @@ func genReplicateTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {
 		replicateTs = oracle.ComposeTS(phy, logic)
 		return nil
 	}, retry.WithBackoffBaseDelay(backoffBaseDelayInMs),
-		retry.WithTotalRetryDuratoin(totalRetryDuration),
+		retry.WithTotalRetryDuration(totalRetryDuration),
 		retry.WithIsRetryableErr(cerrors.IsRetryableError))
 	if err != nil {
 		return model.Ts(0), errors.Trace(err)

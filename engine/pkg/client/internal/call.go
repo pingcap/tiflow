@@ -77,7 +77,7 @@ func (c *Call[ReqT, RespT, F]) Do(
 	}, retry.WithIsRetryableErr(c.isRetryable),
 		retry.WithBackoffBaseDelay(10),
 		retry.WithBackoffMaxDelay(1000),
-		retry.WithTotalRetryDuratoin(10*time.Second))
+		retry.WithTotalRetryDuration(10*time.Second))
 	return resp, rpcutil.FromGRPCError(err)
 }
 

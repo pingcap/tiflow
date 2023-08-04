@@ -173,7 +173,7 @@ func TestTotalRetryDuration(t *testing.T) {
 	err := Do(
 		context.Background(), f,
 		WithBackoffBaseDelay(math.MinInt64),
-		WithTotalRetryDuratoin(time.Second),
+		WithTotalRetryDuration(time.Second),
 	)
 	require.Regexp(t, "test", errors.Cause(err))
 	require.LessOrEqual(t, 1, int(math.Round(time.Since(start).Seconds())))
@@ -182,7 +182,7 @@ func TestTotalRetryDuration(t *testing.T) {
 	err = Do(
 		context.Background(), f,
 		WithBackoffBaseDelay(math.MinInt64),
-		WithTotalRetryDuratoin(2*time.Second),
+		WithTotalRetryDuration(2*time.Second),
 	)
 	require.Regexp(t, "test", errors.Cause(err))
 	require.LessOrEqual(t, 2, int(math.Round(time.Since(start).Seconds())))

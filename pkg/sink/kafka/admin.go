@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/log"
@@ -42,8 +43,8 @@ type saramaAdminClient struct {
 }
 
 const (
-	defaultRetryBackoff  = 20
-	defaultRetryMaxTries = 3
+	defaultRetryBackoff     = 20
+	defaultRetryMaxDuration = time.Duration(120) * time.Second
 )
 
 func newAdminClient(
@@ -106,7 +107,7 @@ func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query fun
 			return a.reset()
 		}
 		return err
-	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
+	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithTotalRetryDuration(defaultRetryMaxDuration))
 	return err
 }
 

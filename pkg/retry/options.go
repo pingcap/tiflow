@@ -79,8 +79,8 @@ func WithMaxTries(tries uint64) Option {
 	}
 }
 
-// WithTotalRetryDuratoin configures the total retry duration.
-func WithTotalRetryDuratoin(retryDuration time.Duration) Option {
+// WithTotalRetryDuration configures the total retry duration.
+func WithTotalRetryDuration(retryDuration time.Duration) Option {
 	return func(o *retryOptions) {
 		o.totalRetryDuration = retryDuration
 	}
