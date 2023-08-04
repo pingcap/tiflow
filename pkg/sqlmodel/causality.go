@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -39,6 +40,19 @@ func (r *RowChange) CausalityKeys() []string {
 		ret = append(ret, r.getCausalityString(r.postValues)...)
 	}
 	return ret
+}
+
+func columnNeeds2LowerCase(col *timodel.ColumnInfo) bool {
+	switch col.GetType() {
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
+		return collationNeeds2LowerCase(col.GetCollate())
+	}
+	return false
+}
+
+func collationNeeds2LowerCase(collation string) bool {
+	return !strings.HasSuffix(collation, "_bin")
 }
 
 func columnValue2String(value interface{}) string {
@@ -99,7 +113,12 @@ func genKeyString(
 			continue // ignore `null` value.
 		}
 		// one column key looks like:`column_val.column_name.`
-		buf.WriteString(columnValue2String(data))
+
+		val := columnValue2String(data)
+		if columnNeeds2LowerCase(columns[i]) {
+			val = strings.ToLower(val)
+		}
+		buf.WriteString(val)
 		buf.WriteString(".")
 		buf.WriteString(columns[i].Name.L)
 		buf.WriteString(".")
@@ -110,7 +129,7 @@ func genKeyString(
 		return "" // all values are `null`.
 	}
 	buf.WriteString(table)
-	return strings.ToLower(buf.String())
+	return buf.String()
 }
 
 // truncateIndexValues truncate prefix index from data.
