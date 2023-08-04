@@ -74,6 +74,8 @@ func setupAuthentication(config *Config) (pulsar.Authentication, error) {
 		return pulsar.NewAuthenticationBasic(config.BasicUserName, config.BasicPassword)
 	} else if len(config.OAuth2) >= 5 {
 		return pulsar.NewAuthenticationOAuth2(config.OAuth2), nil
+	} else if len(config.AuthTLSCertificatePath) > 0 && len(config.AuthTLSPrivateKeyPath) > 0 {
+		return pulsar.NewAuthenticationTLS(config.AuthTLSCertificatePath, config.AuthTLSPrivateKeyPath), nil
 	}
 	return nil, fmt.Errorf("no authentication method found")
 }

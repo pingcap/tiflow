@@ -83,6 +83,12 @@ const (
 	OAuth2ClientID = "oauth2-client-id"
 	// OAuth2Scope scope
 	OAuth2Scope = "auth2-scope"
+
+	// AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
+	AuthTLSCertificatePath = "auth-tls-certificate-path"
+
+	// AuthTLSPrivateKeyPath auth TLS private key
+	AuthTLSPrivateKeyPath = "auth-tls-private-key-path"
 )
 
 // sink config default Value
@@ -154,10 +160,10 @@ type Config struct {
 	// BasicPassword with account
 	BasicPassword string
 
-	// TLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
-	TLSCertificatePath string
-	// TLSPrivateKeyPath private key
-	TLSPrivateKeyPath string
+	// AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
+	AuthTLSCertificatePath string
+	// AuthTLSPrivateKeyPath private key
+	AuthTLSPrivateKeyPath string
 
 	// Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id
 	// and 'type' always is 'client_credentials'
@@ -332,6 +338,16 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 	s = params.Get(BasicPassword)
 	if len(s) > 0 {
 		c.BasicPassword = s
+	}
+
+	s = params.Get(AuthTLSCertificatePath)
+	if len(s) > 0 {
+		c.AuthTLSCertificatePath = s
+	}
+
+	s = params.Get(AuthTLSPrivateKeyPath)
+	if len(s) > 0 {
+		c.AuthTLSPrivateKeyPath = s
 	}
 
 	c.applyOAuth(params)
