@@ -35,6 +35,13 @@ func mockTableInfo(t *testing.T, sql string) *timodel.TableInfo {
 	node, err := p.ParseOneStmt(sql, "", "")
 	require.NoError(t, err)
 	ti, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
+	// for testing to be able to specify charset/collation, kind of hacky, ideally should add this to the MockTableInfo function in tidb
+	if tableCharset, tableCollate, err := ddl.GetCharsetAndCollateInTableOption(0, node.(*ast.CreateTableStmt).Options); err == nil {
+		for _, col := range ti.Columns {
+			col.SetCharset(tableCharset)
+			col.SetCollate(tableCollate)
+		}
+	}
 	require.NoError(t, err)
 	return ti
 }
