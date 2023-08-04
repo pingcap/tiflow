@@ -15,11 +15,11 @@ package pulsar
 
 import (
 	"fmt"
-	"github.com/pingcap/tiflow/pkg/config"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
 
@@ -80,7 +80,8 @@ func setupAuthentication(config *Config) (pulsar.Authentication, error) {
 
 // NewMockCreatorFactory returns a factory implemented based on kafka-go
 func NewMockCreatorFactory(config *Config, changefeedID model.ChangeFeedID,
-	sinkConfig *config.SinkConfig) (pulsar.Client, error) {
+	sinkConfig *config.SinkConfig,
+) (pulsar.Client, error) {
 	log.Info("mock pulsar client factory created", zap.Any("changfeedID", changefeedID))
 	return nil, nil
 }

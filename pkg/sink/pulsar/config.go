@@ -15,13 +15,13 @@ package pulsar
 
 import (
 	"fmt"
-	"github.com/apache/pulsar-client-go/pulsar/auth"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/apache/pulsar-client-go/pulsar/auth"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -81,10 +81,6 @@ const (
 	OAuth2PrivateKey = "oauth2-private-key"
 	// OAuth2ClientID  the client ID of the application.
 	OAuth2ClientID = "oauth2-client-id"
-	// OAuth2Type  the type of the OAuth2 .
-	OAuth2Type = "oauth2-type"
-	// OAuth2TypeClientCredentials  client_credentials
-	OAuth2TypeClientCredentials = "oauth2-client-credentials"
 	// OAuth2Scope scope
 	OAuth2Scope = "auth2-scope"
 )

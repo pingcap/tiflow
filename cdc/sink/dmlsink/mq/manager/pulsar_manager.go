@@ -15,9 +15,10 @@ package manager
 
 import (
 	"context"
+	"sync"
+
 	"github.com/apache/pulsar-client-go/pulsar"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
-	"sync"
 )
 
 // PulsarTopicManager is a manager for pulsar topics.
@@ -51,13 +52,11 @@ func NewPulsarTopicManager(
 // Neither synchronous nor asynchronous sending of pulsar will use PartitionNum
 // but this method is used in mq_ddl_sink.go, so an empty implementation is required
 func (m *pulsarTopicManager) GetPartitionNum(ctx context.Context, topic string) (int32, error) {
-
 	return 0, nil
 }
 
 // CreateTopicAndWaitUntilVisible no need to create first
 func (m *pulsarTopicManager) CreateTopicAndWaitUntilVisible(ctx context.Context, topicName string) (int32, error) {
-
 	return 0, nil
 }
 

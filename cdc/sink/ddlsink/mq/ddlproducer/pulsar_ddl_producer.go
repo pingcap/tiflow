@@ -16,6 +16,8 @@ package ddlproducer
 import (
 	"context"
 	"encoding/json"
+	"sync"
+
 	"github.com/apache/pulsar-client-go/pulsar"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/log"
@@ -24,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 	"go.uber.org/zap"
-	"sync"
 )
 
 const (
@@ -116,6 +117,9 @@ func NewPulsarProducer(
 			pulsarProducer.Close()
 		}
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	producers.Add(topicName, defaultProducer)
 	return &pulsarProducers{

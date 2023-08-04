@@ -15,10 +15,10 @@ package ddlproducer
 
 import (
 	"context"
-	"github.com/pingcap/tiflow/pkg/config"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"

@@ -1620,6 +1620,24 @@ var doc = `{
                 }
             }
         },
+        "config.PulsarConfig": {
+            "type": "object",
+            "properties": {
+                "pulsar-producer-cache-size": {
+                    "description": "PulsarProducerCacheSize is the size of the cache of pulsar producers",
+                    "type": "integer"
+                },
+                "tls-certificate-path": {
+                    "type": "string"
+                },
+                "tls-private-key-path": {
+                    "type": "string"
+                },
+                "tls-trust-certs-file-path": {
+                    "type": "string"
+                }
+            }
+        },
         "config.SinkConfig": {
             "type": "object",
             "properties": {
@@ -1681,6 +1699,9 @@ var doc = `{
                 "protocol": {
                     "description": "Protocol is NOT available when the downstream is DB.",
                     "type": "string"
+                },
+                "pulsar-config": {
+                    "$ref": "#/definitions/config.PulsarConfig"
                 },
                 "safe-mode": {
                     "description": "SafeMode is only available when the downstream is DB.",

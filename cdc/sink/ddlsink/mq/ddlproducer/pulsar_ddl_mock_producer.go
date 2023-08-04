@@ -19,6 +19,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 )
@@ -73,6 +74,7 @@ func NewMockPulsarProducerDDL(
 	changefeedID model.ChangeFeedID,
 	pConfig *pulsarConfig.Config,
 	client pulsar.Client,
+	sinkConfig *config.SinkConfig,
 ) (DDLProducer, error) {
 	return NewMockPulsarProducer(ctx, changefeedID, pConfig, client)
 }
