@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	timock "github.com/pingcap/tidb/util/mock"
 	"github.com/stretchr/testify/require"
@@ -34,14 +35,8 @@ func mockTableInfo(t *testing.T, sql string) *timodel.TableInfo {
 	se := timock.NewContext()
 	node, err := p.ParseOneStmt(sql, "", "")
 	require.NoError(t, err)
-	ti, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
-	// for testing to be able to specify charset/collation, kind of hacky, ideally should add this to the MockTableInfo function in tidb
-	if tableCharset, tableCollate, err := ddl.GetCharsetAndCollateInTableOption(0, node.(*ast.CreateTableStmt).Options); err == nil {
-		for _, col := range ti.Columns {
-			col.SetCharset(tableCharset)
-			col.SetCollate(tableCollate)
-		}
-	}
+	dbChs, dbColl := charset.GetDefaultCharsetAndCollate()
+	ti, err := ddl.BuildTableInfoWithStmt(se, node.(*ast.CreateTableStmt), dbChs, dbColl, nil)
 	require.NoError(t, err)
 	return ti
 }

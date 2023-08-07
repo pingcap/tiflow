@@ -53,7 +53,7 @@ func columnNeeds2LowerCase(col *timodel.ColumnInfo) bool {
 }
 
 func collationNeeds2LowerCase(collation string) bool {
-	return !strings.HasSuffix(collation, "_bin")
+	return strings.HasSuffix(collation, "_ci")
 }
 
 func columnValue2String(value interface{}) string {
