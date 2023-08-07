@@ -16,7 +16,6 @@ package codec
 import (
 	"bytes"
 	"compress/gzip"
-	"sync"
 
 	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/klauspost/compress/zstd"
@@ -39,30 +38,13 @@ const (
 	CompressionZSTD
 )
 
-var (
-	lz4WriterPool = sync.Pool{
-		New: func() interface{} {
-			return lz4.NewWriter(nil)
-		},
-	}
-
-	gzipWriterPool = sync.Pool{
-		New: func() interface{} {
-			return gzip.NewWriter(nil)
-		},
-	}
-)
-
 func compress(cc CompressionCodec, data []byte) ([]byte, error) {
 	switch cc {
 	case CompressionNone:
 		return data, nil
 	case CompressionGZIP:
 		var buf bytes.Buffer
-		writer := gzipWriterPool.Get().(*gzip.Writer)
-		defer gzipWriterPool.Put(writer)
-		writer.Reset(&buf)
-
+		writer := gzip.NewWriter(&buf)
 		if _, err := writer.Write(data); err != nil {
 			return nil, err
 		}
@@ -73,12 +55,8 @@ func compress(cc CompressionCodec, data []byte) ([]byte, error) {
 	case CompressionSnappy:
 		return snappy.Encode(data), nil
 	case CompressionLZ4:
-		writer := lz4WriterPool.Get().(*lz4.Writer)
-		defer lz4WriterPool.Put(writer)
-
 		var buf bytes.Buffer
-		writer.Reset(&buf)
-
+		writer := lz4.NewWriter(&buf)
 		if _, err := writer.Write(data); err != nil {
 			return nil, err
 		}
