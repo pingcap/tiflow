@@ -15,7 +15,6 @@ package kafka
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net"
 	"strconv"
@@ -24,6 +23,7 @@ import (
 	"syscall"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -58,7 +58,7 @@ func newAdminClient(
 
 	admin, err := sarama.NewClusterAdminFromClient(client)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	return &saramaAdminClient{
 		client:          client,
@@ -102,7 +102,7 @@ func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query fun
 			zap.String("changefeed", a.changefeed.ID),
 			zap.Error(err))
 
-		if errors.Is(err, syscall.EPIPE) || errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
+		if cerror.Is(err, syscall.EPIPE) || cerror.Is(err, net.ErrClosed) || cerror.Is(err, io.EOF) {
 			return a.reset()
 		}
 		return err
@@ -123,26 +123,22 @@ func (a *saramaAdminClient) GetAllBrokers(_ context.Context) ([]Broker, error) {
 }
 
 func (a *saramaAdminClient) GetBrokerConfig(
-	ctx context.Context,
+	_ context.Context,
 	configName string,
 ) (string, error) {
 	controller, err := a.client.Controller()
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 
-	var configEntries []sarama.ConfigEntry
-	query := func() error {
-		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
-			Type:        sarama.BrokerResource,
-			Name:        strconv.Itoa(int(controller.ID())),
-			ConfigNames: []string{configName},
-		})
-		return err
-	}
-	err = a.queryClusterWithRetry(ctx, query)
+	configEntries, err := a.admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.BrokerResource,
+		Name:        strconv.Itoa(int(controller.ID())),
+		ConfigNames: []string{configName},
+	})
+
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 
 	// For compatibility with KOP, we checked all return values.
