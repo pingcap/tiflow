@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -554,6 +553,15 @@ const (
 	LargeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
 )
 
+const (
+	// CompressionNone no compression
+	CompressionNone string = "none"
+	// CompressionSnappy compression using snappy
+	CompressionSnappy string = "snappy"
+	// CompressionLZ4 compression using LZ4
+	CompressionLZ4 string = "lz4"
+)
+
 // LargeMessageHandleConfig is the configuration for handling large message.
 type LargeMessageHandleConfig struct {
 	LargeMessageHandleOption string `toml:"large-message-handle-option" json:"large-message-handle-option"`
@@ -565,7 +573,7 @@ type LargeMessageHandleConfig struct {
 func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
 	return &LargeMessageHandleConfig{
 		LargeMessageHandleOption: LargeMessageHandleOptionNone,
-		ClaimCheckCompression:    "",
+		ClaimCheckCompression:    CompressionNone,
 	}
 }
 
@@ -594,11 +602,12 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 			return cerror.ErrInvalidReplicaConfig.GenWithStack(
 				"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
 		}
-
 		if c.ClaimCheckCompression != "" {
-			_, err := common.GetCompressionCodec(c.ClaimCheckCompression)
-			if err != nil {
-				return err
+			switch strings.ToLower(c.ClaimCheckCompression) {
+			case CompressionSnappy, CompressionLZ4:
+			default:
+				return cerror.ErrInvalidReplicaConfig.GenWithStack(
+					"claim-check compression support snappy, lz4, got %s", c.ClaimCheckCompression)
 			}
 		}
 	}
