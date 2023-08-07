@@ -16,6 +16,7 @@ package common
 import (
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/imdario/mergo"
@@ -23,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -67,6 +69,8 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
+
+	compression codec.CompressionCodec
 }
 
 // NewConfig return a Config for codec
@@ -209,6 +213,29 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
 	}
+
+	compression := util.GetOrZero(replicaConfig.Sink.KafkaConfig.Compression)
+	compression = strings.ToLower(strings.TrimSpace(compression))
+	switch compression {
+	case "none":
+		c.compression = codec.CompressionNone
+	case "gzip":
+		c.compression = codec.CompressionGZIP
+	case "snappy":
+		c.compression = codec.CompressionSnappy
+	case "lz4":
+		c.compression = codec.CompressionLZ4
+	case "zstd":
+		c.compression = codec.CompressionZSTD
+	default:
+		log.Warn("Unsupported compression algorithm", zap.String("compression", string(c.compression)))
+		c.compression = codec.CompressionNone
+	}
+
+	if c.compression != codec.CompressionNone {
+		log.Info("Kafka producer uses " + compression + " compression algorithm")
+	}
+
 	return nil
 }
 

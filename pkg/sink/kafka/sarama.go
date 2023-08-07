@@ -21,10 +21,8 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
-	"go.uber.org/zap"
 )
 
 // NewSaramaConfig return the default config and set the according version and metrics
@@ -77,26 +75,26 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.RequiredAcks = sarama.RequiredAcks(o.RequiredAcks)
-	compression := strings.ToLower(strings.TrimSpace(o.Compression))
-	switch compression {
-	case "none":
-		config.Producer.Compression = sarama.CompressionNone
-	case "gzip":
-		config.Producer.Compression = sarama.CompressionGZIP
-	case "snappy":
-		config.Producer.Compression = sarama.CompressionSnappy
-	case "lz4":
-		config.Producer.Compression = sarama.CompressionLZ4
-	case "zstd":
-		config.Producer.Compression = sarama.CompressionZSTD
-	default:
-		log.Warn("Unsupported compression algorithm", zap.String("compression", o.Compression))
-		config.Producer.Compression = sarama.CompressionNone
-	}
-	if config.Producer.Compression != sarama.CompressionNone {
-		log.Info("Kafka producer uses " + compression + " compression algorithm")
-	}
-
+	//compression := strings.ToLower(strings.TrimSpace(o.Compression))
+	//switch compression {
+	//case "none":
+	//	config.Producer.Compression = sarama.CompressionNone
+	//case "gzip":
+	//	config.Producer.Compression = sarama.CompressionGZIP
+	//case "snappy":
+	//	config.Producer.Compression = sarama.CompressionSnappy
+	//case "lz4":
+	//	config.Producer.Compression = sarama.CompressionLZ4
+	//case "zstd":
+	//	config.Producer.Compression = sarama.CompressionZSTD
+	//default:
+	//	log.Warn("Unsupported compression algorithm", zap.String("compression", o.Compression))
+	//	config.Producer.Compression = sarama.CompressionNone
+	//}
+	//if config.Producer.Compression != sarama.CompressionNone {
+	//	log.Info("Kafka producer uses " + compression + " compression algorithm")
+	//}
+	//
 	if o.EnableTLS {
 		// for SSL encryption with a trust CA certificate, we must populate the
 		// following two params of config.Net.TLS
