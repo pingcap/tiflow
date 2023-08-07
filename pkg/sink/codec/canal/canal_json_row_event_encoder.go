@@ -357,6 +357,11 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
+	value, err = common.Compress(c.compressionCodec, value)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
 
@@ -372,14 +377,10 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	previousLen := len(value)
-
 	value, err = common.Compress(c.compressionCodec, value)
 	if err != nil {
 		return err
 	}
-
-	log.Info("message length compression", zap.Int("previous", previousLen), zap.Int("after", len(value)))
 
 	m := &common.Message{
 		Key:      nil,
@@ -443,6 +444,11 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
+	value, err = common.Compress(c.compressionCodec, value)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
 	result.Callback = origin.Callback
 	result.IncRowsCount()
@@ -476,6 +482,11 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
+	value, err = common.Compress(c.compressionCodec, value)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }
 

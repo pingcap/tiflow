@@ -271,7 +271,7 @@ func (c *Config) Validate() error {
 				DecimalHandlingModePrecise,
 			)
 		}
-		c
+
 		if c.AvroBigintUnsignedHandlingMode != BigintUnsignedHandlingModeLong &&
 			c.AvroBigintUnsignedHandlingMode != BigintUnsignedHandlingModeString {
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
