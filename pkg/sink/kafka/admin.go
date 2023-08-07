@@ -110,21 +110,8 @@ func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query fun
 	return err
 }
 
-func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error) {
-	var (
-		brokers []*sarama.Broker
-		err     error
-	)
-	query := func() error {
-		brokers, _, err = a.admin.DescribeCluster()
-		return err
-	}
-
-	err = a.queryClusterWithRetry(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-
+func (a *saramaAdminClient) GetAllBrokers(_ context.Context) ([]Broker, error) {
+	brokers := a.client.Brokers()
 	result := make([]Broker, 0, len(brokers))
 	for _, broker := range brokers {
 		result = append(result, Broker{
