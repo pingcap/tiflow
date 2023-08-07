@@ -15,12 +15,13 @@ package common
 
 import (
 	"bytes"
-	"compress/gzip"
+	"strings"
 
 	snappy "github.com/eapache/go-xerial-snappy"
-	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
+	"go.uber.org/zap"
 )
 
 type CompressionCodec uint8
@@ -28,19 +29,25 @@ type CompressionCodec uint8
 const (
 	// CompressionNone no compression
 	CompressionNone CompressionCodec = iota
-	// CompressionGZIP compression using GZIP
-	CompressionGZIP
 	// CompressionSnappy compression using snappy
 	CompressionSnappy
 	// CompressionLZ4 compression using LZ4
 	CompressionLZ4
-	// CompressionZSTD compression using ZSTD
-	CompressionZSTD
 )
 
-var (
-	compressionNames = []string{"none", "gzip", "snappy", "lz4", "zstd"}
-)
+var compressionNames = []string{"none", "snappy", "lz4"}
+
+func GetCompressionCodec(name string) CompressionCodec {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for i, n := range compressionNames {
+		if n == name {
+			return CompressionCodec(i)
+		}
+	}
+
+	log.Warn("cannot found the compression codec", zap.String("name", name))
+	return CompressionNone
+}
 
 func (c CompressionCodec) String() string {
 	return compressionNames[c]
@@ -50,16 +57,6 @@ func Compress(cc CompressionCodec, data []byte) ([]byte, error) {
 	switch cc {
 	case CompressionNone:
 		return data, nil
-	case CompressionGZIP:
-		var buf bytes.Buffer
-		writer := gzip.NewWriter(&buf)
-		if _, err := writer.Write(data); err != nil {
-			return nil, errors.Trace(err)
-		}
-		if err := writer.Close(); err != nil {
-			return nil, errors.Trace(err)
-		}
-		return buf.Bytes(), nil
 	case CompressionSnappy:
 		return snappy.Encode(data), nil
 	case CompressionLZ4:
@@ -72,16 +69,6 @@ func Compress(cc CompressionCodec, data []byte) ([]byte, error) {
 			return nil, errors.Trace(err)
 		}
 		return buf.Bytes(), nil
-	case CompressionZSTD:
-		encoder, err := zstd.NewWriter(nil, zstd.WithZeroFrames(true),
-			zstd.WithEncoderLevel(zstd.SpeedDefault),
-			zstd.WithEncoderConcurrency(1))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		out := encoder.EncodeAll(data, nil)
-		return out, nil
 	default:
 	}
 	return nil, errors.New("unsupported compression codec")

@@ -292,13 +292,17 @@ type JSONRowEventEncoder struct {
 	messages []*common.Message
 
 	config *common.Config
+
+	compressionCodec common.CompressionCodec
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
+	compressionCodec := common.GetCompressionCodec(config.LargeMessageHandle.ClaimCheckCompression)
 	encoder := &JSONRowEventEncoder{
-		builder:  newCanalEntryBuilder(),
-		messages: make([]*common.Message, 0, 1),
+		builder:          newCanalEntryBuilder(),
+		messages:         make([]*common.Message, 0, 1),
+		compressionCodec: compressionCodec,
 
 		config: config,
 	}
@@ -370,7 +374,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 	previousLen := len(value)
 
-	value, err = common.Compress(c.config.Compression, value)
+	value, err = common.Compress(c.compressionCodec, value)
 	if err != nil {
 		return err
 	}

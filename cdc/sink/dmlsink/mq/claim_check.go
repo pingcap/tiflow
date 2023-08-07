@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -34,7 +33,6 @@ import (
 type ClaimCheck struct {
 	storage storage.ExternalStorage
 
-	//compression  string
 	changefeedID model.ChangeFeedID
 
 	// metricSendMessageDuration tracks the time duration
@@ -44,8 +42,8 @@ type ClaimCheck struct {
 }
 
 // NewClaimCheck return a new ClaimCheck.
-func NewClaimCheck(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
-	storage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
+func NewClaimCheck(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
+	storage, err := util.GetExternalStorageFromURI(ctx, storageURI)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -53,13 +51,11 @@ func NewClaimCheck(ctx context.Context, config *config.LargeMessageHandleConfig,
 	log.Info("claim-check enabled",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.String("storageURI", config.ClaimCheckStorageURI),
-		zap.String("compression", config.ClaimCheckCompression))
+		zap.String("storageURI", storageURI))
 
 	return &ClaimCheck{
-		changefeedID: changefeedID,
-		storage:      storage,
-		//compression:               config.ClaimCheckCompression,
+		changefeedID:              changefeedID,
+		storage:                   storage,
 		metricSendMessageDuration: mq.ClaimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSendMessageCount:    mq.ClaimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}, nil
@@ -75,22 +71,6 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	//switch c.compression {
-	//case config.CompressionSnappy:
-	//	data = snappy.Encode(nil, data)
-	//case config.CompressionLZ4:
-	//	var buf bytes.Buffer
-	//	writer := lz4.NewWriter(&buf)
-	//	if _, err := writer.Write(data); err != nil {
-	//		return errors.Trace(err)
-	//	}
-	//	if err := writer.Close(); err != nil {
-	//		log.Warn("claim-check: close lz4 writer failed", zap.Error(err))
-	//	}
-	//	data = buf.Bytes()
-	//default:
-	//}
 
 	start := time.Now()
 	err = c.storage.WriteFile(ctx, message.ClaimCheckFileName, data)

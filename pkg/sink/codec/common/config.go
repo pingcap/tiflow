@@ -16,7 +16,6 @@ package common
 import (
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/imdario/mergo"
@@ -69,7 +68,9 @@ type Config struct {
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
 
-	Compression CompressionCodec
+	// EncoderCompression is applied after encoding the event into message.
+	// If EncoderCompression is not none, kafka producer compression should be disabled.
+	EncoderCompression CompressionCodec
 }
 
 // NewConfig return a Config for codec
@@ -120,7 +121,6 @@ type urlConfig struct {
 	MaxMessageBytes                *int    `form:"max-message-bytes"`
 	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
 	AvroBigintUnsignedHandlingMode *string `form:"avro-bigint-unsigned-handling-mode"`
-	Compression                    *string `form:"compression"`
 
 	// AvroEnableWatermark is the option for enabling watermark in avro protocol
 	// only used for internal testing, do not set this in the production environment since the
@@ -212,27 +212,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	if c.DeleteOnlyHandleKeyColumns && replicaConfig.ForceReplicate {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
-	}
-
-	compression := strings.ToLower(strings.TrimSpace(util.GetOrZero(urlParameter.Compression)))
-	switch compression {
-	case "none":
-		c.Compression = CompressionNone
-	case "gzip":
-		c.Compression = CompressionGZIP
-	case "snappy":
-		c.Compression = CompressionSnappy
-	case "lz4":
-		c.Compression = CompressionLZ4
-	case "zstd":
-		c.Compression = CompressionZSTD
-	default:
-		log.Warn("Unsupported Compression algorithm", zap.String("compression", compression))
-		c.Compression = CompressionNone
-	}
-
-	if c.Compression != CompressionNone {
-		log.Info("Kafka sink enable compression", zap.Stringer("compression", c.Compression))
 	}
 
 	return nil
