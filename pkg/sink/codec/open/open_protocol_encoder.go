@@ -34,7 +34,8 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
-	config *common.Config
+	compressionCodec common.CompressionCodec
+	config           *common.Config
 }
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
@@ -90,7 +91,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = common.Compress(d.config.Compression, value)
+	value, err = common.Compress(d.compressionCodec, value)
 	if err != nil {
 		return err
 	}
@@ -171,6 +172,11 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 	value, err := valueMsg.encode()
 	if err != nil {
 		return nil, errors.Trace(err)
+	}
+
+	value, err = common.Compress(d.compressionCodec, value)
+	if err != nil {
+		return nil, err
 	}
 
 	var keyLenByte [8]byte
@@ -261,6 +267,11 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 		return nil, errors.Trace(err)
 	}
 
+	value, err = common.Compress(d.compressionCodec, value)
+	if err != nil {
+		return nil, err
+	}
+
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
@@ -336,6 +347,7 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 // NewBatchEncoder creates a new BatchEncoder.
 func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
-		config: config,
+		config:           config,
+		compressionCodec: common.GetCompressionCodec(config.LargeMessageHandle.ClaimCheckCompression),
 	}
 }
