@@ -15,99 +15,22 @@ package kafka
 
 import (
 	"context"
-	"io"
-	"net"
 	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
 
 type saramaAdminClient struct {
-	brokerEndpoints []string
-	config          *sarama.Config
-	changefeed      model.ChangeFeedID
+	changefeed model.ChangeFeedID
 
-	mu     sync.Mutex
 	client sarama.Client
 	admin  sarama.ClusterAdmin
-}
-
-const (
-	defaultRetryBackoff  = 20
-	defaultRetryMaxTries = 3
-)
-
-func newAdminClient(
-	brokerEndpoints []string,
-	config *sarama.Config,
-	changefeed model.ChangeFeedID,
-) (ClusterAdminClient, error) {
-	client, err := sarama.NewClient(brokerEndpoints, config)
-	if err != nil {
-		return nil, cerror.Trace(err)
-	}
-
-	admin, err := sarama.NewClusterAdminFromClient(client)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return &saramaAdminClient{
-		client:          client,
-		admin:           admin,
-		brokerEndpoints: brokerEndpoints,
-		config:          config,
-		changefeed:      changefeed,
-	}, nil
-}
-
-func (a *saramaAdminClient) reset() error {
-	newClient, err := sarama.NewClient(a.brokerEndpoints, a.config)
-	if err != nil {
-		return cerror.Trace(err)
-	}
-	newAdmin, err := sarama.NewClusterAdminFromClient(newClient)
-	if err != nil {
-		return cerror.Trace(err)
-	}
-
-	_ = a.admin.Close()
-	a.client = newClient
-	a.admin = newAdmin
-	log.Info("kafka admin client is reset",
-		zap.String("namespace", a.changefeed.Namespace),
-		zap.String("changefeed", a.changefeed.ID))
-	return errors.New("retry after reset")
-}
-
-func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query func() error) error {
-	err := retry.Do(ctx, func() error {
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		err := query()
-		if err == nil {
-			return nil
-		}
-
-		log.Warn("query kafka cluster meta failed, retry it",
-			zap.String("namespace", a.changefeed.Namespace),
-			zap.String("changefeed", a.changefeed.ID),
-			zap.Error(err))
-
-		if cerror.Is(err, syscall.EPIPE) || cerror.Is(err, net.ErrClosed) || cerror.Is(err, io.EOF) {
-			return a.reset()
-		}
-		return err
-	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
-	return err
 }
 
 func (a *saramaAdminClient) GetAllBrokers(_ context.Context) ([]Broker, error) {
@@ -136,7 +59,6 @@ func (a *saramaAdminClient) GetBrokerConfig(
 		Name:        strconv.Itoa(int(controller.ID())),
 		ConfigNames: []string{configName},
 	})
-
 	if err != nil {
 		return "", errors.Trace(err)
 	}
@@ -211,9 +133,7 @@ func (a *saramaAdminClient) GetTopicsMeta(
 }
 
 func (a *saramaAdminClient) CreateTopic(
-	ctx context.Context,
-	detail *TopicDetail,
-	validateOnly bool,
+	_ context.Context, detail *TopicDetail, validateOnly bool,
 ) error {
 	request := &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
@@ -229,8 +149,6 @@ func (a *saramaAdminClient) CreateTopic(
 }
 
 func (a *saramaAdminClient) Close() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	if err := a.admin.Close(); err != nil {
 		log.Warn("close admin client meet error",
 			zap.String("namespace", a.changefeed.Namespace),

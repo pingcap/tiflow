@@ -123,7 +123,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	return config, err
+	return config, nil
 }
 
 func completeSaramaSASLConfig(ctx context.Context, config *sarama.Config, o *Options) error {
