@@ -14,13 +14,10 @@
 package mq
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"time"
 
-	"github.com/klauspost/compress/snappy"
-	"github.com/pierrec/lz4"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -37,7 +34,7 @@ import (
 type ClaimCheck struct {
 	storage storage.ExternalStorage
 
-	compression  string
+	//compression  string
 	changefeedID model.ChangeFeedID
 
 	// metricSendMessageDuration tracks the time duration
@@ -60,9 +57,9 @@ func NewClaimCheck(ctx context.Context, config *config.LargeMessageHandleConfig,
 		zap.String("compression", config.ClaimCheckCompression))
 
 	return &ClaimCheck{
-		changefeedID:              changefeedID,
-		storage:                   storage,
-		compression:               config.ClaimCheckCompression,
+		changefeedID: changefeedID,
+		storage:      storage,
+		//compression:               config.ClaimCheckCompression,
 		metricSendMessageDuration: mq.ClaimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSendMessageCount:    mq.ClaimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}, nil
@@ -78,21 +75,22 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	switch c.compression {
-	case config.CompressionSnappy:
-		data = snappy.Encode(nil, data)
-	case config.CompressionLZ4:
-		var buf bytes.Buffer
-		writer := lz4.NewWriter(&buf)
-		if _, err := writer.Write(data); err != nil {
-			return errors.Trace(err)
-		}
-		if err := writer.Close(); err != nil {
-			log.Warn("claim-check: close lz4 writer failed", zap.Error(err))
-		}
-		data = buf.Bytes()
-	default:
-	}
+
+	//switch c.compression {
+	//case config.CompressionSnappy:
+	//	data = snappy.Encode(nil, data)
+	//case config.CompressionLZ4:
+	//	var buf bytes.Buffer
+	//	writer := lz4.NewWriter(&buf)
+	//	if _, err := writer.Write(data); err != nil {
+	//		return errors.Trace(err)
+	//	}
+	//	if err := writer.Close(); err != nil {
+	//		log.Warn("claim-check: close lz4 writer failed", zap.Error(err))
+	//	}
+	//	data = buf.Bytes()
+	//default:
+	//}
 
 	start := time.Now()
 	err = c.storage.WriteFile(ctx, message.ClaimCheckFileName, data)
