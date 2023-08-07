@@ -120,6 +120,7 @@ type urlConfig struct {
 	MaxMessageBytes                *int    `form:"max-message-bytes"`
 	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
 	AvroBigintUnsignedHandlingMode *string `form:"avro-bigint-unsigned-handling-mode"`
+	Compression                    *string `form:"compression"`
 
 	// AvroEnableWatermark is the option for enabling watermark in avro protocol
 	// only used for internal testing, do not set this in the production environment since the
@@ -213,8 +214,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
 	}
 
-	compression := util.GetOrZero(replicaConfig.Sink.KafkaConfig.Compression)
-	compression = strings.ToLower(strings.TrimSpace(compression))
+	compression := strings.ToLower(strings.TrimSpace(util.GetOrZero(urlParameter.Compression)))
 	switch compression {
 	case "none":
 		c.Compression = CompressionNone
