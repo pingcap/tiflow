@@ -67,10 +67,6 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
-
-	// EncoderCompression is applied after encoding the event into message.
-	// If EncoderCompression is not none, kafka producer compression should be disabled.
-	EncoderCompression CompressionCodec
 }
 
 // NewConfig return a Config for codec
@@ -213,7 +209,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
 	}
-
 	return nil
 }
 
@@ -276,7 +271,7 @@ func (c *Config) Validate() error {
 				DecimalHandlingModePrecise,
 			)
 		}
-
+		c
 		if c.AvroBigintUnsignedHandlingMode != BigintUnsignedHandlingModeLong &&
 			c.AvroBigintUnsignedHandlingMode != BigintUnsignedHandlingModeString {
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
