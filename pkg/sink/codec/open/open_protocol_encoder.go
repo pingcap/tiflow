@@ -90,7 +90,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = codec.Compress(d.config.Compression, value)
+	value, err = common.Compress(d.config.Compression, value)
 	if err != nil {
 		return err
 	}

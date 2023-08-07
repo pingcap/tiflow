@@ -368,10 +368,14 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = codec.Compress(c.config.Compression, value)
+	previousLen := len(value)
+
+	value, err = common.Compress(c.config.Compression, value)
 	if err != nil {
 		return err
 	}
+
+	log.Info("message length compression", zap.Int("previous", previousLen), zap.Int("after", len(value)))
 
 	m := &common.Message{
 		Key:      nil,

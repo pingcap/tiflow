@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -70,7 +69,7 @@ type Config struct {
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
 
-	Compression codec.CompressionCodec
+	Compression CompressionCodec
 }
 
 // NewConfig return a Config for codec
@@ -218,21 +217,21 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	compression = strings.ToLower(strings.TrimSpace(compression))
 	switch compression {
 	case "none":
-		c.Compression = codec.CompressionNone
+		c.Compression = CompressionNone
 	case "gzip":
-		c.Compression = codec.CompressionGZIP
+		c.Compression = CompressionGZIP
 	case "snappy":
-		c.Compression = codec.CompressionSnappy
+		c.Compression = CompressionSnappy
 	case "lz4":
-		c.Compression = codec.CompressionLZ4
+		c.Compression = CompressionLZ4
 	case "zstd":
-		c.Compression = codec.CompressionZSTD
+		c.Compression = CompressionZSTD
 	default:
 		log.Warn("Unsupported Compression algorithm", zap.String("compression", compression))
-		c.Compression = codec.CompressionNone
+		c.Compression = CompressionNone
 	}
 
-	if c.Compression != codec.CompressionNone {
+	if c.Compression != CompressionNone {
 		log.Info("Kafka sink enable compression", zap.Stringer("compression", c.Compression))
 	}
 
