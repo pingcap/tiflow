@@ -158,20 +158,16 @@ func (a *saramaAdminClient) GetBrokerConfig(
 		"cannot find the `%s` from the broker's configuration", configName)
 }
 
-func (a *saramaAdminClient) GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error) {
-	var configEntries []sarama.ConfigEntry
-	var err error
-	query := func() error {
-		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
-			Type:        sarama.TopicResource,
-			Name:        topicName,
-			ConfigNames: []string{configName},
-		})
-		return err
-	}
-	err = a.queryClusterWithRetry(ctx, query)
+func (a *saramaAdminClient) GetTopicConfig(
+	_ context.Context, topicName string, configName string,
+) (string, error) {
+	configEntries, err := a.admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.TopicResource,
+		Name:        topicName,
+		ConfigNames: []string{configName},
+	})
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 
 	// For compatibility with KOP, we checked all return values.
