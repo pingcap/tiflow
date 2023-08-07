@@ -35,9 +35,6 @@ type ClusterAdminClient interface {
 	// GetAllBrokers return all brokers among the cluster
 	GetAllBrokers(ctx context.Context) ([]Broker, error)
 
-	// GetCoordinator return the coordinator's broker id of the cluster
-	GetCoordinator(ctx context.Context) (controllerID int, err error)
-
 	// GetBrokerConfig return the broker level configuration with the `configName`
 	GetBrokerConfig(ctx context.Context, configName string) (string, error)
 

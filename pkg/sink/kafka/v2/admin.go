@@ -66,20 +66,13 @@ func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
 	return result, nil
 }
 
-func (a *admin) GetCoordinator(ctx context.Context) (int, error) {
+func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return "", errors.Trace(err)
 	}
 
-	return response.Controller.ID, nil
-}
-
-func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
-	controllerID, err := a.GetCoordinator(ctx)
-	if err != nil {
-		return "", err
-	}
+	controllerID := response.Controller.ID
 	request := &kafka.DescribeConfigsRequest{
 		Resources: []kafka.DescribeConfigRequestResource{
 			{

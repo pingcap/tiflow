@@ -100,11 +100,6 @@ func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, e
 	return nil, nil
 }
 
-// GetCoordinator implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int, error) {
-	return c.controllerID, nil
-}
-
 // GetBrokerConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
 	_ context.Context,

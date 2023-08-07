@@ -122,25 +122,11 @@ func (a *saramaAdminClient) GetAllBrokers(_ context.Context) ([]Broker, error) {
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetCoordinator(ctx context.Context) (int, error) {
-	var (
-		controllerID int32
-		err          error
-	)
-
-	query := func() error {
-		_, controllerID, err = a.admin.DescribeCluster()
-		return err
-	}
-	err = a.queryClusterWithRetry(ctx, query)
-	return int(controllerID), err
-}
-
 func (a *saramaAdminClient) GetBrokerConfig(
 	ctx context.Context,
 	configName string,
 ) (string, error) {
-	controller, err := a.GetCoordinator(ctx)
+	controller, err := a.client.Controller()
 	if err != nil {
 		return "", err
 	}
@@ -149,7 +135,7 @@ func (a *saramaAdminClient) GetBrokerConfig(
 	query := func() error {
 		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
 			Type:        sarama.BrokerResource,
-			Name:        strconv.Itoa(controller),
+			Name:        strconv.Itoa(int(controller.ID())),
 			ConfigNames: []string{configName},
 		})
 		return err
