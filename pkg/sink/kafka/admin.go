@@ -219,15 +219,13 @@ func (a *saramaAdminClient) CreateTopic(
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
 	}
-	query := func() error {
-		err := a.admin.CreateTopic(detail.Name, request, validateOnly)
-		// Ignore the already exists error because it's not harmful.
-		if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
-			return err
-		}
-		return nil
+
+	err := a.admin.CreateTopic(detail.Name, request, validateOnly)
+	// Ignore the already exists error because it's not harmful.
+	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+		return err
 	}
-	return a.queryClusterWithRetry(ctx, query)
+	return nil
 }
 
 func (a *saramaAdminClient) Close() {
