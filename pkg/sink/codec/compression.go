@@ -38,7 +38,15 @@ const (
 	CompressionZSTD
 )
 
-func compress(cc CompressionCodec, data []byte) ([]byte, error) {
+var (
+	compressionNames = []string{"none", "gzip", "snappy", "lz4", "zstd"}
+)
+
+func (c CompressionCodec) String() string {
+	return compressionNames[c]
+}
+
+func Compress(cc CompressionCodec, data []byte) ([]byte, error) {
 	switch cc {
 	case CompressionNone:
 		return data, nil
@@ -46,10 +54,10 @@ func compress(cc CompressionCodec, data []byte) ([]byte, error) {
 		var buf bytes.Buffer
 		writer := gzip.NewWriter(&buf)
 		if _, err := writer.Write(data); err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		if err := writer.Close(); err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		return buf.Bytes(), nil
 	case CompressionSnappy:
@@ -58,10 +66,10 @@ func compress(cc CompressionCodec, data []byte) ([]byte, error) {
 		var buf bytes.Buffer
 		writer := lz4.NewWriter(&buf)
 		if _, err := writer.Write(data); err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		if err := writer.Close(); err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
 		}
 		return buf.Bytes(), nil
 	case CompressionZSTD:

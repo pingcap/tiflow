@@ -90,6 +90,11 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
+	value, err = codec.Compress(d.config.Compression, value)
+	if err != nil {
+		return err
+	}
+
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8

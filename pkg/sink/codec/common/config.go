@@ -70,7 +70,7 @@ type Config struct {
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
 
-	compression codec.CompressionCodec
+	Compression codec.CompressionCodec
 }
 
 // NewConfig return a Config for codec
@@ -218,22 +218,22 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	compression = strings.ToLower(strings.TrimSpace(compression))
 	switch compression {
 	case "none":
-		c.compression = codec.CompressionNone
+		c.Compression = codec.CompressionNone
 	case "gzip":
-		c.compression = codec.CompressionGZIP
+		c.Compression = codec.CompressionGZIP
 	case "snappy":
-		c.compression = codec.CompressionSnappy
+		c.Compression = codec.CompressionSnappy
 	case "lz4":
-		c.compression = codec.CompressionLZ4
+		c.Compression = codec.CompressionLZ4
 	case "zstd":
-		c.compression = codec.CompressionZSTD
+		c.Compression = codec.CompressionZSTD
 	default:
-		log.Warn("Unsupported compression algorithm", zap.String("compression", string(c.compression)))
-		c.compression = codec.CompressionNone
+		log.Warn("Unsupported Compression algorithm", zap.String("compression", compression))
+		c.Compression = codec.CompressionNone
 	}
 
-	if c.compression != codec.CompressionNone {
-		log.Info("Kafka producer uses " + compression + " compression algorithm")
+	if c.Compression != codec.CompressionNone {
+		log.Info("Kafka sink enable compression", zap.Stringer("compression", c.Compression))
 	}
 
 	return nil
