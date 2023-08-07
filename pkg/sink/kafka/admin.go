@@ -193,40 +193,17 @@ func (a *saramaAdminClient) GetTopicConfig(
 }
 
 func (a *saramaAdminClient) GetTopicsMeta(
-	ctx context.Context,
-	topics []string,
-	ignoreTopicError bool,
+	_ context.Context, topics []string, _ bool,
 ) (map[string]TopicDetail, error) {
-	var (
-		metaList []*sarama.TopicMetadata
-		err      error
-	)
-	query := func() error {
-		metaList, err = a.admin.DescribeTopics(topics)
-		return err
-	}
-
-	err = a.queryClusterWithRetry(ctx, query)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make(map[string]TopicDetail, len(metaList))
-	for _, meta := range metaList {
-		if meta.Err != sarama.ErrNoError {
-			if !ignoreTopicError {
-				return nil, meta.Err
-			}
-			log.Warn("fetch topic meta failed",
-				zap.String("namespace", a.changefeed.Namespace),
-				zap.String("changefeed", a.changefeed.ID),
-				zap.String("topic", meta.Name),
-				zap.Error(meta.Err))
-			continue
+	result := make(map[string]TopicDetail, len(topics))
+	for _, topic := range topics {
+		partitions, err := a.client.Partitions(topic)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
-		result[meta.Name] = TopicDetail{
-			Name:          meta.Name,
-			NumPartitions: int32(len(meta.Partitions)),
+		result[topic] = TopicDetail{
+			Name:          topic,
+			NumPartitions: int32(len(partitions)),
 		}
 	}
 
