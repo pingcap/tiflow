@@ -270,7 +270,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound, w.sinkMemQuota)
 	defer func() {
 		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
-		task.tableSink.receivedEventCount.Add(int64(allEventCount))
 		metrics.OutputEventCount.WithLabelValues(
 			task.tableSink.changefeed.Namespace,
 			task.tableSink.changefeed.ID,
@@ -405,7 +404,6 @@ func (w *sinkWorker) fetchFromCache(
 	if popRes.success {
 		newLowerBound = popRes.boundary.Next()
 		if len(popRes.events) > 0 {
-			task.tableSink.receivedEventCount.Add(int64(popRes.pushCount))
 			metrics.OutputEventCount.WithLabelValues(
 				task.tableSink.changefeed.Namespace,
 				task.tableSink.changefeed.ID,
