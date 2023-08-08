@@ -35,8 +35,7 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
-	compressionCodec compression.Codec
-	config           *common.Config
+	config *common.Config
 }
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
@@ -92,7 +91,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.compressionCodec, value)
+	value, err = compression.Encode(d.config.LargeMessageHandle.ClaimCheckCompression, value)
 	if err != nil {
 		return err
 	}
@@ -175,7 +174,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		return nil, errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.compressionCodec, value)
+	value, err = compression.Encode(d.config.LargeMessageHandle.ClaimCheckCompression, value)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +267,7 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 		return nil, errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.compressionCodec, value)
+	value, err = compression.Encode(d.config.LargeMessageHandle.ClaimCheckCompression, value)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +347,6 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 // NewBatchEncoder creates a new BatchEncoder.
 func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
-		config:           config,
-		compressionCodec: compression.GetCodec(config.LargeMessageHandle.ClaimCheckCompression),
+		config: config,
 	}
 }

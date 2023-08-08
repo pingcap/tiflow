@@ -15,42 +15,29 @@ package compression
 
 import (
 	"bytes"
-	"strings"
 
 	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/pierrec/lz4/v4"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
-	"go.uber.org/zap"
 )
 
-type Codec uint8
+type Codec string
 
 const (
 	// None no compression
-	None Codec = iota
+	None Codec = "none"
 	// Snappy compression
-	Snappy
+	Snappy Codec = "snappy"
 	// LZ4 compression
-	LZ4
+	LZ4 Codec = "lz4"
 )
 
-var compressionNames = []string{"none", "snappy", "lz4"}
-
-func GetCodec(name string) Codec {
-	name = strings.ToLower(strings.TrimSpace(name))
-	for i, n := range compressionNames {
-		if n == name {
-			return Codec(i)
-		}
+func Supported(cc Codec) bool {
+	switch cc {
+	case None, Snappy, LZ4:
+		return true
 	}
-
-	log.Warn("cannot found the compression codec", zap.String("name", name))
-	return None
-}
-
-func (c Codec) String() string {
-	return compressionNames[c]
+	return false
 }
 
 func Encode(cc Codec, data []byte) ([]byte, error) {

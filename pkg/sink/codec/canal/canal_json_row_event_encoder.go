@@ -292,19 +292,15 @@ type JSONRowEventEncoder struct {
 	builder  *canalEntryBuilder
 	messages []*common.Message
 
-	config           *common.Config
-	compressionCodec compression.Codec
+	config *common.Config
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
-	compressionCodec := compression.GetCodec(config.LargeMessageHandle.ClaimCheckCompression)
 	encoder := &JSONRowEventEncoder{
-		builder:          newCanalEntryBuilder(),
-		messages:         make([]*common.Message, 0, 1),
-		compressionCodec: compressionCodec,
-
-		config: config,
+		builder:  newCanalEntryBuilder(),
+		messages: make([]*common.Message, 0, 1),
+		config:   config,
 	}
 	return encoder
 }
@@ -357,7 +353,7 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	value, err = compression.Encode(c.compressionCodec, value)
+	value, err = compression.Encode(c.config.LargeMessageHandle.ClaimCheckCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -377,7 +373,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = compression.Encode(c.compressionCodec, value)
+	value, err = compression.Encode(c.config.LargeMessageHandle.ClaimCheckCompression, value)
 	if err != nil {
 		return err
 	}
@@ -444,7 +440,7 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err = compression.Encode(c.compressionCodec, value)
+	value, err = compression.Encode(c.config.LargeMessageHandle.ClaimCheckCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -482,7 +478,7 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	value, err = compression.Encode(c.compressionCodec, value)
+	value, err = compression.Encode(c.config.LargeMessageHandle.ClaimCheckCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
