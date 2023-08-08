@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -34,7 +35,7 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
-	compressionCodec common.CompressionCodec
+	compressionCodec compression.Codec
 	config           *common.Config
 }
 
@@ -91,7 +92,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = common.Compress(d.compressionCodec, value)
+	value, err = compression.Encode(d.compressionCodec, value)
 	if err != nil {
 		return err
 	}
@@ -174,7 +175,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		return nil, errors.Trace(err)
 	}
 
-	value, err = common.Compress(d.compressionCodec, value)
+	value, err = compression.Encode(d.compressionCodec, value)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +268,7 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 		return nil, errors.Trace(err)
 	}
 
-	value, err = common.Compress(d.compressionCodec, value)
+	value, err = compression.Encode(d.compressionCodec, value)
 	if err != nil {
 		return nil, err
 	}
@@ -348,6 +349,6 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
 		config:           config,
-		compressionCodec: common.GetCompressionCodec(config.LargeMessageHandle.ClaimCheckCompression),
+		compressionCodec: compression.GetCodec(config.LargeMessageHandle.ClaimCheckCompression),
 	}
 }

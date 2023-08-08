@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -291,14 +292,13 @@ type JSONRowEventEncoder struct {
 	builder  *canalEntryBuilder
 	messages []*common.Message
 
-	config *common.Config
-
-	compressionCodec common.CompressionCodec
+	config           *common.Config
+	compressionCodec compression.Codec
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
-	compressionCodec := common.GetCompressionCodec(config.LargeMessageHandle.ClaimCheckCompression)
+	compressionCodec := compression.GetCodec(config.LargeMessageHandle.ClaimCheckCompression)
 	encoder := &JSONRowEventEncoder{
 		builder:          newCanalEntryBuilder(),
 		messages:         make([]*common.Message, 0, 1),
@@ -357,7 +357,7 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	value, err = common.Compress(c.compressionCodec, value)
+	value, err = compression.Encode(c.compressionCodec, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -377,7 +377,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = common.Compress(c.compressionCodec, value)
+	value, err = compression.Encode(c.compressionCodec, value)
 	if err != nil {
 		return err
 	}
@@ -444,7 +444,7 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err = common.Compress(c.compressionCodec, value)
+	value, err = compression.Encode(c.compressionCodec, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -482,7 +482,7 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	value, err = common.Compress(c.compressionCodec, value)
+	value, err = compression.Encode(c.compressionCodec, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

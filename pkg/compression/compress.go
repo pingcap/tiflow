@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package common
+package compression
 
 import (
 	"bytes"
@@ -24,42 +24,42 @@ import (
 	"go.uber.org/zap"
 )
 
-type CompressionCodec uint8
+type Codec uint8
 
 const (
-	// CompressionNone no compression
-	CompressionNone CompressionCodec = iota
-	// CompressionSnappy compression using snappy
-	CompressionSnappy
-	// CompressionLZ4 compression using LZ4
-	CompressionLZ4
+	// None no compression
+	None Codec = iota
+	// Snappy compression
+	Snappy
+	// LZ4 compression
+	LZ4
 )
 
 var compressionNames = []string{"none", "snappy", "lz4"}
 
-func GetCompressionCodec(name string) CompressionCodec {
+func GetCodec(name string) Codec {
 	name = strings.ToLower(strings.TrimSpace(name))
 	for i, n := range compressionNames {
 		if n == name {
-			return CompressionCodec(i)
+			return Codec(i)
 		}
 	}
 
 	log.Warn("cannot found the compression codec", zap.String("name", name))
-	return CompressionNone
+	return None
 }
 
-func (c CompressionCodec) String() string {
+func (c Codec) String() string {
 	return compressionNames[c]
 }
 
-func Compress(cc CompressionCodec, data []byte) ([]byte, error) {
+func Encode(cc Codec, data []byte) ([]byte, error) {
 	switch cc {
-	case CompressionNone:
+	case None:
 		return data, nil
-	case CompressionSnappy:
+	case Snappy:
 		return snappy.Encode(data), nil
-	case CompressionLZ4:
+	case LZ4:
 		var buf bytes.Buffer
 		writer := lz4.NewWriter(&buf)
 		if _, err := writer.Write(data); err != nil {
