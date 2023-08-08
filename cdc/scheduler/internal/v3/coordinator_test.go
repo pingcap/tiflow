@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/compat"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
@@ -42,10 +43,11 @@ func TestCoordinatorSendMsgs(t *testing.T) {
 	ctx := context.Background()
 	trans := transport.NewMockTrans()
 	coord := coordinator{
-		version:   "6.2.0",
-		revision:  schedulepb.OwnerRevision{Revision: 3},
-		captureID: "0",
-		trans:     trans,
+		version:         "6.2.0",
+		revision:        schedulepb.OwnerRevision{Revision: 3},
+		captureID:       "0",
+		trans:           trans,
+		redoMetaManager: redo.NewDisabledMetaManager(),
 	}
 	cfg := config.NewDefaultSchedulerConfig()
 	coord.captureM = member.NewCaptureManager("", model.ChangeFeedID{}, coord.revision, cfg)
@@ -80,11 +82,12 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 	ctx := context.Background()
 	trans := transport.NewMockTrans()
 	coord := coordinator{
-		version:   "6.2.0",
-		revision:  schedulepb.OwnerRevision{Revision: 3},
-		captureID: "0",
-		trans:     trans,
-		compat:    compat.New(map[string]*model.CaptureInfo{}),
+		version:         "6.2.0",
+		revision:        schedulepb.OwnerRevision{Revision: 3},
+		captureID:       "0",
+		trans:           trans,
+		compat:          compat.New(map[string]*model.CaptureInfo{}),
+		redoMetaManager: redo.NewDisabledMetaManager(),
 	}
 
 	trans.RecvBuffer = append(trans.RecvBuffer,
@@ -132,10 +135,11 @@ func newCoordinator(
 		captureID: captureID,
 		replicationM: replication.NewReplicationManager(
 			cfg.MaxTaskConcurrency, changefeedID),
-		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
-		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
-		changefeedID: changefeedID,
-		compat:       compat.New(map[model.CaptureID]*model.CaptureInfo{}),
+		captureM:        member.NewCaptureManager(captureID, changefeedID, revision, cfg),
+		schedulerM:      scheduler.NewSchedulerManager(changefeedID, cfg),
+		changefeedID:    changefeedID,
+		compat:          compat.New(map[model.CaptureID]*model.CaptureInfo{}),
+		redoMetaManager: redo.NewDisabledMetaManager(),
 	}
 }
 
