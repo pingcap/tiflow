@@ -1022,11 +1022,8 @@ func (s *snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
 	}
 	for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {
 		newSchema, ok := s.schemaByID(newSchemaIDs[i])
-		// If it a rename table job and the schema does not exist,
-		// there is no need to create the table, since this table
-		// will not be replicated in the future.
 		if !ok {
-			continue
+			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
 		}
 		newSchemaName := newSchema.Name.O
 		tbInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName, job.BinlogInfo.FinishedTS, tableInfo)
