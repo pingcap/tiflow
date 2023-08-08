@@ -64,7 +64,8 @@ const (
       "large-message-handle-option": "none",
       "claim-check-storage-uri": "",
       "claim-check-compression": ""
-    }
+    },
+    "advance-timeout": 600
   },
   "consistent": {
     "level": "none",
@@ -277,7 +278,8 @@ const (
       "flush-interval": "1m",
       "file-size": 1024,
       "output-column-id":false
-    }
+    },
+    "advance-timeout": 600
   },
   "consistent": {
     "level": "none",
@@ -411,7 +413,8 @@ const (
       "flush-interval": "1m",
       "file-size": 1024,
       "output-column-id":false
-    }
+    },
+    "advance-timeout": 600
   },
   "consistent": {
     "level": "none",

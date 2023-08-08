@@ -158,6 +158,10 @@ type SinkConfig struct {
 	PulsarConfig       *PulsarConfig       `toml:"pulsar-config" json:"pulsar-config,omitempty"`
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
 	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
+
+	// AdvanceTimeout is a duration in second. If a table sink progress hasn't been
+	// advanced for this given duration, the sink will be canceled and re-established.
+	AdvanceTimeout uint `toml:"advance-timeout" json:"advance-timeout"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
