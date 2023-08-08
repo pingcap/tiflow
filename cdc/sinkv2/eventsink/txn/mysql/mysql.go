@@ -103,6 +103,11 @@ func NewMySQLBackends(
 		return nil, err
 	}
 
+	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
 	db.SetMaxIdleConns(cfg.WorkerCount)
 	db.SetMaxOpenConns(cfg.WorkerCount)
 
@@ -712,7 +717,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				}
 			}
 
-			// we set write source for each txn,
+			// we try to set write source for each txn,
 			// so we can use it to trace the data source
 			if err = s.setWriteSource(pctx, tx); err != nil {
 				err := logDMLTxnErr(
@@ -805,8 +810,8 @@ func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 
 // setWriteSource sets write source for the transaction.
 func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
-	// we only set write source when donwstream is TiDB
-	if !s.cfg.IsTiDB {
+	// we only set write source when donwstream is TiDB and write source is existed.
+	if !s.cfg.IsWriteSourceExisted {
 		return nil
 	}
 	// downstream is TiDB, set system variables.
