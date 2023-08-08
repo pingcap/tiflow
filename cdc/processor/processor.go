@@ -107,7 +107,6 @@ type processor struct {
 	metricsTableSinkTotalRows    prometheus.Counter
 	metricsTableMemoryHistogram  prometheus.Observer
 	metricsProcessorMemoryGauge  prometheus.Gauge
-	metricRemainKVEventGauge     prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -400,7 +399,6 @@ func (p *processor) IsRemoveTableFinished(tableID model.TableID) (model.Ts, bool
 		return stats.CheckpointTs, true
 	}
 	table := p.tables[tableID]
-	p.metricRemainKVEventGauge.Sub(float64(table.RemainEvents()))
 	table.Cancel()
 	table.Wait()
 	delete(p.tables, tableID)
@@ -538,8 +536,6 @@ func newProcessor(
 		metricsTableMemoryHistogram: tableMemoryHistogram.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsProcessorMemoryGauge: processorMemoryGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricRemainKVEventGauge: remainKVEventsGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.createTablePipeline = p.createTablePipelineImpl
@@ -1209,9 +1205,6 @@ func (p *processor) doGCSchemaStorage() {
 func (p *processor) refreshMetrics() {
 	if p.pullBasedSinking {
 		p.metricSyncTableNumGauge.Set(float64(p.sinkManager.GetAllTableCount()))
-		sortEngineReceivedEvents := p.sourceManager.ReceivedEvents()
-		tableSinksReceivedEvents := p.sinkManager.ReceivedEvents()
-		p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 	} else {
 		var totalConsumed uint64
 		var totalEvents int64
@@ -1226,7 +1219,6 @@ func (p *processor) refreshMetrics() {
 		}
 		p.metricsProcessorMemoryGauge.Set(float64(totalConsumed))
 		p.metricSyncTableNumGauge.Set(float64(len(p.tables)))
-		p.metricRemainKVEventGauge.Set(float64(totalEvents))
 	}
 }
 
@@ -1348,8 +1340,6 @@ func (p *processor) cleanupMetrics() {
 
 	tableMemoryHistogram.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-
-	remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
 	sinkmetric.TableSinkTotalRowsCountCounter.
 		DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)

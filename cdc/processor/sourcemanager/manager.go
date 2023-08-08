@@ -124,11 +124,6 @@ func (m *SourceManager) GetTableSorterStats(tableID model.TableID) engine.TableS
 	return m.engine.GetStatsByTable(tableID)
 }
 
-// ReceivedEvents returns the number of events in the engine that have not been sent to the sink.
-func (m *SourceManager) ReceivedEvents() int64 {
-	return m.engine.ReceivedEvents()
-}
-
 // Close closes the source manager. Stop all pullers and close the engine.
 func (m *SourceManager) Close() error {
 	log.Info("Closing source manager",
