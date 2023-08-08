@@ -25,13 +25,9 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
->>>>>>> 53d48935c7 (checker(dm): handle expression UNIQUE index (#9353))
 )
 
 // MySQLVersion represents MySQL version number.
