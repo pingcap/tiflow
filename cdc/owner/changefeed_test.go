@@ -601,6 +601,7 @@ func TestBarrierAdvance(t *testing.T) {
 		require.Nil(t, err)
 
 		err = cf.handleBarrier(ctx, barrier)
+		require.Nil(t, err)
 		if i == 0 {
 			require.Equal(t, cf.state.Info.StartTs, barrier.GlobalBarrierTs)
 		}
