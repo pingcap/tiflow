@@ -53,6 +53,11 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 		return nil, nil, errors.Trace(err)
 	}
 
+	value, err = compression.Encode(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
@@ -91,7 +96,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.config.LargeMessageHandle.ClaimCheckCompression, value)
+	value, err = compression.Encode(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return err
 	}
@@ -174,7 +179,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		return nil, errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.config.LargeMessageHandle.ClaimCheckCompression, value)
+	value, err = compression.Encode(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +272,7 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 		return nil, errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.config.LargeMessageHandle.ClaimCheckCompression, value)
+	value, err = compression.Encode(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, err
 	}

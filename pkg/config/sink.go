@@ -556,16 +556,16 @@ const (
 
 // LargeMessageHandleConfig is the configuration for handling large message.
 type LargeMessageHandleConfig struct {
-	LargeMessageHandleOption string            `toml:"large-message-handle-option" json:"large-message-handle-option"`
-	ClaimCheckStorageURI     string            `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
-	ClaimCheckCompression    compression.Codec `toml:"claim-check-compression" json:"claim-check-compression"`
+	LargeMessageHandleOption      string            `toml:"large-message-handle-option" json:"large-message-handle-option"`
+	LargeMessageHandleCompression compression.Codec `toml:"large-message-handle-compression" json:"large-message-handle-compression"`
+	ClaimCheckStorageURI          string            `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
 }
 
 // NewDefaultLargeMessageHandleConfig return the default LargeMessageHandleConfig.
 func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
 	return &LargeMessageHandleConfig{
-		LargeMessageHandleOption: LargeMessageHandleOptionNone,
-		ClaimCheckCompression:    compression.None,
+		LargeMessageHandleOption:      LargeMessageHandleOptionNone,
+		LargeMessageHandleCompression: compression.None,
 	}
 }
 
@@ -596,10 +596,10 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 		}
 	}
 
-	if c.ClaimCheckCompression != "" {
-		if !compression.Supported(c.ClaimCheckCompression) {
+	if c.LargeMessageHandleCompression != "" {
+		if !compression.Supported(c.LargeMessageHandleCompression) {
 			return cerror.ErrInvalidReplicaConfig.GenWithStack(
-				"large message handle compression is not supported, got %s", c.ClaimCheckCompression)
+				"large message handle compression is not supported, got %s", c.LargeMessageHandleCompression)
 		}
 	}
 

@@ -274,6 +274,12 @@ func newJSONMessageForDML(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
+
+	value, err = compression.Encode(config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+
 	return value, nil
 }
 
@@ -353,7 +359,7 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	value, err = compression.Encode(c.config.LargeMessageHandle.ClaimCheckCompression, value)
+	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -371,11 +377,6 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	value, err := newJSONMessageForDML(c.builder, e, c.config, false)
 	if err != nil {
 		return errors.Trace(err)
-	}
-
-	value, err = compression.Encode(c.config.LargeMessageHandle.ClaimCheckCompression, value)
-	if err != nil {
-		return err
 	}
 
 	m := &common.Message{
@@ -440,7 +441,7 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err = compression.Encode(c.config.LargeMessageHandle.ClaimCheckCompression, value)
+	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -478,7 +479,7 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	value, err = compression.Encode(c.config.LargeMessageHandle.ClaimCheckCompression, value)
+	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

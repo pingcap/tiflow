@@ -313,9 +313,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			if c.Sink.KafkaConfig.LargeMessageHandle != nil {
 				oldConfig := c.Sink.KafkaConfig.LargeMessageHandle
 				largeMessageHandle = &config.LargeMessageHandleConfig{
-					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
-					ClaimCheckStorageURI:     oldConfig.ClaimCheckStorageURI,
-					ClaimCheckCompression:    oldConfig.ClaimCheckCompression,
+					LargeMessageHandleOption:      oldConfig.LargeMessageHandleOption,
+					LargeMessageHandleCompression: oldConfig.LargeMessageHandleCompression,
+					ClaimCheckStorageURI:          oldConfig.ClaimCheckStorageURI,
 				}
 			}
 
@@ -541,9 +541,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			if cloned.Sink.KafkaConfig.LargeMessageHandle != nil {
 				oldConfig := cloned.Sink.KafkaConfig.LargeMessageHandle
 				largeMessageHandle = &LargeMessageHandleConfig{
-					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
-					ClaimCheckStorageURI:     oldConfig.ClaimCheckStorageURI,
-					ClaimCheckCompression:    oldConfig.ClaimCheckCompression,
+					LargeMessageHandleOption:      oldConfig.LargeMessageHandleOption,
+					LargeMessageHandleCompression: oldConfig.LargeMessageHandleCompression,
+					ClaimCheckStorageURI:          oldConfig.ClaimCheckStorageURI,
 				}
 			}
 
@@ -804,9 +804,9 @@ type CSVConfig struct {
 // LargeMessageHandleConfig denotes the large message handling config
 // This is the same as config.LargeMessageHandleConfig
 type LargeMessageHandleConfig struct {
-	LargeMessageHandleOption string            `json:"large_message_handle_option"`
-	ClaimCheckStorageURI     string            `json:"claim_check_storage_uri"`
-	ClaimCheckCompression    compression.Codec `json:"claim_check_compression"`
+	LargeMessageHandleOption      string            `json:"large_message_handle_option"`
+	LargeMessageHandleCompression compression.Codec `json:"large_message_handle_compression"`
+	ClaimCheckStorageURI          string            `json:"claim_check_storage_uri"`
 }
 
 // DispatchRule represents partition rule for a table
