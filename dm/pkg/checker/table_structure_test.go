@@ -919,10 +919,9 @@ func TestExpressionUK(t *testing.T) {
 		  UNIQUE KEY "uk" (("c2"+1), "c")
 		) ENGINE=InnoDB`)
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow2)
-
 	checker := NewTablesChecker(
-		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
-		conn.NewBaseDBForTest(downDB),
+		map[string]*sql.DB{"test-source": db},
+		downDB,
 		map[string]map[filter.Table][]filter.Table{
 			"test-source": {
 				{Schema: "test-db", Name: "test-table-1"}: {
@@ -966,8 +965,8 @@ func TestExpressionUK(t *testing.T) {
 	downMock.ExpectQuery("SHOW CREATE TABLE `test-db`.`test-table-1`").WillReturnRows(createTableRow2)
 
 	checker = NewTablesChecker(
-		map[string]*conn.BaseDB{"test-source": conn.NewBaseDBForTest(db)},
-		conn.NewBaseDBForTest(downDB),
+		map[string]*sql.DB{"test-source": db},
+		downDB,
 		map[string]map[filter.Table][]filter.Table{
 			"test-source": {
 				{Schema: "test-db", Name: "test-table-1"}: {
