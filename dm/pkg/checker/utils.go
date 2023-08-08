@@ -25,6 +25,9 @@ import (
 	"github.com/pingcap/tidb-tools/pkg/utils"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/format"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
 
 // MySQLVersion represents MySQL version number.
@@ -195,6 +198,8 @@ func getCollation(stmt *ast.CreateTableStmt) string {
 // getPKAndUK returns a map of INDEX_NAME -> set of COLUMN_NAMEs.
 func getPKAndUK(stmt *ast.CreateTableStmt) map[string]map[string]struct{} {
 	ret := make(map[string]map[string]struct{})
+	var sb strings.Builder
+	restoreCtx := format.NewRestoreCtx(format.DefaultRestoreFlags, &sb)
 
 	for _, constraint := range stmt.Constraints {
 		switch constraint.Tp {
@@ -206,7 +211,17 @@ func getPKAndUK(stmt *ast.CreateTableStmt) map[string]map[string]struct{} {
 		case ast.ConstraintUniq, ast.ConstraintUniqKey, ast.ConstraintUniqIndex:
 			ret[constraint.Name] = make(map[string]struct{})
 			for _, key := range constraint.Keys {
-				ret[constraint.Name][key.Column.Name.L] = struct{}{}
+				if key.Column != nil {
+					ret[constraint.Name][key.Column.Name.L] = struct{}{}
+				} else {
+					sb.Reset()
+					err := key.Expr.Restore(restoreCtx)
+					if err != nil {
+						log.L().Warn("failed to restore expression", zap.Error(err))
+						continue
+					}
+					ret[constraint.Name][sb.String()] = struct{}{}
+				}
 			}
 		}
 	}
