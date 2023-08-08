@@ -142,8 +142,14 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
-	warnings := m.warningsReportedByProcessors()
-	m.handleWarning(warnings...)
+	// only handle warnings when there are no errors
+	// otherwise, the warnings will cover the errors
+	if len(errs) == 0 {
+		// warning are come from processors' sink component
+		// they ere not fatal errors, so we don't need to stop the changefeed
+		warnings := m.warningsReportedByProcessors()
+		m.handleWarning(warnings...)
+	}
 	return
 }
 

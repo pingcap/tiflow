@@ -207,12 +207,18 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 
 		// return the common info only.
 		commonInfo := &ChangefeedCommonInfo{
-			UpstreamID:   cfInfo.UpstreamID,
-			Namespace:    cfID.Namespace,
-			ID:           cfID.ID,
-			FeedState:    cfInfo.State,
-			RunningError: cfInfo.Error,
+			UpstreamID: cfInfo.UpstreamID,
+			Namespace:  cfID.Namespace,
+			ID:         cfID.ID,
+			FeedState:  cfInfo.State,
 		}
+
+		if cfInfo.Error != nil {
+			commonInfo.RunningError = cfInfo.Error
+		} else {
+			commonInfo.RunningError = cfInfo.Warning
+		}
+
 		// if the state is normal, we shall not return the error info
 		// because changefeed will is retrying. errors will confuse the users
 		if commonInfo.FeedState == model.StateNormal {
