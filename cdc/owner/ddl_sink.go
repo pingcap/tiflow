@@ -160,13 +160,21 @@ func (s *ddlSinkImpl) makeSinkReady(ctx context.Context) error {
 }
 
 // retry the given action with 5s interval. Before every retry, s.sink will be re-initialized.
-func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action func() error) (err error) {
+func (s *ddlSinkImpl) retrySinkAction(ctx context.Context, name string, action func() error) (err error) {
 	for {
 		if err = action(); err == nil {
 			return nil
 		}
+		isWarning := !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled
+		log.Warn("owner ddl sink fails on action",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.String("action", name),
+			zap.Bool("retryable", isWarning),
+			zap.Error(err))
+
 		s.sink = nil
-		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+		if isWarning {
 			s.reportWarning(err)
 		} else {
 			s.reportError(err)
@@ -180,6 +188,22 @@ func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action
 
 		if err = util.Hang(ctx, backoff); err != nil {
 			return errors.Trace(err)
+		}
+	}
+}
+
+func (s *ddlSinkImpl) observedRetrySinkAction(ctx context.Context, name string, action func() error) (err error) {
+	errCh := make(chan error, 1)
+	go func() { errCh <- s.retrySinkAction(ctx, name, action) }()
+	for {
+		select {
+		case err := <-errCh:
+			return err
+		case <-time.After(30 * time.Second):
+			log.Info("owner ddl sink performs an action too long",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID),
+				zap.String("action", name))
 		}
 	}
 }
@@ -205,7 +229,7 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 		return
 	}
 
-	return s.retrySinkActionWithErrorReport(ctx, doWrite)
+	return s.observedRetrySinkAction(ctx, "writeCheckpointTs", doWrite)
 }
 
 func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -236,7 +260,8 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 		}
 		return
 	}
-	return s.retrySinkActionWithErrorReport(ctx, doWrite)
+
+	return s.observedRetrySinkAction(ctx, "writeDDLEvent", doWrite)
 }
 
 func (s *ddlSinkImpl) run(ctx context.Context) {
@@ -244,7 +269,15 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 
 	s.wg.Add(1)
 	go func() {
-		defer s.wg.Done()
+		log.Info("owner ddl sink background loop is started",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID))
+		defer func() {
+			s.wg.Done()
+			log.Info("owner ddl sink background loop exists",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID))
+		}()
 
 		// TODO make the tick duration configurable
 		ticker := time.NewTicker(time.Second)
