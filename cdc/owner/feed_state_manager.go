@@ -63,6 +63,9 @@ type feedStateManager struct {
 	lastRetryCheckpointTs model.Ts                    // checkpoint ts of last retry
 	backoffInterval       time.Duration               // the interval for restarting a changefeed in 'error' state
 	errBackoff            *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
+
+	checkpointTsAdvanced time.Time
+	lastCheckpointTs     model.Ts
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
@@ -110,6 +113,13 @@ func (m *feedStateManager) shiftStateWindow(state model.FeedState) {
 }
 
 func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adminJobPending bool) {
+	if state != nil && state.Status != nil {
+		if m.lastCheckpointTs < state.Status.CheckpointTs {
+			m.lastCheckpointTs = state.Status.CheckpointTs
+			m.checkpointTsAdvanced = time.Now()
+		}
+	}
+
 	m.shiftStateWindow(state.Info.State)
 	m.checkAndInitLastRetryCheckpointTs(state.Status)
 
@@ -561,6 +571,19 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 	if len(errs) == 0 {
 		return
 	}
+
+	if m.state != nil && m.state.Status != nil {
+		currTime := m.upstream.PDClock.CurrentTime()
+		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
+		if currTime.Sub(ckptTime) > defaultBackoffMaxElapsedTime &&
+			time.Since(m.checkpointTsAdvanced) > defaultBackoffMaxElapsedTime &&
+			true /*TODO: how to handle slow start up?*/ {
+			m.shouldBeRunning = false
+			m.patchState(model.StateFailed)
+			return
+		}
+	}
+
 	lastError := errs[len(errs)-1]
 	m.patchState(model.StateWarning)
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
