@@ -117,7 +117,11 @@ func newTableSinkWrapper(
 		targetTs:         targetTs,
 		genReplicateTs:   genReplicateTs,
 	}
+
+	res.tableSink.version = 0
 	res.tableSink.checkpointTs = model.NewResolvedTs(startTs)
+	res.tableSink.advanced = time.Unix(0, 0)
+
 	res.receivedSorterResolvedTs.Store(startTs)
 	res.barrierTs.Store(startTs)
 	return res
@@ -205,8 +209,6 @@ func (t *tableSinkWrapper) getCheckpointTs() (model.ResolvedTs, uint64, time.Tim
 			t.tableSink.checkpointTs = checkpointTs
 			t.tableSink.advanced = time.Now()
 		}
-	} else {
-		t.tableSink.advanced = time.Now()
 	}
 	return t.tableSink.checkpointTs, t.tableSink.version, t.tableSink.advanced
 }
@@ -292,8 +294,11 @@ func (t *tableSinkWrapper) initTableSink() bool {
 	defer t.tableSink.Unlock()
 	if t.tableSink.s == nil {
 		t.tableSink.s, t.tableSink.version = t.tableSinkCreater()
-		t.tableSink.advanced = time.Now()
-		return t.tableSink.s != nil
+		if t.tableSink.s != nil {
+			t.tableSink.advanced = time.Now()
+			return true
+		}
+		return false
 	}
 	return true
 }
@@ -338,6 +343,8 @@ func (t *tableSinkWrapper) doTableSinkClear() {
 		t.tableSink.checkpointTs = checkpointTs
 	}
 	t.tableSink.s = nil
+	t.tableSink.version = 0
+	t.tableSink.advanced = time.Unix(0, 0)
 }
 
 // When the attached sink fail, there can be some events that have already been

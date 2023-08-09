@@ -384,8 +384,7 @@ func (m *SinkManager) putSinkFactoryError(err error, version uint64) bool {
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Bool("skipped", skipped),
-		zap.Uint64("factoryVersion", m.sinkFactory.version),
-		zap.Error(err))
+		zap.String("error", err.Error()))
 
 	return !skipped
 }
@@ -980,12 +979,16 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
-	if time.Since(advanced) > time.Duration(m.changefeedInfo.Config.Sink.AdvanceTimeout)*time.Second {
+	stuckCheck := time.Duration(m.changefeedInfo.Config.Sink.AdvanceTimeout) * time.Second
+	if advanced.After(time.Unix(0, 0)) && time.Since(advanced) > stuckCheck &&
+		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
 		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Any("checkpointTs", checkpointTs),
+			zap.Uint("AdvanceTimeout", m.changefeedInfo.Config.Sink.AdvanceTimeout),
+			zap.Float64("stuckCheck", stuckCheck.Seconds()),
 			zap.Uint64("factoryVersion", version))
 		tableSink.updateTableSinkAdvanced()
 		m.putSinkFactoryError(errors.New("table sink stuck"), version)

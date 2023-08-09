@@ -161,7 +161,7 @@ type SinkConfig struct {
 
 	// AdvanceTimeout is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
-	AdvanceTimeout uint `toml:"advance-timeout" json:"advance-timeout"`
+	AdvanceTimeout uint `toml:"advance-timeout" json:"advance-timeout,omitempty"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -433,6 +433,10 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		if err := s.CSVConfig.validateAndAdjust(); err != nil {
 			return err
 		}
+	}
+
+	if s.AdvanceTimeout == 0 {
+		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout should be greater than 0")
 	}
 
 	return nil
