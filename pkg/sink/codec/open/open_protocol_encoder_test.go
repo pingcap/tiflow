@@ -62,13 +62,23 @@ var (
 			{
 				Name:  "col1",
 				Type:  mysql.TypeVarchar,
-				Value: []byte("aabb"),
+				Value: []byte("12345678910"),
 				Flag:  model.HandleKeyFlag,
 			},
 			{
 				Name:  "col2",
 				Type:  mysql.TypeVarchar,
-				Value: []byte("bb"),
+				Value: []byte("12345678910"),
+			},
+			{
+				Name:  "col3",
+				Type:  mysql.TypeBlob,
+				Value: []byte("12345678910"),
+			},
+			{
+				Name:  "col4",
+				Type:  mysql.TypeBlob,
+				Value: []byte("12345678910"),
 			},
 		},
 	}
@@ -232,7 +242,7 @@ func TestAppendClaimCheckMessage(t *testing.T) {
 	ctx := context.Background()
 	topic := ""
 	// just can hold it.
-	a := 172
+	a := 222
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
 	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
@@ -254,6 +264,23 @@ func TestAppendClaimCheckMessage(t *testing.T) {
 	require.Empty(t, messages[0].ClaimCheckFileName)
 	require.NotEmptyf(t, messages[1].ClaimCheckFileName, "claim check file name should not be empty")
 	require.Empty(t, messages[2].ClaimCheckFileName)
+
+	largeMessage := messages[1]
+	claimCheckLocationMessage, err := encoder.(codec.ClaimCheckLocationEncoder).NewClaimCheckLocationMessage(largeMessage)
+	require.NoError(t, err)
+	require.Empty(t, claimCheckLocationMessage.ClaimCheckFileName)
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, &sql.DB{})
+	require.NoError(t, err)
+	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
+	require.NoError(t, err)
+
+	messageType, ok, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.Equal(t, messageType, model.MessageTypeRow)
+	require.True(t, ok)
+
+	require.Equal(t, largeMessage.ClaimCheckFileName, decoder.(*BatchDecoder).nextKey.ClaimCheckLocation)
 }
 
 func TestAppendMessageOnlyHandleKeyColumns(t *testing.T) {
