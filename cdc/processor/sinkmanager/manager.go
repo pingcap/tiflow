@@ -144,7 +144,7 @@ func New(
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
-		sinkRetry:           retry.NewDefaultErrorRetry(),
+		sinkRetry:           retry.NewInfiniteErrorRetry(),
 
 		metricsTableSinkTotalRows: tablesinkmetrics.TotalRowsCountCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -295,7 +295,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 
 		backoff, err := m.sinkRetry.GetRetryBackoff(err)
 		if err != nil {
-			return errors.Trace(err)
+			return errors.New(fmt.Sprintf("GetRetryBackoff: %s", err.Error()))
 		}
 
 		if err = util.Hang(m.managerCtx, backoff); err != nil {

@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -102,7 +103,7 @@ func newDDLSink(
 		changefeedID: changefeedID,
 		info:         info,
 
-		sinkRetry:     retry.NewDefaultErrorRetry(),
+		sinkRetry:     retry.NewInfiniteErrorRetry(),
 		reportError:   reportError,
 		reportWarning: reportWarning,
 	}
@@ -175,7 +176,7 @@ func (s *ddlSinkImpl) retrySinkActionWithErrorReport(ctx context.Context, action
 
 		backoff, err := s.sinkRetry.GetRetryBackoff(err)
 		if err != nil {
-			return errors.Trace(err)
+			return errors.New(fmt.Sprintf("GetRetryBackoff: %s", err.Error()))
 		}
 
 		if err = util.Hang(ctx, backoff); err != nil {
