@@ -285,7 +285,7 @@ func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e 
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
 	// ClaimCheckFileName must be set to indicate this message should be sent to the external storage.
-	message.ClaimCheckFileName = common.NewClaimCheckFileName(e)
+	message.ClaimCheckFileName = common.NewClaimCheckFileName(d.config.LargeMessageHandle.ClaimCheckStorageURI)
 	message.Event = e
 	message.IncRowsCount()
 	if callback != nil {

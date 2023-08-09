@@ -262,7 +262,7 @@ func newJSONMessageForDML(
 			if config.LargeMessageHandle.EnableClaimCheck() {
 				out.RawByte(',')
 				out.RawString("\"claimCheckLocation\":")
-				out.String(common.NewClaimCheckFileName(e))
+				out.String(common.NewClaimCheckFileName(config.LargeMessageHandle.ClaimCheckStorageURI))
 			}
 		}
 		out.RawByte('}')
@@ -415,7 +415,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
 			m.Event = e
-			m.ClaimCheckFileName = common.NewClaimCheckFileName(e)
+			m.ClaimCheckFileName = common.NewClaimCheckFileName(c.config.LargeMessageHandle.ClaimCheckStorageURI)
 		}
 	}
 
