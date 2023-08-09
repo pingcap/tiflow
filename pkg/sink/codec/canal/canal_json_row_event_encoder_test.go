@@ -21,6 +21,8 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
@@ -46,7 +48,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok := e.(*JSONRowEventEncoder)
 	require.True(t, ok)
 
-	data, err := newJSONMessageForDML(encoder.builder, testCaseInsert, encoder.config, false)
+	data, err := newJSONMessageForDML(encoder.builder, testCaseInsert, encoder.config, false, "")
 	require.NoError(t, err)
 
 	var msg canalJSONMessageInterface = &JSONMessage{}
@@ -97,7 +99,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false, "")
 	require.NoError(t, err)
 
 	jsonMsg = &JSONMessage{}
@@ -117,7 +119,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Old[0], col.Name)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, encoder.config, false)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, encoder.config, false, "")
 	require.NoError(t, err)
 
 	jsonMsg = &JSONMessage{}
@@ -131,7 +133,8 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Data[0], col.Name)
 	}
 
-	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, &common.Config{DeleteOnlyHandleKeyColumns: true}, false)
+	codecConfig = &common.Config{DeleteOnlyHandleKeyColumns: true}
+	data, err = newJSONMessageForDML(encoder.builder, testCaseDelete, codecConfig, false, "")
 	require.NoError(t, err)
 
 	jsonMsg = &JSONMessage{}
@@ -160,7 +163,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	encoder, ok = e.(*JSONRowEventEncoder)
 	require.True(t, ok)
-	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false, "")
 	require.NoError(t, err)
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}
@@ -172,7 +175,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	encoder, ok = e.(*JSONRowEventEncoder)
 	require.True(t, ok)
-	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false)
+	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false, "")
 	require.NoError(t, err)
 
 	withExtension = &canalJSONMessageWithTiDBExtension{}
@@ -182,6 +185,36 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
+}
+
+func TestNewCanalJSONLargeMessageClaimCheck(t *testing.T) {
+	t.Parallel()
+
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
+	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "s3:///canal-json-claim-check"
+	codecConfig.MaxMessageBytes = 500
+
+	encoder := newJSONRowEventEncoder(codecConfig)
+
+	ctx := context.Background()
+	err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
+	require.NoError(t, err)
+
+	// this is a large message, should be delivered to the external storage.
+	message := encoder.Build()[0]
+	require.NotEmpty(t, message.ClaimCheckFileName)
+
+	// the message delivered to the kafka
+	claimCheckLocationMessage, err := encoder.(codec.ClaimCheckLocationEncoder).NewClaimCheckLocationMessage(message)
+	require.NoError(t, err)
+	require.Empty(t, claimCheckLocationMessage.ClaimCheckFileName)
+
+	var decoded canalJSONMessageWithTiDBExtension
+	err = json.Unmarshal(claimCheckLocationMessage.Value, &decoded)
+	require.NoError(t, err)
+	require.Equal(t, message.ClaimCheckFileName, decoded.Extensions.ClaimCheckLocation)
 }
 
 func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
@@ -263,7 +296,7 @@ func TestBatching(t *testing.T) {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
 		err := encoder.AppendRowChangedEvent(context.Background(), "", &updateCase, nil)
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		if i%100 == 0 {
 			msgs := encoder.Build()
@@ -275,7 +308,7 @@ func TestBatching(t *testing.T) {
 
 				var msg JSONMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
-				require.Nil(t, err)
+				require.NoError(t, err)
 				require.Equal(t, "UPDATE", msg.EventType)
 			}
 		}
@@ -288,12 +321,12 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
-		config := &common.Config{
+		codecConfig := &common.Config{
 			EnableTiDBExtension: enable,
 		}
 		encoder := &JSONRowEventEncoder{
 			builder: newCanalEntryBuilder(),
-			config:  config,
+			config:  codecConfig,
 		}
 
 		require.NotNil(t, encoder)
@@ -309,19 +342,19 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		require.NotNil(t, msg)
 
 		ctx := context.Background()
-		decoder, err := NewBatchDecoder(ctx, config, nil)
+		decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 		require.NoError(t, err)
 
 		err = decoder.AddKeyValue(msg.Key, msg.Value)
 		require.NoError(t, err)
 
 		ty, hasNext, err := decoder.HasNext()
-		require.Nil(t, err)
+		require.NoError(t, err)
 		if enable {
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeResolved, ty)
 			consumed, err := decoder.NextResolvedEvent()
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.Equal(t, watermark, consumed)
 		} else {
 			require.False(t, hasNext)
@@ -329,7 +362,7 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		}
 
 		ty, hasNext, err = decoder.HasNext()
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.False(t, hasNext)
 		require.Equal(t, model.MessageTypeUnknown, ty)
 	}
@@ -344,7 +377,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 	}
 	require.NotNil(t, encoder)
 	msg, err := encoder.EncodeCheckpointEvent(watermark)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, msg)
 
 	// Unmarshal from the data we have encoded.
@@ -353,13 +386,13 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 		&tidbExtension{},
 	}
 	err = json.Unmarshal(msg.Value, &jsonMsg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, watermark, jsonMsg.Extensions.WatermarkTs)
 	// Hack the build time.
 	// Otherwise, the timing will be inconsistent.
 	jsonMsg.BuildTime = 1469579899
 	rawBytes, err := json.MarshalIndent(jsonMsg, "", "  ")
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// No commit ts will be output.
 	expectedJSON := `{
@@ -400,7 +433,7 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	// Otherwise, the timing will be inconsistent.
 	msg.BuildTime = 1469579899
 	rawBytes, err := json.MarshalIndent(msg, "", "  ")
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// No watermark ts will be output.
 	expectedJSON := `{
@@ -487,7 +520,7 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 	// Append the events.
 	for _, test := range tests {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")
 
@@ -525,11 +558,11 @@ func TestMaxMessageBytes(t *testing.T) {
 	cfg := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(maxMessageBytes)
 	encoder := NewJSONRowEventEncoderBuilder(cfg).Build()
 	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// the test message length is larger than max-message-bytes
 	cfg = cfg.WithMaxMessageBytes(100)
 	encoder = NewJSONRowEventEncoderBuilder(cfg).Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-	require.NotNil(t, err)
+	require.Error(t, err, cerror.ErrMessageTooLarge)
 }
