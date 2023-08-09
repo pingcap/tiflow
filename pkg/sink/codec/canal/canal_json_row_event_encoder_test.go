@@ -16,6 +16,7 @@ package canal
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -24,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
 )
@@ -187,13 +189,13 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
 }
 
-func TestNewCanalJSONLargeMessageClaimCheck(t *testing.T) {
+func TestCanalJSONClaimCheckE2E(t *testing.T) {
 	t.Parallel()
 
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
-	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "s3:///canal-json-claim-check"
+	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/canal-json-claim-check"
 	codecConfig.MaxMessageBytes = 500
 
 	encoder := newJSONRowEventEncoder(codecConfig)
@@ -203,18 +205,58 @@ func TestNewCanalJSONLargeMessageClaimCheck(t *testing.T) {
 	require.NoError(t, err)
 
 	// this is a large message, should be delivered to the external storage.
-	message := encoder.Build()[0]
-	require.NotEmpty(t, message.ClaimCheckFileName)
+	largeMessage := encoder.Build()[0]
+	require.NotEmpty(t, largeMessage.ClaimCheckFileName)
 
 	// the message delivered to the kafka
-	claimCheckLocationMessage, err := encoder.(codec.ClaimCheckLocationEncoder).NewClaimCheckLocationMessage(message)
+	claimCheckLocationMessage, err := encoder.(codec.ClaimCheckLocationEncoder).NewClaimCheckLocationMessage(largeMessage)
 	require.NoError(t, err)
 	require.Empty(t, claimCheckLocationMessage.ClaimCheckFileName)
 
 	var decoded canalJSONMessageWithTiDBExtension
 	err = json.Unmarshal(claimCheckLocationMessage.Value, &decoded)
 	require.NoError(t, err)
-	require.Equal(t, message.ClaimCheckFileName, decoded.Extensions.ClaimCheckLocation)
+	_, claimCheckFilename := filepath.Split(decoded.Extensions.ClaimCheckLocation)
+	require.Equal(t, largeMessage.ClaimCheckFileName, claimCheckFilename)
+
+	changefeedID := model.DefaultChangeFeedID("claim-check-test")
+	claimCheckStorage, err := claimcheck.New(ctx, codecConfig.LargeMessageHandle, changefeedID)
+	require.NoError(t, err)
+	defer claimCheckStorage.Close()
+
+	err = claimCheckStorage.WriteMessage(ctx, largeMessage)
+	require.NoError(t, err)
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
+	require.NoError(t, err)
+
+	messageType, ok, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.Equal(t, messageType, model.MessageTypeRow)
+	require.True(t, ok)
+
+	decodedLargeEvent, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+
+	require.Equal(t, testCaseInsert.CommitTs, decodedLargeEvent.CommitTs)
+	require.Equal(t, testCaseInsert.Table, decodedLargeEvent.Table)
+	require.Equal(t, testCaseInsert.PreColumns, decodedLargeEvent.PreColumns)
+
+	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
+	for _, column := range decodedLargeEvent.Columns {
+		decodedColumns[column.Name] = column
+	}
+
+	expectedValue := collectExpectedDecodedValue(testColumnsTable)
+	for _, column := range testCaseInsert.Columns {
+		decodedColumn, ok := decodedColumns[column.Name]
+		require.True(t, ok)
+		require.Equal(t, column.Type, decodedColumn.Type)
+		require.Equal(t, expectedValue[column.Name], decodedColumn.Value)
+	}
 }
 
 func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {

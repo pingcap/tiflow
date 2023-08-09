@@ -16,6 +16,7 @@ package open
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/stretchr/testify/require"
 )
 
@@ -236,7 +238,7 @@ func TestOpenProtocolBatchCodec(t *testing.T) {
 		})
 }
 
-func TestAppendClaimCheckMessage(t *testing.T) {
+func TestE2EClaimCheckMessage(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -265,12 +267,23 @@ func TestAppendClaimCheckMessage(t *testing.T) {
 	require.NotEmptyf(t, messages[1].ClaimCheckFileName, "claim check file name should not be empty")
 	require.Empty(t, messages[2].ClaimCheckFileName)
 
+	// write the large message to the external storage, the local filesystem in this case.
 	largeMessage := messages[1]
+
+	changefeedID := model.DefaultChangeFeedID("claim-check-test")
+	claimCheckStorage, err := claimcheck.New(ctx, codecConfig.LargeMessageHandle, changefeedID)
+	require.NoError(t, err)
+	defer claimCheckStorage.Close()
+
+	err = claimCheckStorage.WriteMessage(ctx, largeMessage)
+	require.NoError(t, err)
+
+	// claimCheckLocationMessage send to the kafka.
 	claimCheckLocationMessage, err := encoder.(codec.ClaimCheckLocationEncoder).NewClaimCheckLocationMessage(largeMessage)
 	require.NoError(t, err)
 	require.Empty(t, claimCheckLocationMessage.ClaimCheckFileName)
 
-	decoder, err := NewBatchDecoder(ctx, codecConfig, &sql.DB{})
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 	require.NoError(t, err)
 	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
 	require.NoError(t, err)
@@ -280,7 +293,26 @@ func TestAppendClaimCheckMessage(t *testing.T) {
 	require.Equal(t, messageType, model.MessageTypeRow)
 	require.True(t, ok)
 
-	require.Equal(t, largeMessage.ClaimCheckFileName, decoder.(*BatchDecoder).nextKey.ClaimCheckLocation)
+	_, claimCheckFileName := filepath.Split(decoder.(*BatchDecoder).nextKey.ClaimCheckLocation)
+	require.Equal(t, largeMessage.ClaimCheckFileName, claimCheckFileName)
+
+	decodedLargeEvent, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+
+	require.Equal(t, largeTestEvent.CommitTs, decodedLargeEvent.CommitTs)
+	require.Equal(t, largeTestEvent.Table, decodedLargeEvent.Table)
+
+	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
+	for _, column := range decodedLargeEvent.Columns {
+		decodedColumns[column.Name] = column
+	}
+
+	for _, column := range largeTestEvent.Columns {
+		decodedColumn, ok := decodedColumns[column.Name]
+		require.True(t, ok)
+		require.Equal(t, column.Type, decodedColumn.Type)
+		require.Equal(t, column.Value, decodedColumn.Value)
+	}
 }
 
 func TestAppendMessageOnlyHandleKeyColumns(t *testing.T) {

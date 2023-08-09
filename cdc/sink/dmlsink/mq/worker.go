@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -83,7 +84,7 @@ type worker struct {
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
 
-	claimCheck *ClaimCheck
+	claimCheck *claimcheck.ClaimCheck
 }
 
 // newWorker creates a new flush worker.
@@ -92,7 +93,7 @@ func newWorker(
 	protocol config.Protocol,
 	producer dmlproducer.DMLProducer,
 	encoderGroup codec.EncoderGroup,
-	claimCheck *ClaimCheck,
+	claimCheck *claimcheck.ClaimCheck,
 	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	statistics *metrics.Statistics,
 ) *worker {

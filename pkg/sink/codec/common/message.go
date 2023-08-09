@@ -16,7 +16,7 @@ package common
 import (
 	"encoding/binary"
 	"encoding/json"
-	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,6 +45,7 @@ type Message struct {
 	Callback  func()            // Callback function will be called when the message is sent to the sink.
 
 	// ClaimCheckFileName is set if the message should be sent to the claim check storage.
+	// it's only the file name, since the claim check storage writer know the path.
 	ClaimCheckFileName string
 
 	Event *model.RowChangedEvent
@@ -173,6 +174,11 @@ func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
 // UUID V4 is used to generate random and unique file names.
 // This should not exceed the S3 object name length limit.
 // ref https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
-func NewClaimCheckFileName(prefix string) string {
-	return path.Join(prefix, uuid.NewString()+".json")
+func NewClaimCheckFileName() string {
+	return uuid.NewString() + ".json"
+}
+
+// ClaimCheckFileNameWithPrefix returns the file name with prefix, the full path.
+func ClaimCheckFileNameWithPrefix(prefix, fileName string) string {
+	return filepath.Join(prefix, fileName)
 }

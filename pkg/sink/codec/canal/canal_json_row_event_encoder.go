@@ -416,7 +416,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
 			m.Event = e
-			m.ClaimCheckFileName = common.NewClaimCheckFileName(c.config.LargeMessageHandle.ClaimCheckStorageURI)
+			m.ClaimCheckFileName = common.NewClaimCheckFileName()
 		}
 	}
 
@@ -426,7 +426,8 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 // NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
 func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
-	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true, origin.ClaimCheckFileName)
+	claimCheckLocation := common.ClaimCheckFileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true, claimCheckLocation)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}

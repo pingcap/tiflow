@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mq
+package claimcheck
 
 import (
 	"bytes"
@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -46,8 +45,8 @@ type ClaimCheck struct {
 	metricSendMessageCount    prometheus.Counter
 }
 
-// NewClaimCheck return a new ClaimCheck.
-func NewClaimCheck(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
+// New return a new ClaimCheck.
+func New(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
 	storage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -63,8 +62,8 @@ func NewClaimCheck(ctx context.Context, config *config.LargeMessageHandleConfig,
 		changefeedID:              changefeedID,
 		storage:                   storage,
 		compression:               config.ClaimCheckCompression,
-		metricSendMessageDuration: mq.ClaimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricSendMessageCount:    mq.ClaimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricSendMessageDuration: claimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricSendMessageCount:    claimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}, nil
 }
 
@@ -106,6 +105,6 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 
 // Close the claim check by clean up the metrics.
 func (c *ClaimCheck) Close() {
-	mq.ClaimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
-	mq.ClaimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
+	claimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
+	claimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
 }

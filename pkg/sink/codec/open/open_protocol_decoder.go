@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"path/filepath"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -31,8 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
 )
 
 // BatchDecoder decodes the byte of a batch into the original messages.
@@ -46,7 +45,6 @@ type BatchDecoder struct {
 	storage storage.ExternalStorage
 
 	upstreamTiDB *sql.DB
-	bytesDecoder *encoding.Decoder
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
@@ -71,7 +69,6 @@ func NewBatchDecoder(ctx context.Context, config *common.Config, db *sql.DB) (co
 	return &BatchDecoder{
 		storage:      storage,
 		upstreamTiDB: db,
-		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
 	}, nil
 }
 
@@ -296,7 +293,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 }
 
 func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (*model.RowChangedEvent, error) {
-	data, err := b.storage.ReadFile(ctx, b.nextKey.ClaimCheckLocation)
+	_, claimCheckFileName := filepath.Split(b.nextKey.ClaimCheckLocation)
+	data, err := b.storage.ReadFile(ctx, claimCheckFileName)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
