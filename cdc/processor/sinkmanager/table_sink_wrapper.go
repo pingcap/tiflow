@@ -196,9 +196,9 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	return t.tableSink.s.UpdateResolvedTs(ts)
 }
 
-func (t *tableSinkWrapper) getCheckpointTs() (model.ResolvedTs, time.Time) {
-	t.tableSink.RLock()
-	defer t.tableSink.RUnlock()
+func (t *tableSinkWrapper) getCheckpointTs() (model.ResolvedTs, uint64, time.Time) {
+	t.tableSink.Lock()
+	defer t.tableSink.Unlock()
 	if t.tableSink.s != nil {
 		checkpointTs := t.tableSink.s.GetCheckpointTs()
 		if t.tableSink.checkpointTs.Less(checkpointTs) {
@@ -208,7 +208,13 @@ func (t *tableSinkWrapper) getCheckpointTs() (model.ResolvedTs, time.Time) {
 	} else {
 		t.tableSink.advanced = time.Now()
 	}
-	return t.tableSink.checkpointTs, t.tableSink.advanced
+	return t.tableSink.checkpointTs, t.tableSink.version, t.tableSink.advanced
+}
+
+func (t *tableSinkWrapper) updateTableSinkAdvanced() {
+	t.tableSink.Lock()
+	defer t.tableSink.Unlock()
+	t.tableSink.advanced = time.Now()
 }
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {

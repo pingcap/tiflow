@@ -262,7 +262,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			log.Warn("Sink manager backend sink fails",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Uint64("version", version),
+				zap.Uint64("factoryVersion", sinkFactoryVersion),
 				zap.Error(err))
 			m.clearSinkFactory()
 
@@ -333,7 +333,8 @@ func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 		return m.sinkFactory.errors, m.sinkFactory.version
 	}
 
-	if m.sinkFactory.f, err = factory.New(m.managerCtx, m.changefeedID, uri, cfg, errCh); err != nil {
+	m.sinkFactory.f, err = factory.New(m.managerCtx, m.changefeedID, uri, cfg, m.sinkFactory.errors)
+	if err != nil {
 		emitError(err)
 		return m.sinkFactory.errors, m.sinkFactory.version
 	}
@@ -341,7 +342,7 @@ func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 	log.Info("Sink manager inits sink factory success",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.Uint64("version", m.sinkFactory.version))
+		zap.Uint64("factoryVersion", m.sinkFactory.version))
 	return m.sinkFactory.errors, m.sinkFactory.version
 }
 
@@ -351,12 +352,14 @@ func (m *SinkManager) clearSinkFactory() {
 	if m.sinkFactory.f != nil {
 		log.Info("Sink manager closing sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID))
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Uint64("factoryVersion", m.sinkFactory.version))
 		m.sinkFactory.f.Close()
 		m.sinkFactory.f = nil
 		log.Info("Sink manager has closed sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID))
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Uint64("factoryVersion", m.sinkFactory.version))
 	}
 	if m.sinkFactory.errors != nil {
 		close(m.sinkFactory.errors)
@@ -366,7 +369,7 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
-func (m *SinkManager) putSinkFactoryError(err error, version uint64) {
+func (m *SinkManager) putSinkFactoryError(err error, version uint64) bool {
 	m.sinkFactory.Lock()
 	defer m.sinkFactory.Unlock()
 	skipped := true
@@ -380,8 +383,11 @@ func (m *SinkManager) putSinkFactoryError(err error, version uint64) {
 	log.Info("Sink manager tries to put an sink error",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.Error(err),
-		zap.Bool("skipped", skipped))
+		zap.Bool("skipped", skipped),
+		zap.Uint64("factoryVersion", m.sinkFactory.version),
+		zap.Error(err))
+
+	return !skipped
 }
 
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
@@ -429,7 +435,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 					if time.Since(sink.lastCleanTime) < cleanTableInterval {
 						return true
 					}
-					checkpointTs, _ := sink.getCheckpointTs()
+					checkpointTs, _, _ := sink.getCheckpointTs()
 					resolvedMark := checkpointTs.ResolvedMark()
 					if resolvedMark == 0 {
 						return true
@@ -901,7 +907,7 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span))
 	}
-	checkpointTs, _ := value.(*tableSinkWrapper).getCheckpointTs()
+	checkpointTs, _, _ := value.(*tableSinkWrapper).getCheckpointTs()
 	log.Info("Remove table sink successfully",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -970,7 +976,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 	tableSink := value.(*tableSinkWrapper)
 
-	checkpointTs, advanced := tableSink.getCheckpointTs()
+	checkpointTs, version, advanced := tableSink.getCheckpointTs()
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
@@ -979,12 +985,10 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
-			zap.Any("checkpointTs", checkpointTs))
-
-		tableSink.tableSink.RLock()
-		tableSinkVersion := tableSink.tableSink.version
-		tableSink.tableSink.RUnlock()
-		m.putSinkFactoryError(errors.New("table sink stuck"), tableSinkVersion)
+			zap.Any("checkpointTs", checkpointTs),
+			zap.Uint64("factoryVersion", version))
+		tableSink.updateTableSinkAdvanced()
+		m.putSinkFactoryError(errors.New("table sink stuck"), version)
 	}
 
 	var resolvedTs model.Ts
