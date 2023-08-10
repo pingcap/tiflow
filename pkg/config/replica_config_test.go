@@ -66,7 +66,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
-	conf.Sink.AdvanceTimeout = 600
+	conf.Sink.AdvanceTimeout = util.AddressOf(uint(600))
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
 		ReplicationFactor:            aws.Int16(1),

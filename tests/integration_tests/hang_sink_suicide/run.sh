@@ -23,7 +23,8 @@ function run() {
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --pd $pd_addr --logsuffix 1 --addr "127.0.0.1:8300"
 
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/?max-txn-row=1"
-	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
+	changefeed_id=test
+	cdc cli changefeed create -c $changefeed_id --config $CUR/conf/changefeed.toml --pd=$pd_addr --sink-uri="$SINK_URI"
 
 	run_sql "CREATE DATABASE hang_sink_suicide;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table hang_sink_suicide.t1 (id int primary key auto_increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

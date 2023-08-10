@@ -409,6 +409,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		if c.Sink.TxnAtomicity != nil {
 			res.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(*c.Sink.TxnAtomicity))
 		}
+		if c.Sink.AdvanceTimeout != nil {
+			res.Sink.AdvanceTimeout = util.AddressOf(*c.Sink.AdvanceTimeout)
+		}
 
 	}
 	if c.Mounter != nil {
@@ -637,6 +640,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.TxnAtomicity != nil {
 			res.Sink.TxnAtomicity = util.AddressOf(string(*cloned.Sink.TxnAtomicity))
 		}
+		if cloned.Sink.AdvanceTimeout != nil {
+			res.Sink.AdvanceTimeout = util.AddressOf(*cloned.Sink.AdvanceTimeout)
+		}
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
@@ -788,6 +794,7 @@ type SinkConfig struct {
 	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	AdvanceTimeout                   *uint               `json:"advance-timeout,omitempty"`
 }
 
 // CSVConfig denotes the csv config

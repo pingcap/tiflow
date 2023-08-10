@@ -68,7 +68,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		TiDBSourceID:                     1,
-		AdvanceTimeout:                   600,
+		AdvanceTimeout:                   util.AddressOf(uint(600)),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
