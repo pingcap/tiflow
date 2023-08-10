@@ -50,8 +50,6 @@ const (
 	// engine.CleanByTable can be expensive. So it's necessary to reduce useless calls.
 	cleanTableInterval  = 5 * time.Second
 	cleanTableMinEvents = 128
-	maxRetryDuration    = 30 * time.Minute
-	errGCInterval       = 10 * time.Minute
 )
 
 // TableStats of a table sink.

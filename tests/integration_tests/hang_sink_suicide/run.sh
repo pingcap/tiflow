@@ -28,9 +28,12 @@ function run() {
 
 	run_sql "CREATE DATABASE hang_sink_suicide;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE table hang_sink_suicide.t1 (id int primary key auto_increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "CREATE table hang_sink_suicide.t2 (id int primary key auto_increment)" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	check_table_exists "hang_sink_suicide.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists "hang_sink_suicide.t2" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	run_sql "insert into hang_sink_suicide.t1 values (),(),(),(),()"
+	run_sql "insert into hang_sink_suicide.t2 values (),(),(),(),()"
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 	export GO_FAILPOINTS=''
