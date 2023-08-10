@@ -367,7 +367,7 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
-func (m *SinkManager) putSinkFactoryError(err error, version uint64) bool {
+func (m *SinkManager) putSinkFactoryError(err error, version uint64) {
 	m.sinkFactory.Lock()
 	defer m.sinkFactory.Unlock()
 	skipped := true
@@ -383,8 +383,6 @@ func (m *SinkManager) putSinkFactoryError(err error, version uint64) bool {
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Bool("skipped", skipped),
 		zap.String("error", err.Error()))
-
-	return !skipped
 }
 
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
