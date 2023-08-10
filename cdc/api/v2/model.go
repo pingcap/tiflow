@@ -794,7 +794,7 @@ type SinkConfig struct {
 	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
-	AdvanceTimeout                   *uint               `json:"advance-timeout,omitempty"`
+	AdvanceTimeout                   *uint               `json:"advance_timeout,omitempty"`
 }
 
 // CSVConfig denotes the csv config
