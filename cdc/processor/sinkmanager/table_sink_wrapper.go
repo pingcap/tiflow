@@ -200,6 +200,10 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	return t.tableSink.s.UpdateResolvedTs(ts)
 }
 
+// getCheckpointTs returns
+// 1. checkpoint timestamp of the table;
+// 2. the table sink version, which comes from `tableSinkCreater`;
+// 3. recent time of the table is advanced.
 func (t *tableSinkWrapper) getCheckpointTs() (model.ResolvedTs, uint64, time.Time) {
 	t.tableSink.Lock()
 	defer t.tableSink.Unlock()
