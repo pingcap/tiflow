@@ -571,20 +571,29 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 	if len(errs) == 0 {
 		return
 	}
+	lastError := errs[len(errs)-1]
 
 	if m.state != nil && m.state.Status != nil {
 		currTime := m.upstream.PDClock.CurrentTime()
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
+		// Conditions:
+		// 1. checkpoint lag is large enough;
+		// 2. checkpoint hasn't been advanced for a long while;
+		// 3. the changefeed has been initialized.
 		if currTime.Sub(ckptTime) > defaultBackoffMaxElapsedTime &&
 			time.Since(m.checkpointTsAdvanced) > defaultBackoffMaxElapsedTime &&
-			true /*TODO: how to handle slow start up?*/ {
-			m.shouldBeRunning = false
-			m.patchState(model.StateFailed)
+			m.state.Status.MinTableBarrierTs > m.state.Info.StartTs {
+			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
+			m.handleError(&model.RunningError{
+				Time:    lastError.Time,
+				Addr:    lastError.Addr,
+				Code:    string(code),
+				Message: lastError.Message,
+			})
 			return
 		}
 	}
 
-	lastError := errs[len(errs)-1]
 	m.patchState(model.StateWarning)
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		if info == nil {
