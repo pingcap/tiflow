@@ -17,9 +17,7 @@ import (
 	"sort"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
@@ -29,28 +27,22 @@ func TestGenKeyListCaseInSensitive(t *testing.T) {
 
 	columns := []*model.Column{
 		{
-			Value: "XyZ",
-		},
-	}
-	colInfo := []*timodel.ColumnInfo{
-		{
-			FieldType: *types.NewFieldTypeWithCollation(mysql.TypeVarchar, "utf8_unicode_ci", 10),
+			Value:     "XyZ",
+			Type:      mysql.TypeVarchar,
+			Collation: "utf8_unicode_ci",
 		},
 	}
 
-	first := genKeyList(columns, colInfo, 0, []int{0}, 1)
+	first := genKeyList(columns, 0, []int{0}, 1)
 
 	columns = []*model.Column{
 		{
-			Value: "xYZ",
+			Value:     "xYZ",
+			Type:      mysql.TypeVarchar,
+			Collation: "utf8_unicode_ci",
 		},
 	}
-	colInfo = []*timodel.ColumnInfo{
-		{
-			FieldType: *types.NewFieldTypeWithCollation(mysql.TypeVarchar, "utf8_unicode_ci", 10),
-		},
-	}
-	second := genKeyList(columns, colInfo, 0, []int{0}, 1)
+	second := genKeyList(columns, 0, []int{0}, 1)
 
 	require.Equal(t, first, second)
 }
@@ -85,19 +77,6 @@ func TestGenKeys(t *testing.T) {
 							Value: 1,
 						},
 					},
-					TableInfo: &model.TableInfo{
-						TableInfo: &timodel.TableInfo{
-							Columns: []*timodel.ColumnInfo{
-								nil,
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-							},
-						},
-					},
 					IndexColumns: [][]int{{1, 2}},
 				}, {
 					StartTs:  418658114257813514,
@@ -116,19 +95,6 @@ func TestGenKeys(t *testing.T) {
 							Type:  mysql.TypeLong,
 							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
 							Value: 21,
-						},
-					},
-					TableInfo: &model.TableInfo{
-						TableInfo: &timodel.TableInfo{
-							Columns: []*timodel.ColumnInfo{
-								nil,
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-							},
 						},
 					},
 					IndexColumns: [][]int{{1, 2}},
@@ -158,19 +124,6 @@ func TestGenKeys(t *testing.T) {
 							Value: 1,
 						},
 					},
-					TableInfo: &model.TableInfo{
-						TableInfo: &timodel.TableInfo{
-							Columns: []*timodel.ColumnInfo{
-								nil,
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-							},
-						},
-					},
 					IndexColumns: [][]int{{1}, {2}},
 				}, {
 					StartTs:  418658114257813514,
@@ -189,19 +142,6 @@ func TestGenKeys(t *testing.T) {
 							Type:  mysql.TypeLong,
 							Flag:  model.BinaryFlag | model.HandleKeyFlag,
 							Value: 21,
-						},
-					},
-					TableInfo: &model.TableInfo{
-						TableInfo: &timodel.TableInfo{
-							Columns: []*timodel.ColumnInfo{
-								nil,
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-							},
 						},
 					},
 					IndexColumns: [][]int{{1}, {2}},
@@ -231,19 +171,6 @@ func TestGenKeys(t *testing.T) {
 							Value: nil,
 						},
 					},
-					TableInfo: &model.TableInfo{
-						TableInfo: &timodel.TableInfo{
-							Columns: []*timodel.ColumnInfo{
-								nil,
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-							},
-						},
-					},
 					IndexColumns: [][]int{{1}, {2}},
 				}, {
 					StartTs:  418658114257813514,
@@ -262,19 +189,6 @@ func TestGenKeys(t *testing.T) {
 							Type:  mysql.TypeLong,
 							Flag:  model.BinaryFlag | model.HandleKeyFlag,
 							Value: 21,
-						},
-					},
-					TableInfo: &model.TableInfo{
-						TableInfo: &timodel.TableInfo{
-							Columns: []*timodel.ColumnInfo{
-								nil,
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-								{
-									FieldType: *types.NewFieldTypeWithCollation(mysql.TypeLong, "utf8mb4_bin", 10),
-								},
-							},
 						},
 					},
 					IndexColumns: [][]int{{1}, {2}},
