@@ -118,7 +118,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 						Sink: &config.SinkConfig{
-							Terminator: putil.AddressOf(config.CRLF),
+							Terminator:     putil.AddressOf(config.CRLF),
+							AdvanceTimeout: putil.AddressOf(uint(600)),
 						},
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
 					},
@@ -168,7 +169,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							Terminator: putil.AddressOf(config.CRLF),
+							Terminator:     putil.AddressOf(config.CRLF),
+							AdvanceTimeout: putil.AddressOf(uint(600)),
 						},
 						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
@@ -224,7 +226,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							Terminator: putil.AddressOf(config.CRLF),
+							Terminator:     putil.AddressOf(config.CRLF),
+							AdvanceTimeout: putil.AddressOf(uint(600)),
 						},
 						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
