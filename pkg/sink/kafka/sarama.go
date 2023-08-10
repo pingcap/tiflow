@@ -50,7 +50,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	config.Admin.Retry.Max = 10
 	config.Admin.Retry.Backoff = 200 * time.Millisecond
 	// This timeout control the request timeout for each admin request.
-	// set it as the write timeout.
+	// set it as the read timeout.
 	config.Admin.Timeout = 10 * time.Second
 
 	// Producer.Retry take effect when the producer try to send message to kafka
