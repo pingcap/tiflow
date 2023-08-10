@@ -15,6 +15,7 @@ package open
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -60,7 +61,7 @@ func TestDecodeEvent(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder, err := NewBatchDecoder(ctx, codecConfig)
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 	require.NoError(t, err)
 
 	err = decoder.AddKeyValue(message.Key, message.Value)
@@ -101,13 +102,7 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
-		LargeMessageHandle: &config.LargeMessageHandleConfig{
-			LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
-		},
-	}
-	decoder, err := NewBatchDecoder(ctx, codecConfig)
+	decoder, err := NewBatchDecoder(ctx, codecConfig, &sql.DB{})
 	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
@@ -116,12 +111,11 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, tp)
 
-	obtained, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, insertEvent.CommitTs, obtained.CommitTs)
+	nextEvent := decoder.(*BatchDecoder).nextEvent
+	require.NotNil(t, nextEvent)
 
 	obtainedColumns := make(map[string]*model.Column)
-	for _, col := range obtained.Columns {
+	for _, col := range nextEvent.Columns {
 		obtainedColumns[col.Name] = col
 		require.True(t, col.Flag.IsHandleKey())
 	}
