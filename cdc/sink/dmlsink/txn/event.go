@@ -105,7 +105,8 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 
 func genKeyList(
 	columns []*model.Column, columnInfo []*timodel.ColumnInfo,
-	iIdx int, colIdx []int, tableID int64) []byte {
+	iIdx int, colIdx []int, tableID int64,
+) []byte {
 	var key []byte
 	for _, i := range colIdx {
 		// if a column value is null, we can ignore this index
