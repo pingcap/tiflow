@@ -309,12 +309,22 @@ func datum2Column(
 		offset := tableInfo.RowColumnsOffset[colInfo.ID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
+<<<<<<< HEAD
 			Name:    colName,
 			Type:    colInfo.GetType(),
 			Charset: colInfo.GetCharset(),
 			Value:   colValue,
 			Default: defaultValue,
 			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
+=======
+			Name:      colName,
+			Type:      colInfo.GetType(),
+			Charset:   colInfo.GetCharset(),
+			Collation: colInfo.GetCollate(),
+			Value:     colValue,
+			Default:   defaultValue,
+			Flag:      tableInfo.ColumnsFlag[colID],
+>>>>>>> e04b346e95 (mysql(ticdc): consider collation when build the causality key (#9534))
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}

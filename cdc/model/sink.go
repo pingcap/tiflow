@@ -469,12 +469,22 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 
 // Column represents a column value in row changed event
 type Column struct {
+<<<<<<< HEAD
 	Name    string         `json:"name" msg:"name"`
 	Type    byte           `json:"type" msg:"type"`
 	Charset string         `json:"charset" msg:"charset"`
 	Flag    ColumnFlagType `json:"flag" msg:"-"`
 	Value   interface{}    `json:"value" msg:"value"`
 	Default interface{}    `json:"default" msg:"-"`
+=======
+	Name      string         `json:"name" msg:"name"`
+	Type      byte           `json:"type" msg:"type"`
+	Charset   string         `json:"charset" msg:"charset"`
+	Collation string         `json:"collation" msg:"collation"`
+	Flag      ColumnFlagType `json:"flag" msg:"-"`
+	Value     interface{}    `json:"value" msg:"-"`
+	Default   interface{}    `json:"default" msg:"-"`
+>>>>>>> e04b346e95 (mysql(ticdc): consider collation when build the causality key (#9534))
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-"`
