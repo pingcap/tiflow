@@ -228,19 +228,7 @@ func (o *controllerImpl) updateGCSafepoint(
 func (o *controllerImpl) ignoreFailedChangeFeedWhenGC(
 	state *orchestrator.ChangefeedReactorState,
 ) bool {
-	upID := state.Info.UpstreamID
-	us, exist := o.upstreamManager.Get(upID)
-	if !exist {
-		log.Warn("upstream not found", zap.Uint64("ID", upID))
-		return false
-	}
-	// in case the changefeed failed right after it is created
-	// and the status is not initialized yet.
-	ts := state.Info.StartTs
-	if state.Status != nil {
-		ts = state.Status.CheckpointTs
-	}
-	return us.GCManager.IgnoreFailedChangeFeed(ts)
+	return cerror.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(state.Info.Error.Code))
 }
 
 // calculateGCSafepoint calculates GCSafepoint for different upstream.
