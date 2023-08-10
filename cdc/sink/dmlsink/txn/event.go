@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
@@ -76,7 +75,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	var keys [][]byte
 	if len(row.Columns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {
-			key := genKeyList(row.Columns, row.TableInfo.Columns, iIdx, idxCol, row.Table.TableID)
+			key := genKeyList(row.Columns, iIdx, idxCol, row.Table.TableID)
 			if len(key) == 0 {
 				continue
 			}
@@ -85,7 +84,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	}
 	if len(row.PreColumns) != 0 {
 		for iIdx, idxCol := range row.IndexColumns {
-			key := genKeyList(row.PreColumns, row.TableInfo.Columns, iIdx, idxCol, row.Table.TableID)
+			key := genKeyList(row.PreColumns, iIdx, idxCol, row.Table.TableID)
 			if len(key) == 0 {
 				continue
 			}
@@ -104,8 +103,7 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 }
 
 func genKeyList(
-	columns []*model.Column, columnInfo []*timodel.ColumnInfo,
-	iIdx int, colIdx []int, tableID int64,
+	columns []*model.Column, iIdx int, colIdx []int, tableID int64,
 ) []byte {
 	var key []byte
 	for _, i := range colIdx {
@@ -117,7 +115,7 @@ func genKeyList(
 		}
 
 		val := model.ColumnValueString(columns[i].Value)
-		if columnNeeds2LowerCase(columnInfo[i]) {
+		if columnNeeds2LowerCase(columns[i].Type, columns[i].Collation) {
 			val = strings.ToLower(val)
 		}
 
@@ -134,11 +132,11 @@ func genKeyList(
 	return key
 }
 
-func columnNeeds2LowerCase(columnInfo *timodel.ColumnInfo) bool {
-	switch columnInfo.GetType() {
+func columnNeeds2LowerCase(mysqlType byte, collation string) bool {
+	switch mysqlType {
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
-		return collationNeeds2LowerCase(columnInfo.GetCollate())
+		return collationNeeds2LowerCase(collation)
 	}
 	return false
 }
