@@ -203,6 +203,28 @@ func ValidateNamespace(namespace string) error {
 	return nil
 }
 
+// NeedBlockGC returns true if the changefeed need to block the GC safepoint.
+// Note: if the changefeed is failed by GC, it should not block the GC safepoint.
+func (info *ChangeFeedInfo) NeedBlockGC() bool {
+	switch info.State {
+	case StateNormal, StateStopped, StatePending, StateWarning:
+		return true
+	case StateFailed:
+		return !info.isFailedByGC()
+	case StateFinished, StateRemoved:
+	default:
+	}
+	return false
+}
+
+func (info *ChangeFeedInfo) isFailedByGC() bool {
+	if info.Error == nil {
+		log.Panic("changefeed info is not consistent",
+			zap.Any("state", info.State), zap.Any("error", info.Error))
+	}
+	return cerror.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+}
+
 // String implements fmt.Stringer interface, but hide some sensitive information
 func (info *ChangeFeedInfo) String() (str string) {
 	var err error

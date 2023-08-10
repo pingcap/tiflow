@@ -96,6 +96,17 @@ func TestUpdateGCSafePoint(t *testing.T) {
 			changefeedID1.ID),
 		[]byte(`{"config":{},"state":"failed"}`))
 	tester.MustApplyPatches()
+	gcErr := errors.ChangeFeedGCFastFailError[rand.Intn(len(errors.ChangeFeedGCFastFailError))]
+	errCode, ok := errors.RFCCode(gcErr)
+	require.True(t, ok)
+	state.Changefeeds[changefeedID1].PatchInfo(
+		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			if info == nil {
+				return nil, false, nil
+			}
+			info.Error = &model.RunningError{Code: string(errCode), Message: gcErr.Error()}
+			return info, true, nil
+		})
 	state.Changefeeds[changefeedID1].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return &model.ChangeFeedStatus{CheckpointTs: 2}, true, nil
