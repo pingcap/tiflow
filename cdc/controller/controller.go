@@ -259,7 +259,7 @@ func (o *controllerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorS
 		}
 
 		switch changefeedState.Info.State {
-		case model.StateNormal, model.StateStopped, model.StateWarning:
+		case model.StateNormal, model.StateStopped, model.StateWarning, model.StatePending:
 		case model.StateFailed:
 			if o.ignoreFailedChangeFeedWhenGC(changefeedState) {
 				continue
