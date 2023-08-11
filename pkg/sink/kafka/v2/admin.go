@@ -183,7 +183,7 @@ func (a *admin) GetTopicsMeta(
 	return result, nil
 }
 
-func (a *admin) GetTopicsNumPartitions(
+func (a *admin) GetTopicsPartitionsNum(
 	ctx context.Context, topics []string,
 ) (map[string]int32, error) {
 	resp, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
