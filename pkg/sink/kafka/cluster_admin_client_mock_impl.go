@@ -108,6 +108,7 @@ func (c *ClusterAdminClientMockImpl) DescribeCluster() (brokers []*sarama.Broker
 	return nil, c.controllerID, nil
 }
 
+<<<<<<< HEAD
 // DescribeConfig return brokerConfigs directly.
 func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error) {
 	var result []sarama.ConfigEntry
@@ -134,6 +135,17 @@ func (c *ClusterAdminClientMockImpl) DescribeConfig(resource sarama.ConfigResour
 				}
 			}
 		}
+=======
+// GetBrokerConfig implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
+	_ context.Context,
+	configName string,
+) (string, error) {
+	value, ok := c.brokerConfigs[configName]
+	if !ok {
+		return "", errors.ErrKafkaConfigNotFound.GenWithStack(
+			"cannot find the `%s` from the broker's configuration", configName)
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511))
 	}
 	return result, nil
 }
@@ -187,6 +199,17 @@ func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
 	}
 
 	return metadataRes, nil
+}
+
+// GetTopicsPartitionsNum implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetTopicsPartitionsNum(
+	_ context.Context, topics []string,
+) (map[string]int32, error) {
+	result := make(map[string]int32, len(topics))
+	for _, topic := range topics {
+		result[topic] = c.topics[topic].NumPartitions
+	}
+	return result, nil
 }
 
 // CreateTopic adds topic into map.

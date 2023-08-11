@@ -60,9 +60,14 @@ type kafkaTopicManager struct {
 func NewKafkaTopicManager(
 	ctx context.Context,
 	admin kafka.ClusterAdminClient,
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
 	cfg *kafkaconfig.AutoCreateTopicConfig,
 ) (*kafkaTopicManager, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+=======
+	cfg *kafka.AutoCreateTopicConfig,
+) *kafkaTopicManager {
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 	mgr := &kafkaTopicManager{
 		changefeedID:      changefeedID,
 		admin:             admin,
@@ -74,7 +79,7 @@ func NewKafkaTopicManager(
 	// Background refresh metadata.
 	go mgr.backgroundRefreshMeta(ctx)
 
-	return mgr, nil
+	return mgr
 }
 
 // GetPartitionNum returns the number of partitions of the topic.
@@ -103,21 +108,25 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 			)
 			return
 		case <-m.metaRefreshTicker.C:
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
 			topicMetaList, err := m.getMetadataOfTopics()
+=======
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 			// We ignore the error here, because the error may be caused by the
 			// network problem, and we can try to get the metadata next time.
-			if err != nil {
-				log.Warn("Get metadata of topics failed",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Error(err))
+			topicPartitionNums, _ := m.fetchAllTopicsPartitionsNum(ctx)
+			for topic, partitionNum := range topicPartitionNums {
+				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
 			}
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
 
 			for _, detail := range topicMetaList {
 				partitionNum := int32(len(detail.Partitions))
 				m.tryUpdatePartitionsAndLogging(detail.Name, partitionNum)
 			}
 
+=======
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 		}
 	}
 }
@@ -149,18 +158,31 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
 func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, error) {
 	var topicList []string
 
+=======
+// fetchAllTopicsPartitionsNum fetches all topics' partitions number.
+// The error returned by this method could be a transient error that is fixable by the underlying logic.
+// When handling this error, please be cautious.
+// If you simply throw the error to the caller, it may impact the robustness of your program.
+func (m *kafkaTopicManager) fetchAllTopicsPartitionsNum(
+	ctx context.Context,
+) (map[string]int32, error) {
+	var topics []string
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 	m.topics.Range(func(key, value any) bool {
-		topic := key.(string)
-		topicList = append(topicList, topic)
-
+		topics = append(topics, key.(string))
 		return true
 	})
 
 	start := time.Now()
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
 	topicMetaList, err := m.admin.DescribeTopics(topicList)
+=======
+	numPartitions, err := m.admin.GetTopicsPartitionsNum(ctx, topics)
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
@@ -178,7 +200,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("duration", time.Since(start)))
 
-	return topicMetaList, nil
+	return numPartitions, nil
 }
 
 // waitUntilTopicVisible is called after CreateTopic to make sure the topic
@@ -189,7 +211,13 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 func (m *kafkaTopicManager) waitUntilTopicVisible(topicName string) error {
 	err := retry.Do(context.Background(), func() error {
 		start := time.Now()
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
 		topicMetaList, err := m.admin.DescribeTopics([]string{topicName})
+=======
+		// ignoreTopicError is set to false since we just create the topic,
+		// make sure the topic is visible.
+		meta, err := m.admin.GetTopicsMeta(ctx, topics, false)
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 		if err != nil {
 			log.Error("Kafka admin client describe topic failed",
 				zap.String("namespace", m.changefeedID.Namespace),
@@ -281,9 +309,19 @@ func (m *kafkaTopicManager) createTopic(topicName string) (int32, error) {
 }
 
 // CreateTopicAndWaitUntilVisible wraps createTopic and waitUntilTopicVisible together.
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
 func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(topicName string) (int32, error) {
 	// If the topic is not in the cache, we try to get the metadata of the topic.
 	topicDetails, err := m.admin.DescribeTopics([]string{topicName})
+=======
+func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
+	ctx context.Context, topicName string,
+) (int32, error) {
+	// If the topic is not in the cache, we try to get the metadata of the topic.
+	// ignoreTopicErr is set to true to ignore the error if the topic is not found,
+	// which means we should create the topic later.
+	topicDetails, err := m.admin.GetTopicsMeta(ctx, []string{topicName}, true)
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
