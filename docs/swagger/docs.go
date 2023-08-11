@@ -1280,16 +1280,10 @@ var doc = `{
         "config.SinkConfig": {
             "type": "object",
             "properties": {
-<<<<<<< HEAD
-=======
                 "advance-timeout-in-sec": {
                     "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
                     "type": "integer"
                 },
-                "cloud-storage-config": {
-                    "$ref": "#/definitions/config.CloudStorageConfig"
-                },
->>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
                 "column-selectors": {
                     "type": "array",
                     "items": {
@@ -2039,15 +2033,9 @@ var doc = `{
         "v2.SinkConfig": {
             "type": "object",
             "properties": {
-<<<<<<< HEAD
-=======
                 "advance_timeout": {
                     "type": "integer"
                 },
-                "cloud_storage_config": {
-                    "$ref": "#/definitions/v2.CloudStorageConfig"
-                },
->>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
                 "column_selectors": {
                     "type": "array",
                     "items": {

@@ -205,21 +205,11 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			NullString:           config.NULL,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
-<<<<<<< HEAD
 		Terminator:               "\r\n",
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		Protocol:                 "open-protocol",
-=======
-		Terminator:                       util.AddressOf("\r\n"),
-		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
-		EnablePartitionSeparator:         util.AddressOf(true),
-		EnableKafkaSinkV2:                util.AddressOf(false),
-		OnlyOutputUpdatedColumns:         util.AddressOf(false),
-		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		Protocol:                         util.AddressOf("open-protocol"),
-		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
->>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
+		AdvanceTimeoutInSec:      150,
 	}, cfg.Sink)
 }
 
@@ -248,12 +238,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			IncludeCommitTs:      false,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
-<<<<<<< HEAD
-=======
-		OnlyOutputUpdatedColumns:         util.AddressOf(false),
-		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
->>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
+		AdvanceTimeoutInSec: 150,
 	}, cfg.Sink)
 }
 

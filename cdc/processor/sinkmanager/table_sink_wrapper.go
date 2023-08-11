@@ -99,13 +99,8 @@ func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
 
 func newTableSinkWrapper(
 	changefeed model.ChangeFeedID,
-<<<<<<< HEAD
 	tableID model.TableID,
-	tableSinkCreater func() tablesink.TableSink,
-=======
-	span tablepb.Span,
 	tableSinkCreater func() (tablesink.TableSink, uint64),
->>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 	state tablepb.TableState,
 	startTs model.Ts,
 	targetTs model.Ts,
