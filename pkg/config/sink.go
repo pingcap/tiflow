@@ -159,9 +159,9 @@ type SinkConfig struct {
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
 	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
 
-	// AdvanceTimeout is a duration in second. If a table sink progress hasn't been
+	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
-	AdvanceTimeout *uint `toml:"advance-timeout" json:"advance-timeout,omitempty"`
+	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -435,8 +435,8 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		}
 	}
 
-	if s.AdvanceTimeout != nil && *s.AdvanceTimeout == 0 {
-		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout should be greater than 0")
+	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
+		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout-in-sec should be greater than 0")
 	}
 
 	return nil

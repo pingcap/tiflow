@@ -200,9 +200,9 @@ definitions:
     type: object
   config.SinkConfig:
     properties:
-      advance-timeout:
+      advance-timeout-in-sec:
         description: |-
-          AdvanceTimeout is a duration in second. If a table sink progress hasn't been
+          AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
           advanced for this given duration, the sink will be canceled and re-established.
         type: integer
       cloud-storage-config:

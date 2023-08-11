@@ -86,7 +86,10 @@ type SinkManager struct {
 	// sinkFactory used to create table sink.
 	sinkFactory struct {
 		sync.Mutex
-		f       *factory.SinkFactory
+		f *factory.SinkFactory
+		// When every time we want to create a new factory, version will be increased and
+		// errors will be replaced by a new channel. version is used to distinct different
+		// sink factories in table sinks.
 		version uint64
 		errors  chan error
 	}
@@ -975,7 +978,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
-	stuckCheck := time.Duration(*m.changefeedInfo.Config.Sink.AdvanceTimeout) * time.Second
+	stuckCheck := time.Duration(*m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec) * time.Second
 	if advanced.After(time.Unix(0, 0)) && time.Since(advanced) > stuckCheck &&
 		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
 		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",

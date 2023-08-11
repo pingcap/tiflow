@@ -1,2 +1,2 @@
 [sink]
-advance-timeout = 10
+advance-timeout-in-sec = 10

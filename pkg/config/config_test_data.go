@@ -65,7 +65,7 @@ const (
       "claim-check-storage-uri": "",
       "claim-check-compression": ""
     },
-    "advance-timeout": 600
+    "advance-timeout-in-sec": 600
   },
   "consistent": {
     "level": "none",
@@ -279,7 +279,7 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout": 600
+    "advance-timeout-in-sec": 600
   },
   "consistent": {
     "level": "none",
@@ -414,7 +414,7 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout": 600
+    "advance-timeout-in-sec": 600
   },
   "consistent": {
     "level": "none",
