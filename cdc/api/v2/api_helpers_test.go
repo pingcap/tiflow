@@ -70,7 +70,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	cfg.ID = ""
 	cfg.Namespace = ""
 	// changefeed already exists
-	provider.changefeedStatus = &model.ChangeFeedStatus{}
+	provider.changefeedStatus = &model.ChangeFeedStatusForAPI{}
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NotNil(t, err)
 	provider.changefeedStatus = nil
