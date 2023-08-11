@@ -954,16 +954,6 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	}
 }
 
-// ReceivedEvents returns the number of events received by all table sinks.
-func (m *SinkManager) ReceivedEvents() int64 {
-	totalReceivedEvents := int64(0)
-	m.tableSinks.Range(func(_, value interface{}) bool {
-		totalReceivedEvents += value.(*tableSinkWrapper).getReceivedEventCount()
-		return true
-	})
-	return totalReceivedEvents
-}
-
 // wait all sub-routines associated with `m.wg` returned.
 func (m *SinkManager) waitSubroutines() {
 	m.managerCancel()

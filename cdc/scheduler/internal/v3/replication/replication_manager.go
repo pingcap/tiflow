@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/tikv/client-go/v2/oracle"
@@ -491,7 +492,8 @@ func (r *Manager) RunningTasks() map[model.TableID]*ScheduleTask {
 func (r *Manager) AdvanceCheckpoint(
 	currentTables []model.TableID,
 	currentTime time.Time,
-	barrier schedulepb.BarrierWithMinTs,
+	barrier *schedulepb.BarrierWithMinTs,
+	redoMetaManager redo.MetaManager,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestTableID := int64(0)
@@ -555,6 +557,33 @@ func (r *Manager) AdvanceCheckpoint(
 		time.Since(r.lastLogSlowTablesTime) > logSlowTablesInterval {
 		r.logSlowTableInfo(currentTables, currentTime)
 		r.lastLogSlowTablesTime = time.Now()
+	}
+
+	if redoMetaManager.Enabled() {
+		if newResolvedTs > barrier.RedoBarrierTs {
+			newResolvedTs = barrier.RedoBarrierTs
+		}
+		redoMetaManager.UpdateMeta(newCheckpointTs, newResolvedTs)
+		flushedMeta := redoMetaManager.GetFlushedMeta()
+		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
+		log.Debug("owner gets flushed meta",
+			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
+			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
+			zap.Uint64("newResolvedTs", newResolvedTs),
+			zap.Uint64("newCheckpointTs", newCheckpointTs),
+			zap.String("namespace", r.changefeedID.Namespace),
+			zap.String("changefeed", r.changefeedID.ID))
+		if flushedResolvedTs != 0 && flushedResolvedTs < newResolvedTs {
+			newResolvedTs = flushedResolvedTs
+		}
+
+		if newCheckpointTs > newResolvedTs {
+			newCheckpointTs = newResolvedTs
+		}
+
+		if barrier.GlobalBarrierTs > newResolvedTs {
+			barrier.GlobalBarrierTs = newResolvedTs
+		}
 	}
 
 	return newCheckpointTs, newResolvedTs

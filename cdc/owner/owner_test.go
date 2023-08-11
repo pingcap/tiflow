@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -68,7 +69,8 @@ func newOwner4Test(
 	) (puller.DDLPuller, error),
 	newSink func(model.ChangeFeedID, *model.ChangeFeedInfo, func(error), func(error)) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
+		ctx cdcContext.Context, pdClock pdutil.Clock,
+		epoch uint64, redoMetaManager redo.MetaManager,
 	) (scheduler.Scheduler, error),
 	pdClient pd.Client,
 ) Owner {
@@ -111,7 +113,8 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 		},
 		// new scheduler
 		func(
-			ctx cdcContext.Context, pdClock pdutil.Clock, changefeedEpoch uint64,
+			ctx cdcContext.Context, pdClock pdutil.Clock,
+			changefeedEpoch uint64, redoMetaManager redo.MetaManager,
 		) (scheduler.Scheduler, error) {
 			return &mockScheduler{}, nil
 		},

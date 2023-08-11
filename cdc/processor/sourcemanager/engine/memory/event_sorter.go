@@ -132,12 +132,6 @@ func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
 	return engine.TableStats{}
 }
 
-// ReceivedEvents implements engine.SortEngine.
-func (s *EventSorter) ReceivedEvents() int64 {
-	log.Panic("ReceivedEvents should never be called")
-	return 0
-}
-
 // Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.tables = sync.Map{}

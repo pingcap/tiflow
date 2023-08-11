@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
+	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -44,7 +45,8 @@ import (
 // newScheduler creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
 func newScheduler(
-	ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
+	ctx cdcContext.Context, pdClock pdutil.Clock,
+	epoch uint64, redoMetaManager redo.MetaManager,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
 	messageServer := ctx.GlobalVars().MessageServer
@@ -54,7 +56,9 @@ func newScheduler(
 	cfg := config.GetGlobalServerConfig().Debug
 	ret, err = scheduler.NewScheduler(
 		ctx, captureID, changeFeedID,
-		messageServer, messageRouter, ownerRev, epoch, cfg.Scheduler, pdClock)
+		messageServer, messageRouter,
+		ownerRev, epoch, cfg.Scheduler,
+		pdClock, redoMetaManager)
 	return ret, errors.Trace(err)
 }
 
@@ -124,7 +128,7 @@ type changefeed struct {
 	) DDLSink
 
 	newScheduler func(
-		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
+		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64, redoMetaManager redo.MetaManager,
 	) (scheduler.Scheduler, error)
 
 	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
@@ -170,7 +174,7 @@ func newChangefeed4Test(
 		reportError func(err error), reportWarning func(err error),
 	) DDLSink,
 	newScheduler func(
-		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
+		ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64, redoMetaManager redo.MetaManager,
 	) (scheduler.Scheduler, error),
 ) *changefeed {
 	c := newChangefeed(id, state, up)
@@ -319,26 +323,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	}
 
-	otherBarrierTs, err := c.handleBarrier(ctx)
+	err = c.handleBarrier(ctx, barrier)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	// If there are other barriers less than ddl barrier,
-	// we should wait for them.
-	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
-	// but we can ignore them because they will be handled in the processor.
-	if barrier.GlobalBarrierTs > otherBarrierTs {
-		log.Debug("There are other barriers less than ddl barrier, wait for them",
-			zap.Uint64("otherBarrierTs", otherBarrierTs),
-			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		barrier.GlobalBarrierTs = otherBarrierTs
-	}
-
-	if barrier.MinTableBarrierTs > otherBarrierTs {
-		log.Debug("There are other barriers less than min table barrier, wait for them",
-			zap.Uint64("otherBarrierTs", otherBarrierTs),
-			zap.Uint64("ddlBarrierTs", barrier.GlobalBarrierTs))
-		barrier.MinTableBarrierTs = otherBarrierTs
 	}
 
 	log.Debug("owner handles barrier",
@@ -358,7 +345,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	}
 
 	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
-		ctx, preCheckpointTs, allPhysicalTables, captures, barrier.BarrierWithMinTs)
+		ctx, preCheckpointTs, allPhysicalTables, captures, barrier)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -376,7 +363,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 		return nil
 	}
-
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", c.resolvedTs),
 		zap.Uint64("newResolvedTs", newResolvedTs),
@@ -615,7 +601,7 @@ LOOP2:
 
 	// create scheduler
 	epoch := c.state.Info.Epoch
-	c.scheduler, err = c.newScheduler(ctx, c.upstream.PDClock, epoch)
+	c.scheduler, err = c.newScheduler(ctx, c.upstream.PDClock, epoch, c.redoMetaMgr)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -728,6 +714,10 @@ func (c *changefeed) cleanupMetrics() {
 
 	changefeedBarrierTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedBarrierTsGauge = nil
+
+	if c.isRemoved {
+		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+	}
 }
 
 // cleanup redo logs if changefeed is removed and redo log is enabled
@@ -845,7 +835,7 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 
 // handleBarrier calculates the barrierTs of the changefeed.
 // barrierTs is used to control the data that can be flush to downstream.
-func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
+func (c *changefeed) handleBarrier(ctx cdcContext.Context, barrier *schedulepb.BarrierWithMinTs) error {
 	barrierTp, barrierTs := c.barriers.Min()
 
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
@@ -854,23 +844,40 @@ func (c *changefeed) handleBarrier(ctx cdcContext.Context) (uint64, error) {
 	//   1. All data before the barrierTs was sent to downstream.
 	//   2. No more data after barrierTs was sent to downstream.
 	checkpointReachBarrier := barrierTs == c.state.Status.CheckpointTs
-	if !checkpointReachBarrier {
-		return barrierTs, nil
+	if checkpointReachBarrier {
+		switch barrierTp {
+		case syncPointBarrier:
+			nextSyncPointTs := oracle.
+				GoTimeToTS(oracle.GetTimeFromTS(barrierTs).
+					Add(c.state.Info.Config.SyncPointInterval))
+			if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
+				return errors.Trace(err)
+			}
+			c.barriers.Update(syncPointBarrier, nextSyncPointTs)
+		case finishBarrier:
+			c.feedStateManager.MarkFinished()
+		default:
+			log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
+		}
+	}
+	// If there are other barriers less than ddl barrier,
+	// we should wait for them.
+	// Note: There may be some tableBarrierTs larger than otherBarrierTs,
+	// but we can ignore them because they will be handled in the processor.
+	if barrier.GlobalBarrierTs > barrierTs {
+		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.Uint64("otherBarrierTs", barrierTs),
+			zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs))
+		barrier.GlobalBarrierTs = barrierTs
 	}
 
-	switch barrierTp {
-	case syncPointBarrier:
-		nextSyncPointTs := oracle.GoTimeToTS(oracle.GetTimeFromTS(barrierTs).Add(c.state.Info.Config.SyncPointInterval))
-		if err := c.ddlSink.emitSyncPoint(ctx, barrierTs); err != nil {
-			return 0, errors.Trace(err)
-		}
-		c.barriers.Update(syncPointBarrier, nextSyncPointTs)
-	case finishBarrier:
-		c.feedStateManager.MarkFinished()
-	default:
-		log.Panic("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
+	if barrier.MinTableBarrierTs > barrierTs {
+		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.Uint64("otherBarrierTs", barrierTs),
+			zap.Uint64("minTableBarrierTs", barrier.GlobalBarrierTs))
+		barrier.MinTableBarrierTs = barrierTs
 	}
-	return barrierTs, nil
+	return nil
 }
 
 func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs model.Ts) {
