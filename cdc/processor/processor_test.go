@@ -523,12 +523,8 @@ func TestSchemaGC(t *testing.T) {
 	require.Equal(t, p.lastSchemaTs, uint64(49))
 }
 
-<<<<<<< HEAD
-func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, resolvedTs, checkpointTs model.Ts) {
-=======
 //nolint:unused
 func updateChangeFeedPosition(t *testing.T, tester *orchestrator.ReactorStateTester, cfID model.ChangeFeedID, checkpointTs model.Ts) {
->>>>>>> 924d719354 (changefeed (ticdc): remove resolvedTs from etcd (#9194))
 	key := etcd.CDCKey{
 		ClusterID:    etcd.DefaultCDCClusterID,
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,

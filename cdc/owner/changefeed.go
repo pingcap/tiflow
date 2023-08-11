@@ -377,46 +377,6 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-<<<<<<< HEAD
-	prevResolvedTs := c.state.Status.ResolvedTs
-	if c.redoMetaMgr.Enabled() {
-		if newResolvedTs > barrier.redoBarrierTs {
-			newResolvedTs = barrier.redoBarrierTs
-		}
-		// newResolvedTs can never exceed the barrier timestamp boundary. If redo is enabled,
-		// we can only upload it to etcd after it has been flushed into redo meta.
-		// NOTE: `UpdateMeta` handles regressed checkpointTs and resolvedTs internally.
-		c.redoMetaMgr.UpdateMeta(newCheckpointTs, newResolvedTs)
-		flushedMeta := c.redoMetaMgr.GetFlushedMeta()
-		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
-		log.Debug("owner gets flushed meta",
-			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
-			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
-			zap.Uint64("newResolvedTs", newResolvedTs),
-			zap.Uint64("newCheckpointTs", newCheckpointTs),
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID))
-		if flushedResolvedTs != 0 {
-			// It's not necessary to replace newCheckpointTs with flushedResolvedTs,
-			// as cdc can ensure newCheckpointTs can never exceed prevResolvedTs.
-			newResolvedTs = flushedResolvedTs
-		} else {
-			newResolvedTs = prevResolvedTs
-		}
-		// If allPhysicalTables is empty, newCheckpointTs would advance to min table barrier ts, which may be larger
-		// than preResolvedTs. In this case, we need to set newCheckpointTs to preResolvedTs to guarantee that the
-		// checkpointTs will not cross the preResolvedTs.
-		if newCheckpointTs > prevResolvedTs {
-			newCheckpointTs = prevResolvedTs
-			if newCheckpointTs < preCheckpointTs {
-				log.Panic("checkpointTs should never regress",
-					zap.Uint64("newCheckpointTs", newCheckpointTs),
-					zap.Uint64("checkpointTs", preCheckpointTs))
-			}
-		}
-	}
-=======
->>>>>>> 924d719354 (changefeed (ticdc): remove resolvedTs from etcd (#9194))
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", c.resolvedTs),
 		zap.Uint64("newResolvedTs", newResolvedTs),
@@ -444,14 +404,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
-<<<<<<< HEAD
-	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.MinTableBarrierTs)
-	c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
-=======
 	c.updateStatus(newCheckpointTs, barrier.MinTableBarrierTs)
 	c.updateMetrics(currentTs, newCheckpointTs, c.resolvedTs)
-	c.tickDownstreamObserver(ctx)
->>>>>>> 924d719354 (changefeed (ticdc): remove resolvedTs from etcd (#9194))
 
 	return nil
 }
@@ -554,14 +508,8 @@ LOOP2:
 	}
 
 	c.barriers = newBarriers()
-<<<<<<< HEAD
 	if c.state.Info.Config.EnableSyncPoint { // preResolvedTs model.Ts
-
-		c.barriers.Update(syncPointBarrier, resolvedTs)
-=======
-	if util.GetOrZero(c.state.Info.Config.EnableSyncPoint) {
 		c.barriers.Update(syncPointBarrier, c.resolvedTs)
->>>>>>> 924d719354 (changefeed (ticdc): remove resolvedTs from etcd (#9194))
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
