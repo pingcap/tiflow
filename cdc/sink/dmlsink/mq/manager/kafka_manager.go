@@ -137,7 +137,7 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
-func (m *kafkaTopicManager) fetchAllTopicsNumPartitions(
+func (m *kafkaTopicManager) fetchAllTopicsPartitionsNum(
 	ctx context.Context,
 ) (map[string]int32, error) {
 	var topics []string
