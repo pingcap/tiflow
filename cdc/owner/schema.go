@@ -246,17 +246,19 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 	return s.filterDDLEvents(ddlEvents)
 }
 
+// TODO: delete this function after integration test passed.
 func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
 	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	for _, event := range ddlEvents {
-		ignored, err := s.filter.ShouldIgnoreDDLEvent(event)
+		ignored, err := s.filter.ShouldDiscardDDL(event.StartTs,
+			event.Type, event.TableInfo.TableName.Schema, event.TableInfo.TableName.Table, event.Query)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 		if ignored {
 			s.metricIgnoreDDLEventCounter.Inc()
-			log.Info(
-				"DDL event ignored",
+			log.Panic(
+				"ignored DDL event should not be sent to owner",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("query", event.Query),

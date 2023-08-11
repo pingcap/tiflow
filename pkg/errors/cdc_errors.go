@@ -933,4 +933,9 @@ var (
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
+
+	ErrHandleDDLFailed = errors.Normalize(
+		"handle ddl failed, job: %s, query: %s",
+		errors.RFCCodeText("CDC:ErrHandleDDLFailed"),
+	)
 )
