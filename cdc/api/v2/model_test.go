@@ -58,7 +58,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		AdvanceTimeoutInSec:              util.AddressOf(uint(600)),
+		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
