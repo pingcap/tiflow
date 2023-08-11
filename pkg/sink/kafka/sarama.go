@@ -42,7 +42,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// if metadata cannot be refreshed easily, this would indicate the network condition between the
 	// capture server and kafka broker is not good.
 	// Set the timeout to 2m to make sure do not retry too long.
-	// If retry the metadata failed, just return the error to rebuild the sink.
+	// If retrying to obtain the metadata fails, simply return the error and let sinkManager rebuild the sink.
 	config.Metadata.Retry.Max = 10
 	config.Metadata.Retry.Backoff = 200 * time.Millisecond
 	config.Metadata.Timeout = 2 * time.Minute
