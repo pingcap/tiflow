@@ -15,32 +15,25 @@ package kafka
 
 import (
 	"context"
-	"errors"
-	"io"
-	"net"
 	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/retry"
 	"go.uber.org/zap"
 )
 
 type saramaAdminClient struct {
-	brokerEndpoints []string
-	config          *sarama.Config
-	changefeed      model.ChangeFeedID
+	changefeed model.ChangeFeedID
 
-	mu     sync.Mutex
 	client sarama.Client
 	admin  sarama.ClusterAdmin
 }
 
+<<<<<<< HEAD
 const (
 	defaultRetryBackoff  = 20
 	defaultRetryMaxTries = 3
@@ -132,6 +125,10 @@ func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error)
 		return nil, err
 	}
 
+=======
+func (a *saramaAdminClient) GetAllBrokers(_ context.Context) ([]Broker, error) {
+	brokers := a.client.Brokers()
+>>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511))
 	result := make([]Broker, 0, len(brokers))
 	for _, broker := range brokers {
 		result = append(result, Broker{
@@ -142,41 +139,22 @@ func (a *saramaAdminClient) GetAllBrokers(ctx context.Context) ([]Broker, error)
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetCoordinator(ctx context.Context) (int, error) {
-	var (
-		controllerID int32
-		err          error
-	)
-
-	query := func() error {
-		_, controllerID, err = a.admin.DescribeCluster()
-		return err
-	}
-	err = a.queryClusterWithRetry(ctx, query)
-	return int(controllerID), err
-}
-
 func (a *saramaAdminClient) GetBrokerConfig(
-	ctx context.Context,
+	_ context.Context,
 	configName string,
 ) (string, error) {
-	controller, err := a.GetCoordinator(ctx)
+	_, controller, err := a.admin.DescribeCluster()
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 
-	var configEntries []sarama.ConfigEntry
-	query := func() error {
-		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
-			Type:        sarama.BrokerResource,
-			Name:        strconv.Itoa(controller),
-			ConfigNames: []string{configName},
-		})
-		return err
-	}
-	err = a.queryClusterWithRetry(ctx, query)
+	configEntries, err := a.admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.BrokerResource,
+		Name:        strconv.Itoa(int(controller)),
+		ConfigNames: []string{configName},
+	})
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 
 	// For compatibility with KOP, we checked all return values.
@@ -196,20 +174,16 @@ func (a *saramaAdminClient) GetBrokerConfig(
 		"cannot find the `%s` from the broker's configuration", configName)
 }
 
-func (a *saramaAdminClient) GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error) {
-	var configEntries []sarama.ConfigEntry
-	var err error
-	query := func() error {
-		configEntries, err = a.admin.DescribeConfig(sarama.ConfigResource{
-			Type:        sarama.TopicResource,
-			Name:        topicName,
-			ConfigNames: []string{configName},
-		})
-		return err
-	}
-	err = a.queryClusterWithRetry(ctx, query)
+func (a *saramaAdminClient) GetTopicConfig(
+	_ context.Context, topicName string, configName string,
+) (string, error) {
+	configEntries, err := a.admin.DescribeConfig(sarama.ConfigResource{
+		Type:        sarama.TopicResource,
+		Name:        topicName,
+		ConfigNames: []string{configName},
+	})
 	if err != nil {
-		return "", err
+		return "", errors.Trace(err)
 	}
 
 	// For compatibility with KOP, we checked all return values.
@@ -235,25 +209,15 @@ func (a *saramaAdminClient) GetTopicConfig(ctx context.Context, topicName string
 }
 
 func (a *saramaAdminClient) GetTopicsMeta(
-	ctx context.Context,
-	topics []string,
-	ignoreTopicError bool,
+	_ context.Context, topics []string, ignoreTopicError bool,
 ) (map[string]TopicDetail, error) {
-	var (
-		metaList []*sarama.TopicMetadata
-		err      error
-	)
-	query := func() error {
-		metaList, err = a.admin.DescribeTopics(topics)
-		return err
-	}
+	result := make(map[string]TopicDetail, len(topics))
 
-	err = a.queryClusterWithRetry(ctx, query)
+	metaList, err := a.admin.DescribeTopics(topics)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
-	result := make(map[string]TopicDetail, len(metaList))
 	for _, meta := range metaList {
 		if meta.Err != sarama.ErrNoError {
 			if !ignoreTopicError {
@@ -271,33 +235,41 @@ func (a *saramaAdminClient) GetTopicsMeta(
 			NumPartitions: int32(len(meta.Partitions)),
 		}
 	}
+	return result, nil
+}
+
+func (a *saramaAdminClient) GetTopicsPartitionsNum(
+	_ context.Context, topics []string,
+) (map[string]int32, error) {
+	result := make(map[string]int32, len(topics))
+	for _, topic := range topics {
+		partition, err := a.client.Partitions(topic)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		result[topic] = int32(len(partition))
+	}
 
 	return result, nil
 }
 
 func (a *saramaAdminClient) CreateTopic(
-	ctx context.Context,
-	detail *TopicDetail,
-	validateOnly bool,
+	_ context.Context, detail *TopicDetail, validateOnly bool,
 ) error {
 	request := &sarama.TopicDetail{
 		NumPartitions:     detail.NumPartitions,
 		ReplicationFactor: detail.ReplicationFactor,
 	}
-	query := func() error {
-		err := a.admin.CreateTopic(detail.Name, request, validateOnly)
-		// Ignore the already exists error because it's not harmful.
-		if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
-			return err
-		}
-		return nil
+
+	err := a.admin.CreateTopic(detail.Name, request, validateOnly)
+	// Ignore the already exists error because it's not harmful.
+	if err != nil && !strings.Contains(err.Error(), sarama.ErrTopicAlreadyExists.Error()) {
+		return err
 	}
-	return a.queryClusterWithRetry(ctx, query)
+	return nil
 }
 
 func (a *saramaAdminClient) Close() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	if err := a.admin.Close(); err != nil {
 		log.Warn("close admin client meet error",
 			zap.String("namespace", a.changefeed.Namespace),
