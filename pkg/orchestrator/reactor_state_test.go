@@ -126,7 +126,15 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
+<<<<<<< HEAD
 						Integrity:        config.GetDefaultReplicaConfig().Integrity,
+=======
+						Sink: &config.SinkConfig{
+							Terminator:          putil.AddressOf(config.CRLF),
+							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
+						},
+						Integrity: config.GetDefaultReplicaConfig().Integrity,
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -173,10 +181,19 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
+<<<<<<< HEAD
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 						Integrity:        config.GetDefaultReplicaConfig().Integrity,
+=======
+						Sink: &config.SinkConfig{
+							Terminator:          putil.AddressOf(config.CRLF),
+							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
+						},
+						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
+						Integrity: config.GetDefaultReplicaConfig().Integrity,
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -228,10 +245,19 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
+<<<<<<< HEAD
 						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
 						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 						Integrity:        config.GetDefaultReplicaConfig().Integrity,
+=======
+						Sink: &config.SinkConfig{
+							Terminator:          putil.AddressOf(config.CRLF),
+							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
+						},
+						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
+						Integrity: config.GetDefaultReplicaConfig().Integrity,
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},

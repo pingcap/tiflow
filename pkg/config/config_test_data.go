@@ -53,7 +53,20 @@ const (
       }
     ],
     "enable-partition-separator": true,
+<<<<<<< HEAD
     "protocol": "open-protocol"
+=======
+    "protocol": "open-protocol",
+	"enable-kafka-sink-v2": false,
+	"only-output-updated-columns": false,
+	"delete-only-output-handle-key-columns": false,
+    "large-message-handle": {
+      "large-message-handle-option": "none",
+      "claim-check-storage-uri": "",
+      "claim-check-compression": ""
+    },
+    "advance-timeout-in-sec": 150
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
   },
   "consistent": {
     "level": "none",
@@ -258,8 +271,15 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
+<<<<<<< HEAD
       "file-size": 1024
     }
+=======
+      "file-size": 1024,
+      "output-column-id":false
+    },
+    "advance-timeout-in-sec": 150
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
   },
   "consistent": {
     "level": "none",
@@ -384,8 +404,15 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
+<<<<<<< HEAD
       "file-size": 1024
     }
+=======
+      "file-size": 1024,
+      "output-column-id":false
+    },
+    "advance-timeout-in-sec": 150
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
   },
   "consistent": {
     "level": "none",

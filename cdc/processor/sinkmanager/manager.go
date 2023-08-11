@@ -50,8 +50,6 @@ const (
 	// engine.CleanByTable can be expensive. So it's necessary to reduce useless calls.
 	cleanTableInterval  = 5 * time.Second
 	cleanTableMinEvents = 128
-	maxRetryDuration    = 30 * time.Minute
-	errGCInterval       = 10 * time.Minute
 )
 
 // TableStats of a table sink.
@@ -93,8 +91,15 @@ type SinkManager struct {
 	sourceManager *sourcemanager.SourceManager
 
 	// sinkFactory used to create table sink.
-	sinkFactory   *factory.SinkFactory
-	sinkFactoryMu sync.Mutex
+	sinkFactory struct {
+		sync.Mutex
+		f *factory.SinkFactory
+		// When every time we want to create a new factory, version will be increased and
+		// errors will be replaced by a new channel. version is used to distinct different
+		// sink factories in table sinks.
+		version uint64
+		errors  chan error
+	}
 
 	// tableSinks is a map from tableID to tableSink.
 	tableSinks spanz.SyncMap
@@ -201,7 +206,6 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	enableOldValue := m.changefeedInfo.Config.EnableOldValue
 
 	gcErrors := make(chan error, 16)
-	sinkFactoryErrors := make(chan error, 16)
 	sinkErrors := make(chan error, 16)
 	redoErrors := make(chan error, 16)
 
@@ -255,12 +259,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 
 	// SinkManager will restart some internal modules if necessasry.
 	for {
-		if err := m.initSinkFactory(sinkFactoryErrors); err != nil {
-			select {
-			case <-m.managerCtx.Done():
-			case sinkFactoryErrors <- err:
-			}
-		}
+		sinkFactoryErrors, sinkFactoryVersion := m.initSinkFactory()
 
 		select {
 		case <-m.managerCtx.Done():
@@ -275,9 +274,27 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			log.Warn("Sink manager backend sink fails",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
+				zap.Uint64("factoryVersion", sinkFactoryVersion),
 				zap.Error(err))
 			m.clearSinkFactory()
+<<<<<<< HEAD
 			sinkFactoryErrors = make(chan error, 16)
+=======
+
+			start := time.Now()
+			log.Info("Sink manager is closing all table sinks",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID))
+			m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
+				value.(*tableSinkWrapper).closeTableSink()
+				m.sinkMemQuota.ClearTable(span)
+				return true
+			})
+			log.Info("Sink manager has closed all table sinks",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Duration("cost", time.Since(start)))
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 		}
 
 		// If the error is retryable, we should retry to re-establish the internal resources.
@@ -301,6 +318,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}
 }
 
+<<<<<<< HEAD
 // getRetryBackoff returns the backoff duration for retrying the last error.
 // If the retry time is exhausted, it returns the an ChangefeedUnRetryableError.
 func (m *SinkManager) getRetryBackoff(err error) (time.Duration, error) {
@@ -330,8 +348,28 @@ func (m *SinkManager) initSinkFactory(errCh chan error) error {
 	if m.sinkFactory != nil {
 		return nil
 	}
+=======
+func (m *SinkManager) initSinkFactory() (chan error, uint64) {
+	m.sinkFactory.Lock()
+	defer m.sinkFactory.Unlock()
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 	uri := m.changefeedInfo.SinkURI
 	cfg := m.changefeedInfo.Config
+
+	if m.sinkFactory.f != nil {
+		return m.sinkFactory.errors, m.sinkFactory.version
+	}
+	if m.sinkFactory.errors == nil {
+		m.sinkFactory.errors = make(chan error, 16)
+		m.sinkFactory.version += 1
+	}
+
+	emitError := func(err error) {
+		select {
+		case <-m.managerCtx.Done():
+		case m.sinkFactory.errors <- err:
+		}
+	}
 
 	var err error = nil
 	failpoint.Inject("SinkManagerRunError", func() {
@@ -339,31 +377,70 @@ func (m *SinkManager) initSinkFactory(errCh chan error) error {
 		err = errors.New("SinkManagerRunError")
 	})
 	if err != nil {
-		return errors.Trace(err)
+		emitError(err)
+		return m.sinkFactory.errors, m.sinkFactory.version
 	}
 
+<<<<<<< HEAD
 	if m.sinkFactory, err = factory.New(m.managerCtx, uri, cfg, errCh); err == nil {
 		log.Info("Sink manager inits sink factory success",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID))
 		return nil
+=======
+	m.sinkFactory.f, err = factory.New(m.managerCtx, m.changefeedID, uri, cfg, m.sinkFactory.errors)
+	if err != nil {
+		emitError(err)
+		return m.sinkFactory.errors, m.sinkFactory.version
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 	}
-	return errors.Trace(err)
+
+	log.Info("Sink manager inits sink factory success",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Uint64("factoryVersion", m.sinkFactory.version))
+	return m.sinkFactory.errors, m.sinkFactory.version
 }
 
 func (m *SinkManager) clearSinkFactory() {
-	m.sinkFactoryMu.Lock()
-	defer m.sinkFactoryMu.Unlock()
-	if m.sinkFactory != nil {
+	m.sinkFactory.Lock()
+	defer m.sinkFactory.Unlock()
+	if m.sinkFactory.f != nil {
 		log.Info("Sink manager closing sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID))
-		m.sinkFactory.Close()
-		m.sinkFactory = nil
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Uint64("factoryVersion", m.sinkFactory.version))
+		m.sinkFactory.f.Close()
+		m.sinkFactory.f = nil
 		log.Info("Sink manager has closed sink factory",
 			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID))
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Uint64("factoryVersion", m.sinkFactory.version))
 	}
+	if m.sinkFactory.errors != nil {
+		close(m.sinkFactory.errors)
+		for range m.sinkFactory.errors {
+		}
+		m.sinkFactory.errors = nil
+	}
+}
+
+func (m *SinkManager) putSinkFactoryError(err error, version uint64) {
+	m.sinkFactory.Lock()
+	defer m.sinkFactory.Unlock()
+	skipped := true
+	if version == m.sinkFactory.version {
+		select {
+		case m.sinkFactory.errors <- err:
+			skipped = false
+		default:
+		}
+	}
+	log.Info("Sink manager tries to put an sink error",
+		zap.String("namespace", m.changefeedID.Namespace),
+		zap.String("changefeed", m.changefeedID.ID),
+		zap.Bool("skipped", skipped),
+		zap.String("error", err.Error()))
 }
 
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
@@ -411,7 +488,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 					if time.Since(sink.lastCleanTime) < cleanTableInterval {
 						return true
 					}
-					checkpointTs := sink.getCheckpointTs()
+					checkpointTs, _, _ := sink.getCheckpointTs()
 					resolvedMark := checkpointTs.ResolvedMark()
 					if resolvedMark == 0 {
 						return true
@@ -793,14 +870,15 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 	sinkWrapper := newTableSinkWrapper(
 		m.changefeedID,
 		span,
-		func() tablesink.TableSink {
-			if m.sinkFactoryMu.TryLock() {
-				defer m.sinkFactoryMu.Unlock()
-				if m.sinkFactory != nil {
-					return m.sinkFactory.CreateTableSink(m.changefeedID, span, startTs, m.metricsTableSinkTotalRows)
+		func() (s tablesink.TableSink, version uint64) {
+			if m.sinkFactory.TryLock() {
+				defer m.sinkFactory.Unlock()
+				if m.sinkFactory.f != nil {
+					s = m.sinkFactory.f.CreateTableSink(m.changefeedID, span, startTs, m.metricsTableSinkTotalRows)
+					version = m.sinkFactory.version
 				}
 			}
-			return nil
+			return
 		},
 		tablepb.TableStatePreparing,
 		startTs,
@@ -899,12 +977,12 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span))
 	}
-	sink := value.(*tableSinkWrapper)
+	checkpointTs, _, _ := value.(*tableSinkWrapper).getCheckpointTs()
 	log.Info("Remove table sink successfully",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Stringer("span", &span),
-		zap.Uint64("checkpointTs", sink.getCheckpointTs().Ts))
+		zap.Uint64("checkpointTs", checkpointTs.Ts))
 	if m.eventCache != nil {
 		m.eventCache.removeTable(span)
 	}
@@ -968,9 +1046,24 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 	tableSink := value.(*tableSinkWrapper)
 
-	checkpointTs := tableSink.getCheckpointTs()
+	checkpointTs, version, advanced := tableSink.getCheckpointTs()
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
+
+	stuckCheck := time.Duration(*m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec) * time.Second
+	if version > 0 && time.Since(advanced) > stuckCheck &&
+		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
+		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Any("checkpointTs", checkpointTs),
+			zap.Float64("stuckCheck", stuckCheck.Seconds()),
+			zap.Uint64("factoryVersion", version))
+		tableSink.updateTableSinkAdvanced()
+		m.putSinkFactoryError(errors.New("table sink stuck"), version)
+	}
+
 	var resolvedTs model.Ts
 	// If redo log is enabled, we have to use redo log's resolved ts to calculate processor's min resolved ts.
 	if m.redoDMLMgr != nil {

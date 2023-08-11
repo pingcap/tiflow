@@ -58,12 +58,24 @@ var defaultReplicaConfig = &ReplicaConfig{
 			NullString:           NULL,
 			BinaryEncodingMethod: BinaryEncodingBase64,
 		},
+<<<<<<< HEAD
 		EncoderConcurrency:       16,
 		Terminator:               CRLF,
 		DateSeparator:            DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		EnableKafkaSinkV2:        false,
 		TiDBSourceID:             1,
+=======
+		EncoderConcurrency:               util.AddressOf(16),
+		Terminator:                       util.AddressOf(CRLF),
+		DateSeparator:                    util.AddressOf(DateSeparatorDay.String()),
+		EnablePartitionSeparator:         util.AddressOf(true),
+		EnableKafkaSinkV2:                util.AddressOf(false),
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		TiDBSourceID:                     1,
+		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",

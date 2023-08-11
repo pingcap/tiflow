@@ -86,13 +86,13 @@ func createTableSinkWrapper(
 	wrapper := newTableSinkWrapper(
 		changefeedID,
 		span,
-		func() tablesink.TableSink { return innerTableSink },
+		func() (tablesink.TableSink, uint64) { return innerTableSink, 1 },
 		tableState,
 		0,
 		100,
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
-	wrapper.tableSink = wrapper.tableSinkCreater()
+	wrapper.tableSink.s, wrapper.tableSink.version = wrapper.tableSinkCreater()
 	return wrapper, sink
 }
 
@@ -329,5 +329,6 @@ func TestNewTableSinkWrapper(t *testing.T) {
 	require.NotNil(t, wrapper)
 	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
 	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
-	require.Equal(t, uint64(10), wrapper.getCheckpointTs().ResolvedMark())
+	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	require.Equal(t, uint64(10), checkpointTs.ResolvedMark())
 }

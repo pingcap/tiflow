@@ -1561,6 +1561,10 @@ var doc = `{
         "config.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance-timeout-in-sec": {
+                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
+                    "type": "integer"
+                },
                 "cloud-storage-config": {
                     "$ref": "#/definitions/config.CloudStorageConfig"
                 },
@@ -2609,6 +2613,9 @@ var doc = `{
         "v2.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance_timeout": {
+                    "type": "integer"
+                },
                 "cloud_storage_config": {
                     "$ref": "#/definitions/v2.CloudStorageConfig"
                 },
