@@ -49,14 +49,14 @@ func (a *saramaAdminClient) GetBrokerConfig(
 	_ context.Context,
 	configName string,
 ) (string, error) {
-	controller, err := a.client.Controller()
+	_, controller, err := a.admin.DescribeCluster()
 	if err != nil {
 		return "", errors.Trace(err)
 	}
 
 	configEntries, err := a.admin.DescribeConfig(sarama.ConfigResource{
 		Type:        sarama.BrokerResource,
-		Name:        strconv.Itoa(int(controller.ID())),
+		Name:        strconv.Itoa(int(controller)),
 		ConfigNames: []string{configName},
 	})
 	if err != nil {
