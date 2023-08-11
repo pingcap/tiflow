@@ -937,8 +937,9 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 	receivedEvents[1].Callback()
 	receivedEvents[2].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 3, "No more events should be sent to sink")
-	require.Equal(suite.T(), uint64(2), wrapper.getCheckpointTs().ResolvedMark(),
-		"Only can advance resolved mark to 2")
+
+	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	require.Equal(suite.T(), uint64(2), checkpointTs.ResolvedMark(), "Only can advance resolved mark to 2")
 }
 
 // Test the case that the worker will advance the table sink only when task is finished.
