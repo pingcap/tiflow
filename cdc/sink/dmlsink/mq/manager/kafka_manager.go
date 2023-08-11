@@ -139,6 +139,10 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
+// fetchAllTopicsPartitionsNum fetches all topics' partitions number.
+// The error returned by this method could be a transient error that is fixable by the underlying logic.
+// When handling this error, please be cautious.
+// If you simply throw the error to the caller, it may impact the robustness of your program.
 func (m *kafkaTopicManager) fetchAllTopicsPartitionsNum(
 	ctx context.Context,
 ) (map[string]int32, error) {
