@@ -161,6 +161,7 @@ func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
 	return result, nil
 }
 
+// GetTopicsNumPartitions implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetTopicsNumPartitions(
 	_ context.Context, topics []string,
 ) (map[string]int32, error) {
