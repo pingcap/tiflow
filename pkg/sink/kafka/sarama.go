@@ -41,7 +41,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// Admin client would refresh metadata periodically,
 	// if metadata cannot be refreshed easily, this would indicate the network condition between the
 	// capture server and kafka broker is not good.
-	// Set the timeout to 2m to make sure do not retry too long.
+	// Set the timeout to 2 minutes to ensure that the underlying client does not retry for too long.
 	// If retrying to obtain the metadata fails, simply return the error and let sinkManager rebuild the sink.
 	config.Metadata.Retry.Max = 10
 	config.Metadata.Retry.Backoff = 200 * time.Millisecond
