@@ -144,7 +144,7 @@ func (a *saramaAdminClient) GetTopicsMeta(
 	return result, nil
 }
 
-func (a *saramaAdminClient) GetTopicsNumPartitions(
+func (a *saramaAdminClient) GetTopicsPartitionsNum(
 	_ context.Context, topics []string,
 ) (map[string]int32, error) {
 	result := make(map[string]int32, len(topics))

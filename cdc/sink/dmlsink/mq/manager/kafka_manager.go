@@ -102,8 +102,8 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 			)
 			return
 		case <-m.metaRefreshTicker.C:
-			topicPartitionNums, _ := m.fetchAllTopicsNumPartitions(ctx)
-			for topic, partitionNum := range topicMetaList {
+			topicPartitionNums, _ := m.fetchAllTopicsPartitionsNum(ctx)
+			for topic, partitionNum := range topicPartitionNums {
 				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
 			}
 		}
@@ -147,7 +147,7 @@ func (m *kafkaTopicManager) fetchAllTopicsPartitionsNum(
 	})
 
 	start := time.Now()
-	numPartitions, err := m.admin.GetTopicsNumPartitions(ctx, topics)
+	numPartitions, err := m.admin.GetTopicsPartitionsNum(ctx, topics)
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
