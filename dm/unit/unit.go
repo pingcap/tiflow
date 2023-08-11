@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -107,3 +108,81 @@ func JoinProcessErrors(errors []*pb.ProcessError) string {
 	}
 	return strings.Join(serrs, ", ")
 }
+<<<<<<< HEAD
+=======
+
+// IsResumableError checks the error message and returns whether we need to
+// resume the task unit and retry.
+func IsResumableError(err *pb.ProcessError) bool {
+	if err == nil {
+		return true
+	}
+
+	// not elegant code, because TiDB doesn't expose some error
+	for _, msg := range retry.UnsupportedDDLMsgs {
+		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
+			return false
+		}
+	}
+	for _, msg := range retry.UnsupportedDMLMsgs {
+		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
+			return false
+		}
+	}
+	for _, msg := range retry.ReplicationErrMsgs {
+		if strings.Contains(strings.ToLower(err.RawCause), strings.ToLower(msg)) {
+			return false
+		}
+	}
+	if err.ErrCode == int32(terror.ErrParserParseRelayLog.Code()) {
+		for _, msg := range retry.ParseRelayLogErrMsgs {
+			if strings.Contains(strings.ToLower(err.Message), strings.ToLower(msg)) {
+				return false
+			}
+		}
+	}
+	if _, ok := retry.UnresumableErrCodes[err.ErrCode]; ok {
+		return false
+	}
+
+	return true
+}
+
+// IsResumableDBError checks whether the error is resumable DB error.
+// this is a simplified version of IsResumableError.
+// we use a blacklist to filter out some errors which can not be resumed,
+// all other errors is resumable.
+func IsResumableDBError(err error) bool {
+	if err == nil {
+		return true
+	}
+
+	err = errors.Cause(err)
+	if err == context.Canceled {
+		return false
+	}
+
+	// not elegant code, because TiDB doesn't expose some error
+	errStr := strings.ToLower(err.Error())
+	for _, msg := range retry.UnsupportedDDLMsgs {
+		if strings.Contains(errStr, strings.ToLower(msg)) {
+			return false
+		}
+	}
+	for _, msg := range retry.UnsupportedDMLMsgs {
+		if strings.Contains(errStr, strings.ToLower(msg)) {
+			return false
+		}
+	}
+	return true
+}
+
+// IsResumableRelayError return whether we need resume relay on error
+// since relay impl unit interface too, so we put it here.
+func IsResumableRelayError(err *pb.ProcessError) bool {
+	if _, ok := retry.UnresumableRelayErrCodes[err.ErrCode]; ok {
+		return false
+	}
+	return true
+}
+>>>>>>> 47384423cb (dm: fix validator deadlock and enhance retry (#9522))
