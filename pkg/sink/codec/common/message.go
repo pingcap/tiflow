@@ -16,10 +16,8 @@ package common
 import (
 	"encoding/binary"
 	"encoding/json"
-	"path/filepath"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
@@ -168,17 +166,4 @@ func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
 	var m ClaimCheckMessage
 	err := json.Unmarshal(data, &m)
 	return &m, err
-}
-
-// NewClaimCheckFileName return the file name for the message which is delivered to the external storage system.
-// UUID V4 is used to generate random and unique file names.
-// This should not exceed the S3 object name length limit.
-// ref https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
-func NewClaimCheckFileName() string {
-	return uuid.NewString() + ".json"
-}
-
-// ClaimCheckFileNameWithPrefix returns the file name with prefix, the full path.
-func ClaimCheckFileNameWithPrefix(prefix, fileName string) string {
-	return filepath.Join(prefix, fileName)
 }

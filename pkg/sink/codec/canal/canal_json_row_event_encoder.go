@@ -26,6 +26,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
 
@@ -416,7 +417,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
 			m.Event = e
-			m.ClaimCheckFileName = common.NewClaimCheckFileName()
+			m.ClaimCheckFileName = claimcheck.NewFileName()
 		}
 	}
 
@@ -426,7 +427,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 // NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
 func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
-	claimCheckLocation := common.ClaimCheckFileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	claimCheckLocation := claimcheck.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
 	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true, claimCheckLocation)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)

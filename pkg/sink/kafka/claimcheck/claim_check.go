@@ -17,8 +17,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/klauspost/compress/snappy"
 	"github.com/pierrec/lz4"
 	"github.com/pingcap/log"
@@ -47,7 +49,7 @@ type ClaimCheck struct {
 
 // New return a new ClaimCheck.
 func New(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
-	storage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
+	externalStorage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -60,7 +62,7 @@ func New(ctx context.Context, config *config.LargeMessageHandleConfig, changefee
 
 	return &ClaimCheck{
 		changefeedID:              changefeedID,
-		storage:                   storage,
+		storage:                   externalStorage,
 		compression:               config.ClaimCheckCompression,
 		metricSendMessageDuration: claimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSendMessageCount:    claimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -107,4 +109,17 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 func (c *ClaimCheck) Close() {
 	claimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
 	claimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
+}
+
+// NewFileName return the file name for the message which is delivered to the external storage system.
+// UUID V4 is used to generate random and unique file names.
+// This should not exceed the S3 object name length limit.
+// ref https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
+func NewFileName() string {
+	return uuid.NewString() + ".json"
+}
+
+// FileNameWithPrefix returns the file name with prefix, the full path.
+func FileNameWithPrefix(prefix, fileName string) string {
+	return filepath.Join(prefix, fileName)
 }
