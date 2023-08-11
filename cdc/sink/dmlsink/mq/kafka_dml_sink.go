@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -109,7 +110,7 @@ func NewKafkaDMLSink(
 	}
 
 	var (
-		claimCheck        *ClaimCheck
+		claimCheckStorage *claimcheck.ClaimCheck
 		claimCheckEncoder codec.ClaimCheckLocationEncoder
 		ok                bool
 	)
@@ -121,7 +122,7 @@ func NewKafkaDMLSink(
 				GenWithStack("claim-check enabled but the encoding protocol %s does not support", protocol.String())
 		}
 
-		claimCheck, err = NewClaimCheck(ctx, encoderConfig.LargeMessageHandle, changefeedID)
+		claimCheckStorage, err = claimcheck.New(ctx, encoderConfig.LargeMessageHandle, changefeedID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
@@ -138,7 +139,7 @@ func NewKafkaDMLSink(
 	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	encoderGroup := codec.NewEncoderGroup(encoderBuilder, concurrency, changefeedID)
 	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, encoderGroup, protocol, claimCheck, claimCheckEncoder, errCh,
+		eventRouter, encoderGroup, protocol, claimCheckStorage, claimCheckEncoder, errCh,
 	)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),

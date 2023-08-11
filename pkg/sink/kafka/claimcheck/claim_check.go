@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,20 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mq
+package claimcheck
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/klauspost/compress/snappy"
 	"github.com/pierrec/lz4"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -46,9 +47,9 @@ type ClaimCheck struct {
 	metricSendMessageCount    prometheus.Counter
 }
 
-// NewClaimCheck return a new ClaimCheck.
-func NewClaimCheck(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
-	storage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
+// New return a new ClaimCheck.
+func New(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
+	externalStorage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -61,10 +62,10 @@ func NewClaimCheck(ctx context.Context, config *config.LargeMessageHandleConfig,
 
 	return &ClaimCheck{
 		changefeedID:              changefeedID,
-		storage:                   storage,
+		storage:                   externalStorage,
 		compression:               config.ClaimCheckCompression,
-		metricSendMessageDuration: mq.ClaimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricSendMessageCount:    mq.ClaimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricSendMessageDuration: claimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricSendMessageCount:    claimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}, nil
 }
 
@@ -106,6 +107,19 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 
 // Close the claim check by clean up the metrics.
 func (c *ClaimCheck) Close() {
-	mq.ClaimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
-	mq.ClaimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
+	claimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
+	claimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
+}
+
+// NewFileName return the file name for the message which is delivered to the external storage system.
+// UUID V4 is used to generate random and unique file names.
+// This should not exceed the S3 object name length limit.
+// ref https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
+func NewFileName() string {
+	return uuid.NewString() + ".json"
+}
+
+// FileNameWithPrefix returns the file name with prefix, the full path.
+func FileNameWithPrefix(prefix, fileName string) string {
+	return filepath.Join(prefix, fileName)
 }
