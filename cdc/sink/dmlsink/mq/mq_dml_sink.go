@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/atomic"
 )
 
@@ -74,7 +75,7 @@ func newDMLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
-	claimCheck *ClaimCheck,
+	claimCheck *claimcheck.ClaimCheck,
 	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	errCh chan error,
 ) *dmlSink {

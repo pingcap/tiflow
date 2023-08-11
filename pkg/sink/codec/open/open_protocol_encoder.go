@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
 
@@ -245,7 +246,8 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 	}
 
 	keyMsg.OnlyHandleKey = false
-	keyMsg.ClaimCheckLocation = origin.ClaimCheckFileName
+	claimCheckLocation := claimcheck.FileNameWithPrefix(d.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	keyMsg.ClaimCheckLocation = claimCheckLocation
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -285,7 +287,7 @@ func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e 
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
 	// ClaimCheckFileName must be set to indicate this message should be sent to the external storage.
-	message.ClaimCheckFileName = common.NewClaimCheckFileName(e)
+	message.ClaimCheckFileName = claimcheck.NewFileName()
 	message.Event = e
 	message.IncRowsCount()
 	if callback != nil {
