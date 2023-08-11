@@ -46,6 +46,8 @@ type ClusterAdminClient interface {
 	GetTopicsMeta(ctx context.Context,
 		topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
 
+	GetTopicsNumPartitions(ctx context.Context, topics []string) (map[string]int32, error)
+
 	// CreateTopic creates a new topic.
 	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error
 

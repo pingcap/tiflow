@@ -183,6 +183,23 @@ func (a *admin) GetTopicsMeta(
 	return result, nil
 }
 
+func (a *admin) GetTopicsNumPartitions(
+	ctx context.Context, topics []string,
+) (map[string]int32, error) {
+	resp, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
+		Topics: topics,
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	result := make(map[string]int32, len(topics))
+	for _, topic := range resp.Topics {
+		result[topic.Name] = int32(len(topic.Partitions))
+	}
+	return result, nil
+}
+
 func (a *admin) CreateTopic(
 	ctx context.Context,
 	detail *pkafka.TopicDetail,

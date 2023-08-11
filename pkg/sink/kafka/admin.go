@@ -144,6 +144,21 @@ func (a *saramaAdminClient) GetTopicsMeta(
 	return result, nil
 }
 
+func (a *saramaAdminClient) GetTopicsNumPartitions(
+	_ context.Context, topics []string,
+) (map[string]int32, error) {
+	result := make(map[string]int32, len(topics))
+	for _, topic := range topics {
+		partition, err := a.client.Partitions(topic)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		result[topic] = int32(len(partition))
+	}
+
+	return result, nil
+}
+
 func (a *saramaAdminClient) CreateTopic(
 	_ context.Context, detail *TopicDetail, validateOnly bool,
 ) error {
