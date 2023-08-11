@@ -102,7 +102,7 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 			)
 			return
 		case <-m.metaRefreshTicker.C:
-			topicMetaList, _ := m.fetchAllTopicsNumPartitions(ctx)
+			topicPartitionNums, _ := m.fetchAllTopicsNumPartitions(ctx)
 			for topic, partitionNum := range topicMetaList {
 				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
 			}
