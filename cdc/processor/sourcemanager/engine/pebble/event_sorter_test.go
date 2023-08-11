@@ -41,7 +41,7 @@ func TestTableOperations(t *testing.T) {
 	s.AddTable(1)
 	s.AddTable(1)
 
-	require.Equal(t, model.Ts(0), s.GetResolvedTs(1))
+	require.Equal(t, model.Ts(0), s.GetStatsByTable(1).ReceivedMaxResolvedTs)
 
 	s.RemoveTable(1)
 	s.RemoveTable(1)

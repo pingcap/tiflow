@@ -26,11 +26,11 @@ import (
 // to adapt the current Processor implementation to it.
 // TODO find a way to make the semantics easier to understand.
 type TableExecutor interface {
-	// AddTable add a new table with `startTs`
+	// AddTable add a new table with `Checkpoint.CheckpointTs`
 	// if `isPrepare` is true, the 1st phase of the 2 phase scheduling protocol.
 	// if `isPrepare` is false, the 2nd phase.
 	AddTable(
-		ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
+		ctx context.Context, tableID model.TableID, checkpoint tablepb.Checkpoint, isPrepare bool,
 	) (done bool, err error)
 
 	// IsAddTableFinished make sure the requested table is in the proper status

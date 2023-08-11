@@ -121,12 +121,13 @@ func (p *processor) checkReadyForMessages() bool {
 // 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
 // 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
 func (p *processor) AddTable(
-	ctx context.Context, tableID model.TableID, startTs model.Ts, isPrepare bool,
+	ctx context.Context, tableID model.TableID, checkpoint tablepb.Checkpoint, isPrepare bool,
 ) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
 	}
 
+	startTs := checkpoint.CheckpointTs
 	if startTs == 0 {
 		log.Panic("table start ts must not be 0",
 			zap.String("captureID", p.captureInfo.ID),
@@ -167,6 +168,11 @@ func (p *processor) AddTable(
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
 				if p.pullBasedSinking {
+					if p.redoDMLMgr.Enabled() {
+						// ResolvedTs is store in external storage when redo log is enabled, so we need to
+						// start table with ResolvedTs in redoDMLManager.
+						p.redoDMLMgr.StartTable(tableID, checkpoint.ResolvedTs)
+					}
 					if err := p.sinkManager.StartTable(tableID, startTs); err != nil {
 						return false, errors.Trace(err)
 					}
@@ -463,7 +469,7 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 
 func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableID, sinkStats sinkmanager.TableStats) tablepb.Stats {
 	pullerStats := p.sourceManager.GetTablePullerStats(tableID)
-	now, _ := p.upstream.PDClock.CurrentTime()
+	now := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
@@ -491,8 +497,8 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(tableID model.TableI
 		ResolvedTs:   sortStats.ReceivedMaxResolvedTs,
 	}
 	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
-		CheckpointTs: sinkStats.ReceivedMaxCommitTs,
-		ResolvedTs:   sinkStats.ReceivedMaxCommitTs,
+		CheckpointTs: sinkStats.ResolvedTs,
+		ResolvedTs:   sinkStats.ResolvedTs,
 	}
 
 	return stats

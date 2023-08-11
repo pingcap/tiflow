@@ -147,6 +147,9 @@ func (s *simpleReactorState) SetSum(sum int) {
 	s.patches = append(s.patches, patch)
 }
 
+func (s *simpleReactorState) UpdatePendingChange() {
+}
+
 func (s *simpleReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	subMatches := keyParseRegexp.FindSubmatch(key.Bytes())
 	if len(subMatches) != 2 {
@@ -283,6 +286,9 @@ type intReactorState struct {
 	lastVal   int
 }
 
+func (s *intReactorState) UpdatePendingChange() {
+}
+
 func (s *intReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {
 	var err error
 	s.val, err = strconv.Atoi(string(value))
@@ -370,6 +376,9 @@ func TestLinearizability(t *testing.T) {
 type commonReactorState struct {
 	state          map[string]string
 	pendingPatches []DataPatch
+}
+
+func (s *commonReactorState) UpdatePendingChange() {
 }
 
 func (s *commonReactorState) Update(key util.EtcdKey, value []byte, isInit bool) error {

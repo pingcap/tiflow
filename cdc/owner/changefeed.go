@@ -41,9 +41,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// newSchedulerFromCtx creates a new scheduler from context.
+// newScheduler creates a new scheduler from context.
 // This function is factored out to facilitate unit testing.
-func newSchedulerFromCtx(
+func newScheduler(
 	ctx cdcContext.Context, pdClock pdutil.Clock, epoch uint64,
 ) (ret scheduler.Scheduler, err error) {
 	changeFeedID := ctx.ChangefeedVars().ID
@@ -56,14 +56,6 @@ func newSchedulerFromCtx(
 		ctx, captureID, changeFeedID,
 		messageServer, messageRouter, ownerRev, epoch, cfg.Scheduler, pdClock)
 	return ret, errors.Trace(err)
-}
-
-func newScheduler(
-	ctx cdcContext.Context,
-	pdClock pdutil.Clock,
-	epoch uint64,
-) (scheduler.Scheduler, error) {
-	return newSchedulerFromCtx(ctx, pdClock, epoch)
 }
 
 type changefeed struct {
@@ -371,10 +363,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return errors.Trace(err)
 	}
 
-	pdTime, err := c.upstream.PDClock.CurrentTime()
-	if err != nil {
-		return errors.Trace(err)
-	}
+	pdTime := c.upstream.PDClock.CurrentTime()
 	currentTs := oracle.GetPhysical(pdTime)
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,

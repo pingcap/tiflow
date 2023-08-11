@@ -464,7 +464,7 @@ func (t *tableActor) AsyncStop() bool {
 func (t *tableActor) Stats() tablepb.Stats {
 	pullerStats := t.pullerNode.plr.Stats()
 	sinkStats := t.sinkNode.Stats()
-	now, _ := t.upstream.PDClock.CurrentTime()
+	now := t.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,

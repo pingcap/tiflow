@@ -756,6 +756,11 @@ var (
 			" caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrSnapshotLostByGC"),
 	)
+	ErrGCTTLExceeded = errors.Normalize(
+		"the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded "+
+			"the GC TTL and the changefeed is blocking global GC progression",
+		errors.RFCCodeText("CDC:ErrGCTTLExceeded"),
+	)
 	ErrNotOwner = errors.Normalize(
 		"this capture is not a owner",
 		errors.RFCCodeText("CDC:ErrNotOwner"),
@@ -773,6 +778,10 @@ var (
 		"some tables are not eligible to replicate(%v), "+
 			"if you want to ignore these tables, please set ignore_ineligible_table to true",
 		errors.RFCCodeText("CDC:ErrTableIneligible"),
+	)
+	ErrInvalidCheckpointTs = errors.Normalize(
+		"checkpointTs(%v) should not larger than resolvedTs(%v)",
+		errors.RFCCodeText("CDC:ErrInvalidCheckpointTs"),
 	)
 
 	// EtcdWorker related errors. Internal use only.

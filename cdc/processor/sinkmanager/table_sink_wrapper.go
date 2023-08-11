@@ -50,7 +50,7 @@ type tableSinkWrapper struct {
 	// tableSink is the underlying sink.
 	tableSink             tablesink.TableSink
 	tableSinkCheckpointTs model.ResolvedTs
-	tableSinkMu           sync.Mutex
+	tableSinkMu           sync.RWMutex
 
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
@@ -63,9 +63,6 @@ type tableSinkWrapper struct {
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.
 	// We use this to advance the redo log.
 	receivedSorterResolvedTs atomic.Uint64
-	// receivedSorterCommitTs is the commit ts received from the sorter.
-	// We use this to statistics the latency of the table sorter.
-	receivedSorterCommitTs atomic.Uint64
 	// receivedEventCount is the number of events received from the sorter.
 	receivedEventCount atomic.Int64
 
@@ -161,15 +158,13 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 }
 
 func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEvent) error {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
-	// If it's nil it means it's closed.
-	if t.tableSink != nil {
-		t.tableSink.AppendRowChangedEvents(events...)
-	} else {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink == nil {
 		// If it's nil it means it's closed.
 		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
+	t.tableSink.AppendRowChangedEvents(events...)
 	return nil
 }
 
@@ -188,29 +183,19 @@ func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
 	}
 }
 
-func (t *tableSinkWrapper) updateReceivedSorterCommitTs(ts model.Ts) {
-	if ts > t.receivedSorterCommitTs.Load() {
-		t.receivedSorterCommitTs.Store(ts)
-	}
-}
-
 func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
-	if t.tableSink != nil {
-		if err := t.tableSink.UpdateResolvedTs(ts); err != nil {
-			return errors.Trace(err)
-		}
-	} else {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink == nil {
 		// If it's nil it means it's closed.
 		return tablesink.NewSinkInternalError(errors.New("table sink cleared"))
 	}
-	return nil
+	return t.tableSink.UpdateResolvedTs(ts)
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
 	if t.tableSink != nil {
 		checkpointTs := t.tableSink.GetCheckpointTs()
 		if t.tableSinkCheckpointTs.Less(checkpointTs) {
@@ -222,10 +207,6 @@ func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 
 func (t *tableSinkWrapper) getReceivedSorterResolvedTs() model.Ts {
 	return t.receivedSorterResolvedTs.Load()
-}
-
-func (t *tableSinkWrapper) getReceivedSorterCommitTs() model.Ts {
-	return t.receivedSorterCommitTs.Load()
 }
 
 func (t *tableSinkWrapper) getReceivedEventCount() int64 {
@@ -282,18 +263,18 @@ func (t *tableSinkWrapper) markAsClosed() {
 	}
 }
 
-func (t *tableSinkWrapper) asyncClose() bool {
+func (t *tableSinkWrapper) asyncStop() bool {
 	t.markAsClosing()
-	if t.asyncClearTableSink() {
+	if t.asyncCloseAndClearTableSink() {
 		t.markAsClosed()
 		return true
 	}
 	return false
 }
 
-func (t *tableSinkWrapper) close() {
+func (t *tableSinkWrapper) stop() {
 	t.markAsClosing()
-	t.clearTableSink()
+	t.closeAndClearTableSink()
 	t.markAsClosed()
 }
 
@@ -308,33 +289,46 @@ func (t *tableSinkWrapper) initTableSink() bool {
 	return true
 }
 
-func (t *tableSinkWrapper) asyncClearTableSink() bool {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
-	if t.tableSink != nil {
-		if !t.tableSink.AsyncClose() {
-			return false
-		}
-		checkpointTs := t.tableSink.GetCheckpointTs()
-		if t.tableSinkCheckpointTs.Less(checkpointTs) {
-			t.tableSinkCheckpointTs = checkpointTs
-		}
-		t.tableSink = nil
+func (t *tableSinkWrapper) asyncCloseTableSink() bool {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink == nil {
+		return true
 	}
+	return t.tableSink.AsyncClose()
+}
+
+func (t *tableSinkWrapper) closeTableSink() {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink == nil {
+		return
+	}
+	t.tableSink.Close()
+}
+
+func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
+	t.asyncCloseTableSink()
+	t.doTableSinkClear()
 	return true
 }
 
-func (t *tableSinkWrapper) clearTableSink() {
+func (t *tableSinkWrapper) closeAndClearTableSink() {
+	t.closeTableSink()
+	t.doTableSinkClear()
+}
+
+func (t *tableSinkWrapper) doTableSinkClear() {
 	t.tableSinkMu.Lock()
 	defer t.tableSinkMu.Unlock()
-	if t.tableSink != nil {
-		t.tableSink.Close()
-		checkpointTs := t.tableSink.GetCheckpointTs()
-		if t.tableSinkCheckpointTs.Less(checkpointTs) {
-			t.tableSinkCheckpointTs = checkpointTs
-		}
-		t.tableSink = nil
+	if t.tableSink == nil {
+		return
 	}
+	checkpointTs := t.tableSink.GetCheckpointTs()
+	if t.tableSinkCheckpointTs.Less(checkpointTs) {
+		t.tableSinkCheckpointTs = checkpointTs
+	}
+	t.tableSink = nil
 }
 
 // When the attached sink fail, there can be some events that have already been
@@ -407,9 +401,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
 func convertRowChangedEvents(
-	changefeed model.ChangeFeedID,
-	tableID model.TableID,
-	enableOldValue bool,
+	changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool,
 	events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0

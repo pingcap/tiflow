@@ -411,14 +411,6 @@ func (o *ownerImpl) updateMetrics() {
 			changefeedStatusGauge.WithLabelValues(cfID.Namespace, cfID.ID).
 				Set(float64(cf.state.Info.State.ToInt()))
 		}
-
-		// The InfoProvider is a proxy object returning information
-		// from the scheduler.
-		infoProvider := cf.GetInfoProvider()
-		if infoProvider == nil {
-			// The scheduler has not been initialized yet.
-			continue
-		}
 	}
 }
 

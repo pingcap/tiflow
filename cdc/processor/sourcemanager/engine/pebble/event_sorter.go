@@ -156,44 +156,23 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 			zap.Int64("tableID", tableID))
 	}
 
-	maxCommitTs := model.Ts(0)
-	maxResolvedTs := model.Ts(0)
+	maxCommitTs := state.maxReceivedCommitTs.Load()
+	maxResolvedTs := state.maxReceivedResolvedTs.Load()
 	for _, event := range events {
-		state.ch.In() <- eventWithTableID{tableID, event}
 		if event.IsResolved() {
 			if event.CRTs > maxResolvedTs {
 				maxResolvedTs = event.CRTs
+				state.maxReceivedResolvedTs.Store(maxResolvedTs)
 			}
 		} else {
 			state.receivedEvents.Add(1)
 			if event.CRTs > maxCommitTs {
 				maxCommitTs = event.CRTs
+				state.maxReceivedCommitTs.Store(maxCommitTs)
 			}
 		}
+		state.ch.In() <- eventWithTableID{tableID, event}
 	}
-
-	if maxCommitTs > state.maxReceivedCommitTs.Load() {
-		state.maxReceivedCommitTs.Store(maxCommitTs)
-	}
-	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
-		state.maxReceivedResolvedTs.Store(maxResolvedTs)
-	}
-}
-
-// GetResolvedTs implements engine.SortEngine.
-func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
-	s.mu.RLock()
-	state, exists := s.tables[tableID]
-	s.mu.RUnlock()
-
-	if !exists {
-		log.Panic("get resolved ts from an non-existent table",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Int64("tableID", tableID))
-	}
-
-	return state.maxReceivedResolvedTs.Load()
 }
 
 // OnResolve implements engine.SortEngine.

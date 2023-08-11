@@ -75,6 +75,13 @@ func GetExternalStorage(
 		retErr := errors.ErrFailToCreateExternalStorage.Wrap(errors.Trace(err))
 		return nil, retErr.GenWithStackByArgs("creating ExternalStorage for s3")
 	}
+
+	// Check the connection and ignore the returned bool value, since we don't care if the file exists.
+	_, err = ret.FileExists(ctx, "test")
+	if err != nil {
+		retErr := errors.ErrFailToCreateExternalStorage.Wrap(errors.Trace(err))
+		return nil, retErr.GenWithStackByArgs("creating ExternalStorage for s3")
+	}
 	return ret, nil
 }
 

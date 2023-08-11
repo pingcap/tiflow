@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,10 +119,30 @@ func TestCoordinatorRecvMsgs(t *testing.T) {
 	}}, msgs)
 }
 
+func newCoordinator(
+	captureID model.CaptureID,
+	changefeedID model.ChangeFeedID,
+	cfg *config.SchedulerConfig,
+) *coordinator {
+	revision := schedulepb.OwnerRevision{Revision: 1}
+
+	return &coordinator{
+		version:   version.ReleaseSemver(),
+		revision:  revision,
+		captureID: captureID,
+		replicationM: replication.NewReplicationManager(
+			cfg.MaxTaskConcurrency, changefeedID),
+		captureM:     member.NewCaptureManager(captureID, changefeedID, revision, cfg),
+		schedulerM:   scheduler.NewSchedulerManager(changefeedID, cfg),
+		changefeedID: changefeedID,
+		compat:       compat.New(map[model.CaptureID]*model.CaptureInfo{}),
+	}
+}
+
 func TestCoordinatorHeartbeat(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
@@ -180,7 +201,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 
 func TestCoordinatorAddCapture(t *testing.T) {
 	t.Parallel()
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
@@ -237,7 +258,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 func TestCoordinatorRemoveCapture(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
@@ -330,7 +351,7 @@ func TestCoordinatorDrainCapture(t *testing.T) {
 func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		CollectStatsTick:   math.MaxInt,
 		MaxTaskConcurrency: 1,
@@ -425,10 +446,10 @@ func TestCoordinatorDropMsgIfChangefeedEpochMismatch(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	coord := newCoordinator("b", model.ChangeFeedID{}, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		CollectStatsTick:   math.MaxInt,
-		MaxTaskConcurrency: 1,
+		MaxTaskConcurrency: 2,
 	})
 	coord.captureID = "0"
 	coord.changefeedEpoch = 1

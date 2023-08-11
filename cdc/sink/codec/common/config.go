@@ -46,11 +46,12 @@ type Config struct {
 	AvroBigintUnsignedHandlingMode string
 
 	// for sinking to cloud storage
-	Delimiter       string
-	Quote           string
-	NullString      string
-	IncludeCommitTs bool
-	Terminator      string
+	Delimiter            string
+	Quote                string
+	NullString           string
+	IncludeCommitTs      bool
+	Terminator           string
+	BinaryEncodingMethod string
 }
 
 // NewConfig return a Config for codec
@@ -134,6 +135,7 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 			c.Quote = config.Sink.CSVConfig.Quote
 			c.NullString = config.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
+			c.BinaryEncodingMethod = config.Sink.CSVConfig.BinaryEncodingMethod
 		}
 	}
 

@@ -86,16 +86,6 @@ func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEve
 	}
 }
 
-// GetResolvedTs implements engine.SortEngine.
-func (s *EventSorter) GetResolvedTs(tableID model.TableID) model.Ts {
-	value, exists := s.tables.Load(tableID)
-	if !exists {
-		log.Panic("get resolved ts from an unexist table", zap.Int64("tableID", tableID))
-	}
-
-	return value.(*tableSorter).getResolvedTs()
-}
-
 // OnResolve implements engine.SortEngine.
 func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 	s.mu.Lock()
@@ -219,12 +209,6 @@ func (s *tableSorter) add(events ...*model.PolymorphicEvent) (resolvedTs model.T
 		}
 	}
 	return
-}
-
-func (s *tableSorter) getResolvedTs() model.Ts {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return *s.resolvedTs
 }
 
 func (s *tableSorter) fetch(tableID model.TableID, lowerBound, upperBound engine.Position) engine.EventIterator {

@@ -1187,6 +1187,10 @@ var doc = `{
         "config.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary-encoding-method": {
+                    "description": "encoding method of binary type",
+                    "type": "string"
+                },
                 "delimiter": {
                     "description": "delimiter between fields",
                     "type": "string"
@@ -1597,6 +1601,9 @@ var doc = `{
         "v2.CSVConfig": {
             "type": "object",
             "properties": {
+                "binary_encoding_method": {
+                    "type": "string"
+                },
                 "delimiter": {
                     "type": "string"
                 },
@@ -1858,6 +1865,35 @@ var doc = `{
                 }
             }
         },
+        "v2.KafkaConfig": {
+            "type": "object",
+            "properties": {
+                "sasl_mechanism": {
+                    "type": "string"
+                },
+                "sasl_oauth_audience": {
+                    "type": "string"
+                },
+                "sasl_oauth_client_id": {
+                    "type": "string"
+                },
+                "sasl_oauth_client_secret": {
+                    "type": "string"
+                },
+                "sasl_oauth_grant_type": {
+                    "type": "string"
+                },
+                "sasl_oauth_scopes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sasl_oauth_token_url": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.LogLevelReq": {
             "type": "object",
             "properties": {
@@ -2019,6 +2055,9 @@ var doc = `{
                 },
                 "file_index_width": {
                     "type": "integer"
+                },
+                "kafka_config": {
+                    "$ref": "#/definitions/v2.KafkaConfig"
                 },
                 "protocol": {
                     "type": "string"

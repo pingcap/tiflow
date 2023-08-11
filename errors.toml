@@ -396,6 +396,11 @@ error = '''
 event is larger than the total memory quota, size: %d, quota: %d
 '''
 
+["CDC:ErrGCTTLExceeded"]
+error = '''
+the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL and the changefeed is blocking global GC progression
+'''
+
 ["CDC:ErrGRPCDialFailed"]
 error = '''
 grpc dial failed
@@ -464,6 +469,11 @@ invalid admin job type: %d
 ["CDC:ErrInvalidChangefeedID"]
 error = '''
 bad changefeed id, please match the pattern "^[a-zA-Z0-9]+(\-[a-zA-Z0-9]+)*$", the length should no more than %d, eg, "simple-changefeed-task",
+'''
+
+["CDC:ErrInvalidCheckpointTs"]
+error = '''
+checkpointTs(%v) should not larger than resolvedTs(%v)
 '''
 
 ["CDC:ErrInvalidDDLJob"]

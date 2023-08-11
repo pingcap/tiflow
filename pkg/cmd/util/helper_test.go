@@ -200,9 +200,10 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			{Matcher: []string{"test3.*", "test4.*"}, Columns: []string{"!a", "column3"}},
 		},
 		CSVConfig: &config.CSVConfig{
-			Quote:      string(config.DoubleQuoteChar),
-			Delimiter:  string(config.Comma),
-			NullString: config.NULL,
+			Quote:                string(config.DoubleQuoteChar),
+			Delimiter:            string(config.Comma),
+			NullString:           config.NULL,
+			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
 		Terminator:               "\r\n",
 		DateSeparator:            config.DateSeparatorDay.String(),
@@ -230,10 +231,11 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		EnablePartitionSeparator: true,
 		FileIndexWidth:           config.DefaultFileIndexWidth,
 		CSVConfig: &config.CSVConfig{
-			Delimiter:       ",",
-			Quote:           "\"",
-			NullString:      "\\N",
-			IncludeCommitTs: false,
+			Delimiter:            ",",
+			Quote:                "\"",
+			NullString:           "\\N",
+			IncludeCommitTs:      false,
+			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
 	}, cfg.Sink)
 }

@@ -278,7 +278,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// table-1: `preparing` -> `prepared` -> `replicating`
-	ok, err := p.AddTable(ctx, 1, 20, true)
+	ok, err := p.AddTable(ctx, 1, tablepb.Checkpoint{CheckpointTs: 20}, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -304,12 +304,12 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.True(t, done)
 	require.Equal(t, tablepb.TableStatePrepared, table1.State())
 
-	ok, err = p.AddTable(ctx, 1, 30, true)
+	ok, err = p.AddTable(ctx, 1, tablepb.Checkpoint{CheckpointTs: 30}, true)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(0), table1.sinkStartTs)
 
-	ok, err = p.AddTable(ctx, 1, 30, false)
+	ok, err = p.AddTable(ctx, 1, tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, model.Ts(30), table1.sinkStartTs)
@@ -404,10 +404,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err := p.AddTable(ctx, model.TableID(1), 20, false)
+	done, err := p.AddTable(ctx, 1, tablepb.Checkpoint{CheckpointTs: 20}, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
+	done, err = p.AddTable(ctx, 2, tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.Nil(t, err)
 	require.True(t, done)
 
@@ -438,10 +438,10 @@ func TestProcessorClose(t *testing.T) {
 	tester.MustApplyPatches()
 
 	// add tables
-	done, err = p.AddTable(ctx, model.TableID(1), 20, false)
+	done, err = p.AddTable(ctx, 1, tablepb.Checkpoint{CheckpointTs: 20}, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, model.TableID(2), 30, false)
+	done, err = p.AddTable(ctx, 2, tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	err = p.Tick(ctx)
@@ -472,10 +472,10 @@ func TestPositionDeleted(t *testing.T) {
 	p, tester := initProcessor4Test(ctx, t, &liveness)
 	var err error
 	// add table
-	done, err := p.AddTable(ctx, model.TableID(1), 30, false)
+	done, err := p.AddTable(ctx, 1, tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	done, err = p.AddTable(ctx, model.TableID(2), 40, false)
+	done, err = p.AddTable(ctx, 2, tablepb.Checkpoint{CheckpointTs: 40}, false)
 	require.Nil(t, err)
 	require.True(t, done)
 	// init tick
@@ -573,7 +573,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	})
 	p.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
-	done, err := p.AddTable(ctx, model.TableID(1), 5, false)
+	done, err := p.AddTable(ctx, 1, tablepb.Checkpoint{CheckpointTs: 5}, false)
 	require.True(t, done)
 	require.Nil(t, err)
 	err = p.Tick(ctx)

@@ -62,6 +62,11 @@ const (
 	MaxFileIndexWidth = 20 // enough for 2^64 files
 	// DefaultFileIndexWidth is the default width of file index.
 	DefaultFileIndexWidth = MaxFileIndexWidth
+
+	// BinaryEncodingHex encodes binary data to hex string.
+	BinaryEncodingHex = "hex"
+	// BinaryEncodingBase64 encodes binary data to base64 string.
+	BinaryEncodingBase64 = "base64"
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -150,6 +155,8 @@ type CSVConfig struct {
 	NullString string `toml:"null" json:"null"`
 	// whether to include commit ts
 	IncludeCommitTs bool `toml:"include-commit-ts" json:"include-commit-ts"`
+	// encoding method of binary type
+	BinaryEncodingMethod string `toml:"binary-encoding-method" json:"binary-encoding-method"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {
@@ -183,6 +190,14 @@ func (c *CSVConfig) validateAndAdjust() error {
 	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config quote and delimiter cannot be the same"))
+	}
+
+	// validate binary encoding method
+	switch c.BinaryEncodingMethod {
+	case BinaryEncodingHex, BinaryEncodingBase64:
+	default:
+		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+			errors.New("csv config binary-encoding-method can only be hex or base64"))
 	}
 
 	return nil

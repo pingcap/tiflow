@@ -28,7 +28,7 @@ import (
 func TestInfoProvider(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})
@@ -59,7 +59,7 @@ func TestInfoProvider(t *testing.T) {
 func TestInfoProviderIsInitialized(t *testing.T) {
 	t.Parallel()
 
-	coord := newCoordinator("a", model.ChangeFeedID{}, 1, &config.SchedulerConfig{
+	coord := newCoordinator("a", model.ChangeFeedID{}, &config.SchedulerConfig{
 		HeartbeatTick:      math.MaxInt,
 		MaxTaskConcurrency: 1,
 	})

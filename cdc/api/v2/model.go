@@ -261,10 +261,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var csvConfig *config.CSVConfig
 		if c.Sink.CSVConfig != nil {
 			csvConfig = &config.CSVConfig{
-				Delimiter:       c.Sink.CSVConfig.Delimiter,
-				Quote:           c.Sink.CSVConfig.Quote,
-				NullString:      c.Sink.CSVConfig.NullString,
-				IncludeCommitTs: c.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            c.Sink.CSVConfig.Delimiter,
+				Quote:                c.Sink.CSVConfig.Quote,
+				NullString:           c.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      c.Sink.CSVConfig.IncludeCommitTs,
+				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
 
@@ -280,6 +281,18 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			DateSeparator:            c.Sink.DateSeparator,
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           c.Sink.FileIndexWidth,
+		}
+
+		if c.Sink.KafkaConfig != nil {
+			res.Sink.KafkaConfig = &config.KafkaConfig{
+				SASLMechanism:         c.Sink.KafkaConfig.SASLMechanism,
+				SASLOAuthClientID:     c.Sink.KafkaConfig.SASLOAuthClientID,
+				SASLOAuthClientSecret: c.Sink.KafkaConfig.SASLOAuthClientSecret,
+				SASLOAuthTokenURL:     c.Sink.KafkaConfig.SASLOAuthTokenURL,
+				SASLOAuthScopes:       c.Sink.KafkaConfig.SASLOAuthScopes,
+				SASLOAuthGrantType:    c.Sink.KafkaConfig.SASLOAuthGrantType,
+				SASLOAuthAudience:     c.Sink.KafkaConfig.SASLOAuthAudience,
+			}
 		}
 	}
 	if c.Mounter != nil {
@@ -366,10 +379,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var csvConfig *CSVConfig
 		if cloned.Sink.CSVConfig != nil {
 			csvConfig = &CSVConfig{
-				Delimiter:       cloned.Sink.CSVConfig.Delimiter,
-				Quote:           cloned.Sink.CSVConfig.Quote,
-				NullString:      cloned.Sink.CSVConfig.NullString,
-				IncludeCommitTs: cloned.Sink.CSVConfig.IncludeCommitTs,
+				Delimiter:            cloned.Sink.CSVConfig.Delimiter,
+				Quote:                cloned.Sink.CSVConfig.Quote,
+				NullString:           cloned.Sink.CSVConfig.NullString,
+				IncludeCommitTs:      cloned.Sink.CSVConfig.IncludeCommitTs,
+				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
 
@@ -385,6 +399,18 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			DateSeparator:            cloned.Sink.DateSeparator,
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           cloned.Sink.FileIndexWidth,
+		}
+
+		if cloned.Sink.KafkaConfig != nil {
+			res.Sink.KafkaConfig = &KafkaConfig{
+				SASLMechanism:         cloned.Sink.KafkaConfig.SASLMechanism,
+				SASLOAuthClientID:     cloned.Sink.KafkaConfig.SASLOAuthClientID,
+				SASLOAuthClientSecret: cloned.Sink.KafkaConfig.SASLOAuthClientSecret,
+				SASLOAuthTokenURL:     cloned.Sink.KafkaConfig.SASLOAuthTokenURL,
+				SASLOAuthScopes:       cloned.Sink.KafkaConfig.SASLOAuthScopes,
+				SASLOAuthGrantType:    cloned.Sink.KafkaConfig.SASLOAuthGrantType,
+				SASLOAuthAudience:     cloned.Sink.KafkaConfig.SASLOAuthAudience,
+			}
 		}
 	}
 	if cloned.Consistent != nil {
@@ -515,15 +541,29 @@ type SinkConfig struct {
 	DateSeparator            string            `json:"date_separator"`
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
 	FileIndexWidth           int               `json:"file_index_width"`
+	KafkaConfig              *KafkaConfig      `json:"kafka_config"`
+}
+
+// KafkaConfig represents kafka config for a changefeed.
+// This is a duplicate of config.KafkaConfig
+type KafkaConfig struct {
+	SASLMechanism         *string  `json:"sasl_mechanism,omitempty"`
+	SASLOAuthClientID     *string  `json:"sasl_oauth_client_id,omitempty"`
+	SASLOAuthClientSecret *string  `json:"sasl_oauth_client_secret,omitempty"`
+	SASLOAuthTokenURL     *string  `json:"sasl_oauth_token_url,omitempty"`
+	SASLOAuthScopes       []string `json:"sasl_oauth_scopes,omitempty"`
+	SASLOAuthGrantType    *string  `json:"sasl_oauth_grant_type,omitempty"`
+	SASLOAuthAudience     *string  `json:"sasl_oauth_audience,omitempty"`
 }
 
 // CSVConfig denotes the csv config
 // This is the same as config.CSVConfig
 type CSVConfig struct {
-	Delimiter       string `json:"delimiter"`
-	Quote           string `json:"quote"`
-	NullString      string `json:"null"`
-	IncludeCommitTs bool   `json:"include_commit_ts"`
+	Delimiter            string `json:"delimiter"`
+	Quote                string `json:"quote"`
+	NullString           string `json:"null"`
+	IncludeCommitTs      bool   `json:"include_commit_ts"`
+	BinaryEncodingMethod string `json:"binary_encoding_method"`
 }
 
 // DispatchRule represents partition rule for a table
