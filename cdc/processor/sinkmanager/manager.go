@@ -979,7 +979,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	m.redoMemQuota.Release(span, checkpointTs)
 
 	stuckCheck := time.Duration(*m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec) * time.Second
-	if advanced.After(time.Unix(0, 0)) && time.Since(advanced) > stuckCheck &&
+	if version > 0 && time.Since(advanced) > stuckCheck &&
 		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
 		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
 			zap.String("namespace", m.changefeedID.Namespace),
