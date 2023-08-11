@@ -771,13 +771,9 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
 	if len(t.Rows) < 2 {
 		return nil
 	}
-	newRows, split, err := trySplitAndSortUpdateEvent(t.Rows)
+	newRows, err := trySplitAndSortUpdateEvent(t.Rows)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	// some updated events is split, need to sort
-	if split {
-		sort.Sort(txnRows(newRows))
 	}
 	t.Rows = newRows
 	return nil
@@ -787,9 +783,9 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
 // returns true if some updated events is split
 func trySplitAndSortUpdateEvent(
 	events []*RowChangedEvent,
-) ([]*RowChangedEvent, bool, error) {
+) ([]*RowChangedEvent, error) {
 	rowChangedEvents := make([]*RowChangedEvent, 0, len(events))
-	needSplit := false
+	split := false
 	for _, e := range events {
 		if e == nil {
 			log.Warn("skip emit nil event",
@@ -813,15 +809,19 @@ func trySplitAndSortUpdateEvent(
 		if e.IsUpdate() && shouldSplitUpdateEvent(e) {
 			deleteEvent, insertEvent, err := splitUpdateEvent(e)
 			if err != nil {
-				return nil, false, errors.Trace(err)
+				return nil, errors.Trace(err)
 			}
-			needSplit = true
+			split = true
 			rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
 		} else {
 			rowChangedEvents = append(rowChangedEvents, e)
 		}
 	}
-	return rowChangedEvents, needSplit, nil
+	// some updated events is split, need to sort
+	if split {
+		sort.Sort(txnRows(rowChangedEvents))
+	}
+	return rowChangedEvents, nil
 }
 
 // shouldSplitUpdateEvent determines if the split event is needed to align the old format based on

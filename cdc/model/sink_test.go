@@ -425,10 +425,9 @@ func TestTrySplitAndSortUpdateEventNil(t *testing.T) {
 	t.Parallel()
 
 	events := []*RowChangedEvent{nil}
-	result, split, err := trySplitAndSortUpdateEvent(events)
+	result, err := trySplitAndSortUpdateEvent(events)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
-	require.False(t, split)
 }
 
 func TestTrySplitAndSortUpdateEventEmpty(t *testing.T) {
@@ -440,10 +439,9 @@ func TestTrySplitAndSortUpdateEventEmpty(t *testing.T) {
 			CommitTs: 2,
 		},
 	}
-	result, split, err := trySplitAndSortUpdateEvent(events)
+	result, err := trySplitAndSortUpdateEvent(events)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
-	require.False(t, split)
 }
 
 func TestTrySplitAndSortUpdateEvent(t *testing.T) {
@@ -482,10 +480,11 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 			PreColumns: preColumns,
 		},
 	}
-	result, split, err := trySplitAndSortUpdateEvent(events)
+	result, err := trySplitAndSortUpdateEvent(events)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
-	require.True(t, split)
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
 
 	// Update unique key.
 	columns = []*Column{
@@ -520,10 +519,12 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 			PreColumns: preColumns,
 		},
 	}
-	result, split, err = trySplitAndSortUpdateEvent(events)
+	result, err = trySplitAndSortUpdateEvent(events)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
-	require.True(t, split)
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
 
 	// Update non-handle key.
 	columns = []*Column{
@@ -558,8 +559,7 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 			PreColumns: preColumns,
 		},
 	}
-	result, split, err = trySplitAndSortUpdateEvent(events)
+	result, err = trySplitAndSortUpdateEvent(events)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
-	require.False(t, split)
 }
