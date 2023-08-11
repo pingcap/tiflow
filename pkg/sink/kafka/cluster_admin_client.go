@@ -46,6 +46,7 @@ type ClusterAdminClient interface {
 	GetTopicsMeta(ctx context.Context,
 		topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
 
+	// GetTopicsNumPartitions return the number of partitions of each topic.
 	GetTopicsNumPartitions(ctx context.Context, topics []string) (map[string]int32, error)
 
 	// CreateTopic creates a new topic.
