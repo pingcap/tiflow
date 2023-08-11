@@ -102,9 +102,7 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 			)
 			return
 		case <-m.metaRefreshTicker.C:
-			// We ignore the error here, because the error may be caused by the
-			// network problem, and we can try to get the metadata next time.
-			topicMetaList, _ := m.fetchNumPartitions(ctx)
+			topicMetaList, _ := m.fetchAllTopicsNumPartitions(ctx)
 			for topic, partitionNum := range topicMetaList {
 				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
 			}
@@ -139,7 +137,7 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
-func (m *kafkaTopicManager) fetchNumPartitions(
+func (m *kafkaTopicManager) fetchAllTopicsNumPartitions(
 	ctx context.Context,
 ) (map[string]int32, error) {
 	var topics []string
@@ -182,6 +180,8 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(
 	topics := []string{topicName}
 	err := retry.Do(ctx, func() error {
 		start := time.Now()
+		// ignoreTopicError is set to false since we just create the topic,
+		// make sure the topic is visible.
 		meta, err := m.admin.GetTopicsMeta(ctx, topics, false)
 		if err != nil {
 			log.Warn(" topic not found, retry it",
@@ -255,10 +255,11 @@ func (m *kafkaTopicManager) createTopic(
 
 // CreateTopicAndWaitUntilVisible wraps createTopic and waitUntilTopicVisible together.
 func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
-	ctx context.Context,
-	topicName string,
+	ctx context.Context, topicName string,
 ) (int32, error) {
 	// If the topic is not in the cache, we try to get the metadata of the topic.
+	// ignoreTopicErr is set to true to ignore the error if the topic is not found,
+	// which means we should create the topic later.
 	topicDetails, err := m.admin.GetTopicsMeta(ctx, []string{topicName}, true)
 	if err != nil {
 		return 0, errors.Trace(err)
