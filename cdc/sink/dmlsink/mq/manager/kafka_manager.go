@@ -102,6 +102,8 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 			)
 			return
 		case <-m.metaRefreshTicker.C:
+			// We ignore the error here, because the error may be caused by the
+			// network problem, and we can try to get the metadata next time.
 			topicPartitionNums, _ := m.fetchAllTopicsPartitionsNum(ctx)
 			for topic, partitionNum := range topicPartitionNums {
 				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
