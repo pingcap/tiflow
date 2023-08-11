@@ -1041,10 +1041,6 @@ func (p *processor) sendError(err error) {
 func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 	tableBarrier := p.calculateTableBarrierTs(barrier)
 	globalBarrierTs := barrier.GetGlobalBarrierTs()
-<<<<<<< HEAD
-=======
-
->>>>>>> upstream/release-6.5
 	schemaResolvedTs := p.schemaStorage.ResolvedTs()
 	if schemaResolvedTs < globalBarrierTs {
 		// Do not update barrier ts that is larger than
