@@ -1020,7 +1020,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 	receivedEvents := sink.GetEvents()
 	receivedEvents[0].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
-	require.Equal(suite.T(), uint64(4), wrapper.getCheckpointTs().ResolvedMark())
+	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	require.Equal(suite.T(), uint64(4), checkpointTs.ResolvedMark())
 }
 
 // Test the case that the worker will advance the table sink directly when there are no events.
@@ -1085,12 +1086,94 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		return wrapper.getCheckpointTs().ResolvedMark() == 4
+		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		return checkpointTs.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
 	wg.Wait()
 }
 
+<<<<<<< HEAD
 func TestWorkerSuite(t *testing.T) {
 	suite.Run(t, new(workerSuite))
+=======
+func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
+	}
+	// Only for three events.
+	eventSize := uint64(testEventSize * 3)
+	w, e := suite.createWorker(ctx, eventSize, true)
+	defer w.sinkMemQuota.Close()
+	suite.addEventsToSortEngine(events, e)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  1,
+			CommitTs: 3,
+		}, lastWritePos)
+		require.Equal(suite.T(), engine.Position{
+			StartTs:  2,
+			CommitTs: 3,
+		}, lastWritePos.Next())
+	}
+	taskChan <- &sinkTask{
+		span:          suite.testSpan,
+		lowerBound:    genLowerBound(),
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+	require.Eventually(suite.T(), func() bool {
+		// Only three events should be sent to sink
+		return len(sink.GetEvents()) == 3
+	}, 5*time.Second, 10*time.Millisecond)
+	require.Equal(suite.T(), 2, sink.GetWriteTimes(), "Only two times write to sink, "+
+		"because the max update interval size is 2 * event size")
+	require.Equal(suite.T(), uint64(3), batchID.Load())
+	sink.AckAllEvents()
+	require.Eventually(suite.T(), func() bool {
+		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		return checkpointTs.ResolvedMark() == 2
+	}, 5*time.Second, 10*time.Millisecond)
+
+	events = []*model.PolymorphicEvent{
+		genPolymorphicEvent(2, 5, suite.testSpan),
+		genPolymorphicResolvedEvent(6),
+	}
+	e.Add(suite.testSpan, events...)
+	// Send another task to make sure the batchID is started from 2.
+	callback = func(_ engine.Position) {
+		cancel()
+	}
+	taskChan <- &sinkTask{
+		span: suite.testSpan,
+		lowerBound: engine.Position{
+			StartTs:  2,
+			CommitTs: 3,
+		},
+		getUpperBound: genUpperBoundGetter(6),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+	wg.Wait()
+	require.Equal(suite.T(), uint64(5), batchID.Load(), "The batchID should be 5, "+
+		"because the first task has 3 events, the second task has 1 event")
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 }

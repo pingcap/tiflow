@@ -294,6 +294,13 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				SASLOAuthAudience:     c.Sink.KafkaConfig.SASLOAuthAudience,
 			}
 		}
+<<<<<<< HEAD
+=======
+		if c.Sink.AdvanceTimeoutInSec != nil {
+			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
+		}
+
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -411,6 +418,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				SASLOAuthGrantType:    cloned.Sink.KafkaConfig.SASLOAuthGrantType,
 				SASLOAuthAudience:     cloned.Sink.KafkaConfig.SASLOAuthAudience,
 			}
+		}
+		if cloned.Sink.AdvanceTimeoutInSec != nil {
+			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
 		}
 	}
 	if cloned.Consistent != nil {
@@ -530,6 +540,7 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
+<<<<<<< HEAD
 	Protocol                 string            `json:"protocol"`
 	SchemaRegistry           string            `json:"schema_registry"`
 	CSVConfig                *CSVConfig        `json:"csv"`
@@ -554,6 +565,27 @@ type KafkaConfig struct {
 	SASLOAuthScopes       []string `json:"sasl_oauth_scopes,omitempty"`
 	SASLOAuthGrantType    *string  `json:"sasl_oauth_grant_type,omitempty"`
 	SASLOAuthAudience     *string  `json:"sasl_oauth_audience,omitempty"`
+=======
+	Protocol                         *string             `json:"protocol,omitempty"`
+	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
+	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
+	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
+	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
+	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
+	Terminator                       *string             `json:"terminator,omitempty"`
+	DateSeparator                    *string             `json:"date_separator,omitempty"`
+	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
+	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
+	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
+	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
+	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
+	SafeMode                         *bool               `json:"safe_mode,omitempty"`
+	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
+	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
+	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 }
 
 // CSVConfig denotes the csv config

@@ -134,6 +134,7 @@ type SinkConfig struct {
 	TiDBSourceID uint64 `toml:"-" json:"-"`
 }
 
+<<<<<<< HEAD
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
 	SASLMechanism         *string  `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
@@ -143,6 +144,18 @@ type KafkaConfig struct {
 	SASLOAuthScopes       []string `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
 	SASLOAuthGrantType    *string  `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
 	SASLOAuthAudience     *string  `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
+=======
+	// SafeMode is only available when the downstream is DB.
+	SafeMode           *bool               `toml:"safe-mode" json:"safe-mode,omitempty"`
+	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
+	PulsarConfig       *PulsarConfig       `toml:"pulsar-config" json:"pulsar-config,omitempty"`
+	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
+	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
+
+	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
+	// advanced for this given duration, the sink will be canceled and re-established.
+	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -316,6 +329,10 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		if err := s.CSVConfig.validateAndAdjust(); err != nil {
 			return err
 		}
+	}
+
+	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
+		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout-in-sec should be greater than 0")
 	}
 
 	return nil

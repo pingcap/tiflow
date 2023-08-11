@@ -66,6 +66,16 @@ definitions:
     type: object
   config.SinkConfig:
     properties:
+<<<<<<< HEAD
+=======
+      advance-timeout-in-sec:
+        description: |-
+          AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
+          advanced for this given duration, the sink will be canceled and re-established.
+        type: integer
+      cloud-storage-config:
+        $ref: '#/definitions/config.CloudStorageConfig'
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
       column-selectors:
         items:
           $ref: '#/definitions/config.ColumnSelector'
@@ -565,6 +575,13 @@ definitions:
     type: object
   v2.SinkConfig:
     properties:
+<<<<<<< HEAD
+=======
+      advance_timeout:
+        type: integer
+      cloud_storage_config:
+        $ref: '#/definitions/v2.CloudStorageConfig'
+>>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
       column_selectors:
         items:
           $ref: '#/definitions/v2.ColumnSelector'
