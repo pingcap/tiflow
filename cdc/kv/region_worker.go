@@ -114,7 +114,7 @@ type regionWorker struct {
 }
 
 func newRegionWorker(
-	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+	ctx context.Context, changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
 ) *regionWorker {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
@@ -139,6 +139,7 @@ func newRegionWorker(
 		WithLabelValues("committed", changefeedID.Namespace, changefeedID.ID)
 
 	return &regionWorker{
+		parentCtx:     ctx,
 		session:       s,
 		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
 		outputCh:      s.eventCh,
@@ -347,6 +348,12 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 }
 
 func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEvent) error {
+	// event.state is nil when resolvedTsEvent is not nil
+	skipEvent := event.state != nil && event.state.isStopped()
+	if skipEvent {
+		return nil
+	}
+
 	if event.finishedCallbackCh != nil {
 		event.finishedCallbackCh <- struct{}{}
 		return nil
@@ -409,41 +416,40 @@ func (w *regionWorker) onHandleExit(err error) {
 }
 
 func (w *regionWorker) eventHandler(ctx context.Context) error {
-	preprocess := func(event *regionStatefulEvent, ok bool) (
-		exitEventHandler bool,
-		skipEvent bool,
-	) {
-		// event == nil means the region worker should exit and re-establish
-		// all existing regions.
-		if !ok || event == nil {
+	pollEvents := func() ([]*regionStatefulEvent, error) {
+		exitFn := func() error {
 			log.Info("region worker closed by error",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
 				zap.String("changefeed", w.session.client.changefeed.ID))
-			exitEventHandler = true
-			return
+			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 		}
-		// event.state is nil when resolvedTsEvent is not nil
-		if event.state != nil && event.state.isStopped() {
-			skipEvent = true
-		}
-		return
-	}
-	pollEvents := func() (events []*regionStatefulEvent, ok bool, err error) {
+
 		select {
 		case <-ctx.Done():
-			err = errors.Trace(ctx.Err())
-		case err = <-w.errorCh:
-		case events, ok = <-w.inputCh:
-			if ok && len(events) == 0 {
+			return nil, errors.Trace(ctx.Err())
+		case err := <-w.errorCh:
+			return nil, errors.Trace(err)
+		case events, ok := <-w.inputCh:
+			if !ok {
+				return nil, exitFn()
+			}
+			if len(events) == 0 {
 				log.Panic("regionWorker.inputCh doesn't accept empty slice")
 			}
+			for _, event := range events {
+				// event == nil means the region worker should exit and re-establish
+				// all existing regions.
+				if event == nil {
+					return nil, exitFn()
+				}
+			}
+			return events, nil
 		}
-		return
 	}
 
 	highWatermarkMet := false
 	for {
-		events, ok, err := pollEvents()
+		events, err := pollEvents()
 		if err != nil {
 			return err
 		}
@@ -497,15 +503,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 			// throughput. Otherwise, we process event in local region worker to
 			// ensure low processing latency.
 			for _, event := range events {
-				exitEventHandler, skipEvent := preprocess(event, ok)
-				if exitEventHandler {
-					return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
-				}
-				if !skipEvent {
-					err = w.processEvent(ctx, event)
-					if err != nil {
-						return err
-					}
+				err = w.processEvent(ctx, event)
+				if err != nil {
+					return err
 				}
 			}
 		}
@@ -567,14 +567,14 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	}
 }
 
-func (w *regionWorker) run(parentCtx context.Context) error {
+func (w *regionWorker) run() error {
 	defer func() {
 		for _, h := range w.handles {
 			h.Unregister()
 		}
+		w.evictAllRegions()
 	}()
-	w.parentCtx = parentCtx
-	ctx, cancel := context.WithCancel(parentCtx)
+	ctx, cancel := context.WithCancel(w.parentCtx)
 	wg, ctx := errgroup.WithContext(ctx)
 	w.initPoolHandles()
 
@@ -687,19 +687,7 @@ func handleEventEntry(
 			state.matcher.putPrewriteRow(entry)
 		case cdcpb.Event_COMMIT:
 			metrics.metricPullEventCommitCounter.Inc()
-			// NOTE: state.getLastResolvedTs() will never less than startTs.
-			resolvedTs := state.getLastResolvedTs()
-			// TiKV can send events with StartTs/CommitTs less than startTs.
-			isStaleEvent := entry.CommitTs <= startTs
-			if entry.CommitTs <= resolvedTs && !isStaleEvent {
-				logPanic("The CommitTs must be greater than the resolvedTs",
-					zap.String("EventType", "COMMIT"),
-					zap.Uint64("CommitTs", entry.CommitTs),
-					zap.Uint64("resolvedTs", resolvedTs),
-					zap.Uint64("regionID", regionID))
-				return errUnreachable
-			}
-
+			// NOTE: matchRow should always be called even if the event is stale.
 			if !state.matcher.matchRow(entry, state.isInitialized()) {
 				if !state.isInitialized() {
 					state.matcher.cacheCommitRow(entry)
@@ -711,16 +699,31 @@ func handleEventEntry(
 					entry.GetType(), entry.GetOpType())
 			}
 
-			if !isStaleEvent {
-				revent, err := assembleRowEvent(regionID, entry)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				if !emit(revent) {
-					return nil
-				}
-				metrics.metricSendEventCommitCounter.Inc()
+			// TiKV can send events with StartTs/CommitTs less than startTs.
+			isStaleEvent := entry.CommitTs <= startTs
+			if isStaleEvent {
+				continue
 			}
+
+			// NOTE: state.getLastResolvedTs() will never less than startTs.
+			resolvedTs := state.getLastResolvedTs()
+			if entry.CommitTs <= resolvedTs {
+				logPanic("The CommitTs must be greater than the resolvedTs",
+					zap.String("EventType", "COMMIT"),
+					zap.Uint64("CommitTs", entry.CommitTs),
+					zap.Uint64("resolvedTs", resolvedTs),
+					zap.Uint64("regionID", regionID))
+				return errUnreachable
+			}
+
+			revent, err := assembleRowEvent(regionID, entry)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			if !emit(revent) {
+				return nil
+			}
+			metrics.metricSendEventCommitCounter.Inc()
 		case cdcpb.Event_ROLLBACK:
 			metrics.metricPullEventRollbackCounter.Inc()
 			if !state.isInitialized() {
