@@ -18,9 +18,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -106,4 +108,33 @@ func JoinProcessErrors(errors []*pb.ProcessError) string {
 		serrs = append(serrs, serr.String())
 	}
 	return strings.Join(serrs, ", ")
+}
+
+// IsResumableDBError checks whether the error is resumable DB error.
+// this is a simplified version of IsResumableError.
+// we use a blacklist to filter out some errors which can not be resumed,
+// all other errors is resumable.
+func IsResumableDBError(err error) bool {
+	if err == nil {
+		return true
+	}
+
+	err = errors.Cause(err)
+	if err == context.Canceled {
+		return false
+	}
+
+	// not elegant code, because TiDB doesn't expose some error
+	errStr := strings.ToLower(err.Error())
+	for _, msg := range retry.UnsupportedDDLMsgs {
+		if strings.Contains(errStr, strings.ToLower(msg)) {
+			return false
+		}
+	}
+	for _, msg := range retry.UnsupportedDMLMsgs {
+		if strings.Contains(errStr, strings.ToLower(msg)) {
+			return false
+		}
+	}
+	return true
 }

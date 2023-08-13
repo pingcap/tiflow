@@ -530,6 +530,7 @@ func TestValidatorIsRetryableDBError(t *testing.T) {
 	require.True(t, isRetryableDBError(gmysql.ErrInvalidConn))
 	require.True(t, isRetryableDBError(driver.ErrBadConn))
 	require.True(t, isRetryableDBError(errors.Annotate(driver.ErrBadConn, "test")))
+	require.True(t, isRetryableDBError(errors.New("Error 9005: Region is unavailable")))
 }
 
 func TestValidatorRowCountAndSize(t *testing.T) {

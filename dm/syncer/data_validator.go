@@ -155,7 +155,7 @@ func (vs *tableValidateStatus) stopped(msg string) {
 	vs.message = msg
 }
 
-// DataValidator
+// DataValidator is used to continuously validate incremental data migrated to downstream by dm.
 // validator can be start when there's syncer unit in the subtask and validation mode is not none,
 // it's terminated when the subtask is terminated.
 // stage of validator is independent of subtask, pause/resume subtask doesn't affect the stage of validator.
@@ -163,8 +163,13 @@ func (vs *tableValidateStatus) stopped(msg string) {
 // validator can be in running or stopped stage
 // - in running when it's started with subtask or started later on the fly.
 // - in stopped when validation stop is executed.
+//
+// for each subtask, before it's closed/killed, only one DataValidator object is created,
+// on "dmctl validation stop/start", will call Stop and Start on the same object.
 type DataValidator struct {
+	// used to sync Stop and Start operations.
 	sync.RWMutex
+
 	cfg    *config.SubTaskConfig
 	syncer *Syncer
 	// whether validator starts together with subtask
@@ -198,7 +203,7 @@ type DataValidator struct {
 
 	// fields in this field block are guarded by stateMutex
 	stateMutex  sync.RWMutex
-	stage       pb.Stage
+	stage       pb.Stage // only Running or Stopped is allowed for validator
 	flushedLoc  *binlog.Location
 	result      pb.ProcessResult
 	tableStatus map[string]*tableValidateStatus
@@ -351,7 +356,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	if err := v.initialize(); err != nil {
-		v.fillResult(err, false)
+		v.fillResult(err)
 		return
 	}
 
@@ -425,16 +430,11 @@ func (v *DataValidator) printStatusRoutine() {
 	}
 }
 
-func (v *DataValidator) fillResult(err error, needLock bool) {
-	if needLock {
-		v.Lock()
-		defer v.Unlock()
-	}
-
+func (v *DataValidator) fillResult(err error) {
 	// when met a non-retryable error, we'll call stopInner, then v.ctx is cancelled,
 	// don't set IsCanceled in this case
 	isCanceled := false
-	if len(v.result.Errors) == 0 {
+	if v.getResultErrCnt() == 0 {
 		select {
 		case <-v.ctx.Done():
 			isCanceled = true
@@ -454,13 +454,25 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 
 func (v *DataValidator) errorProcessRoutine() {
 	defer v.errProcessWg.Done()
-	for err := range v.errChan {
-		v.fillResult(err, true)
 
-		if errors.Cause(err) != context.Canceled {
-			v.stopInner()
+	var (
+		stopped bool
+		wg      sync.WaitGroup
+	)
+
+	for err := range v.errChan {
+		v.fillResult(err)
+
+		if errors.Cause(err) != context.Canceled && !stopped {
+			stopped = true
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				v.stopInner()
+			}()
 		}
 	}
+	wg.Wait()
 }
 
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
@@ -724,10 +736,10 @@ func (v *DataValidator) Stop() {
 
 func (v *DataValidator) stopInner() {
 	v.Lock()
+	defer v.Unlock()
 	v.L.Info("stopping")
 	if v.Stage() != pb.Stage_Running {
 		v.L.Warn("not started")
-		v.Unlock()
 		return
 	}
 
@@ -736,13 +748,10 @@ func (v *DataValidator) stopInner() {
 	v.fromDB.Close()
 	v.toDB.Close()
 
-	// release the lock so that the error routine can process errors
-	// wait until all errors are recorded
-	v.Unlock()
 	v.wg.Wait()
-	close(v.errChan) // close error chan after all possible sender goroutines stopped
-	v.Lock()         // lock and modify the stage
-	defer v.Unlock()
+	// we want to record all errors, so we need to wait all error sender goroutines to stop
+	// before closing this error chan.
+	close(v.errChan)
 
 	v.setStage(pb.Stage_Stopped)
 	v.L.Info("stopped")
@@ -1103,6 +1112,12 @@ func (v *DataValidator) addResultError(err *pb.ProcessError, cancelled bool) {
 		v.result.Errors = append(v.result.Errors, err)
 	}
 	v.result.IsCanceled = cancelled
+}
+
+func (v *DataValidator) getResultErrCnt() int {
+	v.stateMutex.Lock()
+	defer v.stateMutex.Unlock()
+	return len(v.result.Errors)
 }
 
 func (v *DataValidator) resetResult() {
