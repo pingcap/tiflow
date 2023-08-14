@@ -69,7 +69,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
         },
         "sink": {
             "dispatchers": null,
-            "protocol": "open-protocol"
+            "protocol": "open-protocol",
+            "advance-timeout-in-sec": 150
         },
         "consistent": {
             "level": "normal",
