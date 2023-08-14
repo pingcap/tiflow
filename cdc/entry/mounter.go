@@ -315,7 +315,7 @@ func datum2Column(
 			Collation: colInfo.GetCollate(),
 			Value:     colValue,
 			Default:   defaultValue,
-			Flag:      tableInfo.ColumnsFlag[colID],
+			Flag:      tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
