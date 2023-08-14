@@ -477,7 +477,7 @@ func TestTaskBlockAllowList(t *testing.T) {
 
 	cfg := &TaskConfig{
 		Name:           "test",
-		TaskMode:       "full",
+		TaskMode:       ModeFull,
 		TargetDB:       &dbconfig.DBConfig{},
 		MySQLInstances: []*MySQLInstance{{SourceID: "source-1"}},
 		BWList:         map[string]*filter.Rules{"source-1": filterRules1},
@@ -946,7 +946,7 @@ func TestDefaultConfig(t *testing.T) {
 
 	cfg := NewTaskConfig()
 	cfg.Name = "test"
-	cfg.TaskMode = "all"
+	cfg.TaskMode = ModeAll
 	cfg.TargetDB = &dbconfig.DBConfig{}
 	cfg.MySQLInstances = append(cfg.MySQLInstances, &MySQLInstance{SourceID: "source1"})
 	require.NoError(t, cfg.adjust())
@@ -962,7 +962,7 @@ func TestExclusiveAndWrongExprFilterFields(t *testing.T) {
 
 	cfg := NewTaskConfig()
 	cfg.Name = "test"
-	cfg.TaskMode = "all"
+	cfg.TaskMode = ModeAll
 	cfg.TargetDB = &dbconfig.DBConfig{}
 	cfg.MySQLInstances = append(cfg.MySQLInstances, &MySQLInstance{SourceID: "source1"})
 	require.NoError(t, cfg.adjust())

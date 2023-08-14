@@ -47,7 +47,21 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	if err != nil {
 		return nil, err
 	}
-	return newAdminClient(f.option.BrokerEndpoints, config, f.changefeedID)
+
+	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	admin, err := sarama.NewClusterAdminFromClient(client)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &saramaAdminClient{
+		client:     client,
+		admin:      admin,
+		changefeed: f.changefeedID,
+	}, nil
 }
 
 // SyncProducer returns a Sync Producer,
@@ -79,7 +93,6 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 // it should be the caller's responsibility to close the producer
 func (f *saramaFactory) AsyncProducer(
 	ctx context.Context,
-	closedChan chan struct{},
 	failpointCh chan error,
 ) (AsyncProducer, error) {
 	config, err := NewSaramaConfig(ctx, f.option)
@@ -100,7 +113,6 @@ func (f *saramaFactory) AsyncProducer(
 		client:       client,
 		producer:     p,
 		changefeedID: f.changefeedID,
-		closedChan:   closedChan,
 		failpointCh:  failpointCh,
 	}, nil
 }

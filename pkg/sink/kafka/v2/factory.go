@@ -219,7 +219,6 @@ func (f *factory) SyncProducer(_ context.Context) (pkafka.SyncProducer, error) {
 // AsyncProducer creates an async producer to writer message to kafka
 func (f *factory) AsyncProducer(
 	ctx context.Context,
-	closedChan chan struct{},
 	failpointCh chan error,
 ) (pkafka.AsyncProducer, error) {
 	w := f.newWriter(true)
@@ -229,7 +228,6 @@ func (f *factory) AsyncProducer(
 	w.BatchSize = int(w.BatchBytes / 1024)
 	aw := &asyncWriter{
 		w:            w,
-		closedChan:   closedChan,
 		changefeedID: f.changefeedID,
 		failpointCh:  failpointCh,
 		errorsChan:   make(chan error, 1),
@@ -333,7 +331,6 @@ func (s *syncWriter) Close() {
 type asyncWriter struct {
 	w            Writer
 	changefeedID model.ChangeFeedID
-	closedChan   chan struct{}
 	failpointCh  chan error
 	errorsChan   chan error
 }
@@ -373,11 +370,6 @@ func (a *asyncWriter) AsyncSend(ctx context.Context, topic string,
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-a.closedChan:
-		log.Warn("Receive from closed chan in kafka producer",
-			zap.String("namespace", a.changefeedID.Namespace),
-			zap.String("changefeed", a.changefeedID.ID))
-		return nil
 	default:
 	}
 	return a.w.WriteMessages(ctx, kafka.Message{
@@ -396,11 +388,6 @@ func (a *asyncWriter) AsyncRunCallback(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
-	case <-a.closedChan:
-		log.Warn("Receive from closed chan in kafka producer",
-			zap.String("namespace", a.changefeedID.Namespace),
-			zap.String("changefeed", a.changefeedID.ID))
-		return nil
 	case err := <-a.failpointCh:
 		log.Warn("Receive from failpoint chan in kafka producer",
 			zap.String("namespace", a.changefeedID.Namespace),

@@ -922,7 +922,7 @@ func (s *Scheduler) AddSubTasks(latched bool, expectStage pb.Stage, cfgs ...conf
 	}
 
 	// 4. put the lightning status, configs and stages into etcd.
-	if cfgs[0].Mode != config.ModeIncrement && cfgs[0].LoaderConfig.ImportMode == config.LoadModePhysical {
+	if config.HasLoad(cfgs[0].Mode) && cfgs[0].LoaderConfig.ImportMode == config.LoadModePhysical {
 		if len(existSources) > 0 {
 			// don't support add new lightning subtask when some subtasks already exist.
 			return terror.ErrSchedulerSubTaskExist.Generate(taskNames[0], existSources)

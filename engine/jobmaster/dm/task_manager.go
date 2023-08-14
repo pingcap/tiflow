@@ -282,7 +282,13 @@ func (tm *TaskManager) allFinished(ctx context.Context) bool {
 			return false
 		}
 		// update if we add new task mode
-		if runningTask.Unit != frameModel.WorkerDMLoad || task.Cfg.TaskMode != dmconfig.ModeFull {
+		switch task.Cfg.TaskMode {
+		case dmconfig.ModeFull:
+			if runningTask.Unit != frameModel.WorkerDMLoad {
+				return false
+			}
+		case dmconfig.ModeDump:
+		default:
 			return false
 		}
 	}

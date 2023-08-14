@@ -40,8 +40,7 @@ type decoder struct {
 	topic  string
 	sc     *stmtctx.StatementContext
 
-	keySchemaM   *SchemaManager
-	valueSchemaM *SchemaManager
+	schemaM *SchemaManager
 
 	key   []byte
 	value []byte
@@ -50,17 +49,15 @@ type decoder struct {
 // NewDecoder return an avro decoder
 func NewDecoder(
 	config *common.Config,
-	keySchemaM *SchemaManager,
-	valueSchemaM *SchemaManager,
+	schemaM *SchemaManager,
 	topic string,
 	tz *time.Location,
 ) codec.RowEventDecoder {
 	return &decoder{
-		config:       config,
-		topic:        topic,
-		keySchemaM:   keySchemaM,
-		valueSchemaM: valueSchemaM,
-		sc:           &stmtctx.StatementContext{TimeZone: tz},
+		config:  config,
+		topic:   topic,
+		schemaM: schemaM,
+		sc:      &stmtctx.StatementContext{TimeZone: tz},
 	}
 }
 
@@ -423,13 +420,13 @@ func decodeRawBytes(
 func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
 	data := d.key
 	d.key = nil
-	return decodeRawBytes(ctx, d.keySchemaM, data, d.topic)
+	return decodeRawBytes(ctx, d.schemaM, data, d.topic)
 }
 
 func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
 	data := d.value
 	d.value = nil
-	return decodeRawBytes(ctx, d.valueSchemaM, data, d.topic)
+	return decodeRawBytes(ctx, d.schemaM, data, d.topic)
 }
 
 // calculate the checksum value, and compare it with the expected one, return error if not identical.
@@ -521,7 +518,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 	// TypeBit encoded as bytes
 	case mysql.TypeBit:
 		// bit is store as bytes, convert to uint64.
-		v, err := binaryLiteralToInt(value.([]byte))
+		v, err := common.BinaryLiteralToInt(value.([]byte))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -560,40 +557,4 @@ func appendLengthValue(buf []byte, val []byte) []byte {
 	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(val)))
 	buf = append(buf, val...)
 	return buf
-}
-
-// convert bytes into uint64,
-// by follow https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/types/binary_literal.go#L105
-func binaryLiteralToInt(bytes []byte) (uint64, error) {
-	bytes = trimLeadingZeroBytes(bytes)
-	length := len(bytes)
-
-	if length > 8 {
-		log.Error("invalid bit value found", zap.ByteString("value", bytes))
-		return math.MaxUint64, errors.New("invalid bit value")
-	}
-
-	if length == 0 {
-		return 0, nil
-	}
-
-	// Note: the byte-order is BigEndian.
-	val := uint64(bytes[0])
-	for i := 1; i < length; i++ {
-		val = (val << 8) | uint64(bytes[i])
-	}
-	return val, nil
-}
-
-func trimLeadingZeroBytes(bytes []byte) []byte {
-	if len(bytes) == 0 {
-		return bytes
-	}
-	pos, posMax := 0, len(bytes)-1
-	for ; pos < posMax; pos++ {
-		if bytes[pos] != 0 {
-			break
-		}
-	}
-	return bytes[pos:]
 }

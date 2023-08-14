@@ -55,9 +55,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	Sink: &SinkConfig{
 		CSVConfig: &CSVConfig{
-			Quote:      string(DoubleQuoteChar),
-			Delimiter:  Comma,
-			NullString: NULL,
+			Quote:                string(DoubleQuoteChar),
+			Delimiter:            Comma,
+			NullString:           NULL,
+			BinaryEncodingMethod: BinaryEncodingBase64,
 		},
 		EncoderConcurrency:               util.AddressOf(16),
 		Terminator:                       util.AddressOf(CRLF),
@@ -66,8 +67,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		LargeMessageOnlyHandleKeyColumns: util.AddressOf(false),
 		TiDBSourceID:                     1,
+		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -201,7 +202,7 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 			return err
 		}
 
-		err = c.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
+		err = c.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 		if err != nil {
 			return err
 		}
@@ -311,9 +312,7 @@ func (c *ReplicaConfig) AdjustEnableOldValue(scheme, protocol string) {
 	}
 }
 
-// AdjustEnableOldValueAndVerifyForceReplicate adjust the old value configuration by the sink scheme and encoding protocol
-// and then verify the force replicate.
-func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url.URL) error {
+func (c *ReplicaConfig) adjustEnableOldValueAndVerifyForceReplicate(sinkURI *url.URL) error {
 	scheme := strings.ToLower(sinkURI.Scheme)
 	protocol := sinkURI.Query().Get(ProtocolKey)
 	if protocol != "" {

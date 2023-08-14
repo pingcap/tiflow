@@ -39,8 +39,7 @@ import (
 // look up local cache according to the table's name, and fetch from the Registry
 // in cache the local cache entry is missing.
 type SchemaManager struct {
-	registryURL   string
-	subjectSuffix string
+	registryURL string
 
 	credential *security.Credential // placeholder, currently always nil
 
@@ -76,30 +75,11 @@ type lookupResponse struct {
 	Schema   string `json:"schema"`
 }
 
-// NewKeyAndValueSchemaManagers create key and value schema managers respectively,
+// NewAvroSchemaManager create schema managers,
 // and test connectivity to the schema registry
-func NewKeyAndValueSchemaManagers(
+func NewAvroSchemaManager(
 	ctx context.Context,
 	registryURL string,
-	credential *security.Credential,
-) (*SchemaManager, *SchemaManager, error) {
-	keyManager, err := newAvroSchemaManager(ctx, registryURL, keySchemaSuffix, credential)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	valueManager, err := newAvroSchemaManager(ctx, registryURL, valueSchemaSuffix, credential)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return keyManager, valueManager, nil
-}
-
-func newAvroSchemaManager(
-	ctx context.Context,
-	registryURL string,
-	subjectSuffix string,
 	credential *security.Credential,
 ) (*SchemaManager, error) {
 	registryURL = strings.TrimRight(registryURL, "/")
@@ -133,16 +113,15 @@ func newAvroSchemaManager(
 	)
 
 	return &SchemaManager{
-		registryURL:   registryURL,
-		cache:         make(map[string]*schemaCacheEntry, 1),
-		subjectSuffix: subjectSuffix,
+		registryURL: registryURL,
+		cache:       make(map[string]*schemaCacheEntry, 1),
 	}, nil
 }
 
 // Register a schema in schema registry, no cache
 func (m *SchemaManager) Register(
 	ctx context.Context,
-	topicName string,
+	schemaSubject string,
 	schema string,
 ) (int, error) {
 	// The Schema Registry expects the JSON to be without newline characters
@@ -160,9 +139,7 @@ func (m *SchemaManager) Register(
 		log.Error("Could not marshal request to the Registry", zap.Error(err))
 		return 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(
-		m.topicNameToSchemaSubject(topicName),
-	) + "/versions"
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(schemaSubject) + "/versions"
 	log.Info("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
@@ -228,15 +205,14 @@ func (m *SchemaManager) Register(
 // Lookup the cached schema entry first, if not found, fetch from the Registry server.
 func (m *SchemaManager) Lookup(
 	ctx context.Context,
-	topicName string,
+	schemaSubject string,
 	schemaID int,
 ) (*goavro.Codec, error) {
-	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
-	entry, exists := m.cache[key]
+	entry, exists := m.cache[schemaSubject]
 	if exists && entry.schemaID == schemaID {
 		log.Debug("Avro schema lookup cache hit",
-			zap.String("key", key),
+			zap.String("key", schemaSubject),
 			zap.Int("schemaID", entry.schemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, nil
@@ -244,7 +220,7 @@ func (m *SchemaManager) Lookup(
 	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
-		zap.String("key", key),
+		zap.String("key", schemaSubject),
 		zap.Int("schemaID", schemaID))
 
 	uri := m.registryURL + "/schemas/ids/" + strconv.Itoa(schemaID)
@@ -285,7 +261,7 @@ func (m *SchemaManager) Lookup(
 
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
-			zap.String("key", key),
+			zap.String("key", schemaSubject),
 			zap.Int("schemaID", schemaID))
 		return nil, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(
 			"Schema not found in Registry",
@@ -308,7 +284,7 @@ func (m *SchemaManager) Lookup(
 	cacheEntry.schemaID = schemaID
 
 	m.cacheRWLock.Lock()
-	m.cache[key] = cacheEntry
+	m.cache[schemaSubject] = cacheEntry
 	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema lookup successful with cache miss",
@@ -328,15 +304,14 @@ type SchemaGenerator func() (string, error)
 // cache is out-of-sync with schema registry, we could reload it.
 func (m *SchemaManager) GetCachedOrRegister(
 	ctx context.Context,
-	topicName string,
+	schemaSubject string,
 	tableVersion uint64,
 	schemaGen SchemaGenerator,
 ) (*goavro.Codec, int, error) {
-	key := m.topicNameToSchemaSubject(topicName)
 	m.cacheRWLock.RLock()
-	if entry, exists := m.cache[key]; exists && entry.tableVersion == tableVersion {
+	if entry, exists := m.cache[schemaSubject]; exists && entry.tableVersion == tableVersion {
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
-			zap.String("key", key),
+			zap.String("key", schemaSubject),
 			zap.Uint64("tableVersion", tableVersion),
 			zap.Int("schemaID", entry.schemaID))
 		m.cacheRWLock.RUnlock()
@@ -345,7 +320,7 @@ func (m *SchemaManager) GetCachedOrRegister(
 	m.cacheRWLock.RUnlock()
 
 	log.Info("Avro schema lookup cache miss",
-		zap.String("key", key),
+		zap.String("key", schemaSubject),
 		zap.Uint64("tableVersion", tableVersion))
 
 	schema, err := schemaGen()
@@ -359,7 +334,7 @@ func (m *SchemaManager) GetCachedOrRegister(
 		return nil, 0, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
-	id, err := m.Register(ctx, topicName, codec.Schema())
+	id, err := m.Register(ctx, schemaSubject, codec.Schema())
 	if err != nil {
 		log.Error("GetCachedOrRegister: Could not register schema", zap.Error(err))
 		return nil, 0, errors.Trace(err)
@@ -371,7 +346,7 @@ func (m *SchemaManager) GetCachedOrRegister(
 	cacheEntry.tableVersion = tableVersion
 
 	m.cacheRWLock.Lock()
-	m.cache[key] = cacheEntry
+	m.cache[schemaSubject] = cacheEntry
 	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
@@ -385,10 +360,8 @@ func (m *SchemaManager) GetCachedOrRegister(
 // ClearRegistry clears the Registry subject for the given table. Should be idempotent.
 // Exported for testing.
 // NOT USED for now, reserved for future use.
-func (m *SchemaManager) ClearRegistry(ctx context.Context, topicName string) error {
-	uri := m.registryURL + "/subjects/" + url.QueryEscape(
-		m.topicNameToSchemaSubject(topicName),
-	)
+func (m *SchemaManager) ClearRegistry(ctx context.Context, schemaSubject string) error {
+	uri := m.registryURL + "/subjects/" + url.QueryEscape(schemaSubject)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", uri, nil)
 	if err != nil {
 		log.Error("Could not construct request for clearRegistry", zap.String("uri", uri))
@@ -480,9 +453,4 @@ func httpRetry(
 	}
 
 	return resp, nil
-}
-
-// TopicNameStrategy, ksqlDB only supports this
-func (m *SchemaManager) topicNameToSchemaSubject(topicName string) string {
-	return topicName + m.subjectSuffix
 }

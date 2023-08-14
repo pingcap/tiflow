@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
@@ -36,12 +37,13 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	// 200 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), id, encoderConfig)
-	require.Nil(t, err)
-	p, err := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
+	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
-	return newWorker(id, config.ProtocolOpen, builder, encoderConcurrency, p, statistics), p
+	encoderGroup := codec.NewEncoderGroup(builder, encoderConcurrency, id)
+	return newWorker(id, config.ProtocolOpen, p, encoderGroup, nil, nil, statistics), p
 }
 
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
@@ -50,12 +52,13 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300)
 	builder, err := builder.NewRowEventEncoderBuilder(context.Background(),
 		id, encoderConfig)
-	require.Nil(t, err)
-	p, err := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
+	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
+	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
-	return newWorker(id, config.ProtocolCanalJSON, builder, encoderConcurrency, p, statistics), p
+	encoderGroup := codec.NewEncoderGroup(builder, encoderConcurrency, id)
+	return newWorker(id, config.ProtocolOpen, p, encoderGroup, nil, nil, statistics), p
 }
 
 func TestNonBatchEncode_SendMessages(t *testing.T) {

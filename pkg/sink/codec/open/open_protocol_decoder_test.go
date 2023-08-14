@@ -15,6 +15,7 @@ package open
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -50,8 +51,8 @@ var (
 )
 
 func TestDecodeEvent(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen)
-	encoder := NewBatchEncoderBuilder(config).Build()
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	ctx := context.Background()
 	topic := "test"
@@ -60,7 +61,9 @@ func TestDecodeEvent(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder := NewBatchDecoder()
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 	tp, hasNext, err := decoder.HasNext()
@@ -82,11 +85,15 @@ func TestDecodeEvent(t *testing.T) {
 }
 
 func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen)
-	config.LargeMessageOnlyHandleKeyColumns = true
-	config.MaxMessageBytes = 185
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.LargeMessageHandle = &config.LargeMessageHandleConfig{
+		LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
+	}
 
-	encoder := NewBatchEncoderBuilder(config).Build()
+	//config.LargeMessageOnlyHandleKeyColumns = true
+	codecConfig.MaxMessageBytes = 185
+
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	ctx := context.Background()
 	topic := "test"
@@ -95,7 +102,8 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	decoder := NewBatchDecoder()
+	decoder, err := NewBatchDecoder(ctx, codecConfig, &sql.DB{})
+	require.NoError(t, err)
 	err = decoder.AddKeyValue(message.Key, message.Value)
 	require.NoError(t, err)
 	tp, hasNext, err := decoder.HasNext()
@@ -103,12 +111,11 @@ func TestDecodeEventOnlyHandleKeyColumns(t *testing.T) {
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, tp)
 
-	obtained, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, insertEvent.CommitTs, obtained.CommitTs)
+	nextEvent := decoder.(*BatchDecoder).nextEvent
+	require.NotNil(t, nextEvent)
 
 	obtainedColumns := make(map[string]*model.Column)
-	for _, col := range obtained.Columns {
+	for _, col := range nextEvent.Columns {
 		obtainedColumns[col.Name] = col
 		require.True(t, col.Flag.IsHandleKey())
 	}

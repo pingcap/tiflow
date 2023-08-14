@@ -15,6 +15,7 @@ package common
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -40,6 +41,15 @@ type Message struct {
 	Protocol  config.Protocol   // protocol
 	rowsCount int               // rows in one Message
 	Callback  func()            // Callback function will be called when the message is sent to the sink.
+
+	// ClaimCheckFileName is set if the message should be sent to the claim check storage.
+	// it's only the file name, since the claim check storage writer know the path.
+	ClaimCheckFileName string
+
+	Event *model.RowChangedEvent
+
+	// PartitionKey for pulsar, route messages to one or different partitions
+	PartitionKey *string
 }
 
 // Length returns the expected size of the Kafka message
@@ -67,6 +77,30 @@ func (m *Message) SetRowsCount(cnt int) {
 // IncRowsCount increase the number of rows
 func (m *Message) IncRowsCount() {
 	m.rowsCount++
+}
+
+// GetSchema returns schema string
+func (m *Message) GetSchema() string {
+	if m.Schema == nil {
+		return ""
+	}
+	return *m.Schema
+}
+
+// GetTable returns the Table string
+func (m *Message) GetTable() string {
+	if m.Table == nil {
+		return ""
+	}
+	return *m.Table
+}
+
+// GetPartitionKey returns the GetPartitionKey
+func (m *Message) GetPartitionKey() string {
+	if m.PartitionKey == nil {
+		return ""
+	}
+	return *m.PartitionKey
 }
 
 // NewDDLMsg creates a DDL message.
@@ -119,4 +153,17 @@ func NewMsg(
 	}
 
 	return ret
+}
+
+// ClaimCheckMessage is the message sent to the claim-check external storage.
+type ClaimCheckMessage struct {
+	Key   []byte `json:"key"`
+	Value []byte `json:"value"`
+}
+
+// UnmarshalClaimCheckMessage unmarshal bytes to ClaimCheckMessage.
+func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
+	var m ClaimCheckMessage
+	err := json.Unmarshal(data, &m)
+	return &m, err
 }

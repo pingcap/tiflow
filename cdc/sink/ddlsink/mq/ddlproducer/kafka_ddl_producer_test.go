@@ -15,7 +15,6 @@ package ddlproducer
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -27,132 +26,109 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func initBroker(t *testing.T, withPartitionResponse int) (*sarama.MockBroker, string) {
-	topic := kafka.DefaultMockTopicName
-	leader := sarama.NewMockBroker(t, 2)
-	metadataResponse := new(sarama.MetadataResponse)
-	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
-	metadataResponse.AddTopicPartition(topic, 0,
-		leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	metadataResponse.AddTopicPartition(topic, 1,
-		leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	metadataResponse.AddTopicPartition(topic, 2,
-		leader.BrokerID(), nil, nil, nil, sarama.ErrNoError)
-	// Response for `sarama.NewClient`
-	leader.Returns(metadataResponse)
-
-	prodSuccess := new(sarama.ProduceResponse)
-	for i := 0; i < withPartitionResponse; i++ {
-		prodSuccess.AddTopicPartition(topic, int32(i), sarama.ErrNoError)
-	}
-	for i := 0; i < withPartitionResponse; i++ {
-		leader.Returns(prodSuccess)
-	}
-
-	return leader, topic
-}
-
-func getOptions(addr string) *kafka.Options {
+func getOptions() *kafka.Options {
 	options := kafka.NewOptions()
-	// Because the sarama mock broker is not compatible with version larger than 1.0.0.
-	// We use a smaller version in the following producer tests.
-	// Ref: https://github.com/Shopify/sarama/blob/89707055369768913defac
-	// 030c15cf08e9e57925/async_producer_test.go#L1445-L1447
 	options.Version = "0.9.0.0"
 	options.ClientID = "test-client"
 	options.PartitionNum = int32(kafka.DefaultMockPartitionNum)
 	options.AutoCreate = false
-	options.BrokerEndpoints = strings.Split(addr, ",")
+	options.BrokerEndpoints = []string{"127.0.0.1:9092"}
 
 	return options
 }
 
 func TestSyncBroadcastMessage(t *testing.T) {
-	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
-	defer leader.Close()
-
 	ctx, cancel := context.WithCancel(context.Background())
-	options := getOptions(leader.Addr())
+	options := getOptions()
 	options.MaxMessages = 1
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
+	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
 
-	err = p.SyncBroadcastMessage(ctx, topic,
+	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+
+	for i := 0; i < kafka.DefaultMockPartitionNum; i++ {
+		syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
+	}
+	err = p.SyncBroadcastMessage(ctx, kafka.DefaultMockTopicName,
 		kafka.DefaultMockPartitionNum, &common.Message{Ts: 417318403368288260})
 	require.NoError(t, err)
 
 	p.Close()
-	err = p.SyncBroadcastMessage(ctx, topic,
+	err = p.SyncBroadcastMessage(ctx, kafka.DefaultMockTopicName,
 		kafka.DefaultMockPartitionNum, &common.Message{Ts: 417318403368288260})
 	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 	cancel()
 }
 
 func TestSyncSendMessage(t *testing.T) {
-	leader, topic := initBroker(t, 1)
-	defer leader.Close()
-
 	ctx, cancel := context.WithCancel(context.Background())
-	options := getOptions(leader.Addr())
+	options := getOptions()
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
+	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
 
-	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
+	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
+
+	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
+	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
 	require.NoError(t, err)
 
 	p.Close()
-	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
+	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
 	require.ErrorIs(t, err, cerror.ErrKafkaProducerClosed)
 	cancel()
 }
 
 func TestProducerSendMsgFailed(t *testing.T) {
-	leader, topic := initBroker(t, 0)
-	defer leader.Close()
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	options := getOptions(leader.Addr())
+	options := getOptions()
 	options.MaxMessages = 1
 	options.MaxMessageBytes = 1
+
+	ctx = context.WithValue(ctx, "testing.T", t)
 
 	// This will make the first send failed.
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
+	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
+
+	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 	defer p.Close()
 
-	err = p.SyncSendMessage(ctx, topic, 0, &common.Message{Ts: 417318403368288260})
-	require.Regexp(t, ".*too large.*", err)
+	syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndFail(sarama.ErrMessageTooLarge)
+	err = p.SyncSendMessage(ctx, kafka.DefaultMockTopicName, 0, &common.Message{Ts: 417318403368288260})
+	require.ErrorIs(t, err, sarama.ErrMessageTooLarge)
 }
 
 func TestProducerDoubleClose(t *testing.T) {
-	leader, _ := initBroker(t, 0)
-	defer leader.Close()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	options := getOptions(leader.Addr())
+	options := getOptions()
 
+	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
 	factory, err := kafka.NewMockFactory(options, changefeed)
 	require.NoError(t, err)
 
-	p, err := NewKafkaDDLProducer(ctx, changefeed, factory)
+	syncProducer, err := factory.SyncProducer(ctx)
 	require.NoError(t, err)
+
+	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 
 	p.Close()
 	p.Close()

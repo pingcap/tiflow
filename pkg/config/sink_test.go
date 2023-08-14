@@ -281,8 +281,9 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 		{
 			name: "valid quote",
 			config: &CSVConfig{
-				Quote:     "\"",
-				Delimiter: ",",
+				Quote:                "\"",
+				Delimiter:            ",",
+				BinaryEncodingMethod: BinaryEncodingBase64,
 			},
 			wantErr: "",
 		},
@@ -303,8 +304,9 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 		{
 			name: "valid delimiter1",
 			config: &CSVConfig{
-				Quote:     "\"",
-				Delimiter: ",",
+				Quote:                "\"",
+				Delimiter:            ",",
+				BinaryEncodingMethod: BinaryEncodingHex,
 			},
 			wantErr: "",
 		},
@@ -331,6 +333,15 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 				Delimiter: "'",
 			},
 			wantErr: "csv config quote and delimiter cannot be the same",
+		},
+		{
+			name: "invalid binary encoding method",
+			config: &CSVConfig{
+				Quote:                "\"",
+				Delimiter:            ",",
+				BinaryEncodingMethod: "invalid",
+			},
+			wantErr: "csv config binary-encoding-method can only be hex or base64",
 		},
 	}
 	for _, c := range tests {

@@ -77,7 +77,7 @@ type Strategy interface {
 // FiniteRetryStrategy will retry `RetryCount` times when failed to operate DB.
 type FiniteRetryStrategy struct{}
 
-// Apply for FiniteRetryStrategy, it wait `FirstRetryDuration` before it starts first retry, and then rest of retries wait time depends on BackoffStrategy.
+// Apply for FiniteRetryStrategy, it waits `FirstRetryDuration` before it starts first retry, and then rest of retries wait time depends on BackoffStrategy.
 func (*FiniteRetryStrategy) Apply(ctx *tcontext.Context, params Params, operateFn OperateFunc,
 ) (ret interface{}, i int, err error) {
 	for ; i < params.RetryCount; i++ {
@@ -91,7 +91,7 @@ func (*FiniteRetryStrategy) Apply(ctx *tcontext.Context, params Params, operateF
 					duration = time.Duration(i+1) * params.FirstRetryDuration
 				default:
 				}
-				log.L().Warn("retry stratey takes effect", zap.Error(err), zap.Int("retry_times", i), zap.Int("retry_count", params.RetryCount))
+				log.L().Warn("retry strategy takes effect", zap.Error(err), zap.Int("retry_times", i), zap.Int("retry_count", params.RetryCount))
 
 				select {
 				case <-ctx.Context().Done():

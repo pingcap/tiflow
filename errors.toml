@@ -706,6 +706,76 @@ error = '''
 processor running unknown error
 '''
 
+["CDC:ErrPulsarAsyncSendMessage"]
+error = '''
+pulsar async send message failed
+'''
+
+["CDC:ErrPulsarBrokerConfigNotFound"]
+error = '''
+pulsar broker config item not found
+'''
+
+["CDC:ErrPulsarCreateTopic"]
+error = '''
+pulsar create topic failed
+'''
+
+["CDC:ErrPulsarFlushUnfinished"]
+error = '''
+flush not finished before producer close
+'''
+
+["CDC:ErrPulsarInvalidClientID"]
+error = '''
+invalid pulsar client ID '%s'
+'''
+
+["CDC:ErrPulsarInvalidConfig"]
+error = '''
+pulsar config invalid
+'''
+
+["CDC:ErrPulsarInvalidPartitionNum"]
+error = '''
+invalid partition num %d
+'''
+
+["CDC:ErrPulsarInvalidVersion"]
+error = '''
+invalid pulsar version
+'''
+
+["CDC:ErrPulsarNewClient"]
+error = '''
+new pulsar client
+'''
+
+["CDC:ErrPulsarNewProducer"]
+error = '''
+new pulsar producer
+'''
+
+["CDC:ErrPulsarProducerClosed"]
+error = '''
+pulsar producer closed
+'''
+
+["CDC:ErrPulsarSendMessage"]
+error = '''
+pulsar send message failed
+'''
+
+["CDC:ErrPulsarTopicExprInvalid"]
+error = '''
+invalid topic expression
+'''
+
+["CDC:ErrPulsarTopicNotExists"]
+error = '''
+pulsar topic not exists after creation
+'''
+
 ["CDC:ErrReachMaxTry"]
 error = '''
 reach maximum try: %s, error: %s

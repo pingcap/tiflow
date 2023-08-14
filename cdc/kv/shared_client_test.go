@@ -200,8 +200,3 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
-
-// more tests:
-// resolve lock
-// unsubscribe table
-// prewrite not match

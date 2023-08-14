@@ -15,9 +15,18 @@ package avro
 
 var expectedSchemaWithoutExtension = `{
   "type": "record",
-  "name": "rowtoavroschema",
+  "name": "avroencode",
   "namespace": "default.testdb",
   "fields": [
+    {
+      "name": "id",
+      "type": {
+        "type": "int",
+        "connect.parameters": {
+          "tidb_type": "INT"
+        }
+      }
+    },
     {
       "name": "tiny",
       "type": {
@@ -827,9 +836,18 @@ var expectedSchemaWithoutExtension = `{
 
 var expectedSchemaWithExtension = `{
   "type": "record",
-  "name": "rowtoavroschema",
+  "name": "avroencode",
   "namespace": "default.testdb",
   "fields": [
+    {
+      "name": "id",
+      "type": {
+        "type": "int",
+        "connect.parameters": {
+          "tidb_type": "INT"
+        }
+      }
+    },
     {
       "name": "tiny",
       "type": {
@@ -1654,7 +1672,7 @@ var expectedSchemaWithExtension = `{
 
 var expectedSchemaWithExtensionEnableChecksum = `{
   "type": "record",
-  "name": "rowtoavroschema",
+  "name": "avroencode",
   "namespace": "default.testdb",
   "fields": [
     {
@@ -2454,6 +2472,15 @@ var expectedSchemaWithExtensionEnableChecksum = `{
           }
         }
       ]
+    },
+    {
+      "name": "id",
+      "type": {
+        "type": "int",
+        "connect.parameters": {
+          "tidb_type": "INT"
+        }
+      }
     },
     {
       "default": "",
