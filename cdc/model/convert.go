@@ -85,9 +85,11 @@ func LogToRow(redoLog *RedoRowChangedEvent) *RowChangedEvent {
 // DDLToRedo converts ddl event to redo log ddl
 func DDLToRedo(ddl *DDLEvent) *RedoDDLEvent {
 	redoDDL := &RedoDDLEvent{
-		DDL:       ddl,
-		Type:      byte(ddl.Type),
-		TableName: ddl.TableInfo.TableName,
+		DDL:  ddl,
+		Type: byte(ddl.Type),
+	}
+	if ddl.TableInfo != nil {
+		redoDDL.TableName = ddl.TableInfo.TableName
 	}
 	return redoDDL
 }
