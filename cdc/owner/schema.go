@@ -282,7 +282,7 @@ func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*mode
 				zap.Uint64("startTs", event.StartTs),
 				zap.Uint64("commitTs", event.CommitTs),
 			)
-			continue
+			// continue
 		}
 		res = append(res, event)
 	}
