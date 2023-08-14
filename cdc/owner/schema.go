@@ -271,7 +271,6 @@ func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*mode
 				return nil, errors.Trace(err)
 			}
 		}
-
 		if ignored {
 			s.metricIgnoreDDLEventCounter.Inc()
 			log.Panic(

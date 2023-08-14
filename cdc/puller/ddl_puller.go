@@ -451,6 +451,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			if skipByOldTableName && !skipByNewTableName {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
 			}
+			if skipByOldTableName && skipByNewTableName {
+				skip = true
+				return true, nil
+			}
 		}
 	default:
 		// nil means it is a schema ddl job, it's no need to fill the table name.
