@@ -177,6 +177,12 @@ func TestIsChangefeedUnRetryableError(t *testing.T) {
 	for _, c := range cases {
 		require.Equal(t, c.expected, IsChangefeedUnRetryableError(c.err))
 	}
+
+	var code errors.RFCErrorCode
+	var ok bool
+	code, ok = RFCCode(ErrChangefeedUnretryable)
+	require.True(t, ok)
+	require.True(t, IsChangefeedUnRetryableError(errors.New(string(code))))
 }
 
 func TestIsCliUnprintableError(t *testing.T) {

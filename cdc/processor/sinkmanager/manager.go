@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -150,6 +151,10 @@ func New(
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
+<<<<<<< HEAD
+=======
+		sinkRetry:           retry.NewInfiniteErrorRetry(),
+>>>>>>> bd210f8ee3 (sink(cdc): fix internal retry algothrim (#9530))
 
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
 	}
@@ -295,8 +300,18 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 		} else {
 			return errors.Trace(err)
 		}
+<<<<<<< HEAD
 		// Use a 5 second backoff when re-establishing internal resources.
 		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
+=======
+
+		backoff, err := m.sinkRetry.GetRetryBackoff(err)
+		if err != nil {
+			return errors.New(fmt.Sprintf("GetRetryBackoff: %s", err.Error()))
+		}
+
+		if err = util.Hang(m.managerCtx, backoff); err != nil {
+>>>>>>> bd210f8ee3 (sink(cdc): fix internal retry algothrim (#9530))
 			return errors.Trace(err)
 		}
 	}
