@@ -35,9 +35,6 @@ type ClusterAdminClient interface {
 	// GetAllBrokers return all brokers among the cluster
 	GetAllBrokers(ctx context.Context) ([]Broker, error)
 
-	// GetCoordinator return the coordinator's broker id of the cluster
-	GetCoordinator(ctx context.Context) (controllerID int, err error)
-
 	// GetBrokerConfig return the broker level configuration with the `configName`
 	GetBrokerConfig(ctx context.Context, configName string) (string, error)
 
@@ -48,6 +45,9 @@ type ClusterAdminClient interface {
 	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
 	GetTopicsMeta(ctx context.Context,
 		topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
+
+	// GetTopicsPartitionsNum return the number of partitions of each topic.
+	GetTopicsPartitionsNum(ctx context.Context, topics []string) (map[string]int32, error)
 
 	// CreateTopic creates a new topic.
 	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error

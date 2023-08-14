@@ -156,8 +156,13 @@ type SinkConfig struct {
 	// SafeMode is only available when the downstream is DB.
 	SafeMode           *bool               `toml:"safe-mode" json:"safe-mode,omitempty"`
 	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
+	PulsarConfig       *PulsarConfig       `toml:"pulsar-config" json:"pulsar-config,omitempty"`
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
 	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
+
+	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
+	// advanced for this given duration, the sink will be canceled and re-established.
+	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -327,6 +332,16 @@ type KafkaConfig struct {
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
+// PulsarConfig pulsar sink configuration
+type PulsarConfig struct {
+	TLSKeyFilePath        *string `toml:"tls-certificate-path" json:"tls-certificate-path,omitempty"`
+	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-private-key-path,omitempty"`
+	TLSTrustCertsFilePath *string `toml:"tls-trust-certs-file-path" json:"tls-trust-certs-file-path,omitempty"`
+
+	// PulsarProducerCacheSize is the size of the cache of pulsar producers
+	PulsarProducerCacheSize *int32 `toml:"pulsar-producer-cache-size" json:"pulsar-producer-cache-size,omitempty"`
+}
+
 // MySQLConfig represents a MySQL sink configuration
 type MySQLConfig struct {
 	WorkerCount                  *int    `toml:"worker-count" json:"worker-count,omitempty"`
@@ -419,6 +434,10 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		if err := s.CSVConfig.validateAndAdjust(); err != nil {
 			return err
 		}
+	}
+
+	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
+		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout-in-sec should be greater than 0")
 	}
 
 	return nil

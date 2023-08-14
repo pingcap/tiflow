@@ -25,11 +25,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mysql"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	kafkav2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -59,6 +61,9 @@ func New(
 		return mysql.NewDDLSink(ctx, changefeedID, sinkURI, cfg)
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		return cloudstorage.NewDDLSink(ctx, changefeedID, sinkURI, cfg)
+	case sink.PulsarScheme, sink.PulsarSSLScheme:
+		return mq.NewPulsarDDLSink(ctx, changefeedID, sinkURI, cfg, manager.NewPulsarTopicManager,
+			pulsarConfig.NewCreatorFactory, ddlproducer.NewPulsarProducer)
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", scheme)

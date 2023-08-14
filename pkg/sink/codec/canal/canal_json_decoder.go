@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -128,7 +129,8 @@ func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, cl
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	data, err := b.storage.ReadFile(ctx, claimCheckLocation)
+	_, claimCheckFileName := filepath.Split(claimCheckLocation)
+	data, err := b.storage.ReadFile(ctx, claimCheckFileName)
 	if err != nil {
 		return nil, err
 	}

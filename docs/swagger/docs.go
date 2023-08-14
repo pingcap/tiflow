@@ -1620,9 +1620,31 @@ var doc = `{
                 }
             }
         },
+        "config.PulsarConfig": {
+            "type": "object",
+            "properties": {
+                "pulsar-producer-cache-size": {
+                    "description": "PulsarProducerCacheSize is the size of the cache of pulsar producers",
+                    "type": "integer"
+                },
+                "tls-certificate-path": {
+                    "type": "string"
+                },
+                "tls-private-key-path": {
+                    "type": "string"
+                },
+                "tls-trust-certs-file-path": {
+                    "type": "string"
+                }
+            }
+        },
         "config.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance-timeout-in-sec": {
+                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
+                    "type": "integer"
+                },
                 "cloud-storage-config": {
                     "$ref": "#/definitions/config.CloudStorageConfig"
                 },
@@ -1681,6 +1703,9 @@ var doc = `{
                 "protocol": {
                     "description": "Protocol is NOT available when the downstream is DB.",
                     "type": "string"
+                },
+                "pulsar-config": {
+                    "$ref": "#/definitions/config.PulsarConfig"
                 },
                 "safe-mode": {
                     "description": "SafeMode is only available when the downstream is DB.",
@@ -2707,6 +2732,9 @@ var doc = `{
         "v2.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance_timeout": {
+                    "type": "integer"
+                },
                 "cloud_storage_config": {
                     "$ref": "#/definitions/v2.CloudStorageConfig"
                 },
