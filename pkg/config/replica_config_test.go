@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +56,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.Terminator = ""
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
-	conf.Sink.AdvanceTimeoutInSec = 150
+	conf.Sink.AdvanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)

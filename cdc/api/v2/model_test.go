@@ -52,7 +52,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		Terminator:               config.CRLF,
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
-		AdvanceTimeoutInSec:      150,
+		AdvanceTimeoutInSec:      config.DefaultAdvanceTimeoutInSec,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",

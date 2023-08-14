@@ -126,7 +126,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
 							Protocol:            "open-protocol",
-							AdvanceTimeoutInSec: 150,
+							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
@@ -177,7 +177,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
 							Protocol:            "open-protocol",
-							AdvanceTimeoutInSec: 150,
+							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
@@ -233,7 +233,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
 							Protocol:            "open-protocol",
-							AdvanceTimeoutInSec: 150,
+							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
