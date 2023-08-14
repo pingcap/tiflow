@@ -331,6 +331,11 @@ error = '''
 get tikv grpc context failed
 '''
 
+["CDC:ErrHandleDDLFailed"]
+error = '''
+handle ddl failed, job: %s, query: %s, startTs: %d. If you want to skip this DDL and continue with replication, you can manually execute this DDL downstream. Afterwards, add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.
+'''
+
 ["CDC:ErrIllegalSorterParameter"]
 error = '''
 illegal parameter for sorter: %s
@@ -1481,7 +1486,3 @@ error = '''
 request forward error, an request can only forward to owner one time
 '''
 
-["ErrHandleDDLFailed"]
-error = '''
-handle ddl failed, job: %s, query: %s, startTs: %d. If you want to execute this ddl in the downstream manually and skip this ddl in this changefeed, please add `ignore-txn-start-ts=[%d]` to the changefeed filter config.
-'''
