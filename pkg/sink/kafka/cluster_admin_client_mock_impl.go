@@ -14,7 +14,6 @@
 package kafka
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 
@@ -188,17 +187,6 @@ func (c *ClusterAdminClientMockImpl) DescribeTopics(topics []string) (
 	}
 
 	return metadataRes, nil
-}
-
-// GetTopicsPartitionsNum implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetTopicsPartitionsNum(
-	_ context.Context, topics []string,
-) (map[string]int32, error) {
-	result := make(map[string]int32, len(topics))
-	for _, topic := range topics {
-		result[topic] = c.topics[topic].NumPartitions
-	}
-	return result, nil
 }
 
 // CreateTopic adds topic into map.

@@ -94,21 +94,7 @@ func GetTopicManagerAndTryCreateTopic(
 	topicCfg *kafka.AutoCreateTopicConfig,
 	adminClient pkafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
-<<<<<<< HEAD:cdc/sinkv2/util/helper.go
-	topicManager, err := manager.NewKafkaTopicManager(
-		ctx,
-		adminClient,
-		topicCfg,
-	)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaNewSaramaProducer, err)
-	}
-=======
-	topicManager := manager.NewKafkaTopicManager(
-		ctx, changefeedID, adminClient, topicCfg,
-	)
->>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511)):cdc/sink/util/helper.go
-
+	topicManager := manager.NewKafkaTopicManager(ctx, adminClient, topicCfg)
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}
