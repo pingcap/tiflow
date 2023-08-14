@@ -114,7 +114,8 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 	if job != nil {
 		skip, err := p.handleJob(job)
 		if err != nil {
-			return cerror.WrapError(cerror.ErrHandleDDLFailed, err, job.String(), job.Query)
+			return cerror.WrapError(cerror.ErrHandleDDLFailed,
+				err, job.String(), job.Query, job.StartTS, job.StartTS)
 		}
 		log.Info("handle ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
