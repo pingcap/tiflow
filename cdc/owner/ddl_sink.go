@@ -196,11 +196,13 @@ func (s *ddlSinkImpl) retrySinkAction(ctx context.Context, name string, action f
 func (s *ddlSinkImpl) observedRetrySinkAction(ctx context.Context, name string, action func() error) (err error) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- s.retrySinkAction(ctx, name, action) }()
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case err := <-errCh:
 			return err
-		case <-time.After(30 * time.Second):
+		case <-ticker.C:
 			log.Info("owner ddl sink performs an action too long",
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID),

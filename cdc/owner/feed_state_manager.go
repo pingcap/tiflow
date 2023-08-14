@@ -49,8 +49,10 @@ const (
 // feedStateManager manages the ReactorState of a changefeed
 // when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
-	upstream        *upstream.Upstream
-	state           *orchestrator.ChangefeedReactorState
+	upstream   *upstream.Upstream
+	state      *orchestrator.ChangefeedReactorState
+	resolvedTs model.Ts
+
 	shouldBeRunning bool
 	// Based on shouldBeRunning = false
 	// shouldBeRemoved = true means the changefeed is removed
@@ -112,8 +114,11 @@ func (m *feedStateManager) shiftStateWindow(state model.FeedState) {
 	m.stateHistory[defaultStateWindowSize-1] = state
 }
 
-func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adminJobPending bool) {
-	if state != nil && state.Status != nil {
+func (m *feedStateManager) Tick(
+	state *orchestrator.ChangefeedReactorState,
+	resolvedTs model.Ts,
+) (adminJobPending bool) {
+	if state.Status != nil {
 		if m.lastCheckpointTs < state.Status.CheckpointTs {
 			m.lastCheckpointTs = state.Status.CheckpointTs
 			m.checkpointTsAdvanced = time.Now()
@@ -124,6 +129,7 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 	m.checkAndInitLastRetryCheckpointTs(state.Status)
 
 	m.state = state
+	m.resolvedTs = resolvedTs
 	m.shouldBeRunning = true
 	defer func() {
 		if !m.shouldBeRunning {
@@ -573,7 +579,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 	}
 	lastError := errs[len(errs)-1]
 
-	if m.state != nil && m.state.Status != nil {
+	if m.state.Status != nil {
 		currTime := m.upstream.PDClock.CurrentTime()
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
 		// Conditions:
@@ -582,7 +588,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		// 3. the changefeed has been initialized.
 		if currTime.Sub(ckptTime) > defaultBackoffMaxElapsedTime &&
 			time.Since(m.checkpointTsAdvanced) > defaultBackoffMaxElapsedTime &&
-			m.state.Status.MinTableBarrierTs > m.state.Info.StartTs {
+			m.resolvedTs > m.state.Info.StartTs {
 			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
 			m.handleError(&model.RunningError{
 				Time:    lastError.Time,
