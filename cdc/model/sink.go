@@ -26,11 +26,7 @@ import (
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/integrity"
->>>>>>> 7f42fce46a (sink(ticdc):  split RowChangeEvent if unique key is updated (#9437))
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
