@@ -26,6 +26,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
 
@@ -85,6 +86,7 @@ func newJSONMessageForDML(
 	e *model.RowChangedEvent,
 	config *common.Config,
 	messageTooLarge bool,
+	claimCheckFileName string,
 ) ([]byte, error) {
 	isDelete := e.IsDelete()
 
@@ -262,7 +264,7 @@ func newJSONMessageForDML(
 			if config.LargeMessageHandle.EnableClaimCheck() {
 				out.RawByte(',')
 				out.RawString("\"claimCheckLocation\":")
-				out.String(common.NewClaimCheckFileName(e))
+				out.String(claimCheckFileName)
 			}
 		}
 		out.RawByte('}')
@@ -363,7 +365,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	value, err := newJSONMessageForDML(c.builder, e, c.config, false)
+	value, err := newJSONMessageForDML(c.builder, e, c.config, false, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -392,7 +394,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		}
 
 		if c.config.LargeMessageHandle.HandleKeyOnly() {
-			value, err = newJSONMessageForDML(c.builder, e, c.config, true)
+			value, err = newJSONMessageForDML(c.builder, e, c.config, true, "")
 			if err != nil {
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
@@ -415,7 +417,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
 			m.Event = e
-			m.ClaimCheckFileName = common.NewClaimCheckFileName(e)
+			m.ClaimCheckFileName = claimcheck.NewFileName()
 		}
 	}
 
@@ -425,7 +427,8 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 // NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
 func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
-	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true)
+	claimCheckLocation := claimcheck.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true, claimCheckLocation)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
