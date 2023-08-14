@@ -273,15 +273,20 @@ func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*mode
 		}
 		if ignored {
 			s.metricIgnoreDDLEventCounter.Inc()
-			log.Panic(
-				"ignored DDL event should not be sent to owner",
+			log.Warn(
+				"ignored DDL event should not be sent to owner"+
+					"please report a bug to TiCDC if you see this log"+
+					"but it is no harm to your replication",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("query", event.Query),
+				zap.String("type", event.Type.String()),
+				zap.String("schema", event.TableInfo.TableName.Schema),
+				zap.String("table", event.TableInfo.TableName.Table),
 				zap.Uint64("startTs", event.StartTs),
 				zap.Uint64("commitTs", event.CommitTs),
 			)
-			// continue
+			continue
 		}
 		res = append(res, event)
 	}

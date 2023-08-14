@@ -1481,3 +1481,7 @@ error = '''
 request forward error, an request can only forward to owner one time
 '''
 
+["ErrHandleDDLFailed"]
+error = '''
+handle ddl failed, job: %s, query: %s
+'''

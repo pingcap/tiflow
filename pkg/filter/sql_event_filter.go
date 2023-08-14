@@ -140,6 +140,7 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 func (f *sqlEventFilter) shouldSkipDDL(
 	ddlType timodel.ActionType, schema, table, query string,
 ) (bool, error) {
+	log.Info("fizz sql event filter skip ddl event", zap.Any("ddlType", ddlType), zap.String("schema", schema), zap.String("table", table), zap.String("query", query))
 	evenType, err := ddlToEventType(f.p, query, ddlType)
 	if err != nil {
 		return false, err
