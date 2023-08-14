@@ -18,12 +18,12 @@ import (
 	"sync"
 
 	"github.com/apache/pulsar-client-go/pulsar"
-	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
+	"github.com/pingcap/tiflow/pkg/config"
 )
 
 // PulsarTopicManager is a manager for pulsar topics.
 type PulsarTopicManager func(
-	cfg *pulsarConfig.Config,
+	cfg *config.PulsarConfig,
 	client pulsar.Client,
 ) (TopicManager, error)
 
@@ -31,12 +31,12 @@ type PulsarTopicManager func(
 type pulsarTopicManager struct {
 	client     pulsar.Client
 	partitions sync.Map // key : topic, value : partition-name
-	cfg        *pulsarConfig.Config
+	cfg        *config.PulsarConfig
 }
 
 // NewPulsarTopicManager creates a new topic manager.
 func NewPulsarTopicManager(
-	cfg *pulsarConfig.Config,
+	cfg *config.PulsarConfig,
 	client pulsar.Client,
 ) (TopicManager, error) {
 	mgr := &pulsarTopicManager{

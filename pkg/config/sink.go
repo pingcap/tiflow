@@ -17,7 +17,9 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -331,6 +333,61 @@ type KafkaConfig struct {
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
+// PulsarCompressionType is the compression type for pulsar
+type PulsarCompressionType string
+
+// Value returns the pulsar compression type
+func (p *PulsarCompressionType) Value() pulsar.CompressionType {
+	if p == nil {
+		return 0
+	}
+	switch strings.ToLower(string(*p)) {
+	case "lz4":
+		return pulsar.LZ4
+	case "zlib":
+		return pulsar.ZLib
+	case "zstd":
+		return pulsar.ZSTD
+	default:
+		return 0 // default is no compression
+	}
+}
+
+// TimeMill is the time in seconds
+type TimeMill int
+
+// Duration returns the time in seconds as a duration
+func (t *TimeMill) Duration() time.Duration {
+	if t == nil {
+		return 0
+	}
+	return time.Duration(*t) * time.Millisecond
+}
+
+// TimeSec is the time in seconds
+type TimeSec int
+
+// Duration returns the time in seconds as a duration
+func (t *TimeSec) Duration() time.Duration {
+	if t == nil {
+		return 0
+	}
+	return time.Duration(*t) * time.Second
+}
+
+type OAuth2 struct {
+	// OAuth2IssuerURL  the URL of the authorization server.
+	OAuth2IssuerURL string `toml:"oauth2-issuer-url" json:"oauth2-issuer-url,omitempty"`
+	// OAuth2Audience  the URL of the resource server.
+	OAuth2Audience string `toml:"oauth2-audience" json:"oauth2-audience,omitempty"`
+	// OAuth2PrivateKey the private key used to sign the server.
+	OAuth2PrivateKey string `toml:"oauth2-private-key" json:"oauth2-private-key,omitempty"`
+	// OAuth2ClientID  the client ID of the application.
+	OAuth2ClientID string `toml:"oauth2-client-id" json:"oauth2-client-id,omitempty"`
+	// OAuth2Scope scope
+	OAuth2Scope string `toml:"oauth2-scope" json:"oauth2-scope,omitempty"`
+}
+
 // PulsarConfig pulsar sink configuration
 type PulsarConfig struct {
 	TLSKeyFilePath        *string `toml:"tls-certificate-path" json:"tls-certificate-path,omitempty"`
@@ -339,6 +396,64 @@ type PulsarConfig struct {
 
 	// PulsarProducerCacheSize is the size of the cache of pulsar producers
 	PulsarProducerCacheSize *int32 `toml:"pulsar-producer-cache-size" json:"pulsar-producer-cache-size,omitempty"`
+
+	// PulsarVersion print the version of pulsar
+	PulsarVersion *string `toml:"pulsar-version" json:"pulsar-version,omitempty"`
+
+	// Configure the service CreateUrl for the Pulsar service.
+	// This parameter from the sink-uri
+	CreateUrl string `toml:"-" json:"-"`
+
+	// pulsar client compression
+	CompressionType *PulsarCompressionType `toml:"compression-type" json:"compression-type,omitempty"`
+
+	// AuthenticationToken the token for the Pulsar server
+	AuthenticationToken *string `toml:"authentication-token" json:"authentication-token,omitempty"`
+
+	// ConnectionTimeout Timeout for the establishment of a TCP connection (default: 5 seconds)
+	ConnectionTimeout *TimeSec `toml:"connection-timeout" json:"connection-timeout,omitempty"`
+
+	// Set the operation timeout (default: 30 seconds)
+	// Producer-create, subscribe and unsubscribe operations will be retried until this interval, after which the
+	// operation will be marked as failed
+	OperationTimeout *TimeSec `toml:"operation-timeout" json:"operation-timeout,omitempty"`
+
+	// BatchingMaxMessages specifies the maximum number of messages permitted in a batch. (default: 1000)
+	BatchingMaxMessages *uint `toml:"batching-max-messages" json:"batching-max-messages,omitempty"`
+
+	// BatchingMaxPublishDelay specifies the time period within which the messages sent will be batched (default: 10ms)
+	// if batch messages are enabled. If set to a non zero value, messages will be queued until this time
+	// interval or until
+	BatchingMaxPublishDelay *TimeMill `toml:"batching-max-publish-delay" json:"batching-max-publish-delay,omitempty"`
+
+	// SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.
+	// Send and SendAsync returns an error after timeout.
+	// default: 30s
+	SendTimeout *TimeSec `toml:"send-timeout" json:"send-timeout,omitempty"`
+
+	// TokenFromFile Authentication from the file token,
+	// the path name of the file (the third priority authentication method)
+	TokenFromFile *string `toml:"token-from-file" json:"token-from-file,omitempty"`
+
+	// BasicUserName Account name for pulsar basic authentication (the second priority authentication method)
+	BasicUserName *string `toml:"basic-user-name" json:"basic-user-name,omitempty"`
+	// BasicPassword with account
+	BasicPassword *string `toml:"basic-password" json:"basic-password,omitempty"`
+
+	// AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
+	AuthTLSCertificatePath *string `toml:"auth-tls-certificate-path" json:"auth-tls-certificate-path,omitempty"`
+	// AuthTLSPrivateKeyPath private key
+	AuthTLSPrivateKeyPath *string `toml:"auth-tls-private-key-path" json:"auth-tls-private-key-path,omitempty"`
+
+	// Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id
+	// and 'type' always use 'client_credentials'
+	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
+
+	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
+	Protocol *ProtocolStr `toml:"protocol" json:"protocol,omitempty"`
+
+	// parse the sinkURI
+	U *url.URL `toml:"-" json:"-"`
 }
 
 // MySQLConfig represents a MySQL sink configuration

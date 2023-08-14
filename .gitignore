@@ -67,3 +67,7 @@ node_modules
 
 tools/bin
 tools/include
+
+docs/package-lock.json
+docs/node_modules
+docs/package.json

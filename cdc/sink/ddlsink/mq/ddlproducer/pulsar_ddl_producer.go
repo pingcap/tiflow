@@ -22,9 +22,9 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 	"go.uber.org/zap"
 )
 
@@ -40,7 +40,7 @@ var _ DDLProducer = (*pulsarProducers)(nil)
 // pulsarProducers is a producer for pulsar
 type pulsarProducers struct {
 	client           pulsar.Client
-	pConfig          *pulsarConfig.Config
+	pConfig          *config.PulsarConfig
 	defaultTopicName string
 	// support multiple topics
 	producers      *lru.Cache
@@ -90,7 +90,7 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 func NewPulsarProducer(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
-	pConfig *pulsarConfig.Config,
+	pConfig *config.PulsarConfig,
 	client pulsar.Client,
 	sinkConfig *config.SinkConfig,
 ) (DDLProducer, error) {
@@ -98,7 +98,10 @@ func NewPulsarProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
-	topicName := pConfig.GetDefaultTopicName()
+	topicName, err := util.GetTopic(pConfig.U)
+	if err != nil {
+		return nil, err
+	}
 
 	defaultProducer, err := newProducer(pConfig, client, topicName)
 	if err != nil {
@@ -134,25 +137,25 @@ func NewPulsarProducer(
 // newProducer creates a pulsar producer
 // One topic is used by one producer
 func newProducer(
-	pConfig *pulsarConfig.Config,
+	pConfig *config.PulsarConfig,
 	client pulsar.Client,
 	topicName string,
 ) (pulsar.Producer, error) {
 	po := pulsar.ProducerOptions{
 		Topic: topicName,
 	}
-	if pConfig.BatchingMaxMessages > 0 {
-		po.BatchingMaxMessages = pConfig.BatchingMaxMessages
+	if pConfig.BatchingMaxMessages != nil {
+		po.BatchingMaxMessages = *pConfig.BatchingMaxMessages
 	}
-	if pConfig.BatchingMaxPublishDelay > 0 {
-		po.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay
+	if pConfig.BatchingMaxPublishDelay != nil {
+		po.BatchingMaxPublishDelay = pConfig.BatchingMaxPublishDelay.Duration()
 	}
-	if pConfig.CompressionType > 0 {
-		po.CompressionType = pConfig.CompressionType
+	if pConfig.CompressionType != nil {
+		po.CompressionType = pConfig.CompressionType.Value()
 		po.CompressionLevel = pulsar.Default
 	}
-	if pConfig.SendTimeout > 0 {
-		po.SendTimeout = pConfig.SendTimeout
+	if pConfig.SendTimeout != nil {
+		po.SendTimeout = pConfig.SendTimeout.Duration()
 	}
 
 	producer, err := client.CreateProducer(po)
@@ -160,8 +163,7 @@ func newProducer(
 		return nil, err
 	}
 
-	log.Info("create pulsar producer success",
-		zap.String("topic:", topicName))
+	log.Info("new pulsar producer ok", zap.String("topic:", topicName))
 
 	return producer, nil
 }

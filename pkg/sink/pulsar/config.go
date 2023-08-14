@@ -93,16 +93,16 @@ const (
 
 // sink config default Value
 const (
-	defaultConnectionTimeout = 5 * time.Second
+	defaultConnectionTimeout = 5 // 5s
 
-	defaultOperationTimeout = 30 * time.Second
+	defaultOperationTimeout = 30 // 30s
 
 	defaultBatchingMaxSize = uint(1000)
 
-	defaultBatchingMaxPublishDelay = 10 * time.Millisecond
+	defaultBatchingMaxPublishDelay = 10 // 10ms
 
 	// defaultSendTimeout 30s
-	defaultSendTimeout = 30 * time.Second
+	defaultSendTimeout = 30 // 30s
 
 	// defaultProducerModeSingle batch send message(s)
 	defaultProducerModeBatch = "batch"
@@ -189,7 +189,7 @@ func (c *Config) GetSinkURI() *url.URL {
 	return c.u
 }
 
-func (c *Config) checkSinkURI(sinkURI *url.URL) error {
+func checkSinkURI(sinkURI *url.URL) error {
 	if sinkURI.Scheme == "" {
 		return fmt.Errorf("scheme is empty")
 	}
@@ -236,7 +236,7 @@ func (c *Config) applyOAuth(params url.Values) {
 
 // Apply apply
 func (c *Config) Apply(sinkURI *url.URL) error {
-	err := c.checkSinkURI(sinkURI)
+	err := checkSinkURI(sinkURI)
 	if err != nil {
 		return err
 	}
@@ -373,28 +373,68 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 }
 
 // NewPulsarConfig new pulsar config
-func NewPulsarConfig(sinkURI *url.URL) (*Config, error) {
-	c := &Config{
-		u:                       sinkURI,
-		ConnectionTimeout:       defaultConnectionTimeout,
-		OperationTimeout:        defaultOperationTimeout,
-		BatchingMaxMessages:     defaultBatchingMaxSize,
-		BatchingMaxPublishDelay: defaultBatchingMaxPublishDelay,
-		// from pkg/config.go
-		MaxMessageBytes: config.DefaultMaxMessageBytes,
-		SendTimeout:     defaultSendTimeout,
-		ProducerMode:    defaultProducerModeBatch,
+func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*config.PulsarConfig, error) {
+	c := &config.PulsarConfig{
+		U:                       sinkURI,
+		ConnectionTimeout:       toSec(defaultConnectionTimeout),
+		OperationTimeout:        toSec(defaultOperationTimeout),
+		BatchingMaxMessages:     toUint(defaultBatchingMaxSize),
+		BatchingMaxPublishDelay: toMill(defaultBatchingMaxPublishDelay),
+		SendTimeout:             toSec(defaultSendTimeout),
 	}
-	err := c.Apply(sinkURI)
+
+	if pulsarConfig == nil {
+		log.L().Debug("new pulsar config", zap.Any("config", c))
+		return c, nil
+	}
+
+	err := checkSinkURI(sinkURI)
 	if err != nil {
-		log.L().Error("NewPulsarConfig failed", zap.Error(err))
 		return nil, err
 	}
-	return c, nil
+
+	pulsarConfig.U = sinkURI
+
+	c.CreateUrl = sinkURI.Scheme + "://" + sinkURI.Host
+	if len(c.CreateUrl) == 0 {
+		return nil, fmt.Errorf("URL is empty")
+	}
+
+	// merge config
+	if pulsarConfig.ConnectionTimeout == nil {
+		pulsarConfig.ConnectionTimeout = c.ConnectionTimeout
+	}
+	if pulsarConfig.OperationTimeout != nil {
+		pulsarConfig.OperationTimeout = c.OperationTimeout
+	}
+	if pulsarConfig.BatchingMaxMessages != nil {
+		pulsarConfig.BatchingMaxMessages = c.BatchingMaxMessages
+	}
+	if pulsarConfig.BatchingMaxPublishDelay != nil {
+		pulsarConfig.BatchingMaxPublishDelay = c.BatchingMaxPublishDelay
+	}
+
+	log.L().Debug("new pulsar config", zap.Any("config", pulsarConfig))
+
+	return pulsarConfig, nil
 }
 
 // GetDefaultTopicName get default topic name
 func (c *Config) GetDefaultTopicName() string {
 	topicName := c.u.Path
 	return topicName[1:]
+}
+
+func toSec(x int) *config.TimeSec {
+	t := config.TimeSec(x)
+	return &t
+}
+
+func toMill(x int) *config.TimeMill {
+	t := config.TimeMill(x)
+	return &t
+}
+
+func toUint(x uint) *uint {
+	return &x
 }

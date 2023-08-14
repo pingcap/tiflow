@@ -57,7 +57,7 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	pConfig, err := pulsarConfig.NewPulsarConfig(sinkURI)
+	pConfig, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -70,7 +70,7 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, pConfig.MaxMessageBytes)
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, config.DefaultMaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
