@@ -49,9 +49,8 @@ const (
 // feedStateManager manages the ReactorState of a changefeed
 // when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
-	upstream   *upstream.Upstream
-	state      *orchestrator.ChangefeedReactorState
-	resolvedTs model.Ts
+	upstream *upstream.Upstream
+	state    *orchestrator.ChangefeedReactorState
 
 	shouldBeRunning bool
 	// Based on shouldBeRunning = false
@@ -65,6 +64,11 @@ type feedStateManager struct {
 	lastRetryCheckpointTs model.Ts                    // checkpoint ts of last retry
 	backoffInterval       time.Duration               // the interval for restarting a changefeed in 'error' state
 	errBackoff            *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
+
+	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
+	// has been advanced or not.
+	resolvedTs       model.Ts
+	initCheckpointTs model.Ts
 
 	checkpointTsAdvanced time.Time
 	lastCheckpointTs     model.Ts
@@ -122,6 +126,10 @@ func (m *feedStateManager) Tick(
 		if m.lastCheckpointTs < state.Status.CheckpointTs {
 			m.lastCheckpointTs = state.Status.CheckpointTs
 			m.checkpointTsAdvanced = time.Now()
+		}
+		if m.state == nil || m.state.Status == nil {
+			// It's the first time `m.state.Status` gets filled.
+			m.initCheckpointTs = m.state.Status.CheckpointTs
 		}
 	}
 
@@ -588,7 +596,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		// 3. the changefeed has been initialized.
 		if currTime.Sub(ckptTime) > defaultBackoffMaxElapsedTime &&
 			time.Since(m.checkpointTsAdvanced) > defaultBackoffMaxElapsedTime &&
-			m.resolvedTs > m.state.Info.StartTs {
+			m.resolvedTs > m.initCheckpointTs {
 			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
 			m.handleError(&model.RunningError{
 				Time:    lastError.Time,
