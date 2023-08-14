@@ -129,7 +129,7 @@ func (m *feedStateManager) Tick(
 		}
 		if m.state == nil || m.state.Status == nil {
 			// It's the first time `m.state.Status` gets filled.
-			m.initCheckpointTs = m.state.Status.CheckpointTs
+			m.initCheckpointTs = state.Status.CheckpointTs
 		}
 	}
 
