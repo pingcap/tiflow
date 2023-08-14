@@ -67,6 +67,8 @@ const (
 	BinaryEncodingHex = "hex"
 	// BinaryEncodingBase64 encodes binary data to base64 string.
 	BinaryEncodingBase64 = "base64"
+
+    DefaultAdvanceTimeoutInSec uint = 150
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -323,7 +325,7 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	}
 
 	if s.AdvanceTimeoutInSec == 0 {
-		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout-in-sec should be greater than 0")
+        s.AdvanceTimeoutInSec = DefaultAdvanceTimeoutInSec
 	}
 
 	return nil
