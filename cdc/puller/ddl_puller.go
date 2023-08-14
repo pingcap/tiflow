@@ -391,7 +391,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return true, nil
 	}
 
-	log.Info("fizz: handle ddl job", zap.Stringer("job", job), zap.String("query", job.Query))
 	snap := p.schemaStorage.GetLastSnapshot()
 	if err := snap.FillSchemaName(job); err != nil {
 		log.Info("failed to fill schema name for ddl job", zap.Error(err))

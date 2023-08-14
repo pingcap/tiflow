@@ -265,15 +265,19 @@ func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*mode
 				return nil, errors.Trace(err)
 			}
 		} else {
-			ignored, err = s.filter.ShouldDiscardDDL(event.StartTs,
-				event.Type, event.TableInfo.TableName.Schema, event.TableInfo.TableName.Table, event.Query)
+			ignored, err = s.filter.ShouldDiscardDDL(
+				event.StartTs,
+				event.Type,
+				event.TableInfo.TableName.Schema,
+				event.TableInfo.TableName.Table,
+				event.Query)
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
 		}
 		if ignored {
 			s.metricIgnoreDDLEventCounter.Inc()
-			log.Panic(
+			log.Error(
 				"ignored DDL event should not be sent to owner"+
 					"please report a bug to TiCDC if you see this log"+
 					"but it is no harm to your replication",
