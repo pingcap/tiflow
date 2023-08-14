@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -89,6 +90,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	var (
 		msg         canalJSONMessageInterface = &JSONMessage{}
 		encodedData []byte
+		err         error
 	)
 
 	if b.config.EnableTiDBExtension {
@@ -97,6 +99,15 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 			Extensions:  &tidbExtension{},
 		}
 	}
+
+	b.data, err = compression.Decode(b.config.LargeMessageHandle.LargeMessageHandleCompression, b.data)
+	if err != nil {
+		log.Info("uncompress data failed",
+			zap.String("compression", string(b.config.LargeMessageHandle.LargeMessageHandleCompression)),
+			zap.Error(err))
+		return model.MessageTypeUnknown, false, err
+	}
+
 	if len(b.config.Terminator) > 0 {
 		idx := bytes.IndexAny(b.data, b.config.Terminator)
 		if idx >= 0 {

@@ -60,3 +60,21 @@ func Encode(cc Codec, data []byte) ([]byte, error) {
 	}
 	return nil, errors.New("unsupported compression codec")
 }
+
+func Decode(cc Codec, data []byte) ([]byte, error) {
+	switch cc {
+	case None:
+		return data, nil
+	case Snappy:
+		return snappy.Decode(data)
+	case LZ4:
+		reader := lz4.NewReader(bytes.NewReader(data))
+		var buf bytes.Buffer
+		if _, err := buf.ReadFrom(reader); err != nil {
+			return nil, errors.Trace(err)
+		}
+		return buf.Bytes(), nil
+	default:
+	}
+	return nil, errors.New("unsupported compression codec")
+}
