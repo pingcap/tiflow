@@ -166,16 +166,16 @@ func (s *ddlSinkImpl) retrySinkAction(ctx context.Context, name string, action f
 		if err = action(); err == nil {
 			return nil
 		}
-		isWarning := !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled
+		isRetryable := !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled
 		log.Warn("owner ddl sink fails on action",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.String("action", name),
-			zap.Bool("retryable", isWarning),
+			zap.Bool("retryable", isRetryable),
 			zap.Error(err))
 
 		s.sink = nil
-		if isWarning {
+		if isRetryable {
 			s.reportWarning(err)
 		} else {
 			s.reportError(err)
