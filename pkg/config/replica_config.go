@@ -62,6 +62,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		DateSeparator:            DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		TiDBSourceID:             1,
+		AdvanceTimeoutInSec:      DefaultAdvanceTimeoutInSec,
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",

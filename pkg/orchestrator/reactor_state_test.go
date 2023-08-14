@@ -69,7 +69,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
         },
         "sink": {
             "dispatchers": null,
-            "protocol": "open-protocol"
+            "protocol": "open-protocol",
+            "advance-timeout-in-sec": 150
         },
         "consistent": {
             "level": "normal",
@@ -123,8 +124,11 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Sink: &config.SinkConfig{
+							Protocol:            "open-protocol",
+							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -171,8 +175,11 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Sink: &config.SinkConfig{
+							Protocol:            "open-protocol",
+							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -224,8 +231,11 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Sink: &config.SinkConfig{
+							Protocol:            "open-protocol",
+							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},

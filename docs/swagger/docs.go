@@ -1280,6 +1280,10 @@ var doc = `{
         "config.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance-timeout-in-sec": {
+                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
+                    "type": "integer"
+                },
                 "column-selectors": {
                     "type": "array",
                     "items": {
@@ -2029,6 +2033,9 @@ var doc = `{
         "v2.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance_timeout": {
+                    "type": "integer"
+                },
                 "column_selectors": {
                     "type": "array",
                     "items": {

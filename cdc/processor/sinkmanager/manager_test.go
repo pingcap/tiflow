@@ -222,7 +222,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
+		checkpointTS, _, _ := tableSink.(*tableSinkWrapper).getCheckpointTs()
 		return checkpointTS.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
@@ -250,7 +250,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(tableID)
 		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
+		checkpointTS, _, _ := tableSink.(*tableSinkWrapper).getCheckpointTs()
 		return checkpointTS.ResolvedMark() == 3
 	}, 5*time.Second, 10*time.Millisecond)
 }
@@ -299,7 +299,8 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	require.Equal(t, uint64(1), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)
+	checkpointTS, _, _ := tableSink.(*tableSinkWrapper).getCheckpointTs()
+	require.Equal(t, uint64(1), checkpointTS.Ts)
 }
 
 func TestClose(t *testing.T) {

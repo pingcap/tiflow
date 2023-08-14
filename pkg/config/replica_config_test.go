@@ -55,6 +55,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.Terminator = ""
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
+	conf.Sink.AdvanceTimeoutInSec = DefaultAdvanceTimeoutInSec
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)

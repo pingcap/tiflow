@@ -937,8 +937,9 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 	receivedEvents[1].Callback()
 	receivedEvents[2].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 3, "No more events should be sent to sink")
-	require.Equal(suite.T(), uint64(2), wrapper.getCheckpointTs().ResolvedMark(),
-		"Only can advance resolved mark to 2")
+
+	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	require.Equal(suite.T(), uint64(2), checkpointTs.ResolvedMark(), "Only can advance resolved mark to 2")
 }
 
 // Test the case that the worker will advance the table sink only when task is finished.
@@ -1020,7 +1021,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 	receivedEvents := sink.GetEvents()
 	receivedEvents[0].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
-	require.Equal(suite.T(), uint64(4), wrapper.getCheckpointTs().ResolvedMark())
+	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	require.Equal(suite.T(), uint64(4), checkpointTs.ResolvedMark())
 }
 
 // Test the case that the worker will advance the table sink directly when there are no events.
@@ -1085,7 +1087,8 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		return wrapper.getCheckpointTs().ResolvedMark() == 4
+		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		return checkpointTs.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
 	wg.Wait()

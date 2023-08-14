@@ -53,7 +53,8 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol"
+    "protocol": "open-protocol",
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
@@ -197,7 +198,8 @@ const (
     "transaction-atomicity": "",
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
@@ -251,7 +253,8 @@ const (
     },
     "terminator": "",
     "date-separator": "month",
-    "enable-partition-separator": true
+    "enable-partition-separator": true,
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",

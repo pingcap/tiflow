@@ -91,7 +91,7 @@ func TestValidateTxnAtomicity(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		cfg := SinkConfig{}
+		cfg := SinkConfig{AdvanceTimeoutInSec: DefaultAdvanceTimeoutInSec}
 		parsedSinkURI, err := url.Parse(tc.sinkURI)
 		require.Nil(t, err)
 		if tc.expectedErr == "" {

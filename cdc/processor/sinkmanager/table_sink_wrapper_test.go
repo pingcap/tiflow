@@ -74,13 +74,13 @@ func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.Table
 	wrapper := newTableSinkWrapper(
 		changefeedID,
 		tableID,
-		func() tablesink.TableSink { return innerTableSink },
+		func() (tablesink.TableSink, uint64) { return innerTableSink, 1 },
 		tableState,
 		0,
 		100,
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
-	wrapper.tableSink = innerTableSink
+	wrapper.tableSink.s, wrapper.tableSink.version = wrapper.tableSinkCreater()
 	return wrapper, sink
 }
 

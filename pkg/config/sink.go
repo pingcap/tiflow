@@ -67,6 +67,9 @@ const (
 	BinaryEncodingHex = "hex"
 	// BinaryEncodingBase64 encodes binary data to base64 string.
 	BinaryEncodingBase64 = "base64"
+
+	// DefaultAdvanceTimeoutInSec is the default sink advance timeout, in second.
+	DefaultAdvanceTimeoutInSec uint = 150
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -132,6 +135,10 @@ type SinkConfig struct {
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
 	TiDBSourceID uint64 `toml:"-" json:"-"`
+
+	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
+	// advanced for this given duration, the sink will be canceled and re-established.
+	AdvanceTimeoutInSec uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 }
 
 // KafkaConfig represents a kafka sink configuration
@@ -316,6 +323,10 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		if err := s.CSVConfig.validateAndAdjust(); err != nil {
 			return err
 		}
+	}
+
+	if s.AdvanceTimeoutInSec == 0 {
+		s.AdvanceTimeoutInSec = DefaultAdvanceTimeoutInSec
 	}
 
 	return nil

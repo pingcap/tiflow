@@ -281,6 +281,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			DateSeparator:            c.Sink.DateSeparator,
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           c.Sink.FileIndexWidth,
+			AdvanceTimeoutInSec:      c.Sink.AdvanceTimeoutInSec,
 		}
 
 		if c.Sink.KafkaConfig != nil {
@@ -399,6 +400,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			DateSeparator:            cloned.Sink.DateSeparator,
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           cloned.Sink.FileIndexWidth,
+			AdvanceTimeoutInSec:      cloned.Sink.AdvanceTimeoutInSec,
 		}
 
 		if cloned.Sink.KafkaConfig != nil {
@@ -542,6 +544,7 @@ type SinkConfig struct {
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
 	FileIndexWidth           int               `json:"file_index_width"`
 	KafkaConfig              *KafkaConfig      `json:"kafka_config"`
+	AdvanceTimeoutInSec      uint              `json:"advance_timeout,omitempty"`
 }
 
 // KafkaConfig represents kafka config for a changefeed.
