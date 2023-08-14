@@ -390,7 +390,7 @@ func TestHandleFastFailError(t *testing.T) {
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return nil, true, nil
 	})
-	manager.Tick(state , 0)
+	manager.Tick(state, 0)
 	// When the patches are applied, the callback function of PatchInfo in feedStateManager.HandleError will be called.
 	// At that time, the nil pointer will be checked instead of throwing a panic. See issue #3128 for more detail.
 	tester.MustApplyPatches()
