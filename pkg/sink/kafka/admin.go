@@ -102,17 +102,10 @@ func (a *saramaAdminClient) queryClusterWithRetry(ctx context.Context, query fun
 			zap.String("changefeed", a.changefeed.ID),
 			zap.Error(err))
 
-		if !errors.Is(err, syscall.EPIPE) {
-			return err
+		if errors.Is(err, syscall.EPIPE) || errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
+			return a.reset()
 		}
-		if !errors.Is(err, net.ErrClosed) {
-			return err
-		}
-		if !errors.Is(err, io.EOF) {
-			return err
-		}
-
-		return a.reset()
+		return err
 	}, retry.WithBackoffBaseDelay(defaultRetryBackoff), retry.WithMaxTries(defaultRetryMaxTries))
 	return err
 }
