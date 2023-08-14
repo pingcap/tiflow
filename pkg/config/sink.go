@@ -29,7 +29,7 @@ import (
 const (
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
-	// DefaultMaxMessageCount sets the default value for advance-timeout-in-sec.
+	// DefaultAdvanceTimeoutInSec sets the default value for advance-timeout-in-sec.
 	DefaultAdvanceTimeoutInSec = uint(150)
 
 	// TxnAtomicityKey specifies the key of the transaction-atomicity in the SinkURI.
