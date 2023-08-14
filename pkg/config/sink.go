@@ -68,6 +68,7 @@ const (
 	// BinaryEncodingBase64 encodes binary data to base64 string.
 	BinaryEncodingBase64 = "base64"
 
+	// DefaultAdvanceTimeoutInSec is the default sink advance timeout, in second.
 	DefaultAdvanceTimeoutInSec uint = 150
 )
 
