@@ -226,7 +226,8 @@ func (c *validatorPersistHelper) execQueriesWithRetry(tctx *tcontext.Context, qu
 					if (c.cfg.SourceID == "mysql-replica-01" && i == 3) ||
 						(c.cfg.SourceID == "mysql-replica-02" && i == 4) {
 						triggeredFailOnPersistForIntegrationTest = true
-						failpoint.Return(nil, errors.New("ValidatorFailOnPersist"))
+						// "Error 1406" is non-resumable error, so we can't retry it
+						failpoint.Return(nil, errors.New("ValidatorFailOnPersist Error 1366"))
 					}
 				}
 			})

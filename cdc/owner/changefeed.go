@@ -73,6 +73,7 @@ type changefeed struct {
 	// and will be destroyed when a changefeed is closed.
 	barriers         *barriers
 	feedStateManager *feedStateManager
+	resolvedTs       model.Ts
 
 	// ddl related fields
 	ddlManager  *ddlManager
@@ -331,7 +332,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 		zap.Uint64("preCheckpointTs", preCheckpointTs),
-		zap.Uint64("preResolvedTs", c.state.Status.ResolvedTs),
+		zap.Uint64("preResolvedTs", c.resolvedTs),
 		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
 		zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
 		zap.Any("tableBarrier", barrier.TableBarriers))
@@ -358,23 +359,19 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		if c.state.Status != nil {
 			// We should keep the metrics updated even if the scheduler cannot
 			// advance the watermarks for now.
-			c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.state.Status.ResolvedTs)
+			c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.resolvedTs)
 		}
 		return nil
 	}
-
-	prevResolvedTs := c.state.Status.ResolvedTs
-
 	log.Debug("owner prepares to update status",
-		zap.Uint64("prevResolvedTs", prevResolvedTs),
+		zap.Uint64("prevResolvedTs", c.resolvedTs),
 		zap.Uint64("newResolvedTs", newResolvedTs),
 		zap.Uint64("newCheckpointTs", newCheckpointTs),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
-	// resolvedTs should never regress but checkpointTs can, as checkpointTs has already
-	// been decreased when the owner is initialized.
-	if newResolvedTs < prevResolvedTs {
-		newResolvedTs = prevResolvedTs
+	// resolvedTs should never regress.
+	if newResolvedTs > c.resolvedTs {
+		c.resolvedTs = newResolvedTs
 	}
 
 	// MinTableBarrierTs should never regress
@@ -393,8 +390,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
-	c.updateStatus(newCheckpointTs, newResolvedTs, barrier.MinTableBarrierTs)
-	c.updateMetrics(currentTs, newCheckpointTs, newResolvedTs)
+	c.updateStatus(newCheckpointTs, barrier.MinTableBarrierTs)
+	c.updateMetrics(currentTs, newCheckpointTs, c.resolvedTs)
 
 	return nil
 }
@@ -430,7 +427,10 @@ LOOP2:
 	}
 
 	checkpointTs := c.state.Status.CheckpointTs
-	resolvedTs := c.state.Status.ResolvedTs
+	if c.resolvedTs == 0 {
+		c.resolvedTs = checkpointTs
+	}
+
 	minTableBarrierTs := c.state.Status.MinTableBarrierTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
@@ -494,8 +494,8 @@ LOOP2:
 	}
 
 	c.barriers = newBarriers()
-	if c.state.Info.Config.EnableSyncPoint {
-		c.barriers.Update(syncPointBarrier, resolvedTs)
+	if c.state.Info.Config.EnableSyncPoint { // preResolvedTs model.Ts
+		c.barriers.Update(syncPointBarrier, c.resolvedTs)
 	}
 	c.barriers.Update(finishBarrier, c.state.Info.GetTargetTs())
 
@@ -614,7 +614,7 @@ LOOP2:
 		zap.String("changefeed", c.state.ID.ID),
 		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Uint64("resolvedTs", resolvedTs),
+		zap.Uint64("resolvedTs", c.resolvedTs),
 		zap.Stringer("info", c.state.Info))
 
 	return nil
@@ -788,7 +788,6 @@ func (c *changefeed) preflightCheck(captures map[model.CaptureID]*model.CaptureI
 				if status == nil {
 					status = &model.ChangeFeedStatus{
 						// changefeed status is nil when the changefeed has just created.
-						ResolvedTs:        c.state.Info.StartTs,
 						CheckpointTs:      c.state.Info.StartTs,
 						MinTableBarrierTs: c.state.Info.StartTs,
 						AdminJobType:      model.AdminNone,
@@ -899,21 +898,12 @@ func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs mod
 	c.metricsCurrentPDTsGauge.Set(float64(currentTs))
 }
 
-func (c *changefeed) updateStatus(checkpointTs, resolvedTs, minTableBarrierTs model.Ts) {
-	if checkpointTs > resolvedTs {
-		log.Panic("checkpointTs is greater than resolvedTs",
-			zap.Uint64("checkpointTs", checkpointTs),
-			zap.Uint64("resolvedTs", resolvedTs))
-	}
+func (c *changefeed) updateStatus(checkpointTs, minTableBarrierTs model.Ts) {
 	c.state.PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			changed := false
 			if status == nil {
 				return nil, changed, nil
-			}
-			if status.ResolvedTs != resolvedTs {
-				status.ResolvedTs = resolvedTs
-				changed = true
 			}
 			if status.CheckpointTs != checkpointTs {
 				status.CheckpointTs = checkpointTs

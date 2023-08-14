@@ -46,7 +46,7 @@ var (
 	UnsupportedDMLMsgs = []string{
 		"Error 1062: Duplicate",
 		"Error 1406: Data too long for column",
-		"Error 1366",
+		"Error 1366", // Incorrect %s value: '%s' for column '%s' at row %d
 		"Error 8025: entry too large",
 	}
 
