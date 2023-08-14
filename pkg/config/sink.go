@@ -621,7 +621,6 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 				"large message handle compression is not supported, got %s", c.LargeMessageHandleCompression)
 		}
 	}
-
 	return nil
 }
 

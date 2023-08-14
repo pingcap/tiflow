@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -277,11 +278,6 @@ func newJSONMessageForDML(
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err = compression.Encode(config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-	}
-
 	return value, nil
 }
 
@@ -301,6 +297,8 @@ type JSONRowEventEncoder struct {
 	messages []*common.Message
 
 	config *common.Config
+
+	compressionRatio prometheus.Observer
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
@@ -380,6 +378,15 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	oldSize := len(value)
+	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return errors.Trace(err)
+		//return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+	ratio := float64(oldSize) / float64(len(value)) * 100
+	c.compressionRatio.Observe(ratio)
 
 	m := &common.Message{
 		Key:      nil,
@@ -492,16 +499,25 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 
 type jsonRowEventEncoderBuilder struct {
 	config *common.Config
+
+	compressionRatio prometheus.Observer
 }
 
 // NewJSONRowEventEncoderBuilder creates a canal-json batchEncoderBuilder.
-func NewJSONRowEventEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
-	return &jsonRowEventEncoderBuilder{config: config}
+func NewJSONRowEventEncoderBuilder(
+	config *common.Config, changefeedID model.ChangeFeedID,
+) codec.RowEventEncoderBuilder {
+	return &jsonRowEventEncoderBuilder{
+		config:           config,
+		compressionRatio: common.CompressionRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+	}
 }
 
 // Build a `jsonRowEventEncoderBuilder`
 func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
-	return newJSONRowEventEncoder(b.config)
+	encoder := newJSONRowEventEncoder(b.config)
+	encoder.(*JSONRowEventEncoder).compressionRatio = b.compressionRatio
+	return encoder
 }
 
 func shouldIgnoreColumn(col *model.Column,
