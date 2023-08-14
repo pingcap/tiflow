@@ -366,26 +366,14 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 
-	go func() {
-		time.Sleep(time.Millisecond * 10)
-		sink.Close()
-	}()
+	// Table sink close should return even if callbacks are not called,
+	// because the backend sink is closed.
+	sink.Close()
+	tb.Close()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		tb.Close()
-	}()
-	require.Eventually(t, func() bool {
-		return state.TableSinkStopping == tb.state.Load()
-	}, time.Second, time.Microsecond, "table should be stopping")
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		currentTs := tb.GetCheckpointTs()
-		sink.acknowledge(105)
-		require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
-	}()
-	wg.Wait()
+	require.Equal(t, state.TableSinkStopped, tb.state.Load())
+
+	currentTs := tb.GetCheckpointTs()
+	sink.acknowledge(105)
+	require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
 }
