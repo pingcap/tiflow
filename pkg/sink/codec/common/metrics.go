@@ -9,7 +9,7 @@ var (
 			Subsystem: "kafka_sink",
 			Name:      "compression_ratio",
 			Help:      "The compression ratio of kafka sink",
-			Buckets:   prometheus.LinearBuckets(1, 1, 20),
+			Buckets:   prometheus.LinearBuckets(0, 100, 20),
 		}, []string{"namespace", "changefeed"})
 )
 

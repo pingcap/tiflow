@@ -359,10 +359,16 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
+
+	oldSize := len(value)
 	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	newSize := len(value)
+	ratio := float64(oldSize) / float64(newSize) * 100
+
+	log.Info("compress checkpoint event", zap.Int("oldSize", oldSize), zap.Int("newSize", newSize), zap.Float64("ratio", ratio))
 
 	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
@@ -383,11 +389,11 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return errors.Trace(err)
-		//return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 	newSize := len(value)
-	ratio := float64(oldSize) / float64(newSize)
+	ratio := float64(oldSize) / float64(newSize) * 100
 	c.compressionRatio.Observe(ratio)
+	log.Info("compress row event", zap.Int("oldSize", oldSize), zap.Int("newSize", newSize), zap.Float64("ratio", ratio))
 
 	m := &common.Message{
 		Key:      nil,
@@ -416,6 +422,10 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 			value, err = newJSONMessageForDML(c.builder, e, c.config, true, "")
 			if err != nil {
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
+			value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+			if err != nil {
+				return errors.Trace(err)
 			}
 			m.Value = value
 			length := m.Length()
@@ -490,10 +500,14 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
+	oldSize := len(value)
 	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	newSize := len(value)
+	ratio := float64(oldSize) / float64(newSize) * 100
+	log.Info("compress DDL event", zap.Int("oldSize", oldSize), zap.Int("newSize", newSize), zap.Float64("ratio", ratio))
 
 	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }
