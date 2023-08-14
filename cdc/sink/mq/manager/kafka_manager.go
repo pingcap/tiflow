@@ -103,9 +103,9 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 			)
 			return
 		case <-m.metaRefreshTicker.C:
+			topicMetaList, err := m.getMetadataOfTopics()
 			// We ignore the error here, because the error may be caused by the
 			// network problem, and we can try to get the metadata next time.
-			topicMetaList, err := m.getMetadataOfTopics()
 			if err != nil {
 				log.Warn("Get metadata of topics failed",
 					zap.String("namespace", m.changefeedID.Namespace),
@@ -117,6 +117,7 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 				partitionNum := int32(len(detail.Partitions))
 				m.tryUpdatePartitionsAndLogging(detail.Name, partitionNum)
 			}
+
 		}
 	}
 }
@@ -150,9 +151,11 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 
 func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, error) {
 	var topicList []string
+
 	m.topics.Range(func(key, value any) bool {
 		topic := key.(string)
 		topicList = append(topicList, topic)
+		
 		return true
 	})
 
