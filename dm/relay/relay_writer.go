@@ -278,16 +278,16 @@ func (w *FileWriter) handleEventDefault(ev *replication.BinlogEvent) (WResult, e
 	}, terror.Annotatef(err, "write event %+v", ev.Header)
 }
 
-// handlePotentialHoleOrDuplicate combines handleFileHoleExist and handleDuplicateEventsExist.
+// handlePotentialHoleOrDuplicate combines handleFileHoleIfExists and handleDuplicateEventsExist.
 func (w *FileWriter) handlePotentialHoleOrDuplicate(ev *replication.BinlogEvent) (WResult, error) {
 	// handle a potential hole
-	mayDuplicate, err := w.handleFileHoleExist(ev)
+	err := w.handleFileHoleIfExists(ev)
 	if err != nil {
 		return WResult{}, terror.Annotatef(err, "handle a potential hole in %s before %+v",
 			w.filename.Load(), ev.Header)
 	}
 
-	if mayDuplicate {
+	if w.detectDuplicateEvent(ev) {
 		if err := w.Flush(); err != nil {
 			return WResult{}, terror.Annotatef(err, "flush before handle duplicate event %v in %s", ev.Header, w.filename.Load())
 		}
@@ -308,18 +308,29 @@ func (w *FileWriter) handlePotentialHoleOrDuplicate(ev *replication.BinlogEvent)
 	}, nil
 }
 
-// handleFileHoleExist tries to handle a potential hole after this event wrote.
-// A hole exists often because some binlog events not sent by the master.
-// If no hole exists, then ev may be a duplicate event.
-// NOTE: handle cases when file size > 4GB.
-func (w *FileWriter) handleFileHoleExist(ev *replication.BinlogEvent) (bool, error) {
+// detectDuplicateEvent detects whether duplicate events exist.
+// Return true if duplicate events exist, otherwise return false.
+func (w *FileWriter) detectDuplicateEvent(ev *replication.BinlogEvent) bool {
+	evStartPos := int64(ev.Header.LogPos - ev.Header.EventSize)
+	fileOffset := w.out.Offset()
+	if evStartPos < fileOffset {
+		// duplicate event exists
+		return true
+	}
+	return false
+}
+
+// handleFileHoleIfExists tries to handle a potential hole after this event wrote.
+// It fills the hole with a dummy event. A hole exists often because some binlog events not sent by the master.
+// TODO: handle cases when file size > 4GB.
+func (w *FileWriter) handleFileHoleIfExists(ev *replication.BinlogEvent) error {
 	// 1. detect whether a hole exists
 	evStartPos := int64(ev.Header.LogPos - ev.Header.EventSize)
 	fileOffset := w.out.Offset()
 	holeSize := evStartPos - fileOffset
 	if holeSize <= 0 {
-		// no hole exists, but duplicate events may exists, this should be handled in another place.
-		return holeSize < 0, nil
+		// no hole exists
+		return nil
 	}
 	w.logger.Info("hole exist from pos1 to pos2", zap.Int64("pos1", fileOffset), zap.Int64("pos2", evStartPos), zap.String("file", w.filename.Load()))
 
@@ -334,12 +345,12 @@ func (w *FileWriter) handleFileHoleExist(ev *replication.BinlogEvent) (bool, err
 	)
 	dummyEv, err := event.GenDummyEvent(header, latestPos, eventSize)
 	if err != nil {
-		return false, terror.Annotatef(err, "generate dummy event at %d with size %d", latestPos, eventSize)
+		return terror.Annotatef(err, "generate dummy event at %d with size %d", latestPos, eventSize)
 	}
 
-	// 3. write the dummy event
+	// 3. fill the hole with a dummy event
 	err = w.out.Write(dummyEv.RawData)
-	return false, terror.Annotatef(err, "write dummy event %+v to fill the hole", dummyEv.Header)
+	return terror.Annotatef(err, "write dummy event %+v to fill the hole", dummyEv.Header)
 }
 
 // handleDuplicateEventsExist tries to handle a potential duplicate event in the binlog file.
