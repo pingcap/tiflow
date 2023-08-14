@@ -155,7 +155,7 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 	m.topics.Range(func(key, value any) bool {
 		topic := key.(string)
 		topicList = append(topicList, topic)
-		
+
 		return true
 	})
 
