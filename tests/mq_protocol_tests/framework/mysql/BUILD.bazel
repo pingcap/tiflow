@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mysql",
+    srcs = [
+        "docker_env.go",
+        "single_table.go",
+    ],
+    importpath = "github.com/pingcap/tidb/tests/mq_protocol_tests/framework/mysql",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_integralist_go_findroot//find",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//tests/mq_protocol_tests/framework:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "mysql_test",
+    srcs = [
+        "docker_env_test.go",
+        "single_table_test.go",
+    ],
+    embed = [":mysql"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//tests/mq_protocol_tests/framework:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

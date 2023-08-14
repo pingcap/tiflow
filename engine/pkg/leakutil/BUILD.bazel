@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "leakutil",
+    srcs = ["leak_helper.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/leakutil",
+    visibility = ["//visibility:public"],
+    deps = ["@org_uber_go_goleak//:goleak"],
+)
+
+go_test(
+    name = "leakutil_test",
+    srcs = ["leak_helper_test.go"],
+    embed = [":leakutil"],
+    deps = ["@org_uber_go_goleak//:goleak"],
+)

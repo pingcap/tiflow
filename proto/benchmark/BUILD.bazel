@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "benchmark",
+    srcs = ["CraftBenchmark.pb.go"],
+    importpath = "github.com/pingcap/tidb/proto/benchmark",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//proto"],
+)

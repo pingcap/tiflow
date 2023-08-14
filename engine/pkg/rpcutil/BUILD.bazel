@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rpcutil",
+    srcs = [
+        "client.go",
+        "server.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/rpcutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "rpcutil_test",
+    srcs = [
+        "client_test.go",
+        "server_test.go",
+    ],
+    embed = [":rpcutil"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)

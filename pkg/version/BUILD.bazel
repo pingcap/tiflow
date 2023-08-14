@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "version",
+    srcs = [
+        "check.go",
+        "creator_version_gate.go",
+        "version.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/version",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_coreos_go_semver//semver",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_kvproto//pkg/metapb",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/httputil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/util:go_default_library",
+        "@com_github_tikv_pd_client//:client",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "version_test",
+    srcs = [
+        "check_test.go",
+        "creator_version_gate_test.go",
+        "main_test.go",
+    ],
+    embed = [":version"],
+    deps = [
+        "@com_github_coreos_go_semver//semver",
+        "@com_github_pingcap_kvproto//pkg/metapb",
+        "@com_github_pingcap_tiflow//pkg/httputil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+        "@com_github_tikv_pd//pkg/tempurl",
+        "@com_github_tikv_pd_client//:client",
+    ],
+)

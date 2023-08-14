@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "test",
+    srcs = [
+        "context.go",
+        "etcd_utils.go",
+        "flag.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/test",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_phayes_freeport//:freeport",
+        "@com_github_pingcap_tiflow//engine/pkg/etcdutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_client_v3//:client",
+        "@io_etcd_go_etcd_server_v3//embed",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)
+
+go_test(
+    name = "test_test",
+    srcs = [
+        "etcd_utils_test.go",
+        "heartbeat_test.go",
+        "util_test.go",
+    ],
+    embed = [":test"],
+    deps = [
+        "@com_github_phayes_freeport//:freeport",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tiflow//engine/executor:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/etcdutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/servermaster:go_default_library",
+        "@com_github_pingcap_tiflow//engine/test:go_default_library",
+        "@com_github_pingcap_tiflow//engine/test/mock:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

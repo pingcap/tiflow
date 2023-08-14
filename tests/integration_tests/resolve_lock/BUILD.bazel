@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "resolve_lock_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/pingcap/tidb/tests/integration_tests/resolve_lock",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_kvproto//pkg/kvrpcpb",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//kv",
+        "@com_github_pingcap_tidb//store/driver",
+        "@com_github_pingcap_tidb//tablecodec",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tiflow//tests/integration_tests/util:go_default_library",
+        "@com_github_tikv_client_go_v2//oracle",
+        "@com_github_tikv_client_go_v2//tikv",
+        "@com_github_tikv_client_go_v2//tikvrpc",
+        "@com_github_tikv_pd_client//:client",
+    ],
+)
+
+go_binary(
+    name = "resolve_lock",
+    embed = [":resolve_lock_lib"],
+    visibility = ["//visibility:public"],
+)

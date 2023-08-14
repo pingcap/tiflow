@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "db",
+    srcs = [
+        "db.go",
+        "leveldb.go",
+        "metrics.go",
+        "pebble.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/db",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_cockroachdb_pebble//bloom",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/sorter:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/encoding:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_syndtr_goleveldb//leveldb",
+        "@com_github_syndtr_goleveldb//leveldb/iterator",
+        "@com_github_syndtr_goleveldb//leveldb/opt",
+        "@com_github_syndtr_goleveldb//leveldb/util",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "db_test",
+    srcs = [
+        "db_test.go",
+        "pebble_test.go",
+    ],
+    embed = [":db"],
+    deps = [
+        "@com_github_cockroachdb_pebble//:pebble",
+        "@com_github_pingcap_tiflow//cdc/sorter/encoding:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@com_github_syndtr_goleveldb//leveldb",
+        "@com_github_syndtr_goleveldb//leveldb/opt",
+        "@com_github_syndtr_goleveldb//leveldb/storage",
+        "@com_github_syndtr_goleveldb//leveldb/util",
+    ],
+)

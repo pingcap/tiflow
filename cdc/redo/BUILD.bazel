@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "redo",
+    srcs = [
+        "applier.go",
+        "convert.go",
+        "doc.go",
+        "manager.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/redo",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//br/pkg/storage",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tiflow//cdc/contextutil:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/redo/common:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/redo/reader:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/redo/writer:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/chann:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "redo_test",
+    srcs = [
+        "convert_test.go",
+        "main_test.go",
+        "manager_test.go",
+    ],
+    embed = [":redo"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb_parser//charset",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_zap//:zap",
+    ],
+)

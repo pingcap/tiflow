@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workerrpc",
+    srcs = [
+        "interface.go",
+        "rawgrpc.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/dm/master/workerrpc",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tidb_tools//pkg/utils",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//backoff",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)
+
+go_test(
+    name = "workerrpc_test",
+    srcs = ["workerrpc_test.go"],
+    embed = [":workerrpc"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/pbmock:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_tikv_pd//pkg/tempurl",
+    ],
+)

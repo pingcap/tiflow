@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "model",
+    srcs = [
+        "common.go",
+        "logic_epoch.go",
+        "project.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/orm/model",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@io_gorm_gorm//:gorm",
+        "@io_gorm_gorm//clause",
+    ],
+)
+
+go_test(
+    name = "model_test",
+    srcs = ["logic_epoch_test.go"],
+    embed = [":model"],
+    deps = [
+        "@com_github_data_dog_go_sqlmock//:go-sqlmock",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_stretchr_testify//require",
+        "@io_gorm_driver_mysql//:mysql",
+        "@io_gorm_gorm//:gorm",
+    ],
+)

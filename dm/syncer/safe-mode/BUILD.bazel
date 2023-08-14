@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "safe-mode",
+    srcs = ["mode.go"],
+    importpath = "github.com/pingcap/tidb/dm/syncer/safe-mode",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tidb//util/filter",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "safe-mode_test",
+    srcs = ["mode_test.go"],
+    embed = [":safe-mode"],
+    deps = [
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tidb//util/filter",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+    ],
+)

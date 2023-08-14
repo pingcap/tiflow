@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "regionspan",
+    srcs = [
+        "region.go",
+        "region_range_lock.go",
+        "span.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/regionspan",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_google_btree//:btree",
+        "@com_github_pingcap_kvproto//pkg/metapb",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//kv",
+        "@com_github_pingcap_tidb//tablecodec",
+        "@com_github_pingcap_tidb//util/codec",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "regionspan_test",
+    srcs = [
+        "region_range_lock_test.go",
+        "region_test.go",
+        "span_test.go",
+    ],
+    embed = [":regionspan"],
+    deps = [
+        "@com_github_pingcap_kvproto//pkg/metapb",
+        "@com_github_pingcap_tidb//tablecodec",
+        "@com_github_stretchr_testify//require",
+    ],
+)

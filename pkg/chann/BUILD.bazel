@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "chann",
+    srcs = ["chann.go"],
+    importpath = "github.com/pingcap/tidb/pkg/chann",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "chann_test",
+    srcs = [
+        "chann_test.go",
+        "main_test.go",
+    ],
+    embed = [":chann"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

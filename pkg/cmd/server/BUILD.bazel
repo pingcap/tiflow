@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "server",
+    srcs = ["server.go"],
+    importpath = "github.com/pingcap/tidb/pkg/cmd/server",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_fatih_color//:color",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//config",
+        "@com_github_pingcap_tiflow//cdc:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/contextutil:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/unified:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/context:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/util:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/util:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/version:go_default_library",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "server_test",
+    srcs = [
+        "main_test.go",
+        "server_test.go",
+    ],
+    embed = [":server"],
+    deps = [
+        "@com_github_pingcap_tidb//config",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_stretchr_testify//require",
+    ],
+)

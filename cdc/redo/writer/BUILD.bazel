@@ -1,0 +1,62 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "writer",
+    srcs = [
+        "blackhole_writer.go",
+        "file.go",
+        "mock_RedoLogWriter.go",
+        "mock_fileWriter.go",
+        "writer.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/redo/writer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_aws_aws_sdk_go//aws/awserr",
+        "@com_github_aws_aws_sdk_go//service/s3",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//br/pkg/storage",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/redo/common:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/fsutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/uuid:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_uber_go_atomic//:atomic",
+        "@io_etcd_go_etcd_pkg_v3//ioutil",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_multierr//:multierr",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "writer_test",
+    srcs = [
+        "file_test.go",
+        "main_test.go",
+        "writer_test.go",
+    ],
+    embed = [":writer"],
+    deps = [
+        "@com_github_aws_aws_sdk_go//aws/awserr",
+        "@com_github_aws_aws_sdk_go//service/s3",
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_kvproto//pkg/brpb",
+        "@com_github_pingcap_tidb//br/pkg/mock/storage",
+        "@com_github_pingcap_tidb//br/pkg/storage",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/redo/common:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/fsutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/uuid:go_default_library",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@com_github_uber_go_atomic//:atomic",
+        "@org_uber_go_multierr//:multierr",
+    ],
+)

@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "promutil",
+    srcs = [
+        "factory.go",
+        "plain.go",
+        "registry.go",
+        "util.go",
+        "util_inner.go",
+        "wrapping.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/promutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_golang//prometheus/collectors",
+        "@com_github_prometheus_client_golang//prometheus/promhttp",
+        "@com_github_prometheus_client_model//go",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "promutil_test",
+    srcs = [
+        "implement_test.go",
+        "registry_test.go",
+        "util_inner_test.go",
+    ],
+    embed = [":promutil"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@com_github_prometheus_client_model//go",
+        "@com_github_stretchr_testify//require",
+    ],
+)

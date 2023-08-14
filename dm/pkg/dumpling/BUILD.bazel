@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dumpling",
+    srcs = ["utils.go"],
+    importpath = "github.com/pingcap/tidb/dm/pkg/dumpling",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_pingcap_tidb//br/pkg/storage",
+        "@com_github_pingcap_tidb//dumpling/export",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/storage:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_spf13_pflag//:pflag",
+    ],
+)
+
+go_test(
+    name = "dumpling_test",
+    srcs = ["utils_test.go"],
+    embed = [":dumpling"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tidb//dumpling/export",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+    ],
+)

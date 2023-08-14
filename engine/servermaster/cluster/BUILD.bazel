@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cluster",
+    srcs = [
+        "election.go",
+        "session.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/servermaster/cluster",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/pkg/adapter:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@io_etcd_go_etcd_api_v3//v3rpc/rpctypes",
+        "@io_etcd_go_etcd_client_v3//:client",
+        "@io_etcd_go_etcd_client_v3//concurrency",
+        "@io_etcd_go_etcd_server_v3//mvcc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "cluster_test",
+    srcs = [
+        "election_test.go",
+        "session_test.go",
+    ],
+    embed = [":cluster"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//engine/pkg/etcdutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/test:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_client_v3//:client",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)

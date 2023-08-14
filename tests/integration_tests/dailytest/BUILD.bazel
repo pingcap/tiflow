@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "dailytest",
+    srcs = [
+        "case.go",
+        "dailytest.go",
+        "data.go",
+        "db.go",
+        "exector.go",
+        "job.go",
+        "parser.go",
+        "rand.go",
+    ],
+    importpath = "github.com/pingcap/tidb/tests/integration_tests/dailytest",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//types",
+        "@com_github_pingcap_tidb//types/parser_driver",
+        "@com_github_pingcap_tidb_parser//:parser",
+        "@com_github_pingcap_tidb_parser//ast",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_pingcap_tiflow//tests/integration_tests/util:go_default_library",
+        "@org_uber_go_zap//zapcore",
+    ],
+)

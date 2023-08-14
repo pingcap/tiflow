@@ -1,0 +1,58 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "broker",
+    srcs = [
+        "broker.go",
+        "file_manager.go",
+        "interfaces.go",
+        "local_broker.go",
+        "local_file_utils.go",
+        "local_resource_desc.go",
+        "storage_handle.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/externalresource/broker",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_status//:status",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//br/pkg/storage",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/manager:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/resourcemeta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/storagecfg:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/rpcutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/fsutil:go_default_library",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//codes",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "broker_test",
+    srcs = [
+        "broker_test.go",
+        "file_manager_test.go",
+        "storage_handle_test.go",
+    ],
+    embed = [":broker"],
+    deps = [
+        "@com_github_gogo_status//:status",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/manager:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/storagecfg:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/rpcutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+    ],
+)

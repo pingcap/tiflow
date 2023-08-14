@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "_dmctl_tools_lib",
+    srcs = [
+        "check_exit_safe_binlog.go",
+        "check_master_http_apis.go",
+        "check_master_online.go",
+        "check_master_online_http.go",
+        "check_worker_online.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/tests/_dmctl_tools",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb_tools//pkg/utils",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/tests/utils:go_default_library",
+        "@org_golang_google_grpc//:grpc",
+    ],
+)
+
+go_binary(
+    name = "_dmctl_tools",
+    embed = [":_dmctl_tools_lib"],
+    visibility = ["//visibility:public"],
+)

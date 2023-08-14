@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dbconn",
+    srcs = [
+        "db.go",
+        "upstream_db.go",
+        "utils.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/syncer/dbconn",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tidb//util/dbutil",
+        "@com_github_pingcap_tidb//util/filter",
+        "@com_github_pingcap_tidb_parser//:parser",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/metricsproxy:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/retry:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_pingcap_tiflow//dm/syncer/metrics:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "dbconn_test",
+    srcs = ["upstream_db_test.go"],
+    embed = [":dbconn"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+    ],
+)

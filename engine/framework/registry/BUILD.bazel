@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "registry",
+    srcs = [
+        "factory.go",
+        "globals.go",
+        "register_fake.go",
+        "registry.go",
+        "utils.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/framework/registry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/framework:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/fake:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "registry_test",
+    srcs = [
+        "factory_test.go",
+        "registry_test.go",
+    ],
+    embed = [":registry"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/framework:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/fake:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/deps:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/broker:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/mock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/p2p:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_dig//:dig",
+    ],
+)

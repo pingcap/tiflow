@@ -67,3 +67,10 @@ node_modules
 
 tools/bin
 tools/include
+
+/_bazel
+bazel-bin
+bazel-out
+bazel-testlogs
+bazel-tiflow
+.ijwb/

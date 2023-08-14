@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "resource",
+    srcs = [
+        "capacity_impl.go",
+        "manager.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/servermaster/resource",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/servermaster/scheduler:go_default_library",
+        "@com_github_pingcap_tiflow//engine/servermaster/scheduler/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)

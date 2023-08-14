@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "upstream",
+    srcs = [
+        "manager.go",
+        "upstream.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/upstream",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_benbjohnson_clock//:clock",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//kv",
+        "@com_github_pingcap_tiflow//cdc/kv:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/etcd:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/orchestrator:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/pdutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/txnutil/gc:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/version:go_default_library",
+        "@com_github_tikv_client_go_v2//tikv",
+        "@com_github_tikv_pd_client//:client",
+        "@com_github_uber_go_atomic//:atomic",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//backoff",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "upstream_test",
+    srcs = [
+        "manager_test.go",
+        "upstream_test.go",
+    ],
+    embed = [":upstream"],
+    deps = [
+        "@com_github_benbjohnson_clock//:clock",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/orchestrator:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/txnutil/gc:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

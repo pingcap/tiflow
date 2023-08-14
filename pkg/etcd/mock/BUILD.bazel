@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mock",
+    srcs = ["etcd_client_mock.go"],
+    importpath = "github.com/pingcap/tidb/pkg/etcd/mock",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@io_etcd_go_etcd_api_v3//mvccpb",
+    ],
+)

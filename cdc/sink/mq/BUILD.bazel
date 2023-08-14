@@ -1,0 +1,57 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mq",
+    srcs = [
+        "mq.go",
+        "mq_flush_worker.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sink/mq",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/contextutil:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/metrics:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/codec:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/manager:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/producer:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/producer/kafka:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/producer/pulsar:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/chann:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/util:go_default_library",
+        "@com_github_shopify_sarama//:sarama",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "mq_test",
+    srcs = [
+        "main_test.go",
+        "mq_flush_worker_test.go",
+        "mq_test.go",
+    ],
+    embed = [":mq"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/metrics:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/codec:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/producer/kafka:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/kafka:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@com_github_shopify_sarama//:sarama",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)

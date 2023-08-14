@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ddlsink",
+    srcs = ["ddl_sink.go"],
+    importpath = "github.com/pingcap/tidb/cdc/sinkv2/ddlsink",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//cdc/model:go_default_library"],
+)

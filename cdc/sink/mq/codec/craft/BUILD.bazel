@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "craft",
+    srcs = [
+        "buffer.go",
+        "decoder.go",
+        "encoder.go",
+        "model.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sink/mq/codec/craft",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "craft_test",
+    srcs = ["codec_test.go"],
+    embed = [":craft"],
+    deps = [
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_goleak//:goleak",
+    ],
+)

@@ -1,0 +1,46 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "workerpool",
+    srcs = [
+        "async_pool.go",
+        "async_pool_impl.go",
+        "hash.go",
+        "pool.go",
+        "pool_impl.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/workerpool",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/notify:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@org_golang_x_sync//errgroup",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "workerpool_test",
+    srcs = [
+        "async_pool_test.go",
+        "main_test.go",
+        "pool_test.go",
+    ],
+    embed = [":workerpool"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_sync//errgroup",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_zap//:zap",
+    ],
+)

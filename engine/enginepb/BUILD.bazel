@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "enginepb",
+    srcs = [
+        "datarw.pb.go",
+        "error.pb.go",
+        "errorv2.pb.go",
+        "executor.pb.go",
+        "master.pb.go",
+        "metastore.pb.go",
+        "projects.pb.go",
+        "resources.pb.go",
+        "test.pb.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/enginepb",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gogo_protobuf//proto",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
+    ],
+)

@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mock",
+    srcs = [
+        "discovery.go",
+        "discovery_runner.go",
+        "grpc.go",
+        "test_server.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/test/mock",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/srvdiscovery:go_default_library",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//metadata",
+        "@org_uber_go_zap//:zap",
+    ],
+)

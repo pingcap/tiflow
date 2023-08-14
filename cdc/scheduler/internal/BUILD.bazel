@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "internal",
+    srcs = [
+        "agent.go",
+        "info_provider.go",
+        "scheduler.go",
+        "table_executor.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/scheduler/internal",
+    visibility = ["//cdc/scheduler:__subpackages__"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/processor/pipeline:go_default_library",
+    ],
+)

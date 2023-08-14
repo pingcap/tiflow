@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scheduler",
+    srcs = [
+        "capacity_provider.go",
+        "cost_scheduler.go",
+        "placement_constrainer.go",
+        "scheduler.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/servermaster/scheduler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/resourcemeta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/servermaster/scheduler/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "scheduler_test",
+    srcs = [
+        "cost_scheduler_test.go",
+        "scheduler_test.go",
+    ],
+    embed = [":scheduler"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/resourcemeta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/servermaster/scheduler/model:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "errctx",
+    srcs = [
+        "center.go",
+        "ctx.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/errctx",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "errctx_test",
+    srcs = ["center_test.go"],
+    embed = [":errctx"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

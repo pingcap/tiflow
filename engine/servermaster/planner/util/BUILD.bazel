@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "util",
+    srcs = ["dag_walker.go"],
+    importpath = "github.com/pingcap/tidb/engine/servermaster/planner/util",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "util_test",
+    srcs = ["dag_walker_test.go"],
+    embed = [":util"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

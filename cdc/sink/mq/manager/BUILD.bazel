@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "manager",
+    srcs = [
+        "kafka_manager.go",
+        "manager.go",
+        "pulsar_manager.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sink/mq/manager",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/producer/kafka:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/kafka:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@com_github_shopify_sarama//:sarama",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "manager_test",
+    srcs = [
+        "kafka_manager_test.go",
+        "main_test.go",
+    ],
+    embed = [":manager"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/sink/mq/producer/kafka:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/kafka:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

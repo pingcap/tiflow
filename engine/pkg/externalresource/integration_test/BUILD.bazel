@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "integration_test",
+    srcs = [
+        "cluster_stub.go",
+        "mock_cluster.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/externalresource/integration_test",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/client:go_default_library",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/broker:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/manager:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/resourcemeta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/resourcetypes:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/storagecfg:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/rpcutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)
+
+go_test(
+    name = "integration_test_test",
+    srcs = ["gc_test.go"],
+    embed = [":integration_test"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/broker:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/resourcemeta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

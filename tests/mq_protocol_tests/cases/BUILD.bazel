@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cases",
+    srcs = [
+        "case_alter.go",
+        "case_composite_pkey.go",
+        "case_date_time.go",
+        "case_delete.go",
+        "case_handle_key.go",
+        "case_many_types.go",
+        "case_simple.go",
+        "case_unsigned.go",
+    ],
+    importpath = "github.com/pingcap/tidb/tests/mq_protocol_tests/cases",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//tests/mq_protocol_tests/framework:go_default_library",
+        "@com_github_pingcap_tiflow//tests/mq_protocol_tests/framework/avro:go_default_library",
+        "@com_github_pingcap_tiflow//tests/mq_protocol_tests/framework/canal:go_default_library",
+        "@com_github_pingcap_tiflow//tests/mq_protocol_tests/framework/mysql:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)

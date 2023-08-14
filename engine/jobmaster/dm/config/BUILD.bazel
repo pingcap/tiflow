@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "config",
+    srcs = ["config.go"],
+    importpath = "github.com/pingcap/tidb/engine/jobmaster/dm/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb//util/filter",
+        "@com_github_pingcap_tidb//util/table-router",
+        "@com_github_pingcap_tidb_tools//pkg/binlog-filter",
+        "@com_github_pingcap_tidb_tools//pkg/column-mapping",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/master:go_default_library",
+        "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    srcs = ["config_test.go"],
+    embed = [":config"],
+    deps = [
+        "@com_github_burntsushi_toml//:toml",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/master:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

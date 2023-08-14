@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "txn",
+    srcs = ["txn_sink.go"],
+    importpath = "github.com/pingcap/tidb/cdc/sinkv2/eventsink/txn",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sinkv2/eventsink:go_default_library",
+    ],
+)

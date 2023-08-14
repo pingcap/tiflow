@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "kafka",
+    srcs = [
+        "client.go",
+        "client_mock_impl.go",
+        "cluster_admin_client.go",
+        "cluster_admin_client_mock_impl.go",
+        "config.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/kafka",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_shopify_sarama//:sarama"],
+)

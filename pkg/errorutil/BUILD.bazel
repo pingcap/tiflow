@@ -1,0 +1,29 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "errorutil",
+    srcs = ["ignore.go"],
+    importpath = "github.com/pingcap/tidb/pkg/errorutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb//infoschema",
+        "@com_github_pingcap_tidb//util/dbterror",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@io_etcd_go_etcd_api_v3//v3rpc/rpctypes",
+    ],
+)
+
+go_test(
+    name = "errorutil_test",
+    srcs = ["ignore_test.go"],
+    embed = [":errorutil"],
+    deps = [
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_tidb//infoschema",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_api_v3//v3rpc/rpctypes",
+    ],
+)

@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "model",
+    srcs = [
+        "master.go",
+        "messages.go",
+        "status.go",
+        "typedefs.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/framework/model",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//engine/pkg/clock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@io_gorm_gorm//:gorm",
+    ],
+)
+
+go_test(
+    name = "model_test",
+    srcs = ["status_test.go"],
+    embed = [":model"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

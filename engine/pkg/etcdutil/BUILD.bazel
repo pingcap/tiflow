@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "etcdutil",
+    srcs = [
+        "config.go",
+        "join.go",
+        "service.go",
+        "testing.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/etcdutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_phayes_freeport//:freeport",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//dm/pkg/etcdutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@io_etcd_go_etcd_client_v3//:client",
+        "@io_etcd_go_etcd_server_v3//embed",
+        "@org_golang_google_grpc//:grpc",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "etcdutil_test",
+    srcs = ["join_test.go"],
+    embed = [":etcdutil"],
+    deps = [
+        "@com_github_phayes_freeport//:freeport",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_server_v3//embed",
+    ],
+)

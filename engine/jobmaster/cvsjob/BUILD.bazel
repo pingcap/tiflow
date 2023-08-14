@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cvsjob",
+    srcs = ["cvs_job_master.go"],
+    importpath = "github.com/pingcap/tidb/engine/jobmaster/cvsjob",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/executor/cvs:go_default_library",
+        "@com_github_pingcap_tiflow//engine/executor/worker:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/registry:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/clock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "cvsjob_test",
+    srcs = ["cvs_job_master_test.go"],
+    embed = [":cvsjob"],
+    deps = ["@com_github_pingcap_tiflow//engine/framework:go_default_library"],
+)

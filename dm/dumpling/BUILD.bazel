@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dumpling",
+    srcs = [
+        "dumpling.go",
+        "metrics.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/dumpling",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tidb//dumpling/export",
+        "@com_github_pingcap_tidb//util/promutil",
+        "@com_github_pingcap_tidb//util/table-filter",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/unit:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/dumpling:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/metricsproxy:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/storage:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/promutil:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "dumpling_test",
+    srcs = ["dumpling_test.go"],
+    embed = [":dumpling"],
+    deps = [
+        "@com_github_data_dog_go_sqlmock//:go-sqlmock",
+        "@com_github_docker_go_units//:go-units",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tidb//dumpling/export",
+        "@com_github_pingcap_tidb//util/filter",
+        "@com_github_pingcap_tidb//util/promutil",
+        "@com_github_pingcap_tidb//util/table-filter",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/promutil:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+    ],
+)

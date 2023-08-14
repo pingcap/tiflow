@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "binlog",
+    srcs = [
+        "file.go",
+        "pos_finder.go",
+        "position.go",
+        "status.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/pkg/binlog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/common:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/event:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/reader:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "binlog_test",
+    srcs = [
+        "file_test.go",
+        "pos_finder_test.go",
+        "position_test.go",
+        "status_test.go",
+    ],
+    embed = [":binlog"],
+    deps = [
+        "@com_github_data_dog_go_sqlmock//:go-sqlmock",
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/event:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

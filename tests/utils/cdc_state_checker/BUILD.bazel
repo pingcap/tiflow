@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "cdc_state_checker_lib",
+    srcs = [
+        "cdc_monitor.go",
+        "main.go",
+        "reactor.go",
+        "state.go",
+    ],
+    importpath = "github.com/pingcap/tidb/tests/utils/cdc_state_checker",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/etcd:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/migrate:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/orchestrator:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/orchestrator/util:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_prometheus_client_golang//prometheus",
+        "@io_etcd_go_etcd_client_pkg_v3//logutil",
+        "@io_etcd_go_etcd_client_v3//:client",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//backoff",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+    ],
+)
+
+go_binary(
+    name = "cdc_state_checker",
+    embed = [":cdc_state_checker_lib"],
+    visibility = ["//visibility:public"],
+)

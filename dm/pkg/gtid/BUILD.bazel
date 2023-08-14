@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "gtid",
+    srcs = ["gtid.go"],
+    importpath = "github.com/pingcap/tidb/dm/pkg/gtid",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+    ],
+)
+
+go_test(
+    name = "gtid_test",
+    srcs = ["gtid_test.go"],
+    embed = [":gtid"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_stretchr_testify//require",
+    ],
+)

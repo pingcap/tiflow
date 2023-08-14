@@ -1,0 +1,36 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dispatcher",
+    srcs = ["event_router.go"],
+    importpath = "github.com/pingcap/tidb/cdc/sink/mq/dispatcher",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//util/table-filter",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher/partition:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher/topic:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "dispatcher_test",
+    srcs = [
+        "event_router_test.go",
+        "main_test.go",
+    ],
+    embed = [":dispatcher"],
+    deps = [
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher/partition:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher/topic:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

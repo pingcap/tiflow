@@ -1,0 +1,43 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "worker",
+    srcs = [
+        "ctx.go",
+        "task_committer.go",
+        "task_runner.go",
+        "test_util.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/executor/worker",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/executor/worker/internal:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/clock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/notifier:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "worker_test",
+    srcs = [
+        "ctx_test.go",
+        "task_committer_test.go",
+        "task_runner_test.go",
+    ],
+    embed = [":worker"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/executor/worker/internal:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/taskutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/clock:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)

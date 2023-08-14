@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "adapter",
+    srcs = ["keyadapter.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/adapter",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_pingcap_tiflow//pkg/errors:go_default_library"],
+)

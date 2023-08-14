@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "streamer",
+    srcs = ["hub.go"],
+    importpath = "github.com/pingcap/tidb/dm/pkg/streamer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+    ],
+)
+
+go_test(
+    name = "streamer_test",
+    srcs = ["hub_test.go"],
+    embed = [":streamer"],
+    deps = ["@com_github_pingcap_check//:check"],
+)

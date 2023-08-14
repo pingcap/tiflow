@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "binlog-event-blackhole_lib",
+    srcs = [
+        "config.go",
+        "fetcher.go",
+        "main.go",
+        "packet.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/debug-tools/binlog-event-blackhole",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//client",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "binlog-event-blackhole",
+    embed = [":binlog-event-blackhole_lib"],
+    visibility = ["//visibility:public"],
+)

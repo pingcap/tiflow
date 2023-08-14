@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sqlgen",
+    srcs = [
+        "errors.go",
+        "impl.go",
+        "sqlgen.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/simulator/internal/sqlgen",
+    visibility = ["//dm/simulator:__subpackages__"],
+    deps = [
+        "@com_github_chaos_mesh_go_sqlsmith//util",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb//types/parser_driver",
+        "@com_github_pingcap_tidb_parser//ast",
+        "@com_github_pingcap_tidb_parser//format",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tidb_parser//opcode",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/simulator/internal/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/simulator/internal/mcp:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "sqlgen_test",
+    srcs = ["impl_test.go"],
+    embed = [":sqlgen"],
+    deps = [
+        "@com_github_pingcap_tidb_parser//:parser",
+        "@com_github_pingcap_tidb_parser//ast",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/simulator/internal/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/simulator/internal/mcp:go_default_library",
+        "@com_github_stretchr_testify//suite",
+    ],
+)

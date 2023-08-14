@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tablesink",
+    srcs = [
+        "event_table_sink.go",
+        "progress_tracker.go",
+        "table_sink.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sinkv2/tablesink",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_emirpasic_gods//maps/linkedhashmap",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/processor/pipeline:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sinkv2/eventsink:go_default_library",
+    ],
+)
+
+go_test(
+    name = "tablesink_test",
+    srcs = [
+        "event_table_sink_test.go",
+        "main_test.go",
+        "progress_tracker_test.go",
+    ],
+    embed = [":tablesink"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/processor/pipeline:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sinkv2/eventsink:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "dataset",
+    srcs = ["dataset.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/dataset",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//engine/pkg/adapter:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "dataset_test",
+    srcs = ["dataset_test.go"],
+    embed = [":dataset"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/pkg/adapter:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/mock:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

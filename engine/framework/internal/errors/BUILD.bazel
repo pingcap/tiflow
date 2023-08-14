@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "errors",
+    srcs = ["fail_fast.go"],
+    importpath = "github.com/pingcap/tidb/engine/framework/internal/errors",
+    visibility = ["//engine/framework:__subpackages__"],
+)
+
+go_test(
+    name = "errors_test",
+    srcs = ["fail_fast_test.go"],
+    embed = [":errors"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

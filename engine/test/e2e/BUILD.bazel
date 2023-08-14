@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "e2e",
+    srcs = ["e2e_test_cli.go"],
+    importpath = "github.com/pingcap/tidb/engine/test/e2e",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/client:go_default_library",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/fake:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_pingcap_tiflow//engine/servermaster:go_default_library",
+        "@io_etcd_go_etcd_client_v3//:client",
+        "@org_golang_google_grpc//:grpc",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "e2e_test",
+    srcs = [
+        "e2e_dm_test.go",
+        "e2e_node_chaos_test.go",
+        "e2e_test.go",
+        "e2e_worker_exit_test.go",
+    ],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/client:go_default_library",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/fake:go_default_library",
+        "@com_github_pingcap_tiflow//engine/jobmaster/cvsjob:go_default_library",
+        "@com_github_pingcap_tiflow//engine/jobmaster/dm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/jobmaster/dm/metadata:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/dm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_pingcap_tiflow//engine/test/e2e:go_default_library",
+        "@com_github_pingcap_tiflow//tests/integration_tests/util:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
+        "@org_uber_go_zap//:zap",
+    ],
+)

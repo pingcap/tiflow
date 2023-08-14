@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "util",
+    srcs = [
+        "bitflag.go",
+        "cancel_monitor.go",
+        "failpoint.go",
+        "identity.go",
+        "overlap_merge.go",
+        "test_helper.go",
+        "tz.go",
+        "uri.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/util",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//util/timeutil",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "util_test",
+    srcs = [
+        "bitflag_test.go",
+        "main_test.go",
+        "overlap_merge_test.go",
+        "test_helper_test.go",
+        "tz_test.go",
+        "uri_test.go",
+    ],
+    embed = [":util"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

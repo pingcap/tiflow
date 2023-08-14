@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "factory",
+    srcs = [
+        "factory.go",
+        "factory_impl.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/cmd/factory",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/api/v1:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/api/v2:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/context:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/util:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/etcd:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/version:go_default_library",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_tikv_pd_client//:client",
+        "@io_etcd_go_etcd_client_pkg_v3//logutil",
+        "@io_etcd_go_etcd_client_v3//:client",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//backoff",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "factory_test",
+    srcs = ["factory_impl_test.go"],
+    embed = [":factory"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/api/v1:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/api/v1/mock:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/context:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/factory/mock:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
+    ],
+)

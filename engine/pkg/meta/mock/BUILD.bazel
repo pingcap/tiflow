@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mock",
+    srcs = [
+        "client_mock.go",
+        "clientconn_mock.go",
+        "simple_mockclient.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/meta/mock",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+    ],
+)
+
+go_test(
+    name = "mock_test",
+    srcs = ["simple_mockclient_test.go"],
+    embed = [":mock"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

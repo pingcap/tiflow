@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "status",
+    srcs = ["status.go"],
+    importpath = "github.com/pingcap/tidb/cdc/api/status",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_tiflow//cdc/api:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/capture:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/etcd:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/version:go_default_library",
+    ],
+)

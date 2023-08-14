@@ -1,0 +1,49 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "p2p",
+    srcs = [
+        "message_handler_manager.go",
+        "message_sender.go",
+        "mock_message_handler_manager.go",
+        "mock_message_sender.go",
+        "server.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/p2p",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_edwingeng_deque//:deque",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//proto/p2p:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "p2p_test",
+    srcs = [
+        "message_handler_manager_test.go",
+        "mock_message_handler_manager_test.go",
+        "mock_message_sender_test.go",
+        "server_integration_test.go",
+    ],
+    embed = [":p2p"],
+    deps = [
+        "@com_github_phayes_freeport//:freeport",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)

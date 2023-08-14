@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "many_sorters_test_lib",
+    srcs = ["many_sorters.go"],
+    importpath = "github.com/pingcap/tidb/tests/utils/many_sorters_test",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/unified:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+    ],
+)
+
+go_binary(
+    name = "many_sorters_test",
+    embed = [":many_sorters_test_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "many_sorters_test_test",
+    srcs = ["many_sorters_test.go"],
+    embed = [":many_sorters_test_lib"],
+)

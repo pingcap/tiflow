@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "master",
+    srcs = [
+        "events.go",
+        "mock_handle.go",
+        "worker_entry.go",
+        "worker_handle.go",
+        "worker_manager.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/framework/internal/master",
+    visibility = ["//engine/framework:__subpackages__"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/config:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/metadata:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/statusutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/clock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/errctx:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "master_test",
+    srcs = ["worker_manager_test.go"],
+    embed = [":master"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/framework/config:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/metadata:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/statusutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/clock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_zap//:zap",
+    ],
+)

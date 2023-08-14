@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "demoserver_lib",
+    srcs = [
+        "kvdatamake.go",
+        "mockdata.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/cmd/demoserver",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/db:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_x_sync//errgroup",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "demoserver",
+    embed = [":demoserver_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "demoserver_test",
+    srcs = ["kvdata_test.go"],
+    embed = [":demoserver_lib"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
+    ],
+)

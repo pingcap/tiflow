@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "server",
+    srcs = ["metastore.go"],
+    importpath = "github.com/pingcap/tidb/engine/executor/server",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/client:go_default_library",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/dbutil:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@io_etcd_go_etcd_client_pkg_v3//logutil",
+        "@io_etcd_go_etcd_client_v3//:client",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//backoff",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+    ],
+)
+
+go_test(
+    name = "server_test",
+    srcs = ["metastore_test.go"],
+    embed = [":server"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_tiflow//engine/client:go_default_library",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/executor/server/mocks:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/mock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_client_v3//:client",
+    ],
+)

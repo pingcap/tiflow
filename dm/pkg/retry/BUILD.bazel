@@ -1,0 +1,32 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "retry",
+    srcs = [
+        "errors.go",
+        "strategy.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/pkg/retry",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "retry_test",
+    srcs = ["strategy_test.go"],
+    embed = [":retry"],
+    deps = [
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tidb//util/dbutil",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+    ],
+)

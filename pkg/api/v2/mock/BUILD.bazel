@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mock",
+    srcs = [
+        "changefeed_mock.go",
+        "tso_mock.go",
+        "unsafe_mock.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/api/v2/mock",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_tiflow//cdc/api/v2:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/api/v2:go_default_library",
+    ],
+)

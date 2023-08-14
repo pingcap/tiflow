@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "clock",
+    srcs = ["clock.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/clock",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_benbjohnson_clock//:clock",
+        "@com_github_gavv_monotime//:monotime",
+    ],
+)

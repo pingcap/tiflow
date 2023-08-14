@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "middleware",
+    srcs = ["middleware.go"],
+    importpath = "github.com/pingcap/tidb/cdc/api/middleware",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/api:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/capture:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "middleware_test",
+    srcs = ["middleware_test.go"],
+    embed = [":middleware"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_tiflow//cdc/capture:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

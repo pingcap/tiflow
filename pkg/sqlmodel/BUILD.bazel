@@ -1,0 +1,55 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sqlmodel",
+    srcs = [
+        "causality.go",
+        "multivalue.go",
+        "reduce.go",
+        "row_change.go",
+        "utils.go",
+        "where_handle.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/sqlmodel",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//sessionctx",
+        "@com_github_pingcap_tidb//tablecodec",
+        "@com_github_pingcap_tidb//types",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/quotes:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "sqlmodel_test",
+    srcs = [
+        "causality_test.go",
+        "multivalue_test.go",
+        "reduce_test.go",
+        "row_change_test.go",
+        "utils_test.go",
+        "where_handle_test.go",
+    ],
+    embed = [":sqlmodel"],
+    deps = [
+        "@com_github_pingcap_tidb//ddl",
+        "@com_github_pingcap_tidb//util/mock",
+        "@com_github_pingcap_tidb_parser//:parser",
+        "@com_github_pingcap_tidb_parser//ast",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_shopspring_decimal//:decimal",
+        "@com_github_stretchr_testify//require",
+        "@com_github_stretchr_testify//suite",
+    ],
+)

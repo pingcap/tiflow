@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "system",
+    srcs = ["system.go"],
+    importpath = "github.com/pingcap/tidb/cdc/sorter/leveldb/system",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//util/memory",
+        "@com_github_pingcap_tiflow//cdc/sorter/leveldb:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/leveldb/message:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/actor:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/db:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "system_test",
+    srcs = ["system_test.go"],
+    embed = [":system"],
+    deps = [
+        "@com_github_pingcap_tiflow//cdc/sorter/leveldb:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sorter/leveldb/message:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/actor:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/actor/message:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

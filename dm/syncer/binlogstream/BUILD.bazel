@@ -1,0 +1,48 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "binlogstream",
+    srcs = [
+        "stream_modifier.go",
+        "streamer_controller.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/syncer/binlogstream",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/reader:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_pingcap_tiflow//dm/relay:go_default_library",
+        "@com_github_pingcap_tiflow//dm/syncer/dbconn:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "binlogstream_test",
+    srcs = [
+        "stream_modifier_test.go",
+        "streamer_controller_test.go",
+    ],
+    embed = [":binlogstream"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/reader:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/relay:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

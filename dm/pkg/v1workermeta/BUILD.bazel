@@ -1,0 +1,40 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "v1workermeta",
+    srcs = [
+        "api.go",
+        "db.go",
+        "meta.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/pkg/v1workermeta",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_burntsushi_toml//:toml",
+        "@com_github_golang_protobuf//proto",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_syndtr_goleveldb//leveldb",
+        "@com_github_syndtr_goleveldb//leveldb/opt",
+        "@com_github_syndtr_goleveldb//leveldb/util",
+    ],
+)
+
+go_test(
+    name = "v1workermeta_test",
+    srcs = [
+        "api_test.go",
+        "meta_test.go",
+    ],
+    embed = [":v1workermeta"],
+    deps = [
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_syndtr_goleveldb//leveldb",
+    ],
+)

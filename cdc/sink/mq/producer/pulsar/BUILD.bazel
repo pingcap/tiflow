@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pulsar",
+    srcs = [
+        "doc.go",
+        "option.go",
+        "producer.go",
+    ],
+    importpath = "github.com/pingcap/tidb/cdc/sink/mq/producer/pulsar",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_apache_pulsar_client_go//pulsar",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/codec:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)

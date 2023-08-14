@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "unit",
+    srcs = ["unit.go"],
+    importpath = "github.com/pingcap/tidb/dm/dm/unit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+    ],
+)
+
+go_test(
+    name = "unit_test",
+    srcs = ["unit_test.go"],
+    embed = [":unit"],
+    deps = [
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//dm/dm/pb:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+    ],
+)

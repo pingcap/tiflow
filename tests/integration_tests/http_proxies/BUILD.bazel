@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "http_proxies_lib",
+    srcs = ["run-proxy.go"],
+    importpath = "github.com/pingcap/tidb/tests/integration_tests/http_proxies",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_bradleyjkemp_grpc_tools//grpc-proxy",
+        "@com_github_pingcap_log//:log",
+        "@org_golang_google_grpc//:grpc",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "http_proxies",
+    embed = [":http_proxies_lib"],
+    visibility = ["//visibility:public"],
+)

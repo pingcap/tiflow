@@ -1,0 +1,53 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "config",
+    srcs = [
+        "config_test_data.go",
+        "consistent.go",
+        "db.go",
+        "debug.go",
+        "filter.go",
+        "kvclient.go",
+        "messages.go",
+        "mounter.go",
+        "mq_sink_protocol.go",
+        "replica_config.go",
+        "scheduler_config.go",
+        "server_config.go",
+        "sink.go",
+        "sorter.go",
+        "table_actor.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/config",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//util/table-filter",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tidb_tools//pkg/binlog-filter",
+        "@com_github_pingcap_tiflow//pkg/config/outdated:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "config_test",
+    srcs = [
+        "main_test.go",
+        "messages_test.go",
+        "mq_sink_protocol_test.go",
+        "replica_config_test.go",
+        "server_config_test.go",
+        "sink_test.go",
+    ],
+    embed = [":config"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

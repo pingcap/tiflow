@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "statusutil",
+    srcs = [
+        "message.go",
+        "writer.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/framework/statusutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_modern_go_reflect2//:reflect2",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/framework/internal/worker:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@org_golang_x_time//rate",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "statusutil_test",
+    srcs = ["writer_test.go"],
+    embed = [":statusutil"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/framework/internal/worker:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/orm:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/p2p:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

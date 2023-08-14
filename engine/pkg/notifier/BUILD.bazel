@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "notifier",
+    srcs = ["notifier.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/notifier",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//engine/pkg/containers:go_default_library",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)
+
+go_test(
+    name = "notifier_test",
+    srcs = ["notifier_test.go"],
+    embed = [":notifier"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

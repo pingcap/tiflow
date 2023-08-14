@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "kafka-consumer_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/pingcap/tidb/cmd/kafka-consumer",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_google_uuid//:uuid",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/contextutil:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/codec:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/sink/mq/dispatcher:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/util:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/filter:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/quotes:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/util:go_default_library",
+        "@com_github_shopify_sarama//:sarama",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_binary(
+    name = "kafka-consumer",
+    embed = [":kafka-consumer_lib"],
+    visibility = ["//visibility:public"],
+)

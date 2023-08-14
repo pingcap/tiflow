@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "framework",
+    srcs = [
+        "docker_compose_op.go",
+        "docker_env.go",
+        "dsl.go",
+        "env.go",
+        "sql_batch_op.go",
+        "sql_helper.go",
+        "task.go",
+    ],
+    importpath = "github.com/pingcap/tidb/tests/mq_protocol_tests/framework",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cenkalti_backoff_v4//:backoff",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_integralist_go_findroot//find",
+        "@com_github_jmoiron_sqlx//:sqlx",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/quotes:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@io_upper_db_v3//lib/sqlbuilder",
+        "@io_upper_db_v3//mysql",
+        "@org_golang_x_net//context",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+    ],
+)
+
+go_test(
+    name = "framework_test",
+    srcs = ["docker_compose_op_test.go"],
+    embed = [":framework"],
+    deps = [
+        "@com_github_integralist_go_findroot//find",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

@@ -1,0 +1,61 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "filter",
+    srcs = [
+        "expr_filter.go",
+        "filter.go",
+        "filter_test_helper.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/filter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//config",
+        "@com_github_pingcap_tidb//ddl",
+        "@com_github_pingcap_tidb//domain",
+        "@com_github_pingcap_tidb//expression",
+        "@com_github_pingcap_tidb//kv",
+        "@com_github_pingcap_tidb//meta",
+        "@com_github_pingcap_tidb//planner/core",
+        "@com_github_pingcap_tidb//session",
+        "@com_github_pingcap_tidb//sessionctx",
+        "@com_github_pingcap_tidb//store/mockstore",
+        "@com_github_pingcap_tidb//testkit",
+        "@com_github_pingcap_tidb//types",
+        "@com_github_pingcap_tidb//util/chunk",
+        "@com_github_pingcap_tidb//util/filter",
+        "@com_github_pingcap_tidb//util/table-filter",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@com_github_tikv_client_go_v2//oracle",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "filter_test",
+    srcs = [
+        "expr_filter_bench_test.go",
+        "expr_filter_test.go",
+        "filter_test.go",
+        "main_test.go",
+    ],
+    embed = [":filter"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb//planner/core",
+        "@com_github_pingcap_tidb_parser//model",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/config:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

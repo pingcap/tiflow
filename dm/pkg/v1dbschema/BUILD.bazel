@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "v1dbschema",
+    srcs = ["schema.go"],
+    importpath = "github.com/pingcap/tidb/dm/pkg/v1dbschema",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tidb//errno",
+        "@com_github_pingcap_tidb//util/dbutil",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/reader:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/cputil:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "v1dbschema_test",
+    srcs = ["schema_test.go"],
+    embed = [":v1dbschema"],
+    deps = [
+        "@com_github_data_dog_go_sqlmock//:go-sqlmock",
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tiflow//dm/dm/config:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/conn:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/context:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+    ],
+)

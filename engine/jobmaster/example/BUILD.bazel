@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "example",
+    srcs = [
+        "master_impl.go",
+        "worker_impl.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/jobmaster/example",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//engine/framework:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/p2p:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "example_test",
+    srcs = [
+        "master_impl_test.go",
+        "worker_impl_test.go",
+    ],
+    embed = [":example"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/framework:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

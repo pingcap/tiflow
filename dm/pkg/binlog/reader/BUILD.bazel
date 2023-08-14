@@ -1,0 +1,51 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "reader",
+    srcs = [
+        "file.go",
+        "mock.go",
+        "reader.go",
+        "tcp.go",
+        "util.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/pkg/binlog/reader",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/common:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/event:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/parser:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/utils:go_default_library",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "reader_test",
+    srcs = [
+        "file_test.go",
+        "mock_test.go",
+        "tcp_test.go",
+    ],
+    embed = [":reader"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_failpoint//:failpoint",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/common:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/binlog/event:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+    ],
+)

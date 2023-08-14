@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rest",
+    srcs = [
+        "client.go",
+        "config.go",
+        "request.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/api/internal/rest",
+    visibility = ["//pkg/api:__subpackages__"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//cdc/api/middleware:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/httputil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/version:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "rest_test",
+    srcs = [
+        "client_test.go",
+        "config_test.go",
+        "request_test.go",
+    ],
+    embed = [":rest"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/httputil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

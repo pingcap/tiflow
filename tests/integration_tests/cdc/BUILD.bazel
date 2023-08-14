@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "cdc_lib",
+    srcs = ["cdc.go"],
+    importpath = "github.com/pingcap/tidb/tests/integration_tests/cdc",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_go_sql_driver_mysql//:mysql",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//tests/integration_tests/dailytest:go_default_library",
+        "@com_github_pingcap_tiflow//tests/integration_tests/util:go_default_library",
+    ],
+)
+
+go_binary(
+    name = "cdc",
+    embed = [":cdc_lib"],
+    visibility = ["//visibility:public"],
+)

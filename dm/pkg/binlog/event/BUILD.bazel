@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "event",
+    srcs = [
+        "common.go",
+        "ddl.go",
+        "default_arg.go",
+        "dml.go",
+        "event.go",
+        "generator.go",
+        "helper.go",
+        "sid_mysql.go",
+        "util.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/pkg/binlog/event",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_coreos_go_semver//semver",
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_pingcap_tidb_parser//:parser",
+        "@com_github_pingcap_tidb_parser//charset",
+        "@com_github_pingcap_tidb_parser//mysql",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@org_golang_x_text//encoding",
+        "@org_golang_x_text//encoding/simplifiedchinese",
+    ],
+)
+
+go_test(
+    name = "event_test",
+    srcs = [
+        "common_test.go",
+        "ddl_test.go",
+        "dml_test.go",
+        "event_test.go",
+        "generator_test.go",
+        "helper_test.go",
+        "sid_mysql_test.go",
+        "util_test.go",
+    ],
+    embed = [":event"],
+    deps = [
+        "@com_github_go_mysql_org_go_mysql//mysql",
+        "@com_github_go_mysql_org_go_mysql//replication",
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_tiflow//dm/pkg/gtid:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)

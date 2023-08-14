@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "uuid",
+    srcs = [
+        "mock.go",
+        "uuid.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/uuid",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_google_uuid//:uuid",
+        "@com_github_pingcap_log//:log",
+    ],
+)
+
+go_test(
+    name = "uuid_test",
+    srcs = ["uuid_test.go"],
+    embed = [":uuid"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mock",
+    srcs = ["owner_mock.go"],
+    importpath = "github.com/pingcap/tidb/cdc/owner/mock",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_tiflow//cdc/model:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/owner:go_default_library",
+        "@com_github_pingcap_tiflow//cdc/scheduler:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/orchestrator:go_default_library",
+    ],
+)

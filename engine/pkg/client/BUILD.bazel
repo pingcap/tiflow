@@ -1,0 +1,59 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "client",
+    srcs = [
+        "broker_service.go",
+        "client_mock.go",
+        "errors.go",
+        "executor_client.go",
+        "executor_group.go",
+        "executor_service.go",
+        "test_util.go",
+    ],
+    importpath = "github.com/pingcap/tidb/engine/pkg/client",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_golang_mock//gomock",
+        "@com_github_google_uuid//:uuid",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/framework/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/client/internal:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/externalresource/resourcemeta/model:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/rpcerror:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/tenant:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/retry:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "client_test",
+    srcs = [
+        "broker_service_test.go",
+        "executor_client_test.go",
+        "executor_group_test.go",
+        "executor_service_test.go",
+    ],
+    embed = [":client"],
+    deps = [
+        "@com_github_gogo_status//:status",
+        "@com_github_golang_mock//gomock",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//engine/enginepb:go_default_library",
+        "@com_github_pingcap_tiflow//engine/enginepb/mock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_uber_go_atomic//:atomic",
+    ],
+)

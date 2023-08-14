@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "openapi",
+    srcs = [
+        "gen.client.go",
+        "gen.server.go",
+        "gen.types.go",
+        "logger.go",
+        "swaggerui.go",
+        "task.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/openapi",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_deepmap_oapi_codegen//pkg/runtime",
+        "@com_github_getkin_kin_openapi//openapi3",
+        "@com_github_gin_gonic_gin//:gin",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+    ],
+)
+
+go_test(
+    name = "openapi_test",
+    srcs = [
+        "logger_test.go",
+        "swaggerui_test.go",
+        "task_test.go",
+    ],
+    embed = [":openapi"],
+    deps = [
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_pingcap_check//:check",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zaptest/observer",
+    ],
+)

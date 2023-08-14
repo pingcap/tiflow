@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "func-rollback",
+    srcs = ["rollback.go"],
+    importpath = "github.com/pingcap/tidb/dm/pkg/func-rollback",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//dm/pkg/log:go_default_library",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "func-rollback_test",
+    srcs = ["rollback_test.go"],
+    embed = [":func-rollback"],
+    deps = ["@com_github_pingcap_check//:check"],
+)

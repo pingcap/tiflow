@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "security",
+    srcs = [
+        "credential.go",
+        "sasl.go",
+        "scram_client.go",
+        "test_util.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/security",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb_tools//pkg/utils",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+        "@com_github_shopify_sarama//:sarama",
+        "@com_github_tikv_pd_client//:client",
+        "@com_github_xdg_scram//:scram",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//credentials",
+    ],
+)
+
+go_test(
+    name = "security_test",
+    srcs = [
+        "credential_test.go",
+        "sasl_test.go",
+    ],
+    embed = [":security"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

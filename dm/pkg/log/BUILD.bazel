@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "log",
+    srcs = [
+        "ctx.go",
+        "log.go",
+    ],
+    importpath = "github.com/pingcap/tidb/dm/pkg/log",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@com_github_pingcap_tidb//util/logutil",
+        "@com_github_pingcap_tiflow//dm/pkg/helper:go_default_library",
+        "@com_github_pingcap_tiflow//dm/pkg/terror:go_default_library",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+    ],
+)
+
+go_test(
+    name = "log_test",
+    srcs = [
+        "ctx_test.go",
+        "log_test.go",
+    ],
+    embed = [":log"],
+    deps = [
+        "@com_github_pingcap_check//:check",
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tidb//util/logutil",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_zap//:zap",
+        "@org_uber_go_zap//zapcore",
+        "@org_uber_go_zap//zaptest",
+    ],
+)

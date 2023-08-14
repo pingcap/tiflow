@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "redo",
+    srcs = [
+        "apply.go",
+        "meta.go",
+        "redo.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/cmd/redo",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_tiflow//pkg/applier:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/context:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/cmd/util:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/logutil:go_default_library",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)

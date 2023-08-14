@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "label",
+    srcs = [
+        "label.go",
+        "selector.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/label",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_log//:log",
+        "@org_uber_go_atomic//:atomic",
+        "@org_uber_go_zap//:zap",
+    ],
+)
+
+go_test(
+    name = "label_test",
+    srcs = [
+        "label_test.go",
+        "selector_test.go",
+    ],
+    embed = [":label"],
+    deps = ["@com_github_stretchr_testify//require"],
+)

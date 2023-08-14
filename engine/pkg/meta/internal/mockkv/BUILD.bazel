@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mockkv",
+    srcs = ["builder.go"],
+    importpath = "github.com/pingcap/tidb/engine/pkg/meta/internal/mockkv",
+    visibility = ["//engine/pkg/meta:__subpackages__"],
+    deps = [
+        "@com_github_pingcap_tiflow//engine/pkg/meta/mock:go_default_library",
+        "@com_github_pingcap_tiflow//engine/pkg/meta/model:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/errors:go_default_library",
+    ],
+)

@@ -1,0 +1,30 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "httputil",
+    srcs = [
+        "httputil.go",
+        "testing.go",
+    ],
+    importpath = "github.com/pingcap/tidb/pkg/httputil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_pingcap_errors//:errors",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+    ],
+)
+
+go_test(
+    name = "httputil_test",
+    srcs = [
+        "httputil_test.go",
+        "main_test.go",
+    ],
+    embed = [":httputil"],
+    deps = [
+        "@com_github_pingcap_tidb//util",
+        "@com_github_pingcap_tiflow//pkg/leakutil:go_default_library",
+        "@com_github_pingcap_tiflow//pkg/security:go_default_library",
+        "@com_github_stretchr_testify//require",
+    ],
+)
