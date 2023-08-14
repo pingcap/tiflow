@@ -35,18 +35,14 @@ import (
 const (
 	resolveLockFence        time.Duration = 20 * time.Second
 	resolveLockTickInterval time.Duration = 10 * time.Second
-
-	multiplexingPullerEventChanSize = 1024
-	resolvedSpanChanSize            = 128
 )
 
 type tableProgress struct {
 	changefeed model.ChangeFeedID
-	pullerType string
-	tableName  string
+	client     *kv.SharedClient
 	spans      []tablepb.Span
 	startTs    model.Ts
-	client     *kv.SharedClient
+	tableName  string
 
 	initialized          bool
 	resolvedTsUpdated    time.Time
@@ -68,21 +64,23 @@ type tableProgress struct {
 // MultiplexingPuller works with `kv.SharedClient`. All tables share resources.
 type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
+	client     *kv.SharedClient
+	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span) error
+	workers    int
+	hasher     func(tablepb.Span, int) int
+	frontiers  int
 
-	client    *kv.SharedClient
-	inputChs  []chan kv.MultiplexingEvent
-	hasher    func(tablepb.Span, int) int
-	consume   func(context.Context, *model.RawKVEntry, []tablepb.Span) error
-	frontiers int
+	// inputChs is used to collect events from client.
+	inputChs []chan kv.MultiplexingEvent
+	// advanceCh is used to handle resolved ts in frontier workers.
+	advanceCh chan *tableProgress
 
-	// NOTE: subscriptions can share one tableProgress if necessary.
+	// NOTE: different subscriptions can share one tableProgress.
 	subscriptions struct {
 		sync.RWMutex
 		m map[kv.SubscriptionID]*tableProgress
 		n *spanz.HashMap[*tableProgress]
 	}
-
-	advanceCh chan *tableProgress
 
 	pullerEventCounterKv       prometheus.Counter
 	pullerEventCounterResolved prometheus.Counter
@@ -92,6 +90,9 @@ type MultiplexingPuller struct {
 
 // NewMultiplexingPuller creates a MultiplexingPuller. Outputs are handled by
 // `consume`, which will be called in several sub-routines concurrently.
+//
+// `workers` specifies how many workers will be spawned to handle events.
+// `frontiers` specifies how many workers will be spawned to handle resolved timestamps.
 func NewMultiplexingPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
@@ -103,8 +104,9 @@ func NewMultiplexingPuller(
 	x := &MultiplexingPuller{
 		changefeed: changefeed,
 		client:     client,
-		hasher:     hasher,
 		consume:    consume,
+		workers:    workers,
+		hasher:     hasher,
 		frontiers:  frontiers,
 		advanceCh:  make(chan *tableProgress, 128),
 	}
@@ -113,34 +115,27 @@ func NewMultiplexingPuller(
 
 	x.inputChs = make([]chan kv.MultiplexingEvent, 0, workers)
 	for i := 0; i < workers; i++ {
-		x.inputChs = append(x.inputChs, make(chan kv.MultiplexingEvent, multiplexingPullerEventChanSize))
+		x.inputChs = append(x.inputChs, make(chan kv.MultiplexingEvent, 1024))
 	}
 	return x
 }
 
 // Subscribe some spans. They will share one same resolved timestamp progress.
-func (p *MultiplexingPuller) Subscribe(
-	pullerType string, tableName string,
-	spans []tablepb.Span, startTs model.Ts,
-) []kv.SubscriptionID {
+func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) []kv.SubscriptionID {
 	p.subscriptions.Lock()
 	defer p.subscriptions.Unlock()
-	return p.subscribe(pullerType, tableName, spans, startTs)
+	return p.subscribe(spans, startTs, tableName)
 }
 
-func (p *MultiplexingPuller) subscribe(
-	pullerType string, tableName string,
-	spans []tablepb.Span, startTs model.Ts,
-) []kv.SubscriptionID {
+func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) []kv.SubscriptionID {
 	progress := &tableProgress{
 		changefeed: p.changefeed,
-		pullerType: pullerType,
-		tableName:  tableName,
+		client:     p.client,
 		spans:      spans,
 		startTs:    startTs,
-		client:     p.client,
+		tableName:  tableName,
 
-		resolvedSpans: make(chan kv.MultiplexingEvent, resolvedSpanChanSize),
+		resolvedSpans: make(chan kv.MultiplexingEvent, 16),
 		tsTracker:     frontier.NewFrontier(0, spans...),
 	}
 
@@ -153,10 +148,10 @@ func (p *MultiplexingPuller) subscribe(
 		return nil
 	}
 
-	subIDs := make([]kv.SubscriptionID, 0, len(spans))
-	for _, span := range spans {
+	subIDs := make([]kv.SubscriptionID, len(spans))
+	for i, span := range spans {
 		subID := p.client.AllocSubscriptionID()
-		subIDs = append(subIDs, subID)
+		subIDs[i] = subID
 
 		p.subscriptions.m[subID] = progress
 		p.subscriptions.n.ReplaceOrInsert(span, progress)
@@ -182,7 +177,6 @@ func (p *MultiplexingPuller) Unsubscribe(spans []tablepb.Span) {
 func (p *MultiplexingPuller) unsubscribe(spans []tablepb.Span) {
 	for _, span := range spans {
 		if subID, ok := p.client.Unsubscribe(span); ok {
-			// It's ok to stop one progress multiple times.
 			progress := p.subscriptions.m[subID]
 			progress.consume.Lock()
 			progress.consume.removed = true
@@ -213,6 +207,7 @@ func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
 	}()
 
 	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error { return p.client.Run(ctx) })
 	g.Go(func() error { return p.checkResolveLock(ctx) })
 
 	for i := 0; i < p.frontiers; i++ {

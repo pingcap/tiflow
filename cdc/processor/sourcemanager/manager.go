@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 const defaultMaxBatchSize = 256
@@ -53,7 +52,6 @@ type tablePullers struct {
 }
 
 type multiplexingPuller struct {
-	client *kv.SharedClient
 	puller *pullerwrapper.MultiplexingWrapper
 }
 
@@ -134,7 +132,7 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	m.engine.AddTable(span, startTs)
 
 	if m.multiplexing {
-		m.multiplexingPuller.puller.Subscribe("dml", tableName, []tablepb.Span{span}, startTs)
+		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
 		return
 	}
 
@@ -201,21 +199,18 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.multiplexing {
 		clientConfig := config.GetGlobalServerConfig().KVClient
-		m.multiplexingPuller.client = kv.NewSharedClient(
+		client := kv.NewSharedClient(
 			m.changefeedID, clientConfig, m.bdrMode,
 			m.up.PDClient, m.up.GrpcPool, m.up.RegionCache, m.up.PDClock,
 			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
 		)
 		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
-			m.changefeedID, m.multiplexingPuller.client, m.engine,
+			m.changefeedID, client, m.engine,
 			int(clientConfig.FrontierConcurrent),
 		)
 
-		g, ctx := errgroup.WithContext(ctx)
-		g.Go(func() error { return m.multiplexingPuller.client.Run(ctx) })
-		g.Go(func() error { return m.multiplexingPuller.puller.Run(ctx) })
 		close(m.ready)
-		return nil
+		return m.multiplexingPuller.puller.Run(ctx)
 	}
 
 	m.tablePullers.ctx = ctx

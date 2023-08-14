@@ -81,7 +81,7 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 
 	spans := []tablepb.Span{spanz.ToSpan([]byte("t_a"), []byte("t_e"))}
 	spans[0].TableID = 1
-	subID := puller.Subscribe("dml", "test", spans, 996)[0]
+	subID := puller.Subscribe(spans, 996, "test")[0]
 	for _, event := range events {
 		puller.inputChs[0] <- kv.MultiplexingEvent{RegionFeedEvent: event, SubscriptionID: subID}
 	}
