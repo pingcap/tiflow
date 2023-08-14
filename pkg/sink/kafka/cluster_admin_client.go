@@ -20,32 +20,12 @@ import (
 // ClusterAdminClient is the administrative client for Kafka, which supports managing and inspecting topics,
 // brokers, configurations and ACLs.
 type ClusterAdminClient interface {
-<<<<<<< HEAD
 	// DescribeCluster gets information about the nodes in the cluster
 	DescribeCluster() (brokers []*sarama.Broker, controllerID int32, err error)
 	// DescribeConfig gets the configuration for the specified resources.
 	DescribeConfig(resource sarama.ConfigResource) ([]sarama.ConfigEntry, error)
 	// DescribeTopics fetches metadata from some topics.
 	DescribeTopics(topics []string) (metadata []*sarama.TopicMetadata, err error)
-=======
-	// GetAllBrokers return all brokers among the cluster
-	GetAllBrokers(ctx context.Context) ([]Broker, error)
-
-	// GetBrokerConfig return the broker level configuration with the `configName`
-	GetBrokerConfig(ctx context.Context, configName string) (string, error)
-
-	// GetTopicConfig return the topic level configuration with the `configName`
-	GetTopicConfig(ctx context.Context, topicName string, configName string) (string, error)
-
-	// GetTopicsMeta return all target topics' metadata
-	// if `ignoreTopicError` is true, ignore the topic error and return the metadata of valid topics
-	GetTopicsMeta(ctx context.Context,
-		topics []string, ignoreTopicError bool) (map[string]TopicDetail, error)
-
-	// GetTopicsPartitionsNum return the number of partitions of each topic.
-	GetTopicsPartitionsNum(ctx context.Context, topics []string) (map[string]int32, error)
-
->>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511))
 	// CreateTopic creates a new topic.
 	CreateTopic(topic string, detail *sarama.TopicDetail, validateOnly bool) error
 	// Close shuts down the admin and closes underlying client.
