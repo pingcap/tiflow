@@ -254,6 +254,10 @@ def get_processor():
     resp = rq.get(base_url, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
     data = resp.json()[0]
+<<<<<<< HEAD
+=======
+    time.sleep(2)
+>>>>>>> 7f42fce46a (sink(ticdc):  split RowChangeEvent if unique key is updated (#9437))
     url = base_url + "/" + data["changefeed_id"] + "/" + data["capture_id"]
     resp = rq.get(url, cert=CERT, verify=VERIFY)
     # print error message for debug 
