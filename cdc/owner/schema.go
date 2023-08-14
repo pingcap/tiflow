@@ -273,7 +273,7 @@ func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*mode
 		}
 		if ignored {
 			s.metricIgnoreDDLEventCounter.Inc()
-			log.Warn(
+			log.Panic(
 				"ignored DDL event should not be sent to owner"+
 					"please report a bug to TiCDC if you see this log"+
 					"but it is no harm to your replication",
