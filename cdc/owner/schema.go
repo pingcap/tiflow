@@ -250,11 +250,28 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
 	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	for _, event := range ddlEvents {
-		ignored, err := s.filter.ShouldDiscardDDL(event.StartTs,
-			event.Type, event.TableInfo.TableName.Schema, event.TableInfo.TableName.Table, event.Query)
-		if err != nil {
-			return nil, errors.Trace(err)
+		var (
+			ignored bool
+			err     error
+		)
+		if event.Type == timodel.ActionRenameTable {
+			ignored, err = s.filter.ShouldDiscardDDL(
+				event.StartTs,
+				event.Type,
+				event.PreTableInfo.TableName.Schema,
+				event.PreTableInfo.TableName.Table,
+				event.Query)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		} else {
+			ignored, err = s.filter.ShouldDiscardDDL(event.StartTs,
+				event.Type, event.TableInfo.TableName.Schema, event.TableInfo.TableName.Table, event.Query)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 		}
+
 		if ignored {
 			s.metricIgnoreDDLEventCounter.Inc()
 			log.Panic(
