@@ -385,7 +385,8 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 		//return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	ratio := float64(oldSize) / float64(len(value)) * 100
+	newSize := len(value)
+	ratio := float64(oldSize) / float64(newSize)
 	c.compressionRatio.Observe(ratio)
 
 	m := &common.Message{

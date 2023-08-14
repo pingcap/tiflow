@@ -42,7 +42,9 @@ const (
 // Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
 	// Producer level.
-	compressionRatioMetricName = "compression-ratio"
+	compressionRatioMetricName  = "compression-ratio"
+	recordsPerRequestMetricName = "records-per-request"
+
 	// Broker level.
 	outgoingByteRateMetricNamePrefix   = "outgoing-byte-rate-for-broker-"
 	requestRateMetricNamePrefix        = "request-rate-for-broker-"
@@ -131,7 +133,14 @@ func (m *saramaMetricsCollector) collectProducerMetrics() {
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
 		compressionRatioGauge.
 			WithLabelValues(namespace, changefeedID).
-			Set(histogram.Snapshot().Mean())
+			Set(histogram.Snapshot().Percentile(0.99))
+	}
+
+	recordsPerRequestMetric := m.registry.Get(recordsPerRequestMetricName)
+	if histogram, ok := recordsPerRequestMetric.(metrics.Histogram); ok {
+		recordsPerRequestGauge.
+			WithLabelValues(namespace, changefeedID).
+			Set(histogram.Snapshot().Percentile(0.99))
 	}
 }
 
@@ -189,6 +198,8 @@ func getBrokerMetricName(prefix, brokerID string) string {
 
 func (m *saramaMetricsCollector) cleanupProducerMetrics() {
 	compressionRatioGauge.
+		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
+	recordsPerRequestGauge.
 		DeleteLabelValues(m.changefeedID.Namespace, m.changefeedID.ID)
 }
 
