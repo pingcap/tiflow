@@ -360,6 +360,7 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 // handleJob handles the DDL job.
 // It split rename tables DDL job and fill the job table name.
 func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
+	log.Info("fizz handle ddl job in handleJob", zap.String("query", job.Query))
 	// Only nil in test.
 	if p.schemaStorage == nil {
 		return false, nil
