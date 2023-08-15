@@ -195,6 +195,10 @@ func (p *MultiplexingPuller) unsubscribe(spans []tablepb.Span) {
 
 // Run the puller.
 func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
+	return p.run(ctx, true)
+}
+
+func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error {
 	p.pullerEventCounterKv = PullerEventCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 	p.pullerEventCounterResolved = PullerEventCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	p.queueKvDuration = pullerQueueDuration.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
@@ -207,7 +211,10 @@ func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
 	}()
 
 	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error { return p.client.Run(ctx) })
+	if includeClient {
+		g.Go(func() error { return p.client.Run(ctx) })
+	}
+
 	g.Go(func() error { return p.checkResolveLock(ctx) })
 
 	for i := 0; i < p.frontiers; i++ {

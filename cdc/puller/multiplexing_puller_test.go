@@ -52,7 +52,7 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		puller.Run(ctx)
+		puller.run(ctx, false)
 	}()
 
 	events := []model.RegionFeedEvent{
