@@ -199,6 +199,11 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
+    "kafka-config": {
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
+      }
+    },
     "advance-timeout-in-sec": 150
   },
   "consistent": {
@@ -254,6 +259,11 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
+    "kafka-config": {
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
+      }
+    },
     "advance-timeout-in-sec": 150
   },
   "consistent": {

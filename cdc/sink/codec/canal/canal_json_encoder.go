@@ -58,50 +58,50 @@ func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	return encoder
 }
 
+func fillColumns(columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool) error {
+	if len(columns) == 0 {
+		out.RawString("null")
+		return nil
+	}
+	out.RawByte('[')
+	out.RawByte('{')
+	isFirst := true
+	for _, col := range columns {
+		if col != nil {
+			if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+				continue
+			}
+			if isFirst {
+				isFirst = false
+			} else {
+				out.RawByte(',')
+			}
+			mysqlType := getMySQLType(col)
+			javaType, err := getJavaSQLType(col, mysqlType)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			value, err := c.builder.formatValue(col.Value, javaType)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			out.String(col.Name)
+			out.RawByte(':')
+			if col.Value == nil {
+				out.RawString("null")
+			} else {
+				out.String(value)
+			}
+		}
+	}
+	out.RawByte('}')
+	out.RawByte(']')
+	return nil
+}
+
 func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byte, error) {
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
-
-	filling := func(columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool) error {
-		if len(columns) == 0 {
-			out.RawString("null")
-			return nil
-		}
-		out.RawByte('[')
-		out.RawByte('{')
-		isFirst := true
-		for _, col := range columns {
-			if col != nil {
-				if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
-					continue
-				}
-				if isFirst {
-					isFirst = false
-				} else {
-					out.RawByte(',')
-				}
-				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
-				if err != nil {
-					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-				}
-				value, err := c.builder.formatValue(col.Value, javaType)
-				if err != nil {
-					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-				}
-				out.String(col.Name)
-				out.RawByte(':')
-				if col.Value == nil {
-					out.RawString("null")
-				} else {
-					out.String(value)
-				}
-			}
-		}
-		out.RawByte('}')
-		out.RawByte(']')
-		return nil
-	}
 
 	out := &jwriter.Writer{}
 	out.RawByte('{')
@@ -332,15 +332,6 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		value = append(value, c.config.Terminator...)
 	}
 
-	length := len(value) + common.MaxRecordOverhead
-	// for single message that is longer than max-message-bytes, do not send it.
-	if length > c.config.MaxMessageBytes {
-		log.Warn("Single message is too large for canal-json",
-			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
-			zap.Int("length", length),
-			zap.Any("table", e.Table))
-		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
-	}
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
@@ -351,6 +342,33 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		Protocol: config.ProtocolCanalJSON,
 		Callback: callback,
 	}
+
+	if m.Length() > c.config.MaxMessageBytes {
+		// for single message that is longer than max-message-bytes, do not send it.
+		if c.config.LargeMessageHandle.Disabled() {
+			log.Warn("Single message is too large for canal-json",
+				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+				zap.Int("length", m.Length()),
+				zap.Any("table", e.Table))
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+
+		if c.config.LargeMessageHandle.HandleKeyOnly() {
+			value, err = c.newJSONMessageForDML(c.builder, e, c.config, true)
+			if err != nil {
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
+			m.Value = value
+			if m.Length() > c.config.MaxMessageBytes {
+				log.Warn("Single message is too large for canal-json, only encode handle-key columns",
+					zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+					zap.Int("length", m.Length()),
+					zap.Any("table", e.Table))
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
+		}
+	}
+
 	m.IncRowsCount()
 
 	c.messages = append(c.messages, m)

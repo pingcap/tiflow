@@ -150,6 +150,8 @@ type KafkaConfig struct {
 	SASLOAuthScopes       []string `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
 	SASLOAuthGrantType    *string  `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
 	SASLOAuthAudience     *string  `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
+
+	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -451,4 +453,55 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 		return nil
 	}
 	return compatibilityError
+}
+
+const (
+	// LargeMessageHandleOptionNone means not handling large message.
+	LargeMessageHandleOptionNone string = "none"
+	// LargeMessageHandleOptionHandleKeyOnly means handling large message by sending only handle key columns.
+	LargeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
+)
+
+// LargeMessageHandleConfig is the configuration for handling large message.
+type LargeMessageHandleConfig struct {
+	LargeMessageHandleOption string `toml:"large-message-handle-option" json:"large-message-handle-option"`
+}
+
+// NewDefaultLargeMessageHandleConfig return the default LargeMessageHandleConfig.
+func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
+	return &LargeMessageHandleConfig{
+		LargeMessageHandleOption: LargeMessageHandleOptionNone,
+	}
+}
+
+// Validate the LargeMessageHandleConfig.
+func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtension bool) error {
+	if c.LargeMessageHandleOption == LargeMessageHandleOptionNone {
+		return nil
+	}
+
+	switch protocol {
+	case ProtocolOpen:
+		return nil
+	case ProtocolCanalJSON:
+		if !enableTiDBExtension {
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
+				c.LargeMessageHandleOption, protocol.String())
+		}
+	default:
+	}
+	return cerror.ErrInvalidReplicaConfig.GenWithStack(
+		"large message handle is set to %s, protocol is %s, it's not supported",
+		c.LargeMessageHandleOption, protocol.String())
+}
+
+// HandleKeyOnly returns true if handle large message by encoding handle key only.
+func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
+	return c.LargeMessageHandleOption == LargeMessageHandleOptionHandleKeyOnly
+}
+
+// Disabled returns true if disable large message handle.
+func (c *LargeMessageHandleConfig) Disabled() bool {
+	return c.LargeMessageHandleOption == LargeMessageHandleOptionNone
 }

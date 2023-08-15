@@ -285,6 +285,15 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 
 		if c.Sink.KafkaConfig != nil {
+
+			var largeMessageHandle *config.LargeMessageHandleConfig
+			if c.Sink.KafkaConfig.LargeMessageHandle != nil {
+				oldConfig := c.Sink.KafkaConfig.LargeMessageHandle
+				largeMessageHandle = &config.LargeMessageHandleConfig{
+					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
+				}
+			}
+
 			res.Sink.KafkaConfig = &config.KafkaConfig{
 				SASLMechanism:         c.Sink.KafkaConfig.SASLMechanism,
 				SASLOAuthClientID:     c.Sink.KafkaConfig.SASLOAuthClientID,
@@ -293,6 +302,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				SASLOAuthScopes:       c.Sink.KafkaConfig.SASLOAuthScopes,
 				SASLOAuthGrantType:    c.Sink.KafkaConfig.SASLOAuthGrantType,
 				SASLOAuthAudience:     c.Sink.KafkaConfig.SASLOAuthAudience,
+				LargeMessageHandle:    largeMessageHandle,
 			}
 		}
 	}
@@ -404,6 +414,13 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		if cloned.Sink.KafkaConfig != nil {
+			var largeMessageHandle *LargeMessageHandleConfig
+			if cloned.Sink.KafkaConfig.LargeMessageHandle != nil {
+				oldConfig := cloned.Sink.KafkaConfig.LargeMessageHandle
+				largeMessageHandle = &LargeMessageHandleConfig{
+					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
+				}
+			}
 			res.Sink.KafkaConfig = &KafkaConfig{
 				SASLMechanism:         cloned.Sink.KafkaConfig.SASLMechanism,
 				SASLOAuthClientID:     cloned.Sink.KafkaConfig.SASLOAuthClientID,
@@ -412,6 +429,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				SASLOAuthScopes:       cloned.Sink.KafkaConfig.SASLOAuthScopes,
 				SASLOAuthGrantType:    cloned.Sink.KafkaConfig.SASLOAuthGrantType,
 				SASLOAuthAudience:     cloned.Sink.KafkaConfig.SASLOAuthAudience,
+				LargeMessageHandle:    largeMessageHandle,
 			}
 		}
 	}
@@ -557,6 +575,8 @@ type KafkaConfig struct {
 	SASLOAuthScopes       []string `json:"sasl_oauth_scopes,omitempty"`
 	SASLOAuthGrantType    *string  `json:"sasl_oauth_grant_type,omitempty"`
 	SASLOAuthAudience     *string  `json:"sasl_oauth_audience,omitempty"`
+
+	LargeMessageHandle *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -733,4 +753,10 @@ type ChangefeedStatus struct {
 	CheckpointTs uint64        `json:"checkpoint_ts"`
 	LastError    *RunningError `json:"last_error,omitempty"`
 	LastWarning  *RunningError `json:"last_warning,omitempty"`
+}
+
+// LargeMessageHandleConfig denotes the large message handling config
+// This is the same as config.LargeMessageHandleConfig
+type LargeMessageHandleConfig struct {
+	LargeMessageHandleOption string `json:"large_message_handle_option"`
 }

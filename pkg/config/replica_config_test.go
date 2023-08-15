@@ -57,6 +57,12 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.EnablePartitionSeparator = true
 	conf.Sink.AdvanceTimeoutInSec = DefaultAdvanceTimeoutInSec
 
+	conf.Sink.KafkaConfig = &KafkaConfig{
+		LargeMessageHandle: &LargeMessageHandleConfig{
+			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
+		},
+	}
+
 	b, err := conf.Marshal()
 	require.Nil(t, err)
 	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))

@@ -68,7 +68,13 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
 			zap.Any("key", key))
-		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		if d.config.LargeMessageHandle.Disabled() {
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+		key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	if len(d.messageBuf) == 0 ||
