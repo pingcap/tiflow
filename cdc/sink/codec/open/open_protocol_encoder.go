@@ -84,11 +84,6 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	var keyLenByte [8]byte
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	var valueLenByte [8]byte
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
 	// for single message that is longer than max-message-bytes, do not send it.
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
@@ -118,6 +113,13 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		d.messageBuf = append(d.messageBuf, msg)
 		d.curBatchSize = 0
 	}
+
+	var (
+		keyLenByte   [8]byte
+		valueLenByte [8]byte
+	)
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
 	message := d.messageBuf[len(d.messageBuf)-1]
 	message.Key = append(message.Key, keyLenByte[:]...)

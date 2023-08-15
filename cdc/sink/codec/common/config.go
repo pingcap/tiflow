@@ -68,6 +68,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroSchemaRegistry:             "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
+
+		LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
 	}
 }
 
