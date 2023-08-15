@@ -115,3 +115,45 @@ func TestDDLToEventType(t *testing.T) {
 		require.Equal(t, c.eventType, et, "case%v", c.ddl)
 	}
 }
+
+func TestDDLToTypeSpecialDDL(t *testing.T) {
+	type c struct {
+		ddl      string
+		jobType  timodel.ActionType
+		evenType bf.EventType
+		err      error
+	}
+
+	ddl_with_tab := `\tCREATE TABLE if not exists sbtest25 
+	(\n  id bigint NOT NULL,\n   k bigint NOT NULL DEFAULT '0',\n   c char(30) NOT NULL DEFAULT '',
+	\n   pad char(20) NOT NULL DEFAULT '',\n    PRIMARY KEY (id),\n
+	    KEY k_1 (k)\n)\n     ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+	ddl_with_two_tab := `\t\tCREATE TABLE if not exists sbtest25 
+	(\n  id bigint NOT NULL,\n   k bigint NOT NULL DEFAULT '0',
+	\n   c char(30) NOT NULL DEFAULT '',\n   pad char(20) NOT NULL DEFAULT '',
+	\n    PRIMARY KEY (id),\n    KEY k_1 (k)\n)\n
+	     ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+	ddl_with_new_line := `CREATE TABLE finish_mark 
+	(\n                     id INT AUTO_INCREMENT PRIMARY KEY,
+		\n                     val INT DEFAULT 0,\n                     col0 INT NOT NULL\n)`
+	cases := []c{
+		{"CREATE DATABASE test", timodel.ActionCreateSchema, bf.CreateDatabase, nil},
+		{ddl_with_two_tab, timodel.ActionCreateTable, bf.CreateTable, nil},
+		{ddl_with_tab, timodel.ActionCreateTable, bf.CreateTable, nil},
+		{ddl_with_new_line, timodel.ActionCreateTable, bf.CreateTable, nil},
+	}
+	p := parser.New()
+	for _, c := range cases {
+		et, err := ddlToEventType(p, c.ddl, c.jobType)
+		if c.err != nil {
+			errRFC, ok := cerror.RFCCode(err)
+			require.True(t, ok)
+			caseErrRFC, ok := cerror.RFCCode(c.err)
+			require.True(t, ok)
+			require.Equal(t, caseErrRFC, errRFC)
+		} else {
+			require.NoError(t, err)
+		}
+		require.Equal(t, c.evenType, et, "case%v", c.ddl)
+	}
+}
