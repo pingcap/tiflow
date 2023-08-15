@@ -28,6 +28,9 @@ type MessageKey struct {
 	RowID     int64             `json:"rid,omitempty"`
 	Partition *int64            `json:"ptn,omitempty"`
 	Type      model.MessageType `json:"t"`
+
+	// Only Handle Key Columns encoded in the message's value part.
+	OnlyHandleKey bool `json:"ohk,omitempty"`
 }
 
 // Encode encodes the message key to a byte slice.
