@@ -58,7 +58,9 @@ func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	return encoder
 }
 
-func fillColumns(columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool) error {
+func fillColumns(
+	columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool, builder *canalEntryBuilder,
+) error {
 	if len(columns) == 0 {
 		out.RawString("null")
 		return nil
@@ -81,7 +83,7 @@ func fillColumns(columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColu
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
-			value, err := c.builder.formatValue(col.Value, javaType)
+			value, err := builder.formatValue(col.Value, javaType)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
@@ -99,9 +101,16 @@ func fillColumns(columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColu
 	return nil
 }
 
-func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byte, error) {
+func newJSONMessageForDML(
+	e *model.RowChangedEvent, config *common.Config, builder *canalEntryBuilder, messageTooLarge bool,
+) ([]byte, error) {
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
+
+	onlyHandleKey := messageTooLarge
+	if isDelete && config.OnlyHandleKeyColumns {
+		onlyHandleKey = true
+	}
 
 	out := &jwriter.Writer{}
 	out.RawByte('{')
@@ -172,7 +181,7 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
-				if isDelete && c.config.OnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+				if onlyHandleKey && !col.Flag.IsHandleKey() {
 					continue
 				}
 				if emptyColumn {
@@ -223,34 +232,42 @@ func (c *JSONBatchEncoder) newJSONMessageForDML(e *model.RowChangedEvent) ([]byt
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.PreColumns, out, c.config.OnlyHandleKeyColumns); err != nil {
+		if err := fillColumns(e.PreColumns, out, onlyHandleKey, builder); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out, false); err != nil {
+		if err := fillColumns(e.Columns, out, onlyHandleKey, builder); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
 		out.RawString(",\"old\":")
-		if err := filling(e.PreColumns, out, false); err != nil {
+		if err := fillColumns(e.PreColumns, out, onlyHandleKey, builder); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out, false); err != nil {
+		if err := fillColumns(e.Columns, out, onlyHandleKey, builder); err != nil {
 			return nil, err
 		}
 	} else {
 		log.Panic("unreachable event type", zap.Any("event", e))
 	}
 
-	if c.config.EnableTiDBExtension {
+	if config.EnableTiDBExtension {
 		const prefix string = ",\"_tidb\":"
 		out.RawString(prefix)
 		out.RawByte('{')
 		out.RawString("\"commitTs\":")
 		out.Uint64(e.CommitTs)
+
+		if messageTooLarge {
+			if config.LargeMessageHandle.HandleKeyOnly() {
+				out.RawByte(',')
+				out.RawString("\"onlyHandleKey\":true")
+			}
+		}
+
 		out.RawByte('}')
 	}
 	out.RawByte('}')
@@ -324,7 +341,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	value, err := c.newJSONMessageForDML(e)
+	value, err := newJSONMessageForDML(e, c.config, c.builder, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -354,7 +371,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		}
 
 		if c.config.LargeMessageHandle.HandleKeyOnly() {
-			value, err = c.newJSONMessageForDML(c.builder, e, c.config, true)
+			value, err = newJSONMessageForDML(e, c.config, c.builder, true)
 			if err != nil {
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
