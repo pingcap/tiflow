@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -393,7 +394,7 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	}
 
 	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
-		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout-in-sec should be greater than 0")
+		s.AdvanceTimeoutInSec = util.AddressOf(uint(150))
 	}
 
 	return nil
