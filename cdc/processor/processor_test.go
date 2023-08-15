@@ -133,7 +133,8 @@ func initProcessor4Test(
         },
         "sink": {
             "dispatchers": null,
-            "protocol": "open-protocol"
+            "protocol": "open-protocol",
+            "advance-timeout-in-sec": 150
         }
     },
     "state": "normal",
