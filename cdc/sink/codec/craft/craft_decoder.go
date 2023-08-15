@@ -29,7 +29,7 @@ type batchDecoder struct {
 	allocator *SliceAllocator
 }
 
-// HasNext implements the RowEventDecoder interface
+// HasNext implements the EventBatchDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	if b.index >= b.headers.Count() {
 		return model.MessageTypeUnknown, false, nil
@@ -37,7 +37,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	return b.headers.GetType(b.index), true, nil
 }
 
-// NextResolvedEvent implements the RowEventDecoder interface
+// NextResolvedEvent implements the EventBatchDecoder interface
 func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	ty, hasNext, err := b.HasNext()
 	if err != nil {
@@ -51,7 +51,7 @@ func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	return ts, nil
 }
 
-// NextRowChangedEvent implements the RowEventDecoder interface
+// NextRowChangedEvent implements the EventBatchDecoder interface
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	ty, hasNext, err := b.HasNext()
 	if err != nil {
@@ -89,7 +89,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return ev, nil
 }
 
-// NextDDLEvent implements the RowEventDecoder interface
+// NextDDLEvent implements the EventBatchDecoder interface
 func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	ty, hasNext, err := b.HasNext()
 	if err != nil {
@@ -132,7 +132,7 @@ func NewBatchDecoderWithAllocator(
 	}
 }
 
-// AddKeyValue implements the RowEventDecoder interface
+// AddKeyValue implements the EventBatchDecoder interface
 func (b *batchDecoder) AddKeyValue(_, value []byte) error {
 	decoder, err := NewMessageDecoder(value, b.allocator)
 	if err != nil {

@@ -59,13 +59,13 @@ func NewBatchDecoder(
 	}, nil
 }
 
-// AddKeyValue implements the RowEventDecoder interface
+// AddKeyValue implements the EventBatchDecoder interface
 func (b *batchDecoder) AddKeyValue(_, value []byte) error {
 	b.data = value
 	return nil
 }
 
-// HasNext implements the RowEventDecoder interface
+// HasNext implements the EventBatchDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	var (
 		msg         canalJSONMessageInterface = &JSONMessage{}
@@ -219,7 +219,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 	return b.NextRowChangedEvent()
 }
 
-// NextRowChangedEvent implements the RowEventDecoder interface
+// NextRowChangedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeRow {
@@ -243,7 +243,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return result, nil
 }
 
-// NextDDLEvent implements the RowEventDecoder interface
+// NextDDLEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeDDL {
@@ -256,7 +256,7 @@ func (b *batchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return result, nil
 }
 
-// NextResolvedEvent implements the RowEventDecoder interface
+// NextResolvedEvent implements the EventBatchDecoder interface
 // `HasNext` should be called before this.
 func (b *batchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.msg == nil || b.msg.messageType() != model.MessageTypeResolved {

@@ -59,7 +59,7 @@ func NewBatchDecoder(
 	}, nil
 }
 
-// AddKeyValue implements the RowEventDecoder interface
+// AddKeyValue implements the EventBatchDecoder interface
 func (b *BatchDecoder) AddKeyValue(key, value []byte) error {
 	if len(b.keyBytes) != 0 || len(b.valueBytes) != 0 {
 		return cerror.ErrOpenProtocolCodecInvalidData.
@@ -108,7 +108,7 @@ func (b *BatchDecoder) decodeNextKey() error {
 	return nil
 }
 
-// HasNext implements the RowEventDecoder interface
+// HasNext implements the EventBatchDecoder interface
 func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 	if !b.hasNext() {
 		return 0, false, nil
@@ -132,7 +132,7 @@ func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 	return b.nextKey.Type, true, nil
 }
 
-// NextResolvedEvent implements the RowEventDecoder interface
+// NextResolvedEvent implements the EventBatchDecoder interface
 func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	if b.nextKey.Type != model.MessageTypeResolved {
 		return 0, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found resolved event message")
@@ -144,7 +144,7 @@ func (b *BatchDecoder) NextResolvedEvent() (uint64, error) {
 	return resolvedTs, nil
 }
 
-// NextDDLEvent implements the RowEventDecoder interface
+// NextDDLEvent implements the EventBatchDecoder interface
 func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	if b.nextKey.Type != model.MessageTypeDDL {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found ddl event message")
@@ -164,7 +164,7 @@ func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return ddlEvent, nil
 }
 
-// NextRowChangedEvent implements the RowEventDecoder interface
+// NextRowChangedEvent implements the EventBatchDecoder interface
 func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if b.nextKey.Type != model.MessageTypeRow {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")

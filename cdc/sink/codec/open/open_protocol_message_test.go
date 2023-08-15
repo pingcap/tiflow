@@ -18,7 +18,9 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -105,9 +107,19 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
 		},
 	}
-	_, value := rowChangeToMsg(insertEvent, true)
-	_, ok := value.Update["a"]
-	require.True(t, ok)
+
+	config := common.NewConfig(config.ProtocolOpen)
+	config.DeleteOnlyHandleKeyColumns = true
+
+	_, value := rowChangeToMsg(insertEvent, config, false)
+	require.Contains(t, value.Update, "id")
+	require.Contains(t, value.Update, "a")
+
+	config.DeleteOnlyHandleKeyColumns = false
+	key, value := rowChangeToMsg(insertEvent, config, true)
+	require.True(t, key.OnlyHandleKey)
+	require.Contains(t, value.Update, "id")
+	require.NotContains(t, value.Update, "a")
 
 	updateEvent := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
@@ -124,9 +136,16 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 1},
 		},
 	}
-	_, value = rowChangeToMsg(updateEvent, true)
-	_, ok = value.PreColumns["a"]
-	require.True(t, ok)
+
+	config.DeleteOnlyHandleKeyColumns = true
+	_, value = rowChangeToMsg(updateEvent, config, false)
+	require.Contains(t, value.PreColumns, "a")
+
+	config.DeleteOnlyHandleKeyColumns = false
+	key, value = rowChangeToMsg(updateEvent, config, true)
+	require.True(t, key.OnlyHandleKey)
+	require.NotContains(t, value.PreColumns, "a")
+	require.NotContains(t, value.Update, "a")
 
 	deleteEvent := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
@@ -139,11 +158,16 @@ func TestRowChanged2MsgOnlyHandleKeyColumns(t *testing.T) {
 			{Name: "a", Type: mysql.TypeLonglong, Value: 2},
 		},
 	}
-	_, value = rowChangeToMsg(deleteEvent, true)
-	_, ok = value.Delete["a"]
-	require.False(t, ok)
+	config.DeleteOnlyHandleKeyColumns = true
+	_, value = rowChangeToMsg(deleteEvent, config, false)
+	require.NotContains(t, value.Delete, "a")
 
-	_, value = rowChangeToMsg(deleteEvent, false)
-	_, ok = value.Delete["a"]
-	require.True(t, ok)
+	config.DeleteOnlyHandleKeyColumns = false
+	_, value = rowChangeToMsg(deleteEvent, config, false)
+	require.Contains(t, value.Delete, "a")
+
+	config.DeleteOnlyHandleKeyColumns = false
+	key, value = rowChangeToMsg(deleteEvent, config, true)
+	require.True(t, key.OnlyHandleKey)
+	require.NotContains(t, value.Delete, "a")
 }
