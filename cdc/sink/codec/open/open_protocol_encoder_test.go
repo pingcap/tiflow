@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -99,30 +100,23 @@ func TestMaxMessageBytes(t *testing.T) {
 
 func TestMaxBatchSize(t *testing.T) {
 	t.Parallel()
-	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
-	config.MaxBatchSize = 64
-	encoder := NewBatchEncoderBuilder(config).Build()
-
-	testEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
-			Name:  "col1",
-			Type:  mysql.TypeVarchar,
-			Value: []byte("aa"),
-		}},
-	}
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
+	codecConfig.MaxBatchSize = 64
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 
 	messages := encoder.Build()
+
+	decoder, err := NewBatchDecoder(context.Background(), codecConfig, nil)
+	require.NoError(t, err)
 	sum := 0
 	for _, msg := range messages {
-		decoder, err := NewBatchDecoder(msg.Key, msg.Value)
-		require.Nil(t, err)
+		err := decoder.AddKeyValue(msg.Key, msg.Value)
+		require.NoError(t, err)
 		count := 0
 		for {
 			v, hasNext, err := decoder.HasNext()
@@ -133,7 +127,7 @@ func TestMaxBatchSize(t *testing.T) {
 
 			require.Equal(t, model.MessageTypeRow, v)
 			_, err = decoder.NextRowChangedEvent()
-			require.Nil(t, err)
+			require.NoError(t, err)
 			count++
 		}
 		require.LessOrEqual(t, count, 64)
@@ -222,10 +216,16 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 }
 
 func TestOpenProtocolBatchCodec(t *testing.T) {
-	config := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
-	config.MaxBatchSize = 64
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
+	codecConfig.MaxBatchSize = 64
 	tester := internal.NewDefaultBatchTester()
-	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config), NewBatchDecoder)
+	tester.TestBatchCodec(t, NewBatchEncoderBuilder(codecConfig),
+		func(key []byte, value []byte) (codec.EventBatchDecoder, error) {
+			decoder, err := NewBatchDecoder(context.Background(), codecConfig, nil)
+			require.NoError(t, err)
+			err = decoder.AddKeyValue(key, value)
+			return decoder, err
+		})
 }
 
 func TestAppendMessageOnlyHandleKeyColumns(t *testing.T) {

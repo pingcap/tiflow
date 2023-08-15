@@ -28,8 +28,7 @@ type EventBatchDecoder interface {
 	//     2. a bool if the next event is exist
 	//     3. error
 	HasNext() (model.MessageType, bool, error)
-	// NextResolvedE
-	//vent returns the next resolved event if exists
+	// NextResolvedEvent returns the next resolved event if exists
 	NextResolvedEvent() (uint64, error)
 	// NextRowChangedEvent returns the next row changed event if exists
 	NextRowChangedEvent() (*model.RowChangedEvent, error)
