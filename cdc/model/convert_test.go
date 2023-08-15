@@ -131,10 +131,11 @@ func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 func TestDDLRedoConvert(t *testing.T) {
 	t.Parallel()
 	ddl := &DDLEvent{
-		StartTs:  1020,
-		CommitTs: 1030,
-		Type:     timodel.ActionAddColumn,
-		Query:    "ALTER TABLE test.t1 ADD COLUMN a int",
+		StartTs:   1020,
+		CommitTs:  1030,
+		Type:      timodel.ActionAddColumn,
+		Query:     "ALTER TABLE test.t1 ADD COLUMN a int",
+		TableInfo: &TableInfo{},
 	}
 	redoDDL := DDLToRedo(ddl)
 

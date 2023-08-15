@@ -88,11 +88,17 @@ func DDLToRedo(ddl *DDLEvent) *RedoDDLEvent {
 		DDL:  ddl,
 		Type: byte(ddl.Type),
 	}
+	if ddl.TableInfo != nil {
+		redoDDL.TableName = ddl.TableInfo.TableName
+	}
 	return redoDDL
 }
 
 // LogToDDL converts redo log ddl to ddl event
 func LogToDDL(redoDDL *RedoDDLEvent) *DDLEvent {
 	redoDDL.DDL.Type = pmodel.ActionType(redoDDL.Type)
+	redoDDL.DDL.TableInfo = &TableInfo{
+		TableName: redoDDL.TableName,
+	}
 	return redoDDL.DDL
 }

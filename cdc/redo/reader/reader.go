@@ -211,7 +211,7 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 
 		switch cfg.fileType {
 		case redo.RedoRowLogFileType:
-			row := common.LogToRow(item.data.RedoRow)
+			row := model.LogToRow(item.data.RedoRow)
 			// By design only data (startTs,endTs] is needed,
 			// so filter out data may beyond the boundary.
 			if row != nil && row.CommitTs > cfg.startTs && row.CommitTs <= cfg.endTs {
@@ -227,7 +227,7 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 			}
 
 		case redo.RedoDDLLogFileType:
-			ddl := common.LogToDDL(item.data.RedoDDL)
+			ddl := model.LogToDDL(item.data.RedoDDL)
 			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
 				select {
 				case <-egCtx.Done():
