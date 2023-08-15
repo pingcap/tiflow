@@ -32,10 +32,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"go.uber.org/atomic"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
-var _ eventsink.EventSink[*model.RowChangedEvent] = (*dmlSink)(nil)
+var _ eventsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 
 // dmlSink is the mq sink.
 // It will send the events to the MQ system.
@@ -79,7 +80,7 @@ func newSink(ctx context.Context,
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
 
@@ -119,32 +120,48 @@ func newSink(ctx context.Context,
 
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
-func (s *dmlSink) WriteEvents(rows ...*eventsink.RowChangeCallbackableEvent) error {
+func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	s.alive.RLock()
 	defer s.alive.RUnlock()
 	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
+	// merge the split row callback into one callback
+	mergedCallback := func(outCallback func(), totalCount uint64) func() {
+		var acked atomic.Uint64
+		return func() {
+			if acked.Add(1) == totalCount {
+				outCallback()
+			}
+		}
+	}
 
-	for _, row := range rows {
-		if row.GetTableSinkState() != state.TableSinkSinking {
+	for _, txn := range txns {
+		if txn.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
 			// to drop the event directly.
-			row.Callback()
+			txn.Callback()
 			continue
 		}
-		topic := s.alive.eventRouter.GetTopicForRowChange(row.Event)
-		partitionNum, err := s.alive.topicManager.GetPartitionNum(topic)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		partition := s.alive.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
-		// This never be blocked because this is an unbounded channel.
-		s.alive.worker.msgChan.In() <- mqEvent{
-			key: mqv1.TopicPartitionKey{
-				Topic: topic, Partition: partition,
-			},
-			rowEvent: row,
+		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
+		for _, row := range txn.Event.Rows {
+			topic := s.alive.eventRouter.GetTopicForRowChange(row)
+			partitionNum, err := s.alive.topicManager.GetPartitionNum(topic)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
+			// This never be blocked because this is an unbounded channel.
+			s.alive.worker.msgChan.In() <- mqEvent{
+				key: mqv1.TopicPartitionKey{
+					Topic: topic, Partition: partition,
+				},
+				rowEvent: &eventsink.RowChangeCallbackableEvent{
+					Event:     row,
+					Callback:  callback,
+					SinkState: txn.SinkState,
+				},
+			}
 		}
 	}
 

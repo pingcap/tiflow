@@ -71,8 +71,8 @@ func newForTest(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		s.rowSink = mqs
-		s.sinkType = sink.RowSink
+		s.txnSink = mqs
+		s.sinkType = sink.TxnSink
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
@@ -102,8 +102,8 @@ func TestSinkFactory(t *testing.T) {
 	sinkFactory, err := newForTest(ctx, uri, replicaConfig, errCh)
 	require.NotNil(t, sinkFactory)
 	require.Nil(t, err)
-	require.Equal(t, sink.RowSink, sinkFactory.sinkType)
-	require.NotNil(t, sinkFactory.rowSink)
+	require.Equal(t, sink.TxnSink, sinkFactory.sinkType)
+	require.NotNil(t, sinkFactory.txnSink)
 
 	tableSink := sinkFactory.CreateTableSink(model.DefaultChangeFeedID("1"),
 		1, 0, prometheus.NewCounter(prometheus.CounterOpts{}))

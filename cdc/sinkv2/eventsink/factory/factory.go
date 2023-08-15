@@ -70,8 +70,8 @@ func New(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		s.rowSink = mqs
-		s.sinkType = sink.RowSink
+		s.txnSink = mqs
+		s.sinkType = sink.TxnSink
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		storageSink, err := cloudstorage.NewCloudStorageSink(ctx, sinkURI, cfg, errCh)
 		if err != nil {

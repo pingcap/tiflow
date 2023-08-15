@@ -41,7 +41,7 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
 	encoderConcurrency := 4
-	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	return newWorker(id, config.ProtocolOpen, builder, encoderConcurrency, p, statistics), p
 }
 
@@ -54,7 +54,7 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	require.Nil(t, err)
 	id := model.DefaultChangeFeedID("test")
 	encoderConcurrency := 4
-	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	return newWorker(id, config.ProtocolCanalJSON, builder, encoderConcurrency, p, statistics), p
 }
 
