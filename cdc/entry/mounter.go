@@ -309,12 +309,13 @@ func datum2Column(
 		offset := tableInfo.RowColumnsOffset[colInfo.ID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
-			Name:    colName,
-			Type:    colInfo.GetType(),
-			Charset: colInfo.GetCharset(),
-			Value:   colValue,
-			Default: defaultValue,
-			Flag:    tableInfo.ColumnsFlag[colInfo.ID],
+			Name:      colName,
+			Type:      colInfo.GetType(),
+			Charset:   colInfo.GetCharset(),
+			Collation: colInfo.GetCollate(),
+			Value:     colValue,
+			Default:   defaultValue,
+			Flag:      tableInfo.ColumnsFlag[colInfo.ID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
