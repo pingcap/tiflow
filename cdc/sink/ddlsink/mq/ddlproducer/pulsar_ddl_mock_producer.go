@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 )
 
 // Assert DDLEventSink implementation
@@ -60,7 +59,7 @@ func (p *PulsarMockProducers) SyncSendMessage(ctx context.Context, topic string,
 func NewMockPulsarProducer(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
-	pConfig *pulsarConfig.Config,
+	pConfig *config.PulsarConfig,
 	client pulsar.Client,
 ) (*PulsarMockProducers, error) {
 	return &PulsarMockProducers{
@@ -72,7 +71,7 @@ func NewMockPulsarProducer(
 func NewMockPulsarProducerDDL(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
-	pConfig *pulsarConfig.Config,
+	pConfig *config.PulsarConfig,
 	client pulsar.Client,
 	sinkConfig *config.SinkConfig,
 ) (DDLProducer, error) {

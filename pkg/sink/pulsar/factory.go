@@ -30,7 +30,7 @@ type FactoryCreator func(config *config.PulsarConfig, changefeedID model.ChangeF
 // NewCreatorFactory returns a factory implemented based on kafka-go
 func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFeedID, sinkConfig *config.SinkConfig) (pulsar.Client, error) {
 	co := pulsar.ClientOptions{
-		URL: config.CreateUrl,
+		URL: config.GetBrokerURL(),
 		CustomMetricsLabels: map[string]string{
 			"changefeed": changefeedID.ID,
 			"namespace":  changefeedID.Namespace,
@@ -94,7 +94,7 @@ func setupAuthentication(config *config.PulsarConfig) (pulsar.Authentication, er
 }
 
 // NewMockCreatorFactory returns a factory implemented based on kafka-go
-func NewMockCreatorFactory(config *Config, changefeedID model.ChangeFeedID,
+func NewMockCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFeedID,
 	sinkConfig *config.SinkConfig,
 ) (pulsar.Client, error) {
 	log.Info("mock pulsar client factory created", zap.Any("changfeedID", changefeedID))

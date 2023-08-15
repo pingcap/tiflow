@@ -102,8 +102,3 @@ func NewPulsarDDLSink(
 
 	return s, nil
 }
-
-// str2Pointer returns the pointer of the string.
-func str2Pointer(str string) *string {
-	return &str
-}

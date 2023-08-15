@@ -105,6 +105,14 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
 		},
 	}
+	conf.Sink.PulsarConfig = &PulsarConfig{
+		PulsarVersion:           aws.String("v2.10.0"),
+		AuthenticationToken:     aws.String("token"),
+		TLSTrustCertsFilePath:   aws.String("TLSTrustCertsFilePath_path"),
+		ConnectionTimeout:       NewTimeSec(18),
+		OperationTimeout:        NewTimeSec(8),
+		BatchingMaxPublishDelay: NewTimeMill(5000),
+	}
 	conf.Sink.MySQLConfig = &MySQLConfig{
 		WorkerCount:                  aws.Int(8),
 		MaxTxnRow:                    aws.Int(100000),

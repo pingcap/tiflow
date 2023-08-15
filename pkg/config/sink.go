@@ -353,7 +353,7 @@ func (p *PulsarCompressionType) Value() pulsar.CompressionType {
 	}
 }
 
-// TimeMill is the time in seconds
+// TimeMill is the time in milliseconds
 type TimeMill int
 
 // Duration returns the time in seconds as a duration
@@ -362,6 +362,12 @@ func (t *TimeMill) Duration() time.Duration {
 		return 0
 	}
 	return time.Duration(*t) * time.Millisecond
+}
+
+// NewTimeMill returns a new time in milliseconds
+func NewTimeMill(x int) *TimeMill {
+	t := TimeMill(x)
+	return &t
 }
 
 // TimeSec is the time in seconds
@@ -375,6 +381,13 @@ func (t *TimeSec) Duration() time.Duration {
 	return time.Duration(*t) * time.Second
 }
 
+// NewTimeSec returns a new time in seconds
+func NewTimeSec(x int) *TimeSec {
+	t := TimeSec(x)
+	return &t
+}
+
+// OAuth2 is the configuration for OAuth2
 type OAuth2 struct {
 	// OAuth2IssuerURL  the URL of the authorization server.
 	OAuth2IssuerURL string `toml:"oauth2-issuer-url" json:"oauth2-issuer-url,omitempty"`
@@ -399,10 +412,6 @@ type PulsarConfig struct {
 
 	// PulsarVersion print the version of pulsar
 	PulsarVersion *string `toml:"pulsar-version" json:"pulsar-version,omitempty"`
-
-	// Configure the service CreateUrl for the Pulsar service.
-	// This parameter from the sink-uri
-	CreateUrl string `toml:"-" json:"-"`
 
 	// pulsar client compression
 	CompressionType *PulsarCompressionType `toml:"compression-type" json:"compression-type,omitempty"`
@@ -449,11 +458,41 @@ type PulsarConfig struct {
 	// and 'type' always use 'client_credentials'
 	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
 
-	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
-	Protocol *ProtocolStr `toml:"protocol" json:"protocol,omitempty"`
+	//// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
+	//Protocol *ProtocolStr `toml:"protocol" json:"protocol,omitempty"`
+
+	// Configure the service brokerUrl for the Pulsar service.
+	// This parameter from the sink-uri
+	brokerURL string `toml:"-" json:"-"`
 
 	// parse the sinkURI
-	U *url.URL `toml:"-" json:"-"`
+	u *url.URL `toml:"-" json:"-"`
+}
+
+// GetBrokerURL get broker url
+func (c *PulsarConfig) GetBrokerURL() string {
+	return c.brokerURL
+}
+
+// SetBrokerURL get broker url
+func (c *PulsarConfig) SetBrokerURL(brokerURL string) {
+	c.brokerURL = brokerURL
+}
+
+// GetSinkURI get sink uri
+func (c *PulsarConfig) GetSinkURI() *url.URL {
+	return c.u
+}
+
+// SetSinkURI get sink uri
+func (c *PulsarConfig) SetSinkURI(u *url.URL) {
+	c.u = u
+}
+
+// GetDefaultTopicName get default topic name
+func (c *PulsarConfig) GetDefaultTopicName() string {
+	topicName := c.u.Path
+	return topicName[1:]
 }
 
 // MySQLConfig represents a MySQL sink configuration

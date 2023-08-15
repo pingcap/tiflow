@@ -94,12 +94,3 @@ func (p Protocol) String() string {
 		panic("unreachable")
 	}
 }
-
-type ProtocolStr string
-
-func (p *ProtocolStr) ToProtocol() (Protocol, error) {
-	if p == nil {
-		return 0, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs("nil")
-	}
-	return ParseSinkProtocolFromString(string(*p))
-}
