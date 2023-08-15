@@ -47,7 +47,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	encoder, ok := e.(*JSONBatchEncoder)
 	require.True(t, ok)
 
-	data, err := encoder.newJSONMessageForDML(testCaseInsert)
+	data, err := newJSONMessageForDML(testCaseInsert, encoder.config, encoder.builder, false)
 	require.Nil(t, err)
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
@@ -96,7 +96,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
+	data, err = newJSONMessageForDML(testCaseUpdate, encoder.config, encoder.builder, false)
 	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -114,7 +114,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Old[0], col.Name)
 	}
 
-	data, err = encoder.newJSONMessageForDML(testCaseDelete)
+	data, err = newJSONMessageForDML(testCaseDelete, encoder.config, encoder.builder, false)
 	require.Nil(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -127,7 +127,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Data[0], col.Name)
 	}
 
-	data, err = encoder.newJSONMessageForDML(testCaseDelete)
+	data, err = newJSONMessageForDML(testCaseDelete, encoder.config, encoder.builder, false)
 	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -143,7 +143,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	encoder, ok = newJSONBatchEncoder(&common.Config{OnlyHandleKeyColumns: true}).(*JSONBatchEncoder)
 	require.True(t, ok)
-	data, err = encoder.newJSONMessageForDML(testCaseDelete)
+	data, err = newJSONMessageForDML(testCaseDelete, encoder.config, encoder.builder, false)
 	require.NoError(t, err)
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
@@ -171,7 +171,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	encoder, ok = e.(*JSONBatchEncoder)
 	require.True(t, ok)
-	data, err = encoder.newJSONMessageForDML(testCaseUpdate)
+	data, err = newJSONMessageForDML(testCaseUpdate, encoder.config, encoder.builder, false)
 	require.Nil(t, err)
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}
@@ -180,6 +180,38 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
+}
+
+func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
+	t.Parallel()
+
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	codecConfig.MaxMessageBytes = 500
+	encoder := newJSONRowEventEncoder(codecConfig)
+
+	err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, func() {})
+	require.NoError(t, err)
+
+	message := encoder.Build()[0]
+
+	var decoded canalJSONMessageWithTiDBExtension
+	err = json.Unmarshal(message.Value, &decoded)
+	require.NoError(t, err)
+	require.True(t, decoded.Extensions.OnlyHandleKey)
+
+	for _, col := range testCaseInsert.Columns {
+		if col.Flag.IsHandleKey() {
+			require.Contains(t, decoded.Data[0], col.Name)
+			require.Contains(t, decoded.SQLType, col.Name)
+			require.Contains(t, decoded.MySQLType, col.Name)
+		} else {
+			require.NotContains(t, decoded.Data[0], col.Name)
+			require.NotContains(t, decoded.SQLType, col.Name)
+			require.NotContains(t, decoded.MySQLType, col.Name)
+		}
+	}
 }
 
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {

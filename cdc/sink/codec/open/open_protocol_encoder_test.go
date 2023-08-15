@@ -15,6 +15,7 @@ package open
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -23,6 +24,26 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	testEvent = &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns: []*model.Column{
+			{
+				Name:  "col1",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("aa"),
+				Flag:  model.HandleKeyFlag,
+			},
+			{
+				Name:  "col2",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("bb"),
+			},
+		},
+	}
 )
 
 func TestBuildOpenProtocolBatchEncoder(t *testing.T) {
@@ -205,4 +226,33 @@ func TestOpenProtocolBatchCodec(t *testing.T) {
 	config.MaxBatchSize = 64
 	tester := internal.NewDefaultBatchTester()
 	tester.TestBatchCodec(t, NewBatchEncoderBuilder(config), NewBatchDecoder)
+}
+
+func TestAppendMessageOnlyHandleKeyColumns(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	topic := ""
+
+	// cannot hold one message
+	a := 171
+	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
+	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	encoder := NewBatchEncoderBuilder(codecConfig).Build()
+
+	// only handle key is encoded into the message
+	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
+	require.NoError(t, err)
+
+	message := encoder.Build()[0]
+
+	decoder, err := NewBatchDecoder(context.Background(), codecConfig, &sql.DB{})
+	require.NoError(t, err)
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	batchDecoder := decoder.(*BatchDecoder)
+	err = batchDecoder.decodeNextKey()
+	require.NoError(t, err)
+	require.True(t, batchDecoder.nextKey.OnlyHandleKey)
 }
