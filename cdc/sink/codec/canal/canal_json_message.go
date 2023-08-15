@@ -254,3 +254,7 @@ func getDDLActionType(query string) timodel.ActionType {
 
 	return timodel.ActionNone
 }
+
+func isBinaryMySQLType(mysqlType string) bool {
+	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
+}
