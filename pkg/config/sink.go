@@ -489,6 +489,7 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
 				c.LargeMessageHandleOption, protocol.String())
 		}
+		return nil
 	default:
 	}
 	return cerror.ErrInvalidReplicaConfig.GenWithStack(

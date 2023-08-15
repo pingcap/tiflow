@@ -217,6 +217,7 @@ func TestOpenProtocolAppendRowChangedEventWithCallback(t *testing.T) {
 
 func TestOpenProtocolBatchCodec(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
+	codecConfig.LargeMessageHandle = config.NewDefaultLargeMessageHandleConfig()
 	codecConfig.MaxBatchSize = 64
 	tester := internal.NewDefaultBatchTester()
 	tester.TestBatchCodec(t, NewBatchEncoderBuilder(codecConfig),
