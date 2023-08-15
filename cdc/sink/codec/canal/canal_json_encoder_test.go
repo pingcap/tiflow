@@ -286,10 +286,10 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
-		config := &common.Config{
+		codecConfig := &common.Config{
 			EnableTiDBExtension: enable,
 		}
-		encoder := newJSONBatchEncoder(config).(*JSONBatchEncoder)
+		encoder := newJSONBatchEncoder(codecConfig).(*JSONBatchEncoder)
 		require.NotNil(t, encoder)
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
@@ -301,7 +301,13 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		}
 
 		require.NotNil(t, msg)
-		decoder := NewBatchDecoder(msg.Value, enable, "")
+
+		ctx := context.Background()
+		decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+		require.NoError(t, err)
+
+		err = decoder.AddKeyValue(msg.Key, msg.Value)
+		require.NoError(t, err)
 
 		ty, hasNext, err := decoder.HasNext()
 		require.Nil(t, err)

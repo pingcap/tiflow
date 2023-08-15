@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -39,8 +38,6 @@ type BatchDecoder struct {
 
 	nextKey   *internal.MessageKey
 	nextEvent *model.RowChangedEvent
-
-	storage storage.ExternalStorage
 
 	upstreamTiDB *sql.DB
 }
