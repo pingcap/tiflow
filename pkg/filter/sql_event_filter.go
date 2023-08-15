@@ -103,13 +103,13 @@ type sqlEventFilter struct {
 	// So we can use a lock to protect it.
 	// If we want to use it to parse dml query in the future,
 	// we should create a parser for each goroutine.
-	p     *parser.Parser
-	rules []*sqlEventRule
+	ddlParser *parser.Parser
+	rules     []*sqlEventRule
 }
 
 func newSQLEventFilter(cfg *config.FilterConfig) (*sqlEventFilter, error) {
 	res := &sqlEventFilter{
-		p: parser.New(),
+		ddlParser: parser.New(),
 	}
 	for _, rule := range cfg.EventFilters {
 		if err := res.addRule(rule); err != nil {
@@ -152,7 +152,7 @@ func (f *sqlEventFilter) shouldSkipDDL(
 		zap.Any("ddlType", ddlType), zap.String("schema", schema),
 		zap.String("table", table), zap.String("query", query))
 	f.pLock.Lock()
-	evenType, err := ddlToEventType(f.p, query, ddlType)
+	evenType, err := ddlToEventType(f.ddlParser, query, ddlType)
 	f.pLock.Unlock()
 	if err != nil {
 		return false, err
