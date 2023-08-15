@@ -979,20 +979,18 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
-	if m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec != nil {
-		stuckCheck := time.Duration(*m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec) * time.Second
-		if version > 0 && time.Since(advanced) > stuckCheck &&
-			oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
-			log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span),
-				zap.Any("checkpointTs", checkpointTs),
-				zap.Float64("stuckCheck", stuckCheck.Seconds()),
-				zap.Uint64("factoryVersion", version))
-			tableSink.updateTableSinkAdvanced()
-			m.putSinkFactoryError(errors.New("table sink stuck"), version)
-		}
+	stuckCheck := time.Duration(*m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec) * time.Second
+	if version > 0 && time.Since(advanced) > stuckCheck &&
+		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
+		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Stringer("span", &span),
+			zap.Any("checkpointTs", checkpointTs),
+			zap.Float64("stuckCheck", stuckCheck.Seconds()),
+			zap.Uint64("factoryVersion", version))
+		tableSink.updateTableSinkAdvanced()
+		m.putSinkFactoryError(errors.New("table sink stuck"), version)
 	}
 
 	var resolvedTs model.Ts
