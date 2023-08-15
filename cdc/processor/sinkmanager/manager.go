@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
@@ -101,6 +103,8 @@ type SinkManager struct {
 	sinkWorkerAvailable chan struct{}
 	// sinkMemQuota is used to control the total memory usage of the table sink.
 	sinkMemQuota *memquota.MemQuota
+	// sinkRetry is used to control the retry behavior of the table sink.
+	sinkRetry *retry.ErrorRetry
 
 	// redoWorkers used to pull data from source manager.
 	redoWorkers []*redoWorker
@@ -150,6 +154,7 @@ func New(
 		sinkWorkers:         make([]*sinkWorker, 0, sinkWorkerNum),
 		sinkTaskChan:        make(chan *sinkTask),
 		sinkWorkerAvailable: make(chan struct{}, 1),
+		sinkRetry:           retry.NewInfiniteErrorRetry(),
 
 		metricsTableSinkTotalRows: metricsTableSinkTotalRows,
 	}
@@ -295,8 +300,13 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 		} else {
 			return errors.Trace(err)
 		}
-		// Use a 5 second backoff when re-establishing internal resources.
-		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
+
+		backoff, err := m.sinkRetry.GetRetryBackoff(err)
+		if err != nil {
+			return errors.New(fmt.Sprintf("GetRetryBackoff: %s", err.Error()))
+		}
+
+		if err = util.Hang(m.managerCtx, backoff); err != nil {
 			return errors.Trace(err)
 		}
 	}
