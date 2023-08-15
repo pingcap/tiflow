@@ -125,9 +125,18 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 		err      error
 	}
 
-	ddl_with_tab := "\tCREATE TABLE if not exists sbtest25 (\n  id bigint NOT NULL,\n   k bigint NOT NULL DEFAULT '0',\n   c char(30) NOT NULL DEFAULT '',\n   pad char(20) NOT NULL DEFAULT '',\n    PRIMARY KEY (id),\n    KEY k_1 (k)\n)\n     ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
-	ddl_with_two_tab := "\t\tCREATE TABLE if not exists sbtest25 (\n  id bigint NOT NULL,\n   k bigint NOT NULL DEFAULT '0',\n   c char(30) NOT NULL DEFAULT '',\n   pad char(20) NOT NULL DEFAULT '',\n    PRIMARY KEY (id),\n    KEY k_1 (k)\n)\n     ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin"
-	ddl_with_new_line := "CREATE TABLE finish_mark (\n                     id INT AUTO_INCREMENT PRIMARY KEY,\n                     val INT DEFAULT 0,\n                     col0 INT NOT NULL\n)"
+	ddl_with_tab := `\tCREATE TABLE if not exists sbtest25 
+	(\n  id bigint NOT NULL,\n   k bigint NOT NULL DEFAULT '0',\n   c char(30) NOT NULL DEFAULT '',
+	\n   pad char(20) NOT NULL DEFAULT '',\n    PRIMARY KEY (id),\n
+	    KEY k_1 (k)\n)\n     ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+	ddl_with_two_tab := `\t\tCREATE TABLE if not exists sbtest25 
+	(\n  id bigint NOT NULL,\n   k bigint NOT NULL DEFAULT '0',
+	\n   c char(30) NOT NULL DEFAULT '',\n   pad char(20) NOT NULL DEFAULT '',
+	\n    PRIMARY KEY (id),\n    KEY k_1 (k)\n)\n
+	     ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+	ddl_with_new_line := `CREATE TABLE finish_mark 
+	(\n                     id INT AUTO_INCREMENT PRIMARY KEY,
+		\n                     val INT DEFAULT 0,\n                     col0 INT NOT NULL\n)`
 	cases := []c{
 		{"CREATE DATABASE test", timodel.ActionCreateSchema, bf.CreateDatabase, nil},
 		{ddl_with_two_tab, timodel.ActionCreateTable, bf.CreateTable, nil},

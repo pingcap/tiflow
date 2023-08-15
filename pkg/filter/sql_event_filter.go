@@ -99,6 +99,10 @@ func verifyIgnoreEvents(types []bf.EventType) error {
 type sqlEventFilter struct {
 	// Please be careful, parser.Parser is not thread safe.
 	pLock sync.Mutex
+	// Currently, parser is only used to parse ddl query.
+	// So we can use a lock to protect it.
+	// If we want to use it to parse dml query in the future,
+	// we should create a parser for each goroutine.
 	p     *parser.Parser
 	rules []*sqlEventRule
 }
