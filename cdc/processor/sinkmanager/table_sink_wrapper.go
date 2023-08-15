@@ -280,7 +280,7 @@ func (t *tableSinkWrapper) markAsClosed() {
 	}
 }
 
-func (t *tableSinkWrapper) asyncClose() bool {
+func (t *tableSinkWrapper) asyncStop() bool {
 	t.markAsClosing()
 	if t.asyncCloseAndClearTableSink() {
 		t.markAsClosed()
@@ -289,7 +289,7 @@ func (t *tableSinkWrapper) asyncClose() bool {
 	return false
 }
 
-func (t *tableSinkWrapper) close() {
+func (t *tableSinkWrapper) stop() {
 	t.markAsClosing()
 	t.closeAndClearTableSink()
 	t.markAsClosed()
@@ -310,19 +310,6 @@ func (t *tableSinkWrapper) initTableSink() bool {
 	return true
 }
 
-<<<<<<< HEAD
-func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
-	t.tableSinkMu.RLock()
-	if t.tableSink == nil {
-		t.tableSinkMu.RUnlock()
-		return true
-	}
-	if !t.tableSink.AsyncClose() {
-		t.tableSinkMu.RUnlock()
-		return false
-	}
-	t.tableSinkMu.RUnlock()
-=======
 func (t *tableSinkWrapper) asyncCloseTableSink() bool {
 	t.tableSink.RLock()
 	defer t.tableSink.RUnlock()
@@ -343,19 +330,12 @@ func (t *tableSinkWrapper) closeTableSink() {
 
 func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
 	t.asyncCloseTableSink()
->>>>>>> e99ba1a5cf (sink(cdc): clean backends if table sink is stuck too long (#9527))
 	t.doTableSinkClear()
 	return true
 }
 
 func (t *tableSinkWrapper) closeAndClearTableSink() {
-	t.tableSinkMu.RLock()
-	if t.tableSink == nil {
-		t.tableSinkMu.RUnlock()
-		return
-	}
-	t.tableSink.Close()
-	t.tableSinkMu.RUnlock()
+	t.closeTableSink()
 	t.doTableSinkClear()
 }
 
