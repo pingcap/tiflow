@@ -393,7 +393,6 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	newSize := len(value)
 	ratio := float64(oldSize) / float64(newSize) * 100
 	c.compressionRatio.Observe(ratio)
-	log.Info("compress row event", zap.Int("oldSize", oldSize), zap.Int("newSize", newSize), zap.Float64("ratio", ratio))
 
 	m := &common.Message{
 		Key:      nil,
