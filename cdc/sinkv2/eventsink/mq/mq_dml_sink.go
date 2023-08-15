@@ -80,7 +80,7 @@ func newSink(ctx context.Context,
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx, sink.RowSink)
+	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
 
