@@ -289,7 +289,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			return errors.Trace(err)
 		}
 
-		if err = util.Hang(m.managerCtx, 5 *time.Second); err != nil {
+		if err = util.Hang(m.managerCtx, 5*time.Second); err != nil {
 			return errors.Trace(err)
 		}
 	}

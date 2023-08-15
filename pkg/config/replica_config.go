@@ -26,8 +26,8 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/redo"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -65,7 +65,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnablePartitionSeparator: true,
 		EnableKafkaSinkV2:        false,
 		TiDBSourceID:             1,
-		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		AdvanceTimeoutInSec:      util.AddressOf(uint(150)),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",

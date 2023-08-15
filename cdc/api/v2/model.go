@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // EmptyResponse return empty {} to http client
@@ -369,7 +370,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			CloudStorageConfig:       cloudStorageConfig,
 			SafeMode:                 c.Sink.SafeMode,
 		}
-
 		if c.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
 		}
@@ -729,7 +729,7 @@ type SinkConfig struct {
 	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
-	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
+	AdvanceTimeoutInSec      *uint               `json:"advance_timeout,omitempty"`
 }
 
 // CSVConfig denotes the csv config
