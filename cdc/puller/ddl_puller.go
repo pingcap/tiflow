@@ -120,7 +120,8 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 	if job != nil {
 		skip, err := p.handleJob(job)
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.WrapError(cerror.ErrHandleDDLFailed,
+				err, job.String(), job.Query, job.StartTS, job.StartTS)
 		}
 		log.Info("handle ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
@@ -297,7 +298,11 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		if !ok {
 			shouldDiscardOldTable = true
 		} else {
-			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, oldTable.Name.O)
+			shouldDiscardOldTable, err = p.filter.ShouldDiscardDDL(job.StartTS,
+				job.Type, oldSchemaNames[i].O, oldTable.Name.O, job.Query)
+			if err != nil {
+				return true, errors.Trace(err)
+			}
 		}
 
 		newSchemaName, ok := snap.SchemaByID(newSchemaIDs[i])
@@ -305,7 +310,11 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 			// the new table name does not hit the filter rule, so we should discard the table.
 			shouldDiscardNewTable = true
 		} else {
-			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, newTableNames[i].O)
+			shouldDiscardNewTable, err = p.filter.ShouldDiscardDDL(job.StartTS,
+				job.Type, newSchemaName.Name.O, newTableNames[i].O, job.Query)
+			if err != nil {
+				return true, errors.Trace(err)
+			}
 		}
 
 		if shouldDiscardOldTable && shouldDiscardNewTable {
@@ -385,21 +394,9 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
 				zap.String("query", job.Query),
-				zap.String("job", job.String()))
+				zap.Stringer("job", job))
 		}
 	}()
-
-	snap := p.schemaStorage.GetLastSnapshot()
-	// Do this first to fill the schema name to its origin schema name.
-	if err := snap.FillSchemaName(job); err != nil {
-		log.Info("failed to fill schema name for ddl job", zap.Error(err))
-		// If we can't find a job's schema, check if it's been filtered.
-		if p.filter.ShouldIgnoreTable(job.SchemaName, job.TableName) ||
-			p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName) {
-			return true, nil
-		}
-
-	}
 
 	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
 		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
@@ -414,6 +411,19 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("query", job.Query),
 			zap.String("job", job.String()))
 		return true, nil
+	}
+
+	snap := p.schemaStorage.GetLastSnapshot()
+	if err := snap.FillSchemaName(job); err != nil {
+		log.Info("failed to fill schema name for ddl job", zap.Error(err))
+		discard, fErr := p.filter.
+			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
+		if fErr != nil {
+			return false, errors.Trace(fErr)
+		}
+		if discard {
+			return true, nil
+		}
 	}
 
 	switch job.Type {
@@ -433,7 +443,12 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
 			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
-			if !p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O) {
+			discard, err := p.filter.
+				ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.Query)
+			if err != nil {
+				return true, errors.Trace(err)
+			}
+			if !discard {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
 			}
 			skip = true
@@ -443,11 +458,23 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("oldSchemaName", oldTable.TableName.Schema))
 			// since we can find the old table, we must can find the old schema.
 			// 2. If we can find the preTableInfo, we filter it by the old table name.
-			skipByOldTableName := p.filter.ShouldDiscardDDL(job.Type, oldTable.TableName.Schema, oldTable.TableName.Table)
-			skipByNewTableName := p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O)
+			skipByOldTableName, err := p.filter.ShouldDiscardDDL(job.StartTS,
+				job.Type, oldTable.TableName.Schema, oldTable.TableName.Table, job.Query)
+			if err != nil {
+				return true, errors.Trace(err)
+			}
+			skipByNewTableName, err := p.filter.ShouldDiscardDDL(job.StartTS,
+				job.Type, job.SchemaName, job.BinlogInfo.TableInfo.Name.O, job.Query)
+			if err != nil {
+				return true, errors.Trace(err)
+			}
 			// 3. If its old table name is not in filter rule, and its new table name in filter rule, return error.
 			if skipByOldTableName && !skipByNewTableName {
 				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(job.TableID, job.Query)
+			}
+			if skipByOldTableName && skipByNewTableName {
+				skip = true
+				return true, nil
 			}
 		}
 	default:
@@ -455,7 +482,11 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if job.BinlogInfo.TableInfo != nil {
 			job.TableName = job.BinlogInfo.TableInfo.Name.O
 		}
-		skip = p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName)
+		skip, err = p.filter.
+			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
+		if err != nil {
+			return false, errors.Trace(err)
+		}
 	}
 
 	if skip {
