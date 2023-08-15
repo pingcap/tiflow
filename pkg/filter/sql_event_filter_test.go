@@ -183,7 +183,8 @@ func TestShouldSkipDDL(t *testing.T) {
 				},
 				Query: c.query,
 			}
-			skip, err := f.shouldSkipDDL(ddl)
+			skip, err := f.shouldSkipDDL(ddl.Type,
+				ddl.TableInfo.TableName.Schema, ddl.TableInfo.TableName.Table, ddl.Query)
 			require.NoError(t, err)
 			require.Equal(t, c.skip, skip, "case: %+v", c)
 		}
