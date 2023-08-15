@@ -133,14 +133,14 @@ func (m *saramaMetricsCollector) collectProducerMetrics() {
 	if histogram, ok := compressionRatioMetric.(metrics.Histogram); ok {
 		compressionRatioGauge.
 			WithLabelValues(namespace, changefeedID).
-			Set(histogram.Snapshot().Percentile(0.99))
+			Set(histogram.Snapshot().Mean())
 	}
 
 	recordsPerRequestMetric := m.registry.Get(recordsPerRequestMetricName)
 	if histogram, ok := recordsPerRequestMetric.(metrics.Histogram); ok {
 		recordsPerRequestGauge.
 			WithLabelValues(namespace, changefeedID).
-			Set(histogram.Snapshot().Percentile(0.99))
+			Set(histogram.Snapshot().Mean())
 	}
 }
 
