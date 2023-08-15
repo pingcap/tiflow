@@ -96,7 +96,7 @@ func rowChangeToMsg(
 	}
 	value := &messageRow{}
 	if e.IsDelete() {
-		handleKeyOnly := config.OnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
+		handleKeyOnly := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
 		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, handleKeyOnly)
 	} else {
 		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)

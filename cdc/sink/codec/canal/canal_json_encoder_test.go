@@ -141,7 +141,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.MySQLType, col.Name)
 	}
 
-	encoder, ok = newJSONBatchEncoder(&common.Config{OnlyHandleKeyColumns: true}).(*JSONBatchEncoder)
+	encoder, ok = newJSONBatchEncoder(&common.Config{DeleteOnlyHandleKeyColumns: true}).(*JSONBatchEncoder)
 	require.True(t, ok)
 	data, err = newJSONMessageForDML(testCaseDelete, encoder.config, encoder.builder, false)
 	require.NoError(t, err)

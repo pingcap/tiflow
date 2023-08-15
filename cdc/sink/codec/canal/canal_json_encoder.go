@@ -108,7 +108,7 @@ func newJSONMessageForDML(
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
 	onlyHandleKey := messageTooLarge
-	if isDelete && config.OnlyHandleKeyColumns {
+	if isDelete && config.DeleteOnlyHandleKeyColumns {
 		onlyHandleKey = true
 	}
 

@@ -55,7 +55,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.True(t, c.EnableTiDBExtension)
-	require.False(t, c.OnlyHandleKeyColumns)
+	require.False(t, c.DeleteOnlyHandleKeyColumns)
 
 	err = c.Validate()
 	require.NoError(t, err)
@@ -63,7 +63,7 @@ func TestConfigApplyValidate(t *testing.T) {
 	replicaConfig.EnableOldValue = false
 	err = c.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-	require.True(t, c.OnlyHandleKeyColumns)
+	require.True(t, c.DeleteOnlyHandleKeyColumns)
 
 	uri = "kafka://127.0.0.1:9092/abc?protocol=canal-json&enable-tidb-extension=a"
 	sinkURI, err = url.Parse(uri)

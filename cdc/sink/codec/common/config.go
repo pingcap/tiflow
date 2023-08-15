@@ -31,7 +31,7 @@ const defaultMaxBatchSize int = 16
 type Config struct {
 	Protocol config.Protocol
 
-	OnlyHandleKeyColumns bool
+	DeleteOnlyHandleKeyColumns bool
 
 	// control batch behavior, only for `open-protocol` and `craft` at the moment.
 	MaxMessageBytes int
@@ -142,11 +142,15 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 
 		if config.Sink.KafkaConfig != nil {
 			c.LargeMessageHandle = config.Sink.KafkaConfig.LargeMessageHandle
+			if c.LargeMessageHandle.HandleKeyOnly() && config.ForceReplicate {
+				return cerror.ErrCodecInvalidConfig.GenWithStack(
+					`force-replicate must be disabled, when the large message handle option is set to "handle-key-only"`)
+			}
 		}
 
 	}
 
-	c.OnlyHandleKeyColumns = !config.EnableOldValue
+	c.DeleteOnlyHandleKeyColumns = !config.EnableOldValue
 	return nil
 }
 
