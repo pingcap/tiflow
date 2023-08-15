@@ -687,7 +687,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
 
 	stateMap := []model.FeedState{
-		model.StateNormal, model.StateStopped, model.StateError,
+		model.StateNormal, model.StateStopped, model.StatePending,
 		model.StateFailed, /* failed changefeed with normal error should not be ignored */
 	}
 	for i := 0; i < 100; i++ {

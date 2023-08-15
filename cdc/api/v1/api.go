@@ -174,7 +174,13 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 		}
 
 		resp.FeedState = cfInfo.State
-		resp.RunningError = cfInfo.Error
+		if cfInfo.Error != nil {
+			resp.RunningError = cfInfo.Error
+		} else {
+			resp.RunningError = cfInfo.Warning
+		}
+
+		log.Info("List changefeed successfully!", zap.Any("runningError", resp.RunningError))
 
 		if cfStatus != nil {
 			resp.CheckpointTSO = cfStatus.CheckpointTs
