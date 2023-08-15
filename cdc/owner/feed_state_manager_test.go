@@ -62,7 +62,7 @@ func newFeedStateManager4Test(
 	f.errBackoff.Multiplier = multiplier
 	f.errBackoff.RandomizationFactor = 0
 
-	f.resetErrBackoff()
+	f.resetErrRetry()
 
 	return f
 }
