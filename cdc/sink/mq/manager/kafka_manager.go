@@ -61,7 +61,7 @@ func NewKafkaTopicManager(
 	ctx context.Context,
 	admin kafka.ClusterAdminClient,
 	cfg *kafkaconfig.AutoCreateTopicConfig,
-) (*kafkaTopicManager, error) {
+) *kafkaTopicManager {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	mgr := &kafkaTopicManager{
 		changefeedID:      changefeedID,
@@ -74,7 +74,7 @@ func NewKafkaTopicManager(
 	// Background refresh metadata.
 	go mgr.backgroundRefreshMeta(ctx)
 
-	return mgr, nil
+	return mgr
 }
 
 // GetPartitionNum returns the number of partitions of the topic.
