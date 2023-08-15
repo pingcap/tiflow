@@ -326,6 +326,7 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	}
 
 	if s.AdvanceTimeoutInSec == 0 {
+		log.Warn(fmt.Sprintf("advance-timeout-in-sec is not set, use default value: %d seconds", DefaultAdvanceTimeoutInSec))
 		s.AdvanceTimeoutInSec = DefaultAdvanceTimeoutInSec
 	}
 
