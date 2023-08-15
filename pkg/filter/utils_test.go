@@ -16,6 +16,7 @@ package filter
 import (
 	"testing"
 
+	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/parser"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -125,18 +126,32 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 		err      error
 	}
 
-	ddl_with_tab := `\tCREATE TABLE if not exists sbtest25 
-	(\n  id bigint NOT NULL,\n   k bigint NOT NULL DEFAULT '0',\n   c char(30) NOT NULL DEFAULT '',
-	\n   pad char(20) NOT NULL DEFAULT '',\n    PRIMARY KEY (id),\n
-	    KEY k_1 (k)\n)\n     ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
-	ddl_with_two_tab := `\t\tCREATE TABLE if not exists sbtest25 
-	(\n  id bigint NOT NULL,\n   k bigint NOT NULL DEFAULT '0',
-	\n   c char(30) NOT NULL DEFAULT '',\n   pad char(20) NOT NULL DEFAULT '',
-	\n    PRIMARY KEY (id),\n    KEY k_1 (k)\n)\n
-	     ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+	ddl_with_tab := `CREATE TABLE if not exists sbtest25 
+	(
+		id bigint NOT NULL,
+		k bigint NOT NULL DEFAULT '0',
+		c char(30) NOT NULL DEFAULT '',
+		pad char(20) NOT NULL DEFAULT '',
+		PRIMARY KEY (id),
+	    KEY k_1 (k)
+	) 	ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
+	ddl_with_two_tab := `		CREATE TABLE if not exists sbtest25 
+	(
+		id bigint NOT NULL,
+		k bigint NOT NULL DEFAULT '0',
+		c char(30) NOT NULL DEFAULT '',
+		pad char(20) NOT NULL DEFAULT '',
+		PRIMARY KEY (id),
+		KEY k_1 (k)
+		)
+		ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
 	ddl_with_new_line := `CREATE TABLE finish_mark 
-	(\n                     id INT AUTO_INCREMENT PRIMARY KEY,
-		\n                     val INT DEFAULT 0,\n                     col0 INT NOT NULL\n)`
+	(
+		
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		val INT DEFAULT 0,                     
+		col0 INT NOT NULL)`
+
 	cases := []c{
 		{"CREATE DATABASE test", timodel.ActionCreateSchema, bf.CreateDatabase, nil},
 		{ddl_with_two_tab, timodel.ActionCreateTable, bf.CreateTable, nil},
@@ -145,6 +160,7 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 	}
 	p := parser.New()
 	for _, c := range cases {
+		log.Info(c.ddl)
 		et, err := ddlToEventType(p, c.ddl, c.jobType)
 		if c.err != nil {
 			errRFC, ok := cerror.RFCCode(err)
