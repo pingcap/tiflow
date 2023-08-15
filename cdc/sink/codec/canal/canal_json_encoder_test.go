@@ -520,6 +520,7 @@ func TestMaxMessageBytes(t *testing.T) {
 
 	// the test message length is larger than max-message-bytes
 	cfg = cfg.WithMaxMessageBytes(100)
+	cfg.LargeMessageHandle = config.NewDefaultLargeMessageHandleConfig()
 	encoder = NewJSONBatchEncoderBuilder(cfg).Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.NotNil(t, err)
