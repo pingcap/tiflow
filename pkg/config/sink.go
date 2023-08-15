@@ -438,7 +438,8 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	}
 
 	if util.GetOrZero(s.AdvanceTimeoutInSec) == 0 {
-		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout-in-sec should be greater than 0")
+		log.Warn(fmt.Sprintf("advance-timeout-in-sec is not set, use default value: %d seconds", DefaultAdvanceTimeoutInSec))
+		s.AdvanceTimeoutInSec = util.AddressOf(DefaultAdvanceTimeoutInSec)
 	}
 
 	return nil
