@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	tablesinkmetrics "github.com/pingcap/tiflow/cdc/sink/metrics/tablesink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -979,7 +980,12 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
-	stuckCheck := time.Duration(*m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec) * time.Second
+	advanceTimeoutInSec := util.GetOrZero(m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec)
+	if advanceTimeoutInSec <= 0 {
+		log.Warn("AdvanceTimeoutInSec is not set, use default value", zap.Any("sinkConfig", m.changefeedInfo.Config.Sink))
+		advanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
+	}
+	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
 	if version > 0 && time.Since(advanced) > stuckCheck &&
 		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
 		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
