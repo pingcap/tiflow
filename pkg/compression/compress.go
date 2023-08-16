@@ -19,6 +19,8 @@ import (
 	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/pierrec/lz4/v4"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type Codec string
@@ -40,12 +42,32 @@ func Supported(cc Codec) bool {
 	return false
 }
 
-func Encode(cc Codec, data []byte) ([]byte, error) {
-	switch cc {
+type Compressor struct {
+	cc Codec
+
+	compressRatio prometheus.Observer
+}
+
+func NewCompressor(changefeedID model.ChangeFeedID, cc Codec) *Compressor {
+	return &Compressor{
+		compressRatio: CompressRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		cc:            cc,
+	}
+}
+
+func CleanMetrics(changefeedID model.ChangeFeedID) {
+	CompressRatio.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+}
+
+func (c *Compressor) Encode(data []byte) ([]byte, error) {
+	oldSize := len(data)
+	var compressed []byte
+
+	switch c.cc {
 	case None:
 		return data, nil
 	case Snappy:
-		return snappy.Encode(data), nil
+		compressed = snappy.Encode(data)
 	case LZ4:
 		var buf bytes.Buffer
 		writer := lz4.NewWriter(&buf)
@@ -55,14 +77,19 @@ func Encode(cc Codec, data []byte) ([]byte, error) {
 		if err := writer.Close(); err != nil {
 			return nil, errors.Trace(err)
 		}
-		return buf.Bytes(), nil
+		compressed = buf.Bytes()
 	default:
+		return nil, errors.New("unsupported compression codec")
 	}
-	return nil, errors.New("unsupported compression codec")
+
+	ratio := float64(oldSize) / float64(len(compressed)) * 100
+	c.compressRatio.Observe(ratio)
+
+	return compressed, nil
 }
 
-func Decode(cc Codec, data []byte) ([]byte, error) {
-	switch cc {
+func (c *Compressor) Decode(data []byte) ([]byte, error) {
+	switch c.cc {
 	case None:
 		return data, nil
 	case Snappy:

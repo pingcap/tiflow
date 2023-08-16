@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
 
@@ -296,17 +295,18 @@ type JSONRowEventEncoder struct {
 	builder  *canalEntryBuilder
 	messages []*common.Message
 
-	config *common.Config
+	compressor *compression.Compressor
 
-	compressionRatio prometheus.Observer
+	config *common.Config
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
-		builder:  newCanalEntryBuilder(),
-		messages: make([]*common.Message, 0, 1),
-		config:   config,
+		builder:    newCanalEntryBuilder(),
+		messages:   make([]*common.Message, 0, 1),
+		compressor: compression.NewCompressor(config.ChangefeedID, config.LargeMessageHandle.LargeMessageHandleCompression),
+		config:     config,
 	}
 	return encoder
 }
@@ -360,15 +360,10 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	oldSize := len(value)
-	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = c.compressor.Encode(value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	newSize := len(value)
-	ratio := float64(oldSize) / float64(newSize) * 100
-
-	log.Info("compress checkpoint event", zap.Int("oldSize", oldSize), zap.Int("newSize", newSize), zap.Float64("ratio", ratio))
 
 	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
@@ -385,15 +380,10 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	oldSize := len(value)
-	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = c.compressor.Encode(value)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	newSize := len(value)
-	ratio := float64(oldSize) / float64(newSize) * 100
-	c.compressionRatio.Observe(ratio)
-
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
@@ -422,7 +412,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 			if err != nil {
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
-			value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+			value, err = c.compressor.Encode(value)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -461,7 +451,7 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = c.compressor.Encode(value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -499,38 +489,29 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	oldSize := len(value)
-	value, err = compression.Encode(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = c.compressor.Encode(value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	newSize := len(value)
-	ratio := float64(oldSize) / float64(newSize) * 100
-	log.Info("compress DDL event", zap.Int("oldSize", oldSize), zap.Int("newSize", newSize), zap.Float64("ratio", ratio))
-
 	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }
 
 type jsonRowEventEncoderBuilder struct {
 	config *common.Config
-
-	compressionRatio prometheus.Observer
 }
 
 // NewJSONRowEventEncoderBuilder creates a canal-json batchEncoderBuilder.
 func NewJSONRowEventEncoderBuilder(
-	config *common.Config, changefeedID model.ChangeFeedID,
+	config *common.Config,
 ) codec.RowEventEncoderBuilder {
 	return &jsonRowEventEncoderBuilder{
-		config:           config,
-		compressionRatio: common.CompressionRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		config: config,
 	}
 }
 
 // Build a `jsonRowEventEncoderBuilder`
 func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
 	encoder := newJSONRowEventEncoder(b.config)
-	encoder.(*JSONRowEventEncoder).compressionRatio = b.compressionRatio
 	return encoder
 }
 

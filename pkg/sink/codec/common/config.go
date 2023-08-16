@@ -21,6 +21,7 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -32,6 +33,8 @@ const defaultMaxBatchSize int = 16
 
 // Config use to create the encoder
 type Config struct {
+	ChangefeedID model.ChangeFeedID
+
 	Protocol config.Protocol
 
 	// control batch behavior, only for `open-protocol` and `craft` at the moment.

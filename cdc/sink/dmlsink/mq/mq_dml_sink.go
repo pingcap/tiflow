@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -183,6 +184,9 @@ func (s *dmlSink) Close() {
 	if s.adminClient != nil {
 		s.adminClient.Close()
 	}
+
+	compression.CleanMetrics(s.id)
+
 }
 
 // Dead checks whether it's dead or not.

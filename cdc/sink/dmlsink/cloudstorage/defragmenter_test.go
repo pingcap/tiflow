@@ -47,11 +47,12 @@ func TestDeframenter(t *testing.T) {
 		return defrag.run(egCtx)
 	})
 
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
 	uri := "file:///tmp/test"
 	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCsv,
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, config.ProtocolCsv,
 		config.GetDefaultReplicaConfig(), config.DefaultMaxMessageBytes)
 	require.Nil(t, err)
 	encoderBuilder, err := builder.NewTxnEventEncoderBuilder(encoderConfig)

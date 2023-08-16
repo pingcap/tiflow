@@ -93,7 +93,7 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, options.MaxMessageBytes)
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, protocol, replicaConfig, options.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
