@@ -60,7 +60,7 @@ func TestSharedRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 
 	span := spanz.ToSpan([]byte{}, spanz.UpperBoundKey)
 	sri := newSingleRegionInfo(tikv.RegionVerID{}, span, &tikv.RPCContext{})
-	sri.requestedTable = &requestedTable{requestID: uint64(1), eventCh: eventCh}
+	sri.requestedTable = &requestedTable{subscriptionID: SubscriptionID(1), eventCh: eventCh}
 	sri.lockedRange = &regionlock.LockedRange{}
 	state := newRegionFeedState(sri, 1)
 	state.start()

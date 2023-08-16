@@ -40,7 +40,7 @@ import (
 func TestRequestedStreamRequestedRegions(t *testing.T) {
 	stream := &requestedStream{streamID: 100, requests: chann.NewAutoDrainChann[singleRegionInfo]()}
 	defer stream.requests.CloseAndDrain()
-	stream.requestedRegions.m = make(map[uint64]map[uint64]*regionFeedState)
+	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
 
 	require.Nil(t, stream.getState(1, 2))
 	require.Nil(t, stream.takeState(1, 2))

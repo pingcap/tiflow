@@ -127,7 +127,7 @@ func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, t
 	p.subscribe(spans, startTs, tableName)
 }
 
-func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) {
+func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) []kv.SubscriptionID {
 	progress := &tableProgress{
 		changefeed: p.changefeed,
 		client:     p.client,
@@ -148,8 +148,11 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		return nil
 	}
 
-	for _, span := range spans {
+	subIDs := make([]kv.SubscriptionID, len(spans))
+	for i, span := range spans {
 		subID := p.client.AllocSubscriptionID()
+		subIDs[i] = subID
+
 		p.subscriptions.m[subID] = progress
 		p.subscriptions.n.ReplaceOrInsert(span, progress)
 
@@ -161,6 +164,7 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 				zap.String("span", span.String()))
 		}
 	}
+	return subIDs
 }
 
 // Unsubscribe some spans, which must be subscribed in one call.
