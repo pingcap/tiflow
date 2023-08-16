@@ -501,6 +501,9 @@ type Task struct {
 	SourceConfig TaskSourceConfig `json:"source_config"`
 	StatusList   *[]SubTaskStatus `json:"status_list,omitempty"`
 
+	// whether to enable strict optimistic shard mode
+	StrictOptimisticShardMode *bool `json:"strict_optimistic_shard_mode,omitempty"`
+
 	// table migrate rule
 	TableMigrateRule []TaskTableMigrateRule `json:"table_migrate_rule"`
 
