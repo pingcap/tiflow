@@ -108,7 +108,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(
 ) {
 	state.markStopped(nil)
 	if stream != nil {
-		stream.takeState(state.requestID, state.getRegionID())
+		stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
 	}
 	if state.markRemoved() {
 		w.client.onRegionFail(ctx, newRegionErrorInfo(state.getRegionInfo(), err))
@@ -163,7 +163,7 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 }
 
 func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolvedTsBatch) {
-	resolvedSpans := make(map[uint64]*struct {
+	resolvedSpans := make(map[SubscriptionID]*struct {
 		spans          []model.RegionComparableSpan
 		requestedTable *requestedTable
 	})
@@ -173,13 +173,13 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolve
 			continue
 		}
 
-		spansAndChan := resolvedSpans[state.sri.requestedTable.requestID]
+		spansAndChan := resolvedSpans[state.sri.requestedTable.subscriptionID]
 		if spansAndChan == nil {
 			spansAndChan = &struct {
 				spans          []model.RegionComparableSpan
 				requestedTable *requestedTable
 			}{requestedTable: state.sri.requestedTable}
-			resolvedSpans[state.sri.requestedTable.requestID] = spansAndChan
+			resolvedSpans[state.sri.requestedTable.subscriptionID] = spansAndChan
 		}
 
 		regionID := state.getRegionID()
@@ -200,12 +200,12 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolve
 		spansAndChan.spans = append(spansAndChan.spans, span)
 	}
 
-	for requestID, spansAndChan := range resolvedSpans {
+	for subscriptionID, spansAndChan := range resolvedSpans {
 		log.Debug("region worker get a ResolvedTs",
 			zap.String("namespace", w.changefeed.Namespace),
 			zap.String("changefeed", w.changefeed.ID),
 			zap.Uint64("ResolvedTs", batch.ts),
-			zap.Uint64("requestID", requestID),
+			zap.Any("subscriptionID", subscriptionID),
 			zap.Int("spanCount", len(spansAndChan.spans)))
 		if len(spansAndChan.spans) > 0 {
 			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{

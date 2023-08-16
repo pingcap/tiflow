@@ -347,7 +347,12 @@ func (p *MultiplexingPuller) checkResolveLock(ctx context.Context) error {
 		case <-resolveLockTicker.C:
 		}
 		for progress := range p.getAllProgresses() {
-			progress.resolvedSpans <- kv.MultiplexingEvent{}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case progress.resolvedSpans <- kv.MultiplexingEvent{}:
+				p.schedule(ctx, progress)
+			}
 		}
 	}
 }
