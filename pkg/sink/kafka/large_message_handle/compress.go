@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package compression
+package large_message_handle
 
 import (
 	"bytes"
@@ -34,8 +34,8 @@ const (
 	LZ4 Codec = "lz4"
 )
 
-func Supported(cc Codec) bool {
-	switch cc {
+func Supported(codec string) bool {
+	switch Codec(codec) {
 	case None, Snappy, LZ4:
 		return true
 	}
@@ -48,15 +48,15 @@ type Compressor struct {
 	compressRatio prometheus.Observer
 }
 
-func NewCompressor(changefeedID model.ChangeFeedID, cc Codec) *Compressor {
+func NewCompressor(changefeedID model.ChangeFeedID, codec string) *Compressor {
 	return &Compressor{
-		compressRatio: CompressRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		cc:            cc,
+		compressRatio: compressionRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		cc:            Codec(codec),
 	}
 }
 
 func CleanMetrics(changefeedID model.ChangeFeedID) {
-	CompressRatio.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+	compressionRatio.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
 }
 
 func (c *Compressor) Encode(data []byte) ([]byte, error) {

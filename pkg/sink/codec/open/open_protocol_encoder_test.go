@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
 	"github.com/stretchr/testify/require"
 )
 
@@ -271,7 +271,7 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	largeMessage := messages[1]
 
 	changefeedID := model.DefaultChangeFeedID("claim-check-test")
-	claimCheckStorage, err := claimcheck.New(ctx, codecConfig.LargeMessageHandle, changefeedID)
+	claimCheckStorage, err := large_message_handle.New(ctx, codecConfig.LargeMessageHandle, changefeedID)
 	require.NoError(t, err)
 	defer claimCheckStorage.Close()
 

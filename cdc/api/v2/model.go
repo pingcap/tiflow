@@ -21,11 +21,11 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
 	"github.com/pingcap/tiflow/pkg/util"
 )
 
@@ -811,9 +811,9 @@ type CSVConfig struct {
 // LargeMessageHandleConfig denotes the large message handling config
 // This is the same as config.LargeMessageHandleConfig
 type LargeMessageHandleConfig struct {
-	LargeMessageHandleOption      string            `json:"large_message_handle_option"`
-	LargeMessageHandleCompression compression.Codec `json:"large_message_handle_compression"`
-	ClaimCheckStorageURI          string            `json:"claim_check_storage_uri"`
+	LargeMessageHandleOption      string                     `json:"large_message_handle_option"`
+	LargeMessageHandleCompression large_message_handle.Codec `json:"large_message_handle_compression"`
+	ClaimCheckStorageURI          string                     `json:"claim_check_storage_uri"`
 }
 
 // DispatchRule represents partition rule for a table

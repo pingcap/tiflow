@@ -22,12 +22,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
 	"go.uber.org/zap"
 )
 
@@ -295,7 +294,7 @@ type JSONRowEventEncoder struct {
 	builder  *canalEntryBuilder
 	messages []*common.Message
 
-	compressor *compression.Compressor
+	compressor *large_message_handle.Compressor
 
 	config *common.Config
 }
@@ -305,7 +304,7 @@ func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
 		builder:    newCanalEntryBuilder(),
 		messages:   make([]*common.Message, 0, 1),
-		compressor: compression.NewCompressor(config.ChangefeedID, config.LargeMessageHandle.LargeMessageHandleCompression),
+		compressor: large_message_handle.NewCompressor(config.ChangefeedID, config.LargeMessageHandle.LargeMessageHandleCompression),
 		config:     config,
 	}
 	return encoder
@@ -435,7 +434,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
 			m.Event = e
-			m.ClaimCheckFileName = claimcheck.NewFileName()
+			m.ClaimCheckFileName = large_message_handle.NewFileName()
 		}
 	}
 
@@ -445,7 +444,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 // NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
 func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
-	claimCheckLocation := claimcheck.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	claimCheckLocation := large_message_handle.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
 	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true, claimCheckLocation)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)

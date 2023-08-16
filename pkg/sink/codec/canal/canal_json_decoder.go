@@ -27,10 +27,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding"
@@ -48,6 +48,8 @@ type batchDecoder struct {
 
 	upstreamTiDB *sql.DB
 	bytesDecoder *encoding.Decoder
+
+	compressor *large_message_handle.Compressor
 }
 
 // NewBatchDecoder return a decoder for canal-json
@@ -71,11 +73,15 @@ func NewBatchDecoder(
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
+	compressor := large_message_handle.NewCompressor(codecConfig.ChangefeedID,
+		large_message_handle.Codec(codecConfig.LargeMessageHandle.LargeMessageHandleCompression))
+
 	return &batchDecoder{
 		config:       codecConfig,
 		storage:      storage,
 		upstreamTiDB: db,
 		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
+		compressor:   compressor,
 	}, nil
 }
 
@@ -104,10 +110,10 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		}
 	}
 
-	b.data, err = compression.Decode(b.config.LargeMessageHandle.LargeMessageHandleCompression, b.data)
+	b.data, err = b.compressor.Decode(b.data)
 	if err != nil {
-		log.Info("uncompress data failed",
-			zap.String("compression", string(b.config.LargeMessageHandle.LargeMessageHandleCompression)),
+		log.Info("decompress data failed",
+			zap.String("compression", b.config.LargeMessageHandle.LargeMessageHandleCompression),
 			zap.Error(err))
 		return model.MessageTypeUnknown, false, err
 	}

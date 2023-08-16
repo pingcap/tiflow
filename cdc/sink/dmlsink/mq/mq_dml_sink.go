@@ -25,12 +25,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
-	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
 	"go.uber.org/atomic"
 )
 
@@ -76,7 +75,7 @@ func newDMLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
-	claimCheck *claimcheck.ClaimCheck,
+	claimCheck *large_message_handle.ClaimCheck,
 	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	errCh chan error,
 ) *dmlSink {
@@ -185,7 +184,7 @@ func (s *dmlSink) Close() {
 		s.adminClient.Close()
 	}
 
-	compression.CleanMetrics(s.id)
+	large_message_handle.CleanMetrics(s.id)
 
 }
 

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package claimcheck
+package large_message_handle
 
 import (
 	"context"
@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -44,7 +43,7 @@ type ClaimCheck struct {
 }
 
 // New return a new ClaimCheck.
-func New(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
+func New(ctx context.Context, config *Config, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
 	externalStorage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
 	if err != nil {
 		return nil, errors.Trace(err)

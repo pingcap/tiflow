@@ -21,12 +21,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
 	"go.uber.org/zap"
 )
 
@@ -37,6 +36,8 @@ type BatchEncoder struct {
 	curBatchSize int
 
 	config *common.Config
+
+	compressor *large_message_handle.Compressor
 }
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
@@ -54,7 +55,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 		return nil, nil, errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = d.compressor.Encode(value)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -97,7 +98,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = d.compressor.Encode(value)
 	if err != nil {
 		return err
 	}
@@ -180,7 +181,7 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		return nil, errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = d.compressor.Encode(value)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +263,7 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 	}
 
 	keyMsg.OnlyHandleKey = false
-	claimCheckLocation := claimcheck.FileNameWithPrefix(d.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	claimCheckLocation := large_message_handle.FileNameWithPrefix(d.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
 	keyMsg.ClaimCheckLocation = claimCheckLocation
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -274,7 +275,7 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 		return nil, errors.Trace(err)
 	}
 
-	value, err = compression.Encode(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = d.compressor.Encode(value)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +309,7 @@ func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e 
 	message.Schema = &e.Table.Schema
 	message.Table = &e.Table.Table
 	// ClaimCheckFileName must be set to indicate this message should be sent to the external storage.
-	message.ClaimCheckFileName = claimcheck.NewFileName()
+	message.ClaimCheckFileName = large_message_handle.NewFileName()
 	message.Event = e
 	message.IncRowsCount()
 	if callback != nil {
@@ -354,6 +355,7 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 // NewBatchEncoder creates a new BatchEncoder.
 func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
-		config: config,
+		config:     config,
+		compressor: large_message_handle.NewCompressor(config.ChangefeedID, config.LargeMessageHandle.LargeMessageHandleCompression),
 	}
 }
