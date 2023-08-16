@@ -478,10 +478,10 @@ type LockedRange struct {
 	Created      time.Time
 }
 
-// CheckSlowLockedRanges checks slow locked ranges.
-func (l *RegionRangeLock) CheckSlowLockedRanges(
+// CollectLockedRangeAttrs collects locked range attributes.
+func (l *RegionRangeLock) CollectLockedRangeAttrs(
 	action func(regionID uint64, state *LockedRange),
-) (r CheckLockedRangesResult) {
+) (r CollectedLockedRangeAttrs) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	r.FastestRegion.CheckpointTs = 0
@@ -512,15 +512,15 @@ func (l *RegionRangeLock) CheckSlowLockedRanges(
 	return
 }
 
-// CheckLockedRangesResult returns by `RegionRangeLock.CheckLockedRanges`.
-type CheckLockedRangesResult struct {
+// CollectedLockedRangeAttrs returns by `RegionRangeLock.CollectedLockedRangeAttrs`.
+type CollectedLockedRangeAttrs struct {
 	HoleExists    bool
-	FastestRegion LockedRangeValue
-	SlowestRegion LockedRangeValue
+	FastestRegion LockedRangeAttrs
+	SlowestRegion LockedRangeAttrs
 }
 
-// LockedRangeValue is like `LockedRange`.
-type LockedRangeValue struct {
+// LockedRangeAttrs is like `LockedRange`, but only contains some read-only attributes.
+type LockedRangeAttrs struct {
 	RegionID     uint64
 	CheckpointTs uint64
 	Initialized  bool

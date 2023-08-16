@@ -1104,7 +1104,7 @@ func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 		}
 	}
 
-	res := r.rangeLock.CheckSlowLockedRanges(r.postUpdateRegionResolvedTs)
+	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)
 	log.Warn("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
