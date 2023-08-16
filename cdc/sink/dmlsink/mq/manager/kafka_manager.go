@@ -58,12 +58,8 @@ func NewKafkaTopicManager(
 	ctx context.Context,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
-<<<<<<< HEAD
-) (*kafkaTopicManager, error) {
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-=======
 ) *kafkaTopicManager {
->>>>>>> 447e5126cb (kafka(ticdc): sarama admin client fetch metadata by cache (#9511))
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	mgr := &kafkaTopicManager{
 		changefeedID:      changefeedID,
 		admin:             admin,
