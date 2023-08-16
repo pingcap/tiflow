@@ -521,6 +521,8 @@ func TestChangefeedNotRetry(t *testing.T) {
 
 	tester.MustApplyPatches()
 	manager.Tick(state, 0)
+	require.False(t, manager.ShouldRunning())
+	manager.Tick(state, 0)
 	require.True(t, manager.ShouldRunning())
 
 	state.PatchTaskPosition("test",

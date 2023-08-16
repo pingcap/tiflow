@@ -338,7 +338,7 @@ func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 		log.Info("failpoint SinkManagerRunError injected", zap.String("changefeed", m.changefeedID.ID))
 		err = errors.New("SinkManagerRunError")
 	})
-	time.Sleep(1 * time.Second)
+	time.Sleep(5 * time.Minute)
 	err = errors.New("SinkManagerRunError, for test only")
 	if err != nil {
 		emitError(err)

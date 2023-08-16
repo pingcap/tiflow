@@ -39,7 +39,7 @@ func TestChangefeedListCli(t *testing.T) {
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
-			ID:             "warning-1",
+			ID:             "pending-1",
 			CheckpointTime: model.JSONTime{},
 			RunningError:   nil,
 			FeedState:      model.StateWarning,
