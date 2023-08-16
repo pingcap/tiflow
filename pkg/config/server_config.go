@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -142,6 +143,7 @@ var defaultServerConfig = &ServerConfig{
 
 		Scheduler: NewDefaultSchedulerConfig(),
 	},
+	MetastoreConfig:     &MetastoreConfig{},
 	ClusterID:           "default",
 	MaxMemoryPercentage: DefaultMaxMemoryPercentage,
 }
@@ -174,6 +176,41 @@ type ServerConfig struct {
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
 	ClusterID           string          `toml:"cluster-id" json:"cluster-id"`
 	MaxMemoryPercentage int             `toml:"max-memory-percentage" json:"max-memory-percentage"`
+
+	// MetastoreConfig represents the config for metastore
+	MetastoreConfig *MetastoreConfig `toml:"metastore" json:"metastore"`
+}
+
+// MetastoreConfig represents the config for metastore
+type MetastoreConfig struct {
+	Type     string `toml:"type" json:"type"`
+	URI      string `toml:"uri" json:"uri"`
+	CAPath   string `toml:"ca-path" json:"ca-path"`
+	CertPath string `toml:"cert-path" json:"cert-path"`
+	KeyPath  string `toml:"key-path" json:"key-path"`
+}
+
+// IsEnableExternalMetastore checks whether external metastore is enabled or not.
+func (s *MetastoreConfig) IsEnableExternalMetastore() bool {
+	return s.URI != "" && s.Type != ""
+}
+
+// IsTLSEnabled checks whether TLS is enabled or not.
+func (s *MetastoreConfig) IsTLSEnabled() bool {
+	return len(s.CAPath) != 0 && len(s.CertPath) != 0 && len(s.KeyPath) != 0
+}
+
+// GetMetaStoreSecurity returns the security config for metastore,
+// if metastore is not enabled, return the pd security config for server.
+func (c *ServerConfig) GetMetaStoreSecurity() *SecurityConfig {
+	if c.MetastoreConfig == nil && c.MetastoreConfig.URI != "" {
+		return &SecurityConfig{
+			CertPath: c.MetastoreConfig.CertPath,
+			KeyPath:  c.MetastoreConfig.KeyPath,
+			CAPath:   c.MetastoreConfig.CAPath,
+		}
+	}
+	return c.Security
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -287,6 +324,26 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if c.MaxMemoryPercentage >= 100 {
 		log.Warn("server max-memory-percentage must be less than 100, set to default value")
 		c.MaxMemoryPercentage = DefaultMaxMemoryPercentage
+	}
+	if c.MetastoreConfig.IsEnableExternalMetastore() {
+		if c.MetastoreConfig.Type != "" && c.MetastoreConfig.Type != "etcd" {
+			return errors.Errorf("currently metastore type must be etcd or empty")
+		}
+		_, err := url.Parse(c.MetastoreConfig.URI)
+		if err != nil {
+			return errors.Annotate(err, "invalidate metastore uri")
+		}
+		if c.MetastoreConfig.IsTLSEnabled() {
+			var err error
+			_, err = c.Security.ToTLSConfig()
+			if err != nil {
+				return errors.Annotate(err, "invalidate TLS config")
+			}
+			_, err = c.Security.ToGRPCDialOption()
+			if err != nil {
+				return errors.Annotate(err, "invalidate TLS config")
+			}
+		}
 	}
 
 	return nil

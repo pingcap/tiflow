@@ -90,6 +90,14 @@ func (o *options) addFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
 	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
+	cmd.Flags().StringVar(&o.serverConfig.MetastoreConfig.URI, "metastore-uri", "",
+		"List of meta storage servers to connect with (scheme://ip:port), comma separated")
+	cmd.Flags().StringVar(&o.serverConfig.MetastoreConfig.CAPath, "metastore-ca", "",
+		"Path to the CA file for setting up "+"TLS connection between TiCDC and meta storage")
+	cmd.Flags().StringVar(&o.serverConfig.MetastoreConfig.CertPath, "metastore-cert", "",
+		"Path to the client certificate file for setting up TLS connection between TiCDC and meta storage")
+	cmd.Flags().StringVar(&o.serverConfig.MetastoreConfig.KeyPath, "metastore-key", "",
+		"Path to the client key file for setting up TLS connection between TiCDC and meta storage")
 }
 
 // run runs the server cmd.
@@ -195,6 +203,14 @@ func (o *options) complete(cmd *cobra.Command) error {
 			cfg.Security.KeyPath = o.serverConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			cfg.Security.CertAllowedCN = o.serverConfig.Security.CertAllowedCN
+		case "metastore-uri":
+			cfg.MetastoreConfig.URI = o.serverConfig.MetastoreConfig.URI
+		case "metastore-ca":
+			cfg.MetastoreConfig.CAPath = o.serverConfig.MetastoreConfig.CAPath
+		case "metastore-cert":
+			cfg.MetastoreConfig.CertPath = o.serverConfig.MetastoreConfig.CertPath
+		case "metastore-key":
+			cfg.MetastoreConfig.KeyPath = o.serverConfig.MetastoreConfig.KeyPath
 		case "sort-dir":
 			// user specified sorter dir should not take effect, it's always `/tmp/sorter`
 			// if user try to set sort-dir by flag, warn it.

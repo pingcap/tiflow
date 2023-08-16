@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -125,12 +126,13 @@ func New(pdEndpoints []string) (*server, error) {
 func (s *server) prepare(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 
-	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
+	metastoreSecurity := conf.GetMetaStoreSecurity()
+	grpcTLSOption, err := metastoreSecurity.ToGRPCDialOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	tlsConfig, err := conf.Security.ToTLSConfig()
+	tlsConfig, err := metastoreSecurity.ToTLSConfig()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -138,7 +140,12 @@ func (s *server) prepare(ctx context.Context) error {
 	logConfig := logutil.DefaultZapLoggerConfig
 	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
 
-	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
+	metastoreEndpoints := s.pdEndpoints
+	if conf.MetastoreConfig.IsEnableExternalMetastore() {
+		metastoreEndpoints = strings.Split(conf.MetastoreConfig.URI, ",")
+	}
+
+	log.Info("create etcdCli", zap.Strings("endpoints", metastoreEndpoints))
 	// we do not pass a `context` to the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,
@@ -148,7 +155,7 @@ func (s *server) prepare(ctx context.Context) error {
 	// then cause the new owner cannot be elected immediately after the old owner offline.
 	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
 	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:        s.pdEndpoints,
+		Endpoints:        metastoreEndpoints,
 		TLS:              tlsConfig,
 		LogConfig:        &logConfig,
 		DialTimeout:      5 * time.Second,
