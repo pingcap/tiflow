@@ -94,7 +94,7 @@ func TestGetProcessor(t *testing.T) {
 	{
 		provider := &mockStatusProvider{
 			changefeedInfo: &model.ChangeFeedInfo{
-				State: model.StateError,
+				State: model.StatePending,
 			},
 		}
 		cp := mock_capture.NewMockCapture(gomock.NewController(t))

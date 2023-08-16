@@ -218,6 +218,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 		} else {
 			commonInfo.RunningError = cfInfo.Warning
 		}
+		log.Info("List changefeed successfully!", zap.Any("runningError", commonInfo.RunningError))
 
 		// if the state is normal, we shall not return the error info
 		// because changefeed will is retrying. errors will confuse the users
