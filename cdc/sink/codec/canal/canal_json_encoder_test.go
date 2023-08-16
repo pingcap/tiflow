@@ -286,9 +286,8 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
-		codecConfig := &common.Config{
-			EnableTiDBExtension: enable,
-		}
+		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+		codecConfig.EnableTiDBExtension = enable
 		encoder := newJSONBatchEncoder(codecConfig).(*JSONBatchEncoder)
 		require.NotNil(t, encoder)
 

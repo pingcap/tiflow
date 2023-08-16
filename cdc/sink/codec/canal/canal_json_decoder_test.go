@@ -44,9 +44,10 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		msg := messages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder, err := NewBatchDecoder(ctx, &common.Config{
-				EnableTiDBExtension: decodeEnable,
-			}, nil)
+			codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+			codecConfig.EnableTiDBExtension = decodeEnable
+			decoder, err := NewBatchDecoder(ctx, codecConfig
+			, nil)
 			require.NoError(t, err)
 			err = decoder.AddKeyValue(msg.Key, msg.Value)
 			require.NoError(t, err)
