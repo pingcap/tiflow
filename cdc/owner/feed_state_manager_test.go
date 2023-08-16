@@ -505,23 +505,20 @@ func TestChangefeedNotRetry(t *testing.T) {
 	require.True(t, manager.ShouldRunning())
 
 	// changefeed in error state but error can be retried
-	state.PatchTaskPosition("test",
-		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-			if position == nil {
-				position = &model.TaskPosition{}
-			}
-			position.Error = &model.RunningError{
-				Time:    time.Now(),
-				Addr:    "test",
-				Code:    "CDC:ErrExpressionColumnNotFound",
-				Message: "what ever",
-			}
-			return position, true, nil
-		})
-
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		return &model.ChangeFeedInfo{
+			SinkURI: "123",
+			Config:  &config.ReplicaConfig{},
+			State:   model.StateWarning,
+			Error: &model.RunningError{
+				Addr: "127.0.0.1",
+				Code: "CDC:ErrPipelineTryAgain",
+				Message: "pipeline is full, please try again. Internal use only, " +
+					"report a bug if seen externally",
+			},
+		}, true, nil
+	})
 	tester.MustApplyPatches()
-	manager.Tick(state, 0)
-	require.False(t, manager.ShouldRunning())
 	manager.Tick(state, 0)
 	require.True(t, manager.ShouldRunning())
 

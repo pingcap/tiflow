@@ -58,12 +58,13 @@ type feedStateManager struct {
 	// shouldBeRemoved = false means the changefeed is paused
 	shouldBeRemoved bool
 
-	adminJobQueue         []*model.AdminJob
-	stateHistory          [defaultStateWindowSize]model.FeedState
-	lastErrorRetryTime    time.Time                   // time of last error for a changefeed
-	lastRetryCheckpointTs model.Ts                    // checkpoint ts of last retry
-	backoffInterval       time.Duration               // the interval for restarting a changefeed in 'error' state
-	errBackoff            *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
+	adminJobQueue                 []*model.AdminJob
+	stateHistory                  [defaultStateWindowSize]model.FeedState
+	lastErrorRetryTime            time.Time                   // time of last error for a changefeed
+	lastErrorRetryCheckpointTs    model.Ts                    // checkpoint ts of last retry
+	lastWarningReportCheckpointTs model.Ts                    // checkpoint ts of last warning report
+	backoffInterval               time.Duration               // the interval for restarting a changefeed in 'error' state
+	errBackoff                    *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
 
 	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
 	// has been advanced or not.
@@ -180,7 +181,9 @@ func (m *feedStateManager) Tick(
 		}
 
 		m.lastErrorRetryTime = time.Now()
-
+		if m.state.Status != nil {
+			m.lastErrorRetryCheckpointTs = m.state.Status.CheckpointTs
+		}
 		m.shouldBeRunning = true
 		m.patchState(model.StateWarning)
 		log.Info("changefeed retry backoff interval is elapsed,"+
@@ -579,6 +582,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 	if m.state.Status != nil {
 		currTime := m.upstream.PDClock.CurrentTime()
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
+		m.lastWarningReportCheckpointTs = m.state.Status.CheckpointTs
 		// Conditions:
 		// 1. checkpoint lag is large enough;
 		// 2. checkpoint hasn't been advanced for a long while;
@@ -596,6 +600,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 			return
 		}
 	}
+
 	m.patchState(model.StateWarning)
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		if info == nil {
@@ -631,14 +636,15 @@ func (m *feedStateManager) checkAndChangeState() {
 		return
 	}
 	if m.state.Info.State == model.StateWarning &&
-		m.state.Status.CheckpointTs > m.lastRetryCheckpointTs {
+		m.state.Status.CheckpointTs > m.lastErrorRetryCheckpointTs &&
+		m.state.Status.CheckpointTs > m.lastWarningReportCheckpointTs {
 		log.Info("changefeed is recovered from warning state,"+
 			"its checkpointTs is greater than lastRetryCheckpointTs,"+
 			"it will be changed to normal state",
 			zap.String("changefeed", m.state.ID.ID),
 			zap.String("namespace", m.state.ID.Namespace),
 			zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
-			zap.Uint64("lastRetryCheckpointTs", m.lastRetryCheckpointTs))
+			zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs))
 		m.patchState(model.StateNormal)
 	}
 }
@@ -647,9 +653,10 @@ func (m *feedStateManager) checkAndChangeState() {
 // It the owner is changed, the lastRetryCheckpointTs will be reset to 0, and we should init
 // it to the checkpointTs of the changefeed when the changefeed is ticked at the first time.
 func (m *feedStateManager) checkAndInitLastRetryCheckpointTs(status *model.ChangeFeedStatus) {
-	if status == nil || m.lastRetryCheckpointTs != 0 {
+	if status == nil || m.lastErrorRetryCheckpointTs != 0 {
 		return
 	}
-	m.lastRetryCheckpointTs = status.CheckpointTs
-	log.Info("init lastRetryCheckpointTs", zap.Uint64("lastRetryCheckpointTs", m.lastRetryCheckpointTs))
+	m.lastWarningReportCheckpointTs = status.CheckpointTs
+	m.lastErrorRetryCheckpointTs = status.CheckpointTs
+	log.Info("init lastRetryCheckpointTs", zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs))
 }

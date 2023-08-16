@@ -180,13 +180,12 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 			resp.RunningError = cfInfo.Warning
 		}
 
-		log.Info("List changefeed successfully!", zap.Any("runningError", resp.RunningError))
-
 		if cfStatus != nil {
 			resp.CheckpointTSO = cfStatus.CheckpointTs
 			tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
 			resp.CheckpointTime = model.JSONTime(tm)
 		}
+		log.Info("List changefeed successfully!", zap.Any("info", resp))
 
 		resps = append(resps, resp)
 	}

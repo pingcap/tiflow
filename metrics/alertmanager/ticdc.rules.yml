@@ -37,6 +37,31 @@ groups:
       value: '{{ $value }}'
       summary: cdc processor checkpoint delay more than 10 minutes
 
+  # changefeed related alter rules
+  - alert: ticdc_changefeed_failed
+    expr: (max_over_time(ticdc_owner_status[1m]) == 2) > 0
+    for: 1m
+    labels:
+      env: ENV_LABELS_ENV
+      level: critical
+      expr: (max_over_time(ticdc_owner_status[1m]) == 2) > 0
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
+      value: '{{ $value }}'
+      summary: cdc changefeed failed, it can not be automatically resumed
+
+  - alert: ticdc_changefeed_meet_error
+    expr: (max_over_time(ticdc_owner_status[1m]) == 1 or max_over_time(ticdc_owner_status[1m]) == 6) > 0
+    for: 1m
+    labels:
+      env: ENV_LABELS_ENV
+      level: warning
+      expr: (max_over_time(ticdc_owner_status[1m]) == 1 or max_over_time(ticdc_owner_status[1m]) == 6 ) > 0
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
+      value: '{{ $value }}'
+      summary: cdc changefeed meet error
+
   - alert: ticdc_mounter_unmarshal_and_mount_time_more_than_1s
     expr: histogram_quantile(0.9, rate(ticdc_mounter_unmarshal_and_mount_bucket[1m])) * 1000 > 1000
     for: 1m
