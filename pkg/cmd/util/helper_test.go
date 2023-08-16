@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -209,6 +210,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		Protocol:                 "open-protocol",
+		AdvanceTimeoutInSec:      util.AddressOf(uint(150)),
 	}, cfg.Sink)
 }
 
@@ -237,6 +239,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			IncludeCommitTs:      false,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
+		AdvanceTimeoutInSec: util.AddressOf(uint(150)),
 	}, cfg.Sink)
 }
 

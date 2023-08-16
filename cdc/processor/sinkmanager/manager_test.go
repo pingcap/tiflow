@@ -15,7 +15,6 @@ package sinkmanager
 
 import (
 	"context"
-	"errors"
 	"math"
 	"testing"
 	"time"
@@ -198,7 +197,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(span)
 		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
+		checkpointTS, _, _ := tableSink.(*tableSinkWrapper).getCheckpointTs()
 		return checkpointTS.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
@@ -229,7 +228,7 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	require.Eventually(t, func() bool {
 		tableSink, ok := manager.tableSinks.Load(span)
 		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
+		checkpointTS, _, _ := tableSink.(*tableSinkWrapper).getCheckpointTs()
 		return checkpointTS.ResolvedMark() == 3
 	}, 5*time.Second, 10*time.Millisecond)
 }
@@ -284,7 +283,8 @@ func TestDoNotGenerateTableSinkTaskWhenTableIsNotReplicating(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(span)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
-	require.Equal(t, uint64(1), tableSink.(*tableSinkWrapper).getCheckpointTs().Ts)
+	checkpointTS, _, _ := tableSink.(*tableSinkWrapper).getCheckpointTs()
+	require.Equal(t, uint64(1), checkpointTS.Ts)
 }
 
 func TestClose(t *testing.T) {
@@ -356,29 +356,4 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 	case <-timer.C:
 		log.Panic("must get an error instead of a timeout")
 	}
-}
-
-func TestGetRetryBackoff(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 16)
-	changefeedInfo := getChangefeedInfo()
-	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
-	defer func() {
-		cancel()
-		manager.Close()
-	}()
-
-	backoff, err := manager.getRetryBackoff(errors.New("test"))
-	require.NoError(t, err)
-	require.Less(t, backoff, 30*time.Second)
-	time.Sleep(500 * time.Millisecond)
-	elapsedTime := time.Since(manager.sinkRetry.firstRetryTime)
-
-	// mock time to test reset error backoff
-	manager.sinkRetry.lastErrorRetryTime = time.Unix(0, 0)
-	_, err = manager.getRetryBackoff(errors.New("test"))
-	require.NoError(t, err)
-	require.Less(t, time.Since(manager.sinkRetry.firstRetryTime), elapsedTime)
 }

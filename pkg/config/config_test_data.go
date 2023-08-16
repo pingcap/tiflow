@@ -53,7 +53,8 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol"
+    "protocol": "open-protocol",
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
@@ -259,7 +260,8 @@ const (
       "worker-count": 8,
       "flush-interval": "1m",
       "file-size": 1024
-    }
+    },
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
@@ -385,7 +387,8 @@ const (
       "worker-count": 8,
       "flush-interval": "1m",
       "file-size": 1024
-    }
+    },
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",

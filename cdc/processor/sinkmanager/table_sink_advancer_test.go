@@ -136,7 +136,8 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTableSinkWithBatchID() {
 	expectedResolvedTs := model.NewResolvedTs(2)
 	expectedResolvedTs.Mode = model.BatchResolvedMode
 	expectedResolvedTs.BatchID = 1
-	require.Equal(suite.T(), expectedResolvedTs, task.tableSink.getCheckpointTs())
+	checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+	require.Equal(suite.T(), expectedResolvedTs, checkpointTs)
 }
 
 func (suite *tableSinkAdvancerSuite) TestAdvanceTableSink() {
@@ -150,7 +151,8 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTableSink() {
 	require.NoError(suite.T(), err)
 
 	expectedResolvedTs := model.NewResolvedTs(2)
-	require.Equal(suite.T(), expectedResolvedTs, task.tableSink.getCheckpointTs())
+	checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+	require.Equal(suite.T(), expectedResolvedTs, checkpointTs)
 }
 
 func (suite *tableSinkAdvancerSuite) TestNewTableSinkAdvancer() {
@@ -288,7 +290,8 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithCommitF
 	require.Len(suite.T(), sink.GetEvents(), 3)
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		return task.tableSink.getCheckpointTs() == model.NewResolvedTs(2)
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == model.NewResolvedTs(2)
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -334,7 +337,8 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithoutComm
 		expectedResolvedTs := model.NewResolvedTs(3)
 		expectedResolvedTs.Mode = model.BatchResolvedMode
 		expectedResolvedTs.BatchID = 1
-		return task.tableSink.getCheckpointTs() == expectedResolvedTs
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == expectedResolvedTs
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -384,7 +388,8 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithSplit
 		expectedResolvedTs := model.NewResolvedTs(3)
 		expectedResolvedTs.Mode = model.BatchResolvedMode
 		expectedResolvedTs.BatchID = 1
-		return task.tableSink.getCheckpointTs() == expectedResolvedTs
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == expectedResolvedTs
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -438,7 +443,8 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithoutSp
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		expectedResolvedTs := model.NewResolvedTs(2)
-		return task.tableSink.getCheckpointTs() == expectedResolvedTs
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == expectedResolvedTs
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(256), advancer.pendingTxnSize)
@@ -493,7 +499,8 @@ func (suite *tableSinkAdvancerSuite) TestLastTimeAdvanceDifferentCommitTsEventsW
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		expectedResolvedTs := model.NewResolvedTs(2)
-		return task.tableSink.getCheckpointTs() == expectedResolvedTs
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == expectedResolvedTs
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize,
@@ -550,7 +557,8 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		expectedResolvedTs := model.NewResolvedTs(3)
-		return task.tableSink.getCheckpointTs() == expectedResolvedTs
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == expectedResolvedTs
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -599,7 +607,8 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeA
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		expectedResolvedTs := model.NewResolvedTs(3)
-		return task.tableSink.getCheckpointTs() == expectedResolvedTs
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == expectedResolvedTs
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -651,7 +660,8 @@ func (suite *tableSinkAdvancerSuite) TestFinish() {
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		expectedResolvedTs := model.NewResolvedTs(4)
-		return task.tableSink.getCheckpointTs() == expectedResolvedTs
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == expectedResolvedTs
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -700,7 +710,8 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTx
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
 		expectedResolvedTs := model.NewResolvedTs(3)
-		return task.tableSink.getCheckpointTs() == expectedResolvedTs
+		checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+		return checkpointTs == expectedResolvedTs
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
@@ -764,7 +775,8 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn()
 		<-down
 		require.Eventually(suite.T(), func() bool {
 			expectedResolvedTs := model.NewResolvedTs(3)
-			return task.tableSink.getCheckpointTs() == expectedResolvedTs
+			checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+			return checkpointTs == expectedResolvedTs
 		}, 5*time.Second, 10*time.Millisecond)
 		require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 		require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)

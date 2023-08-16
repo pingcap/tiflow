@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -140,6 +141,10 @@ type SinkConfig struct {
 	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
 	MySQLConfig        *MySQLConfig        `toml:"mysql-config" json:"mysql-config,omitempty"`
 	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
+
+	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
+	// advanced for this given duration, the sink will be canceled and re-established.
+	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -386,6 +391,10 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		if err := s.CSVConfig.validateAndAdjust(); err != nil {
 			return err
 		}
+	}
+
+	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
+		s.AdvanceTimeoutInSec = util.AddressOf(uint(150))
 	}
 
 	return nil
