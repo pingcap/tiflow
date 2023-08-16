@@ -121,13 +121,13 @@ func NewMultiplexingPuller(
 }
 
 // Subscribe some spans. They will share one same resolved timestamp progress.
-func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) []kv.SubscriptionID {
+func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) {
 	p.subscriptions.Lock()
 	defer p.subscriptions.Unlock()
-	return p.subscribe(spans, startTs, tableName)
+	p.subscribe(spans, startTs, tableName)
 }
 
-func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) []kv.SubscriptionID {
+func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) {
 	progress := &tableProgress{
 		changefeed: p.changefeed,
 		client:     p.client,
@@ -148,11 +148,8 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		return nil
 	}
 
-	subIDs := make([]kv.SubscriptionID, len(spans))
-	for i, span := range spans {
+	for _, span := range spans {
 		subID := p.client.AllocSubscriptionID()
-		subIDs[i] = subID
-
 		p.subscriptions.m[subID] = progress
 		p.subscriptions.n.ReplaceOrInsert(span, progress)
 
@@ -164,7 +161,6 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 				zap.String("span", span.String()))
 		}
 	}
-	return subIDs
 }
 
 // Unsubscribe some spans, which must be subscribed in one call.
@@ -397,7 +393,7 @@ func (p *tableProgress) resolveLock() {
 	resolvedTs := p.resolvedTs.Load()
 	resolvedTime := oracle.GetTimeFromTS(resolvedTs)
 	currentTime := p.client.GetPDClock().CurrentTime()
-	if !currentTime.After(resolvedTime) || currentTime.Sub(resolvedTime) < resolveLockFence {
+	if currentTime.Sub(resolvedTime) < resolveLockFence {
 		return
 	}
 

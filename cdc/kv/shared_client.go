@@ -194,7 +194,7 @@ func NewSharedClient(
 
 // AllocSubscriptionID gets an ID can be used in `Subscribe`.
 func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
-	return SubscriptionID(requestIDGen.Add(1))
+	return SubscriptionID(subscriptionIDGen.Add(1))
 }
 
 // Subscribe the given table span.
@@ -1045,7 +1045,6 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 
 	gcTicker := time.NewTicker(resolveLockMinInterval * 3 / 2)
 	defer gcTicker.Stop()
-LOOP:
 	for {
 		var task resolveLockTask
 		select {
@@ -1053,7 +1052,6 @@ LOOP:
 			return ctx.Err()
 		case <-gcTicker.C:
 			gcResolveLastRun()
-			continue LOOP
 		case task = <-s.resolveLockCh.Out():
 			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
 			doResolve(task.regionID, task.state, task.maxVersion)
@@ -1159,8 +1157,9 @@ func hashRegionID(regionID uint64, slots int) int {
 }
 
 var (
-	// To generate a requestID in `newRequestedTable`.
-	requestIDGen atomic.Uint64
+	// To generate an ID for a new subscription. And the subscription ID will also be used as
+	// requestID in region requests of the table.
+	subscriptionIDGen atomic.Uint64
 
 	// To generate a streamID in `newStream`.
 	streamIDGen atomic.Uint64
