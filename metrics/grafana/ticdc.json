@@ -2,7 +2,7 @@
   "__inputs": [
     {
       "name": "DS_TEST-CLUSTER",
-      "label": "${DS_TEST-CLUSTER}",
+      "label": "test-cluster",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1689172951778,
+  "iteration": 1692166839158,
   "links": [],
   "panels": [
     {
@@ -7255,7 +7255,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Responses/second received from all brokers\n\nvalue = one-minute moving average of response receive rate",
+          "description": "Records count per request send to the kafka\nvalue = one-minute moving average of response receive rate",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -7303,7 +7303,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(ticdc_sink_kafka_producer_response_rate{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace,changefeed, instance, broker)",
+              "expr": "sum(ticdc_sink_kafka_producer_records_per_request{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace,changefeed, instance, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -7315,7 +7315,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Response Rate",
+          "title": "Kafka Records Per Request",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7412,6 +7412,14 @@
               "intervalFactor": 1,
               "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
               "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_kafka_sink_compression_ratio_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,namespace,changefeed,instance))",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-P99",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -18568,7 +18576,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "test-cluster",
           "description": "The latency distributions of fsync called by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -18642,7 +18650,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "test-cluster",
           "description": "The latency distributions of flushall called by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -18716,7 +18724,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "test-cluster",
           "description": "The latency distributions of writeLog called by redoManager",
           "fieldConfig": {
             "defaults": {},
@@ -18790,7 +18798,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "test-cluster",
           "description": "The latency distributions of flushLog called by redoManager",
           "fieldConfig": {
             "defaults": {},
@@ -18855,7 +18863,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "test-cluster",
           "description": "The total count of rows that are processed by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -18965,7 +18973,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "test-cluster",
           "description": "Total number of bytes redo log written",
           "fieldConfig": {
             "defaults": {},
@@ -19061,7 +19069,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_TEST-CLUSTER}",
+          "datasource": "test-cluster",
           "description": "Redo bgUpdateLog worker busy ratio",
           "fieldConfig": {
             "defaults": {},
@@ -19222,8 +19230,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -19408,8 +19416,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [],
@@ -19515,8 +19523,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -19637,8 +19645,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -20045,7 +20053,8 @@
     ]
   },
   "timezone": "browser",
-  "title": "${DS_TEST-CLUSTER}-TiCDC",
+  "title": "test-cluster-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 53
+  "version": 1
 }
+
