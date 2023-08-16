@@ -205,7 +205,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		return nil, nil
 	}()
-	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
+	if err != nil && !cerror.ShouldFailChangefeed(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
