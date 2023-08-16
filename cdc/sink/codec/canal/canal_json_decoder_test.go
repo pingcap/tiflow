@@ -95,7 +95,10 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := &JSONBatchEncoder{
 			builder: newCanalEntryBuilder(),
-			config:  &common.Config{EnableTiDBExtension: encodeEnable},
+			config: &common.Config{
+				EnableTiDBExtension: encodeEnable,
+				LargeMessageHandle:  config.NewDefaultLargeMessageHandleConfig(),
+			},
 		}
 		require.NotNil(t, encoder)
 
@@ -104,10 +107,12 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 		require.NotNil(t, result)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder, err := NewBatchDecoder(ctx, &common.Config{
+			codecConfig := &common.Config{
 				EnableTiDBExtension: decodeEnable,
 				Terminator:          "",
-			}, nil)
+			}
+			codecConfig.LargeMessageHandle = config.NewDefaultLargeMessageHandleConfig()
+			decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 			err = decoder.AddKeyValue(nil, result.Value)
 			require.NoError(t, err)
