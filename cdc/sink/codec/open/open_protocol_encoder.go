@@ -96,8 +96,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 				zap.Any("key", key))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
-		key, value, err = d.buildMessage
-		OnlyHandleKeyColumns(e)
+		key, value, err = d.buildMessagegOnlyHandleKeyColumns(e)
 		if err != nil {
 			return errors.Trace(err)
 		}
