@@ -158,7 +158,7 @@ func (m *feedStateManager) Tick(
 		m.shouldBeRunning = false
 		return
 	case model.StateError:
-		if m.state.Info.Error.IsChangefeedUnRetryableError() {
+		if m.state.Info.Error.ShouldFailChangefeed() {
 			m.shouldBeRunning = false
 			m.patchState(model.StateFailed)
 			return
@@ -511,7 +511,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// so we have to iterate all errs here to check wether it is a unretryable
 	// error in errs
 	for _, err := range errs {
-		if err.IsChangefeedUnRetryableError() {
+		if err.ShouldFailChangefeed() {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 				if info == nil {
 					return nil, false, nil
