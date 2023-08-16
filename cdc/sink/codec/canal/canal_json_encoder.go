@@ -359,6 +359,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 		Protocol: config.ProtocolCanalJSON,
 		Callback: callback,
 	}
+	m.IncRowsCount()
 
 	if m.Length() > c.config.MaxMessageBytes {
 		// for single message that is longer than max-message-bytes, do not send it.
@@ -385,8 +386,6 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 			}
 		}
 	}
-
-	m.IncRowsCount()
 
 	c.messages = append(c.messages, m)
 	return nil
