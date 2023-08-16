@@ -483,7 +483,12 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// if there are a fastFail error in errs, we can just fastFail the changefeed
 	// and no need to patch other error to the changefeed info
 	for _, err := range errs {
+<<<<<<< HEAD
 		if cerrors.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
+=======
+		if cerrors.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(err.Code)) ||
+			err.ShouldFailChangefeed() {
+>>>>>>> dcfcb43a99 (sink(cdc): ddl sink errors shouldn't fail changefeed quickly (#9581))
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 				if info == nil {
 					return nil, false, nil
