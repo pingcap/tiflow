@@ -247,6 +247,12 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 	return c
 }
 
+// WithChangefeedID set the `changefeedID`
+func (c *Config) WithChangefeedID(id model.ChangeFeedID) *Config {
+	c.ChangefeedID = id
+	return c
+}
+
 // Validate the Config
 func (c *Config) Validate() error {
 	if c.EnableTiDBExtension &&
