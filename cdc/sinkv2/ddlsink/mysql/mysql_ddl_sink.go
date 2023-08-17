@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -97,8 +98,7 @@ func NewMySQLDDLSink(
 	return m, nil
 }
 
-// WriteDDLEvent writes a DDL event to the mysql database.
-func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return m.execDDLWithMaxRetries(ctx, ddl)
 }
 
