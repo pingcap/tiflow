@@ -25,7 +25,7 @@ function run() {
 	run_sql "CREATE table test.external_metastore(id int primary key, val int);"
 
 	# run cdc cluster
-	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --cluster-id "test1" --addr "127.0.0.1:8300" --logsuffix external_metastore.server
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --config $CUR/conf/cdc.toml --cluster-id "test1" --addr "127.0.0.1:8300" --logsuffix external_metastore.server
 
 	SINK_URI="mysql://normal:123456@127.0.0.1:3306/"
 
