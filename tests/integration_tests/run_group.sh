@@ -46,7 +46,7 @@ groups=(
 	["G12"]='many_pk_or_uk capture_session_done_during_task ddl_attributes'
 	["G13"]='tiflash new_ci_collation_without_old_value region_merge common_1'
 	["G14"]='big_txn changefeed_finish force_replicate_table'
-	["G15"]='new_ci_collation_with_old_value batch_add_table multi_rocks'
+	["G15"]='new_ci_collation_with_old_value batch_add_table multi_rocks external_metastore'
 	# currently G16 is not running in kafka pipeline
 	["G16"]='owner_resign processor_etcd_worker_delay sink_hang'
 	["G17"]='clustered_index processor_resolved_ts_fallback'

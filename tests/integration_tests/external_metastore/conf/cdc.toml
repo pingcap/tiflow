@@ -1,0 +1,3 @@
+[metastore]
+type = "etcd"
+uri = "http://127.0.0.1:2479"
