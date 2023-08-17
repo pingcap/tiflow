@@ -97,19 +97,9 @@ func NewMySQLDDLSink(
 	return m, nil
 }
 
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
-func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	err := m.execDDLWithMaxRetries(ctx, ddl)
-	// we should not retry changefeed if DDL failed by return an unretryable error.
-	if !errorutil.IsRetryableDDLError(err) {
-		return cerror.WrapChangefeedUnretryableErr(err)
-	}
-	return errors.Trace(err)
-=======
 // WriteDDLEvent writes a DDL event to the mysql database.
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	return m.execDDLWithMaxRetries(ctx, ddl)
->>>>>>> dcfcb43a99 (sink(cdc): ddl sink errors shouldn't fail changefeed quickly (#9581)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 }
 
 func (m *mysqlDDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {

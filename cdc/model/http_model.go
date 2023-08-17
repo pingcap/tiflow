@@ -122,6 +122,12 @@ func (c ChangefeedCommonInfo) MarshalJSON() ([]byte, error) {
 	if c.FeedState == StateNormal {
 		c.RunningError = nil
 	}
+	if c.FeedState == StateUnInitialized {
+		c.FeedState = StateNormal
+	}
+	if c.FeedState == StatePending {
+		c.FeedState = StateWarning
+	}
 	return json.Marshal(struct {
 		Alias
 	}{

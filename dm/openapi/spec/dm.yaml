@@ -1775,6 +1775,11 @@ components:
           enum:
             - "pessimistic"
             - "optimistic"
+        strict_optimistic_shard_mode:
+          type: boolean
+          example: true
+          description: "whether to enable strict optimistic shard mode"
+          default: false
         meta_schema:
           type: string
           example: "dm-meta"

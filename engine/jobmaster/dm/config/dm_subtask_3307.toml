@@ -1,5 +1,6 @@
 is-sharding = false
-shard-mode = "pessimistic"
+shard-mode = "optimistic"
+strict-optimistic-shard-mode = true
 online-ddl = true
 shadow-table-rules = []
 trash-table-rules = []

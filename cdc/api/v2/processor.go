@@ -64,7 +64,7 @@ func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	if info.State != model.StateNormal {
+	if !info.State.IsRunning() {
 		_ = c.Error(
 			cerror.WrapError(
 				cerror.ErrAPIInvalidParam,

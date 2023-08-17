@@ -2,6 +2,7 @@ name: test
 task-mode: all
 is-sharding: false
 shard-mode: ""
+strict-optimistic-shard-mode: false
 ignore-checking-items: []
 meta-schema: dm_meta
 enable-heartbeat: false

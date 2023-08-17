@@ -40,6 +40,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]DBConfig) ([]*
 		cfg := NewSubTaskConfig()
 		cfg.IsSharding = c.IsSharding
 		cfg.ShardMode = c.ShardMode
+		cfg.StrictOptimisticShardMode = c.StrictOptimisticShardMode
 		cfg.OnlineDDL = c.OnlineDDL
 		cfg.TrashTableRules = c.TrashTableRules
 		cfg.ShadowTableRules = c.ShadowTableRules
@@ -179,6 +180,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *DBConfig, sourceCf
 		} else {
 			subTaskCfg.IsSharding = false
 		}
+		if task.StrictOptimisticShardMode != nil {
+			subTaskCfg.StrictOptimisticShardMode = *task.StrictOptimisticShardMode
+		}
 		// set online ddl plugin config
 		subTaskCfg.OnlineDDL = task.EnhanceOnlineSchemaChange
 		// set case sensitive from source
@@ -312,6 +316,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.TaskMode = stCfg0.Mode
 	c.IsSharding = stCfg0.IsSharding
 	c.ShardMode = stCfg0.ShardMode
+	c.StrictOptimisticShardMode = stCfg0.StrictOptimisticShardMode
 	c.IgnoreCheckingItems = stCfg0.IgnoreCheckingItems
 	c.MetaSchema = stCfg0.MetaSchema
 	c.EnableHeartbeat = stCfg0.EnableHeartbeat
@@ -609,6 +614,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 		taskShardMode := openapi.TaskShardMode(oneSubtaskConfig.ShardMode)
 		task.ShardMode = &taskShardMode
 	}
+	task.StrictOptimisticShardMode = &oneSubtaskConfig.StrictOptimisticShardMode
 	if len(filterMap) > 0 {
 		task.BinlogFilterRule = &filterRuleMap
 	}
