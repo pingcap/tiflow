@@ -364,7 +364,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 	if m.Length() > c.config.MaxMessageBytes {
 		// for single message that is longer than max-message-bytes, do not send it.
 		if c.config.LargeMessageHandle.Disabled() {
-			log.Warn("Single message is too large for canal-json",
+			log.Error("Single message is too large for canal-json",
 				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
 				zap.Int("length", m.Length()),
 				zap.Any("table", e.Table))
@@ -378,7 +378,7 @@ func (c *JSONBatchEncoder) AppendRowChangedEvent(
 			}
 			m.Value = value
 			if m.Length() > c.config.MaxMessageBytes {
-				log.Warn("Single message is too large for canal-json, only encode handle-key columns",
+				log.Error("Single message is too large for canal-json, only encode handle-key columns",
 					zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
 					zap.Int("length", m.Length()),
 					zap.Any("table", e.Table))
