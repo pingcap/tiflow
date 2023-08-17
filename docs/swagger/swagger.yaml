@@ -146,9 +146,9 @@ definitions:
     type: object
   config.LargeMessageHandleConfig:
     properties:
-      claim-check-compression:
-        type: string
       claim-check-storage-uri:
+        type: string
+      large-message-handle-compression:
         type: string
       large-message-handle-option:
         type: string
@@ -791,9 +791,9 @@ definitions:
     type: object
   v2.LargeMessageHandleConfig:
     properties:
-      claim_check_compression:
-        type: string
       claim_check_storage_uri:
+        type: string
+      large_message_handle_compression:
         type: string
       large_message_handle_option:
         type: string
