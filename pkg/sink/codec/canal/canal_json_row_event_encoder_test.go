@@ -196,7 +196,7 @@ func TestCanalJSONCompressionE2E(t *testing.T) {
 
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
+	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.ZSTD
 
 	encoder := newJSONRowEventEncoder(codecConfig)
 
@@ -260,61 +260,6 @@ func TestCanalJSONCompressionE2E(t *testing.T) {
 	decodedWatermark, err := decoder.NextResolvedEvent()
 	require.NoError(t, err)
 	require.Equal(t, decodedWatermark, waterMark)
-
-	// encode handle key only row changed event
-	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
-	codecConfig.MaxMessageBytes = 500
-	encoder = newJSONRowEventEncoder(codecConfig)
-
-	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
-	require.NoError(t, err)
-
-	handleKeyOnlyEvent := encoder.Build()[0]
-
-	decoder, err = NewBatchDecoder(ctx, codecConfig, &sql.DB{})
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(handleKeyOnlyEvent.Key, handleKeyOnlyEvent.Value)
-	require.NoError(t, err)
-
-	var decoded canalJSONMessageWithTiDBExtension
-	err = json.Unmarshal(decoder.(*batchDecoder).data, &decoded)
-	require.NoError(t, err)
-	require.True(t, decoded.Extensions.OnlyHandleKey)
-
-	for _, col := range testCaseInsert.Columns {
-		if col.Flag.IsHandleKey() {
-			require.Contains(t, decoded.Data[0], col.Name)
-			require.Contains(t, decoded.SQLType, col.Name)
-			require.Contains(t, decoded.MySQLType, col.Name)
-		} else {
-			require.NotContains(t, decoded.Data[0], col.Name)
-			require.NotContains(t, decoded.SQLType, col.Name)
-			require.NotContains(t, decoded.MySQLType, col.Name)
-		}
-	}
-
-	// encode claim check event.
-	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
-	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/canal-json-claim-check"
-
-	encoder = newJSONRowEventEncoder(codecConfig)
-
-	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
-	require.NoError(t, err)
-
-	largeMessage := encoder.Build()[0]
-	require.NotEmpty(t, largeMessage.ClaimCheckFileName)
-
-	claimCheckLocationMessage, err := encoder.(codec.ClaimCheckLocationEncoder).NewClaimCheckLocationMessage(largeMessage)
-	require.NoError(t, err)
-
-	decoder, err = NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
-	require.NoError(t, err)
-
 }
 
 func TestCanalJSONClaimCheckE2E(t *testing.T) {
@@ -323,6 +268,7 @@ func TestCanalJSONClaimCheckE2E(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
+	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
 	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/canal-json-claim-check"
 	codecConfig.MaxMessageBytes = 500
 
@@ -341,8 +287,10 @@ func TestCanalJSONClaimCheckE2E(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, claimCheckLocationMessage.ClaimCheckFileName)
 
+	value, err := common.Decompress(compression.Snappy, claimCheckLocationMessage.Value)
+	require.NoError(t, err)
 	var decoded canalJSONMessageWithTiDBExtension
-	err = json.Unmarshal(claimCheckLocationMessage.Value, &decoded)
+	err = json.Unmarshal(value, &decoded)
 	require.NoError(t, err)
 	_, claimCheckFilename := filepath.Split(decoded.Extensions.ClaimCheckLocation)
 	require.Equal(t, largeMessage.ClaimCheckFileName, claimCheckFilename)
@@ -393,6 +341,7 @@ func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
 	codecConfig.MaxMessageBytes = 500
 	encoder := newJSONRowEventEncoder(codecConfig)
 
@@ -401,20 +350,29 @@ func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
 
 	message := encoder.Build()[0]
 
-	var decoded canalJSONMessageWithTiDBExtension
-	err = json.Unmarshal(message.Value, &decoded)
+	decoder, err := NewBatchDecoder(context.Background(), codecConfig, &sql.DB{})
 	require.NoError(t, err)
-	require.True(t, decoded.Extensions.OnlyHandleKey)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, ok, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, messageType, model.MessageTypeRow)
+
+	handleKeyOnlyMessage := decoder.(*batchDecoder).msg.(*canalJSONMessageWithTiDBExtension)
+	require.True(t, handleKeyOnlyMessage.Extensions.OnlyHandleKey)
 
 	for _, col := range testCaseInsert.Columns {
 		if col.Flag.IsHandleKey() {
-			require.Contains(t, decoded.Data[0], col.Name)
-			require.Contains(t, decoded.SQLType, col.Name)
-			require.Contains(t, decoded.MySQLType, col.Name)
+			require.Contains(t, handleKeyOnlyMessage.Data[0], col.Name)
+			require.Contains(t, handleKeyOnlyMessage.SQLType, col.Name)
+			require.Contains(t, handleKeyOnlyMessage.MySQLType, col.Name)
 		} else {
-			require.NotContains(t, decoded.Data[0], col.Name)
-			require.NotContains(t, decoded.SQLType, col.Name)
-			require.NotContains(t, decoded.MySQLType, col.Name)
+			require.NotContains(t, handleKeyOnlyMessage.Data[0], col.Name)
+			require.NotContains(t, handleKeyOnlyMessage.SQLType, col.Name)
+			require.NotContains(t, handleKeyOnlyMessage.MySQLType, col.Name)
 		}
 	}
 }
