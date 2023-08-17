@@ -275,7 +275,6 @@ func newJSONMessageForDML(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-
 	return value, nil
 }
 
@@ -356,8 +355,9 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	//value, err = c.compressor.Encode(value)
-
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

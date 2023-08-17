@@ -76,11 +76,10 @@ func GetEncoderConfig(
 	if err := encoderConfig.Apply(sinkURI, replicaConfig); err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkInvalidConfig, err)
 	}
-	encoderConfig.ChangefeedID = changefeedID
 	// Always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
 	// to prevent that the encoder generate batched message too large
 	// then cause producer meet `message too large`.
-	encoderConfig = encoderConfig.WithMaxMessageBytes(maxMsgBytes)
+	encoderConfig = encoderConfig.WithMaxMessageBytes(maxMsgBytes).WithChangefeedID(changefeedID)
 
 	if err := encoderConfig.Validate(); err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkInvalidConfig, err)

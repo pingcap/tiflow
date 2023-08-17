@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -55,12 +54,12 @@ func NewBatchDecoder(
 	ctx context.Context, codecConfig *common.Config, db *sql.DB,
 ) (codec.RowEventDecoder, error) {
 	var (
-		storage storage.ExternalStorage
-		err     error
+		externalStorage storage.ExternalStorage
+		err             error
 	)
 	if codecConfig.LargeMessageHandle.EnableClaimCheck() {
 		storageURI := codecConfig.LargeMessageHandle.ClaimCheckStorageURI
-		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		externalStorage, err = util.GetExternalStorageFromURI(ctx, storageURI)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
@@ -73,7 +72,7 @@ func NewBatchDecoder(
 
 	return &batchDecoder{
 		config:       codecConfig,
-		storage:      storage,
+		storage:      externalStorage,
 		upstreamTiDB: db,
 		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
 	}, nil
@@ -81,6 +80,14 @@ func NewBatchDecoder(
 
 // AddKeyValue implements the RowEventDecoder interface
 func (b *batchDecoder) AddKeyValue(_, value []byte) error {
+	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		log.Error("decompress data failed",
+			zap.String("compression", b.config.LargeMessageHandle.LargeMessageHandleCompression),
+			zap.Error(err))
+
+		return errors.Trace(err)
+	}
 	b.data = value
 	return nil
 }
@@ -94,7 +101,6 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	var (
 		msg         canalJSONMessageInterface = &JSONMessage{}
 		encodedData []byte
-		err         error
 	)
 
 	if b.config.EnableTiDBExtension {
@@ -102,14 +108,6 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 			JSONMessage: &JSONMessage{},
 			Extensions:  &tidbExtension{},
 		}
-	}
-
-	b.data, err = compression.Decode(b.config.LargeMessageHandle.LargeMessageHandleCompression, b.data)
-	if err != nil {
-		log.Info("decompress data failed",
-			zap.String("compression", b.config.LargeMessageHandle.LargeMessageHandleCompression),
-			zap.Error(err))
-		return model.MessageTypeUnknown, false, err
 	}
 
 	if len(b.config.Terminator) > 0 {

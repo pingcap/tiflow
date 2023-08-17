@@ -44,18 +44,20 @@ type BatchDecoder struct {
 
 	storage storage.ExternalStorage
 
+	config *common.Config
+
 	upstreamTiDB *sql.DB
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
 func NewBatchDecoder(ctx context.Context, config *common.Config, db *sql.DB) (codec.RowEventDecoder, error) {
 	var (
-		storage storage.ExternalStorage
-		err     error
+		externalStorage storage.ExternalStorage
+		err             error
 	)
 	if config.LargeMessageHandle.EnableClaimCheck() {
 		storageURI := config.LargeMessageHandle.ClaimCheckStorageURI
-		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		externalStorage, err = util.GetExternalStorageFromURI(ctx, storageURI)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
@@ -67,7 +69,8 @@ func NewBatchDecoder(ctx context.Context, config *common.Config, db *sql.DB) (co
 	}
 
 	return &BatchDecoder{
-		storage:      storage,
+		config:       config,
+		storage:      externalStorage,
 		upstreamTiDB: db,
 	}, nil
 }
@@ -86,6 +89,13 @@ func (b *BatchDecoder) AddKeyValue(key, value []byte) error {
 	}
 
 	b.keyBytes = key
+
+	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return cerror.ErrOpenProtocolCodecInvalidData.
+			GenWithStack("decompress data failed")
+	}
+
 	b.valueBytes = value
 
 	return nil
@@ -317,9 +327,14 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (
 		return nil, errors.Trace(err)
 	}
 
+	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, claimCheckM.Value)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	rowMsg := new(messageRow)
-	valueLen := binary.BigEndian.Uint64(claimCheckM.Value[:8])
-	value := claimCheckM.Value[8 : valueLen+8]
+	valueLen := binary.BigEndian.Uint64(value[:8])
+	value = value[8 : valueLen+8]
 	if err := rowMsg.decode(value); err != nil {
 		return nil, errors.Trace(err)
 	}
