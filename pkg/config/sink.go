@@ -165,8 +165,7 @@ type SinkConfig struct {
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 
-	// GlueSchemaRegistryConfig is only available when the downstream is MQ using avro protocol.
-	GlueSchemaRegistryConfig *GlueSchemaRegistryConfig `toml:"glue_schema_registry_config" json:"glue_schema_registry_config,omitempty"`
+	GlueSchemaRegistryConfig *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -669,11 +668,11 @@ type GlueSchemaRegistryConfig struct {
 	RegistryName string `toml:"registry-name" json:"registry-name"`
 	// Region of the schema registry
 	Region string `toml:"region" json:"region"`
-	// AccessKeyID of the schema registry
-	AccessKeyID string `toml: "access-key-id" json:"access-key-id,omitempty"`
-	// AccessKeySecret of the schema registry
-	AccessKeySecret string `toml: "access-key-secret" json:"access-key-secret,omitempty"`
-	Token           string `toml: "token" json:"token,omitempty"`
+	// AccessKey of the schema registry
+	AccessKey string `toml:"access-key" json:"access-key,omitempty"`
+	// SecretAccessKey of the schema registry
+	SecretAccessKey string `toml:"secret-access-key" json:"secret-access-key,omitempty"`
+	Token           string `toml:"token" json:"token,omitempty"`
 }
 
 func (g *GlueSchemaRegistryConfig) Validate() error {
@@ -685,7 +684,7 @@ func (g *GlueSchemaRegistryConfig) Validate() error {
 		return cerror.ErrInvalidGlueSchemaRegistryConfig.
 			GenWithStack("region is empty, is must be set")
 	}
-	if g.AccessKeyID != "" && g.AccessKeySecret == "" {
+	if g.AccessKey != "" && g.SecretAccessKey == "" {
 		return cerror.ErrInvalidGlueSchemaRegistryConfig.
 			GenWithStack("access-key is set, but access-key-secret is empty, they must be set together")
 	}
@@ -693,5 +692,5 @@ func (g *GlueSchemaRegistryConfig) Validate() error {
 }
 
 func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
-	return g.AccessKeyID == "" && g.AccessKeySecret == "" && g.Token == ""
+	return g.AccessKey == "" && g.SecretAccessKey == "" && g.Token == ""
 }

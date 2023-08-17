@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -63,15 +64,30 @@ func NewGlueSchemaManager(
 		awsCfg = *aws.NewConfig()
 		awsCfg.Region = cfg.Region
 		awsCfg.Credentials = credentials.
-			NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.AccessKeySecret, cfg.Token)
+			NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretAccessKey, cfg.Token)
 	}
 	client := glue.NewFromConfig(awsCfg)
-	return &glueSchemaManager{
+	res := &glueSchemaManager{
 		registryName: cfg.RegistryName,
 		client:       client,
 		cache:        make(map[string]*schemaCacheEntry),
 		registryType: common.SchemaRegistryTypeGlue,
-	}, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	registry, err := res.client.GetRegistry(
+		ctx,
+		&glue.GetRegistryInput{
+			RegistryId: &types.RegistryId{
+				RegistryName: &cfg.RegistryName,
+			},
+		},
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Info("Glue schema registry initialized", zap.Any("registry", registry))
+	return res, nil
 }
 
 // Register a schema into schema registry, no cache

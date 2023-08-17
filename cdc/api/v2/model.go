@@ -417,8 +417,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			res.Sink.GlueSchemaRegistryConfig = &config.GlueSchemaRegistryConfig{
 				RegistryName:    c.Sink.GlueSchemaRegistryConfig.RegistryName,
 				Region:          c.Sink.GlueSchemaRegistryConfig.Region,
-				AccessKeyID:     c.Sink.GlueSchemaRegistryConfig.AccessKeyID,
-				AccessKeySecret: c.Sink.GlueSchemaRegistryConfig.AccessKeySecret,
+				AccessKey:       c.Sink.GlueSchemaRegistryConfig.AccessKey,
+				SecretAccessKey: c.Sink.GlueSchemaRegistryConfig.SecretAccessKey,
 				Token:           c.Sink.GlueSchemaRegistryConfig.Token,
 			}
 		}
@@ -632,8 +632,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			glueSchemaRegistryConfig = &GlueSchemaRegistryConfig{
 				RegistryName:    cloned.Sink.GlueSchemaRegistryConfig.RegistryName,
 				Region:          cloned.Sink.GlueSchemaRegistryConfig.Region,
-				AccessKeyID:     cloned.Sink.GlueSchemaRegistryConfig.AccessKeyID,
-				AccessKeySecret: cloned.Sink.GlueSchemaRegistryConfig.AccessKeySecret,
+				AccessKey:       cloned.Sink.GlueSchemaRegistryConfig.AccessKey,
+				SecretAccessKey: cloned.Sink.GlueSchemaRegistryConfig.SecretAccessKey,
 				Token:           cloned.Sink.GlueSchemaRegistryConfig.Token,
 			}
 		}
@@ -798,29 +798,27 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                         *string             `json:"protocol,omitempty"`
-	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
-	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
-	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
-	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
-	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
-	Terminator                       *string             `json:"terminator,omitempty"`
-	DateSeparator                    *string             `json:"date_separator,omitempty"`
-	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
-	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
-	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
-	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
-	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
-	SafeMode                         *bool               `json:"safe_mode,omitempty"`
-	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
-	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
-	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
-	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
-	GlueSchemaRegistryConfig         *GlueSchemaRegistryConfig  json:"glue_schema_registry_config,omitempty"`
-
+	Protocol                         *string                   `json:"protocol,omitempty"`
+	SchemaRegistry                   *string                   `json:"schema_registry,omitempty"`
+	CSVConfig                        *CSVConfig                `json:"csv,omitempty"`
+	DispatchRules                    []*DispatchRule           `json:"dispatchers,omitempty"`
+	ColumnSelectors                  []*ColumnSelector         `json:"column_selectors,omitempty"`
+	TxnAtomicity                     *string                   `json:"transaction_atomicity,omitempty"`
+	EncoderConcurrency               *int                      `json:"encoder_concurrency,omitempty"`
+	Terminator                       *string                   `json:"terminator,omitempty"`
+	DateSeparator                    *string                   `json:"date_separator,omitempty"`
+	EnablePartitionSeparator         *bool                     `json:"enable_partition_separator,omitempty"`
+	FileIndexWidth                   *int                      `json:"file_index_width,omitempty"`
+	EnableKafkaSinkV2                *bool                     `json:"enable_kafka_sink_v2,omitempty"`
+	OnlyOutputUpdatedColumns         *bool                     `json:"only_output_updated_columns,omitempty"`
+	DeleteOnlyOutputHandleKeyColumns *bool                     `json:"delete_only_output_handle_key_columns"`
+	SafeMode                         *bool                     `json:"safe_mode,omitempty"`
+	KafkaConfig                      *KafkaConfig              `json:"kafka_config,omitempty"`
+	MySQLConfig                      *MySQLConfig              `json:"mysql_config,omitempty"`
+	CloudStorageConfig               *CloudStorageConfig       `json:"cloud_storage_config,omitempty"`
+	AdvanceTimeoutInSec              *uint                     `json:"advance_timeout,omitempty"`
+	GlueSchemaRegistryConfig         *GlueSchemaRegistryConfig `json:"glue_schema_registry_config,omitempty"`
 }
-
 
 // CSVConfig denotes the csv config
 // This is the same as config.CSVConfig
@@ -1090,12 +1088,12 @@ type ChangefeedStatus struct {
 
 type GlueSchemaRegistryConfig struct {
 	// Name of the schema registry
-	RegistryName string `toml:"registry-name" json:"registry-name"`
+	RegistryName string `json:"registry_name"`
 	// Region of the schema registry
-	Region string `toml:"region" json:"region"`
-	// AccessKeyID of the schema registry
-	AccessKeyID string `toml: "access-key-id" json:"access-key-id,omitempty"`
-	// AccessKeySecret of the schema registry
-	AccessKeySecret string `toml: "access-key-secret" json:"access-key-secret,omitempty"`
-	Token           string `toml: "token" json:"token,omitempty"`
+	Region string `json:"region"`
+	// AccessKey of the schema registry
+	AccessKey string `json:"access_key,omitempty"`
+	// SecretAccessKey of the schema registry
+	SecretAccessKey string `json:"secret_access_key,omitempty"`
+	Token           string `json:"token,omitempty"`
 }
