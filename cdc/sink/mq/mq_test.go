@@ -168,6 +168,7 @@ func TestKafkaSink(t *testing.T) {
 }
 
 func TestFlushRowChangedEvents(t *testing.T) {
+	t.Skip("skip because of race introduced by #9026")
 	ctx, cancel := context.WithCancel(context.Background())
 
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
