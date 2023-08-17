@@ -95,7 +95,6 @@ func (b *batchDecoder) AddKeyValue(_, value []byte) error {
 // HasNext implements the RowEventDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	if b.data == nil {
-		log.Panic("canal-json decoder has no data to decode, it's nil")
 		return model.MessageTypeUnknown, false, nil
 	}
 	var (

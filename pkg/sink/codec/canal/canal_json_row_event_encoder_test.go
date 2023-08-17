@@ -412,11 +412,9 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 
 func TestBatching(t *testing.T) {
 	t.Parallel()
-	encoder := newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: false,
-		Terminator:          "",
-		MaxMessageBytes:     config.DefaultMaxMessageBytes,
-	})
+
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	encoder := newJSONRowEventEncoder(codecConfig)
 	require.NotNil(t, encoder)
 
 	updateCase := *testCaseUpdate
@@ -449,14 +447,10 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
-		codecConfig := &common.Config{
-			EnableTiDBExtension: enable,
-		}
-		encoder := &JSONRowEventEncoder{
-			builder: newCanalEntryBuilder(),
-			config:  codecConfig,
-		}
+		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+		codecConfig.EnableTiDBExtension = enable
 
+		encoder := newJSONRowEventEncoder(codecConfig)
 		require.NotNil(t, encoder)
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
@@ -498,12 +492,14 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 
 func TestCheckpointEventValueMarshal(t *testing.T) {
 	t.Parallel()
-	var watermark uint64 = 1024
-	encoder := &JSONRowEventEncoder{
-		builder: newCanalEntryBuilder(),
-		config:  &common.Config{EnableTiDBExtension: true},
-	}
+
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+
+	encoder := newJSONRowEventEncoder(codecConfig)
 	require.NotNil(t, encoder)
+
+	var watermark uint64 = 1024
 	msg, err := encoder.EncodeCheckpointEvent(watermark)
 	require.NoError(t, err)
 	require.NotNil(t, msg)
@@ -586,11 +582,9 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 }
 
 func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
-	encoder := newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: true,
-		Terminator:          "",
-		MaxMessageBytes:     config.DefaultMaxMessageBytes,
-	})
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+	encoder := newJSONRowEventEncoder(codecConfig)
 	require.NotNil(t, encoder)
 
 	count := 0
