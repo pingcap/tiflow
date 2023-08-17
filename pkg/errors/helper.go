@@ -83,8 +83,8 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrStorageSinkInvalidConfig,
 }
 
-// IsChangefeedUnRetryableError returns true if an error is a changefeed not retry error.
-func IsChangefeedUnRetryableError(err error) bool {
+// ShouldFailChangefeed returns true if an error is a changefeed not retry error.
+func ShouldFailChangefeed(err error) bool {
 	for _, e := range changefeedUnRetryableErrors {
 		if e.Equal(err) {
 			return true

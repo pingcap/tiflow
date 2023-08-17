@@ -293,7 +293,8 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 				zap.Duration("cost", time.Since(start)))
 		}
 
-		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+		// If the error is retryable, we should retry to re-establish the internal resources.
+		if !cerror.ShouldFailChangefeed(err) && errors.Cause(err) != context.Canceled {
 			select {
 			case <-m.managerCtx.Done():
 			case warnings[0] <- err:

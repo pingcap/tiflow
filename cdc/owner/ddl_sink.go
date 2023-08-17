@@ -185,7 +185,7 @@ func (s *ddlSinkImpl) retrySinkAction(ctx context.Context, name string, action f
 		}
 		s.sinkV1 = nil
 		s.sinkV2 = nil
-		isRetryable := !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled
+		isRetryable := !cerror.ShouldFailChangefeed(err) && errors.Cause(err) != context.Canceled
 		log.Warn("owner ddl sink fails on action",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
@@ -423,7 +423,7 @@ func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) (e
 		if err == nil {
 			return nil
 		}
-		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
+		if !cerror.ShouldFailChangefeed(err) && errors.Cause(err) != context.Canceled {
 			// TODO(qupeng): retry it internally after async sink syncPoint is ready.
 			s.reportError(err)
 			return err
