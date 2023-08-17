@@ -126,7 +126,7 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 		err      error
 	}
 
-	ddl_with_tab := `CREATE TABLE if not exists sbtest25 
+	ddlWithTab := `CREATE TABLE if not exists sbtest25 
 	(
 		id bigint NOT NULL,
 		k bigint NOT NULL DEFAULT '0',
@@ -135,7 +135,7 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 		PRIMARY KEY (id),
 	    KEY k_1 (k)
 	) 	ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
-	ddl_with_two_tab := `		CREATE TABLE if not exists sbtest25 
+	ddlWithTwoTab := `		CREATE TABLE if not exists sbtest25 
 	(
 		id bigint NOT NULL,
 		k bigint NOT NULL DEFAULT '0',
@@ -145,7 +145,7 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 		KEY k_1 (k)
 		)
 		ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin`
-	ddl_with_new_line := `CREATE TABLE finish_mark 
+	ddlWithNewLine := `CREATE TABLE finish_mark 
 	(
 		
 		id INT AUTO_INCREMENT PRIMARY KEY,
@@ -154,9 +154,9 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 
 	cases := []c{
 		{"CREATE DATABASE test", timodel.ActionCreateSchema, bf.CreateDatabase, nil},
-		{ddl_with_two_tab, timodel.ActionCreateTable, bf.CreateTable, nil},
-		{ddl_with_tab, timodel.ActionCreateTable, bf.CreateTable, nil},
-		{ddl_with_new_line, timodel.ActionCreateTable, bf.CreateTable, nil},
+		{ddlWithTwoTab, timodel.ActionCreateTable, bf.CreateTable, nil},
+		{ddlWithTab, timodel.ActionCreateTable, bf.CreateTable, nil},
+		{ddlWithNewLine, timodel.ActionCreateTable, bf.CreateTable, nil},
 	}
 	p := parser.New()
 	for _, c := range cases {
