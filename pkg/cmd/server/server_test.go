@@ -206,6 +206,7 @@ func TestParseCfg(t *testing.T) {
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MetastoreConfig:     &config.MetastoreConfig{},
 	}, o.serverConfig)
 }
 
@@ -355,6 +356,7 @@ check-balance-interval = "10s"
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MetastoreConfig:     &config.MetastoreConfig{},
 	}, o.serverConfig)
 }
 
@@ -492,6 +494,7 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MetastoreConfig:     &config.MetastoreConfig{},
 	}, o.serverConfig)
 }
 
