@@ -21,6 +21,7 @@ import (
 
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -187,6 +188,66 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
+}
+
+func TestCanalJSONCompressionE2E(t *testing.T) {
+	t.Parallel()
+
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
+
+	encoder := newJSONRowEventEncoder(codecConfig)
+
+	// encode normal row changed event
+	ctx := context.Background()
+	err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
+	require.NoError(t, err)
+
+	message := encoder.Build()[0]
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, messageType, model.MessageTypeRow)
+
+	decodedEvent, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.Equal(t, decodedEvent.CommitTs, testCaseInsert.CommitTs)
+	require.Equal(t, decodedEvent.Table.Schema, testCaseInsert.Table.Schema)
+	require.Equal(t, decodedEvent.Table.Table, testCaseInsert.Table.Table)
+
+	// encode DDL event
+	message, err = encoder.EncodeDDLEvent(testCaseDDL)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err = decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, messageType, model.MessageTypeDDL)
+
+	decodedDDL, err := decoder.NextDDLEvent()
+	require.NoError(t, err)
+
+	require.Equal(t, decodedDDL.Query, testCaseDDL.Query)
+	require.Equal(t, decodedDDL.CommitTs, testCaseDDL.CommitTs)
+	require.Equal(t, decodedDDL.TableInfo.TableName.Schema, testCaseDDL.TableInfo.TableName.Schema)
+	require.Equal(t, decodedDDL.TableInfo.TableName.Table, testCaseDDL.TableInfo.TableName.Table)
+
+	// encode checkpoint event
+
+	// encode handle key only row changed event
+
+	// encode claim check event.
 }
 
 func TestCanalJSONClaimCheckE2E(t *testing.T) {
