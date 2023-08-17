@@ -163,7 +163,14 @@ const (
     }
   },
   "cluster-id": "default",
-  "max-memory-percentage": 70
+  "max-memory-percentage": 70,
+  "metastore": {
+    "type": "",
+    "uri": "",
+    "ca-path": "",
+    "cert-path": "",
+    "key-path": ""
+  }
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{

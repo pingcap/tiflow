@@ -192,7 +192,7 @@ type MetastoreConfig struct {
 
 // IsEnableExternalMetastore checks whether external metastore is enabled or not.
 func (s *MetastoreConfig) IsEnableExternalMetastore() bool {
-	return s.URI != "" && s.Type != ""
+	return s.URI != ""
 }
 
 // IsTLSEnabled checks whether TLS is enabled or not.
@@ -203,7 +203,7 @@ func (s *MetastoreConfig) IsTLSEnabled() bool {
 // GetMetaStoreSecurity returns the security config for metastore,
 // if metastore is not enabled, return the pd security config for server.
 func (c *ServerConfig) GetMetaStoreSecurity() *SecurityConfig {
-	if c.MetastoreConfig == nil && c.MetastoreConfig.URI != "" {
+	if c.MetastoreConfig != nil && c.MetastoreConfig.IsEnableExternalMetastore() {
 		return &SecurityConfig{
 			CertPath: c.MetastoreConfig.CertPath,
 			KeyPath:  c.MetastoreConfig.KeyPath,
@@ -325,7 +325,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 		log.Warn("server max-memory-percentage must be less than 100, set to default value")
 		c.MaxMemoryPercentage = DefaultMaxMemoryPercentage
 	}
-	if c.MetastoreConfig.IsEnableExternalMetastore() {
+	if c.MetastoreConfig != nil && c.MetastoreConfig.IsEnableExternalMetastore() {
 		if c.MetastoreConfig.Type != "" && c.MetastoreConfig.Type != "etcd" {
 			return errors.Errorf("currently metastore type must be etcd or empty")
 		}
