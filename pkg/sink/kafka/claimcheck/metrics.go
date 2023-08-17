@@ -34,20 +34,10 @@ var (
 			Name:      "mq_claim_check_send_message_count",
 			Help:      "The total count of messages sent to the external claim-check storage.",
 		}, []string{"namespace", "changefeed"})
-
-	compressionRatio = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "compression",
-			Name:      "ratio",
-			Help:      "The compression ratio",
-			Buckets:   prometheus.LinearBuckets(0, 100, 20),
-		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all claim check related metrics
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(claimCheckSendMessageDuration)
 	registry.MustRegister(claimCheckSendMessageCount)
-	registry.MustRegister(compressionRatio)
 }
