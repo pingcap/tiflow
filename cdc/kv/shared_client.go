@@ -1087,7 +1087,7 @@ func (s *SharedClient) newRequestedTable(
 func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) MultiplexingEvent {
 	return MultiplexingEvent{
 		RegionFeedEvent: event,
-		SubscriptionID:  SubscriptionID(r.subscriptionID),
+		SubscriptionID:  r.subscriptionID,
 		Start:           time.Now(),
 	}
 }
