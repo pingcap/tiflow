@@ -592,6 +592,11 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		currTime := m.upstream.PDClock.CurrentTime()
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
 		m.lastWarningReportCheckpointTs = m.state.Status.CheckpointTs
+		log.Info("changefeed retry on warning for a very long time and does not resume, "+
+			"it will be failed", zap.String("changefeed", m.state.ID.ID),
+			zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
+			zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
+		)
 		// Conditions:
 		// 1. checkpoint lag is large enough;
 		// 2. checkpoint hasn't been advanced for a long while;
