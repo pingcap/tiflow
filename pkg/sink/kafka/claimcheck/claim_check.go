@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package large_message_handle
+package claimcheck
 
 import (
 	"context"
@@ -43,8 +43,8 @@ type ClaimCheck struct {
 }
 
 // New return a new ClaimCheck.
-func New(ctx context.Context, config *Config, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
-	externalStorage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
+func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
+	externalStorage, err := util.GetExternalStorageFromURI(ctx, storageURI)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -52,7 +52,7 @@ func New(ctx context.Context, config *Config, changefeedID model.ChangeFeedID) (
 	log.Info("claim-check enabled",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.String("storageURI", config.ClaimCheckStorageURI))
+		zap.String("storageURI", storageURI))
 
 	return &ClaimCheck{
 		changefeedID:              changefeedID,

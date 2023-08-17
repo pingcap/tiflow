@@ -1,7 +1,7 @@
-package large_message_handle
+package config
 
 import (
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -14,30 +14,30 @@ const (
 	LargeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
 )
 
-// Config is the configuration for handling large message.
-type Config struct {
+// LargeMessageHandleConfig is the configuration for handling large message.
+type LargeMessageHandleConfig struct {
 	LargeMessageHandleOption      string `toml:"large-message-handle-option" json:"large-message-handle-option"`
 	LargeMessageHandleCompression string `toml:"large-message-handle-compression" json:"large-message-handle-compression"`
 	ClaimCheckStorageURI          string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
 }
 
-// NewDefaultConfig return the default Config.
-func NewDefaultConfig() *Config {
-	return &Config{
+// NewLargeMessageHandleConfig return the default Config.
+func NewLargeMessageHandleConfig() *LargeMessageHandleConfig {
+	return &LargeMessageHandleConfig{
 		LargeMessageHandleOption:      LargeMessageHandleOptionNone,
-		LargeMessageHandleCompression: "none",
+		LargeMessageHandleCompression: compression.None,
 	}
 }
 
 // Validate the Config.
-func (c *Config) Validate(protocol config.Protocol, enableTiDBExtension bool) error {
+func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtension bool) error {
 	if c.LargeMessageHandleOption == LargeMessageHandleOptionNone {
 		return nil
 	}
 
 	switch protocol {
-	case config.ProtocolOpen:
-	case config.ProtocolCanalJSON:
+	case ProtocolOpen:
+	case ProtocolCanalJSON:
 		if !enableTiDBExtension {
 			return cerror.ErrInvalidReplicaConfig.GenWithStack(
 				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
@@ -57,7 +57,7 @@ func (c *Config) Validate(protocol config.Protocol, enableTiDBExtension bool) er
 	}
 
 	if c.LargeMessageHandleCompression != "" {
-		if !Supported(c.LargeMessageHandleCompression) {
+		if !compression.Supported(c.LargeMessageHandleCompression) {
 			return cerror.ErrInvalidReplicaConfig.GenWithStack(
 				"large message handle compression is not supported, got %s", c.LargeMessageHandleCompression)
 		}
@@ -66,7 +66,7 @@ func (c *Config) Validate(protocol config.Protocol, enableTiDBExtension bool) er
 }
 
 // HandleKeyOnly returns true if handle large message by encoding handle key only.
-func (c *Config) HandleKeyOnly() bool {
+func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
 	if c == nil {
 		return false
 	}
@@ -74,7 +74,7 @@ func (c *Config) HandleKeyOnly() bool {
 }
 
 // EnableClaimCheck returns true if enable claim check.
-func (c *Config) EnableClaimCheck() bool {
+func (c *LargeMessageHandleConfig) EnableClaimCheck() bool {
 	if c == nil {
 		return false
 	}
@@ -82,7 +82,7 @@ func (c *Config) EnableClaimCheck() bool {
 }
 
 // Disabled returns true if disable large message handle.
-func (c *Config) Disabled() bool {
+func (c *LargeMessageHandleConfig) Disabled() bool {
 	if c == nil {
 		return false
 	}

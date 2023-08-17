@@ -16,7 +16,7 @@ package mq
 import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -55,7 +55,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(WorkerSendMessageDuration)
 	registry.MustRegister(WorkerBatchSize)
 	registry.MustRegister(WorkerBatchDuration)
-	large_message_handle.InitMetrics(registry)
+	claimcheck.InitMetrics(registry)
 	codec.InitMetrics(registry)
 	kafka.InitMetrics(registry)
 }

@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/atomic"
 )
 
@@ -75,7 +75,7 @@ func newDMLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
-	claimCheck *large_message_handle.ClaimCheck,
+	claimCheck *claimcheck.ClaimCheck,
 	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	errCh chan error,
 ) *dmlSink {
@@ -183,9 +183,6 @@ func (s *dmlSink) Close() {
 	if s.adminClient != nil {
 		s.adminClient.Close()
 	}
-
-	large_message_handle.CleanMetrics(s.id)
-
 }
 
 // Dead checks whether it's dead or not.

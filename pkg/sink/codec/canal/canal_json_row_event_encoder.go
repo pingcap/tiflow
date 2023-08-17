@@ -26,7 +26,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
 
@@ -294,18 +294,15 @@ type JSONRowEventEncoder struct {
 	builder  *canalEntryBuilder
 	messages []*common.Message
 
-	compressor *large_message_handle.Compressor
-
 	config *common.Config
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
-		builder:    newCanalEntryBuilder(),
-		messages:   make([]*common.Message, 0, 1),
-		compressor: large_message_handle.NewCompressor(config.ChangefeedID, config.LargeMessageHandle.LargeMessageHandleCompression),
-		config:     config,
+		builder:  newCanalEntryBuilder(),
+		messages: make([]*common.Message, 0, 1),
+		config:   config,
 	}
 	return encoder
 }
@@ -359,7 +356,8 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err = c.compressor.Encode(value)
+	//value, err = c.compressor.Encode(value)
+
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -379,7 +377,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = c.compressor.Encode(value)
+	value, err = common.Compress(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -411,10 +409,11 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 			if err != nil {
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
-			value, err = c.compressor.Encode(value)
+			value, err = common.Compress(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 			if err != nil {
 				return errors.Trace(err)
 			}
+
 			m.Value = value
 			length := m.Length()
 			if length > c.config.MaxMessageBytes {
@@ -434,7 +433,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
 			m.Event = e
-			m.ClaimCheckFileName = large_message_handle.NewFileName()
+			m.ClaimCheckFileName = claimcheck.NewFileName()
 		}
 	}
 
@@ -444,13 +443,13 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 // NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
 func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
-	claimCheckLocation := large_message_handle.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	claimCheckLocation := claimcheck.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
 	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true, claimCheckLocation)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err = c.compressor.Encode(value)
+	value, err = common.Compress(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -488,7 +487,7 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	value, err = c.compressor.Encode(value)
+	value, err = common.Compress(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

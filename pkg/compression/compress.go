@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package large_message_handle
+package compression
 
 import (
 	"bytes"
@@ -19,55 +19,31 @@ import (
 	snappy "github.com/eapache/go-xerial-snappy"
 	"github.com/pierrec/lz4/v4"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/prometheus/client_golang/prometheus"
 )
-
-type Codec string
 
 const (
 	// None no compression
-	None Codec = "none"
+	None string = "none"
 	// Snappy compression
-	Snappy Codec = "snappy"
+	Snappy string = "snappy"
 	// LZ4 compression
-	LZ4 Codec = "lz4"
+	LZ4 string = "lz4"
 )
 
-func Supported(codec string) bool {
-	switch Codec(codec) {
+func Supported(cc string) bool {
+	switch cc {
 	case None, Snappy, LZ4:
 		return true
 	}
 	return false
 }
 
-type Compressor struct {
-	cc Codec
-
-	compressRatio prometheus.Observer
-}
-
-func NewCompressor(changefeedID model.ChangeFeedID, codec string) *Compressor {
-	return &Compressor{
-		compressRatio: compressionRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		cc:            Codec(codec),
-	}
-}
-
-func CleanMetrics(changefeedID model.ChangeFeedID) {
-	compressionRatio.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-}
-
-func (c *Compressor) Encode(data []byte) ([]byte, error) {
-	oldSize := len(data)
-	var compressed []byte
-
-	switch c.cc {
+func Encode(cc string, data []byte) ([]byte, error) {
+	switch cc {
 	case None:
 		return data, nil
 	case Snappy:
-		compressed = snappy.Encode(data)
+		return snappy.Encode(data), nil
 	case LZ4:
 		var buf bytes.Buffer
 		writer := lz4.NewWriter(&buf)
@@ -77,19 +53,15 @@ func (c *Compressor) Encode(data []byte) ([]byte, error) {
 		if err := writer.Close(); err != nil {
 			return nil, errors.Trace(err)
 		}
-		compressed = buf.Bytes()
+		return buf.Bytes(), nil
 	default:
-		return nil, errors.New("unsupported compression codec")
 	}
 
-	ratio := float64(oldSize) / float64(len(compressed)) * 100
-	c.compressRatio.Observe(ratio)
-
-	return compressed, nil
+	return nil, errors.New("unsupported compression codec")
 }
 
-func (c *Compressor) Decode(data []byte) ([]byte, error) {
-	switch c.cc {
+func Decode(cc string, data []byte) ([]byte, error) {
+	switch cc {
 	case None:
 		return data, nil
 	case Snappy:

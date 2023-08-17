@@ -45,7 +45,7 @@ func NewRowEventEncoderBuilder(
 	case config.ProtocolMaxwell:
 		return maxwell.NewBatchEncoderBuilder(c), nil
 	case config.ProtocolCanalJSON:
-		return canal.NewJSONRowEventEncoderBuilder(c, changefeedID), nil
+		return canal.NewJSONRowEventEncoderBuilder(c), nil
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(c), nil
 

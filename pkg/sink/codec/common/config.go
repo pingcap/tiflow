@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -45,7 +44,7 @@ type Config struct {
 	// DeleteOnlyHandleKeyColumns is true, for the delete event only output the handle key columns.
 	DeleteOnlyHandleKeyColumns bool
 
-	LargeMessageHandle *large_message_handle.Config
+	LargeMessageHandle *config.LargeMessageHandleConfig
 
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
@@ -91,7 +90,7 @@ func NewConfig(protocol config.Protocol) *Config {
 
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
-		LargeMessageHandle:         large_message_handle.NewDefaultConfig(),
+		LargeMessageHandle:         config.NewLargeMessageHandleConfig(),
 	}
 }
 

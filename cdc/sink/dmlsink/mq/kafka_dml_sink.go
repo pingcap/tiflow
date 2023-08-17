@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/large_message_handle"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -110,7 +110,7 @@ func NewKafkaDMLSink(
 	}
 
 	var (
-		claimCheckStorage *large_message_handle.ClaimCheck
+		claimCheckStorage *claimcheck.ClaimCheck
 		claimCheckEncoder codec.ClaimCheckLocationEncoder
 		ok                bool
 	)
@@ -122,7 +122,7 @@ func NewKafkaDMLSink(
 				GenWithStack("claim-check enabled but the encoding protocol %s does not support", protocol.String())
 		}
 
-		claimCheckStorage, err = large_message_handle.New(ctx, encoderConfig.LargeMessageHandle, changefeedID)
+		claimCheckStorage, err = claimcheck.New(ctx, encoderConfig.LargeMessageHandle.ClaimCheckStorageURI, changefeedID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
