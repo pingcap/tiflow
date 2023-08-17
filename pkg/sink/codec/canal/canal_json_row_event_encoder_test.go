@@ -15,6 +15,7 @@ package canal
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -244,10 +245,76 @@ func TestCanalJSONCompressionE2E(t *testing.T) {
 	require.Equal(t, decodedDDL.TableInfo.TableName.Table, testCaseDDL.TableInfo.TableName.Table)
 
 	// encode checkpoint event
+	waterMark := uint64(2333)
+	message, err = encoder.EncodeCheckpointEvent(waterMark)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err = decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, messageType, model.MessageTypeResolved)
+
+	decodedWatermark, err := decoder.NextResolvedEvent()
+	require.NoError(t, err)
+	require.Equal(t, decodedWatermark, waterMark)
 
 	// encode handle key only row changed event
+	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	codecConfig.MaxMessageBytes = 500
+	encoder = newJSONRowEventEncoder(codecConfig)
+
+	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
+	require.NoError(t, err)
+
+	handleKeyOnlyEvent := encoder.Build()[0]
+
+	decoder, err = NewBatchDecoder(ctx, codecConfig, &sql.DB{})
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(handleKeyOnlyEvent.Key, handleKeyOnlyEvent.Value)
+	require.NoError(t, err)
+
+	var decoded canalJSONMessageWithTiDBExtension
+	err = json.Unmarshal(decoder.(*batchDecoder).data, &decoded)
+	require.NoError(t, err)
+	require.True(t, decoded.Extensions.OnlyHandleKey)
+
+	for _, col := range testCaseInsert.Columns {
+		if col.Flag.IsHandleKey() {
+			require.Contains(t, decoded.Data[0], col.Name)
+			require.Contains(t, decoded.SQLType, col.Name)
+			require.Contains(t, decoded.MySQLType, col.Name)
+		} else {
+			require.NotContains(t, decoded.Data[0], col.Name)
+			require.NotContains(t, decoded.SQLType, col.Name)
+			require.NotContains(t, decoded.MySQLType, col.Name)
+		}
+	}
 
 	// encode claim check event.
+	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
+	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/canal-json-claim-check"
+
+	encoder = newJSONRowEventEncoder(codecConfig)
+
+	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
+	require.NoError(t, err)
+
+	largeMessage := encoder.Build()[0]
+	require.NotEmpty(t, largeMessage.ClaimCheckFileName)
+
+	claimCheckLocationMessage, err := encoder.(codec.ClaimCheckLocationEncoder).NewClaimCheckLocationMessage(largeMessage)
+	require.NoError(t, err)
+
+	decoder, err = NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
+	require.NoError(t, err)
+
 }
 
 func TestCanalJSONClaimCheckE2E(t *testing.T) {
