@@ -44,7 +44,7 @@ func TestSchemaRegistry(t *testing.T) {
 	err = manager.ClearRegistry(ctx, topic)
 	require.NoError(t, err)
 
-	_, err = manager.Lookup(ctx, topic, schemaID{cID: 1})
+	_, err = manager.Lookup(ctx, topic, schemaID{confluentSchemaID: 1})
 	require.Regexp(t, `.*not\sfound.*`, err)
 
 	codec, err := goavro.NewCodec(`{
@@ -147,8 +147,8 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		id1, err := manager.Register(ctx, topic, codec.Schema())
 		require.NoError(t, err)
-		require.True(t, id == 0 || id == id1.cID)
-		id = id1.cID
+		require.True(t, id == 0 || id == id1.confluentSchemaID)
+		id = id1.confluentSchemaID
 	}
 }
 

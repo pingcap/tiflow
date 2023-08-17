@@ -33,12 +33,12 @@ type SchemaManager interface {
 type SchemaGenerator func() (string, error)
 
 type schemaID struct {
-	// cID is the Confluent Schema ID, it represents
+	// confluentSchemaID is the Confluent Schema ID, it represents
 	// a unique schema in Confluent Schema Registry
-	cID int
-	// gID is the AWS Glue SchemaVersionID, it represents
+	confluentSchemaID int
+	// glueSchemaID is the AWS Glue SchemaVersionID, it represents
 	// a unique schema in AWS Glue Schema Registry
-	gID string
+	glueSchemaID string
 }
 
 type schemaCacheEntry struct {

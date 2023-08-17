@@ -775,7 +775,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{cID: cid})
+	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
 	require.NoError(t, err)
 
 	res, _, err := avroValueCodec.NativeFromBinary(data)
@@ -815,7 +815,7 @@ func TestAvroEncode(t *testing.T) {
 	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroKeyCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{cID: cid})
+	avroKeyCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
 	require.NoError(t, err)
 
 	res, _, err := avroKeyCodec.NativeFromBinary(data)
@@ -834,7 +834,7 @@ func TestAvroEncode(t *testing.T) {
 	cid, data, err = extractConfluentSchemaIDAndBinaryData(bin)
 	require.NoError(t, err)
 
-	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{cID: cid})
+	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
 	require.NoError(t, err)
 
 	res, _, err = avroValueCodec.NativeFromBinary(data)

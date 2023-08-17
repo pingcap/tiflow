@@ -427,13 +427,13 @@ func decodeRawBytes(
 		if err != nil {
 			return nil, nil, err
 		}
-		schemaID.cID = cid
+		schemaID.confluentSchemaID = cid
 	case common.SchemaRegistryTypeGlue:
 		gid, binary, err = extractGlueSchemaIDAndBinaryData(data)
 		if err != nil {
 			return nil, nil, err
 		}
-		schemaID.gID = gid
+		schemaID.glueSchemaID = gid
 	default:
 		return nil, nil, errors.New("unknown schema registry type")
 	}

@@ -945,4 +945,5 @@ var (
 	ErrInvalidGlueSchemaRegistryConfig = errors.Normalize(
 		"invalid glue schema registry config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidGlueSchemaRegistryConfig"),
+	)
 )

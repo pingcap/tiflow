@@ -197,7 +197,7 @@ func (m *confluentSchemaManager) Register(
 		zap.String("uri", uri),
 		zap.ByteString("body", body))
 
-	id.cID = jsonResp.SchemaID
+	id.confluentSchemaID = jsonResp.SchemaID
 	return id, nil
 }
 
@@ -209,10 +209,10 @@ func (m *confluentSchemaManager) Lookup(
 ) (*goavro.Codec, error) {
 	m.cacheRWLock.RLock()
 	entry, exists := m.cache[schemaName]
-	if exists && entry.schemaID.cID == schemaID.cID {
+	if exists && entry.schemaID.confluentSchemaID == schemaID.confluentSchemaID {
 		log.Debug("Avro schema lookup cache hit",
 			zap.String("key", schemaName),
-			zap.Int("schemaID", entry.schemaID.cID))
+			zap.Int("schemaID", entry.schemaID.confluentSchemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, nil
 	}
@@ -220,9 +220,9 @@ func (m *confluentSchemaManager) Lookup(
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", schemaName),
-		zap.Int("schemaID", schemaID.cID))
+		zap.Int("schemaID", schemaID.confluentSchemaID))
 
-	uri := m.registryURL + "/schemas/ids/" + strconv.Itoa(schemaID.cID)
+	uri := m.registryURL + "/schemas/ids/" + strconv.Itoa(schemaID.confluentSchemaID)
 	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
@@ -261,7 +261,7 @@ func (m *confluentSchemaManager) Lookup(
 	if resp.StatusCode == 404 {
 		log.Warn("Specified schema not found in Registry",
 			zap.String("key", schemaName),
-			zap.Int("schemaID", schemaID.cID))
+			zap.Int("schemaID", schemaID.confluentSchemaID))
 		return nil, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(
 			"Schema not found in Registry",
 		)
@@ -280,8 +280,8 @@ func (m *confluentSchemaManager) Lookup(
 		log.Error("Creating Avro codec failed", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
-	cacheEntry.schemaID.cID = schemaID.cID
-	cacheEntry.header, err = m.getMsgHeader(schemaID.cID)
+	cacheEntry.schemaID.confluentSchemaID = schemaID.confluentSchemaID
+	cacheEntry.header, err = m.getMsgHeader(schemaID.confluentSchemaID)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +291,7 @@ func (m *confluentSchemaManager) Lookup(
 	m.cacheRWLock.Unlock()
 
 	log.Info("Avro schema lookup successful with cache miss",
-		zap.Int("schemaID", cacheEntry.schemaID.cID),
+		zap.Int("schemaID", cacheEntry.schemaID.confluentSchemaID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return cacheEntry.codec, nil
@@ -312,7 +312,7 @@ func (m *confluentSchemaManager) GetCachedOrRegister(
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
 			zap.String("key", schemaSubject),
 			zap.Uint64("tableVersion", tableVersion),
-			zap.Int("schemaID", entry.schemaID.cID))
+			zap.Int("schemaID", entry.schemaID.confluentSchemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.header, nil
 	}
@@ -343,7 +343,7 @@ func (m *confluentSchemaManager) GetCachedOrRegister(
 	cacheEntry.codec = codec
 	cacheEntry.schemaID = id
 	cacheEntry.tableVersion = tableVersion
-	header, err := m.getMsgHeader(cacheEntry.schemaID.cID)
+	header, err := m.getMsgHeader(cacheEntry.schemaID.confluentSchemaID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -355,7 +355,7 @@ func (m *confluentSchemaManager) GetCachedOrRegister(
 
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
 		zap.Uint64("tableVersion", cacheEntry.tableVersion),
-		zap.Int("schemaID", cacheEntry.schemaID.cID),
+		zap.Int("schemaID", cacheEntry.schemaID.confluentSchemaID),
 		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return codec, cacheEntry.header, nil

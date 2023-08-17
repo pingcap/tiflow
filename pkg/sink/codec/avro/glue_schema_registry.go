@@ -93,7 +93,7 @@ func (m *glueSchemaManager) Register(
 		}
 		log.Info("Schema updated", zap.String("schemaName", schemaName),
 			zap.String("schemaID", schemaID))
-		id.gID = schemaID
+		id.glueSchemaID = schemaID
 		return id, nil
 	} else {
 		log.Info("Schema does not exist, create it", zap.String("schemaName", schemaName))
@@ -101,7 +101,7 @@ func (m *glueSchemaManager) Register(
 		if err != nil {
 			return id, errors.Trace(err)
 		}
-		id.gID = schemaID
+		id.glueSchemaID = schemaID
 		return id, nil
 	}
 }
@@ -113,10 +113,10 @@ func (m *glueSchemaManager) Lookup(
 ) (*goavro.Codec, error) {
 	m.cacheRWLock.RLock()
 	entry, exists := m.cache[schemaName]
-	if exists && entry.schemaID.cID == schemaID.cID {
+	if exists && entry.schemaID.confluentSchemaID == schemaID.confluentSchemaID {
 		log.Debug("Avro schema lookup cache hit",
 			zap.String("key", schemaName),
-			zap.Int("schemaID", entry.schemaID.cID))
+			zap.Int("schemaID", entry.schemaID.confluentSchemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, nil
 	}
@@ -124,15 +124,15 @@ func (m *glueSchemaManager) Lookup(
 
 	log.Info("Avro schema lookup cache miss",
 		zap.String("key", schemaName),
-		zap.Int("schemaID", schemaID.cID))
+		zap.Int("schemaID", schemaID.confluentSchemaID))
 
-	ok, schema, err := m.getSchemaByID(ctx, schemaID.gID)
+	ok, schema, err := m.getSchemaByID(ctx, schemaID.glueSchemaID)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	if !ok {
 		return nil, cerror.ErrAvroSchemaAPIError.
-			GenWithStackByArgs("schema not found in registry, name: %s, id: %s", schemaName, schemaID.gID)
+			GenWithStackByArgs("schema not found in registry, name: %s, id: %s", schemaName, schemaID.glueSchemaID)
 	}
 
 	codec, err := goavro.NewCodec(schema)
@@ -141,7 +141,7 @@ func (m *glueSchemaManager) Lookup(
 		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 
-	header, err := m.getMsgHeader(schemaID.gID)
+	header, err := m.getMsgHeader(schemaID.glueSchemaID)
 	if err != nil {
 		log.Error("could not get message header", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
@@ -173,7 +173,7 @@ func (m *glueSchemaManager) GetCachedOrRegister(
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
 			zap.String("schemaName", schemaName),
 			zap.Uint64("tableVersion", tableVersion),
-			zap.String("schemaID", entry.schemaID.gID))
+			zap.String("schemaID", entry.schemaID.glueSchemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.header, nil
 	}
@@ -202,7 +202,7 @@ func (m *glueSchemaManager) GetCachedOrRegister(
 		return nil, nil, errors.Trace(err)
 	}
 
-	header, err := m.getMsgHeader(id.gID)
+	header, err := m.getMsgHeader(id.glueSchemaID)
 	if err != nil {
 		log.Error("GetCachedOrRegister: Could not get message header", zap.Error(err))
 		return nil, nil, errors.Trace(err)
@@ -222,7 +222,7 @@ func (m *glueSchemaManager) GetCachedOrRegister(
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
 		zap.String("schemaName", schemaName),
 		zap.Uint64("tableVersion", tableVersion),
-		zap.String("schemaID", id.gID))
+		zap.String("schemaID", id.glueSchemaID))
 
 	return codec, header, nil
 }

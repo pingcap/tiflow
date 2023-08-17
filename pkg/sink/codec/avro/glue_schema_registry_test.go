@@ -40,18 +40,18 @@ func TestGlueSchemaManager_Register(t *testing.T) {
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
 	schemaID, err := m.Register(ctx, schemaName, schemaDefinition)
 	require.NoError(t, err)
-	require.NotEmpty(t, schemaID.gID)
+	require.NotEmpty(t, schemaID.glueSchemaID)
 
 	// Register the same schema again
 	schemaID2, err := m.Register(ctx, schemaName, schemaDefinition)
 	require.NoError(t, err)
-	require.Equal(t, schemaID.gID, schemaID2.gID)
+	require.Equal(t, schemaID.glueSchemaID, schemaID2.glueSchemaID)
 
 	// Register a different schema
 	schemaDefinition2 := `{"type": "record", "name": "test_schema2", "fields": [{"name": "field1", "type": "string"}]}`
 	schemaID3, err := m.Register(ctx, schemaName, schemaDefinition2)
 	require.NoError(t, err)
-	require.NotEqual(t, schemaID.gID, schemaID3.gID)
+	require.NotEqual(t, schemaID.glueSchemaID, schemaID3.glueSchemaID)
 }
 
 func TestGlueSchemaManager_Lookup(t *testing.T) {
@@ -119,11 +119,11 @@ func TestGlueSchemaManager_getMsgHeader(t *testing.T) {
 	schemaID, err := m.Register(ctx, schemaName, schemaDefinition)
 	require.NoError(t, err)
 
-	header, err := m.getMsgHeader(schemaID.gID)
+	header, err := m.getMsgHeader(schemaID.glueSchemaID)
 	require.NoError(t, err)
 	require.Equal(t, header[0], header_version_byte)
 	require.Equal(t, header[1], compression_default_byte)
 	sid, err := getGlueSchemaIDFromHeader(header)
 	require.NoError(t, err)
-	require.Equal(t, schemaID.gID, sid)
+	require.Equal(t, schemaID.glueSchemaID, sid)
 }
