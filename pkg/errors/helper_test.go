@@ -100,21 +100,21 @@ func TestChangefeedFastFailError(t *testing.T) {
 	t.Parallel()
 	err := ErrSnapshotLostByGC.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
-	require.Equal(t, true, IsChangefeedFastFailError(err))
-	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedGCFastFailError(err))
+	require.Equal(t, true, IsChangefeedGCFastFailErrorCode(rfcCode))
 
 	err = ErrStartTsBeforeGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, IsChangefeedFastFailError(err))
-	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedGCFastFailError(err))
+	require.Equal(t, true, IsChangefeedGCFastFailErrorCode(rfcCode))
 
 	err = ErrToTLSConfigFailed.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, false, IsChangefeedFastFailError(err))
-	require.Equal(t, false, IsChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, false, IsChangefeedGCFastFailError(err))
+	require.Equal(t, false, IsChangefeedGCFastFailErrorCode(rfcCode))
 }
 
-func TestIsChangefeedUnRetryableError(t *testing.T) {
+func TestShouldFailChangefeed(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		err      error
@@ -171,8 +171,14 @@ func TestIsChangefeedUnRetryableError(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		require.Equal(t, c.expected, IsChangefeedUnRetryableError(c.err))
+		require.Equal(t, c.expected, ShouldFailChangefeed(c.err))
 	}
+
+	var code errors.RFCErrorCode
+	var ok bool
+	code, ok = RFCCode(ErrChangefeedUnretryable)
+	require.True(t, ok)
+	require.True(t, ShouldFailChangefeed(errors.New(string(code))))
 }
 
 func TestIsCliUnprintableError(t *testing.T) {

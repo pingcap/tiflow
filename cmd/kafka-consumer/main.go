@@ -586,7 +586,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 	switch c.codecConfig.Protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
-		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig)
+		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
 	case config.ProtocolCanalJSON:
 		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
 		if err != nil {

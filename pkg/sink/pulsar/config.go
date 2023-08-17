@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/apache/pulsar-client-go/pulsar/auth"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -72,12 +73,6 @@ const (
 	// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
 	Protocol = "protocol"
 
-	// TLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
-	TLSCertificatePath = "tls-certificate-path"
-
-	// TLSPrivateKeyPath TLS private key
-	TLSPrivateKeyPath = "tls-private-key-path"
-
 	// OAuth2IssuerURL  the URL of the authorization server.
 	OAuth2IssuerURL = "oauth2-issuer-url"
 	// OAuth2Audience  the URL of the resource server.
@@ -86,6 +81,14 @@ const (
 	OAuth2PrivateKey = "oauth2-private-key"
 	// OAuth2ClientID  the client ID of the application.
 	OAuth2ClientID = "oauth2-client-id"
+	// OAuth2Scope scope
+	OAuth2Scope = "auth2-scope"
+
+	// AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
+	AuthTLSCertificatePath = "auth-tls-certificate-path"
+
+	// AuthTLSPrivateKeyPath auth TLS private key
+	AuthTLSPrivateKeyPath = "auth-tls-private-key-path"
 )
 
 // sink config default Value
@@ -157,10 +160,10 @@ type Config struct {
 	// BasicPassword with account
 	BasicPassword string
 
-	// TLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
-	TLSCertificatePath string
-	// TLSPrivateKeyPath private key
-	TLSPrivateKeyPath string
+	// AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
+	AuthTLSCertificatePath string
+	// AuthTLSPrivateKeyPath private key
+	AuthTLSPrivateKeyPath string
 
 	// Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id
 	// and 'type' always is 'client_credentials'
@@ -202,28 +205,30 @@ func (c *Config) checkSinkURI(sinkURI *url.URL) error {
 func (c *Config) applyOAuth(params url.Values) {
 	// Go client use Oauth2 authentication
 	// https://pulsar.apache.org/docs/2.10.x/security-oauth2/#authentication-types
+	// pulsar client now support type as client_credentials only
 
 	s := params.Get(OAuth2IssuerURL)
 	if len(s) > 0 {
-		c.OAuth2["issuerUrl"] = s
+		c.OAuth2[auth.ConfigParamIssuerURL] = s
 	}
-
 	s = params.Get(OAuth2Audience)
 	if len(s) > 0 {
-		c.OAuth2["audience"] = s
+		c.OAuth2[auth.ConfigParamAudience] = s
 	}
-
+	s = params.Get(OAuth2Scope)
+	if len(s) > 0 {
+		c.OAuth2[auth.ConfigParamScope] = s
+	}
 	s = params.Get(OAuth2PrivateKey)
 	if len(s) > 0 {
-		c.OAuth2["privateKey"] = s
+		c.OAuth2[auth.ConfigParamKeyFile] = s
 	}
-
 	s = params.Get(OAuth2ClientID)
 	if len(s) > 0 {
-		c.OAuth2["clientId"] = s
+		c.OAuth2[auth.ConfigParamClientID] = s
 	}
 	if len(c.OAuth2) >= 4 {
-		c.OAuth2["type"] = "client_credentials"
+		c.OAuth2[auth.ConfigParamType] = auth.ConfigParamTypeClientCredentials
 	} else {
 		c.OAuth2 = make(map[string]string)
 	}
@@ -335,14 +340,14 @@ func (c *Config) Apply(sinkURI *url.URL) error {
 		c.BasicPassword = s
 	}
 
-	s = params.Get(TLSCertificatePath)
+	s = params.Get(AuthTLSCertificatePath)
 	if len(s) > 0 {
-		c.TLSCertificatePath = s
+		c.AuthTLSCertificatePath = s
 	}
 
-	s = params.Get(TLSPrivateKeyPath)
+	s = params.Get(AuthTLSPrivateKeyPath)
 	if len(s) > 0 {
-		c.TLSPrivateKeyPath = s
+		c.AuthTLSPrivateKeyPath = s
 	}
 
 	c.applyOAuth(params)

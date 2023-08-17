@@ -29,6 +29,12 @@ CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
 export PATH := $(CURDIR)/bin:$(CURDIR)/tools/bin:$(path_to_add):$(PATH)
 
+# DBUS_SESSION_BUS_ADDRESS pulsar client use dbus to detect the connection status,
+# but it will not exit when the connection is closed.
+# I try to use leak_helper to detect goroutine leak,but it does not work.
+# https://github.com/benthosdev/benthos/issues/1184 suggest to use environment variable to disable dbus.
+export DBUS_SESSION_BUS_ADDRESS := /dev/null
+
 SHELL := /usr/bin/env bash
 
 TEST_DIR := /tmp/tidb_cdc_test

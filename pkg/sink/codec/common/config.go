@@ -152,6 +152,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.MaxMessageBytes = *urlParameter.MaxMessageBytes
 	}
 
+	// avro related
 	if urlParameter.AvroDecimalHandlingMode != nil &&
 		*urlParameter.AvroDecimalHandlingMode != "" {
 		c.AvroDecimalHandlingMode = *urlParameter.AvroDecimalHandlingMode
@@ -165,9 +166,12 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.AvroEnableWatermark = *urlParameter.AvroEnableWatermark
 		}
 	}
-
 	if urlParameter.AvroSchemaRegistry != "" {
 		c.AvroConfluentSchemaRegistry = urlParameter.AvroSchemaRegistry
+	}
+	if c.Protocol == config.ProtocolAvro && replicaConfig.ForceReplicate {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`force-replicate must be disabled, when using avro protocol`)
 	}
 
 	if replicaConfig.Sink != nil {
@@ -181,6 +185,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		}
 		if replicaConfig.Sink.KafkaConfig != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+		}
+		if c.LargeMessageHandle.HandleKeyOnly() && replicaConfig.ForceReplicate {
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
+				`force-replicate must be disabled, when the large message handle option is set to "handle-key-only"`)
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
@@ -198,6 +206,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
+	if c.DeleteOnlyHandleKeyColumns && replicaConfig.ForceReplicate {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
+	}
 	return nil
 }
 

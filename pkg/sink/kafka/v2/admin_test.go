@@ -85,28 +85,6 @@ func TestGetAllBrokers(t *testing.T) {
 	require.Equal(t, int32(1), brokers[0].ID)
 }
 
-func TestGetCoordinator(t *testing.T) {
-	t.Parallel()
-
-	admin, client := newClusterAdminClientWithMock(t)
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("kafka.(*Client).Metadata"))
-
-	ctx := context.Background()
-	coordinatorID, err := admin.GetCoordinator(ctx)
-	require.Error(t, err)
-	require.Equal(t, 0, coordinatorID)
-
-	client.EXPECT().Metadata(gomock.Any(), gomock.Any()).
-		Return(&kafka.MetadataResponse{
-			Controller: kafka.Broker{ID: 1},
-		}, nil)
-
-	coordinatorID, err = admin.GetCoordinator(ctx)
-	require.NoError(t, err)
-	require.Equal(t, 1, coordinatorID)
-}
-
 func TestGetBrokerConfig(t *testing.T) {
 	t.Parallel()
 

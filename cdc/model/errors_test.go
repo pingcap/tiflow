@@ -52,6 +52,6 @@ func TestIsChangefeedNotRetryError(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		require.Equal(t, c.result, c.err.IsChangefeedUnRetryableError())
+		require.Equal(t, c.result, c.err.ShouldFailChangefeed())
 	}
 }
