@@ -89,13 +89,6 @@ func (b *BatchDecoder) AddKeyValue(key, value []byte) error {
 	}
 
 	b.keyBytes = key
-
-	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return cerror.ErrOpenProtocolCodecInvalidData.
-			GenWithStack("decompress data failed")
-	}
-
 	b.valueBytes = value
 
 	return nil
@@ -146,6 +139,13 @@ func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 		b.valueBytes = b.valueBytes[valueLen+8:]
 
 		rowMsg := new(messageRow)
+
+		value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+		if err != nil {
+			return model.MessageTypeUnknown, false, cerror.ErrOpenProtocolCodecInvalidData.
+				GenWithStack("decompress data failed")
+		}
+
 		if err := rowMsg.decode(value); err != nil {
 			return b.nextKey.Type, false, errors.Trace(err)
 		}
@@ -175,6 +175,12 @@ func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 
 	valueLen := binary.BigEndian.Uint64(b.valueBytes[:8])
 	value := b.valueBytes[8 : valueLen+8]
+
+	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return nil, cerror.ErrOpenProtocolCodecInvalidData.
+			GenWithStack("decompress DDL event failed")
+	}
 
 	ddlMsg := new(messageDDL)
 	if err := ddlMsg.decode(value); err != nil {
@@ -327,14 +333,14 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (
 		return nil, errors.Trace(err)
 	}
 
-	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, claimCheckM.Value)
+	valueLen := binary.BigEndian.Uint64(claimCheckM.Value[:8])
+	value := claimCheckM.Value[8 : valueLen+8]
+	value, err = common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.WrapError(cerror.ErrOpenProtocolCodecInvalidData, err)
 	}
 
 	rowMsg := new(messageRow)
-	valueLen := binary.BigEndian.Uint64(value[:8])
-	value = value[8 : valueLen+8]
 	if err := rowMsg.decode(value); err != nil {
 		return nil, errors.Trace(err)
 	}
