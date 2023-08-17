@@ -783,7 +783,21 @@ func TestHandleWarning(t *testing.T) {
 	require.Equal(t, model.StateWarning, state.Info.State)
 	require.True(t, manager.ShouldRunning())
 
-	// 2. test when the changefeed is in warning state, and the checkpointTs is progressing,
+	// 2. test when the changefeed is in warning state, and the checkpointTs is not progressing,
+	// the changefeed state will remain warning
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.NotNil(t, status)
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 200,
+		}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateWarning, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	// 3. test when the changefeed is in warning state, and the checkpointTs is progressing,
 	// the changefeed state will be changed to normal
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.NotNil(t, status)
@@ -797,7 +811,7 @@ func TestHandleWarning(t *testing.T) {
 	require.Equal(t, model.StateNormal, state.Info.State)
 	require.True(t, manager.ShouldRunning())
 
-	// test when the changefeed is in warning state, and the checkpointTs is not progressing
+	// 4. test when the changefeed is in warning state, and the checkpointTs is not progressing
 	// for defaultBackoffMaxElapsedTime time, the changefeed state will be changed to failed
 	// and it will stop running
 	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
