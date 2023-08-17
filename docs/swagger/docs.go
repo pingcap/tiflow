@@ -1251,6 +1251,9 @@ var doc = `{
         "config.KafkaConfig": {
             "type": "object",
             "properties": {
+                "large-message-handle": {
+                    "$ref": "#/definitions/config.LargeMessageHandleConfig"
+                },
                 "sasl-mechanism": {
                     "type": "string"
                 },
@@ -1273,6 +1276,14 @@ var doc = `{
                     }
                 },
                 "sasl-oauth-token-url": {
+                    "type": "string"
+                }
+            }
+        },
+        "config.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "large-message-handle-option": {
                     "type": "string"
                 }
             }
@@ -1872,6 +1883,9 @@ var doc = `{
         "v2.KafkaConfig": {
             "type": "object",
             "properties": {
+                "large_message_handle": {
+                    "$ref": "#/definitions/v2.LargeMessageHandleConfig"
+                },
                 "sasl_mechanism": {
                     "type": "string"
                 },
@@ -1894,6 +1908,14 @@ var doc = `{
                     }
                 },
                 "sasl_oauth_token_url": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "large_message_handle_option": {
                     "type": "string"
                 }
             }

@@ -21,6 +21,7 @@ import (
 
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -76,25 +77,30 @@ func newResolvedMessage(ts uint64) *internal.MessageKey {
 	}
 }
 
-func rowChangeToMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow) {
+func rowChangeToMsg(
+	e *model.RowChangedEvent,
+	config *common.Config,
+	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow) {
 	var partition *int64
 	if e.Table.IsPartition {
 		partition = &e.Table.TableID
 	}
 	key := &internal.MessageKey{
-		Ts:        e.CommitTs,
-		Schema:    e.Table.Schema,
-		Table:     e.Table.Table,
-		RowID:     e.RowID,
-		Partition: partition,
-		Type:      model.MessageTypeRow,
+		Ts:            e.CommitTs,
+		Schema:        e.Table.Schema,
+		Table:         e.Table.Table,
+		RowID:         e.RowID,
+		Partition:     partition,
+		Type:          model.MessageTypeRow,
+		OnlyHandleKey: largeMessageOnlyHandleKeyColumns,
 	}
 	value := &messageRow{}
 	if e.IsDelete() {
-		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, onlyHandleKeyColumns)
+		handleKeyOnly := config.DeleteOnlyHandleKeyColumns || largeMessageOnlyHandleKeyColumns
+		value.Delete = rowChangeColumns2CodecColumns(e.PreColumns, handleKeyOnly)
 	} else {
-		value.Update = rowChangeColumns2CodecColumns(e.Columns, false)
-		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, false)
+		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
+		value.PreColumns = rowChangeColumns2CodecColumns(e.PreColumns, largeMessageOnlyHandleKeyColumns)
 	}
 	return key, value
 }

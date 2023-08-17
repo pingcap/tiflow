@@ -31,7 +31,7 @@ const defaultMaxBatchSize int = 16
 type Config struct {
 	Protocol config.Protocol
 
-	OnlyHandleKeyColumns bool
+	DeleteOnlyHandleKeyColumns bool
 
 	// control batch behavior, only for `open-protocol` and `craft` at the moment.
 	MaxMessageBytes int
@@ -52,6 +52,8 @@ type Config struct {
 	IncludeCommitTs      bool
 	Terminator           string
 	BinaryEncodingMethod string
+
+	LargeMessageHandle *config.LargeMessageHandleConfig
 }
 
 // NewConfig return a Config for codec
@@ -66,6 +68,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroSchemaRegistry:             "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
+
+		LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
 	}
 }
 
@@ -137,10 +141,18 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 			c.IncludeCommitTs = config.Sink.CSVConfig.IncludeCommitTs
 			c.BinaryEncodingMethod = config.Sink.CSVConfig.BinaryEncodingMethod
 		}
+
+		if config.Sink.KafkaConfig != nil {
+			c.LargeMessageHandle = config.Sink.KafkaConfig.LargeMessageHandle
+			if c.LargeMessageHandle.HandleKeyOnly() && config.ForceReplicate {
+				return cerror.ErrCodecInvalidConfig.GenWithStack(
+					`force-replicate must be disabled, when the large message handle option is set to "handle-key-only"`)
+			}
+		}
+
 	}
 
-	c.OnlyHandleKeyColumns = !config.EnableOldValue
-
+	c.DeleteOnlyHandleKeyColumns = !config.EnableOldValue
 	return nil
 }
 
@@ -199,6 +211,13 @@ func (c *Config) Validate() error {
 		return cerror.ErrCodecInvalidConfig.Wrap(
 			errors.Errorf("invalid max-batch-size %d", c.MaxBatchSize),
 		)
+	}
+
+	if c.LargeMessageHandle != nil {
+		err := c.LargeMessageHandle.Validate(c.Protocol, c.EnableTiDBExtension)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
