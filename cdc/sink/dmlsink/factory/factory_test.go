@@ -51,7 +51,7 @@ func newForTest(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		s.rowSink = mqs
+		s.txnSink = mqs
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
