@@ -53,7 +53,9 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 		return nil, nil, errors.Trace(err)
 	}
 
-	value, err = common.Compress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -96,7 +98,9 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = common.Compress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -179,7 +183,9 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		return nil, errors.Trace(err)
 	}
 
-	value, err = common.Compress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -273,7 +279,9 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 		return nil, errors.Trace(err)
 	}
 
-	value, err = common.Compress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

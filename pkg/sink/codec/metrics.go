@@ -14,7 +14,7 @@
 package codec
 
 import (
-	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -34,28 +34,11 @@ var (
 			Name:      "encoder_group_output_chan_size",
 			Help:      "The size of output channel of encoder group",
 		}, []string{"namespace", "changefeed"})
-
-	compressionRatio = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "ticdc",
-			Subsystem: "compression",
-			Name:      "ratio",
-			Help:      "The compression ratio",
-			Buckets:   prometheus.LinearBuckets(0, 100, 20),
-		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(encoderGroupInputChanSizeGauge)
 	registry.MustRegister(EncoderGroupOutputChanSizeGauge)
-
-	registry.MustRegister(compressionRatio)
-}
-
-// CleanMetrics remove metrics belong to the given changefeed.
-func CleanMetrics(changefeedID model.ChangeFeedID) {
-	encoderGroupInputChanSizeGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-	EncoderGroupOutputChanSizeGauge.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
-	compressionRatio.DeleteLabelValues(changefeedID.Namespace, changefeedID.ID)
+	common.InitMetrics(registry)
 }

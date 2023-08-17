@@ -377,7 +377,9 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	value, err = common.Compress(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -409,7 +411,9 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 			if err != nil {
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
-			value, err = common.Compress(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+			value, err = common.Compress(
+				c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+			)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -449,7 +453,9 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err = common.Compress(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -487,7 +493,9 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
-	value, err = common.Compress(c.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
