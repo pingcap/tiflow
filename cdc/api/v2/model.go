@@ -285,7 +285,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 
 		if c.Sink.KafkaConfig != nil {
-
 			var largeMessageHandle *config.LargeMessageHandleConfig
 			if c.Sink.KafkaConfig.LargeMessageHandle != nil {
 				oldConfig := c.Sink.KafkaConfig.LargeMessageHandle
