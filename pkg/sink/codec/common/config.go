@@ -185,7 +185,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
 		}
-		if replicaConfig.Sink.KafkaConfig != nil {
+		if replicaConfig.Sink.KafkaConfig != nil && replicaConfig.Sink.KafkaConfig.LargeMessageHandle != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 		}
 		if c.LargeMessageHandle.HandleKeyOnly() && replicaConfig.ForceReplicate {
