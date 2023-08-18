@@ -1003,7 +1003,12 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
+<<<<<<< HEAD
 	worker := newRegionWorker(s.changefeed, s, addr)
+=======
+	worker := newRegionWorker(parentCtx, s.changefeed, s, addr)
+	defer worker.evictAllRegions()
+>>>>>>> 6e80e27c2b (kv-client(ticdc): evictAllRegions after close receiveEvents goroutine (#9597))
 
 	defer worker.evictAllRegions()
 
