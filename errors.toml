@@ -33,7 +33,7 @@ encode to binray from native
 
 ["CDC:ErrAvroInvalidMessage"]
 error = '''
-avro invalid message format
+avro invalid message format, %s
 '''
 
 ["CDC:ErrAvroMarshalFailed"]
@@ -43,7 +43,7 @@ json marshal failed
 
 ["CDC:ErrAvroSchemaAPIError"]
 error = '''
-schema manager API error
+schema manager API error, %s
 '''
 
 ["CDC:ErrAvroToEnvelopeError"]
@@ -384,6 +384,11 @@ invalid key: %s
 ["CDC:ErrInvalidFilterExpression"]
 error = '''
 invalid filter expressions. There is a syntax error in: '%s'
+'''
+
+["CDC:ErrInvalidGlueSchemaRegistryConfig"]
+error = '''
+invalid glue schema registry config, %s
 '''
 
 ["CDC:ErrInvalidHost"]
