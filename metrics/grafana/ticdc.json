@@ -7416,7 +7416,7 @@
               "expr": "histogram_quantile(0.99, sum(rate(ticdc_kafka_sink_codec_compression_ratio_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,namespace,changefeed,instance))",
               "hide": false,
               "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-P99",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-Codec-P99",
               "refId": "B"
             }
           ],
