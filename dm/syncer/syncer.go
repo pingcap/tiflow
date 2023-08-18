@@ -233,7 +233,9 @@ type Syncer struct {
 	// stores the last job TS(binlog event timestamp) of each worker,
 	// if there's no active job, the corresponding worker's TS is reset to 0.
 	// since DML worker runs jobs in batch, the TS is the TS of the first job in the batch.
-	// 	- 0 is not used here, it's the idx for skip jobs, see skipJobIdx
+	// We account for skipped events too, if the distance between up and downstream is long,
+	// and there's no interested binlog event in between, we can have a decreasing lag.
+	// 	- 0 is for skip jobs
 	// 	- 1 is ddl worker
 	// 	- 2+ is for DML worker job idx=(queue id + 2)
 	workerJobTSArray          []*atomic.Int64
@@ -929,6 +931,11 @@ func (s *Syncer) updateReplicationLagMetric() {
 			s.tctx.L().Info("ShowLagInLog", zap.Int64("lag", lag))
 		}
 	})
+
+	// reset skip job TS in case of skip job TS is never updated
+	if minTS == s.workerJobTSArray[skipJobIdx].Load() {
+		s.workerJobTSArray[skipJobIdx].Store(0)
+	}
 }
 
 func (s *Syncer) saveTablePoint(table *filter.Table, location binlog.Location) {
@@ -1100,6 +1107,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 			// is the last binlog in source db
 			s.saveGlobalPoint(job.location)
 		}
+		s.updateReplicationJobTS(job, skipJobIdx)
 		return
 	}
 
