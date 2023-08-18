@@ -177,7 +177,7 @@ func NewSharedClient(
 		grpcPool:     grpcPool,
 		regionCache:  regionCache,
 		pdClock:      pdClock,
-		lockResolver: nil,
+		lockResolver: lockResolver,
 
 		requestRangeCh: chann.NewAutoDrainChann[rangeTask](),
 		regionCh:       chann.NewAutoDrainChann[singleRegionInfo](),
