@@ -113,13 +113,13 @@ func (m *mockGlueClientImpl) GetSchemaVersion(
 			return nil, errors.New("EntityNotFoundException")
 		}
 		return &glue.GetSchemaVersionOutput{SchemaDefinition: res.SchemaDefinition}, nil
-	} else {
-		res, ok := m.registerSchemaVersionsInput[*params.SchemaVersionId]
-		if !ok {
-			return nil, errors.New("EntityNotFoundException")
-		}
-		return &glue.GetSchemaVersionOutput{SchemaDefinition: res.SchemaDefinition}, nil
 	}
+
+	res, ok := m.registerSchemaVersionsInput[*params.SchemaVersionId]
+	if !ok {
+		return nil, errors.New("EntityNotFoundException")
+	}
+	return &glue.GetSchemaVersionOutput{SchemaDefinition: res.SchemaDefinition}, nil
 }
 
 func (m *mockGlueClientImpl) GetRegistry(

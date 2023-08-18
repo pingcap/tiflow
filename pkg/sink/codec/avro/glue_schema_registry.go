@@ -48,6 +48,9 @@ type glueSchemaManager struct {
 	registryType string
 }
 
+// NewGlueSchemaManager creates a new schema manager for AWS Glue Schema Registry
+// It will load the default AWS credentials if no credentials are provided.
+// It will check if the registry exists, if not, it will return an error.
 func NewGlueSchemaManager(
 	ctx context.Context,
 	cfg *config.GlueSchemaRegistryConfig,
@@ -111,15 +114,14 @@ func (m *glueSchemaManager) Register(
 			zap.String("schemaID", schemaID))
 		id.glueSchemaID = schemaID
 		return id, nil
-	} else {
-		log.Info("Schema does not exist, create it", zap.String("schemaName", schemaName))
-		schemaID, err := m.createSchema(ctx, schemaName, schemaDefinition)
-		if err != nil {
-			return id, errors.Trace(err)
-		}
-		id.glueSchemaID = schemaID
-		return id, nil
 	}
+	log.Info("Schema does not exist, create it", zap.String("schemaName", schemaName))
+	schemaID, err := m.createSchema(ctx, schemaName, schemaDefinition)
+	if err != nil {
+		return id, errors.Trace(err)
+	}
+	id.glueSchemaID = schemaID
+	return id, nil
 }
 
 func (m *glueSchemaManager) Lookup(
@@ -326,14 +328,14 @@ func (m *glueSchemaManager) getSchemaByID(ctx context.Context, schemaID string) 
 // master/common/src/main/java/com/amazonaws/services/
 // schemaregistry/utils/AWSSchemaRegistryConstants.java
 const (
-	header_version_byte      = uint8(3) // 3 is fixed for the glue message
-	compression_default_byte = uint8(0) // 0  no compression
+	headerVersionByte      = uint8(3) // 3 is fixed for the glue message
+	compressionDefaultByte = uint8(0) // 0  no compression
 )
 
 func (m *glueSchemaManager) getMsgHeader(schemaID string) ([]byte, error) {
 	header := []byte{}
-	header = append(header, header_version_byte)
-	header = append(header, compression_default_byte)
+	header = append(header, headerVersionByte)
+	header = append(header, compressionDefaultByte)
 	uuid, err := uuid.ParseBytes([]byte(schemaID))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)

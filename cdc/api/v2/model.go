@@ -1086,6 +1086,7 @@ type ChangefeedStatus struct {
 	LastWarning  *RunningError `json:"last_warning,omitempty"`
 }
 
+// GlueSchemaRegistryConfig represents a glue schema registry configuration
 type GlueSchemaRegistryConfig struct {
 	// Name of the schema registry
 	RegistryName string `json:"registry_name"`

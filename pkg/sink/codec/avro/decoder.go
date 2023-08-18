@@ -397,13 +397,13 @@ func extractGlueSchemaIDAndBinaryData(data []byte) (string, []byte, error) {
 		return "", nil, errors.ErrAvroInvalidMessage.
 			FastGenByArgs("an avro message using glue schema registry should have at least 18 bytes")
 	}
-	if data[0] != header_version_byte {
+	if data[0] != headerVersionByte {
 		return "", nil, errors.ErrAvroInvalidMessage.
-			FastGenByArgs("header version byte is not match, it should be %d", header_version_byte)
+			FastGenByArgs("header version byte is not match, it should be %d", headerVersionByte)
 	}
-	if data[1] != compression_default_byte {
+	if data[1] != compressionDefaultByte {
 		return "", nil, errors.ErrAvroInvalidMessage.
-			FastGenByArgs("compression byte is not match, it should be %d", compression_default_byte)
+			FastGenByArgs("compression byte is not match, it should be %d", compressionDefaultByte)
 	}
 	id, err := getGlueSchemaIDFromHeader(data[0:18])
 	if err != nil {

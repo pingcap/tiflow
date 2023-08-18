@@ -331,12 +331,13 @@ func (c *Config) Validate() error {
 }
 
 const (
-	// schemaRegistryTypeConfluent is the type of Confluent Schema Registry
+	// SchemaRegistryTypeConfluent is the type of Confluent Schema Registry
 	SchemaRegistryTypeConfluent = "confluent"
-	// schemaRegistryTypeGlue is the type of AWS Glue Schema Registry
+	// SchemaRegistryTypeGlue is the type of AWS Glue Schema Registry
 	SchemaRegistryTypeGlue = "glue"
 )
 
+// SchemaRegistryType returns the type of schema registry
 func (c *Config) SchemaRegistryType() string {
 	if c.AvroConfluentSchemaRegistry != "" {
 		return SchemaRegistryTypeConfluent

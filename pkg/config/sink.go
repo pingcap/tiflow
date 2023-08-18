@@ -663,6 +663,7 @@ func (c *LargeMessageHandleConfig) Disabled() bool {
 	return c.LargeMessageHandleOption == LargeMessageHandleOptionNone
 }
 
+// GlueSchemaRegistryConfig represents a Glue Schema Registry configuration
 type GlueSchemaRegistryConfig struct {
 	// Name of the schema registry
 	RegistryName string `toml:"registry-name" json:"registry-name"`
@@ -675,6 +676,7 @@ type GlueSchemaRegistryConfig struct {
 	Token           string `toml:"token" json:"token,omitempty"`
 }
 
+// Validate the GlueSchemaRegistryConfig.
 func (g *GlueSchemaRegistryConfig) Validate() error {
 	if g.RegistryName == "" {
 		return cerror.ErrInvalidGlueSchemaRegistryConfig.
@@ -691,6 +693,7 @@ func (g *GlueSchemaRegistryConfig) Validate() error {
 	return nil
 }
 
+// NoCredentials returns true if no credentials are set.
 func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
 	return g.AccessKey == "" && g.SecretAccessKey == "" && g.Token == ""
 }

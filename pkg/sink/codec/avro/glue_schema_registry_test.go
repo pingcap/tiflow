@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newClueSchemaManagerForTest(t *testing.T, ctx context.Context, cfg *config.GlueSchemaRegistryConfig) *glueSchemaManager {
+func newClueSchemaManagerForTest(ctx context.Context, t *testing.T, cfg *config.GlueSchemaRegistryConfig) *glueSchemaManager {
 	m, err := NewGlueSchemaManager(ctx, cfg)
 	require.NoError(t, err)
 	m.(*glueSchemaManager).client = newMockGlueClientImpl()
@@ -34,7 +34,7 @@ func TestGlueSchemaManager_Register(t *testing.T) {
 	cfg := &config.GlueSchemaRegistryConfig{
 		Region: "us-west-2",
 	}
-	m := newClueSchemaManagerForTest(t, ctx, cfg)
+	m := newClueSchemaManagerForTest(ctx, t, cfg)
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
@@ -59,7 +59,7 @@ func TestGlueSchemaManager_Lookup(t *testing.T) {
 	cfg := &config.GlueSchemaRegistryConfig{
 		Region: "us-west-2",
 	}
-	m := newClueSchemaManagerForTest(t, ctx, cfg)
+	m := newClueSchemaManagerForTest(ctx, t, cfg)
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
@@ -77,7 +77,7 @@ func TestGlueSchemaManager_GetCachedOrRegister(t *testing.T) {
 	cfg := &config.GlueSchemaRegistryConfig{
 		Region: "us-west-2",
 	}
-	m := newClueSchemaManagerForTest(t, ctx, cfg)
+	m := newClueSchemaManagerForTest(ctx, t, cfg)
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
@@ -101,7 +101,7 @@ func TestGlueSchemaManager_RegistryType(t *testing.T) {
 	cfg := &config.GlueSchemaRegistryConfig{
 		Region: "us-west-2",
 	}
-	m := newClueSchemaManagerForTest(t, ctx, cfg)
+	m := newClueSchemaManagerForTest(ctx, t, cfg)
 
 	registryType := m.RegistryType()
 	require.Equal(t, common.SchemaRegistryTypeGlue, registryType)
@@ -112,7 +112,7 @@ func TestGlueSchemaManager_getMsgHeader(t *testing.T) {
 	cfg := &config.GlueSchemaRegistryConfig{
 		Region: "us-west-2",
 	}
-	m := newClueSchemaManagerForTest(t, ctx, cfg)
+	m := newClueSchemaManagerForTest(ctx, t, cfg)
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
@@ -121,8 +121,8 @@ func TestGlueSchemaManager_getMsgHeader(t *testing.T) {
 
 	header, err := m.getMsgHeader(schemaID.glueSchemaID)
 	require.NoError(t, err)
-	require.Equal(t, header[0], header_version_byte)
-	require.Equal(t, header[1], compression_default_byte)
+	require.Equal(t, header[0], headerVersionByte)
+	require.Equal(t, header[1], compressionDefaultByte)
 	sid, err := getGlueSchemaIDFromHeader(header)
 	require.NoError(t, err)
 	require.Equal(t, schemaID.glueSchemaID, sid)

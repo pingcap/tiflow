@@ -19,6 +19,7 @@ import (
 	"github.com/linkedin/goavro/v2"
 )
 
+// SchemaManager is an interface for schema registry
 type SchemaManager interface {
 	Register(ctx context.Context, schemaName string, schemaDefinition string) (schemaID, error)
 	Lookup(ctx context.Context, schemaName string, schemaID schemaID) (*goavro.Codec, error)
