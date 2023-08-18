@@ -542,29 +542,24 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 					return errors.Trace(err)
 				}
 			}
-			continue
-		}
-
-		if sri.requestedTable.stopped.Load() {
+		} else if sri.requestedTable.stopped.Load() {
 			// It can be skipped directly because there must be no pending states from
 			// the stopped requestedTable, or the spetial singleRegionInfo for stopping
 			// the table will be handled later.
 			s.onRegionFail(ctx, newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
-			continue
-		}
+		} else {
+			connectTime := time.Since(sri.lockedRange.Created).Milliseconds()
+			s.metrics.regionConnectDuration.Observe(float64(connectTime))
 
-		connectTime := time.Since(sri.lockedRange.Created).Milliseconds()
-		s.metrics.regionConnectDuration.Observe(float64(connectTime))
+			subscriptionID := sri.requestedTable.subscriptionID
+			state := newRegionFeedState(sri, uint64(subscriptionID))
+			state.start()
+			stream.setState(subscriptionID, sri.verID.GetID(), state)
 
-		subscriptionID := sri.requestedTable.subscriptionID
-		regionID := sri.verID.GetID()
-		state := newRegionFeedState(sri, uint64(subscriptionID))
-		state.start()
-		stream.setState(subscriptionID, regionID, state)
-
-		req := s.createRegionRequest(sri)
-		if err = doSend(req); err != nil {
-			return err
+			req := s.createRegionRequest(sri)
+			if err = doSend(req); err != nil {
+				return err
+			}
 		}
 
 		select {
