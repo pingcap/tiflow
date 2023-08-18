@@ -581,7 +581,6 @@ func (w *regionWorker) run() error {
 		for _, h := range w.handles {
 			h.Unregister()
 		}
-		w.evictAllRegions()
 	}()
 	ctx, cancel := context.WithCancel(w.parentCtx)
 	wg, ctx := errgroup.WithContext(ctx)
