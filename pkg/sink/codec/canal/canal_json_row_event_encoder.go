@@ -507,18 +507,13 @@ type jsonRowEventEncoderBuilder struct {
 }
 
 // NewJSONRowEventEncoderBuilder creates a canal-json batchEncoderBuilder.
-func NewJSONRowEventEncoderBuilder(
-	config *common.Config,
-) codec.RowEventEncoderBuilder {
-	return &jsonRowEventEncoderBuilder{
-		config: config,
-	}
+func NewJSONRowEventEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
+	return &jsonRowEventEncoderBuilder{config: config}
 }
 
 // Build a `jsonRowEventEncoderBuilder`
 func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
-	encoder := newJSONRowEventEncoder(b.config)
-	return encoder
+	return newJSONRowEventEncoder(b.config)
 }
 
 func shouldIgnoreColumn(col *model.Column,
