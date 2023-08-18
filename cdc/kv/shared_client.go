@@ -469,16 +469,11 @@ func (s *SharedClient) requestStore(
 }
 
 func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDataRequest {
-	rpcCtx := sri.rpcCtx
-	regionID := rpcCtx.Meta.GetId()
-	regionEpoch := rpcCtx.Meta.RegionEpoch
-	subscriptionID := sri.requestedTable.subscriptionID
-
 	return &cdcpb.ChangeDataRequest{
 		Header:       &cdcpb.Header{ClusterId: s.clusterID, TicdcVersion: version.ReleaseSemver()},
-		RegionId:     regionID,
-		RequestId:    uint64(subscriptionID),
-		RegionEpoch:  regionEpoch,
+		RegionId:     sri.verID.GetID(),
+		RequestId:    uint64(sri.requestedTable.subscriptionID),
+		RegionEpoch:  sri.rpcCtx.Meta.RegionEpoch,
 		CheckpointTs: sri.resolvedTs(),
 		StartKey:     sri.span.StartKey,
 		EndKey:       sri.span.EndKey,
