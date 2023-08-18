@@ -15,11 +15,8 @@ package compression
 
 import (
 	"bytes"
-	"compress/gzip"
-	"io"
 
 	"github.com/klauspost/compress/snappy"
-	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -28,23 +25,17 @@ const (
 	// None no compression
 	None string = "none"
 
-	// GZIP compression
-	GZIP string = "gzip"
-
 	// Snappy compression
 	Snappy string = "snappy"
 
 	// LZ4 compression
 	LZ4 string = "lz4"
-
-	// ZSTD compression
-	ZSTD string = "zstd"
 )
 
 // Supported return true if the given compression is supported.
 func Supported(cc string) bool {
 	switch cc {
-	case None, GZIP, Snappy, LZ4, ZSTD:
+	case None, Snappy, LZ4:
 		return true
 	}
 	return false
@@ -55,36 +46,11 @@ func Encode(cc string, data []byte) ([]byte, error) {
 	switch cc {
 	case None:
 		return data, nil
-	case GZIP:
-		var buf bytes.Buffer
-		writer := gzip.NewWriter(&buf)
-		if _, err := writer.Write(data); err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
-		if err := writer.Close(); err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
-		return buf.Bytes(), nil
 	case Snappy:
 		return snappy.Encode(nil, data), nil
 	case LZ4:
 		var buf bytes.Buffer
 		writer := lz4.NewWriter(&buf)
-		if _, err := writer.Write(data); err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
-		if err := writer.Close(); err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
-		return buf.Bytes(), nil
-	case ZSTD:
-		var buf bytes.Buffer
-		writer, err := zstd.NewWriter(&buf, zstd.WithZeroFrames(true),
-			zstd.WithEncoderLevel(zstd.SpeedDefault),
-			zstd.WithEncoderConcurrency(1))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
 		if _, err := writer.Write(data); err != nil {
 			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
 		}
@@ -103,16 +69,6 @@ func Decode(cc string, data []byte) ([]byte, error) {
 	switch cc {
 	case None:
 		return data, nil
-	case GZIP:
-		reader, err := gzip.NewReader(bytes.NewReader(data))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
-		result, err := io.ReadAll(reader)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
-		return result, nil
 	case Snappy:
 		return snappy.Decode(nil, data)
 	case LZ4:
@@ -122,16 +78,6 @@ func Decode(cc string, data []byte) ([]byte, error) {
 			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
 		}
 		return buf.Bytes(), nil
-	case ZSTD:
-		reader, err := zstd.NewReader(bytes.NewReader(data), zstd.WithDecoderConcurrency(0))
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
-		result, err := reader.DecodeAll(data, nil)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrCompressionFailed, err)
-		}
-		return result, nil
 	default:
 	}
 

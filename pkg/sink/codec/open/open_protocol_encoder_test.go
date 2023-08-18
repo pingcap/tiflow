@@ -351,7 +351,7 @@ func TestE2EDDLCompression(t *testing.T) {
 	ctx := context.Background()
 
 	codecConfig := common.NewConfig(config.ProtocolOpen)
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.GZIP
+	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
 
 	encoder := NewBatchEncoder(codecConfig)
 
@@ -401,9 +401,9 @@ func TestE2EHandleKeyOnlyEvent(t *testing.T) {
 
 	codecConfig := common.NewConfig(config.ProtocolOpen)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.GZIP
+	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
 
-	codecConfig.MaxMessageBytes = 249
+	codecConfig.MaxMessageBytes = 251
 
 	encoder := NewBatchEncoder(codecConfig)
 
@@ -446,11 +446,11 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 
 	ctx := context.Background()
 	topic := ""
-	// just can hold it.
-	a := 244
+
+	a := 241
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.ZSTD
+	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
 	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
 	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 

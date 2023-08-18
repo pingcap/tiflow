@@ -196,7 +196,7 @@ func TestCanalJSONCompressionE2E(t *testing.T) {
 
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.ZSTD
+	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
 
 	encoder := newJSONRowEventEncoder(codecConfig)
 
