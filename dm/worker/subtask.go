@@ -570,7 +570,7 @@ func (st *SubTask) Kill() {
 	st.validator = nil
 }
 
-// Pause pauses a running sub task or a sub task paused by error.
+// Pause pauses a running subtask or a subtask paused by error.
 func (st *SubTask) Pause() error {
 	if st.markResultCanceled() {
 		return nil
