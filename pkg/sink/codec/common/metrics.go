@@ -21,10 +21,10 @@ import (
 var compressionRatio = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Namespace: "ticdc",
-		Subsystem: "compression",
-		Name:      "ratio",
-		Help:      "The compression ratio",
-		Buckets:   prometheus.LinearBuckets(0, 100, 20),
+		Subsystem: "kafka_sink",
+		Name:      "codec_compression_ratio",
+		Help:      "The TiCDC kafka sink codec compression ratio",
+		Buckets:   prometheus.LinearBuckets(0, 1, 20),
 	}, []string{"namespace", "changefeed"})
 
 // InitMetrics registers all metrics in this file
