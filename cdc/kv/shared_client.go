@@ -967,7 +967,8 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		}
 		if duplicated := innerErr.GetDuplicateRequest(); duplicated != nil {
 			metricFeedDuplicateRequestCounter.Inc()
-			return cerror.ErrDuplicatedRegionRequest.GenWithStackByArgs(duplicated.RegionId)
+			// TODO(qupeng): It's better to add a new machanism to deregister one region.
+			return errors.New("duplicate request")
 		}
 		if compatibility := innerErr.GetCompatibility(); compatibility != nil {
 			return cerror.ErrVersionIncompatible.GenWithStackByArgs(compatibility)

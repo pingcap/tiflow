@@ -226,11 +226,6 @@ error = '''
 failed to preallocate file because disk is full
 '''
 
-["CDC:ErrDuplicatedRegionRequest"]
-error = '''
-duplicated region request %d
-'''
-
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
