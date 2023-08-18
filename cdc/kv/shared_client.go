@@ -226,8 +226,8 @@ func (s *SharedClient) Subscribe(
 	log.Info("event feed subscribes table success",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.String("span", rt.span.String()),
-		zap.Any("subscriptionID", rt.subscriptionID))
+		zap.Any("subscriptionID", rt.subscriptionID),
+		zap.String("span", rt.span.String()))
 	success = true
 	return
 }
@@ -254,8 +254,8 @@ func (s *SharedClient) Unsubscribe(span tablepb.Span) (subID SubscriptionID, suc
 	log.Info("event feed unsubscribes table",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.String("span", rt.span.String()),
-		zap.Any("subscriptionID", rt.subscriptionID))
+		zap.Any("subscriptionID", rt.subscriptionID),
+		zap.String("span", rt.span.String()))
 
 	s.setTableStopped(rt)
 	return
@@ -343,6 +343,7 @@ func (s *SharedClient) setTableStopped(rt *requestedTable) {
 	log.Info("event feed starts to stop table",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
+		zap.Any("subscriptionID", rt.subscriptionID),
 		zap.String("span", rt.span.String()))
 
 	// Set stopped to true so we can stop handling region events from the table.
@@ -360,6 +361,7 @@ func (s *SharedClient) onTableDrained(rt *requestedTable) {
 	log.Info("event feed stop table is finished",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
+		zap.Any("subscriptionID", rt.subscriptionID),
 		zap.String("span", rt.span.String()))
 
 	s.totalSpans.Lock()
@@ -388,6 +390,7 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 			log.Debug("event feed get RPC context fail",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
+				zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Error(err))
 		}
@@ -421,6 +424,14 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 			}
 			continue
 		}
+
+		log.Debug("event feed will request a region",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Any("table", sri.requestedTable.span),
+			zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
+			zap.Uint64("regionID", sri.verID.GetID()))
+
 		storeID := sri.rpcCtx.Peer.StoreId
 		storeAddr := sri.rpcCtx.Addr
 		rs := s.requestStore(ctx, g, storeID, storeAddr)
@@ -492,11 +503,20 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			log.Warn("event feed send request to grpc stream failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
+				zap.Any("subscriptionID", SubscriptionID(req.RequestId)),
+				zap.Uint64("regionID", req.RegionId),
 				zap.Uint64("storeID", rs.storeID),
 				zap.String("addr", rs.storeAddr),
 				zap.Error(err))
 			return errors.Trace(err)
 		}
+		log.Debug("event feed send request to grpc stream success",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Any("subscriptionID", SubscriptionID(req.RequestId)),
+			zap.Uint64("regionID", req.RegionId),
+			zap.Uint64("storeID", rs.storeID),
+			zap.String("addr", rs.storeAddr))
 		return nil
 	}
 
@@ -612,8 +632,8 @@ func (s *SharedClient) sendResolvedTs(ctx context.Context, resolvedTs *cdcpb.Res
 	log.Debug("event feed get a ResolvedTs",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Uint64("ResolvedTs", resolvedTs.Ts),
 		zap.Any("subscriptionID", subscriptionID),
+		zap.Uint64("ResolvedTs", resolvedTs.Ts),
 		zap.Int("regionCount", len(resolvedTs.Regions)))
 
 	for _, regionID := range resolvedTs.Regions {
@@ -829,6 +849,11 @@ func (s *SharedClient) divideAndRequestRegions(
 			}
 			backoffBeforeLoad = false
 		}
+		log.Debug("event feed is going to load regions",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Any("subscriptionID", requestedTable.subscriptionID),
+			zap.Any("span", nextSpan))
 
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
@@ -836,6 +861,7 @@ func (s *SharedClient) divideAndRequestRegions(
 			log.Warn("event feed load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
+				zap.Any("subscriptionID", requestedTable.subscriptionID),
 				zap.Any("span", nextSpan),
 				zap.Error(err))
 			backoffBeforeLoad = true
@@ -853,6 +879,7 @@ func (s *SharedClient) divideAndRequestRegions(
 			log.Warn("event feed load regions with holes",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
+				zap.Any("subscriptionID", requestedTable.subscriptionID),
 				zap.Any("span", nextSpan))
 			backoffBeforeLoad = true
 			continue
@@ -866,7 +893,8 @@ func (s *SharedClient) divideAndRequestRegions(
 			if err != nil {
 				log.Panic("event feed check spans intersect shouldn't fail",
 					zap.String("namespace", s.changefeed.Namespace),
-					zap.String("changefeed", s.changefeed.ID))
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Any("subscriptionID", requestedTable.subscriptionID))
 			}
 			verID := tikv.NewRegionVerID(region.Id, region.RegionEpoch.ConfVer, region.RegionEpoch.Version)
 			sri := newSingleRegionInfo(verID, partialSpan, nil)
@@ -947,6 +975,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		log.Debug("cdc error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
+			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
 			zap.Stringer("error", innerErr))
 
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
@@ -980,6 +1009,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		log.Warn("empty or unknown cdc error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
+			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
 			zap.Stringer("error", innerErr))
 		metricFeedUnknownErrorCounter.Inc()
 		s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
@@ -999,8 +1029,8 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		log.Warn("event feed meets an internal error, fail the changefeed",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
-			zap.String("span", errInfo.requestedTable.span.String()),
 			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
+			zap.String("span", errInfo.requestedTable.span.String()),
 			zap.Error(err))
 		return err
 	}
@@ -1108,9 +1138,9 @@ func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 	log.Warn("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.String("span", r.span.String()),
 		zap.Any("subscriptionID", r.subscriptionID),
-		zap.Any("LockedRanges", res))
+		zap.String("span", r.span.String()),
+		zap.Any("ranges", res))
 }
 
 type sharedClientMetrics struct {
