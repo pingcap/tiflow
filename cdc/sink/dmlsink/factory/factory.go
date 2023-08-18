@@ -77,7 +77,7 @@ func New(
 		if err != nil {
 			return nil, err
 		}
-		s.rowSink = mqs
+		s.txnSink = mqs
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		storageSink, err := cloudstorage.NewDMLSink(ctx, sinkURI, cfg, errCh)
 		if err != nil {
