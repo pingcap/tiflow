@@ -978,7 +978,11 @@ func (s *testSyncerSuite) TestRun(c *C) {
 	ctx, cancel = context.WithCancel(context.Background())
 	resultCh = make(chan pb.ProcessResult)
 	// simulate `syncer.Resume` here, but doesn't reset database conns
+	syncer.secondsBehindMaster.Store(100)
+	syncer.workerJobTSArray[ddlJobIdx].Store(100)
 	syncer.reset()
+	c.Assert(syncer.secondsBehindMaster.Load(), Equals, int64(0))
+	c.Assert(syncer.workerJobTSArray[ddlJobIdx].Load(), Equals, int64(0))
 	mockStreamerProducer = &MockStreamProducer{s.generateEvents(events2, c)}
 	mockStreamer, err = mockStreamerProducer.GenerateStreamFrom(binlog.MustZeroLocation(mysql.MySQLFlavor))
 	c.Assert(err, IsNil)
