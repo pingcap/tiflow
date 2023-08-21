@@ -21,29 +21,31 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
-// NewPulsarDDLSink will verify the config and create a Pulsar DDL Sink.
-func NewPulsarDDLSink(
+// NewPulsarDMLSink will verify the config and create a PulsarSink.
+func NewPulsarDMLSink(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
+	errCh chan error,
 	pulsarTopicManagerCreator manager.PulsarTopicManager,
 	clientCreator pulsarConfig.FactoryCreator,
-	producerCreator ddlproducer.PulsarFactory,
-) (_ *DDLSink, err error) {
-	log.Info("Starting pulsar DDL producer ...",
+	producerCreator dmlproducer.PulsarFactory,
+) (_ *dmlSink, err error) {
+	log.Info("Starting pulsar DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
@@ -62,34 +64,27 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	log.Info("Try to create a DDL sink producer", zap.Any("pulsarConfig", pConfig))
+	log.Info("Try to create a DDL sink producer",
+		zap.Any("pulsarConfig", pConfig))
 
-	// NewEventRouter
-	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, sinkURI.Scheme)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, config.DefaultMaxMessageBytes)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	start := time.Now()
 	client, err := clientCreator(pConfig, changefeedID, replicaConfig.Sink)
 	if err != nil {
-		log.Error("DDL sink producer client create fail", zap.Error(err))
+		log.Error("DML sink producer client create fail", zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrPulsarNewClient, err)
 	}
 
-	p, err := producerCreator(ctx, changefeedID, pConfig, client, replicaConfig.Sink)
-	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
+	failpointCh := make(chan error, 1)
+	log.Info("Try to create a DML sink producer", zap.Any("pulsar", pConfig))
+	start := time.Now()
+	p, err := producerCreator(ctx, changefeedID, client, replicaConfig.Sink, errCh, failpointCh)
+	log.Info("DML sink producer client created",
+		zap.Duration("duration", time.Since(start)))
 	if err != nil {
+		defer func() {
+			if p != nil {
+				p.Close()
+			}
+		}()
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 
@@ -98,7 +93,30 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	s := newDDLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderBuilder, protocol)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, sinkURI.Scheme)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
+		config.DefaultMaxMessageBytes)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrPulsarInvalidConfig, err)
+	}
+
+	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
+	encoderGroup := codec.NewEncoderGroup(encoderBuilder, concurrency, changefeedID)
+
+	s := newDMLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderGroup,
+		protocol, nil, nil, errCh)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	return s, nil
 }

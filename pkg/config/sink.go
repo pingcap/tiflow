@@ -70,6 +70,10 @@ const (
 	BinaryEncodingHex = "hex"
 	// BinaryEncodingBase64 encodes binary data to base64 string.
 	BinaryEncodingBase64 = "base64"
+
+	// DefaultPulsarProducerCacheSize is the default size of the cache for producers
+	// 10240 producers maybe cost 1.1G memory
+	DefaultPulsarProducerCacheSize = 10240
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.

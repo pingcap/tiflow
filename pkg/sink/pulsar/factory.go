@@ -20,6 +20,7 @@ import (
 	"github.com/apache/pulsar-client-go/pulsar/auth"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
 	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
@@ -37,6 +38,8 @@ func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFee
 		},
 		ConnectionTimeout: config.ConnectionTimeout.Duration(),
 		OperationTimeout:  config.OperationTimeout.Duration(),
+		// add pulsar default metrics
+		MetricsRegisterer: mq.GetMetricRegistry(),
 	}
 	var err error
 

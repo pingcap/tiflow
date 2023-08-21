@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/cloudstorage"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/txn"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -33,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	v2 "github.com/pingcap/tiflow/pkg/sink/kafka/v2"
+	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -90,6 +92,14 @@ func New(
 	case sink.BlackHoleScheme:
 		bs := blackhole.NewDMLSink()
 		s.rowSink = bs
+	case sink.PulsarScheme:
+		mqs, err := mq.NewPulsarDMLSink(ctx, changefeedID, sinkURI, cfg, errCh,
+			manager.NewPulsarTopicManager,
+			pulsarConfig.NewCreatorFactory, dmlproducer.NewPulsarDMLProducer)
+		if err != nil {
+			return nil, err
+		}
+		s.txnSink = mqs
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
