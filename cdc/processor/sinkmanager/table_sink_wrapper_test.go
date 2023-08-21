@@ -96,13 +96,17 @@ func createTableSinkWrapper(
 	return wrapper, sink
 }
 
-func TestTableSinkWrapperClose(t *testing.T) {
+func TestTableSinkWrapperStop(t *testing.T) {
 	t.Parallel()
 
 	wrapper, _ := createTableSinkWrapper(
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
 	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
-	wrapper.stop()
+	for {
+		if wrapper.asyncStop() {
+			break
+		}
+	}
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
 }
 
