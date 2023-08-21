@@ -68,7 +68,9 @@ func (r *avroEncodeInput) Swap(i, j int) {
 
 type avroEncodeResult struct {
 	data []byte
-	// header is the message header
+	// header is the message header, it will be encoder into the head
+	// of every single avro message. Note: Confluent schema registry and
+	// Aws Glue schema registry have different header format.
 	header []byte
 }
 
@@ -1010,7 +1012,8 @@ func NewBatchEncoderBuilder(ctx context.Context,
 	var schemaM SchemaManager
 	var err error
 
-	switch config.SchemaRegistryType() {
+	schemaRegistryType := config.SchemaRegistryType()
+	switch schemaRegistryType {
 	case common.SchemaRegistryTypeConfluent:
 		schemaM, err = NewConfluentSchemaManager(ctx, config.AvroConfluentSchemaRegistry, nil)
 		if err != nil {
@@ -1022,7 +1025,7 @@ func NewBatchEncoderBuilder(ctx context.Context,
 			return nil, errors.Trace(err)
 		}
 	default:
-		return nil, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(config.SchemaRegistryType())
+		return nil, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs(schemaRegistryType)
 	}
 
 	return &batchEncoderBuilder{

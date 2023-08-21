@@ -318,6 +318,17 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				}
 			}
 
+			var glueSchemaRegistryConfig *config.GlueSchemaRegistryConfig
+			if c.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+				glueSchemaRegistryConfig = &config.GlueSchemaRegistryConfig{
+					RegistryName:    c.Sink.KafkaConfig.GlueSchemaRegistryConfig.RegistryName,
+					Region:          c.Sink.KafkaConfig.GlueSchemaRegistryConfig.Region,
+					AccessKey:       c.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey,
+					SecretAccessKey: c.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey,
+					Token:           c.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token,
+				}
+			}
+
 			kafkaConfig = &config.KafkaConfig{
 				PartitionNum:                 c.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            c.Sink.KafkaConfig.ReplicationFactor,
@@ -354,6 +365,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
+				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -411,16 +423,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 		if c.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
-		}
-
-		if c.Sink.GlueSchemaRegistryConfig != nil {
-			res.Sink.GlueSchemaRegistryConfig = &config.GlueSchemaRegistryConfig{
-				RegistryName:    c.Sink.GlueSchemaRegistryConfig.RegistryName,
-				Region:          c.Sink.GlueSchemaRegistryConfig.Region,
-				AccessKey:       c.Sink.GlueSchemaRegistryConfig.AccessKey,
-				SecretAccessKey: c.Sink.GlueSchemaRegistryConfig.SecretAccessKey,
-				Token:           c.Sink.GlueSchemaRegistryConfig.Token,
-			}
 		}
 
 	}
@@ -559,6 +561,17 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				}
 			}
 
+			var glueSchemaRegistryConfig *GlueSchemaRegistryConfig
+			if cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+				glueSchemaRegistryConfig = &GlueSchemaRegistryConfig{
+					RegistryName:    cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.RegistryName,
+					Region:          cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.Region,
+					AccessKey:       cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey,
+					SecretAccessKey: cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey,
+					Token:           cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token,
+				}
+			}
+
 			kafkaConfig = &KafkaConfig{
 				PartitionNum:                 cloned.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            cloned.Sink.KafkaConfig.ReplicationFactor,
@@ -595,6 +608,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
+				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -627,17 +641,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			}
 		}
 
-		var glueSchemaRegistryConfig *GlueSchemaRegistryConfig
-		if cloned.Sink.GlueSchemaRegistryConfig != nil {
-			glueSchemaRegistryConfig = &GlueSchemaRegistryConfig{
-				RegistryName:    cloned.Sink.GlueSchemaRegistryConfig.RegistryName,
-				Region:          cloned.Sink.GlueSchemaRegistryConfig.Region,
-				AccessKey:       cloned.Sink.GlueSchemaRegistryConfig.AccessKey,
-				SecretAccessKey: cloned.Sink.GlueSchemaRegistryConfig.SecretAccessKey,
-				Token:           cloned.Sink.GlueSchemaRegistryConfig.Token,
-			}
-		}
-
 		res.Sink = &SinkConfig{
 			Protocol:                         cloned.Sink.Protocol,
 			SchemaRegistry:                   cloned.Sink.SchemaRegistry,
@@ -656,7 +659,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MySQLConfig:                      mysqlConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         cloned.Sink.SafeMode,
-			GlueSchemaRegistryConfig:         glueSchemaRegistryConfig,
 		}
 
 		if cloned.Sink.TxnAtomicity != nil {
@@ -798,26 +800,25 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                         *string                   `json:"protocol,omitempty"`
-	SchemaRegistry                   *string                   `json:"schema_registry,omitempty"`
-	CSVConfig                        *CSVConfig                `json:"csv,omitempty"`
-	DispatchRules                    []*DispatchRule           `json:"dispatchers,omitempty"`
-	ColumnSelectors                  []*ColumnSelector         `json:"column_selectors,omitempty"`
-	TxnAtomicity                     *string                   `json:"transaction_atomicity,omitempty"`
-	EncoderConcurrency               *int                      `json:"encoder_concurrency,omitempty"`
-	Terminator                       *string                   `json:"terminator,omitempty"`
-	DateSeparator                    *string                   `json:"date_separator,omitempty"`
-	EnablePartitionSeparator         *bool                     `json:"enable_partition_separator,omitempty"`
-	FileIndexWidth                   *int                      `json:"file_index_width,omitempty"`
-	EnableKafkaSinkV2                *bool                     `json:"enable_kafka_sink_v2,omitempty"`
-	OnlyOutputUpdatedColumns         *bool                     `json:"only_output_updated_columns,omitempty"`
-	DeleteOnlyOutputHandleKeyColumns *bool                     `json:"delete_only_output_handle_key_columns"`
-	SafeMode                         *bool                     `json:"safe_mode,omitempty"`
-	KafkaConfig                      *KafkaConfig              `json:"kafka_config,omitempty"`
-	MySQLConfig                      *MySQLConfig              `json:"mysql_config,omitempty"`
-	CloudStorageConfig               *CloudStorageConfig       `json:"cloud_storage_config,omitempty"`
-	AdvanceTimeoutInSec              *uint                     `json:"advance_timeout,omitempty"`
-	GlueSchemaRegistryConfig         *GlueSchemaRegistryConfig `json:"glue_schema_registry_config,omitempty"`
+	Protocol                         *string             `json:"protocol,omitempty"`
+	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
+	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
+	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
+	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
+	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
+	Terminator                       *string             `json:"terminator,omitempty"`
+	DateSeparator                    *string             `json:"date_separator,omitempty"`
+	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
+	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
+	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
+	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
+	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
+	SafeMode                         *bool               `json:"safe_mode,omitempty"`
+	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
+	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
+	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -1048,6 +1049,7 @@ type KafkaConfig struct {
 	InsecureSkipVerify           *bool                     `json:"insecure_skip_verify,omitempty"`
 	CodecConfig                  *CodecConfig              `json:"codec_config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `json:"glue_schema_registry_config,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration

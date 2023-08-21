@@ -169,8 +169,8 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	if urlParameter.AvroSchemaRegistry != "" {
 		c.AvroConfluentSchemaRegistry = urlParameter.AvroSchemaRegistry
 	}
-	if replicaConfig.Sink.GlueSchemaRegistryConfig != nil {
-		c.AvroGlueSchemaRegistry = replicaConfig.Sink.GlueSchemaRegistryConfig
+	if replicaConfig.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+		c.AvroGlueSchemaRegistry = replicaConfig.Sink.KafkaConfig.GlueSchemaRegistryConfig
 	}
 	if c.Protocol == config.ProtocolAvro && replicaConfig.ForceReplicate {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(

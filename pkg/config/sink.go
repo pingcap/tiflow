@@ -164,8 +164,6 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
-
-	GlueSchemaRegistryConfig *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -333,6 +331,7 @@ type KafkaConfig struct {
 	InsecureSkipVerify           *bool                     `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
 }
 
 // PulsarConfig pulsar sink configuration
