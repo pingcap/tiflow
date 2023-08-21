@@ -47,6 +47,8 @@ func fastMarshalDummyStatus(t *testing.T, val int) []byte {
 }
 
 func TestWorkerInitAndClose(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -113,6 +115,8 @@ const (
 )
 
 func TestWorkerHeartbeatPingPong(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -367,6 +371,8 @@ func TestWorkerSuicideAfterRuntimeDelay(t *testing.T) {
 }
 
 func TestWorkerGracefulExit(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -434,6 +440,8 @@ func TestWorkerGracefulExit(t *testing.T) {
 }
 
 func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -497,6 +505,8 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 }
 
 func TestCloseBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -508,6 +518,8 @@ func TestCloseBeforeInit(t *testing.T) {
 }
 
 func TestExitWithoutReturn(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -548,6 +560,8 @@ func checkWorkerStatusMsg(t *testing.T, expect, msg *statusutil.WorkerStatusMess
 }
 
 func TestWorkerExit(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		exitReason       ExitReason
 		err              error
