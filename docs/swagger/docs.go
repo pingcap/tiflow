@@ -1443,6 +1443,30 @@ var doc = `{
                 }
             }
         },
+        "config.GlueSchemaRegistryConfig": {
+            "type": "object",
+            "properties": {
+                "access-key": {
+                    "description": "AccessKey of the schema registry",
+                    "type": "string"
+                },
+                "region": {
+                    "description": "Region of the schema registry",
+                    "type": "string"
+                },
+                "registry-name": {
+                    "description": "Name of the schema registry",
+                    "type": "string"
+                },
+                "secret-access-key": {
+                    "description": "SecretAccessKey of the schema registry",
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "config.KafkaConfig": {
             "type": "object",
             "properties": {
@@ -1689,6 +1713,9 @@ var doc = `{
                 "file-index-digit": {
                     "description": "FileIndexWidth is only available when the downstream is Storage",
                     "type": "integer"
+                },
+                "glue-schema-registry-config": {
+                    "$ref": "#/definitions/config.GlueSchemaRegistryConfig"
                 },
                 "kafka-config": {
                     "$ref": "#/definitions/config.KafkaConfig"
@@ -2374,6 +2401,30 @@ var doc = `{
                 }
             }
         },
+        "v2.GlueSchemaRegistryConfig": {
+            "type": "object",
+            "properties": {
+                "access_key": {
+                    "description": "AccessKey of the schema registry",
+                    "type": "string"
+                },
+                "region": {
+                    "description": "Region of the schema registry",
+                    "type": "string"
+                },
+                "registry_name": {
+                    "description": "Name of the schema registry",
+                    "type": "string"
+                },
+                "secret_access_key": {
+                    "description": "SecretAccessKey of the schema registry",
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.IntegrityConfig": {
             "type": "object",
             "properties": {
@@ -2770,6 +2821,9 @@ var doc = `{
                 },
                 "file_index_width": {
                     "type": "integer"
+                },
+                "glue_schema_registry_config": {
+                    "$ref": "#/definitions/v2.GlueSchemaRegistryConfig"
                 },
                 "kafka_config": {
                     "$ref": "#/definitions/v2.KafkaConfig"
