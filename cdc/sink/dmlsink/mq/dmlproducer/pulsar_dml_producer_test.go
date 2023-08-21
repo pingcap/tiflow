@@ -27,17 +27,17 @@ import (
 )
 
 // newPulsarConfig set config
-func newPulsarConfig(t *testing.T) (*config.PulsarConfig, *url.URL, *config.ReplicaConfig) {
+func newPulsarConfig(t *testing.T) (c *config.PulsarConfig, sinkURI *url.URL, replicaConfig *config.ReplicaConfig) {
 	sinkURL := "pulsar://127.0.0.1:6650/persistent://public/default/test?" +
 		"protocol=canal-json&pulsar-version=v2.10.0&enable-tidb-extension=true&" +
 		"authentication-token=eyJhbcGcixxxxxxxxxxxxxx"
-
-	sinkURI, err := url.Parse(sinkURL)
+	var err error
+	sinkURI, err = url.Parse(sinkURL)
 	require.NoError(t, err)
-	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig = config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	require.NoError(t, err)
-	c, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
+	c, err = pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	require.NoError(t, err)
 	replicaConfig.Sink.PulsarConfig = c
 	return c, sinkURI, replicaConfig

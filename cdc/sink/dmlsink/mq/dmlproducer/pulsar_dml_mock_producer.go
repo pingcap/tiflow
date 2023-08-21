@@ -16,8 +16,6 @@ package dmlproducer
 import (
 	"context"
 	"fmt"
-	"sync"
-
 	"github.com/apache/pulsar-client-go/pulsar"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -39,9 +37,6 @@ type pulsarDMLProducerMock struct {
 	// support multiple topics
 	producers *lru.Cache
 
-	// closedMu is used to protect `closed`.
-	// We need to ensure that closed producers are never written to.
-	closedMu sync.RWMutex
 	// closed is used to indicate whether the producer is closed.
 	// We also use it to guard against double closes.
 	closed bool

@@ -54,7 +54,7 @@ var (
 		}, []string{"topic", "changefeed", "schema", "type"})
 )
 
-// DDL
+// IncPublishedDDLCount DDL
 func IncPublishedDDLCount(topic, changefeed string, message *common.Message) {
 	if message.Type == model.MessageTypeDDL {
 		publishedDDLSchemaTableCountMetric.WithLabelValues(topic, changefeed, message.GetSchema(), "count").Inc()
@@ -64,6 +64,7 @@ func IncPublishedDDLCount(topic, changefeed string, message *common.Message) {
 	}
 }
 
+// IncPublishedDDLSuccess success
 func IncPublishedDDLSuccess(topic, changefeed string, message *common.Message) {
 	if message.Type == model.MessageTypeDDL {
 		publishedDDLSchemaTableCountMetric.WithLabelValues(topic, changefeed, message.GetSchema(), "success").Inc()
@@ -73,6 +74,7 @@ func IncPublishedDDLSuccess(topic, changefeed string, message *common.Message) {
 	}
 }
 
+// IncPublishedDDLFail fail
 func IncPublishedDDLFail(topic, changefeed string, message *common.Message) {
 	if message.Type == model.MessageTypeDDL {
 		publishedDDLSchemaTableCountMetric.WithLabelValues(topic, changefeed, message.GetSchema(), "fail").Inc()
@@ -82,15 +84,17 @@ func IncPublishedDDLFail(topic, changefeed string, message *common.Message) {
 	}
 }
 
-// DML
+// IncPublishedDMLCount count
 func IncPublishedDMLCount(topic, changefeed, schema string) {
 	publishedDMLSchemaTableCountMetric.WithLabelValues(topic, changefeed, schema, "count").Inc()
 }
 
+// IncPublishedDMLSuccess success
 func IncPublishedDMLSuccess(topic, changefeed, schema string) {
 	publishedDMLSchemaTableCountMetric.WithLabelValues(topic, changefeed, schema, "success").Inc()
 }
 
+// IncPublishedDMLFail fail
 func IncPublishedDMLFail(topic, changefeed, schema string) {
 	publishedDMLSchemaTableCountMetric.WithLabelValues(topic, changefeed, schema, "fail").Inc()
 }
