@@ -313,7 +313,7 @@ func (w *FileWriter) handlePotentialHoleOrDuplicate(ev *replication.BinlogEvent)
 func (w *FileWriter) detectDuplicateEvent(ev *replication.BinlogEvent) bool {
 	evStartPos := int64(ev.Header.LogPos - ev.Header.EventSize)
 	fileOffset := w.out.Offset()
-	if evStartPos < fileOffset {
+	return evStartPos < fileOffset
 		// duplicate event exists
 		return true
 	}
