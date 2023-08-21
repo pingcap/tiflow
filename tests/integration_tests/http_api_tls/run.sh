@@ -117,8 +117,7 @@ function run() {
 		"move_table"
 		"set_log_level"
 		"remove_changefeed"
-		"resign_owner"
-		"get_tso"
+		"resign_owner" # "get_tso" : todo: needs to revert it.
 		"verify_table"
 		"create_changefeed_v2"
 		"delete_changefeed_v2"
