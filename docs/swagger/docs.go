@@ -1491,6 +1491,9 @@ var doc = `{
                 "enable-tls": {
                     "type": "boolean"
                 },
+                "glue-schema-registry-config": {
+                    "$ref": "#/definitions/config.GlueSchemaRegistryConfig"
+                },
                 "insecure-skip-verify": {
                     "type": "boolean"
                 },
@@ -1713,9 +1716,6 @@ var doc = `{
                 "file-index-digit": {
                     "description": "FileIndexWidth is only available when the downstream is Storage",
                     "type": "integer"
-                },
-                "glue-schema-registry-config": {
-                    "$ref": "#/definitions/config.GlueSchemaRegistryConfig"
                 },
                 "kafka-config": {
                     "$ref": "#/definitions/config.KafkaConfig"
@@ -2460,6 +2460,9 @@ var doc = `{
                 "enable_tls": {
                     "type": "boolean"
                 },
+                "glue_schema_registry_config": {
+                    "$ref": "#/definitions/v2.GlueSchemaRegistryConfig"
+                },
                 "insecure_skip_verify": {
                     "type": "boolean"
                 },
@@ -2821,9 +2824,6 @@ var doc = `{
                 },
                 "file_index_width": {
                     "type": "integer"
-                },
-                "glue_schema_registry_config": {
-                    "$ref": "#/definitions/v2.GlueSchemaRegistryConfig"
                 },
                 "kafka_config": {
                     "$ref": "#/definitions/v2.KafkaConfig"
