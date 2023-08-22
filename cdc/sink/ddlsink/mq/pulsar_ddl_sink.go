@@ -70,7 +70,8 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := util.GetEncoderConfig(changefeedID,sinkURI, protocol, replicaConfig, config.DefaultMaxMessageBytes)
+	encoderConfig, err := util.GetEncoderConfig(changefeedID,
+		sinkURI, protocol, replicaConfig, config.DefaultMaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
