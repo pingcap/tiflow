@@ -136,7 +136,7 @@ func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 	state := s.sri.lockedRange
 	for {
 		last := state.CheckpointTs.Load()
-		if last >= resolvedTs {
+		if last > resolvedTs {
 			return
 		}
 		if state.CheckpointTs.CompareAndSwap(last, resolvedTs) {

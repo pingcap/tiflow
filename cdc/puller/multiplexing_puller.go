@@ -82,10 +82,11 @@ type MultiplexingPuller struct {
 		n *spanz.HashMap[*tableProgress]
 	}
 
-	pullerEventCounterKv       prometheus.Counter
-	pullerEventCounterResolved prometheus.Counter
-	queueKvDuration            prometheus.Observer
-	queueResolvedDuration      prometheus.Observer
+	CounterKv              prometheus.Counter
+	CounterResolved        prometheus.Counter
+	CounterResolvedDropped prometheus.Counter
+	queueKvDuration        prometheus.Observer
+	queueResolvedDuration  prometheus.Observer
 }
 
 // NewMultiplexingPuller creates a MultiplexingPuller. Outputs are handled by
@@ -199,15 +200,20 @@ func (p *MultiplexingPuller) Run(ctx context.Context) (err error) {
 }
 
 func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error {
-	p.pullerEventCounterKv = PullerEventCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
-	p.pullerEventCounterResolved = PullerEventCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
+	p.CounterKv = PullerEventCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
+	p.CounterResolved = PullerEventCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
+	p.CounterResolvedDropped = PullerEventCounter.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved-dropped")
 	p.queueKvDuration = pullerQueueDuration.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 	p.queueResolvedDuration = pullerQueueDuration.WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 	defer func() {
 		PullerEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 		PullerEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
+		PullerEventCounter.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved-dropped")
 		pullerQueueDuration.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "kv")
 		pullerQueueDuration.DeleteLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
+		log.Info("MultiplexingPuller exits",
+			zap.String("namespace", p.changefeed.Namespace),
+			zap.String("changefeed", p.changefeed.ID))
 	}()
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -228,6 +234,7 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 	log.Info("MultiplexingPuller starts",
 		zap.String("namespace", p.changefeed.Namespace),
 		zap.String("changefeed", p.changefeed.ID),
+		zap.Int("workerConcurrent", len(p.inputChs)),
 		zap.Int("frontierConcurrent", p.frontiers))
 	return g.Wait()
 }
@@ -248,17 +255,19 @@ func (p *MultiplexingPuller) handleInputCh(ctx context.Context, inputCh <-chan k
 
 		if e.Val != nil {
 			p.queueKvDuration.Observe(float64(time.Since(e.Start).Milliseconds()))
-			p.pullerEventCounterKv.Inc()
+			p.CounterKv.Inc()
 			if err := progress.consume.f(ctx, e.Val, progress.spans); err != nil {
 				return errors.Trace(err)
 			}
 		} else if e.Resolved != nil {
-			p.pullerEventCounterResolved.Add(float64(len(e.Resolved.Spans)))
+			p.CounterResolved.Add(float64(len(e.Resolved.Spans)))
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case progress.resolvedSpans <- e:
 				p.schedule(ctx, progress)
+			default:
+				p.CounterResolvedDropped.Add(float64(len(e.Resolved.Spans)))
 			}
 		}
 	}

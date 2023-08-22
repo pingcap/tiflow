@@ -309,7 +309,9 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	log.Info("event feed started",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID))
-
+	defer log.Info("event feed exits",
+		zap.String("namespace", s.changefeed.Namespace),
+		zap.String("changefeed", s.changefeed.ID))
 	return g.Wait()
 }
 
