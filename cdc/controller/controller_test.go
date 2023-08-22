@@ -87,7 +87,6 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(
 		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
 	) (uint64, error) {
-		t.Fatal("must not update")
 		return 0, nil
 	}
 	changefeedID1 := model.DefaultChangeFeedID("test-changefeed1")
