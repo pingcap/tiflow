@@ -114,6 +114,28 @@ func TestConfigApplyValidate4EnableRowChecksum(t *testing.T) {
 	require.True(t, c.AvroEnableWatermark)
 }
 
+func TestLargeMessageHandle4NotSupportedProtocol(t *testing.T) {
+	t.Parallel()
+
+	// enable the `handle-key-only`.
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
+	}
+	replicaConfig.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+
+	uri := "kafka://127.0.0.1:9092/unsupported-protocol?protocol=canal"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolCanal)
+	err = codecConfig.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+
+	err = codecConfig.Validate()
+	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
+}
+
 func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	t.Parallel()
 
