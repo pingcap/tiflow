@@ -49,8 +49,8 @@ type tableProgress struct {
 	resolvedTs           atomic.Uint64
 	maxIngressResolvedTs atomic.Uint64
 
-	resolvedSpans chan kv.MultiplexingEvent
-	tsTracker     frontier.Frontier
+	resolvedEventsCache chan kv.MultiplexingEvent
+	tsTracker           frontier.Frontier
 
 	consume struct {
 		sync.RWMutex
@@ -66,7 +66,6 @@ type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
 	client     *kv.SharedClient
 	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span) error
-	workers    int
 	hasher     func(tablepb.Span, int) int
 	frontiers  int
 
@@ -106,7 +105,6 @@ func NewMultiplexingPuller(
 		changefeed: changefeed,
 		client:     client,
 		consume:    consume,
-		workers:    workers,
 		hasher:     hasher,
 		frontiers:  frontiers,
 		advanceCh:  make(chan *tableProgress, 128),
@@ -136,8 +134,8 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		startTs:    startTs,
 		tableName:  tableName,
 
-		resolvedSpans: make(chan kv.MultiplexingEvent, 16),
-		tsTracker:     frontier.NewFrontier(0, spans...),
+		resolvedEventsCache: make(chan kv.MultiplexingEvent, 16),
+		tsTracker:           frontier.NewFrontier(0, spans...),
 	}
 
 	progress.consume.f = func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
@@ -264,7 +262,7 @@ func (p *MultiplexingPuller) handleInputCh(ctx context.Context, inputCh <-chan k
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case progress.resolvedSpans <- e:
+			case progress.resolvedEventsCache <- e:
 				p.schedule(ctx, progress)
 			default:
 				p.CounterResolvedDropped.Add(float64(len(e.Resolved.Spans)))
@@ -308,7 +306,7 @@ func (p *MultiplexingPuller) advanceSpans(ctx context.Context) error {
 	handleProgress := func(ctx context.Context, progress *tableProgress) error {
 		defer func() {
 			progress.scheduled.Store(false)
-			if len(progress.resolvedSpans) > 0 {
+			if len(progress.resolvedEventsCache) > 0 {
 				p.schedule(ctx, progress)
 			}
 		}()
@@ -319,7 +317,7 @@ func (p *MultiplexingPuller) advanceSpans(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case event = <-progress.resolvedSpans:
+			case event = <-progress.resolvedEventsCache:
 				spans = event.RegionFeedEvent.Resolved
 			default:
 				return nil
@@ -363,7 +361,7 @@ func (p *MultiplexingPuller) checkResolveLock(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case progress.resolvedSpans <- kv.MultiplexingEvent{}:
+			case progress.resolvedEventsCache <- kv.MultiplexingEvent{}:
 				p.schedule(ctx, progress)
 			}
 		}
