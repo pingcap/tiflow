@@ -17,12 +17,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
-func newClueSchemaManagerForTest(ctx context.Context, t *testing.T, cfg *config.GlueSchemaRegistryConfig) *glueSchemaManager {
+func newClueSchemaManagerForTest() *glueSchemaManager {
 	res := &glueSchemaManager{
 		registryName: "test_registry",
 		client:       newMockGlueClientImpl(),
@@ -34,10 +33,7 @@ func newClueSchemaManagerForTest(ctx context.Context, t *testing.T, cfg *config.
 
 func TestGlueSchemaManager_Register(t *testing.T) {
 	ctx := context.Background()
-	cfg := &config.GlueSchemaRegistryConfig{
-		Region: "us-west-2",
-	}
-	m := newClueSchemaManagerForTest(ctx, t, cfg)
+	m := newClueSchemaManagerForTest()
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
@@ -59,10 +55,7 @@ func TestGlueSchemaManager_Register(t *testing.T) {
 
 func TestGlueSchemaManager_Lookup(t *testing.T) {
 	ctx := context.Background()
-	cfg := &config.GlueSchemaRegistryConfig{
-		Region: "us-west-2",
-	}
-	m := newClueSchemaManagerForTest(ctx, t, cfg)
+	m := newClueSchemaManagerForTest()
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
@@ -77,10 +70,7 @@ func TestGlueSchemaManager_Lookup(t *testing.T) {
 
 func TestGlueSchemaManager_GetCachedOrRegister(t *testing.T) {
 	ctx := context.Background()
-	cfg := &config.GlueSchemaRegistryConfig{
-		Region: "us-west-2",
-	}
-	m := newClueSchemaManagerForTest(ctx, t, cfg)
+	m := newClueSchemaManagerForTest()
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
@@ -100,11 +90,7 @@ func TestGlueSchemaManager_GetCachedOrRegister(t *testing.T) {
 }
 
 func TestGlueSchemaManager_RegistryType(t *testing.T) {
-	ctx := context.Background()
-	cfg := &config.GlueSchemaRegistryConfig{
-		Region: "us-west-2",
-	}
-	m := newClueSchemaManagerForTest(ctx, t, cfg)
+	m := newClueSchemaManagerForTest()
 
 	registryType := m.RegistryType()
 	require.Equal(t, common.SchemaRegistryTypeGlue, registryType)
@@ -112,10 +98,7 @@ func TestGlueSchemaManager_RegistryType(t *testing.T) {
 
 func TestGlueSchemaManager_getMsgHeader(t *testing.T) {
 	ctx := context.Background()
-	cfg := &config.GlueSchemaRegistryConfig{
-		Region: "us-west-2",
-	}
-	m := newClueSchemaManagerForTest(ctx, t, cfg)
+	m := newClueSchemaManagerForTest()
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
