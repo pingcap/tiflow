@@ -44,7 +44,7 @@ type tableProgress struct {
 	startTs    model.Ts
 	tableName  string
 
-	initialized          bool
+	initialized          atomic.Bool
 	resolvedTsUpdated    time.Time
 	resolvedTs           atomic.Uint64
 	maxIngressResolvedTs atomic.Uint64
@@ -322,11 +322,6 @@ func (p *MultiplexingPuller) advanceSpans(ctx context.Context) error {
 			default:
 				return nil
 			}
-			if spans == nil {
-				// It means the event comes from `checkResolveLock`.
-				progress.resolveLock()
-				continue
-			}
 			p.queueResolvedDuration.Observe(float64(time.Since(event.Start).Milliseconds()))
 			if err := progress.handleResolvedSpans(ctx, spans); err != nil {
 				return errors.Trace(err)
@@ -357,12 +352,13 @@ func (p *MultiplexingPuller) checkResolveLock(ctx context.Context) error {
 			return ctx.Err()
 		case <-resolveLockTicker.C:
 		}
+		currentTime := p.client.GetPDClock().CurrentTime()
 		for progress := range p.getAllProgresses() {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case progress.resolvedEventsCache <- kv.MultiplexingEvent{}:
-				p.schedule(ctx, progress)
+			default:
+				progress.resolveLock(currentTime)
 			}
 		}
 	}
@@ -384,8 +380,7 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 	}
 	resolvedTs := p.tsTracker.Frontier()
 
-	if resolvedTs > 0 && !p.initialized {
-		p.initialized = true
+	if resolvedTs > 0 && p.initialized.CompareAndSwap(false, true) {
 		log.Info("puller is initialized",
 			zap.String("namespace", p.changefeed.Namespace),
 			zap.String("changefeed", p.changefeed.ID),
@@ -402,13 +397,12 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 	return
 }
 
-func (p *tableProgress) resolveLock() {
-	if !p.initialized || time.Since(p.resolvedTsUpdated) < resolveLockFence {
+func (p *tableProgress) resolveLock(currentTime time.Time) {
+	if !p.initialized.Load() || time.Since(p.resolvedTsUpdated) < resolveLockFence {
 		return
 	}
 	resolvedTs := p.resolvedTs.Load()
 	resolvedTime := oracle.GetTimeFromTS(resolvedTs)
-	currentTime := p.client.GetPDClock().CurrentTime()
 	if currentTime.Sub(resolvedTime) < resolveLockFence {
 		return
 	}

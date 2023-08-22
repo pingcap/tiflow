@@ -102,7 +102,10 @@ func (w *sharedRegionWorker) run(ctx context.Context) error {
 }
 
 func (w *sharedRegionWorker) handleSingleRegionError(ctx context.Context, state *regionFeedState, stream *requestedStream) {
-	stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
+	if stream != nil {
+		// stream can be nil if it's obviously unnecessary to re-schedule the region.
+		stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
+	}
 	if state.markRemoved() {
 		// For SharedClient and SharedWorker, err will never be nil.
 		err := state.takeError()

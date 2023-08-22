@@ -109,7 +109,7 @@ func (s *regionFeedState) markRemoved() (changed bool) {
 
 func (s *regionFeedState) isStale() bool {
 	state := s.state.Load()
-	return state == stateStopped || state == stateStopped
+	return state == stateStopped || state == stateRemoved
 }
 
 func (s *regionFeedState) takeError() (err error) {
