@@ -85,6 +85,11 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 		// DDLs on multiple schema or tables, ignore them.
 		return nil
 	}
+	if job.Type == timodel.ActionRenameTable && job.SchemaName != "" {
+		// DDL on single table with schema name, ignore it.
+		return nil
+	}
+
 	if job.Type == timodel.ActionCreateSchema ||
 		job.Type == timodel.ActionDropSchema {
 		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
@@ -428,6 +433,12 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		err := s.inner.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
+		}
+		// If the schema of a rename table job does not exist,
+		// there is no need to create the table, since this table
+		// will not be replicated in the future.
+		if _, ok := s.inner.schemaByID(job.SchemaID); !ok {
+			return nil
 		}
 		// create table
 		err = s.inner.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
