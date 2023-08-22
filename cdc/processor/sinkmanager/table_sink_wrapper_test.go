@@ -104,8 +104,8 @@ func TestTableSinkWrapperStop(t *testing.T) {
 	t.Parallel()
 
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
-	wrapper.tableSink.s = &mockDelayedTableSink{
-		TableSink:   wrapper.tableSink.s,
+	wrapper.tableSink = &mockDelayedTableSink{
+		TableSink:   wrapper.tableSink,
 		closeCnt:    0,
 		closeTarget: 10,
 	}
