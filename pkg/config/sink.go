@@ -29,6 +29,8 @@ import (
 const (
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+	// DefaultAdvanceTimeoutInSec sets the default value for advance-timeout-in-sec.
+	DefaultAdvanceTimeoutInSec = uint(150)
 
 	// TxnAtomicityKey specifies the key of the transaction-atomicity in the SinkURI.
 	TxnAtomicityKey = "transaction-atomicity"
@@ -393,8 +395,9 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		}
 	}
 
-	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
-		s.AdvanceTimeoutInSec = util.AddressOf(uint(150))
+	if util.GetOrZero(s.AdvanceTimeoutInSec) == 0 {
+		log.Warn(fmt.Sprintf("advance-timeout-in-sec is not set, use default value: %d seconds", DefaultAdvanceTimeoutInSec))
+		s.AdvanceTimeoutInSec = util.AddressOf(DefaultAdvanceTimeoutInSec)
 	}
 
 	return nil
