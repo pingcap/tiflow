@@ -65,6 +65,10 @@ type regionFeedState struct {
 	startFeedTime time.Time
 
 	// Transform: normal -> stopped -> removed.
+	// normal: the region is in replicating.
+	// stopped: some error happens.
+	// removed: the region is returned into the pending list,
+	//   will be re-resolved and re-scheduled later.
 	state atomic.Uint32
 
 	// All region errors should be handled in region workers.
@@ -103,8 +107,9 @@ func (s *regionFeedState) markRemoved() (changed bool) {
 	return s.state.CompareAndSwap(stateStopped, stateRemoved)
 }
 
-func (s *regionFeedState) isStopped() bool {
-	return s.state.Load() == stateStopped
+func (s *regionFeedState) isStale() bool {
+	state := s.state.Load()
+	return state == stateStopped || state == stateStopped
 }
 
 func (s *regionFeedState) takeError() (err error) {

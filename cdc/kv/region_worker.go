@@ -213,10 +213,10 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.Uint64("resolvedTs", state.sri.resolvedTs()),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
-	if state.isStopped() {
+	if state.isStale() {
 		return w.checkShouldExit()
 	}
-	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
+	// We need to ensure when the error is handled, `isStale` must be set. So set it before sending the error.
 	state.markStopped(nil)
 	w.delRegionState(regionID)
 	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
@@ -297,7 +297,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 			maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 			for _, rts := range expired {
 				state, ok := w.getRegionState(rts.regionID)
-				if !ok || state.isStopped() {
+				if !ok || state.isStale() {
 					// state is already deleted or stopped, just continue,
 					// and don't need to push resolved ts back to heap.
 					continue
@@ -358,7 +358,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 
 func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEvent) error {
 	// event.state is nil when resolvedTsEvent is not nil
-	skipEvent := event.state != nil && event.state.isStopped()
+	skipEvent := event.state != nil && event.state.isStale()
 	if skipEvent {
 		return nil
 	}
@@ -753,7 +753,7 @@ func (w *regionWorker) handleResolvedTs(
 	regions := make([]uint64, 0, len(revents.regions))
 
 	for _, state := range revents.regions {
-		if state.isStopped() || !state.isInitialized() {
+		if state.isStale() || !state.isInitialized() {
 			continue
 		}
 		regionID := state.getRegionID()
@@ -788,7 +788,7 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
-		if state.isStopped() || !state.isInitialized() {
+		if state.isStale() || !state.isInitialized() {
 			continue
 		}
 		state.updateResolvedTs(resolvedTs)
@@ -814,7 +814,7 @@ func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
 		deletes = deletes[:0]
 		states.iter(func(regionID uint64, regionState *regionFeedState) bool {
-			if regionState.isStopped() {
+			if regionState.isStale() {
 				return true
 			}
 			regionState.markStopped(nil)

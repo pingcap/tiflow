@@ -101,16 +101,11 @@ func (w *sharedRegionWorker) run(ctx context.Context) error {
 	}
 }
 
-func (w *sharedRegionWorker) handleSingleRegionError(
-	ctx context.Context, err error,
-	state *regionFeedState,
-	stream *requestedStream,
-) {
-	state.markStopped(nil)
-	if stream != nil {
-		stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
-	}
+func (w *sharedRegionWorker) handleSingleRegionError(ctx context.Context, state *regionFeedState, stream *requestedStream) {
+	stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
 	if state.markRemoved() {
+		// For SharedClient and SharedWorker, err will never be nil.
+		err := state.takeError()
 		w.client.onRegionFail(ctx, newRegionErrorInfo(state.getRegionInfo(), err))
 	}
 }
@@ -118,22 +113,22 @@ func (w *sharedRegionWorker) handleSingleRegionError(
 func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEvent) {
 	if event.eventItem.state != nil {
 		state := event.eventItem.state
-		if state.isStopped() {
-			if err := state.takeError(); err != nil {
-				w.handleSingleRegionError(ctx, err, state, event.stream)
-				return
-			}
+		if state.isStale() {
+			w.handleSingleRegionError(ctx, state, event.stream)
+			return
 		}
 		w.metrics.metricReceivedEventSize.Observe(float64(event.eventItem.item.Event.Size()))
 		switch x := event.eventItem.item.Event.(type) {
 		case *cdcpb.Event_Entries_:
 			if err := w.handleEventEntry(ctx, x, state); err != nil {
-				w.handleSingleRegionError(ctx, err, state, event.stream)
+				state.markStopped(err)
+				w.handleSingleRegionError(ctx, state, event.stream)
 				return
 			}
 		case *cdcpb.Event_Admin_:
 		case *cdcpb.Event_Error:
-			w.handleSingleRegionError(ctx, &eventError{err: x.Error}, state, event.stream)
+			state.markStopped(&eventError{err: x.Error})
+			w.handleSingleRegionError(ctx, state, event.stream)
 			return
 		case *cdcpb.Event_ResolvedTs:
 			w.handleResolvedTs(ctx, resolvedTsBatch{
@@ -169,7 +164,7 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolve
 	})
 
 	for _, state := range batch.regions {
-		if state.isStopped() || !state.isInitialized() {
+		if state.isStale() || !state.isInitialized() {
 			continue
 		}
 
