@@ -1559,10 +1559,10 @@ var doc = `{
         "config.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
-                "claim-check-compression": {
+                "claim-check-storage-uri": {
                     "type": "string"
                 },
-                "claim-check-storage-uri": {
+                "large-message-handle-compression": {
                     "type": "string"
                 },
                 "large-message-handle-option": {
@@ -2501,10 +2501,10 @@ var doc = `{
         "v2.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
-                "claim_check_compression": {
+                "claim_check_storage_uri": {
                     "type": "string"
                 },
-                "claim_check_storage_uri": {
+                "large_message_handle_compression": {
                     "type": "string"
                 },
                 "large_message_handle_option": {

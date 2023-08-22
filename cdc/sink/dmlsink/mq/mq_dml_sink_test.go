@@ -43,7 +43,6 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	ctx = context.WithValue(ctx, "testing.T", t)
@@ -71,7 +70,6 @@ func TestWriteEvents(t *testing.T) {
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	errCh := make(chan error, 1)
 

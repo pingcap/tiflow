@@ -121,7 +121,7 @@ func NewDMLSink(ctx context.Context,
 	ext := util.GetFileExtension(protocol)
 	// the last param maxMsgBytes is mainly to limit the size of a single message for
 	// batch protocols in mq scenario. In cloud storage sink, we just set it to max int.
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, math.MaxInt)
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, protocol, replicaConfig, math.MaxInt)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

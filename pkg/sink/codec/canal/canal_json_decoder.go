@@ -54,12 +54,12 @@ func NewBatchDecoder(
 	ctx context.Context, codecConfig *common.Config, db *sql.DB,
 ) (codec.RowEventDecoder, error) {
 	var (
-		storage storage.ExternalStorage
-		err     error
+		externalStorage storage.ExternalStorage
+		err             error
 	)
 	if codecConfig.LargeMessageHandle.EnableClaimCheck() {
 		storageURI := codecConfig.LargeMessageHandle.ClaimCheckStorageURI
-		storage, err = util.GetExternalStorageFromURI(ctx, storageURI)
+		externalStorage, err = util.GetExternalStorageFromURI(ctx, storageURI)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
@@ -72,7 +72,7 @@ func NewBatchDecoder(
 
 	return &batchDecoder{
 		config:       codecConfig,
-		storage:      storage,
+		storage:      externalStorage,
 		upstreamTiDB: db,
 		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
 	}, nil
@@ -80,12 +80,23 @@ func NewBatchDecoder(
 
 // AddKeyValue implements the RowEventDecoder interface
 func (b *batchDecoder) AddKeyValue(_, value []byte) error {
+	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		log.Error("decompress data failed",
+			zap.String("compression", b.config.LargeMessageHandle.LargeMessageHandleCompression),
+			zap.Error(err))
+
+		return errors.Trace(err)
+	}
 	b.data = value
 	return nil
 }
 
 // HasNext implements the RowEventDecoder interface
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
+	if b.data == nil {
+		return model.MessageTypeUnknown, false, nil
+	}
 	var (
 		msg         canalJSONMessageInterface = &JSONMessage{}
 		encodedData []byte
@@ -97,6 +108,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 			Extensions:  &tidbExtension{},
 		}
 	}
+
 	if len(b.config.Terminator) > 0 {
 		idx := bytes.IndexAny(b.data, b.config.Terminator)
 		if idx >= 0 {
@@ -139,8 +151,12 @@ func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, cl
 		return nil, err
 	}
 
+	value, err := common.Decompress(b.config.LargeMessageHandle.LargeMessageHandleCompression, claimCheckM.Value)
+	if err != nil {
+		return nil, err
+	}
 	message := &canalJSONMessageWithTiDBExtension{}
-	err = json.Unmarshal(claimCheckM.Value, message)
+	err = json.Unmarshal(value, message)
 	if err != nil {
 		return nil, err
 	}

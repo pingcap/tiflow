@@ -1011,9 +1011,8 @@ const (
 )
 
 // NewBatchEncoderBuilder creates an avro batchEncoderBuilder.
-func NewBatchEncoderBuilder(ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	config *common.Config,
+func NewBatchEncoderBuilder(
+	ctx context.Context, config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
 	schemaM, err := NewAvroSchemaManager(ctx, config.AvroSchemaRegistry, nil)
 	if err != nil {
@@ -1021,7 +1020,7 @@ func NewBatchEncoderBuilder(ctx context.Context,
 	}
 
 	return &batchEncoderBuilder{
-		namespace: changefeedID.Namespace,
+		namespace: config.ChangefeedID.Namespace,
 		config:    config,
 		schemaM:   schemaM,
 	}, nil

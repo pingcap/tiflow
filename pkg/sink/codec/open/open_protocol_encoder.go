@@ -53,6 +53,13 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 		return nil, nil, errors.Trace(err)
 	}
 
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// for single message that is longer than max-message-bytes
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
@@ -64,9 +71,6 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 			zap.Any("key", key))
 		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
-
-	log.Warn("open-protocol: message too large, only encode handle key columns",
-		zap.Any("table", e.Table), zap.Uint64("commitTs", e.CommitTs))
 
 	return key, value, nil
 }
@@ -87,6 +91,13 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 	value, err := valueMsg.encode()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -165,6 +176,13 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		return nil, errors.Trace(err)
 	}
 	value, err := valueMsg.encode()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -254,6 +272,13 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 	}
 
 	value, err := valueMsg.encode()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

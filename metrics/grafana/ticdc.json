@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1689172951778,
+  "iteration": 1692166839167,
   "links": [],
   "panels": [
     {
@@ -3809,7 +3809,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 31
+            "y": 24
           },
           "hiddenSeries": false,
           "id": 597,
@@ -4036,7 +4036,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 38
+            "y": 31
           },
           "id": 163,
           "links": [],
@@ -4089,7 +4089,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 38
+            "y": 31
           },
           "hiddenSeries": false,
           "id": 514,
@@ -4208,7 +4208,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 45
+            "y": 38
           },
           "hiddenSeries": false,
           "id": 102,
@@ -4311,7 +4311,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 45
+            "y": 38
           },
           "hiddenSeries": false,
           "id": 82,
@@ -7255,7 +7255,7 @@
           "dashLength": 10,
           "dashes": false,
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "Responses/second received from all brokers\n\nvalue = one-minute moving average of response receive rate",
+          "description": "Records count per request send to the kafka\nvalue = one-minute moving average of response receive rate",
           "fieldConfig": {
             "defaults": {
               "links": []
@@ -7303,7 +7303,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(ticdc_sink_kafka_producer_response_rate{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace,changefeed, instance, broker)",
+              "expr": "sum(ticdc_sink_kafka_producer_records_per_request{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\",changefeed=~\"$changefeed\", instance=~\"$ticdc_instance\"}) by (namespace,changefeed, instance, broker)",
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
@@ -7315,7 +7315,7 @@
           "timeFrom": null,
           "timeRegions": [],
           "timeShift": null,
-          "title": "Kafka Response Rate",
+          "title": "Kafka Records Per Request",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -7360,9 +7360,7 @@
           "datasource": "${DS_TEST-CLUSTER}",
           "description": "The compression ratio times 100 of record batches for all topics.",
           "fieldConfig": {
-            "defaults": {
-              "links": []
-            },
+            "defaults": {},
             "overrides": []
           },
           "fill": 1,
@@ -7412,6 +7410,14 @@
               "intervalFactor": 1,
               "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
               "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.99, sum(rate(ticdc_kafka_sink_codec_compression_ratio_bucket{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (le,namespace,changefeed,instance))",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-Codec-P99",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -7434,7 +7440,7 @@
           },
           "yaxes": [
             {
-              "format": "percent",
+              "format": "none",
               "label": null,
               "logBase": 1,
               "max": null,
@@ -19222,8 +19228,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -19408,8 +19414,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [],
@@ -19515,8 +19521,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -19637,8 +19643,8 @@
             },
             "runtime_instance": {
               "selected": false,
-              "text": "10.2.6.173:8300",
-              "value": "10.2.6.173:8300"
+              "text": "10.2.6.77:8300",
+              "value": "10.2.6.77:8300"
             }
           },
           "seriesOverrides": [
@@ -20047,5 +20053,5 @@
   "timezone": "browser",
   "title": "${DS_TEST-CLUSTER}-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 53
+  "version": 54
 }

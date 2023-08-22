@@ -29,12 +29,10 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	ctx := context.Background()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
-		config := &common.Config{
-			EnableTiDBExtension: encodeEnable,
-			Terminator:          config.CRLF,
-			MaxMessageBytes:     config.DefaultMaxMessageBytes,
-		}
-		encoder := newJSONRowEventEncoder(config)
+		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+		codecConfig.EnableTiDBExtension = encodeEnable
+		codecConfig.Terminator = config.CRLF
+		encoder := newJSONRowEventEncoder(codecConfig)
 		require.NotNil(t, encoder)
 
 		err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, nil)
@@ -45,9 +43,9 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		msg := messages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder, err := NewBatchDecoder(ctx, &common.Config{
-				EnableTiDBExtension: decodeEnable,
-			}, nil)
+			codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+			codecConfig.EnableTiDBExtension = decodeEnable
+			decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 			err = decoder.AddKeyValue(msg.Key, msg.Value)
 			require.NoError(t, err)
@@ -94,20 +92,19 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 
 	ctx := context.Background()
 	for _, encodeEnable := range []bool{false, true} {
-		config := &common.Config{
-			EnableTiDBExtension: encodeEnable,
-		}
-		encoder := newJSONRowEventEncoder(config)
+		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+		codecConfig.EnableTiDBExtension = encodeEnable
+
+		encoder := newJSONRowEventEncoder(codecConfig)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder, err := NewBatchDecoder(ctx, &common.Config{
-				EnableTiDBExtension: decodeEnable,
-				Terminator:          "",
-			}, nil)
+			codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+			codecConfig.EnableTiDBExtension = decodeEnable
+			decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 			err = decoder.AddKeyValue(nil, result.Value)
 			require.NoError(t, err)
@@ -146,10 +143,9 @@ func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"UPDATE","es":1668067229137,"ts":1668067230720,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":[{"FirstName":"Bob","HireDate":"2014-06-04","LastName":"Smith","OfficeLocation":"New York","id":"101"}]}
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"DELETE","es":1668067230388,"ts":1668067231725,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":null}`
 	ctx := context.Background()
-	decoder, err := NewBatchDecoder(ctx, &common.Config{
-		EnableTiDBExtension: false,
-		Terminator:          "\n",
-	}, nil)
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.Terminator = "\n"
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 	require.NoError(t, err)
 
 	err = decoder.AddKeyValue(nil, []byte(encodedValue))
@@ -161,7 +157,7 @@ func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 		if !hasNext {
 			break
 		}
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, model.MessageTypeRow, tp)
 		cnt++
 		event, err := decoder.NextRowChangedEvent()

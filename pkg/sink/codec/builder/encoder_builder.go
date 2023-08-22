@@ -16,7 +16,6 @@ package builder
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -31,9 +30,7 @@ import (
 
 // NewRowEventEncoderBuilder returns an RowEventEncoderBuilder
 func NewRowEventEncoderBuilder(
-	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	c *common.Config,
+	ctx context.Context, c *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
 	switch c.Protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
@@ -41,7 +38,7 @@ func NewRowEventEncoderBuilder(
 	case config.ProtocolCanal:
 		return canal.NewBatchEncoderBuilder(c), nil
 	case config.ProtocolAvro:
-		return avro.NewBatchEncoderBuilder(ctx, changefeedID, c)
+		return avro.NewBatchEncoderBuilder(ctx, c)
 	case config.ProtocolMaxwell:
 		return maxwell.NewBatchEncoderBuilder(c), nil
 	case config.ProtocolCanalJSON:

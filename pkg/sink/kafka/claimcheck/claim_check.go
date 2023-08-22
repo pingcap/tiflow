@@ -14,19 +14,15 @@
 package claimcheck
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/klauspost/compress/snappy"
-	"github.com/pierrec/lz4"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -38,7 +34,6 @@ import (
 type ClaimCheck struct {
 	storage storage.ExternalStorage
 
-	compression  string
 	changefeedID model.ChangeFeedID
 
 	// metricSendMessageDuration tracks the time duration
@@ -48,8 +43,8 @@ type ClaimCheck struct {
 }
 
 // New return a new ClaimCheck.
-func New(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
-	externalStorage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
+func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
+	externalStorage, err := util.GetExternalStorageFromURI(ctx, storageURI)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -57,13 +52,11 @@ func New(ctx context.Context, config *config.LargeMessageHandleConfig, changefee
 	log.Info("claim-check enabled",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.String("storageURI", config.ClaimCheckStorageURI),
-		zap.String("compression", config.ClaimCheckCompression))
+		zap.String("storageURI", storageURI))
 
 	return &ClaimCheck{
 		changefeedID:              changefeedID,
 		storage:                   externalStorage,
-		compression:               config.ClaimCheckCompression,
 		metricSendMessageDuration: claimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSendMessageCount:    claimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}, nil
@@ -78,21 +71,6 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	data, err := json.Marshal(m)
 	if err != nil {
 		return errors.Trace(err)
-	}
-	switch c.compression {
-	case config.CompressionSnappy:
-		data = snappy.Encode(nil, data)
-	case config.CompressionLZ4:
-		var buf bytes.Buffer
-		writer := lz4.NewWriter(&buf)
-		if _, err := writer.Write(data); err != nil {
-			return errors.Trace(err)
-		}
-		if err := writer.Close(); err != nil {
-			log.Warn("claim-check: close lz4 writer failed", zap.Error(err))
-		}
-		data = buf.Bytes()
-	default:
 	}
 
 	start := time.Now()
