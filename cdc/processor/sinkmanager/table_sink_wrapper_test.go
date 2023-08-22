@@ -81,6 +81,22 @@ func (t *mockDelayedTableSink) AsyncClose() bool {
 	return false
 }
 
+type mockDelayedTableSink struct {
+	tablesink.TableSink
+
+	closeCnt    int
+	closeTarget int
+}
+
+func (t *mockDelayedTableSink) AsyncClose() bool {
+	t.closeCnt++
+	if t.closeCnt >= t.closeTarget {
+		t.TableSink.Close()
+		return true
+	}
+	return false
+}
+
 //nolint:unparam
 func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
 	tableState := tablepb.TableStatePreparing
@@ -103,7 +119,12 @@ func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.Table
 func TestTableSinkWrapperStop(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
+=======
+	wrapper, _ := createTableSinkWrapper(
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
+>>>>>>> 0694352a5c (sink(ticdc): fix data loss (#9618))
 	wrapper.tableSink.s = &mockDelayedTableSink{
 		TableSink:   wrapper.tableSink.s,
 		closeCnt:    0,
