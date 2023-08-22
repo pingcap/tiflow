@@ -188,9 +188,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		if replicaConfig.Sink.KafkaConfig != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 		}
-		if c.LargeMessageHandle.HandleKeyOnly() && replicaConfig.ForceReplicate {
+		if !c.LargeMessageHandle.Disabled() && replicaConfig.ForceReplicate {
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
-				`force-replicate must be disabled, when the large message handle option is set to "handle-key-only"`)
+				`force-replicate must be disabled, when the large message handle is enabled, large message handle: "%s"`,
+				c.LargeMessageHandle.LargeMessageHandleOption)
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {

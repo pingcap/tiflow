@@ -136,10 +136,10 @@ func TestLargeMessageHandle4NotSupportedProtocol(t *testing.T) {
 	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 }
 
-func TestCanalJSONHandleKeyOnly(t *testing.T) {
+func TestLargeMessageHandle4CanalJSON(t *testing.T) {
 	t.Parallel()
 
-	// handle-key-only not enabled, always no error
+	// large-message-handle not set, always no error
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
 		LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
@@ -157,32 +157,39 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, codecConfig.LargeMessageHandle.Disabled())
 
-	// enable handle-key only
-	replicaConfig.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	for _, option := range []string{
+		config.LargeMessageHandleOptionHandleKeyOnly,
+		config.LargeMessageHandleOptionClaimCheck,
+	} {
+		// `enable-tidb-extension` is false, return error
+		uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json"
+		sinkURI, err = url.Parse(uri)
+		require.NoError(t, err)
 
-	// `enable-tidb-extension` is false, return error
-	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	require.NoError(t, err)
+		codecConfig = NewConfig(config.ProtocolCanal)
+		replicaConfig.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = option
+		if option == config.LargeMessageHandleOptionClaimCheck {
+			replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
+		}
 
-	codecConfig = NewConfig(config.ProtocolCanal)
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	err = codecConfig.Validate()
-	require.Error(t, err)
+		err = codecConfig.Apply(sinkURI, replicaConfig)
+		require.NoError(t, err)
+		err = codecConfig.Validate()
+		require.Error(t, err)
 
-	// canal-json, `enable-tidb-extension` is true, no error
-	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json&enable-tidb-extension=true"
-	sinkURI, err = url.Parse(uri)
-	require.NoError(t, err)
+		// canal-json, `enable-tidb-extension` is true, no error
+		uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json&enable-tidb-extension=true"
+		sinkURI, err = url.Parse(uri)
+		require.NoError(t, err)
 
-	codecConfig = NewConfig(config.ProtocolCanalJSON)
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	err = codecConfig.Validate()
-	require.NoError(t, err)
+		codecConfig = NewConfig(config.ProtocolCanalJSON)
+		err = codecConfig.Apply(sinkURI, replicaConfig)
+		require.NoError(t, err)
+		err = codecConfig.Validate()
+		require.NoError(t, err)
 
-	require.True(t, codecConfig.LargeMessageHandle.HandleKeyOnly())
+		require.Equal(t, option, codecConfig.LargeMessageHandle.LargeMessageHandleOption)
+	}
 
 	// force-replicate is set to true, should return error
 	replicaConfig.ForceReplicate = true
@@ -190,7 +197,7 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
 }
 
-func TestOpenProtocolHandleKeyOnly(t *testing.T) {
+func TestLargeMessageHandle4OpenProtocol(t *testing.T) {
 	t.Parallel()
 
 	// large message handle is set to default, none.
@@ -223,19 +230,26 @@ func TestOpenProtocolHandleKeyOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, codecConfig.LargeMessageHandle.Disabled())
 
-	// enable handle-key only as the large message handle option
-	replicaConfig.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
+	for _, o := range []string{
+		config.LargeMessageHandleOptionHandleKeyOnly,
+		config.LargeMessageHandleOptionClaimCheck,
+	} {
+		// no matter enable-tidb-extension, always no error
+		uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=open-protocol"
+		sinkURI, err = url.Parse(uri)
+		require.NoError(t, err)
 
-	// no matter enable-tidb-extension, always no error
-	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=open-protocol"
-	sinkURI, err = url.Parse(uri)
-	require.NoError(t, err)
+		replicaConfig.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = o
+		if o == config.LargeMessageHandleOptionClaimCheck {
+			replicaConfig.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
+		}
 
-	codecConfig = NewConfig(config.ProtocolOpen)
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	err = codecConfig.Validate()
-	require.NoError(t, err)
+		codecConfig = NewConfig(config.ProtocolOpen)
+		err = codecConfig.Apply(sinkURI, replicaConfig)
+		require.NoError(t, err)
+		err = codecConfig.Validate()
+		require.NoError(t, err)
+	}
 }
 
 func TestDeleteHandleKeyOnly(t *testing.T) {
