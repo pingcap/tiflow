@@ -65,14 +65,6 @@ func (m *mockSink) Dead() <-chan struct{} {
 	return make(chan struct{})
 }
 
-func (m *mockSink) AckAllEvents() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, e := range m.events {
-		e.Callback()
-	}
-}
-
 type mockDelayedTableSink struct {
 	tablesink.TableSink
 
