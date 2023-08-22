@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -257,6 +258,22 @@ func (o *controllerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorS
 			forceUpdateMap[upstreamID] = nil
 		}
 	}
+
+	// check if the upstream has a changefeed, if not we should update the gc safepoint
+	_ = o.upstreamManager.Visit(func(up *upstream.Upstream) error {
+		hasGcServiceSafePoint := false
+		if _, exist := minCheckpointTsMap[up.ID]; exist {
+			hasGcServiceSafePoint = true
+		}
+		if _, exist := forceUpdateMap[up.ID]; exist {
+			hasGcServiceSafePoint = true
+		}
+		if !hasGcServiceSafePoint {
+			ts := up.PDClock.CurrentTime()
+			minCheckpointTsMap[up.ID] = oracle.ComposeTS(ts.UnixNano(), 0)
+		}
+		return nil
+	})
 	return minCheckpointTsMap, forceUpdateMap
 }
 
