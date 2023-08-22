@@ -58,11 +58,21 @@ type feedStateManager struct {
 	// shouldBeRemoved = false means the changefeed is paused
 	shouldBeRemoved bool
 
+<<<<<<< HEAD
 	adminJobQueue   []*model.AdminJob
 	stateHistory    [defaultStateWindowSize]model.FeedState
 	lastErrorTime   time.Time                   // time of last error for a changefeed
 	backoffInterval time.Duration               // the interval for restarting a changefeed in 'error' state
 	errBackoff      *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
+=======
+	adminJobQueue                 []*model.AdminJob
+	stateHistory                  [defaultStateWindowSize]model.FeedState
+	lastErrorRetryTime            time.Time                   // time of last error for a changefeed
+	lastErrorRetryCheckpointTs    model.Ts                    // checkpoint ts of last retry
+	lastWarningReportCheckpointTs model.Ts                    // checkpoint ts of last warning report
+	backoffInterval               time.Duration               // the interval for restarting a changefeed in 'error' state
+	errBackoff                    *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
+>>>>>>> 21c63016aa (changefeed (ticdc): make changefeed list show warning message report by sinkmanager (#9593))
 
 	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
 	// has been advanced or not.
@@ -163,6 +173,35 @@ func (m *feedStateManager) Tick(
 			m.patchState(model.StateFailed)
 			return
 		}
+<<<<<<< HEAD
+=======
+
+		m.lastErrorRetryTime = time.Now()
+		if m.state.Status != nil {
+			m.lastErrorRetryCheckpointTs = m.state.Status.CheckpointTs
+		}
+		m.shouldBeRunning = true
+		m.patchState(model.StateWarning)
+		log.Info("changefeed retry backoff interval is elapsed,"+
+			"chengefeed will be restarted",
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.String("changefeed", m.state.ID.ID),
+			zap.Time("lastErrorRetryTime", m.lastErrorRetryTime),
+			zap.Duration("lastRetryInterval", oldBackoffInterval),
+			zap.Duration("nextRetryInterval", m.backoffInterval))
+	case model.StateNormal, model.StateWarning:
+		m.checkAndChangeState()
+		errs := m.errorsReportedByProcessors()
+		m.handleError(errs...)
+		// only handle warnings when there are no errors
+		// otherwise, the warnings will cover the errors
+		if len(errs) == 0 {
+			// warning are come from processors' sink component
+			// they ere not fatal errors, so we don't need to stop the changefeed
+			warnings := m.warningsReportedByProcessors()
+			m.handleWarning(warnings...)
+		}
+>>>>>>> 21c63016aa (changefeed (ticdc): make changefeed list show warning message report by sinkmanager (#9593))
 	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
@@ -597,6 +636,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 	if m.state.Status != nil {
 		currTime, _ := m.upstream.PDClock.CurrentTime()
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
+		m.lastWarningReportCheckpointTs = m.state.Status.CheckpointTs
 		// Conditions:
 		// 1. checkpoint lag is large enough;
 		// 2. checkpoint hasn't been advanced for a long while;
@@ -604,6 +644,11 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		if currTime.Sub(ckptTime) > defaultBackoffMaxElapsedTime &&
 			time.Since(m.checkpointTsAdvanced) > defaultBackoffMaxElapsedTime &&
 			m.resolvedTs > m.initCheckpointTs {
+			log.Info("changefeed retry on warning for a very long time and does not resume, "+
+				"it will be failed", zap.String("changefeed", m.state.ID.ID),
+				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
+				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
+			)
 			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
 			m.handleError(&model.RunningError{
 				Time:    lastError.Time,
@@ -633,3 +678,39 @@ func GenerateChangefeedEpoch(ctx context.Context, pdClient pd.Client) uint64 {
 	}
 	return oracle.ComposeTS(phyTs, logical)
 }
+<<<<<<< HEAD
+=======
+
+// checkAndChangeState checks the state of the changefeed and change it if needed.
+// if the state of the changefeed is warning and the changefeed's checkpointTs is
+// greater than the lastRetryCheckpointTs, it will change the state to normal.
+func (m *feedStateManager) checkAndChangeState() {
+	if m.state.Info == nil || m.state.Status == nil {
+		return
+	}
+	if m.state.Info.State == model.StateWarning &&
+		m.state.Status.CheckpointTs > m.lastErrorRetryCheckpointTs &&
+		m.state.Status.CheckpointTs > m.lastWarningReportCheckpointTs {
+		log.Info("changefeed is recovered from warning state,"+
+			"its checkpointTs is greater than lastRetryCheckpointTs,"+
+			"it will be changed to normal state",
+			zap.String("changefeed", m.state.ID.String()),
+			zap.String("namespace", m.state.ID.Namespace),
+			zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
+			zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs))
+		m.patchState(model.StateNormal)
+	}
+}
+
+// checkAndInitLastRetryCheckpointTs checks the lastRetryCheckpointTs and init it if needed.
+// It the owner is changed, the lastRetryCheckpointTs will be reset to 0, and we should init
+// it to the checkpointTs of the changefeed when the changefeed is ticked at the first time.
+func (m *feedStateManager) checkAndInitLastRetryCheckpointTs(status *model.ChangeFeedStatus) {
+	if status == nil || m.lastErrorRetryCheckpointTs != 0 {
+		return
+	}
+	m.lastWarningReportCheckpointTs = status.CheckpointTs
+	m.lastErrorRetryCheckpointTs = status.CheckpointTs
+	log.Info("init lastRetryCheckpointTs", zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs))
+}
+>>>>>>> 21c63016aa (changefeed (ticdc): make changefeed list show warning message report by sinkmanager (#9593))
