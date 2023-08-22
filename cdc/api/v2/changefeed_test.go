@@ -533,6 +533,9 @@ func TestListChangeFeeds(t *testing.T) {
 			},
 			model.DefaultChangeFeedID("cf2"): {
 				State: model.StateError,
+				Warning: &model.RunningError{
+					Code: "warning",
+				},
 			},
 			model.DefaultChangeFeedID("cf3"): {
 				State: model.StateStopped,
@@ -563,6 +566,9 @@ func TestListChangeFeeds(t *testing.T) {
 	require.Equal(t, 3, resp.Total)
 	// changefeed info must be sorted by ID
 	require.Equal(t, true, sorted(resp.Items))
+	// warning changefeed must have warning error message
+	require.Equal(t, model.StateError, resp.Items[1].FeedState)
+	require.Contains(t, resp.Items[1].RunningError.Code, "warning")
 
 	// case 2: only list changefeed with state 'normal', 'stopped' and 'failed'
 	metaInfo2 := testCase{
