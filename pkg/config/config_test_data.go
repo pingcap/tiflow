@@ -62,8 +62,8 @@ const (
 	"delete-only-output-handle-key-columns": false,
     "large-message-handle": {
       "large-message-handle-option": "none",
-      "claim-check-storage-uri": "",
-      "claim-check-compression": ""
+      "large-message-handle-compression": "",
+      "claim-check-storage-uri": ""
     },
     "advance-timeout-in-sec": 150
   },
@@ -252,8 +252,8 @@ const (
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
-        "claim-check-storage-uri": "",
-        "claim-check-compression": ""
+        "large-message-handle-compression": "",
+        "claim-check-storage-uri": ""
       }
     },
 	"pulsar-config": {
@@ -395,8 +395,8 @@ const (
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
-        "claim-check-storage-uri": "",
-        "claim-check-compression": ""
+        "large-message-handle-compression": "",
+        "claim-check-storage-uri": ""
       }
     },
 	"pulsar-config": {

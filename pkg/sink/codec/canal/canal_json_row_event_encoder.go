@@ -301,8 +301,7 @@ func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
 		builder:  newCanalEntryBuilder(),
 		messages: make([]*common.Message, 0, 1),
-
-		config: config,
+		config:   config,
 	}
 	return encoder
 }
@@ -355,6 +354,14 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
+
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
 
@@ -370,6 +377,12 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
@@ -398,6 +411,13 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 			if err != nil {
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
+			value, err = common.Compress(
+				c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+			)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
 			m.Value = value
 			length := m.Length()
 			if length > c.config.MaxMessageBytes {
@@ -433,6 +453,13 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
 	result.Callback = origin.Callback
 	result.IncRowsCount()
@@ -465,6 +492,12 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	value, err := json.Marshal(message)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+	}
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }

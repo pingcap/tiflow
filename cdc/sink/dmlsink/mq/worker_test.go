@@ -35,29 +35,28 @@ import (
 func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	id := model.DefaultChangeFeedID("test")
 	// 200 is about the size of a rowEvent change.
-	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
-	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), id, encoderConfig)
+	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200).WithChangefeedID(id)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(context.Background(), encoderConfig)
 	require.NoError(t, err)
 	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
 	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
-	encoderGroup := codec.NewEncoderGroup(builder, encoderConcurrency, id)
+	encoderGroup := codec.NewEncoderGroup(encoderBuilder, encoderConcurrency, id)
 	return newWorker(id, config.ProtocolOpen, p, encoderGroup, nil, nil, statistics), p
 }
 
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	id := model.DefaultChangeFeedID("test")
 	// 300 is about the size of a rowEvent change.
-	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300)
-	builder, err := builder.NewRowEventEncoderBuilder(context.Background(),
-		id, encoderConfig)
+	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300).WithChangefeedID(id)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(context.Background(), encoderConfig)
 	require.NoError(t, err)
 	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
 	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
-	encoderGroup := codec.NewEncoderGroup(builder, encoderConcurrency, id)
+	encoderGroup := codec.NewEncoderGroup(encoderBuilder, encoderConcurrency, id)
 	return newWorker(id, config.ProtocolOpen, p, encoderGroup, nil, nil, statistics), p
 }
 

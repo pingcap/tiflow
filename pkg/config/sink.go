@@ -31,6 +31,8 @@ import (
 const (
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+	// DefaultAdvanceTimeoutInSec sets the default value for advance-timeout-in-sec.
+	DefaultAdvanceTimeoutInSec = uint(150)
 
 	// TxnAtomicityKey specifies the key of the transaction-atomicity in the SinkURI.
 	TxnAtomicityKey = "transaction-atomicity"
@@ -589,8 +591,9 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		}
 	}
 
-	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
-		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout-in-sec should be greater than 0")
+	if util.GetOrZero(s.AdvanceTimeoutInSec) == 0 {
+		log.Warn(fmt.Sprintf("advance-timeout-in-sec is not set, use default value: %d seconds", DefaultAdvanceTimeoutInSec))
+		s.AdvanceTimeoutInSec = util.AddressOf(DefaultAdvanceTimeoutInSec)
 	}
 
 	return nil
@@ -715,99 +718,4 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 		return nil
 	}
 	return compatibilityError
-}
-
-const (
-	// LargeMessageHandleOptionNone means not handling large message.
-	LargeMessageHandleOptionNone string = "none"
-	// LargeMessageHandleOptionClaimCheck means handling large message by sending to the claim check storage.
-	LargeMessageHandleOptionClaimCheck string = "claim-check"
-	// LargeMessageHandleOptionHandleKeyOnly means handling large message by sending only handle key columns.
-	LargeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
-)
-
-const (
-	// CompressionNone no compression
-	CompressionNone string = "none"
-	// CompressionSnappy compression using snappy
-	CompressionSnappy string = "snappy"
-	// CompressionLZ4 compression using LZ4
-	CompressionLZ4 string = "lz4"
-)
-
-// LargeMessageHandleConfig is the configuration for handling large message.
-type LargeMessageHandleConfig struct {
-	LargeMessageHandleOption string `toml:"large-message-handle-option" json:"large-message-handle-option"`
-	ClaimCheckStorageURI     string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
-	ClaimCheckCompression    string `toml:"claim-check-compression" json:"claim-check-compression"`
-}
-
-// NewDefaultLargeMessageHandleConfig return the default LargeMessageHandleConfig.
-func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
-	return &LargeMessageHandleConfig{
-		LargeMessageHandleOption: LargeMessageHandleOptionNone,
-		ClaimCheckCompression:    CompressionNone,
-	}
-}
-
-// Validate the LargeMessageHandleConfig.
-func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtension bool) error {
-	if c.LargeMessageHandleOption == LargeMessageHandleOptionNone {
-		return nil
-	}
-
-	switch protocol {
-	case ProtocolOpen:
-	case ProtocolCanalJSON:
-		if !enableTiDBExtension {
-			return cerror.ErrInvalidReplicaConfig.GenWithStack(
-				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
-				c.LargeMessageHandleOption, protocol.String())
-		}
-	default:
-		return cerror.ErrInvalidReplicaConfig.GenWithStack(
-			"large message handle is set to %s, protocol is %s, it's not supported",
-			c.LargeMessageHandleOption, protocol.String())
-	}
-
-	if c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck {
-		if c.ClaimCheckStorageURI == "" {
-			return cerror.ErrInvalidReplicaConfig.GenWithStack(
-				"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
-		}
-
-		if c.ClaimCheckCompression != "" {
-			switch strings.ToLower(c.ClaimCheckCompression) {
-			case CompressionSnappy, CompressionLZ4:
-			default:
-				return cerror.ErrInvalidReplicaConfig.GenWithStack(
-					"claim-check compression support snappy, lz4, got %s", c.ClaimCheckCompression)
-			}
-		}
-	}
-	return nil
-}
-
-// HandleKeyOnly returns true if handle large message by encoding handle key only.
-func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
-	if c == nil {
-		return false
-	}
-	return c.LargeMessageHandleOption == LargeMessageHandleOptionHandleKeyOnly
-}
-
-// EnableClaimCheck returns true if enable claim check.
-func (c *LargeMessageHandleConfig) EnableClaimCheck() bool {
-	if c == nil {
-		return false
-	}
-	return c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck
-}
-
-// Disabled returns true if disable large message handle.
-func (c *LargeMessageHandleConfig) Disabled() bool {
-	if c == nil {
-		return false
-	}
-	return c.LargeMessageHandleOption == LargeMessageHandleOptionNone
 }

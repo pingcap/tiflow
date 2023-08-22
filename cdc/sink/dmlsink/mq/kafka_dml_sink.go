@@ -75,9 +75,7 @@ func NewKafkaDMLSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
-	protocol, err := util.GetProtocol(
-		tiflowutil.GetOrZero(replicaConfig.Sink.Protocol),
-	)
+	protocol, err := util.GetProtocol(tiflowutil.GetOrZero(replicaConfig.Sink.Protocol))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -98,13 +96,12 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
-		options.MaxMessageBytes)
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, protocol, replicaConfig, options.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
@@ -122,7 +119,7 @@ func NewKafkaDMLSink(
 				GenWithStack("claim-check enabled but the encoding protocol %s does not support", protocol.String())
 		}
 
-		claimCheckStorage, err = claimcheck.New(ctx, encoderConfig.LargeMessageHandle, changefeedID)
+		claimCheckStorage, err = claimcheck.New(ctx, encoderConfig.LargeMessageHandle.ClaimCheckStorageURI, changefeedID)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
