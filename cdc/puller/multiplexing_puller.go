@@ -184,12 +184,12 @@ func (p *MultiplexingPuller) unsubscribe(spans []tablepb.Span) {
 
 			delete(p.subscriptions.m, subID)
 			p.subscriptions.n.Delete(span)
-			continue
+		} else {
+			log.Panic("unexist unsubscription",
+				zap.String("namespace", p.changefeed.Namespace),
+				zap.String("changefeed", p.changefeed.ID),
+				zap.String("span", span.String()))
 		}
-		log.Panic("unexist unsubscription",
-			zap.String("namespace", p.changefeed.Namespace),
-			zap.String("changefeed", p.changefeed.ID),
-			zap.String("span", span.String()))
 	}
 }
 

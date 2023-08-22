@@ -117,22 +117,22 @@ type requestedStore struct {
 }
 
 type requestedStream struct {
-	// init is for initializing client and conn asynchronously.
-	init func(ctx context.Context) error
-
 	streamID uint64
-	client   cdcpb.ChangeData_EventFeedClient
-	conn     *sharedConn
-	requests *chann.DrainableChann[singleRegionInfo]
+
+	// To trigger a connect action lazily.
+	preFetchForConnecting *singleRegionInfo
+	requests              *chann.DrainableChann[singleRegionInfo]
+
+	// init is for initializing client and conn asynchronously.
+	init   func(ctx context.Context) error
+	client cdcpb.ChangeData_EventFeedClient
+	conn   *sharedConn
 
 	requestedRegions struct {
 		sync.RWMutex
 		// map[subscriptionID]map[regionID]*regionFeedState
 		m map[SubscriptionID]map[uint64]*regionFeedState
 	}
-
-	// To trigger a connect action lazily.
-	preFetchForConnecting *singleRegionInfo
 }
 
 type requestedTable struct {
@@ -148,12 +148,7 @@ type requestedTable struct {
 
 	// To handle lock resolvings.
 	postUpdateRegionResolvedTs func(regionID uint64, state *regionlock.LockedRange)
-	staleLocks                 struct {
-		maxVersion atomic.Uint64
-
-		sync.RWMutex
-		registered time.Time
-	}
+	staleLocksVersion          atomic.Uint64
 }
 
 // NewSharedClient creates a client.
@@ -691,6 +686,8 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 					_ = s.workers[slot].sendEvent(ctx, sfEvent)
 				}
 			}
+			// Why we need to re-schedule pending regions? This because the store can
+			// fail forever, and all regions are scheduled to other stores.
 			for _, sri := range stream.clearPendingRegions() {
 				s.onRegionFail(ctx, newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
 			}
@@ -1096,7 +1093,7 @@ func (s *SharedClient) newRequestedTable(
 	}
 
 	rt.postUpdateRegionResolvedTs = func(regionID uint64, state *regionlock.LockedRange) {
-		maxVersion := rt.staleLocks.maxVersion.Load()
+		maxVersion := rt.staleLocksVersion.Load()
 		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
 			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
@@ -1115,11 +1112,11 @@ func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) Mu
 
 func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 	for {
-		old := r.staleLocks.maxVersion.Load()
+		old := r.staleLocksVersion.Load()
 		if old >= maxVersion {
 			return
 		}
-		if r.staleLocks.maxVersion.CompareAndSwap(old, maxVersion) {
+		if r.staleLocksVersion.CompareAndSwap(old, maxVersion) {
 			break
 		}
 	}
