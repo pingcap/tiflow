@@ -254,6 +254,10 @@ const (
         "large-message-handle-option": "handle-key-only",
         "claim-check-storage-uri": "",
         "claim-check-compression": ""
+      },
+      "glue-schema-registry-config": {
+        "region":"region", 
+        "registry-name":"registry"
       }
     },
     "mysql-config": {
@@ -389,6 +393,10 @@ const (
         "large-message-handle-option": "handle-key-only",
         "claim-check-storage-uri": "",
         "claim-check-compression": ""
+      },
+      "glue-schema-registry-config": {
+        "region":"region", 
+        "registry-name":"registry"
       }
     },
     "mysql-config": {

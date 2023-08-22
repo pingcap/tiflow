@@ -23,10 +23,13 @@ import (
 )
 
 func newClueSchemaManagerForTest(ctx context.Context, t *testing.T, cfg *config.GlueSchemaRegistryConfig) *glueSchemaManager {
-	m, err := NewGlueSchemaManager(ctx, cfg)
-	require.NoError(t, err)
-	m.(*glueSchemaManager).client = newMockGlueClientImpl()
-	return m.(*glueSchemaManager)
+	res := &glueSchemaManager{
+		registryName: "test_registry",
+		client:       newMockGlueClientImpl(),
+		cache:        make(map[string]*schemaCacheEntry),
+		registryType: common.SchemaRegistryTypeGlue,
+	}
+	return res
 }
 
 func TestGlueSchemaManager_Register(t *testing.T) {
