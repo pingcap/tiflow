@@ -291,8 +291,8 @@ func (c *changefeed) handleWarning(ctx cdcContext.Context, err error) {
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
-	state := c.state.Info.State
-	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
+	cfInfo := c.state.Info
+	if cfInfo.NeedBlockGC() {
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrStartTsBeforeGC.FastGen("InjectChangefeedFastFailError")
 		})

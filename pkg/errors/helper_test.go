@@ -100,18 +100,18 @@ func TestChangefeedFastFailError(t *testing.T) {
 	t.Parallel()
 	err := ErrSnapshotLostByGC.FastGenByArgs()
 	rfcCode, _ := RFCCode(err)
-	require.Equal(t, true, IsChangefeedFastFailError(err))
-	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedGCFastFailError(err))
+	require.Equal(t, true, IsChangefeedGCFastFailErrorCode(rfcCode))
 
 	err = ErrStartTsBeforeGC.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, true, IsChangefeedFastFailError(err))
-	require.Equal(t, true, IsChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, true, IsChangefeedGCFastFailError(err))
+	require.Equal(t, true, IsChangefeedGCFastFailErrorCode(rfcCode))
 
 	err = ErrToTLSConfigFailed.FastGenByArgs()
 	rfcCode, _ = RFCCode(err)
-	require.Equal(t, false, IsChangefeedFastFailError(err))
-	require.Equal(t, false, IsChangefeedFastFailErrorCode(rfcCode))
+	require.Equal(t, false, IsChangefeedGCFastFailError(err))
+	require.Equal(t, false, IsChangefeedGCFastFailErrorCode(rfcCode))
 }
 
 func TestShouldFailChangefeed(t *testing.T) {

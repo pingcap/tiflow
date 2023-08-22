@@ -34,20 +34,20 @@ func WrapError(rfcError *errors.Error, err error, args ...interface{}) error {
 	return rfcError.Wrap(err).GenWithStackByArgs(args...)
 }
 
-// changeFeedFastFailError is read only.
+// ChangeFeedGCFastFailError is read only.
 // If this type of error occurs in a changefeed, it means that the data it
 // wants to replicate has been or will be GC. So it makes no sense to try to
 // resume the changefeed, and the changefeed should immediately be failed.
-var changeFeedFastFailError = []*errors.Error{
+var ChangeFeedGCFastFailError = []*errors.Error{
 	ErrGCTTLExceeded, ErrSnapshotLostByGC, ErrStartTsBeforeGC,
 }
 
-// IsChangefeedFastFailError checks if an error is a ChangefeedFastFailError
-func IsChangefeedFastFailError(err error) bool {
+// IsChangefeedGCFastFailError checks if an error is a ChangefeedFastFailError
+func IsChangefeedGCFastFailError(err error) bool {
 	if err == nil {
 		return false
 	}
-	for _, e := range changeFeedFastFailError {
+	for _, e := range ChangeFeedGCFastFailError {
 		if e.Equal(err) {
 			return true
 		}
@@ -59,10 +59,10 @@ func IsChangefeedFastFailError(err error) bool {
 	return false
 }
 
-// IsChangefeedFastFailErrorCode checks the error code, returns true if it is a
+// IsChangefeedGCFastFailErrorCode checks the error code, returns true if it is a
 // ChangefeedFastFailError code
-func IsChangefeedFastFailErrorCode(errCode errors.RFCErrorCode) bool {
-	for _, e := range changeFeedFastFailError {
+func IsChangefeedGCFastFailErrorCode(errCode errors.RFCErrorCode) bool {
+	for _, e := range ChangeFeedGCFastFailError {
 		if errCode == e.RFCCode() {
 			return true
 		}
