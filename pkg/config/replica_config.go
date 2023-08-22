@@ -206,19 +206,6 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err != nil {
 			return err
 		}
-
-		if c.Sink.SchemaRegistry != nil &&
-			(c.Sink.KafkaConfig != nil && c.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil) {
-			return cerror.ErrInvalidReplicaConfig.
-				GenWithStackByArgs("schema-registry and glue-schema-registry-config cannot be set at the same time," +
-					"schema-registry is used by confluent schema registry, glue-schema-registry-config is used by aws glue schema registry")
-		}
-		if c.Sink.KafkaConfig != nil && c.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
-			err = c.Sink.KafkaConfig.GlueSchemaRegistryConfig.Validate()
-			if err != nil {
-				return err
-			}
-		}
 	}
 
 	if c.Consistent != nil {
