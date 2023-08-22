@@ -291,12 +291,6 @@ func (t *tableSinkWrapper) asyncStop() bool {
 	return false
 }
 
-func (t *tableSinkWrapper) stop() {
-	t.markAsClosing()
-	t.closeAndClearTableSink()
-	t.markAsClosed()
-}
-
 // Return true means the internal table sink has been initialized.
 func (t *tableSinkWrapper) initTableSink() bool {
 	t.tableSinkMu.Lock()
@@ -327,9 +321,11 @@ func (t *tableSinkWrapper) closeTableSink() {
 }
 
 func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
-	t.asyncCloseTableSink()
-	t.doTableSinkClear()
-	return true
+	closed := t.asyncCloseTableSink()
+	if closed {
+		t.doTableSinkClear()
+	}
+	return closed
 }
 
 func (t *tableSinkWrapper) closeAndClearTableSink() {
