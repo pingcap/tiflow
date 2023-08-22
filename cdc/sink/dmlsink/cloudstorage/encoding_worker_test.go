@@ -39,13 +39,14 @@ func testEncodingWorker(
 	uri := fmt.Sprintf("file:///%s", t.TempDir())
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCsv,
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, config.ProtocolCsv,
 		config.GetDefaultReplicaConfig(), config.DefaultMaxMessageBytes)
 	require.Nil(t, err)
 	encoderBuilder, err := builder.NewTxnEventEncoderBuilder(encoderConfig)
 	require.Nil(t, err)
 	encoder := encoderBuilder.Build()
-	changefeedID := model.DefaultChangeFeedID("test-encode")
 
 	encodedCh := make(chan eventFragment)
 	msgCh := make(chan eventFragment, 1024)

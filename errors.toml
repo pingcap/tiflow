@@ -181,6 +181,11 @@ error = '''
 Codec invalid config
 '''
 
+["CDC:ErrCompressionFailed"]
+error = '''
+Compression failed
+'''
+
 ["CDC:ErrConsistentStorage"]
 error = '''
 consistent storage (%s) not support
