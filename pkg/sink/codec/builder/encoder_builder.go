@@ -30,8 +30,7 @@ import (
 
 // NewRowEventEncoderBuilder returns an RowEventEncoderBuilder
 func NewRowEventEncoderBuilder(
-	ctx context.Context,
-	cfg *common.Config,
+	ctx context.Context, cfg *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
 	switch cfg.Protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:

@@ -251,11 +251,6 @@ const (
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
-        "claim-check-storage-uri": "",
-        "claim-check-compression": ""
-      },
-      "large-message-handle": {
-        "large-message-handle-option": "handle-key-only",
         "large-message-handle-compression": "",
         "claim-check-storage-uri": ""
       },

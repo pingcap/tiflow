@@ -34,9 +34,9 @@ import (
 
 func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	id := model.DefaultChangeFeedID("test")
-	// 200 is about the size of a rowEvents change.
-	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
-	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), id, encoderConfig)
+	// 200 is about the size of a rowEvent change.
+	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200).WithChangefeedID(id)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(context.Background(), encoderConfig)
 	require.NoError(t, err)
 	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
 	require.NoError(t, err)
@@ -48,10 +48,9 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
 	id := model.DefaultChangeFeedID("test")
-	// 300 is about the size of a rowEvents change.
-	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300)
-	builder, err := builder.NewRowEventEncoderBuilder(context.Background(),
-		id, encoderConfig)
+	// 300 is about the size of a rowEvent change.
+	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300).WithChangefeedID(id)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(context.Background(), encoderConfig)
 	require.NoError(t, err)
 	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
 	require.NoError(t, err)
