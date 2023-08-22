@@ -425,7 +425,6 @@ func newProcessor(
 var processorIgnorableError = []*errors.Error{
 	cerror.ErrAdminStopProcessor,
 	cerror.ErrReactorFinished,
-	cerror.ErrRedoWriterStopped,
 }
 
 // isProcessorIgnorableError returns true if the error means the processor exits
