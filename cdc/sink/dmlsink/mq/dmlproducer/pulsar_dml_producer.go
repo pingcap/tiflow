@@ -87,13 +87,7 @@ func NewPulsarDMLProducer(
 	defaultTopicName := pulsarConfig.GetDefaultTopicName()
 	defaultProducer, err := newProducer(pulsarConfig, client, defaultTopicName)
 	if err != nil {
-		// Close the client to prevent the goroutine leak.
-		// Because it may be a long time to close the client,
-		// so close it asynchronously.
-		// follow kafka
-		go func() {
-			client.Close()
-		}()
+		go client.Close()
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 	producerCacheSize := config.DefaultPulsarProducerCacheSize
@@ -108,6 +102,10 @@ func NewPulsarDMLProducer(
 			pulsarProducer.Close()
 		}
 	})
+	if err != nil {
+		go client.Close()
+		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
+	}
 
 	producers.Add(defaultTopicName, defaultProducer)
 

@@ -16,6 +16,7 @@ package dmlproducer
 import (
 	"context"
 	"fmt"
+
 	"github.com/apache/pulsar-client-go/pulsar"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -37,11 +38,6 @@ type pulsarDMLProducerMock struct {
 	// support multiple topics
 	producers *lru.Cache
 
-	// closed is used to indicate whether the producer is closed.
-	// We also use it to guard against double closes.
-	closed bool
-	// closedChan is used to notify the run loop to exit.
-	closedChan chan struct{}
 	// failpointCh is used to inject failpoints to the run loop.
 	// Only used in test.
 	failpointCh chan error
@@ -85,6 +81,10 @@ func NewPulsarDMLProducerMock(
 			pulsarProducer.Close()
 		}
 	})
+	if err != nil {
+		go client.Close()
+		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
+	}
 
 	producers.Add(defaultTopicName, defaultProducer)
 
@@ -93,8 +93,6 @@ func NewPulsarDMLProducerMock(
 		client:      client,
 		producers:   producers,
 		pConfig:     pulsarConfig,
-		closed:      false,
-		closedChan:  make(chan struct{}),
 		failpointCh: failpointCh,
 		errChan:     errCh,
 	}

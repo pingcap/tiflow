@@ -27,7 +27,7 @@ import (
 )
 
 // newPulsarConfig set config
-func newPulsarConfig(t *testing.T) (c *config.PulsarConfig, sinkURI *url.URL, replicaConfig *config.ReplicaConfig) {
+func newPulsarConfig(t *testing.T) (sinkURI *url.URL, replicaConfig *config.ReplicaConfig) {
 	sinkURL := "pulsar://127.0.0.1:6650/persistent://public/default/test?" +
 		"protocol=canal-json&pulsar-version=v2.10.0&enable-tidb-extension=true&" +
 		"authentication-token=eyJhbcGcixxxxxxxxxxxxxx"
@@ -36,21 +36,22 @@ func newPulsarConfig(t *testing.T) (c *config.PulsarConfig, sinkURI *url.URL, re
 	require.NoError(t, err)
 	replicaConfig = config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
-	require.NoError(t, err)
+	var c *config.PulsarConfig
 	c, err = pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	require.NoError(t, err)
 	replicaConfig.Sink.PulsarConfig = c
-	return c, sinkURI, replicaConfig
+	return sinkURI, replicaConfig
 }
 
 func TestNewPulsarDMLProducer(t *testing.T) {
 	t.Parallel()
 
-	_, _, rc := newPulsarConfig(t)
+	sinkURI, rc := newPulsarConfig(t)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink = &config.SinkConfig{
 		Protocol: aws.String("canal-json"),
 	}
+	t.Logf(sinkURI.String())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -72,7 +73,7 @@ func TestNewPulsarDMLProducer(t *testing.T) {
 func Test_pulsarDMLProducer_AsyncSendMessage(t *testing.T) {
 	t.Parallel()
 
-	_, _, rc := newPulsarConfig(t)
+	_, rc := newPulsarConfig(t)
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink = &config.SinkConfig{
 		Protocol: aws.String("canal-json"),
