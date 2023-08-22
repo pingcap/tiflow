@@ -556,7 +556,14 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 func (s *eventFeedSession) onRegionFail(ctx context.Context, errorInfo regionErrorInfo) {
 	s.rangeLock.UnlockRange(errorInfo.span.StartKey, errorInfo.span.EndKey,
 		errorInfo.verID.GetID(), errorInfo.verID.GetVer(), errorInfo.resolvedTs)
-	s.enqueueError(ctx, errorInfo)
+	log.Info("region failed", zap.Stringer("span", &errorInfo.span),
+		zap.Any("regionId", errorInfo.verID.GetID()),
+		zap.Error(errorInfo.err))
+	select {
+	case s.errCh.In() <- errorInfo:
+		s.errChSizeGauge.Inc()
+	case <-ctx.Done():
+	}
 }
 
 // requestRegionToStore gets singleRegionInfo from regionRouter, which is a token
@@ -658,7 +665,7 @@ func (s *eventFeedSession) requestRegionToStore(
 
 			g.Go(func() error {
 				defer s.deleteStream(storeAddr)
-				return s.receiveFromStream(ctx, g, storeAddr, storeID, stream.client, pendingRegions)
+				return s.receiveFromStream(ctx, storeAddr, storeID, stream.client, pendingRegions)
 			})
 		}
 
@@ -867,16 +874,6 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 	}
 }
 
-// enqueueError sends error to the eventFeedSession's error channel in a none blocking way
-// TODO: refactor enqueueError to avoid too many goroutines spawned when a lot of regions meet error.
-func (s *eventFeedSession) enqueueError(ctx context.Context, errorInfo regionErrorInfo) {
-	select {
-	case s.errCh.In() <- errorInfo:
-		s.errChSizeGauge.Inc()
-	case <-ctx.Done():
-	}
-}
-
 // handleError handles error returned by a region. If some new EventFeed connection should be established, the region
 // info will be sent to `regionCh`. Note if region channel is full, this function will be blocked.
 // CAUTION: Note that this should only be invoked in a context that the region is not locked, otherwise use onRegionFail
@@ -964,8 +961,7 @@ func (s *eventFeedSession) getRPCContextForRegion(ctx context.Context, id tikv.R
 //  2. pending regions: call `s.onRegionFail` for each pending region before this
 //     routine exits to establish these regions.
 func (s *eventFeedSession) receiveFromStream(
-	ctx context.Context,
-	g *errgroup.Group,
+	parentCtx context.Context,
 	addr string,
 	storeID uint64,
 	stream cdcpb.ChangeData_EventFeedClient,
@@ -994,7 +990,7 @@ func (s *eventFeedSession) receiveFromStream(
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
 			errInfo := newRegionErrorInfo(state.sri, cerror.ErrPendingRegionCancel.FastGenByArgs())
-			s.onRegionFail(ctx, errInfo)
+			s.onRegionFail(parentCtx, errInfo)
 		}
 	}()
 
@@ -1003,121 +999,147 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
-	worker := newRegionWorker(s.changefeed, s, addr)
-
+	worker := newRegionWorker(parentCtx, s.changefeed, s, addr)
 	defer worker.evictAllRegions()
 
-	g.Go(func() error {
-		return worker.run(ctx)
+	ctx, cancel := context.WithCancel(parentCtx)
+	var retErr error
+	once := sync.Once{}
+	handleExit := func(err error) error {
+		once.Do(func() {
+			cancel()
+			retErr = err
+		})
+		return err
+	}
+
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		err := handleExit(worker.run())
+		if err != nil {
+			log.Error("region worker exited with error", zap.Error(err),
+				zap.Any("changefeed", s.changefeed),
+				zap.Any("addr", addr),
+				zap.Any("storeID", storeID))
+		}
+		return err
 	})
 
-	maxCommitTs := model.Ts(0)
-	for {
-		cevent, err := stream.Recv()
+	receiveEvents := func() error {
+		maxCommitTs := model.Ts(0)
+		for {
+			cevent, err := stream.Recv()
 
-		failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
-			if op.(string) == "error" {
-				_ = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
+			failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
+				if op.(string) == "error" {
+					_ = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
+				}
+			})
+			failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
+				errStr := msg.(string)
+				if errStr == io.EOF.Error() {
+					err = io.EOF
+				} else {
+					err = errors.New(errStr)
+				}
+			})
+			if err != nil {
+				if status.Code(errors.Cause(err)) == codes.Canceled {
+					log.Debug(
+						"receive from stream canceled",
+						zap.String("namespace", s.changefeed.Namespace),
+						zap.String("changefeed", s.changefeed.ID),
+						zap.String("addr", addr),
+						zap.Uint64("storeID", storeID),
+					)
+				} else {
+					log.Warn(
+						"failed to receive from stream",
+						zap.String("namespace", s.changefeed.Namespace),
+						zap.String("changefeed", s.changefeed.ID),
+						zap.String("addr", addr),
+						zap.Uint64("storeID", storeID),
+						zap.Error(err),
+					)
+					// Note that pd need at lease 10s+ to tag a kv node as disconnect if kv node down
+					// tikv raft need wait (raft-base-tick-interval * raft-election-timeout-ticks) 10s to start a new
+					// election
+				}
+
+				// Use the same delay mechanism as `stream.Send` error handling, since
+				// these two errors often mean upstream store suffers an accident, which
+				// needs time to recover, kv client doesn't need to retry frequently.
+				// TODO: add a better retry backoff or rate limitter
+				time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
+
+				// TODO: better to closes the send direction of the stream to notify
+				// the other side, but it is not safe to call CloseSend concurrently
+				// with SendMsg, in future refactor we should refine the recv loop
+				s.deleteStream(addr)
+
+				// send nil regionStatefulEvent to signal worker exit
+				err = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
+				if err != nil {
+					return err
+				}
+
+				// Do no return error but gracefully stop the goroutine here. Then the whole job will not be canceled and
+				// connection will be retried.
+				return nil
 			}
-		})
-		failpoint.Inject("kvClientStreamRecvError", func(msg failpoint.Value) {
-			errStr := msg.(string)
-			if errStr == io.EOF.Error() {
-				err = io.EOF
-			} else {
-				err = errors.New(errStr)
-			}
-		})
-		if err != nil {
-			if status.Code(errors.Cause(err)) == codes.Canceled {
-				log.Debug(
-					"receive from stream canceled",
+
+			size := cevent.Size()
+			if size > warnRecvMsgSizeThreshold {
+				regionCount := 0
+				if cevent.ResolvedTs != nil {
+					regionCount = len(cevent.ResolvedTs.Regions)
+				}
+				log.Warn("change data event size too large",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
-					zap.String("addr", addr),
-					zap.Uint64("storeID", storeID),
-				)
-			} else {
-				log.Warn(
-					"failed to receive from stream",
-					zap.String("namespace", s.changefeed.Namespace),
-					zap.String("changefeed", s.changefeed.ID),
-					zap.String("addr", addr),
-					zap.Uint64("storeID", storeID),
-					zap.Error(err),
-				)
-				// Note that pd need at lease 10s+ to tag a kv node as disconnect if kv node down
-				// tikv raft need wait (raft-base-tick-interval * raft-election-timeout-ticks) 10s to start a new
-				// election
+					zap.Int("size", size), zap.Int("eventLen", len(cevent.Events)),
+					zap.Int("resolvedRegionCount", regionCount))
 			}
 
-			// Use the same delay mechanism as `stream.Send` error handling, since
-			// these two errors often mean upstream store suffers an accident, which
-			// needs time to recover, kv client doesn't need to retry frequently.
-			// TODO: add a better retry backoff or rate limitter
-			time.Sleep(time.Millisecond * time.Duration(rand.Intn(100)))
-
-			// TODO: better to closes the send direction of the stream to notify
-			// the other side, but it is not safe to call CloseSend concurrently
-			// with SendMsg, in future refactor we should refine the recv loop
-			s.deleteStream(addr)
-
-			// send nil regionStatefulEvent to signal worker exit
-			err = worker.sendEvents(ctx, []*regionStatefulEvent{nil})
+			if len(cevent.Events) != 0 {
+				if entries, ok := cevent.Events[0].Event.(*cdcpb.Event_Entries_); ok {
+					commitTs := entries.Entries.Entries[0].CommitTs
+					if maxCommitTs < commitTs {
+						maxCommitTs = commitTs
+					}
+				}
+			}
+			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
 			if err != nil {
 				return err
 			}
-
-			// Do no return error but gracefully stop the goroutine here. Then the whole job will not be canceled and
-			// connection will be retried.
-			return nil
-		}
-
-		size := cevent.Size()
-		if size > warnRecvMsgSizeThreshold {
-			regionCount := 0
 			if cevent.ResolvedTs != nil {
-				regionCount = len(cevent.ResolvedTs.Regions)
-			}
-			log.Warn("change data event size too large",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Int("size", size), zap.Int("eventLen", len(cevent.Events)),
-				zap.Int("resolvedRegionCount", regionCount))
-		}
-
-		if len(cevent.Events) != 0 {
-			if entries, ok := cevent.Events[0].Event.(*cdcpb.Event_Entries_); ok {
-				commitTs := entries.Entries.Entries[0].CommitTs
-				if maxCommitTs < commitTs {
-					maxCommitTs = commitTs
+				metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
+				err = s.sendResolvedTs(ctx, cevent.ResolvedTs, worker)
+				if err != nil {
+					return err
+				}
+				// NOTE(qupeng): what if all regions are removed from the store?
+				// TiKV send resolved ts events every second by default.
+				// We check and update region count here to save CPU.
+				tsStat.regionCount.Store(uint64(worker.statesManager.regionCount()))
+				tsStat.resolvedTs.Store(cevent.ResolvedTs.Ts)
+				if maxCommitTs == 0 {
+					// In case, there is no write for the table,
+					// we use resolved ts as maxCommitTs to make the stats meaningful.
+					tsStat.commitTs.Store(cevent.ResolvedTs.Ts)
+				} else {
+					tsStat.commitTs.Store(maxCommitTs)
 				}
 			}
 		}
-		err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
-		if err != nil {
-			return err
-		}
-		if cevent.ResolvedTs != nil {
-			metricSendEventBatchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			err = s.sendResolvedTs(ctx, cevent.ResolvedTs, worker)
-			if err != nil {
-				return err
-			}
-			// NOTE(qupeng): what if all regions are removed from the store?
-			// TiKV send resolved ts events every second by default.
-			// We check and update region count here to save CPU.
-			tsStat.regionCount.Store(uint64(worker.statesManager.regionCount()))
-			tsStat.resolvedTs.Store(cevent.ResolvedTs.Ts)
-			if maxCommitTs == 0 {
-				// In case, there is no write for the table,
-				// we use resolved ts as maxCommitTs to make the stats meaningful.
-				tsStat.commitTs.Store(cevent.ResolvedTs.Ts)
-			} else {
-				tsStat.commitTs.Store(maxCommitTs)
-			}
-		}
 	}
+	eg.Go(func() error {
+		return handleExit(receiveEvents())
+	})
+
+	_ = eg.Wait()
+	return retErr
 }
 
 func (s *eventFeedSession) sendRegionChangeEvents(

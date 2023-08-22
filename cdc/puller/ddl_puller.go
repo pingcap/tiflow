@@ -255,37 +255,41 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 	remainTables := make([]*timodel.TableInfo, 0, len(multiTableInfos))
 	snap := p.schemaStorage.GetLastSnapshot()
 	for i, tableInfo := range multiTableInfos {
-		schema, ok := snap.SchemaByID(newSchemaIDs[i])
+		var shouldDiscardOldTable, shouldDiscardNewTable bool
+		oldTable, ok := snap.PhysicalTableByID(tableInfo.ID)
 		if !ok {
-			return true, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(newSchemaIDs[i])
+			shouldDiscardOldTable = true
+		} else {
+			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, oldTable.Name.O)
 		}
-		table, ok := snap.PhysicalTableByID(tableInfo.ID)
+
+		newSchemaName, ok := snap.SchemaByID(newSchemaIDs[i])
 		if !ok {
-			// if a table is not found and its new name is in filter rule, return error.
-			if !p.filter.ShouldDiscardDDL(job.Type, schema.Name.O, newTableNames[i].O) {
-				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
-			}
-			continue
+			// the new table name does not hit the filter rule, so we should discard the table.
+			shouldDiscardNewTable = true
+		} else {
+			shouldDiscardNewTable = p.filter.ShouldDiscardDDL(job.Type, newSchemaName.Name.O, newTableNames[i].O)
 		}
-		// we skip a rename table ddl only when its old table name and new table name are both filtered.
-		skip := p.filter.ShouldDiscardDDL(job.Type, oldSchemaNames[i].O, table.Name.O)
-		if skip {
-			// if a table should be skipped by its old name and its new name is in filter rule, return error.
-			if !p.filter.ShouldDiscardDDL(job.Type, schema.Name.O, newTableNames[i].O) {
-				return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
-			}
-			log.Info("table is filtered",
+
+		if shouldDiscardOldTable && shouldDiscardNewTable {
+			// skip a rename table ddl only when its old table name and new table name are both filtered.
+			log.Info("RenameTables is filtered",
 				zap.Int64("tableID", tableInfo.ID),
 				zap.String("schema", oldSchemaNames[i].O),
-				zap.String("table", table.Name.O))
-		} else {
-			remainTables = append(remainTables, tableInfo)
-			remainOldSchemaIDs = append(remainOldSchemaIDs, oldSchemaIDs[i])
-			remainNewSchemaIDs = append(remainNewSchemaIDs, newSchemaIDs[i])
-			remainOldTableIDs = append(remainOldTableIDs, oldTableIDs[i])
-			remainNewTableNames = append(remainNewTableNames, newTableNames[i])
-			remainOldSchemaNames = append(remainOldSchemaNames, oldSchemaNames[i])
+				zap.String("query", job.Query))
+			continue
 		}
+		if shouldDiscardOldTable && !shouldDiscardNewTable {
+			// if old table is not in filter rule and its new name is in filter rule, return error.
+			return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
+		}
+		// old table name matches the filter rule, remain it.
+		remainTables = append(remainTables, tableInfo)
+		remainOldSchemaIDs = append(remainOldSchemaIDs, oldSchemaIDs[i])
+		remainNewSchemaIDs = append(remainNewSchemaIDs, newSchemaIDs[i])
+		remainOldTableIDs = append(remainOldTableIDs, oldTableIDs[i])
+		remainNewTableNames = append(remainNewTableNames, newTableNames[i])
+		remainOldSchemaNames = append(remainOldSchemaNames, oldSchemaNames[i])
 	}
 
 	if len(remainTables) == 0 {
