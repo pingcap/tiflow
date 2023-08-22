@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -64,6 +65,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
+	conf.Sink.AdvanceTimeoutInSec = util.AddressOf(uint(150))
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
 		ReplicationFactor:            aws.Int16(1),
