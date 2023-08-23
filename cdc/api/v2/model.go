@@ -294,6 +294,38 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
 			}
 		}
+		var pulsarConfig *config.PulsarConfig
+		if c.Sink.PulsarConfig != nil {
+			pulsarConfig = &config.PulsarConfig{
+				TLSKeyFilePath:          c.Sink.PulsarConfig.TLSKeyFilePath,
+				TLSCertificateFile:      c.Sink.PulsarConfig.TLSCertificateFile,
+				TLSTrustCertsFilePath:   c.Sink.PulsarConfig.TLSTrustCertsFilePath,
+				PulsarProducerCacheSize: c.Sink.PulsarConfig.PulsarProducerCacheSize,
+				PulsarVersion:           c.Sink.PulsarConfig.PulsarVersion,
+				CompressionType:         (*config.PulsarCompressionType)(c.Sink.PulsarConfig.CompressionType),
+				AuthenticationToken:     c.Sink.PulsarConfig.AuthenticationToken,
+				ConnectionTimeout:       (*config.TimeSec)(c.Sink.PulsarConfig.ConnectionTimeout),
+				OperationTimeout:        (*config.TimeSec)(c.Sink.PulsarConfig.OperationTimeout),
+				BatchingMaxMessages:     c.Sink.PulsarConfig.BatchingMaxMessages,
+				BatchingMaxPublishDelay: (*config.TimeMill)(c.Sink.PulsarConfig.BatchingMaxPublishDelay),
+				SendTimeout:             (*config.TimeSec)(c.Sink.PulsarConfig.SendTimeout),
+				TokenFromFile:           c.Sink.PulsarConfig.TokenFromFile,
+				BasicUserName:           c.Sink.PulsarConfig.BasicUserName,
+				BasicPassword:           c.Sink.PulsarConfig.BasicPassword,
+				AuthTLSCertificatePath:  c.Sink.PulsarConfig.AuthTLSCertificatePath,
+				AuthTLSPrivateKeyPath:   c.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
+			}
+			if c.Sink.PulsarConfig.OAuth2 != nil {
+				pulsarConfig.OAuth2 = &config.OAuth2{
+					OAuth2IssuerURL:  c.Sink.PulsarConfig.OAuth2.OAuth2IssuerURL,
+					OAuth2Audience:   c.Sink.PulsarConfig.OAuth2.OAuth2Audience,
+					OAuth2PrivateKey: c.Sink.PulsarConfig.OAuth2.OAuth2PrivateKey,
+					OAuth2ClientID:   c.Sink.PulsarConfig.OAuth2.OAuth2ClientID,
+					OAuth2Scope:      c.Sink.PulsarConfig.OAuth2.OAuth2Scope,
+				}
+			}
+		}
+
 		var kafkaConfig *config.KafkaConfig
 		if c.Sink.KafkaConfig != nil {
 			var codeConfig *config.CodecConfig
@@ -402,6 +434,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
+			PulsarConfig:                     pulsarConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         c.Sink.SafeMode,
 		}
@@ -607,6 +640,37 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				EnableCachePreparedStatement: cloned.Sink.MySQLConfig.EnableCachePreparedStatement,
 			}
 		}
+		var pulsarConfig *PulsarConfig
+		if cloned.Sink.PulsarConfig != nil {
+			pulsarConfig = &PulsarConfig{
+				TLSKeyFilePath:          cloned.Sink.PulsarConfig.TLSKeyFilePath,
+				TLSCertificateFile:      cloned.Sink.PulsarConfig.TLSCertificateFile,
+				TLSTrustCertsFilePath:   cloned.Sink.PulsarConfig.TLSTrustCertsFilePath,
+				PulsarProducerCacheSize: cloned.Sink.PulsarConfig.PulsarProducerCacheSize,
+				PulsarVersion:           cloned.Sink.PulsarConfig.PulsarVersion,
+				CompressionType:         (*string)(cloned.Sink.PulsarConfig.CompressionType),
+				AuthenticationToken:     cloned.Sink.PulsarConfig.AuthenticationToken,
+				ConnectionTimeout:       (*int)(cloned.Sink.PulsarConfig.ConnectionTimeout),
+				OperationTimeout:        (*int)(cloned.Sink.PulsarConfig.OperationTimeout),
+				BatchingMaxMessages:     cloned.Sink.PulsarConfig.BatchingMaxMessages,
+				BatchingMaxPublishDelay: (*int)(cloned.Sink.PulsarConfig.BatchingMaxPublishDelay),
+				SendTimeout:             (*int)(cloned.Sink.PulsarConfig.SendTimeout),
+				TokenFromFile:           cloned.Sink.PulsarConfig.TokenFromFile,
+				BasicUserName:           cloned.Sink.PulsarConfig.BasicUserName,
+				BasicPassword:           cloned.Sink.PulsarConfig.BasicPassword,
+				AuthTLSCertificatePath:  cloned.Sink.PulsarConfig.AuthTLSCertificatePath,
+				AuthTLSPrivateKeyPath:   cloned.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
+			}
+			if cloned.Sink.PulsarConfig.OAuth2 != nil {
+				pulsarConfig.OAuth2 = &PulsarOAuth2{
+					OAuth2IssuerURL:  cloned.Sink.PulsarConfig.OAuth2.OAuth2IssuerURL,
+					OAuth2Audience:   cloned.Sink.PulsarConfig.OAuth2.OAuth2Audience,
+					OAuth2PrivateKey: cloned.Sink.PulsarConfig.OAuth2.OAuth2PrivateKey,
+					OAuth2ClientID:   cloned.Sink.PulsarConfig.OAuth2.OAuth2ClientID,
+					OAuth2Scope:      cloned.Sink.PulsarConfig.OAuth2.OAuth2Scope,
+				}
+			}
+		}
 		var cloudStorageConfig *CloudStorageConfig
 		if cloned.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &CloudStorageConfig{
@@ -633,6 +697,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
+			PulsarConfig:                     pulsarConfig,
 			CloudStorageConfig:               cloudStorageConfig,
 			SafeMode:                         cloned.Sink.SafeMode,
 		}
@@ -792,6 +857,7 @@ type SinkConfig struct {
 	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
 	SafeMode                         *bool               `json:"safe_mode,omitempty"`
 	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
+	PulsarConfig                     *PulsarConfig       `json:"pulsar_config,omitempty"`
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
@@ -986,6 +1052,37 @@ type CodecConfig struct {
 	AvroEnableWatermark            *bool   `json:"avro_enable_watermark"`
 	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
+}
+
+// PulsarConfig represents a pulsar sink configuration
+type PulsarConfig struct {
+	TLSKeyFilePath          *string       `json:"tls-certificate-path,omitempty"`
+	TLSCertificateFile      *string       `json:"tls-private-key-path,omitempty"`
+	TLSTrustCertsFilePath   *string       `json:"tls-trust-certs-file-path,omitempty"`
+	PulsarProducerCacheSize *int32        `json:"pulsar-producer-cache-size,omitempty"`
+	PulsarVersion           *string       `json:"pulsar-version,omitempty"`
+	CompressionType         *string       `json:"compression-type,omitempty"`
+	AuthenticationToken     *string       `json:"authentication-token,omitempty"`
+	ConnectionTimeout       *int          `json:"connection-timeout,omitempty"`
+	OperationTimeout        *int          `json:"operation-timeout,omitempty"`
+	BatchingMaxMessages     *uint         `json:"batching-max-messages,omitempty"`
+	BatchingMaxPublishDelay *int          `json:"batching-max-publish-delay,omitempty"`
+	SendTimeout             *int          `json:"send-timeout,omitempty"`
+	TokenFromFile           *string       `json:"token-from-file,omitempty"`
+	BasicUserName           *string       `json:"basic-user-name,omitempty"`
+	BasicPassword           *string       `json:"basic-password,omitempty"`
+	AuthTLSCertificatePath  *string       `json:"auth-tls-certificate-path,omitempty"`
+	AuthTLSPrivateKeyPath   *string       `json:"auth-tls-private-key-path,omitempty"`
+	OAuth2                  *PulsarOAuth2 `json:"oauth2,omitempty"`
+}
+
+// PulsarOAuth2 is the configuration for OAuth2
+type PulsarOAuth2 struct {
+	OAuth2IssuerURL  string `json:"oauth2-issuer-url,omitempty"`
+	OAuth2Audience   string `json:"oauth2-audience,omitempty"`
+	OAuth2PrivateKey string `json:"oauth2-private-key,omitempty"`
+	OAuth2ClientID   string `json:"oauth2-client-id,omitempty"`
+	OAuth2Scope      string `json:"oauth2-scope,omitempty"`
 }
 
 // KafkaConfig represents a kafka sink configuration

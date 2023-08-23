@@ -403,6 +403,17 @@ type OAuth2 struct {
 	OAuth2Scope string `toml:"oauth2-scope" json:"oauth2-scope,omitempty"`
 }
 
+func (o *OAuth2) validate() (err error) {
+	if o == nil {
+		return nil
+	}
+	if len(o.OAuth2IssuerURL) == 0 || len(o.OAuth2ClientID) == 0 || len(o.OAuth2PrivateKey) == 0 ||
+		len(o.OAuth2Audience) == 0 {
+		return fmt.Errorf("issuer-url and audience and private-key and client-id not be empty")
+	}
+	return nil
+}
+
 // PulsarConfig pulsar sink configuration
 type PulsarConfig struct {
 	TLSKeyFilePath        *string `toml:"tls-certificate-path" json:"tls-certificate-path,omitempty"`
@@ -460,15 +471,26 @@ type PulsarConfig struct {
 	// and 'type' always use 'client_credentials'
 	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
 
-	//// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
-	//Protocol *ProtocolStr `toml:"protocol" json:"protocol,omitempty"`
-
 	// Configure the service brokerUrl for the Pulsar service.
 	// This parameter from the sink-uri
 	brokerURL string `toml:"-" json:"-"`
 
 	// parse the sinkURI
 	u *url.URL `toml:"-" json:"-"`
+}
+
+// Check get broker url
+func (c *PulsarConfig) validate() (err error) {
+	if c.OAuth2 != nil {
+		if err = c.OAuth2.validate(); err != nil {
+			return err
+		}
+		if c.TLSTrustCertsFilePath == nil {
+			return fmt.Errorf("oauth2 is not empty but tls-trust-certs-file-path is empty")
+		}
+	}
+
+	return nil
 }
 
 // GetBrokerURL get broker url
@@ -533,6 +555,14 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
 		return nil
 	}
+
+	if s.PulsarConfig != nil {
+		if err := s.PulsarConfig.validate(); err != nil {
+			return err
+		}
+	}
+
+	// todo pulsar
 
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
