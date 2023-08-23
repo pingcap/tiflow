@@ -11,12 +11,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
-const mockSqliteDriverName = "mock-sqlite"
+const MockSqliteDriverName = "mock-sqlite"
 
 func init() {
 	// The original sqlite driver is not thread-safe,
 	// so we wrap a new driver to make it thread-safe.
-	sql.Register(mockSqliteDriverName, &safeSqliteDriver{})
+	sql.Register(MockSqliteDriverName, &safeSqliteDriver{})
 }
 
 type safeSqliteDriver struct {
@@ -56,7 +56,7 @@ func (c *mockClientConn) Close() error {
 // NewClientConnForSQLite news a connection of sqlite
 // Only for test
 func NewClientConnForSQLite(dsn string) (metaModel.ClientConn, error) {
-	db, err := sql.Open(mockSqliteDriverName, dsn)
+	db, err := sql.Open(MockSqliteDriverName, dsn)
 	if err != nil {
 		return nil, err
 	}

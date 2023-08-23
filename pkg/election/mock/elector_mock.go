@@ -93,16 +93,16 @@ func (mr *MockElectorMockRecorder) ResignLeader(arg0, arg1 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResignLeader", reflect.TypeOf((*MockElector)(nil).ResignLeader), arg0, arg1)
 }
 
-// Run mocks base method.
-func (m *MockElector) Run(arg0 context.Context) error {
+// RunElection mocks base method.
+func (m *MockElector) RunElection(arg0 context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Run", arg0)
+	ret := m.ctrl.Call(m, "RunElection", arg0)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// Run indicates an expected call of Run.
-func (mr *MockElectorMockRecorder) Run(arg0 interface{}) *gomock.Call {
+// RunElection indicates an expected call of RunElection.
+func (mr *MockElectorMockRecorder) RunElection(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockElector)(nil).Run), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunElection", reflect.TypeOf((*MockElector)(nil).RunElection), arg0)
 }

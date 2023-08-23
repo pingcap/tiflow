@@ -29,8 +29,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
 	"github.com/pingcap/tiflow/pkg/chann"
-	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/election"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -60,10 +61,6 @@ type Storage struct {
 	}
 
 	sync.RWMutex
-	keepalive struct {
-		captures   map[string]*metadata.CaptureInfo
-		heartbeats map[string]time.Time
-	}
 	schedule struct {
 		// CaptureID of the global controller.
 		controller string
@@ -84,8 +81,6 @@ func newStorage() *Storage {
 	s.entities.cfs = make(map[model.ChangeFeedID]*metadata.ChangefeedInfo)
 	s.entities.cfids = make(map[model.ChangeFeedID]metadata.ChangefeedID)
 	s.entities.ups = make(map[uint64]*metadata.UpstreamInfo)
-	s.keepalive.captures = make(map[string]*metadata.CaptureInfo)
-	s.keepalive.heartbeats = make(map[string]time.Time)
 	s.schedule.owners = make(map[metadata.ChangefeedID]metadata.ScheduledChangefeed)
 	s.schedule.processors = make(map[metadata.ChangefeedID]sortedScheduledChangefeeds)
 	s.schedule.ownersByCapture = make(map[string]sortedScheduledChangefeeds)
@@ -174,8 +169,9 @@ func (c *contextManager) stop() {
 
 // CaptureOb is an implement for metadata.CaptureObservation.
 type CaptureOb struct {
-	s              *Storage
-	c              *metadata.CaptureInfo
+	election.Elector
+	storage        *Storage
+	selfInfo       *metadata.CaptureInfo
 	contextManager *contextManager
 
 	tasks struct {
@@ -191,76 +187,77 @@ type CaptureOb struct {
 // NewCaptureObservation creates a capture observation.
 func NewCaptureObservation(s *Storage, c *metadata.CaptureInfo) *CaptureOb {
 	return &CaptureOb{
-		s:                s,
-		c:                c,
+		storage:          s,
+		selfInfo:         c,
 		ownerChanges:     chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
 		processorChanges: chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
 	}
 }
 
 // Run runs the given CaptureOb.
-func (c *CaptureOb) Run(ctx context.Context) error {
-	c.contextManager = newContextManager(ctx)
+func (c *CaptureOb) Run(
+	ctx context.Context,
+	electionDSN string, /* only for election */
+	controllerCallback func(context.Context, metadata.ControllerObservation) error,
+) (err error) {
+	onTakeControl := func(electorCtx context.Context) error {
+		controllerOb := newControllerObservation(c.storage, c.selfInfo, c.getAllCaptures)
 
-	if err := c.Heartbeat(ctx); err != nil {
-		// Do a heartbeat to refresh context.
-		return err
+		ctrlErrGroup, ctrlCtx := errgroup.WithContext(electorCtx)
+		ctrlErrGroup.Go(func() error {
+			return controllerOb.run(ctrlCtx)
+		})
+		ctrlErrGroup.Go(func() error {
+			return controllerCallback(ctrlCtx, controllerOb)
+		})
+		return ctrlErrGroup.Wait()
 	}
 
-	c.contextManager.wg.Add(1)
-	go func() {
-		defer c.contextManager.wg.Done()
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
-		for {
-			updatedCtx := c.contextManager.fetchContext()
-			select {
-			case <-updatedCtx.Done():
-				err := updatedCtx.Err()
-				log.Info("capture stops heartbeat", zap.String("capture", c.c.ID), zap.Error(err))
-				return
-			case <-ticker.C:
-			}
+	inMemoryStorage, err := election.NewInMemorySQLStorage(electionDSN, "election")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if c.Elector, err = election.NewElector(election.Config{
+		ID:              c.selfInfo.ID,
+		Name:            c.selfInfo.Version, /* TODO: refine this filed */
+		Address:         c.selfInfo.AdvertiseAddr,
+		Storage:         inMemoryStorage,
+		LeaderCallback:  onTakeControl,
+		ExitOnRenewFail: true,
+	}); err != nil {
+		return errors.Trace(err)
+	}
 
-			hbCtx, cancel := context.WithTimeout(updatedCtx, heartbeatDeadline)
-			if err := c.Heartbeat(hbCtx); err != nil {
-				log.Warn("capture heartbeat fail", zap.String("capture", c.c.ID), zap.Error(err))
-				c.contextManager.stop()
-				return
-			}
-			cancel()
-		}
-	}()
+	eg, ctx := errgroup.WithContext(ctx)
 
-	c.contextManager.wg.Add(1)
-	go func() {
-		defer c.contextManager.wg.Done()
+	eg.Go(func() error {
+		return c.Elector.RunElection(ctx)
+	})
+
+	eg.Go(func() error {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
-			updatedCtx := c.contextManager.fetchContext()
 			select {
-			case <-updatedCtx.Done():
-				err := updatedCtx.Err()
-				log.Info("capture stops handle task changes", zap.String("capture", c.c.ID), zap.Error(err))
-				return
+			case <-ctx.Done():
+				err := ctx.Err()
+				log.Info("capture stops handle task changes", zap.String("capture", c.selfInfo.ID), zap.Error(err))
+				return err
 			case <-ticker.C:
 			}
 
-			if err := c.handleTaskChanges(updatedCtx, true); err != nil {
-				log.Warn("capture handle task changes fail", zap.String("capture", c.c.ID), zap.Error(err))
-				c.contextManager.stop()
-				return
+			if err := c.handleTaskChanges(ctx, true); err != nil {
+				log.Warn("capture handle task changes fail", zap.String("capture", c.selfInfo.ID), zap.Error(err))
+				return err
 			}
-			if err := c.handleTaskChanges(updatedCtx, false); err != nil {
-				log.Warn("capture handle task changes fail", zap.String("capture", c.c.ID), zap.Error(err))
-				c.contextManager.stop()
+			if err := c.handleTaskChanges(ctx, false); err != nil {
+				log.Warn("capture handle task changes fail", zap.String("capture", c.selfInfo.ID), zap.Error(err))
+				return err
 			}
 		}
-	}()
+	})
 
-	c.contextManager.wg.Wait()
-	return nil
+	return eg.Wait()
 }
 
 func (c *CaptureOb) handleTaskChanges(ctx context.Context, isOwner bool) error {
@@ -270,18 +267,18 @@ func (c *CaptureOb) handleTaskChanges(ctx context.Context, isOwner bool) error {
 	var emitEvents chan<- metadata.ScheduledChangefeed
 
 	if isOwner {
-		c.s.RLock()
-		tasks, exists = c.s.schedule.ownersByCapture[c.Self().ID]
-		c.s.RUnlock()
+		c.storage.RLock()
+		tasks, exists = c.storage.schedule.ownersByCapture[c.Self().ID]
+		c.storage.RUnlock()
 
 		c.tasks.Lock()
 		defer c.tasks.Unlock()
 		localTasks = &c.tasks.owners
 		emitEvents = c.ownerChanges.In()
 	} else {
-		c.s.RLock()
-		tasks, exists = c.s.schedule.processorsByCapture[c.Self().ID]
-		c.s.RUnlock()
+		c.storage.RLock()
+		tasks, exists = c.storage.schedule.processorsByCapture[c.Self().ID]
+		c.storage.RUnlock()
 
 		c.tasks.Lock()
 		defer c.tasks.Unlock()
@@ -310,55 +307,15 @@ func (c *CaptureOb) handleTaskChanges(ctx context.Context, isOwner bool) error {
 }
 
 func (c *CaptureOb) Self() *metadata.CaptureInfo {
-	return c.c
-}
-
-func (c *CaptureOb) Heartbeat(context.Context) error {
-	c.s.Lock()
-	defer c.s.Unlock()
-	c.s.keepalive.captures[c.Self().ID] = c.c
-	c.s.keepalive.heartbeats[c.Self().ID] = time.Now()
-
-	c.contextManager.refreshContext()
-	return nil
-}
-
-func (c *CaptureOb) TakeControl() (metadata.ControllerObservation, error) {
-	for {
-		if err := util.Hang(c.contextManager.fetchContext(), time.Second); err != nil {
-			return nil, err
-		}
-
-		c.s.Lock()
-		if _, ok := c.s.keepalive.heartbeats[c.Self().ID]; !ok {
-			c.s.Unlock()
-			continue
-		}
-		controller := c.s.schedule.controller
-		if len(controller) > 0 {
-			heartbeat, ok := c.s.keepalive.heartbeats[controller]
-			if ok && time.Since(heartbeat) <= lease+heartbeatDeadline+networkJitter {
-				c.s.Unlock()
-				continue
-			}
-		}
-		c.s.schedule.controller = c.Self().ID
-		c.s.Unlock()
-		controllerOb := newControllerObservation(c.contextManager, c.s, c.c)
-		c.contextManager.wg.Add(1)
-		go func() {
-			defer c.contextManager.wg.Done()
-			controllerOb.run()
-		}()
-	}
+	return c.selfInfo
 }
 
 func (c *CaptureOb) Advance(cfs []metadata.ChangefeedID, progresses []metadata.ChangefeedProgress) error {
-	c.s.Lock()
-	defer c.s.Unlock()
+	c.storage.Lock()
+	defer c.storage.Unlock()
 	for i, cf := range cfs {
-		if owner, ok := c.s.schedule.owners[cf]; ok && owner.State == metadata.SchedLaunched {
-			c.s.progresses[cf] = progresses[i]
+		if owner, ok := c.storage.schedule.owners[cf]; ok && owner.State == metadata.SchedLaunched {
+			c.storage.progresses[cf] = progresses[i]
 		}
 	}
 	return nil
@@ -369,10 +326,10 @@ func (c *CaptureOb) OwnerChanges() <-chan metadata.ScheduledChangefeed {
 }
 
 func (c *CaptureOb) PostOwnerRemoved(cf metadata.ChangefeedID) error {
-	c.s.Lock()
-	defer c.s.Unlock()
-	if _, ok := c.s.schedule.owners[cf]; ok {
-		delete(c.s.schedule.owners, cf)
+	c.storage.Lock()
+	defer c.storage.Unlock()
+	if _, ok := c.storage.schedule.owners[cf]; ok {
+		delete(c.storage.schedule.owners, cf)
 	}
 	return nil
 }
@@ -382,26 +339,30 @@ func (c *CaptureOb) ProcessorChanges() <-chan metadata.ScheduledChangefeed {
 }
 
 func (c *CaptureOb) PostProcessorRemoved(cf metadata.ChangefeedID) error {
-	c.s.Lock()
-	defer c.s.Unlock()
-	if processors, ok := c.s.schedule.processors[cf]; ok {
+	c.storage.Lock()
+	defer c.storage.Unlock()
+	if processors, ok := c.storage.schedule.processors[cf]; ok {
 		processors.version += 1
 		// processors.v = postProcessorRemoved(processors.v, c.Self().ID)
-		c.s.schedule.processors[cf] = processors
+		c.storage.schedule.processors[cf] = processors
 	}
-	if processors, ok := c.s.schedule.processorsByCapture[c.Self().ID]; ok {
+	if processors, ok := c.storage.schedule.processorsByCapture[c.Self().ID]; ok {
 		processors.version += 1
 		// processors.v = postProcessorRemoved(processors.v, c.Self().ID)
-		c.s.schedule.processorsByCapture[c.Self().ID] = processors
+		c.storage.schedule.processorsByCapture[c.Self().ID] = processors
 	}
 	return nil
 }
 
+func (c *CaptureOb) getAllCaptures() []*metadata.CaptureInfo {
+	infos, _ := c.GetCaptures()
+	return infos
+}
+
 // ControllerOb is an implement for metadata.ControllerObservation.
 type ControllerOb struct {
-	s              *Storage
-	c              *metadata.CaptureInfo
-	contextManager *contextManager
+	storage  *Storage
+	selfInfo *metadata.CaptureInfo
 
 	aliveCaptures struct {
 		sync.Mutex
@@ -411,50 +372,40 @@ type ControllerOb struct {
 		incomingHash uint64
 	}
 
-	captures *chann.DrainableChann[[]*metadata.CaptureInfo]
+	captures       *chann.DrainableChann[[]*metadata.CaptureInfo]
+	getAllCaptures func() []*metadata.CaptureInfo
 }
 
-func newControllerObservation(ctxMgr *contextManager, s *Storage, c *metadata.CaptureInfo) *ControllerOb {
+func newControllerObservation(s *Storage, c *metadata.CaptureInfo, getAllCaptures func() []*metadata.CaptureInfo) *ControllerOb {
 	return &ControllerOb{
-		s:              s,
-		c:              c,
-		contextManager: ctxMgr,
+		storage:        s,
+		selfInfo:       c,
 		captures:       chann.NewAutoDrainChann[[]*metadata.CaptureInfo](),
+		getAllCaptures: getAllCaptures,
 	}
 }
 
-func (c *ControllerOb) run() {
+func (c *ControllerOb) run(ctx context.Context) error {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		updatedCtx := c.contextManager.fetchContext()
 		select {
-		case <-updatedCtx.Done():
-			err := updatedCtx.Err()
-			log.Info("controller stops handle alive captures ", zap.String("capture", c.c.ID), zap.Error(err))
-			return
+		case <-ctx.Done():
+			err := ctx.Err()
+			log.Info("controller stops handle alive captures ", zap.String("capture", c.selfInfo.ID), zap.Error(err))
+			return err
 		case <-ticker.C:
 		}
 
-		if err := c.handleAliveCaptures(updatedCtx); err != nil {
-			log.Warn("controller handle alive captures fail", zap.String("capture", c.c.ID), zap.Error(err))
-			c.contextManager.stop()
-			return
+		if err := c.handleAliveCaptures(ctx); err != nil {
+			log.Warn("controller handle alive captures fail", zap.String("capture", c.selfInfo.ID), zap.Error(err))
+			return err
 		}
 	}
 }
 
 func (c *ControllerOb) handleAliveCaptures(ctx context.Context) error {
-	alives := make([]*metadata.CaptureInfo, 0)
-	c.s.RLock()
-	for id, info := range c.s.keepalive.captures {
-		if hb, ok := c.s.keepalive.heartbeats[id]; !ok || time.Since(hb) > lease {
-			continue
-		}
-		alives = append(alives, info)
-	}
-	c.s.RUnlock()
-
+	alives := c.getAllCaptures()
 	hash := sortAndHashCaptureList(alives)
 
 	c.aliveCaptures.Lock()
@@ -465,40 +416,40 @@ func (c *ControllerOb) handleAliveCaptures(ctx context.Context) error {
 }
 
 func (c *ControllerOb) CreateChangefeed(cf *metadata.ChangefeedInfo, up *metadata.UpstreamInfo) (metadata.ChangefeedID, error) {
-	c.s.entities.Lock()
-	defer c.s.entities.Unlock()
+	c.storage.entities.Lock()
+	defer c.storage.entities.Unlock()
 
-	if _, ok := c.s.entities.cfs[cf.ID]; ok {
+	if _, ok := c.storage.entities.cfs[cf.ID]; ok {
 		return metadata.ChangefeedID{}, errors.New("changefeed exists")
 	}
 
-	c.s.entities.cfs[cf.ID] = cf
-	c.s.entities.ups[up.ID] = up
+	c.storage.entities.cfs[cf.ID] = cf
+	c.storage.entities.ups[up.ID] = up
 
-	id := metadata.ChangefeedID{ChangeFeedID: cf.ID, Epoch: c.s.epoch.Add(1)}
+	id := metadata.ChangefeedID{ChangeFeedID: cf.ID, Epoch: c.storage.epoch.Add(1)}
 	id.Comparable = fmt.Sprintf("%s.%d", id.String(), id.Epoch)
-	c.s.entities.cfids[cf.ID] = id
+	c.storage.entities.cfids[cf.ID] = id
 	return id, nil
 }
 
 func (c *ControllerOb) RemoveChangefeed(cf metadata.ChangefeedID) error {
-	c.s.entities.Lock()
-	defer c.s.entities.Unlock()
-	c.s.Lock()
-	defer c.s.Unlock()
+	c.storage.entities.Lock()
+	defer c.storage.entities.Unlock()
+	c.storage.Lock()
+	defer c.storage.Unlock()
 
-	delete(c.s.entities.cfids, cf.ChangeFeedID)
-	delete(c.s.entities.cfs, cf.ChangeFeedID)
+	delete(c.storage.entities.cfids, cf.ChangeFeedID)
+	delete(c.storage.entities.cfs, cf.ChangeFeedID)
 
 	// TODO: we need to rollback partial changes on fails.
-	if owner, ok := c.s.schedule.owners[cf]; ok {
+	if owner, ok := c.storage.schedule.owners[cf]; ok {
 		owner.State = metadata.SchedRemoving
-		if err := c.s.setOwner(cf, owner); err != nil {
+		if err := c.storage.setOwner(cf, owner); err != nil {
 			return err
 		}
 	}
-	if processors, ok := c.s.schedule.processors[cf]; ok {
-		if err := c.s.setProcessors(cf, processors.v); err != nil {
+	if processors, ok := c.storage.schedule.processors[cf]; ok {
+		if err := c.storage.setProcessors(cf, processors.v); err != nil {
 			return err
 		}
 	}
@@ -519,42 +470,36 @@ func (c *ControllerOb) RefreshCaptures() (captures []*metadata.CaptureInfo, chan
 }
 
 func (c *ControllerOb) SetOwner(cf metadata.ChangefeedID, target metadata.ScheduledChangefeed) error {
-	c.s.Lock()
-	defer c.s.Unlock()
-	return c.s.setOwner(cf, target)
+	c.storage.Lock()
+	defer c.storage.Unlock()
+	return c.storage.setOwner(cf, target)
 }
 
 func (c *ControllerOb) SetProcessors(cf metadata.ChangefeedID, workers []metadata.ScheduledChangefeed) error {
-	c.s.Lock()
-	defer c.s.Unlock()
-	return c.s.setProcessors(cf, workers)
+	c.storage.Lock()
+	defer c.storage.Unlock()
+	return c.storage.setProcessors(cf, workers)
 }
 
 func (c *ControllerOb) GetChangefeedSchedule(cf metadata.ChangefeedID) (s metadata.ChangefeedSchedule, err error) {
-	c.s.RLock()
-	defer c.s.RUnlock()
-	s.Owner = c.s.schedule.owners[cf]
-	s.Processors = c.s.schedule.processors[cf].v
+	c.storage.RLock()
+	defer c.storage.RUnlock()
+	s.Owner = c.storage.schedule.owners[cf]
+	s.Processors = c.storage.schedule.processors[cf].v
 	return
 }
 
 func (c *ControllerOb) ScheduleSnapshot() (ss []metadata.ChangefeedSchedule, cs []*metadata.CaptureInfo, err error) {
-	c.s.RLock()
-	ss = make([]metadata.ChangefeedSchedule, 0, len(c.s.entities.cfids))
-	cs = make([]*metadata.CaptureInfo, 0, len(c.s.keepalive.captures))
-	for _, cf := range c.s.entities.cfids {
+	c.storage.RLock()
+	ss = make([]metadata.ChangefeedSchedule, 0, len(c.storage.entities.cfids))
+	for _, cf := range c.storage.entities.cfids {
 		var s metadata.ChangefeedSchedule
-		s.Owner = c.s.schedule.owners[cf]
-		s.Processors = c.s.schedule.processors[cf].v
+		s.Owner = c.storage.schedule.owners[cf]
+		s.Processors = c.storage.schedule.processors[cf].v
 		ss = append(ss, s)
 	}
-	for id, info := range c.s.keepalive.captures {
-		if hb, ok := c.s.keepalive.heartbeats[id]; !ok || time.Since(hb) > lease {
-			continue
-		}
-		cs = append(cs, info)
-	}
-	c.s.RUnlock()
+	c.storage.RUnlock()
+	cs = c.getAllCaptures()
 
 	hash := sortAndHashCaptureList(cs)
 
@@ -661,49 +606,48 @@ func (o *ownerOb) RefreshProcessors() (captures []metadata.ScheduledChangefeed, 
 }
 
 func (c *CaptureOb) GetChangefeeds(cfs ...model.ChangeFeedID) ([]*metadata.ChangefeedInfo, []metadata.ChangefeedID, error) {
-	c.s.entities.RLock()
-	defer c.s.entities.RUnlock()
+	c.storage.entities.RLock()
+	defer c.storage.entities.RUnlock()
 
 	length := len(cfs)
 	if length > 0 {
 		infos := make([]*metadata.ChangefeedInfo, 0, length)
 		ids := make([]metadata.ChangefeedID, 0, length)
 		for _, id := range cfs {
-			infos = append(infos, c.s.entities.cfs[id])
-			ids = append(ids, c.s.entities.cfids[id])
+			infos = append(infos, c.storage.entities.cfs[id])
+			ids = append(ids, c.storage.entities.cfids[id])
 		}
 		return infos, ids, nil
 	}
 
-	length = len(c.s.entities.cfs)
+	length = len(c.storage.entities.cfs)
 	infos := make([]*metadata.ChangefeedInfo, 0, length)
 	ids := make([]metadata.ChangefeedID, 0, length)
-	for id, info := range c.s.entities.cfs {
+	for id, info := range c.storage.entities.cfs {
 		infos = append(infos, info)
-		ids = append(ids, c.s.entities.cfids[id])
+		ids = append(ids, c.storage.entities.cfids[id])
 	}
 	return infos, ids, nil
 }
 
 func (c *CaptureOb) GetCaptures(cps ...string) ([]*metadata.CaptureInfo, error) {
-	c.s.RLock()
-	defer c.s.RUnlock()
+	cpsMap := make(map[string]struct{}, len(cps))
+	for _, cp := range cps {
+		cpsMap[cp] = struct{}{}
+	}
 
-	length := len(cps)
-	if length > 0 {
-		infos := make([]*metadata.CaptureInfo, 0, length)
-		for _, id := range cps {
-			infos = append(infos, c.s.keepalive.captures[id])
+	members := c.GetMembers()
+	captures := make([]*metadata.CaptureInfo, 0, len(members))
+	for _, m := range members {
+		if _, ok := cpsMap[m.ID]; ok || len(cps) == 0 {
+			captures = append(captures, &metadata.CaptureInfo{
+				ID:            m.ID,
+				AdvertiseAddr: m.Address,
+				Version:       m.Name,
+			})
 		}
-		return infos, nil
 	}
-
-	length = len(c.s.keepalive.captures)
-	infos := make([]*metadata.CaptureInfo, 0, length)
-	for _, info := range c.s.keepalive.captures {
-		infos = append(infos, info)
-	}
-	return infos, nil
+	return captures, nil
 }
 
 func compareByChangefeed(a, b metadata.ScheduledChangefeed) int {

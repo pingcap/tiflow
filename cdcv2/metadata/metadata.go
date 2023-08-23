@@ -14,12 +14,12 @@
 package metadata
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/election"
 )
 
 // ChangefeedID identifies a changefeed.
@@ -142,14 +142,10 @@ type Querier interface {
 //
 // All intrefaces are thread-safe and shares one same Context.
 type CaptureObservation interface {
+	election.Elector
+
 	// CaptureInfo tells the caller who am I.
 	Self() *CaptureInfo
-
-	// Heartbeat tells the metadata storage I'm still alive.
-	Heartbeat(context.Context) error
-
-	// TakeControl blocks until becomes controller or gets canceled.
-	TakeControl() (ControllerObservation, error)
 
 	// Advance advances some changefeed progresses.
 	Advance(cfs []ChangefeedID, progresses []ChangefeedProgress) error

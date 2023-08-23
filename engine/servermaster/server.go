@@ -377,7 +377,7 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	wg.Go(func() error {
-		return s.elector.Run(ctx)
+		return s.elector.RunElection(ctx)
 	})
 
 	return wg.Wait()

@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/pingcap/tiflow/engine/pkg/meta/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -45,6 +46,16 @@ func NewSQLStorage(db *sql.DB, tableName string) (*SQLStorage, error) {
 		db:        db,
 		tableName: tableName,
 	}, nil
+}
+
+func NewInMemorySQLStorage(dbName string, tableName string) (*SQLStorage, error) {
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", dbName)
+
+	db, err := sql.Open(mock.MockSqliteDriverName, dsn)
+	if err != nil {
+		return nil, err
+	}
+	return NewSQLStorage(db, tableName)
 }
 
 // Get implements Storage.Get.

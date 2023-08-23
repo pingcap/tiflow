@@ -32,9 +32,9 @@ func init() {
 
 // Elector is a leader election client.
 type Elector interface {
-	// Run runs the elector to continuously campaign for leadership
+	// RunElection runs the elector to continuously campaign for leadership
 	// until the context is canceled.
-	Run(ctx context.Context) error
+	RunElection(ctx context.Context) error
 	// IsLeader returns true if the current member is the leader
 	// and its lease is still valid.
 	IsLeader() bool
@@ -87,13 +87,18 @@ type resignReq struct {
 	errCh    chan error
 }
 
-// Run implements Elector.Run.
-func (e *electorImpl) Run(ctx context.Context) error {
+// RunElection implements Elector.RunElection.
+func (e *electorImpl) RunElection(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	for {
 		if err := e.renew(ctx); err != nil {
 			log.Warn("failed to renew lease after renew deadline", zap.Error(err),
-				zap.Duration("renew-deadline", e.config.RenewDeadline))
+				zap.Duration("renewDeadline", e.config.RenewDeadline))
 			e.cancelCallback("renew lease failed")
+			if e.config.ExitOnRenewFail {
+				cancel()
+			}
 		} else if e.IsLeader() {
 			e.ensureCallbackIsRunning(ctx)
 		} else {
@@ -144,16 +149,16 @@ func (e *electorImpl) renew(ctx context.Context) (err error) {
 					record.LeaderID = ""
 					log.Info(
 						"leader lease expired",
-						zap.String("leader-id", m.ID),
-						zap.String("leader-name", m.Name),
-						zap.String("leader-address", m.Address),
+						zap.String("leaderID", m.ID),
+						zap.String("leaderName", m.Name),
+						zap.String("leaderAddress", m.Address),
 					)
 				} else {
 					log.Info(
 						"member lease expired",
-						zap.String("member-id", m.ID),
-						zap.String("member-name", m.Name),
-						zap.String("member-address", m.Address),
+						zap.String("memberID", m.ID),
+						zap.String("memberName", m.Name),
+						zap.String("memberAddress", m.Address),
 					)
 				}
 			} else {
@@ -321,9 +326,9 @@ func (e *electorImpl) setObservedRecord(record *Record) {
 		if ok {
 			log.Info(
 				"new leader elected",
-				zap.String("leader-id", leader.ID),
-				zap.String("leader-name", leader.Name),
-				zap.String("leader-address", leader.Address),
+				zap.String("leaderID", leader.ID),
+				zap.String("leaderName", leader.Name),
+				zap.String("leaderAddress", leader.Address),
 			)
 		}
 	}
