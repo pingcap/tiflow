@@ -481,13 +481,15 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 
 func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, stream *requestedStream) (err error) {
 	defer func() {
-		if err := stream.client.CloseSend(); err != nil {
-			log.Warn("event feed grpc stream close send fail",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("storeID", rs.storeID),
-				zap.String("addr", rs.storeAddr))
-		}
+		closeSendErr := stream.client.CloseSend()
+		log.Info("event feed close send for grpc stream",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Uint64("storeID", rs.storeID),
+			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", stream.streamID),
+			zap.String("reason", err.Error()),
+			zap.Error(closeSendErr))
 	}()
 
 	doSend := func(req *cdcpb.ChangeDataRequest) error {
@@ -499,6 +501,7 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 				zap.Uint64("regionID", req.RegionId),
 				zap.Uint64("storeID", rs.storeID),
 				zap.String("addr", rs.storeAddr),
+				zap.Uint64("streamID", stream.streamID),
 				zap.Error(err))
 			return errors.Trace(err)
 		}
@@ -508,8 +511,26 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			zap.Any("subscriptionID", SubscriptionID(req.RequestId)),
 			zap.Uint64("regionID", req.RegionId),
 			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr))
+			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", stream.streamID))
 		return nil
+	}
+
+	fetchMoreReq := func() (sri singleRegionInfo, _ error) {
+		waitReqTicker := time.NewTicker(60 * time.Second)
+		defer waitReqTicker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return sri, ctx.Err()
+			case sri = <-stream.requests.Out():
+				return sri, nil
+			case <-waitReqTicker.C:
+				if stream.countStates() == 0 {
+					return sri, errors.New("closed as idle")
+				}
+			}
+		}
 	}
 
 	sri := *stream.preFetchForConnecting
@@ -559,10 +580,8 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			}
 		}
 
-		select {
-		case sri = <-stream.requests.Out():
-		case <-ctx.Done():
-			return ctx.Err()
+		if sri, err = fetchMoreReq(); err != nil {
+			return err
 		}
 	}
 }
@@ -722,7 +741,8 @@ func (s *SharedClient) runStream(
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr))
+			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", stream.streamID))
 		// To cancel grpc client stream explicitly.
 		cancel()
 		s.clearStream(rs, stream)
@@ -732,7 +752,8 @@ func (s *SharedClient) runStream(
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("storeID", rs.storeID),
-		zap.String("addr", rs.storeAddr))
+		zap.String("addr", rs.storeAddr),
+		zap.Uint64("streamID", stream.streamID))
 
 	if err := stream.init(ctx); err != nil {
 		log.Warn("event feed create grpc stream failed",
@@ -740,6 +761,7 @@ func (s *SharedClient) runStream(
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", stream.streamID),
 			zap.Error(err))
 	} else {
 		g, ctx := errgroup.WithContext(ctx)
@@ -750,6 +772,15 @@ func (s *SharedClient) runStream(
 		}
 	}
 	return false
+}
+
+func (r *requestedStream) countStates() (sum int) {
+	r.requestedRegions.Lock()
+	defer r.requestedRegions.Unlock()
+	for _, mm := range r.requestedRegions.m {
+		sum += len(mm)
+	}
+	return
 }
 
 func (r *requestedStream) setState(subscriptionID SubscriptionID, regionID uint64, state *regionFeedState) {
