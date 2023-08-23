@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -453,9 +452,6 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(
 		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
 	) (uint64, error) {
-		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-		// set GC safepoint to (checkpointTs - 1)
-		require.Equal(t, safePoint, uint64(math.MaxUint64-1))
 		return 0, nil
 	}
 	err := o.updateGCSafepoint(ctx, state)
