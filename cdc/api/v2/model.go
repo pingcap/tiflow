@@ -350,6 +350,17 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				}
 			}
 
+			var glueSchemaRegistryConfig *config.GlueSchemaRegistryConfig
+			if c.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+				glueSchemaRegistryConfig = &config.GlueSchemaRegistryConfig{
+					RegistryName:    c.Sink.KafkaConfig.GlueSchemaRegistryConfig.RegistryName,
+					Region:          c.Sink.KafkaConfig.GlueSchemaRegistryConfig.Region,
+					AccessKey:       c.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey,
+					SecretAccessKey: c.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey,
+					Token:           c.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token,
+				}
+			}
+
 			kafkaConfig = &config.KafkaConfig{
 				PartitionNum:                 c.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            c.Sink.KafkaConfig.ReplicationFactor,
@@ -386,6 +397,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
+				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -582,6 +594,17 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				}
 			}
 
+			var glueSchemaRegistryConfig *GlueSchemaRegistryConfig
+			if cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+				glueSchemaRegistryConfig = &GlueSchemaRegistryConfig{
+					RegistryName:    cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.RegistryName,
+					Region:          cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.Region,
+					AccessKey:       cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey,
+					SecretAccessKey: cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey,
+					Token:           cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token,
+				}
+			}
+
 			kafkaConfig = &KafkaConfig{
 				PartitionNum:                 cloned.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            cloned.Sink.KafkaConfig.ReplicationFactor,
@@ -618,6 +641,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
+				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -1122,6 +1146,7 @@ type KafkaConfig struct {
 	InsecureSkipVerify           *bool                     `json:"insecure_skip_verify,omitempty"`
 	CodecConfig                  *CodecConfig              `json:"codec_config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `json:"glue_schema_registry_config,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
@@ -1158,4 +1183,17 @@ type ChangefeedStatus struct {
 	CheckpointTs uint64        `json:"checkpoint_ts"`
 	LastError    *RunningError `json:"last_error,omitempty"`
 	LastWarning  *RunningError `json:"last_warning,omitempty"`
+}
+
+// GlueSchemaRegistryConfig represents a glue schema registry configuration
+type GlueSchemaRegistryConfig struct {
+	// Name of the schema registry
+	RegistryName string `json:"registry_name"`
+	// Region of the schema registry
+	Region string `json:"region"`
+	// AccessKey of the schema registry
+	AccessKey string `json:"access_key,omitempty"`
+	// SecretAccessKey of the schema registry
+	SecretAccessKey string `json:"secret_access_key,omitempty"`
+	Token           string `json:"token,omitempty"`
 }

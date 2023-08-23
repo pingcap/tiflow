@@ -50,10 +50,10 @@ type Config struct {
 	EnableRowChecksum   bool
 
 	// avro only
-	AvroSchemaRegistry             string
+	AvroConfluentSchemaRegistry    string
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
-
+	AvroGlueSchemaRegistry         *config.GlueSchemaRegistryConfig
 	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
 	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
 	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
@@ -83,7 +83,7 @@ func NewConfig(protocol config.Protocol) *Config {
 		EnableTiDBExtension: false,
 		EnableRowChecksum:   false,
 
-		AvroSchemaRegistry:             "",
+		AvroConfluentSchemaRegistry:    "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
 		AvroEnableWatermark:            false,
@@ -99,6 +99,7 @@ const (
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
+	coderOPTAvroGlueSchemaRegistry         = "glue-schema-registry"
 
 	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
@@ -169,7 +170,11 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		}
 	}
 	if urlParameter.AvroSchemaRegistry != "" {
-		c.AvroSchemaRegistry = urlParameter.AvroSchemaRegistry
+		c.AvroConfluentSchemaRegistry = urlParameter.AvroSchemaRegistry
+	}
+	if replicaConfig.Sink.KafkaConfig != nil &&
+		replicaConfig.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+		c.AvroGlueSchemaRegistry = replicaConfig.Sink.KafkaConfig.GlueSchemaRegistryConfig
 	}
 	if c.Protocol == config.ProtocolAvro && replicaConfig.ForceReplicate {
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
@@ -264,10 +269,19 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Protocol == config.ProtocolAvro {
-		if c.AvroSchemaRegistry == "" {
+		if c.AvroConfluentSchemaRegistry != "" && c.AvroGlueSchemaRegistry != nil {
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
-				`Avro protocol requires parameter "%s"`,
+				`Avro protocol requires only one of "%s" or "%s" to specify the schema registry`,
 				codecOPTAvroSchemaRegistry,
+				coderOPTAvroGlueSchemaRegistry,
+			)
+		}
+
+		if c.AvroConfluentSchemaRegistry == "" && c.AvroGlueSchemaRegistry == nil {
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
+				`Avro protocol requires parameter "%s" or "%s" to specify the schema registry`,
+				codecOPTAvroSchemaRegistry,
+				coderOPTAvroGlueSchemaRegistry,
 			)
 		}
 
@@ -324,4 +338,22 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+const (
+	// SchemaRegistryTypeConfluent is the type of Confluent Schema Registry
+	SchemaRegistryTypeConfluent = "confluent"
+	// SchemaRegistryTypeGlue is the type of AWS Glue Schema Registry
+	SchemaRegistryTypeGlue = "glue"
+)
+
+// SchemaRegistryType returns the type of schema registry
+func (c *Config) SchemaRegistryType() string {
+	if c.AvroConfluentSchemaRegistry != "" {
+		return SchemaRegistryTypeConfluent
+	}
+	if c.AvroGlueSchemaRegistry != nil {
+		return SchemaRegistryTypeGlue
+	}
+	return "unknown"
 }

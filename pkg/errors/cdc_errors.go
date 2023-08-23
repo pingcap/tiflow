@@ -356,11 +356,11 @@ var (
 		errors.RFCCodeText("CDC:ErrAvroEncodeToBinary"),
 	)
 	ErrAvroSchemaAPIError = errors.Normalize(
-		"schema manager API error",
+		"schema manager API error, %s",
 		errors.RFCCodeText("CDC:ErrAvroSchemaAPIError"),
 	)
 	ErrAvroInvalidMessage = errors.Normalize(
-		"avro invalid message format",
+		"avro invalid message format, %s",
 		errors.RFCCodeText("CDC:ErrAvroInvalidMessage"),
 	)
 	ErrMaxwellEncodeFailed = errors.Normalize(
@@ -946,5 +946,10 @@ var (
 			"you can manually execute this DDL downstream. Afterwards, "+
 			"add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.",
 		errors.RFCCodeText("CDC:ErrHandleDDLFailed"),
+	)
+
+	ErrInvalidGlueSchemaRegistryConfig = errors.Normalize(
+		"invalid glue schema registry config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidGlueSchemaRegistryConfig"),
 	)
 )

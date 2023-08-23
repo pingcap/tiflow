@@ -1443,6 +1443,30 @@ var doc = `{
                 }
             }
         },
+        "config.GlueSchemaRegistryConfig": {
+            "type": "object",
+            "properties": {
+                "access-key": {
+                    "description": "AccessKey of the schema registry",
+                    "type": "string"
+                },
+                "region": {
+                    "description": "Region of the schema registry",
+                    "type": "string"
+                },
+                "registry-name": {
+                    "description": "Name of the schema registry",
+                    "type": "string"
+                },
+                "secret-access-key": {
+                    "description": "SecretAccessKey of the schema registry",
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "config.KafkaConfig": {
             "type": "object",
             "properties": {
@@ -1466,6 +1490,9 @@ var doc = `{
                 },
                 "enable-tls": {
                     "type": "boolean"
+                },
+                "glue-schema-registry-config": {
+                    "$ref": "#/definitions/config.GlueSchemaRegistryConfig"
                 },
                 "insecure-skip-verify": {
                     "type": "boolean"
@@ -2455,6 +2482,30 @@ var doc = `{
                 }
             }
         },
+        "v2.GlueSchemaRegistryConfig": {
+            "type": "object",
+            "properties": {
+                "access_key": {
+                    "description": "AccessKey of the schema registry",
+                    "type": "string"
+                },
+                "region": {
+                    "description": "Region of the schema registry",
+                    "type": "string"
+                },
+                "registry_name": {
+                    "description": "Name of the schema registry",
+                    "type": "string"
+                },
+                "secret_access_key": {
+                    "description": "SecretAccessKey of the schema registry",
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.IntegrityConfig": {
             "type": "object",
             "properties": {
@@ -2489,6 +2540,9 @@ var doc = `{
                 },
                 "enable_tls": {
                     "type": "boolean"
+                },
+                "glue_schema_registry_config": {
+                    "$ref": "#/definitions/v2.GlueSchemaRegistryConfig"
                 },
                 "insecure_skip_verify": {
                     "type": "boolean"

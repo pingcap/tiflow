@@ -1173,7 +1173,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	msg := avroEncoder.Build()
 	require.Len(t, msg, 1)
 
-	schemaM, err := avro.NewAvroSchemaManager(
+	schemaM, err := avro.NewConfluentSchemaManager(
 		ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 

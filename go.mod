@@ -12,6 +12,9 @@ require (
 	github.com/VividCortex/mysqlerr v1.0.0
 	github.com/apache/pulsar-client-go v0.11.0
 	github.com/aws/aws-sdk-go v1.44.259
+	github.com/aws/aws-sdk-go-v2 v1.19.1
+	github.com/aws/aws-sdk-go-v2/config v1.18.30
+	github.com/aws/aws-sdk-go-v2/credentials v1.13.29
 	github.com/benbjohnson/clock v1.3.0
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff/v4 v4.0.2
@@ -120,6 +123,18 @@ require (
 )
 
 require (
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.6 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.36 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.30 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.37 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.9.30 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.12.14 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.14 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.20.1 // indirect
+	github.com/aws/smithy-go v1.13.5 // indirect
+)
+
+require (
 	cloud.google.com/go v0.110.0 // indirect
 	cloud.google.com/go/compute v1.19.0 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
@@ -139,6 +154,7 @@ require (
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/apache/thrift v0.13.1-0.20201008052519-daf620915714 // indirect
 	github.com/ardielle/ardielle-go v1.5.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/glue v1.58.1
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.4.0 // indirect
 	github.com/blacktear23/go-proxyprotocol v1.0.6 // indirect

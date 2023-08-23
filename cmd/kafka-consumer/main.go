@@ -593,7 +593,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			return err
 		}
 	case config.ProtocolAvro:
-		schemaM, err := avro.NewAvroSchemaManager(ctx, c.option.schemaRegistryURI, nil)
+		schemaM, err := avro.NewConfluentSchemaManager(ctx, c.option.schemaRegistryURI, nil)
 		if err != nil {
 			return errors.Trace(err)
 		}
