@@ -255,8 +255,11 @@ const (
         "claim-check-storage-uri": "",
         "claim-check-compression": ""
       },
-      "large-message-handle-compression": "",
-      "claim-check-storage-uri": "",
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "large-message-handle-compression": "",
+        "claim-check-storage-uri": ""
+      },
       "glue-schema-registry-config": {
         "region":"region", 
         "registry-name":"registry"
@@ -396,8 +399,6 @@ const (
         "claim-check-storage-uri": "",
         "claim-check-compression": ""
       },
-      "large-message-handle-compression": "",
-      "claim-check-storage-uri": "",
       "glue-schema-registry-config": {
         "region":"region", 
         "registry-name":"registry"
