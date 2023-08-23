@@ -129,6 +129,7 @@ func TestLarMessageHandleNotAllowForceReplicate(t *testing.T) {
 
 	codecConfig := NewConfig(config.ProtocolCanalJSON)
 	err = codecConfig.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
 
 	// force-replicate is set to true, should return error
 	replicaConfig.ForceReplicate = true
