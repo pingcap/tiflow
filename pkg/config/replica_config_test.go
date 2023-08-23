@@ -104,6 +104,10 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		LargeMessageHandle: &LargeMessageHandleConfig{
 			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
 		},
+		GlueSchemaRegistryConfig: &GlueSchemaRegistryConfig{
+			Region:       "region",
+			RegistryName: "registry",
+		},
 	}
 	conf.Sink.MySQLConfig = &MySQLConfig{
 		WorkerCount:                  aws.Int(8),

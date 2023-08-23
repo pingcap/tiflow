@@ -331,6 +331,7 @@ type KafkaConfig struct {
 	InsecureSkipVerify           *bool                     `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
 }
 
 // PulsarConfig pulsar sink configuration
@@ -372,6 +373,21 @@ type CloudStorageConfig struct {
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
+	if s.SchemaRegistry != nil &&
+		(s.KafkaConfig != nil && s.KafkaConfig.GlueSchemaRegistryConfig != nil) {
+		return cerror.ErrInvalidReplicaConfig.
+			GenWithStackByArgs("schema-registry and glue-schema-registry-config" +
+				"cannot be set at the same time," +
+				"schema-registry is used by confluent schema registry, " +
+				"glue-schema-registry-config is used by aws glue schema registry")
+	}
+	if s.KafkaConfig != nil && s.KafkaConfig.GlueSchemaRegistryConfig != nil {
+		err := s.KafkaConfig.GlueSchemaRegistryConfig.Validate()
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
 	}
@@ -564,4 +580,39 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 		return nil
 	}
 	return compatibilityError
+}
+
+// GlueSchemaRegistryConfig represents a Glue Schema Registry configuration
+type GlueSchemaRegistryConfig struct {
+	// Name of the schema registry
+	RegistryName string `toml:"registry-name" json:"registry-name"`
+	// Region of the schema registry
+	Region string `toml:"region" json:"region"`
+	// AccessKey of the schema registry
+	AccessKey string `toml:"access-key" json:"access-key,omitempty"`
+	// SecretAccessKey of the schema registry
+	SecretAccessKey string `toml:"secret-access-key" json:"secret-access-key,omitempty"`
+	Token           string `toml:"token" json:"token,omitempty"`
+}
+
+// Validate the GlueSchemaRegistryConfig.
+func (g *GlueSchemaRegistryConfig) Validate() error {
+	if g.RegistryName == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("registry-name is empty, is must be set")
+	}
+	if g.Region == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("region is empty, is must be set")
+	}
+	if g.AccessKey != "" && g.SecretAccessKey == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("access-key is set, but access-key-secret is empty, they must be set together")
+	}
+	return nil
+}
+
+// NoCredentials returns true if no credentials are set.
+func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
+	return g.AccessKey == "" && g.SecretAccessKey == "" && g.Token == ""
 }

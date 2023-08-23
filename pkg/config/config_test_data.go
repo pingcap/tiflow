@@ -252,8 +252,17 @@ const (
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
+        "claim-check-storage-uri": "",
+        "claim-check-compression": ""
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
         "large-message-handle-compression": "",
         "claim-check-storage-uri": ""
+      },
+      "glue-schema-registry-config": {
+        "region":"region", 
+        "registry-name":"registry"
       }
     },
     "mysql-config": {
@@ -387,8 +396,12 @@ const (
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
-        "large-message-handle-compression": "",
-        "claim-check-storage-uri": ""
+        "claim-check-storage-uri": "",
+        "claim-check-compression": ""
+      },
+      "glue-schema-registry-config": {
+        "region":"region", 
+        "registry-name":"registry"
       }
     },
     "mysql-config": {
