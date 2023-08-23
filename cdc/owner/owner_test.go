@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"net/url"
 	"testing"
@@ -440,21 +439,11 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(
 		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
 	) (uint64, error) {
-		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-		// set GC safepoint to (checkpointTs - 1)
-		require.Equal(t, safePoint, uint64(math.MaxUint64-1))
 		return 0, nil
 	}
 	err := o.updateGCSafepoint(ctx, state)
 	require.Nil(t, err)
 
-	// add a failed changefeed, it must not trigger update GC safepoint.
-	mockPDClient.UpdateServiceGCSafePointFunc = func(
-		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
-	) (uint64, error) {
-		t.Fatal("must not update")
-		return 0, nil
-	}
 	changefeedID1 := model.DefaultChangeFeedID("test-changefeed1")
 	tester.MustUpdate(
 		fmt.Sprintf("%s/changefeed/info/%s",
@@ -685,6 +674,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
 	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o.upstreamManager = upstream.NewManager4Test(nil)
 
 	stateMap := []model.FeedState{
 		model.StateNormal, model.StateStopped, model.StatePending,
@@ -746,6 +736,20 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
 
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
+	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
+}
+
+func TestCalculateGCSafepointTsNoChangefeed(t *testing.T) {
+	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
+	expectForceUpdateMap := make(map[uint64]interface{})
+	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o.upstreamManager = upstream.NewManager4Test(nil)
+	up, err := o.upstreamManager.GetDefaultUpstream()
+	require.Nil(t, err)
+	up.PDClock = pdutil.NewClock4Test()
+
+	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+	require.Equal(t, 1, len(minCheckpoinTsMap))
 	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
 }
 
