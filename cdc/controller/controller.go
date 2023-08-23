@@ -261,14 +261,7 @@ func (o *controllerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorS
 
 	// check if the upstream has a changefeed, if not we should update the gc safepoint
 	_ = o.upstreamManager.Visit(func(up *upstream.Upstream) error {
-		hasGcServiceSafePoint := false
-		if _, exist := minCheckpointTsMap[up.ID]; exist {
-			hasGcServiceSafePoint = true
-		}
-		if _, exist := forceUpdateMap[up.ID]; exist {
-			hasGcServiceSafePoint = true
-		}
-		if !hasGcServiceSafePoint {
+		if _, exist := minCheckpointTsMap[up.ID]; !exist {
 			ts := up.PDClock.CurrentTime()
 			minCheckpointTsMap[up.ID] = oracle.ComposeTS(ts.UnixNano(), 0)
 		}
