@@ -27,7 +27,7 @@ func TestLargeMessageHandle4Compression(t *testing.T) {
 	largeMessageHandle := NewDefaultLargeMessageHandleConfig()
 
 	// unsupported compression, return error
-	largeMessageHandle.LaclrgeMessageHandleCompression = "zstd"
+	largeMessageHandle.LargeMessageHandleCompression = "zstd"
 
 	err := largeMessageHandle.Validate(ProtocolCanalJSON, false)
 	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
