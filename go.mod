@@ -67,9 +67,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
 	github.com/pingcap/kvproto v0.0.0-20230728080053-8a9db88bc88a
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
-	github.com/pingcap/tidb v1.1.0-beta.0.20230505070356-cb609bb39c80
+	github.com/pingcap/tidb v1.1.0-beta.0.20230823131104-05aa17143df8
 	github.com/pingcap/tidb-tools v7.0.0+incompatible
-	github.com/pingcap/tidb/parser v0.0.0-20230505070356-cb609bb39c80
+	github.com/pingcap/tidb/parser v0.0.0-20230823131104-05aa17143df8
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
 	github.com/r3labs/diff v1.1.0
@@ -361,9 +361,5 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
-
-replace github.com/pingcap/tidb/parser v0.0.0-20230505070356-cb609bb39c80 => ../tidb/parser
-
-replace github.com/pingcap/tidb v1.1.0-beta.0.20230505070356-cb609bb39c80 => ../tidb
 
 replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-0.20230421065457-369a3bab1117
