@@ -16,7 +16,7 @@ package election_test
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/engine/pkg/election"
+	"github.com/pingcap/tiflow/pkg/election"
 	"github.com/stretchr/testify/require"
 )
 
