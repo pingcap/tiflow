@@ -263,7 +263,7 @@ func (o *controllerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorS
 	_ = o.upstreamManager.Visit(func(up *upstream.Upstream) error {
 		if _, exist := minCheckpointTsMap[up.ID]; !exist {
 			ts := up.PDClock.CurrentTime()
-			minCheckpointTsMap[up.ID] = oracle.ComposeTS(ts.UnixNano(), 0)
+			minCheckpointTsMap[up.ID] = oracle.GoTimeToTS(ts)
 		}
 		return nil
 	})
