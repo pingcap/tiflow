@@ -449,7 +449,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		targetInfoGetter, err := importer.NewTargetInfoGetterImpl(lCfg, targetDB)
+		targetInfoGetter, err := importer.NewTargetInfoGetterImpl(lCfg, targetDB, nil)
 		if err != nil {
 			return err
 		}
