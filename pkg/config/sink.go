@@ -31,6 +31,8 @@ import (
 const (
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+	// DefaultAdvanceTimeoutInSec sets the default value for advance-timeout-in-sec.
+	DefaultAdvanceTimeoutInSec = uint(150)
 
 	// TxnAtomicityKey specifies the key of the transaction-atomicity in the SinkURI.
 	TxnAtomicityKey = "transaction-atomicity"
@@ -335,6 +337,7 @@ type KafkaConfig struct {
 	InsecureSkipVerify           *bool                     `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
 }
 
 // PulsarCompressionType is the compression type for pulsar
@@ -405,6 +408,17 @@ type OAuth2 struct {
 	OAuth2Scope string `toml:"oauth2-scope" json:"oauth2-scope,omitempty"`
 }
 
+func (o *OAuth2) validate() (err error) {
+	if o == nil {
+		return nil
+	}
+	if len(o.OAuth2IssuerURL) == 0 || len(o.OAuth2ClientID) == 0 || len(o.OAuth2PrivateKey) == 0 ||
+		len(o.OAuth2Audience) == 0 {
+		return fmt.Errorf("issuer-url and audience and private-key and client-id not be empty")
+	}
+	return nil
+}
+
 // PulsarConfig pulsar sink configuration
 type PulsarConfig struct {
 	TLSKeyFilePath        *string `toml:"tls-certificate-path" json:"tls-certificate-path,omitempty"`
@@ -462,15 +476,26 @@ type PulsarConfig struct {
 	// and 'type' always use 'client_credentials'
 	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
 
-	//// Protocol The message protocol type input to pulsar, pulsar currently supports canal-json, canal, maxwell
-	//Protocol *ProtocolStr `toml:"protocol" json:"protocol,omitempty"`
-
 	// Configure the service brokerUrl for the Pulsar service.
 	// This parameter from the sink-uri
 	brokerURL string `toml:"-" json:"-"`
 
 	// parse the sinkURI
 	u *url.URL `toml:"-" json:"-"`
+}
+
+// Check get broker url
+func (c *PulsarConfig) validate() (err error) {
+	if c.OAuth2 != nil {
+		if err = c.OAuth2.validate(); err != nil {
+			return err
+		}
+		if c.TLSTrustCertsFilePath == nil {
+			return fmt.Errorf("oauth2 is not empty but tls-trust-certs-file-path is empty")
+		}
+	}
+
+	return nil
 }
 
 // GetBrokerURL get broker url
@@ -528,6 +553,21 @@ type CloudStorageConfig struct {
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
+	if s.SchemaRegistry != nil &&
+		(s.KafkaConfig != nil && s.KafkaConfig.GlueSchemaRegistryConfig != nil) {
+		return cerror.ErrInvalidReplicaConfig.
+			GenWithStackByArgs("schema-registry and glue-schema-registry-config" +
+				"cannot be set at the same time," +
+				"schema-registry is used by confluent schema registry, " +
+				"glue-schema-registry-config is used by aws glue schema registry")
+	}
+	if s.KafkaConfig != nil && s.KafkaConfig.GlueSchemaRegistryConfig != nil {
+		err := s.KafkaConfig.GlueSchemaRegistryConfig.Validate()
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
 	}
@@ -535,6 +575,14 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
 		return nil
 	}
+
+	if s.PulsarConfig != nil {
+		if err := s.PulsarConfig.validate(); err != nil {
+			return err
+		}
+	}
+
+	// todo pulsar
 
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
@@ -593,8 +641,9 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		}
 	}
 
-	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
-		return cerror.ErrSinkInvalidConfig.GenWithStack("advance-timeout-in-sec should be greater than 0")
+	if util.GetOrZero(s.AdvanceTimeoutInSec) == 0 {
+		log.Warn(fmt.Sprintf("advance-timeout-in-sec is not set, use default value: %d seconds", DefaultAdvanceTimeoutInSec))
+		s.AdvanceTimeoutInSec = util.AddressOf(DefaultAdvanceTimeoutInSec)
 	}
 
 	return nil
@@ -721,97 +770,37 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 	return compatibilityError
 }
 
-const (
-	// LargeMessageHandleOptionNone means not handling large message.
-	LargeMessageHandleOptionNone string = "none"
-	// LargeMessageHandleOptionClaimCheck means handling large message by sending to the claim check storage.
-	LargeMessageHandleOptionClaimCheck string = "claim-check"
-	// LargeMessageHandleOptionHandleKeyOnly means handling large message by sending only handle key columns.
-	LargeMessageHandleOptionHandleKeyOnly string = "handle-key-only"
-)
-
-const (
-	// CompressionNone no compression
-	CompressionNone string = "none"
-	// CompressionSnappy compression using snappy
-	CompressionSnappy string = "snappy"
-	// CompressionLZ4 compression using LZ4
-	CompressionLZ4 string = "lz4"
-)
-
-// LargeMessageHandleConfig is the configuration for handling large message.
-type LargeMessageHandleConfig struct {
-	LargeMessageHandleOption string `toml:"large-message-handle-option" json:"large-message-handle-option"`
-	ClaimCheckStorageURI     string `toml:"claim-check-storage-uri" json:"claim-check-storage-uri"`
-	ClaimCheckCompression    string `toml:"claim-check-compression" json:"claim-check-compression"`
+// GlueSchemaRegistryConfig represents a Glue Schema Registry configuration
+type GlueSchemaRegistryConfig struct {
+	// Name of the schema registry
+	RegistryName string `toml:"registry-name" json:"registry-name"`
+	// Region of the schema registry
+	Region string `toml:"region" json:"region"`
+	// AccessKey of the schema registry
+	AccessKey string `toml:"access-key" json:"access-key,omitempty"`
+	// SecretAccessKey of the schema registry
+	SecretAccessKey string `toml:"secret-access-key" json:"secret-access-key,omitempty"`
+	Token           string `toml:"token" json:"token,omitempty"`
 }
 
-// NewDefaultLargeMessageHandleConfig return the default LargeMessageHandleConfig.
-func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
-	return &LargeMessageHandleConfig{
-		LargeMessageHandleOption: LargeMessageHandleOptionNone,
-		ClaimCheckCompression:    CompressionNone,
+// Validate the GlueSchemaRegistryConfig.
+func (g *GlueSchemaRegistryConfig) Validate() error {
+	if g.RegistryName == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("registry-name is empty, is must be set")
 	}
-}
-
-// Validate the LargeMessageHandleConfig.
-func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtension bool) error {
-	if c.LargeMessageHandleOption == LargeMessageHandleOptionNone {
-		return nil
+	if g.Region == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("region is empty, is must be set")
 	}
-
-	switch protocol {
-	case ProtocolOpen:
-	case ProtocolCanalJSON:
-		if !enableTiDBExtension {
-			return cerror.ErrInvalidReplicaConfig.GenWithStack(
-				"large message handle is set to %s, protocol is %s, but enable-tidb-extension is false",
-				c.LargeMessageHandleOption, protocol.String())
-		}
-	default:
-		return cerror.ErrInvalidReplicaConfig.GenWithStack(
-			"large message handle is set to %s, protocol is %s, it's not supported",
-			c.LargeMessageHandleOption, protocol.String())
-	}
-
-	if c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck {
-		if c.ClaimCheckStorageURI == "" {
-			return cerror.ErrInvalidReplicaConfig.GenWithStack(
-				"large message handle is set to claim-check, but the claim-check-storage-uri is empty")
-		}
-
-		if c.ClaimCheckCompression != "" {
-			switch strings.ToLower(c.ClaimCheckCompression) {
-			case CompressionSnappy, CompressionLZ4:
-			default:
-				return cerror.ErrInvalidReplicaConfig.GenWithStack(
-					"claim-check compression support snappy, lz4, got %s", c.ClaimCheckCompression)
-			}
-		}
+	if g.AccessKey != "" && g.SecretAccessKey == "" {
+		return cerror.ErrInvalidGlueSchemaRegistryConfig.
+			GenWithStack("access-key is set, but access-key-secret is empty, they must be set together")
 	}
 	return nil
 }
 
-// HandleKeyOnly returns true if handle large message by encoding handle key only.
-func (c *LargeMessageHandleConfig) HandleKeyOnly() bool {
-	if c == nil {
-		return false
-	}
-	return c.LargeMessageHandleOption == LargeMessageHandleOptionHandleKeyOnly
-}
-
-// EnableClaimCheck returns true if enable claim check.
-func (c *LargeMessageHandleConfig) EnableClaimCheck() bool {
-	if c == nil {
-		return false
-	}
-	return c.LargeMessageHandleOption == LargeMessageHandleOptionClaimCheck
-}
-
-// Disabled returns true if disable large message handle.
-func (c *LargeMessageHandleConfig) Disabled() bool {
-	if c == nil {
-		return false
-	}
-	return c.LargeMessageHandleOption == LargeMessageHandleOptionNone
+// NoCredentials returns true if no credentials are set.
+func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
+	return g.AccessKey == "" && g.SecretAccessKey == "" && g.Token == ""
 }
