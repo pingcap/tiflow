@@ -14,19 +14,18 @@
 package pulsar
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
 	"net/url"
 	"testing"
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPulsarConfig(t *testing.T) {
-
-	var p = &config.PulsarConfig{
+	p := &config.PulsarConfig{
 		CompressionType:         (*config.PulsarCompressionType)(aws.String("lz4")),
 		ConnectionTimeout:       (*config.TimeSec)(aws.Int(defaultConnectionTimeout)),
 		OperationTimeout:        (*config.TimeSec)(aws.Int(998)),
