@@ -120,6 +120,7 @@ type OwnerObservation interface {
 	RefreshProcessors() (captures []ScheduledChangefeed, changed bool)
 }
 
+// Elector is used to campaign for capture controller.
 type Elector interface {
 	// Self tells the caller who am I.
 	Self() *model.CaptureInfo
