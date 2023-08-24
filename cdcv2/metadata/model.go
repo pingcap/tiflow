@@ -42,16 +42,6 @@ type ChangefeedInfo struct {
 	Config   *config.ReplicaConfig
 }
 
-// UpstreamInfo is a minimal info collection to describe an upstream.
-type UpstreamInfo struct {
-	ID            uint64
-	PDEndpoints   string
-	KeyPath       string
-	CertPath      string
-	CAPath        string
-	CertAllowedCN []string
-}
-
 // ChangefeedProgress is for changefeed progress.
 type ChangefeedProgress struct {
 	CheckpointTs      uint64

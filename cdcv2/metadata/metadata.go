@@ -62,7 +62,7 @@ type CaptureObservation interface {
 // All intrefaces are thread-safe and shares one same Context.
 type ControllerObservation interface {
 	// CreateChangefeed creates a changefeed, Epoch will be filled into the input ChangefeedInfo.
-	CreateChangefeed(cf *ChangefeedInfo, up *UpstreamInfo) (ChangefeedID, error)
+	CreateChangefeed(cf *ChangefeedInfo, up *model.UpstreamInfo) (ChangefeedID, error)
 
 	// RemoveChangefeed removes a changefeed, will auto stop owner and processors.
 	RemoveChangefeed(cf ChangefeedID) error
@@ -150,7 +150,8 @@ func NewElector(
 	})
 	return &electorImpl{
 		selfInfo: selfInfo,
-		elector:  elector}, err
+		elector:  elector,
+	}, err
 }
 
 type electorImpl struct {

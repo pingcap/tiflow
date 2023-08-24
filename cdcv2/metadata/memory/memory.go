@@ -48,7 +48,7 @@ type Storage struct {
 		sync.RWMutex
 		cfs   map[model.ChangeFeedID]*metadata.ChangefeedInfo
 		cfids map[model.ChangeFeedID]metadata.ChangefeedID
-		ups   map[uint64]*metadata.UpstreamInfo
+		ups   map[uint64]*model.UpstreamInfo
 
 		// 0: normal; 1: paused; 2: finished;
 		cfstates map[metadata.ChangefeedID]int
@@ -74,7 +74,7 @@ func newStorage() *Storage {
 	s := &Storage{}
 	s.entities.cfs = make(map[model.ChangeFeedID]*metadata.ChangefeedInfo)
 	s.entities.cfids = make(map[model.ChangeFeedID]metadata.ChangefeedID)
-	s.entities.ups = make(map[uint64]*metadata.UpstreamInfo)
+	s.entities.ups = make(map[uint64]*model.UpstreamInfo)
 	s.schedule.owners = make(map[metadata.ChangefeedID]metadata.ScheduledChangefeed)
 	s.schedule.processors = make(map[metadata.ChangefeedID]sortedScheduledChangefeeds)
 	s.schedule.ownersByCapture = make(map[string]sortedScheduledChangefeeds)
@@ -406,7 +406,7 @@ func (c *ControllerOb) handleAliveCaptures(ctx context.Context) error {
 	return nil
 }
 
-func (c *ControllerOb) CreateChangefeed(cf *metadata.ChangefeedInfo, up *metadata.UpstreamInfo) (metadata.ChangefeedID, error) {
+func (c *ControllerOb) CreateChangefeed(cf *metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedID, error) {
 	c.storage.entities.Lock()
 	defer c.storage.entities.Unlock()
 
