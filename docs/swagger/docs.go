@@ -2739,6 +2739,85 @@ var doc = `{
                 }
             }
         },
+        "v2.PulsarConfig": {
+            "type": "object",
+            "properties": {
+                "auth-tls-certificate-path": {
+                    "type": "string"
+                },
+                "auth-tls-private-key-path": {
+                    "type": "string"
+                },
+                "authentication-token": {
+                    "type": "string"
+                },
+                "basic-password": {
+                    "type": "string"
+                },
+                "basic-user-name": {
+                    "type": "string"
+                },
+                "batching-max-messages": {
+                    "type": "integer"
+                },
+                "batching-max-publish-delay": {
+                    "type": "integer"
+                },
+                "compression-type": {
+                    "type": "string"
+                },
+                "connection-timeout": {
+                    "type": "integer"
+                },
+                "oauth2": {
+                    "$ref": "#/definitions/v2.PulsarOAuth2"
+                },
+                "operation-timeout": {
+                    "type": "integer"
+                },
+                "pulsar-producer-cache-size": {
+                    "type": "integer"
+                },
+                "pulsar-version": {
+                    "type": "string"
+                },
+                "send-timeout": {
+                    "type": "integer"
+                },
+                "tls-certificate-path": {
+                    "type": "string"
+                },
+                "tls-private-key-path": {
+                    "type": "string"
+                },
+                "tls-trust-certs-file-path": {
+                    "type": "string"
+                },
+                "token-from-file": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.PulsarOAuth2": {
+            "type": "object",
+            "properties": {
+                "oauth2-audience": {
+                    "type": "string"
+                },
+                "oauth2-client-id": {
+                    "type": "string"
+                },
+                "oauth2-issuer-url": {
+                    "type": "string"
+                },
+                "oauth2-private-key": {
+                    "type": "string"
+                },
+                "oauth2-scope": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.ReplicaConfig": {
             "type": "object",
             "properties": {
@@ -2917,6 +2996,9 @@ var doc = `{
                 },
                 "protocol": {
                     "type": "string"
+                },
+                "pulsar_config": {
+                    "$ref": "#/definitions/v2.PulsarConfig"
                 },
                 "safe_mode": {
                     "type": "boolean"

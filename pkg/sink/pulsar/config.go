@@ -59,24 +59,25 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 		BatchingMaxPublishDelay: toMill(defaultBatchingMaxPublishDelay),
 		SendTimeout:             toSec(defaultSendTimeout),
 	}
+	err := checkSinkURI(sinkURI)
+	if err != nil {
+		return nil, err
+	}
+
 	c.SetSinkURI(sinkURI)
+	c.SetBrokerURL(sinkURI.Scheme + "://" + sinkURI.Host)
 
 	if pulsarConfig == nil {
 		log.L().Debug("new pulsar config", zap.Any("config", c))
 		return c, nil
 	}
 
-	err := checkSinkURI(sinkURI)
-	if err != nil {
-		return nil, err
-	}
-
-	pulsarConfig.SetSinkURI(sinkURI)
+	pulsarConfig.SetSinkURI(c.GetSinkURI())
 
 	if len(sinkURI.Scheme) == 0 || len(sinkURI.Host) == 0 {
 		return nil, fmt.Errorf("BrokerURL is empty")
 	}
-	c.SetBrokerURL(sinkURI.Scheme + "://" + sinkURI.Host)
+	pulsarConfig.SetBrokerURL(c.GetBrokerURL())
 
 	// merge default config
 	if pulsarConfig.ConnectionTimeout == nil {

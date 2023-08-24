@@ -582,8 +582,6 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		}
 	}
 
-	// todo pulsar
-
 	for _, rule := range s.DispatchRules {
 		if rule.DispatcherRule != "" && rule.PartitionRule != "" {
 			log.Error("dispatcher and partition cannot be configured both", zap.Any("rule", rule))
