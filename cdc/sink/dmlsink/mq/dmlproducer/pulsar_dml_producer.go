@@ -34,14 +34,16 @@ import (
 
 var _ DMLProducer = (*pulsarDMLProducer)(nil)
 
-// pulsarDMLProducer is used to send messages to kafka.
+// pulsarDMLProducer is used to send messages to pulsar.
 type pulsarDMLProducer struct {
 	// id indicates which processor (changefeed) this sink belongs to.
 	id model.ChangeFeedID
 	// We hold the client to make close operation faster.
 	// Please see the comment of Close().
 	client pulsar.Client
-	// producers is used to send messages to kafka asynchronously.
+	// producers is used to send messages to pulsar.
+	// One topic only use one producer , so we want to have many topics but use less memory,
+	// lru is a good idea to solve this question.
 	// support multiple topics
 	producers *lru.Cache
 
@@ -51,8 +53,7 @@ type pulsarDMLProducer struct {
 	// closed is used to indicate whether the producer is closed.
 	// We also use it to guard against double closes.
 	closed bool
-	// closedChan is used to notify the run loop to exit.
-	closedChan chan struct{}
+
 	// failpointCh is used to inject failpoints to the run loop.
 	// Only used in test.
 	failpointCh chan error
@@ -96,7 +97,7 @@ func NewPulsarDMLProducer(
 	}
 
 	producers, err := lru.NewWithEvict(producerCacheSize, func(key interface{}, value interface{}) {
-		// remove producer
+		// this is call when lru Remove producer or auto remove producer
 		pulsarProducer, ok := value.(pulsar.Producer)
 		if ok && pulsarProducer != nil {
 			pulsarProducer.Close()
@@ -115,7 +116,6 @@ func NewPulsarDMLProducer(
 		producers:   producers,
 		pConfig:     pulsarConfig,
 		closed:      false,
-		closedChan:  make(chan struct{}),
 		failpointCh: failpointCh,
 		errChan:     errCh,
 	}
@@ -196,8 +196,6 @@ func (p *pulsarDMLProducer) Close() {
 		return
 	}
 	close(p.failpointCh)
-	// Notify the run loop to exit.
-	close(p.closedChan)
 	p.closed = true
 
 	start := time.Now()
@@ -243,7 +241,7 @@ func newProducer(
 		return nil, err
 	}
 
-	log.Info("new pulsar producer ok", zap.String("topic:", topicName))
+	log.Info("create pulsar producer success", zap.String("topic", topicName))
 
 	return producer, nil
 }
@@ -259,7 +257,9 @@ func (p *pulsarDMLProducer) getProducer(topic string) (pulsar.Producer, bool) {
 	return nil, false
 }
 
-// GetProducerByTopic get producer by topicName
+// GetProducerByTopic get producer by topicName,
+// if not exist, it will create a producer with topicName, and set in LRU cache
+// more meta info at pulsarDMLProducer's producers
 func (p *pulsarDMLProducer) GetProducerByTopic(topicName string) (producer pulsar.Producer, err error) {
 	getProducer, ok := p.getProducer(topicName)
 	if ok && getProducer != nil {

@@ -161,7 +161,7 @@ func newProducer(
 		return nil, err
 	}
 
-	log.Info("new pulsar producer ok", zap.String("topic:", topicName))
+	log.Info("create pulsar producer success", zap.String("topic", topicName))
 
 	return producer, nil
 }

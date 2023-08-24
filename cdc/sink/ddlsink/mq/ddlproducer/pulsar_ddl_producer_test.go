@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	config2 "github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/leakutil"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
@@ -34,7 +34,7 @@ func TestPulsarSyncSendMessage(t *testing.T) {
 		partition    int32
 		message      *common.Message
 		changefeedID model.ChangeFeedID
-		pulsarConfig *config2.PulsarConfig
+		pulsarConfig *config.PulsarConfig
 		errCh        chan error
 	}
 	tests := []struct {
@@ -83,7 +83,7 @@ func TestPulsarSyncBroadcastMessage(t *testing.T) {
 		partition    int32
 		message      *common.Message
 		changefeedID model.ChangeFeedID
-		pulsarConfig *config2.PulsarConfig
+		pulsarConfig *config.PulsarConfig
 		errCh        chan error
 	}
 	tests := []struct {

@@ -64,9 +64,6 @@ func NewPulsarDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	log.Info("Try to create a DDL sink producer",
-		zap.Any("pulsarConfig", pConfig))
-
 	client, err := clientCreator(pConfig, changefeedID, replicaConfig.Sink)
 	if err != nil {
 		log.Error("DML sink producer client create fail", zap.Error(err))
@@ -77,7 +74,7 @@ func NewPulsarDMLSink(
 	log.Info("Try to create a DML sink producer", zap.Any("pulsar", pConfig))
 	start := time.Now()
 	p, err := producerCreator(ctx, changefeedID, client, replicaConfig.Sink, errCh, failpointCh)
-	log.Info("DML sink producer client created",
+	log.Info("DML sink producer created",
 		zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		defer func() {
@@ -88,6 +85,8 @@ func NewPulsarDMLSink(
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 
+	// The topicManager is not actually used in pulsar , it is only used to create dmlSink.
+	// TODO: Find a way to remove it in newDMLSink.
 	topicManager, err := pulsarTopicManagerCreator(pConfig, client)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -98,13 +97,13 @@ func NewPulsarDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig,
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, protocol, replicaConfig,
 		config.DefaultMaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPulsarInvalidConfig, err)
 	}
@@ -114,9 +113,6 @@ func NewPulsarDMLSink(
 
 	s := newDMLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderGroup,
 		protocol, nil, nil, errCh)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 
 	return s, nil
 }

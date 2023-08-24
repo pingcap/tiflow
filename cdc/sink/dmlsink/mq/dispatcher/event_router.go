@@ -274,15 +274,17 @@ func getTopicDispatcher(
 			if err != nil {
 				return nil, err
 			}
-		} else if p == config.ProtocolAvro {
-			err := topicExpr.ValidateForAvro()
-			if err != nil {
-				return nil, err
-			}
 		} else {
-			err := topicExpr.Validate()
-			if err != nil {
-				return nil, err
+			if p == config.ProtocolAvro {
+				err = topicExpr.ValidateForAvro()
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				err = topicExpr.Validate()
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
