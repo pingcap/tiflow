@@ -126,7 +126,8 @@ type Elector interface {
 
 	// RunElection runs the elector to continuously campaign for leadership
 	// until the context is canceled.
-	RunElection(context.Context) error
+	// onTakeControl will be called when the capture campaign as the controller.
+	RunElection(ctx context.Context, onTakeControl func(ctx context.Context) error) error
 
 	// GetController returns the last observed controller whose lease is still valid.
 	GetController() (*model.CaptureInfo, error)
@@ -138,32 +139,38 @@ type Elector interface {
 func NewElector(
 	selfInfo *model.CaptureInfo,
 	storage election.Storage,
-	onTakeControl func(ctx context.Context) error,
-) (Elector, error) {
-	elector, err := election.NewElector(election.Config{
-		ID:              selfInfo.ID,
-		Name:            selfInfo.Version, /* TODO: refine this filed */
-		Address:         selfInfo.AdvertiseAddr,
-		Storage:         storage,
-		LeaderCallback:  onTakeControl,
-		ExitOnRenewFail: true,
-	})
+) Elector {
 	return &electorImpl{
 		selfInfo: selfInfo,
-		elector:  elector,
-	}, err
+		config: election.Config{
+			ID:              selfInfo.ID,
+			Name:            selfInfo.Version, /* TODO: refine this filed */
+			Address:         selfInfo.AdvertiseAddr,
+			Storage:         storage,
+			ExitOnRenewFail: true,
+		},
+	}
 }
 
 type electorImpl struct {
 	selfInfo *model.CaptureInfo
-	elector  election.Elector
+
+	config  election.Config
+	elector election.Elector
 }
 
 func (e *electorImpl) Self() *model.CaptureInfo {
 	return e.selfInfo
 }
 
-func (e *electorImpl) RunElection(ctx context.Context) error {
+func (e *electorImpl) RunElection(
+	ctx context.Context, onTakeControl func(ctx context.Context) error,
+) (err error) {
+	e.config.LeaderCallback = onTakeControl
+	e.elector, err = election.NewElector(e.config)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return e.elector.RunElection(ctx)
 }
 

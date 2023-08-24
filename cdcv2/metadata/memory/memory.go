@@ -127,48 +127,15 @@ func (s *Storage) setProcessors(cf metadata.ChangefeedID, workers []metadata.Sch
 	return nil
 }
 
-type contextManager struct {
-	pctx    context.Context
-	pcancel context.CancelFunc
-	wg      sync.WaitGroup
-
-	sync.RWMutex
-	ctx context.Context
-}
-
-func newContextManager(ctx context.Context) *contextManager {
-	pctx, pcancel := context.WithCancel(ctx)
-	return &contextManager{pctx: pctx, pcancel: pcancel}
-}
-
-func (c *contextManager) fetchContext() (ctx context.Context) {
-	c.RLock()
-	defer c.RUnlock()
-	ctx = c.ctx
-	return
-}
-
-func (c *contextManager) refreshContext() {
-	ctx, _ := context.WithTimeout(c.pctx, 10*time.Second)
-	c.Lock()
-	defer c.Unlock()
-	c.ctx = ctx
-}
-
-func (c *contextManager) stop() {
-	if c.pcancel != nil {
-		c.pcancel()
-	}
-}
-
 // CaptureOb is an implement for metadata.CaptureObservation.
 type CaptureOb struct {
+	// election related fields.
 	metadata.Elector
-	electionDSN string
-	storage     *Storage
-
 	selfInfo *model.CaptureInfo
-	tasks    struct {
+
+	storage *Storage
+
+	tasks struct {
 		sync.RWMutex
 		owners     sortedScheduledChangefeeds
 		processors sortedScheduledChangefeeds
@@ -183,14 +150,18 @@ func NewCaptureObservation(
 	electionDSN string, /* only for election */
 	storage *Storage, /* only for meta storage */
 	selfInfo *model.CaptureInfo,
-) *CaptureOb {
+) (*CaptureOb, error) {
+	inMemoryStorage, err := election.NewInMemorySQLStorage(electionDSN, "election")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return &CaptureOb{
-		electionDSN:      electionDSN,
-		storage:          storage,
 		selfInfo:         selfInfo,
+		storage:          storage,
+		Elector:          metadata.NewElector(selfInfo, inMemoryStorage),
 		ownerChanges:     chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
 		processorChanges: chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
-	}
+	}, nil
 }
 
 // Run runs the given CaptureOb.
@@ -211,18 +182,10 @@ func (c *CaptureOb) Run(
 		return ctrlErrGroup.Wait()
 	}
 
-	inMemoryStorage, err := election.NewInMemorySQLStorage(c.electionDSN, "election")
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if c.Elector, err = metadata.NewElector(c.selfInfo, inMemoryStorage, onTakeControl); err != nil {
-		return errors.Trace(err)
-	}
-
 	eg, ctx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
-		return c.Elector.RunElection(ctx)
+		return c.Elector.RunElection(ctx, onTakeControl)
 	})
 
 	eg.Go(func() error {
@@ -295,10 +258,6 @@ func (c *CaptureOb) handleTaskChanges(ctx context.Context, isOwner bool) error {
 	}
 
 	return nil
-}
-
-func (c *CaptureOb) Self() *model.CaptureInfo {
-	return c.selfInfo
 }
 
 func (c *CaptureOb) Advance(cfs []metadata.ChangefeedID, progresses []metadata.ChangefeedProgress) error {
@@ -502,10 +461,9 @@ func (c *ControllerOb) ScheduleSnapshot() (ss []metadata.ChangefeedSchedule, cs 
 }
 
 type ownerOb struct {
-	s              *Storage
-	c              *metadata.ChangefeedInfo
-	id             metadata.ChangefeedID
-	contextManager *contextManager
+	s  *Storage
+	c  *metadata.ChangefeedInfo
+	id metadata.ChangefeedID
 
 	processors struct {
 		sync.Mutex
