@@ -66,6 +66,7 @@ func GetFileExtension(protocol config.Protocol) string {
 
 // GetEncoderConfig returns the encoder config and validates the config.
 func GetEncoderConfig(
+	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	protocol config.Protocol,
 	replicaConfig *config.ReplicaConfig,
@@ -78,7 +79,7 @@ func GetEncoderConfig(
 	// Always set encoder's `MaxMessageBytes` equal to producer's `MaxMessageBytes`
 	// to prevent that the encoder generate batched message too large
 	// then cause producer meet `message too large`.
-	encoderConfig = encoderConfig.WithMaxMessageBytes(maxMsgBytes)
+	encoderConfig = encoderConfig.WithMaxMessageBytes(maxMsgBytes).WithChangefeedID(changefeedID)
 
 	if err := encoderConfig.Validate(); err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkInvalidConfig, err)

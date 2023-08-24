@@ -312,9 +312,20 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			if c.Sink.KafkaConfig.LargeMessageHandle != nil {
 				oldConfig := c.Sink.KafkaConfig.LargeMessageHandle
 				largeMessageHandle = &config.LargeMessageHandleConfig{
-					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
-					ClaimCheckStorageURI:     oldConfig.ClaimCheckStorageURI,
-					ClaimCheckCompression:    oldConfig.ClaimCheckCompression,
+					LargeMessageHandleOption:      oldConfig.LargeMessageHandleOption,
+					LargeMessageHandleCompression: oldConfig.LargeMessageHandleCompression,
+					ClaimCheckStorageURI:          oldConfig.ClaimCheckStorageURI,
+				}
+			}
+
+			var glueSchemaRegistryConfig *config.GlueSchemaRegistryConfig
+			if c.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+				glueSchemaRegistryConfig = &config.GlueSchemaRegistryConfig{
+					RegistryName:    c.Sink.KafkaConfig.GlueSchemaRegistryConfig.RegistryName,
+					Region:          c.Sink.KafkaConfig.GlueSchemaRegistryConfig.Region,
+					AccessKey:       c.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey,
+					SecretAccessKey: c.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey,
+					Token:           c.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token,
 				}
 			}
 
@@ -354,6 +365,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
+				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -543,9 +555,20 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			if cloned.Sink.KafkaConfig.LargeMessageHandle != nil {
 				oldConfig := cloned.Sink.KafkaConfig.LargeMessageHandle
 				largeMessageHandle = &LargeMessageHandleConfig{
-					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
-					ClaimCheckStorageURI:     oldConfig.ClaimCheckStorageURI,
-					ClaimCheckCompression:    oldConfig.ClaimCheckCompression,
+					LargeMessageHandleOption:      oldConfig.LargeMessageHandleOption,
+					LargeMessageHandleCompression: oldConfig.LargeMessageHandleCompression,
+					ClaimCheckStorageURI:          oldConfig.ClaimCheckStorageURI,
+				}
+			}
+
+			var glueSchemaRegistryConfig *GlueSchemaRegistryConfig
+			if cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+				glueSchemaRegistryConfig = &GlueSchemaRegistryConfig{
+					RegistryName:    cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.RegistryName,
+					Region:          cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.Region,
+					AccessKey:       cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey,
+					SecretAccessKey: cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey,
+					Token:           cloned.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token,
 				}
 			}
 
@@ -585,6 +608,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
 				LargeMessageHandle:           largeMessageHandle,
+				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -810,9 +834,9 @@ type CSVConfig struct {
 // LargeMessageHandleConfig denotes the large message handling config
 // This is the same as config.LargeMessageHandleConfig
 type LargeMessageHandleConfig struct {
-	LargeMessageHandleOption string `json:"large_message_handle_option"`
-	ClaimCheckStorageURI     string `json:"claim_check_storage_uri"`
-	ClaimCheckCompression    string `json:"claim_check_compression"`
+	LargeMessageHandleOption      string `json:"large_message_handle_option"`
+	LargeMessageHandleCompression string `json:"large_message_handle_compression"`
+	ClaimCheckStorageURI          string `json:"claim_check_storage_uri"`
 }
 
 // DispatchRule represents partition rule for a table
@@ -1025,6 +1049,7 @@ type KafkaConfig struct {
 	InsecureSkipVerify           *bool                     `json:"insecure_skip_verify,omitempty"`
 	CodecConfig                  *CodecConfig              `json:"codec_config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `json:"glue_schema_registry_config,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
@@ -1061,4 +1086,17 @@ type ChangefeedStatus struct {
 	CheckpointTs uint64        `json:"checkpoint_ts"`
 	LastError    *RunningError `json:"last_error,omitempty"`
 	LastWarning  *RunningError `json:"last_warning,omitempty"`
+}
+
+// GlueSchemaRegistryConfig represents a glue schema registry configuration
+type GlueSchemaRegistryConfig struct {
+	// Name of the schema registry
+	RegistryName string `json:"registry_name"`
+	// Region of the schema registry
+	Region string `json:"region"`
+	// AccessKey of the schema registry
+	AccessKey string `json:"access_key,omitempty"`
+	// SecretAccessKey of the schema registry
+	SecretAccessKey string `json:"secret_access_key,omitempty"`
+	Token           string `json:"token,omitempty"`
 }

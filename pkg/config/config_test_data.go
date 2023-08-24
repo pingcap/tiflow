@@ -62,8 +62,8 @@ const (
 	"delete-only-output-handle-key-columns": false,
     "large-message-handle": {
       "large-message-handle-option": "none",
-      "claim-check-storage-uri": "",
-      "claim-check-compression": ""
+      "large-message-handle-compression": "",
+      "claim-check-storage-uri": ""
     },
     "advance-timeout-in-sec": 150
   },
@@ -255,6 +255,15 @@ const (
         "large-message-handle-option": "handle-key-only",
         "claim-check-storage-uri": "",
         "claim-check-compression": ""
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "large-message-handle-compression": "",
+        "claim-check-storage-uri": ""
+      },
+      "glue-schema-registry-config": {
+        "region":"region", 
+        "registry-name":"registry"
       }
     },
     "mysql-config": {
@@ -390,6 +399,10 @@ const (
         "large-message-handle-option": "handle-key-only",
         "claim-check-storage-uri": "",
         "claim-check-compression": ""
+      },
+      "glue-schema-registry-config": {
+        "region":"region", 
+        "registry-name":"registry"
       }
     },
     "mysql-config": {

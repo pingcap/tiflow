@@ -69,6 +69,23 @@ definitions:
       topic:
         type: string
     type: object
+  config.GlueSchemaRegistryConfig:
+    properties:
+      access-key:
+        description: AccessKey of the schema registry
+        type: string
+      region:
+        description: Region of the schema registry
+        type: string
+      registry-name:
+        description: Name of the schema registry
+        type: string
+      secret-access-key:
+        description: SecretAccessKey of the schema registry
+        type: string
+      token:
+        type: string
+    type: object
   config.KafkaConfig:
     properties:
       auto-create-topic:
@@ -85,6 +102,8 @@ definitions:
         type: string
       enable-tls:
         type: boolean
+      glue-schema-registry-config:
+        $ref: '#/definitions/config.GlueSchemaRegistryConfig'
       insecure-skip-verify:
         type: boolean
       kafka-client-id:
@@ -146,9 +165,9 @@ definitions:
     type: object
   config.LargeMessageHandleConfig:
     properties:
-      claim-check-compression:
-        type: string
       claim-check-storage-uri:
+        type: string
+      large-message-handle-compression:
         type: string
       large-message-handle-option:
         type: string
@@ -707,6 +726,23 @@ definitions:
           type: string
         type: array
     type: object
+  v2.GlueSchemaRegistryConfig:
+    properties:
+      access_key:
+        description: AccessKey of the schema registry
+        type: string
+      region:
+        description: Region of the schema registry
+        type: string
+      registry_name:
+        description: Name of the schema registry
+        type: string
+      secret_access_key:
+        description: SecretAccessKey of the schema registry
+        type: string
+      token:
+        type: string
+    type: object
   v2.IntegrityConfig:
     properties:
       corruption_handle_level:
@@ -730,6 +766,8 @@ definitions:
         type: string
       enable_tls:
         type: boolean
+      glue_schema_registry_config:
+        $ref: '#/definitions/v2.GlueSchemaRegistryConfig'
       insecure_skip_verify:
         type: boolean
       kafka_client_id:
@@ -791,9 +829,9 @@ definitions:
     type: object
   v2.LargeMessageHandleConfig:
     properties:
-      claim_check_compression:
-        type: string
       claim_check_storage_uri:
+        type: string
+      large_message_handle_compression:
         type: string
       large_message_handle_option:
         type: string

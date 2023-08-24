@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -43,7 +44,8 @@ type DDLSink struct {
 	statistics *metrics.Statistics
 	storage    storage.ExternalStorage
 
-	outputColumnID bool
+	outputColumnID           bool
+	lastSendCheckpointTsTime time.Time
 }
 
 // NewDDLSink creates a ddl sink for cloud storage.
@@ -58,9 +60,10 @@ func NewDDLSink(ctx context.Context,
 	}
 
 	d := &DDLSink{
-		id:         changefeedID,
-		storage:    storage,
-		statistics: metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		id:                       changefeedID,
+		storage:                  storage,
+		statistics:               metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		lastSendCheckpointTsTime: time.Now(),
 	}
 
 	if replicaConfig != nil && replicaConfig.Sink.CloudStorageConfig != nil {
@@ -113,6 +116,16 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
+	if time.Since(d.lastSendCheckpointTsTime) < 2*time.Second {
+		log.Debug("skip write checkpoint ts to external storage",
+			zap.Any("changefeedID", d.id),
+			zap.Uint64("ts", ts))
+		return nil
+	}
+
+	defer func() {
+		d.lastSendCheckpointTsTime = time.Now()
+	}()
 	ckpt, err := json.Marshal(map[string]uint64{"checkpoint-ts": ts})
 	if err != nil {
 		return errors.Trace(err)
