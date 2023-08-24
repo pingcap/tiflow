@@ -375,6 +375,16 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("query", job.Query),
 				zap.Stringer("job", job))
 		}
+		if err != nil {
+			log.Warn("handle ddl job failed",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.String("schema", job.SchemaName),
+				zap.String("table", job.TableName),
+				zap.String("query", job.Query),
+				zap.Stringer("job", job),
+				zap.Error(err))
+		}
 	}()
 
 	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
@@ -403,6 +413,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		if discard {
 			return true, nil
 		}
+		return true, errors.Trace(err)
 	}
 
 	switch job.Type {
