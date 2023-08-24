@@ -203,8 +203,8 @@ func (p *pulsarDMLProducer) Close() {
 	for _, topic := range keys {
 		p.producers.Remove(topic) // callback func will be called
 		topicName, _ := topic.(string)
-		log.Info("Async client closed in pulsar "+
-			"DML producer", zap.Duration("duration", time.Since(start)),
+		log.Info("Async client closed in pulsar DML producer",
+			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", p.id.Namespace),
 			zap.String("changefeed", p.id.ID), zap.String("topic", topicName))
 	}
