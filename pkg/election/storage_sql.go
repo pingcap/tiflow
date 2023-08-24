@@ -48,10 +48,11 @@ func NewSQLStorage(db *sql.DB, tableName string) (*SQLStorage, error) {
 	}, nil
 }
 
+// NewInMemorySQLStorage creates a new SQLStorage in memory based on SQLite.
 func NewInMemorySQLStorage(dbName string, tableName string) (*SQLStorage, error) {
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", dbName)
 
-	db, err := sql.Open(mock.MockSqliteDriverName, dsn)
+	db, err := sql.Open(mock.ThreadeSafeSqliteDriverName, dsn)
 	if err != nil {
 		return nil, err
 	}
