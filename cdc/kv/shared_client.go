@@ -16,7 +16,6 @@ package kv
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -92,7 +91,6 @@ type SharedClient struct {
 
 	totalSpans struct {
 		sync.RWMutex
-		m *spanz.HashMap[SubscriptionID]
 		v map[SubscriptionID]*requestedTable
 	}
 }
@@ -182,7 +180,6 @@ func NewSharedClient(
 
 		requestedStores: make(map[string]*requestedStore),
 	}
-	s.totalSpans.m = spanz.NewHashMap[SubscriptionID]()
 	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
 	s.initMetrics()
 	return s
@@ -195,25 +192,15 @@ func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
 
 // Subscribe the given table span.
 // NOTE: `span.TableID` must be set correctly.
-func (s *SharedClient) Subscribe(
-	subID SubscriptionID, span tablepb.Span, startTs uint64,
-	eventCh chan<- MultiplexingEvent,
-) (existSubID SubscriptionID, success bool) {
+func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventCh chan<- MultiplexingEvent) {
 	if span.TableID == 0 {
 		log.Panic("event feed subscribe with zero tablepb.Span.TableID",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID))
 	}
 
-	s.totalSpans.Lock()
-	if existSubID, success = s.totalSpans.m.Get(span); success {
-		s.totalSpans.Unlock()
-		success = false
-		return
-	}
-
 	rt := s.newRequestedTable(subID, span, startTs, eventCh)
-	s.totalSpans.m.ReplaceOrInsert(span, subID)
+	s.totalSpans.Lock()
 	s.totalSpans.v[subID] = rt
 	s.totalSpans.Unlock()
 
@@ -223,67 +210,42 @@ func (s *SharedClient) Subscribe(
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", rt.subscriptionID),
 		zap.String("span", rt.span.String()))
-	success = true
-	return
 }
 
 // Unsubscribe the given table span. All covered regions will be deregistered asynchronously.
 // NOTE: `span.TableID` must be set correctly.
-func (s *SharedClient) Unsubscribe(span tablepb.Span) (subID SubscriptionID, success bool) {
-	if span.TableID == 0 {
-		log.Panic("event feed unsubscribe with zero tablepb.Span.TableID",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID))
-	}
-
+func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 	s.totalSpans.Lock()
-	if subID, success = s.totalSpans.m.Get(span); !success {
-		s.totalSpans.Unlock()
-		return
-	}
-
-	s.totalSpans.m.Delete(span)
 	rt := s.totalSpans.v[subID]
 	s.totalSpans.Unlock()
+	if rt != nil {
+		s.setTableStopped(rt)
+	}
 
 	log.Info("event feed unsubscribes table",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", rt.subscriptionID),
-		zap.String("span", rt.span.String()))
-
-	s.setTableStopped(rt)
-	return
+		zap.Bool("exists", rt != nil))
 }
 
 // ResolveLock is a function. If outsider subscribers find a span resolved timestamp is
 // advanced slowly or stopped, they can try to resolve locks in the given span.
-func (s *SharedClient) ResolveLock(span tablepb.Span, maxVersion uint64) (success bool) {
-	if span.TableID == 0 {
-		log.Panic("event feed unsubscribe with zero tablepb.Span.TableID",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID))
-	}
-
+func (s *SharedClient) ResolveLock(subID SubscriptionID, maxVersion uint64) {
 	s.totalSpans.Lock()
-	var subID SubscriptionID
-	if subID, success = s.totalSpans.m.Get(span); success {
-		rt := s.totalSpans.v[subID]
-		s.totalSpans.Unlock()
-		rt.updateStaleLocks(s, maxVersion)
-		return
-	}
-
+	rt := s.totalSpans.v[subID]
 	s.totalSpans.Unlock()
-	return
+	if rt != nil {
+		rt.updateStaleLocks(s, maxVersion)
+	}
 }
 
 // RegionCount returns subscribed region count for the span.
-func (s *SharedClient) RegionCount(span tablepb.Span) uint64 {
+func (s *SharedClient) RegionCount(subID SubscriptionID) uint64 {
 	s.totalSpans.RLock()
 	defer s.totalSpans.RUnlock()
-	if subID, ok := s.totalSpans.m.Get(span); ok {
-		return s.totalSpans.v[subID].rangeLock.RefCount()
+	if rt := s.totalSpans.v[subID]; rt != nil {
+		return rt.rangeLock.RefCount()
 	}
 	return 0
 }
@@ -1114,7 +1076,7 @@ func (s *SharedClient) newRequestedTable(
 	subID SubscriptionID, span tablepb.Span, startTs uint64,
 	eventCh chan<- MultiplexingEvent,
 ) *requestedTable {
-	cfName := fmt.Sprintf("%s.%s", s.changefeed.Namespace, s.changefeed.ID)
+	cfName := s.changefeed.String()
 	rangeLock := regionlock.NewRegionRangeLock(span.StartKey, span.EndKey, startTs, cfName)
 
 	rt := &requestedTable{

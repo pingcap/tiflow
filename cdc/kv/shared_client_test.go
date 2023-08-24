@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/security"
-	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -55,8 +54,6 @@ func TestRequestedTable(t *testing.T) {
 	s := &SharedClient{resolveLockCh: chann.NewAutoDrainChann[resolveLockTask]()}
 	span := tablepb.Span{TableID: 1, StartKey: []byte{'a'}, EndKey: []byte{'z'}}
 	table := s.newRequestedTable(SubscriptionID(1), span, 100, nil)
-	s.totalSpans.m = spanz.NewHashMap[SubscriptionID]()
-	s.totalSpans.m.ReplaceOrInsert(span, SubscriptionID(1))
 	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
 	s.totalSpans.v[SubscriptionID(1)] = table
 	s.pdClock = pdutil.NewClock4Test()
@@ -66,7 +63,7 @@ func TestRequestedTable(t *testing.T) {
 	require.Equal(t, regionlock.LockRangeStatusSuccess, res.Status)
 	res.LockedRange.Initialzied.Store(true)
 
-	require.True(t, s.ResolveLock(span, 200))
+	s.ResolveLock(SubscriptionID(1), 200)
 	select {
 	case <-s.resolveLockCh.Out():
 	case <-time.After(100 * time.Millisecond):

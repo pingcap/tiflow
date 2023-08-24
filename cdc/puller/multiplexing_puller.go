@@ -41,6 +41,7 @@ type tableProgress struct {
 	changefeed model.ChangeFeedID
 	client     *kv.SharedClient
 	spans      []tablepb.Span
+	subIDs     []kv.SubscriptionID
 	startTs    model.Ts
 	tableName  string
 
@@ -61,6 +62,11 @@ type tableProgress struct {
 	scheduled atomic.Bool
 }
 
+type tableProgressWithSubID struct {
+	*tableProgress
+	subID kv.SubscriptionID
+}
+
 // MultiplexingPuller works with `kv.SharedClient`. All tables share resources.
 type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
@@ -78,7 +84,7 @@ type MultiplexingPuller struct {
 	subscriptions struct {
 		sync.RWMutex
 		m map[kv.SubscriptionID]*tableProgress
-		n *spanz.HashMap[*tableProgress]
+		n *spanz.HashMap[tableProgressWithSubID]
 	}
 
 	CounterKv              prometheus.Counter
@@ -110,7 +116,7 @@ func NewMultiplexingPuller(
 		advanceCh:  make(chan *tableProgress, 128),
 	}
 	x.subscriptions.m = make(map[kv.SubscriptionID]*tableProgress)
-	x.subscriptions.n = spanz.NewHashMap[*tableProgress]()
+	x.subscriptions.n = spanz.NewHashMap[tableProgressWithSubID]()
 
 	x.inputChs = make([]chan kv.MultiplexingEvent, 0, workers)
 	for i := 0; i < workers; i++ {
@@ -127,10 +133,20 @@ func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, t
 }
 
 func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) []kv.SubscriptionID {
+	for _, span := range spans {
+		if _, exists := p.subscriptions.n.Get(span); exists {
+			log.Panic("redundant subscription",
+				zap.String("namespace", p.changefeed.Namespace),
+				zap.String("changefeed", p.changefeed.ID),
+				zap.String("span", span.String()))
+		}
+	}
+
 	progress := &tableProgress{
 		changefeed: p.changefeed,
 		client:     p.client,
 		spans:      spans,
+		subIDs:     make([]kv.SubscriptionID, len(spans)),
 		startTs:    startTs,
 		tableName:  tableName,
 
@@ -147,23 +163,17 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		return nil
 	}
 
-	subIDs := make([]kv.SubscriptionID, len(spans))
 	for i, span := range spans {
 		subID := p.client.AllocSubscriptionID()
-		subIDs[i] = subID
+		progress.subIDs[i] = subID
 
 		p.subscriptions.m[subID] = progress
-		p.subscriptions.n.ReplaceOrInsert(span, progress)
+		p.subscriptions.n.ReplaceOrInsert(span, tableProgressWithSubID{progress, subID})
 
 		slot := p.hasher(span, len(p.inputChs))
-		if _, ok := p.client.Subscribe(subID, span, startTs, p.inputChs[slot]); !ok {
-			log.Panic("redundant subscription",
-				zap.String("namespace", p.changefeed.Namespace),
-				zap.String("changefeed", p.changefeed.ID),
-				zap.String("span", span.String()))
-		}
+		p.client.Subscribe(subID, span, startTs, p.inputChs[slot])
 	}
-	return subIDs
+	return progress.subIDs
 }
 
 // Unsubscribe some spans, which must be subscribed in one call.
@@ -174,21 +184,35 @@ func (p *MultiplexingPuller) Unsubscribe(spans []tablepb.Span) {
 }
 
 func (p *MultiplexingPuller) unsubscribe(spans []tablepb.Span) {
+	var progress *tableProgress
 	for _, span := range spans {
-		if subID, ok := p.client.Unsubscribe(span); ok {
-			progress := p.subscriptions.m[subID]
-			progress.consume.Lock()
-			progress.consume.removed = true
-			progress.consume.Unlock()
-
-			delete(p.subscriptions.m, subID)
-			p.subscriptions.n.Delete(span)
+		if prog, exists := p.subscriptions.n.Get(span); exists {
+			if prog.tableProgress != progress && progress != nil {
+				log.Panic("unsubscribe spans not in one subscription",
+					zap.String("namespace", p.changefeed.Namespace),
+					zap.String("changefeed", p.changefeed.ID))
+			}
+			progress = prog.tableProgress
 		} else {
 			log.Panic("unexist unsubscription",
 				zap.String("namespace", p.changefeed.Namespace),
 				zap.String("changefeed", p.changefeed.ID),
 				zap.String("span", span.String()))
 		}
+	}
+	if len(progress.spans) != len(spans) {
+		log.Panic("unsubscribe spans not same with subscription",
+			zap.String("namespace", p.changefeed.Namespace),
+			zap.String("changefeed", p.changefeed.ID))
+	}
+
+	progress.consume.Lock()
+	progress.consume.removed = true
+	progress.consume.Unlock()
+	for i, span := range progress.spans {
+		p.client.Unsubscribe(progress.subIDs[i])
+		delete(p.subscriptions.m, progress.subIDs[i])
+		p.subscriptions.n.Delete(span)
 	}
 }
 
@@ -285,12 +309,6 @@ func (p *MultiplexingPuller) getAllProgresses() map[*tableProgress]struct{} {
 		hashset[value] = struct{}{}
 	}
 	return hashset
-}
-
-func (p *MultiplexingPuller) getProgressBySpan(span tablepb.Span) *tableProgress {
-	p.subscriptions.RLock()
-	defer p.subscriptions.RUnlock()
-	return p.subscriptions.n.GetV(span)
 }
 
 func (p *MultiplexingPuller) schedule(ctx context.Context, progress *tableProgress) {
@@ -408,19 +426,21 @@ func (p *tableProgress) resolveLock(currentTime time.Time) {
 	}
 
 	maxVersion := oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence))
-	for _, span := range p.spans {
-		p.client.ResolveLock(span, maxVersion)
+	for _, subID := range p.subIDs {
+		p.client.ResolveLock(subID, maxVersion)
 	}
 }
 
 // Stats returns Stats.
 func (p *MultiplexingPuller) Stats(span tablepb.Span) Stats {
-	var progress *tableProgress
-	if progress = p.getProgressBySpan(span); progress == nil {
+	p.subscriptions.RLock()
+	progress := p.subscriptions.n.GetV(span)
+	p.subscriptions.RUnlock()
+	if progress.tableProgress == nil {
 		return Stats{}
 	}
 	return Stats{
-		RegionCount:         p.client.RegionCount(span),
+		RegionCount:         p.client.RegionCount(progress.subID),
 		ResolvedTsIngress:   progress.maxIngressResolvedTs.Load(),
 		CheckpointTsIngress: progress.maxIngressResolvedTs.Load(),
 		ResolvedTsEgress:    progress.resolvedTs.Load(),
