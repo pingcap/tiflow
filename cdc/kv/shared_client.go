@@ -329,7 +329,7 @@ func (s *SharedClient) onTableDrained(rt *requestedTable) {
 	delete(s.totalSpans.v, rt.subscriptionID)
 }
 
-func (s *SharedClient) onRegionFail(ctx context.Context, errInfo regionErrorInfo) {
+func (s *SharedClient) onRegionFail(errInfo regionErrorInfo) {
 	s.errCh.In() <- errInfo
 }
 
@@ -351,7 +351,7 @@ func (s *SharedClient) dispatchRequest(ctx context.Context) error {
 				zap.Uint64("regionID", sri.verID.GetID()),
 				zap.Error(err))
 		}
-		s.onRegionFail(ctx, newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID}))
+		s.onRegionFail(newRegionErrorInfo(sri, &rpcCtxUnavailableErr{verID: sri.verID}))
 	}
 
 	for {
@@ -522,7 +522,7 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			// It can be skipped directly because there must be no pending states from
 			// the stopped requestedTable, or the special singleRegionInfo for stopping
 			// the table will be handled later.
-			s.onRegionFail(ctx, newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
+			s.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
 		} else {
 			connectTime := time.Since(sri.lockedRange.Created).Milliseconds()
 			s.metrics.regionConnectDuration.Observe(float64(connectTime))
@@ -673,7 +673,7 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 			// Why we need to re-schedule pending regions? This because the store can
 			// fail forever, and all regions are scheduled to other stores.
 			for _, sri := range stream.clearPendingRegions() {
-				s.onRegionFail(ctx, newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
+				s.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
 			}
 
 			if err := util.Hang(ctx, time.Second); err != nil {

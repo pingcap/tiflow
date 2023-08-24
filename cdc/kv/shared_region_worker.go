@@ -101,7 +101,7 @@ func (w *sharedRegionWorker) run(ctx context.Context) error {
 	}
 }
 
-func (w *sharedRegionWorker) handleSingleRegionError(ctx context.Context, state *regionFeedState, stream *requestedStream) {
+func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, stream *requestedStream) {
 	if stream != nil {
 		// stream can be nil if it's obviously unnecessary to re-schedule the region.
 		stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
@@ -109,7 +109,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(ctx context.Context, state 
 	if state.markRemoved() {
 		// For SharedClient and SharedWorker, err will never be nil.
 		err := state.takeError()
-		w.client.onRegionFail(ctx, newRegionErrorInfo(state.getRegionInfo(), err))
+		w.client.onRegionFail(newRegionErrorInfo(state.getRegionInfo(), err))
 	}
 }
 
@@ -117,7 +117,7 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 	if event.eventItem.state != nil {
 		state := event.eventItem.state
 		if state.isStale() {
-			w.handleSingleRegionError(ctx, state, event.stream)
+			w.handleSingleRegionError(state, event.stream)
 			return
 		}
 		w.metrics.metricReceivedEventSize.Observe(float64(event.eventItem.item.Event.Size()))
@@ -125,13 +125,13 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 		case *cdcpb.Event_Entries_:
 			if err := w.handleEventEntry(ctx, x, state); err != nil {
 				state.markStopped(err)
-				w.handleSingleRegionError(ctx, state, event.stream)
+				w.handleSingleRegionError(state, event.stream)
 				return
 			}
 		case *cdcpb.Event_Admin_:
 		case *cdcpb.Event_Error:
 			state.markStopped(&eventError{err: x.Error})
-			w.handleSingleRegionError(ctx, state, event.stream)
+			w.handleSingleRegionError(state, event.stream)
 			return
 		case *cdcpb.Event_ResolvedTs:
 			w.handleResolvedTs(ctx, resolvedTsBatch{
