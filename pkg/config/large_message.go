@@ -44,6 +44,14 @@ func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
 
 // Validate the Config.
 func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtension bool) error {
+	// compression can be enabled independently
+	if c.LargeMessageHandleCompression != "" {
+		if !compression.Supported(c.LargeMessageHandleCompression) {
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"large message handle compression is not supported, got %s", c.LargeMessageHandleCompression)
+		}
+	}
+
 	if c.LargeMessageHandleOption == LargeMessageHandleOptionNone {
 		return nil
 	}
@@ -69,12 +77,6 @@ func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtensi
 		}
 	}
 
-	if c.LargeMessageHandleCompression != "" {
-		if !compression.Supported(c.LargeMessageHandleCompression) {
-			return cerror.ErrInvalidReplicaConfig.GenWithStack(
-				"large message handle compression is not supported, got %s", c.LargeMessageHandleCompression)
-		}
-	}
 	return nil
 }
 
