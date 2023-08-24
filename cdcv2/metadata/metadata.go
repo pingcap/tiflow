@@ -136,6 +136,7 @@ type Elector interface {
 	GetCaptures(...model.CaptureID) ([]*model.CaptureInfo, error)
 }
 
+// NewElector creates a new elector.
 func NewElector(
 	selfInfo *model.CaptureInfo,
 	storage election.Storage,
