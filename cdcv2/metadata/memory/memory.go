@@ -34,12 +34,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	lease             time.Duration = 10 * time.Second
-	heartbeatDeadline time.Duration = time.Second
-	networkJitter     time.Duration = time.Second
-)
-
 var (
 	_ metadata.CaptureObservation    = &CaptureOb{}
 	_ metadata.ControllerObservation = &ControllerOb{}
@@ -169,12 +163,12 @@ func (c *contextManager) stop() {
 
 // CaptureOb is an implement for metadata.CaptureObservation.
 type CaptureOb struct {
-	election.Elector
-	storage        *Storage
-	selfInfo       *metadata.CaptureInfo
-	contextManager *contextManager
+	metadata.Elector
+	electionDSN string
+	storage     *Storage
 
-	tasks struct {
+	selfInfo *model.CaptureInfo
+	tasks    struct {
 		sync.RWMutex
 		owners     sortedScheduledChangefeeds
 		processors sortedScheduledChangefeeds
@@ -185,10 +179,15 @@ type CaptureOb struct {
 }
 
 // NewCaptureObservation creates a capture observation.
-func NewCaptureObservation(s *Storage, c *metadata.CaptureInfo) *CaptureOb {
+func NewCaptureObservation(
+	electionDSN string, /* only for election */
+	storage *Storage, /* only for meta storage */
+	selfInfo *model.CaptureInfo,
+) *CaptureOb {
 	return &CaptureOb{
-		storage:          s,
-		selfInfo:         c,
+		electionDSN:      electionDSN,
+		storage:          storage,
+		selfInfo:         selfInfo,
 		ownerChanges:     chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
 		processorChanges: chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
 	}
@@ -197,7 +196,6 @@ func NewCaptureObservation(s *Storage, c *metadata.CaptureInfo) *CaptureOb {
 // Run runs the given CaptureOb.
 func (c *CaptureOb) Run(
 	ctx context.Context,
-	electionDSN string, /* only for election */
 	controllerCallback func(context.Context, metadata.ControllerObservation) error,
 ) (err error) {
 	onTakeControl := func(electorCtx context.Context) error {
@@ -213,18 +211,11 @@ func (c *CaptureOb) Run(
 		return ctrlErrGroup.Wait()
 	}
 
-	inMemoryStorage, err := election.NewInMemorySQLStorage(electionDSN, "election")
+	inMemoryStorage, err := election.NewInMemorySQLStorage(c.electionDSN, "election")
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if c.Elector, err = election.NewElector(election.Config{
-		ID:              c.selfInfo.ID,
-		Name:            c.selfInfo.Version, /* TODO: refine this filed */
-		Address:         c.selfInfo.AdvertiseAddr,
-		Storage:         inMemoryStorage,
-		LeaderCallback:  onTakeControl,
-		ExitOnRenewFail: true,
-	}); err != nil {
+	if c.Elector, err = metadata.NewElector(c.selfInfo, inMemoryStorage, onTakeControl); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -306,7 +297,7 @@ func (c *CaptureOb) handleTaskChanges(ctx context.Context, isOwner bool) error {
 	return nil
 }
 
-func (c *CaptureOb) Self() *metadata.CaptureInfo {
+func (c *CaptureOb) Self() *model.CaptureInfo {
 	return c.selfInfo
 }
 
@@ -354,7 +345,7 @@ func (c *CaptureOb) PostProcessorRemoved(cf metadata.ChangefeedID) error {
 	return nil
 }
 
-func (c *CaptureOb) getAllCaptures() []*metadata.CaptureInfo {
+func (c *CaptureOb) getAllCaptures() []*model.CaptureInfo {
 	infos, _ := c.GetCaptures()
 	return infos
 }
@@ -362,25 +353,25 @@ func (c *CaptureOb) getAllCaptures() []*metadata.CaptureInfo {
 // ControllerOb is an implement for metadata.ControllerObservation.
 type ControllerOb struct {
 	storage  *Storage
-	selfInfo *metadata.CaptureInfo
+	selfInfo *model.CaptureInfo
 
 	aliveCaptures struct {
 		sync.Mutex
-		outgoing     []*metadata.CaptureInfo
-		incoming     []*metadata.CaptureInfo
+		outgoing     []*model.CaptureInfo
+		incoming     []*model.CaptureInfo
 		outgoingHash uint64
 		incomingHash uint64
 	}
 
-	captures       *chann.DrainableChann[[]*metadata.CaptureInfo]
-	getAllCaptures func() []*metadata.CaptureInfo
+	captures       *chann.DrainableChann[[]*model.CaptureInfo]
+	getAllCaptures func() []*model.CaptureInfo
 }
 
-func newControllerObservation(s *Storage, c *metadata.CaptureInfo, getAllCaptures func() []*metadata.CaptureInfo) *ControllerOb {
+func newControllerObservation(s *Storage, c *model.CaptureInfo, getAllCaptures func() []*model.CaptureInfo) *ControllerOb {
 	return &ControllerOb{
 		storage:        s,
 		selfInfo:       c,
-		captures:       chann.NewAutoDrainChann[[]*metadata.CaptureInfo](),
+		captures:       chann.NewAutoDrainChann[[]*model.CaptureInfo](),
 		getAllCaptures: getAllCaptures,
 	}
 }
@@ -457,14 +448,14 @@ func (c *ControllerOb) RemoveChangefeed(cf metadata.ChangefeedID) error {
 	return nil
 }
 
-func (c *ControllerOb) RefreshCaptures() (captures []*metadata.CaptureInfo, changed bool) {
+func (c *ControllerOb) RefreshCaptures() (captures []*model.CaptureInfo, changed bool) {
 	c.aliveCaptures.Lock()
 	defer c.aliveCaptures.Unlock()
 	if c.aliveCaptures.outgoingHash != c.aliveCaptures.incomingHash {
 		c.aliveCaptures.outgoingHash = c.aliveCaptures.incomingHash
 		c.aliveCaptures.outgoing = c.aliveCaptures.incoming
 	}
-	captures = make([]*metadata.CaptureInfo, len(c.aliveCaptures.outgoing))
+	captures = make([]*model.CaptureInfo, len(c.aliveCaptures.outgoing))
 	copy(captures, c.aliveCaptures.outgoing)
 	return
 }
@@ -489,7 +480,7 @@ func (c *ControllerOb) GetChangefeedSchedule(cf metadata.ChangefeedID) (s metada
 	return
 }
 
-func (c *ControllerOb) ScheduleSnapshot() (ss []metadata.ChangefeedSchedule, cs []*metadata.CaptureInfo, err error) {
+func (c *ControllerOb) ScheduleSnapshot() (ss []metadata.ChangefeedSchedule, cs []*model.CaptureInfo, err error) {
 	c.storage.RLock()
 	ss = make([]metadata.ChangefeedSchedule, 0, len(c.storage.entities.cfids))
 	for _, cf := range c.storage.entities.cfids {
@@ -630,26 +621,6 @@ func (c *CaptureOb) GetChangefeeds(cfs ...model.ChangeFeedID) ([]*metadata.Chang
 	return infos, ids, nil
 }
 
-func (c *CaptureOb) GetCaptures(cps ...string) ([]*metadata.CaptureInfo, error) {
-	cpsMap := make(map[string]struct{}, len(cps))
-	for _, cp := range cps {
-		cpsMap[cp] = struct{}{}
-	}
-
-	members := c.GetMembers()
-	captures := make([]*metadata.CaptureInfo, 0, len(members))
-	for _, m := range members {
-		if _, ok := cpsMap[m.ID]; ok || len(cps) == 0 {
-			captures = append(captures, &metadata.CaptureInfo{
-				ID:            m.ID,
-				AdvertiseAddr: m.Address,
-				Version:       m.Name,
-			})
-		}
-	}
-	return captures, nil
-}
-
 func compareByChangefeed(a, b metadata.ScheduledChangefeed) int {
 	return strings.Compare(a.ChangefeedID.Comparable, b.ChangefeedID.Comparable)
 }
@@ -696,7 +667,7 @@ func (s *sortedScheduledChangefeeds) update(target metadata.ScheduledChangefeed)
 	}
 }
 
-func sortAndHashCaptureList(cs []*metadata.CaptureInfo) uint64 {
+func sortAndHashCaptureList(cs []*model.CaptureInfo) uint64 {
 	hasher := fnv.New64()
 	sort.Slice(cs, func(i, j int) bool { return strings.Compare(cs[i].ID, cs[j].ID) < 0 })
 	for _, info := range cs {
