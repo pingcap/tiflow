@@ -128,7 +128,7 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 	ctx context.Context, topic string,
 	partition int32, message *common.Message,
 ) error {
-	p.wrapperSchemaAndTopic(message)
+	wrapperSchemaAndTopic(message)
 
 	// We have to hold the lock to avoid writing to a closed producer.
 	// Close may be blocked for a long time.
@@ -278,7 +278,7 @@ func (p *pulsarDMLProducer) GetProducerByTopic(topicName string) (producer pulsa
 }
 
 // wrapperSchemaAndTopic wrapper schema and topic
-func (p *pulsarDMLProducer) wrapperSchemaAndTopic(m *common.Message) {
+func wrapperSchemaAndTopic(m *common.Message) {
 	if m.Schema == nil {
 		if m.Protocol == config.ProtocolMaxwell {
 			mx := &maxwellMessage{}

@@ -57,7 +57,7 @@ func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string
 func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 	partitionNum int32, message *common.Message,
 ) error {
-	p.wrapperSchemaAndTopic(message)
+	wrapperSchemaAndTopic(message)
 	mq.IncPublishedDDLCount(topic, p.id.ID, message)
 
 	producer, err := p.GetProducerByTopic(topic)
@@ -206,7 +206,7 @@ func (p *pulsarProducers) Close() {
 }
 
 // wrapperSchemaAndTopic wrapper schema and topic
-func (p *pulsarProducers) wrapperSchemaAndTopic(m *common.Message) {
+func wrapperSchemaAndTopic(m *common.Message) {
 	if m.Schema == nil {
 		if m.Protocol == config.ProtocolMaxwell {
 			mx := &maxwellMessage{}
