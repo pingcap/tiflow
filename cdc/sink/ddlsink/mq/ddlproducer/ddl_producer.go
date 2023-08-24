@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 )
 
 // DDLProducer is the interface for DDL message producer.
@@ -44,4 +43,4 @@ type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
 
 // PulsarFactory is a function to create a pulsar producer.
 type PulsarFactory func(ctx context.Context, changefeedID model.ChangeFeedID,
-	pConfig *pulsarConfig.Config, client pulsar.Client, sinkConfig *config.SinkConfig) (DDLProducer, error)
+	pConfig *config.PulsarConfig, client pulsar.Client, sinkConfig *config.SinkConfig) (DDLProducer, error)

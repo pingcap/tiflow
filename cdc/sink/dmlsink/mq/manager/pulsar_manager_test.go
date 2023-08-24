@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newPulsarConfig(t *testing.T) (*pulsarConfig.Config, *url.URL) {
+func newPulsarConfig(t *testing.T) (*config.PulsarConfig, *url.URL) {
 	sinkURL := "pulsar://127.0.0.1:6650/persistent://public/default/test?" +
 		"protocol=canal-json&pulsar-version=v2.10.0&enable-tidb-extension=true&" +
 		"authentication-token=eyJhbGciOiJSUzIxxxxxxxxxxxxxxxx"
@@ -33,7 +33,7 @@ func newPulsarConfig(t *testing.T) (*pulsarConfig.Config, *url.URL) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	require.NoError(t, err)
-	c, err := pulsarConfig.NewPulsarConfig(sinkURI)
+	c, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	require.NoError(t, err)
 	return c, sinkURI
 }
@@ -45,7 +45,7 @@ func TestGetPartitionNumMock(t *testing.T) {
 
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink = &config.SinkConfig{
-		Protocol: str2Pointer(cfg.Protocol.String()),
+		Protocol: str2Pointer("canal-json"),
 	}
 
 	ctx := context.Background()
