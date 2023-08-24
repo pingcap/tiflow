@@ -215,6 +215,7 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 // Unsubscribe the given table span. All covered regions will be deregistered asynchronously.
 // NOTE: `span.TableID` must be set correctly.
 func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
+	// NOTE: `subID` is cleared from `s.totalSpans` in `onTableDrained`.
 	s.totalSpans.Lock()
 	rt := s.totalSpans.v[subID]
 	s.totalSpans.Unlock()
@@ -306,7 +307,7 @@ func (s *SharedClient) setTableStopped(rt *requestedTable) {
 		zap.String("span", rt.span.String()))
 
 	// Set stopped to true so we can stop handling region events from the table.
-	// Then send a spetial singleRegionInfo to regionRouter to deregister the table
+	// Then send a special singleRegionInfo to regionRouter to deregister the table
 	// from all TiKV instances.
 	if rt.stopped.CompareAndSwap(false, true) {
 		s.regionRouter.In() <- singleRegionInfo{requestedTable: rt}
@@ -329,10 +330,7 @@ func (s *SharedClient) onTableDrained(rt *requestedTable) {
 }
 
 func (s *SharedClient) onRegionFail(ctx context.Context, errInfo regionErrorInfo) {
-	select {
-	case s.errCh.In() <- errInfo:
-	case <-ctx.Done():
-	}
+	s.errCh.In() <- errInfo
 }
 
 func (s *SharedClient) dispatchRequest(ctx context.Context) error {
@@ -374,7 +372,7 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 			return errors.Trace(ctx.Err())
 		case sri = <-s.regionRouter.Out():
 		}
-		// If lockedRange is nil it means it's a spetial task from stopping the table.
+		// If lockedRange is nil it means it's a special task from stopping the table.
 		if sri.lockedRange == nil {
 			for _, rs := range s.requestedStores {
 				for _, stream := range rs.streams {
@@ -393,9 +391,7 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 
 		storeID := sri.rpcCtx.Peer.StoreId
 		storeAddr := sri.rpcCtx.Addr
-		rs := s.requestStore(ctx, g, storeID, storeAddr)
-		offset := rs.nextStream.Add(1) % uint32(len(rs.streams))
-		rs.streams[offset].requests.In() <- sri
+		s.requestStore(ctx, g, storeID, storeAddr).appendRequest(sri)
 	}
 }
 
@@ -499,7 +495,7 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 	stream.preFetchForConnecting = nil
 	for {
 		if sri.lockedRange == nil {
-			// It means it's a spetial task from stopping the table.
+			// It means it's a special task from stopping the table.
 			req := &cdcpb.ChangeDataRequest{
 				RequestId: uint64(sri.requestedTable.subscriptionID),
 				Request:   &cdcpb.ChangeDataRequest_Deregister_{},
@@ -524,7 +520,7 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			}
 		} else if sri.requestedTable.stopped.Load() {
 			// It can be skipped directly because there must be no pending states from
-			// the stopped requestedTable, or the spetial singleRegionInfo for stopping
+			// the stopped requestedTable, or the special singleRegionInfo for stopping
 			// the table will be handled later.
 			s.onRegionFail(ctx, newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
 		} else {
@@ -624,6 +620,11 @@ func (s *SharedClient) sendResolvedTs(ctx context.Context, resolvedTs *cdcpb.Res
 		}
 	}
 	return nil
+}
+
+func (r *requestedStore) appendRequest(sri singleRegionInfo) {
+	offset := r.nextStream.Add(1) % uint32(len(r.streams))
+	r.streams[offset].requests.In() <- sri
 }
 
 func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requestedStore) *requestedStream {
@@ -811,12 +812,12 @@ func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Grou
 		case <-ctx.Done():
 			return ctx.Err()
 		case task := <-s.requestRangeCh.Out():
-			g.Go(func() error { return s.divideAndRequestRegions(ctx, task.span, task.requestedTable) })
+			g.Go(func() error { return s.divideAndScheduleRegions(ctx, task.span, task.requestedTable) })
 		}
 	}
 }
 
-func (s *SharedClient) divideAndRequestRegions(
+func (s *SharedClient) divideAndScheduleRegions(
 	ctx context.Context,
 	span tablepb.Span,
 	requestedTable *requestedTable,
@@ -904,7 +905,7 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 			}
 		case regionlock.LockRangeStatusStale:
 			for _, r := range res.RetryRanges {
-				s.scheduleDivideRegionAndRequest(ctx, r, sri.requestedTable)
+				s.scheduleRangeRequest(ctx, r, sri.requestedTable)
 			}
 		default:
 			return
@@ -919,7 +920,7 @@ func (s *SharedClient) scheduleRegionRequest(ctx context.Context, sri singleRegi
 	handleResult(res)
 }
 
-func (s *SharedClient) scheduleDivideRegionAndRequest(
+func (s *SharedClient) scheduleRangeRequest(
 	ctx context.Context, span tablepb.Span,
 	requestedTable *requestedTable,
 ) {
@@ -968,12 +969,12 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		}
 		if innerErr.GetEpochNotMatch() != nil {
 			metricFeedEpochNotMatchCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.requestedTable)
+			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
 			return nil
 		}
 		if innerErr.GetRegionNotFound() != nil {
 			metricFeedRegionNotFoundCounter.Inc()
-			s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.requestedTable)
+			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
 			return nil
 		}
 		if duplicated := innerErr.GetDuplicateRequest(); duplicated != nil {
@@ -998,7 +999,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		return nil
 	case *rpcCtxUnavailableErr:
 		metricFeedRPCCtxUnavailable.Inc()
-		s.scheduleDivideRegionAndRequest(ctx, errInfo.span, errInfo.requestedTable)
+		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
 		return nil
 	case *sendRequestToStoreErr:
 		metricStoreSendRequestErr.Inc()

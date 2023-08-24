@@ -102,7 +102,7 @@ func (s *regionFeedState) markStopped(err error) {
 	}
 }
 
-// masrk regionFeedState as removed if possible.
+// mark regionFeedState as removed if possible.
 func (s *regionFeedState) markRemoved() (changed bool) {
 	return s.state.CompareAndSwap(stateStopped, stateRemoved)
 }

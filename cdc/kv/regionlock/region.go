@@ -23,26 +23,8 @@ import (
 
 // CheckRegionsLeftCover checks whether the regions cover the left part of given span
 func CheckRegionsLeftCover(regions []*metapb.Region, span tablepb.Span) bool {
-	if len(regions) == 0 {
-		return false
-	}
-	sort.Slice(regions, func(i, j int) bool {
-		return spanz.StartCompare(regions[i].StartKey, regions[j].StartKey) == -1
-	})
-
-	if spanz.StartCompare(regions[0].StartKey, span.StartKey) == 1 {
-		return false
-	}
-
-	nextStart := regions[0].StartKey
-	for _, region := range regions {
-		// incontinuous regions
-		if spanz.StartCompare(nextStart, region.StartKey) != 0 {
-			return false
-		}
-		nextStart = region.EndKey
-	}
-	return true
+	subRegions := CutRegionsLeftCoverSpan(regions, span)
+	return len(regions) > 0 && len(subRegions) == len(regions)
 }
 
 // CutRegionsLeftCoverSpan cuts regions at the position which doesn't cover span
