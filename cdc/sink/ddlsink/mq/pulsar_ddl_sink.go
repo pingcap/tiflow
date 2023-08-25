@@ -57,7 +57,7 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	pConfig, err := pulsarConfig.NewPulsarConfig(sinkURI)
+	pConfig, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -65,12 +65,13 @@ func NewPulsarDDLSink(
 	log.Info("Try to create a DDL sink producer", zap.Any("pulsarConfig", pConfig))
 
 	// NewEventRouter
-	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, sinkURI.Scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, protocol, replicaConfig, pConfig.MaxMessageBytes)
+	encoderConfig, err := util.GetEncoderConfig(changefeedID,
+		sinkURI, protocol, replicaConfig, config.DefaultMaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -101,9 +102,4 @@ func NewPulsarDDLSink(
 	s := newDDLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderBuilder, protocol)
 
 	return s, nil
-}
-
-// str2Pointer returns the pointer of the string.
-func str2Pointer(str string) *string {
-	return &str
 }

@@ -486,7 +486,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	}
 
 	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.topic)
+		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.topic, "kafka")
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

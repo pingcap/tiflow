@@ -266,6 +266,14 @@ const (
         "registry-name":"registry"
       }
     },
+	"pulsar-config": {
+		"pulsar-version": "v2.10.0",
+		"authentication-token": "token",
+		"tls-trust-certs-file-path": "TLSTrustCertsFilePath_path",
+		"connection-timeout": 18,
+		"operation-timeout": 8,
+		"batching-max-publish-delay": 5000
+	},
     "mysql-config": {
       "worker-count": 8,
       "max-txn-row": 100000,
@@ -405,6 +413,14 @@ const (
         "registry-name":"registry"
       }
     },
+	"pulsar-config": {
+		"pulsar-version": "v2.10.0",
+		"authentication-token": "token",
+		"tls-trust-certs-file-path": "TLSTrustCertsFilePath_path",
+		"connection-timeout": 18,
+		"operation-timeout": 8,
+		"batching-max-publish-delay": 5000
+	},
     "mysql-config": {
       "worker-count": 8,
       "max-txn-row": 100000,

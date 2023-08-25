@@ -306,7 +306,8 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, message := range future.Messages {
-				if message.ClaimCheckFileName != "" {
+				// w.claimCheck in pulsar is nil
+				if message.ClaimCheckFileName != "" && w.claimCheck != nil {
 					// send the message to the external storage.
 					if err = w.claimCheck.WriteMessage(ctx, message); err != nil {
 						log.Error("send message to the external claim check storage failed",
