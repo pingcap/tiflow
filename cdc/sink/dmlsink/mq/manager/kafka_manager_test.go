@@ -33,8 +33,7 @@ func TestPartitions(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager, err := NewKafkaTopicManager(ctx, adminClient, cfg)
-	require.Nil(t, err)
+	manager := NewKafkaTopicManager(ctx, adminClient, cfg)
 	defer manager.Close()
 
 	partitionsNum, err := manager.GetPartitionNum(
@@ -56,8 +55,7 @@ func TestCreateTopic(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager, err := NewKafkaTopicManager(ctx, adminClient, cfg)
-	require.Nil(t, err)
+	manager := NewKafkaTopicManager(ctx, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -72,8 +70,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager, err = NewKafkaTopicManager(ctx, adminClient, cfg)
-	require.Nil(t, err)
+	manager = NewKafkaTopicManager(ctx, adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
@@ -89,8 +86,7 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager, err = NewKafkaTopicManager(ctx, adminClient, cfg)
-	require.Nil(t, err)
+	manager = NewKafkaTopicManager(ctx, adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic-failed")
 	require.Regexp(
@@ -112,8 +108,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager, err := NewKafkaTopicManager(ctx, adminClient, cfg)
-	require.Nil(t, err)
+	manager := NewKafkaTopicManager(ctx, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(ctx, "new_topic")
 	require.Nil(t, err)
