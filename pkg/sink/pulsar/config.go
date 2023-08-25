@@ -35,8 +35,6 @@ const (
 	// defaultSendTimeout 30s
 	defaultSendTimeout = 30 // 30s
 
-	// defaultProducerModeSingle batch send message(s)
-	// defaultProducerModeBatch = "batch"
 )
 
 func checkSinkURI(sinkURI *url.URL) error {

@@ -22,16 +22,11 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/metrics/mq"
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
-)
-
-const (
-	// DefaultPulsarProducerCacheSize is the default size of the cache for producers
-	// 10240 producers maybe cost 1.1G memory
-	DefaultPulsarProducerCacheSize = 10240
 )
 
 // Assert DDLEventSink implementation
@@ -62,7 +57,8 @@ func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string
 func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 	partitionNum int32, message *common.Message,
 ) error {
-	p.wrapperSchemaAndTopic(message)
+	wrapperSchemaAndTopic(message)
+	mq.IncPublishedDDLCount(topic, p.id.ID, message)
 
 	producer, err := p.GetProducerByTopic(topic)
 	if err != nil {
@@ -77,12 +73,14 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 	mID, err := producer.Send(ctx, data)
 	if err != nil {
 		log.Error("ddl producer send fail", zap.Error(err))
+		mq.IncPublishedDDLFail(topic, p.id.ID, message)
 		return err
 	}
 
 	log.Debug("pulsarProducers SyncSendMessage success",
 		zap.Any("mID", mID), zap.String("topic", topic))
 
+	mq.IncPublishedDDLSuccess(topic, p.id.ID, message)
 	return nil
 }
 
@@ -108,7 +106,7 @@ func NewPulsarProducer(
 		return nil, err
 	}
 
-	producerCacheSize := DefaultPulsarProducerCacheSize
+	producerCacheSize := config.DefaultPulsarProducerCacheSize
 	if sinkConfig.PulsarConfig != nil && sinkConfig.PulsarConfig.PulsarProducerCacheSize != nil {
 		producerCacheSize = int(*sinkConfig.PulsarConfig.PulsarProducerCacheSize)
 	}
@@ -163,7 +161,7 @@ func newProducer(
 		return nil, err
 	}
 
-	log.Info("new pulsar producer ok", zap.String("topic:", topicName))
+	log.Info("create pulsar producer success", zap.String("topic", topicName))
 
 	return producer, nil
 }
@@ -208,7 +206,7 @@ func (p *pulsarProducers) Close() {
 }
 
 // wrapperSchemaAndTopic wrapper schema and topic
-func (p *pulsarProducers) wrapperSchemaAndTopic(m *common.Message) {
+func wrapperSchemaAndTopic(m *common.Message) {
 	if m.Schema == nil {
 		if m.Protocol == config.ProtocolMaxwell {
 			mx := &maxwellMessage{}

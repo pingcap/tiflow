@@ -27,7 +27,7 @@ import (
 func TestEventRouter(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(config.GetDefaultReplicaConfig(), "test")
+	d, err := NewEventRouter(config.GetDefaultReplicaConfig(), "test", "kafka")
 	require.Nil(t, err)
 	require.Equal(t, "test", d.GetDefaultTopic())
 	topicDispatcher, partitionDispatcher := d.matchDispatcher("test", "test")
@@ -67,7 +67,7 @@ func TestEventRouter(t *testing.T) {
 				},
 			},
 		},
-	}, "")
+	}, "", "kafka")
 	require.Nil(t, err)
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("test", "table1")
 	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
@@ -134,7 +134,7 @@ func TestGetActiveTopics(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", "kafka")
 	require.Nil(t, err)
 	names := []model.TableName{
 		{Schema: "test_default1", Table: "table"},
@@ -184,7 +184,7 @@ func TestGetTopicForRowChange(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", "kafka")
 	require.Nil(t, err)
 
 	topicName := d.GetTopicForRowChange(&model.RowChangedEvent{
@@ -245,7 +245,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", "kafka")
 	require.Nil(t, err)
 
 	p := d.GetPartitionForRowChange(&model.RowChangedEvent{
@@ -313,7 +313,7 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", "kafka")
 	require.Nil(t, err)
 
 	tests := []struct {
@@ -374,7 +374,7 @@ func TestGetTopicForDDL(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", "kafka")
 	require.Nil(t, err)
 
 	tests := []struct {
