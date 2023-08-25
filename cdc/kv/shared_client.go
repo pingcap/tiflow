@@ -44,9 +44,8 @@ import (
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	grpcerror "google.golang.org/grpc/codes"
 	grpcmeta "google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
 // SubscriptionID comes from `SharedClient.AllocSubscriptionID`.
@@ -122,7 +121,6 @@ type requestedStream struct {
 	requests              *chann.DrainableChann[singleRegionInfo]
 
 	// init is for initializing client and conn asynchronously.
-	init   func(ctx context.Context) error
 	client cdcpb.ChangeData_EventFeedClient
 	conn   *sharedConn
 
@@ -375,9 +373,7 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 		// If lockedRange is nil it means it's a special task from stopping the table.
 		if sri.lockedRange == nil {
 			for _, rs := range s.requestedStores {
-				for _, stream := range rs.streams {
-					stream.requests.In() <- sri
-				}
+				rs.broadcastRequest(sri)
 			}
 			continue
 		}
@@ -484,6 +480,7 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			case sri = <-stream.requests.Out():
 				return sri, nil
 			case <-waitReqTicker.C:
+				// The stream is idle now, will be re-established when necessary.
 				if stream.countStates() == 0 {
 					return sri, errors.New("closed as idle")
 				}
@@ -548,17 +545,14 @@ func (s *SharedClient) receiveFromStream(ctx context.Context, rs *requestedStore
 	for {
 		cevent, err := stream.client.Recv()
 		if err != nil {
-			code := grpc.Code(err)
-			if code != grpcerror.OK && code != grpcerror.Canceled {
-				log.Warn("event feed receive from grpc stream failed",
-					zap.String("namespace", s.changefeed.Namespace),
-					zap.String("changefeed", s.changefeed.ID),
-					zap.Uint64("storeID", rs.storeID),
-					zap.String("addr", rs.storeAddr),
-					zap.Error(err))
-				return errors.Trace(err)
-			}
-			return context.Canceled
+			log.Info("event feed receive from grpc stream failed",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Uint64("storeID", rs.storeID),
+				zap.String("addr", rs.storeAddr),
+				zap.String("code", grpcstatus.Code(err).String()),
+				zap.Error(err))
+			return errors.Trace(err)
 		}
 
 		if len(cevent.Events) > 0 {
@@ -627,27 +621,18 @@ func (r *requestedStore) appendRequest(sri singleRegionInfo) {
 	r.streams[offset].requests.In() <- sri
 }
 
+func (r *requestedStore) broadcastRequest(sri singleRegionInfo) {
+	for _, stream := range r.streams {
+		stream.requests.In() <- sri
+	}
+}
+
 func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requestedStore) *requestedStream {
 	stream := &requestedStream{
 		streamID: streamIDGen.Add(1),
 		requests: chann.NewAutoDrainChann[singleRegionInfo](),
 	}
-
 	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
-	stream.init = func(ctx context.Context) (err error) {
-		if stream.conn, err = s.grpcPool.GetConn(r.storeAddr); err != nil {
-			return errors.Trace(err)
-		}
-		if err = version.CheckStoreVersion(ctx, s.pd, r.storeID); err != nil {
-			return errors.Trace(err)
-		}
-		rpc := cdcpb.NewChangeDataClient(stream.conn.ClientConn)
-		ctx = getContextFromFeatures(ctx, []string{rpcMetaFeatureStreamMultiplexing})
-		if stream.client, err = rpc.EventFeedV2(ctx); err != nil {
-			return errors.Trace(err)
-		}
-		return nil
-	}
 
 	g.Go(func() error {
 		for {
@@ -658,7 +643,6 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 				stream.preFetchForConnecting = new(singleRegionInfo)
 				*stream.preFetchForConnecting = sri
 			}
-
 			if canceled := s.runStream(ctx, r, stream); canceled {
 				return nil
 			}
@@ -675,7 +659,6 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 			for _, sri := range stream.clearPendingRegions() {
 				s.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
 			}
-
 			if err := util.Hang(ctx, time.Second); err != nil {
 				// TODO(qupeng): handle the case that TiKV closes the connection.
 				return err
@@ -693,11 +676,7 @@ func (s *SharedClient) clearStream(r *requestedStore, stream *requestedStream) {
 	}
 }
 
-func (s *SharedClient) runStream(
-	ctx context.Context,
-	rs *requestedStore,
-	stream *requestedStream,
-) (canceled bool) {
+func (s *SharedClient) runStream(ctx context.Context, rs *requestedStore, stream *requestedStream) (canceled bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		log.Info("event feed grpc stream exits",
@@ -718,7 +697,22 @@ func (s *SharedClient) runStream(
 		zap.String("addr", rs.storeAddr),
 		zap.Uint64("streamID", stream.streamID))
 
-	if err := stream.init(ctx); err != nil {
+	init := func(ctx context.Context, stream *requestedStream) (err error) {
+		if stream.conn, err = s.grpcPool.GetConn(rs.storeAddr); err != nil {
+			return errors.Trace(err)
+		}
+		if err = version.CheckStoreVersion(ctx, s.pd, rs.storeID); err != nil {
+			return errors.Trace(err)
+		}
+		rpc := cdcpb.NewChangeDataClient(stream.conn.ClientConn)
+		ctx = getContextFromFeatures(ctx, []string{rpcMetaFeatureStreamMultiplexing})
+		if stream.client, err = rpc.EventFeedV2(ctx); err != nil {
+			return errors.Trace(err)
+		}
+		return nil
+	}
+
+	if err := init(ctx, stream); err != nil {
 		log.Warn("event feed create grpc stream failed",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -727,14 +721,18 @@ func (s *SharedClient) runStream(
 			zap.Uint64("streamID", stream.streamID),
 			zap.Error(err))
 	} else {
+		// sendToStream and receiveFromStream print logs by selves.
 		g, ctx := errgroup.WithContext(ctx)
 		g.Go(func() (err error) { return s.sendToStream(ctx, rs, stream) })
 		g.Go(func() (err error) { return s.receiveFromStream(ctx, rs, stream) })
-		if err := g.Wait(); err == nil || errors.Cause(err) == context.Canceled {
-			return true
-		}
+		_ = g.Wait()
 	}
-	return false
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *requestedStream) countStates() (sum int) {
