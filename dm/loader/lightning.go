@@ -363,9 +363,10 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
 		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	}
-	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
 		cfg.TikvImporter.IncrementalImport = true
+	} else {
+		cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
 	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
