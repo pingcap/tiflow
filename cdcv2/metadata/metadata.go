@@ -24,7 +24,7 @@ import (
 // Querier is used to query informations from metadata storage.
 type Querier interface {
 	// GetChangefeed queries some or all changefeeds.
-	GetChangefeeds(...model.ChangeFeedID) ([]*ChangefeedInfo, []ChangefeedID, error)
+	GetChangefeeds(...model.ChangeFeedID) ([]*ChangefeedInfo, []ChangefeedIDWithEpoch, error)
 }
 
 // CaptureObservation is for observing and updating metadata on a CAPTURE instance.
@@ -42,19 +42,19 @@ type CaptureObservation interface {
 	) error
 
 	// Advance advances some changefeed progresses that are collected from processors.
-	Advance(cfs []ChangefeedID, progresses []ChangefeedProgress) error
+	Advance(cfs []ChangefeedIDWithEpoch, progresses []ChangefeedProgress) error
 
 	// Fetch owner modifications.
 	OwnerChanges() <-chan ScheduledChangefeed
 
 	// When an owner exits, inform the metadata storage.
-	PostOwnerRemoved(cf ChangefeedID) error
+	PostOwnerRemoved(cf ChangefeedIDWithEpoch) error
 
 	// Fetch processor list modifications.
 	ProcessorChanges() <-chan ScheduledChangefeed
 
 	// When a processor exits, inform the metadata storage.
-	PostProcessorRemoved(cf ChangefeedID) error
+	PostProcessorRemoved(cf ChangefeedIDWithEpoch) error
 }
 
 // ControllerObservation is for observing and updating meta by Controller.
@@ -62,10 +62,10 @@ type CaptureObservation interface {
 // All intrefaces are thread-safe and shares one same Context.
 type ControllerObservation interface {
 	// CreateChangefeed creates a changefeed, Epoch will be filled into the input ChangefeedInfo.
-	CreateChangefeed(cf *ChangefeedInfo, up *model.UpstreamInfo) (ChangefeedID, error)
+	CreateChangefeed(cf *ChangefeedInfo, up *model.UpstreamInfo) (ChangefeedIDWithEpoch, error)
 
 	// RemoveChangefeed removes a changefeed, will auto stop owner and processors.
-	RemoveChangefeed(cf ChangefeedID) error
+	RemoveChangefeed(cf ChangefeedIDWithEpoch) error
 
 	// Fetch the latest capture list in the TiCDC cluster.
 	RefreshCaptures() (captures []*model.CaptureInfo, changed bool)
@@ -74,16 +74,16 @@ type ControllerObservation interface {
 	// Notes:
 	//   * the target capture can fetch the event by `OwnerChanges`.
 	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetOwner(cf ChangefeedID, target ScheduledChangefeed) error
+	SetOwner(cf ChangefeedIDWithEpoch, target ScheduledChangefeed) error
 
 	// Schedule some captures as workers to a given changefeed.
 	// Notes:
 	//   * target captures can fetch the event by `ProcessorChanges`.
 	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetProcessors(cf ChangefeedID, workers []ScheduledChangefeed) error
+	SetProcessors(cf ChangefeedIDWithEpoch, workers []ScheduledChangefeed) error
 
 	// Get current schedule of the given changefeed.
-	GetChangefeedSchedule(cf ChangefeedID) (ChangefeedSchedule, error)
+	GetChangefeedSchedule(cf ChangefeedIDWithEpoch) (ChangefeedSchedule, error)
 
 	// Get a snapshot of all changefeeds current schedule.
 	ScheduleSnapshot() ([]ChangefeedSchedule, []*model.CaptureInfo, error)
@@ -93,7 +93,7 @@ type ControllerObservation interface {
 //
 // All intrefaces are thread-safe and shares one same Context.
 type OwnerObservation interface {
-	Self() (*ChangefeedInfo, ChangefeedID)
+	Self() (*ChangefeedInfo, ChangefeedIDWithEpoch)
 
 	// PauseChangefeed pauses a changefeed.
 	PauseChangefeed() error

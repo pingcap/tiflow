@@ -21,21 +21,24 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
-// ChangefeedID identifies a changefeed.
-type ChangefeedID struct {
-	model.ChangeFeedID
+// ChangefeedIDWithEpoch identifies a changefeed.
+type ChangefeedIDWithEpoch struct {
+	ID model.ChangeFeedID
 
 	// Epoch can't be specified by users. It's used by TiCDC internally
 	// to tell distinct changefeeds with a same ID.
 	Epoch uint64
+}
 
-	// Combine of name and epoch, for comparing 2 ChangefeedInfos.
-	Comparable string
+func (c *ChangefeedIDWithEpoch) Compare(other ChangefeedIDWithEpoch) int {
+	cs := fmt.Sprintf("%s.%d", c.ID.String(), c.Epoch)
+	os := fmt.Sprintf("%s.%d", other.ID.String(), other.Epoch)
+	return strings.Compare(cs, os)
 }
 
 // ChangefeedInfo is a minimal info collection to describe a changefeed.
 type ChangefeedInfo struct {
-	ID model.ChangeFeedID
+	ChangefeedIDWithEpoch
 
 	UpstreamID uint64
 	SinkURI    string
@@ -98,8 +101,8 @@ const (
 
 // ScheduledChangefeed is for owner and processor schedule.
 type ScheduledChangefeed struct {
-	ChangefeedID ChangefeedID
-	CaptureID    string
+	ChangefeedID ChangefeedIDWithEpoch
+	CaptureID    model.CaptureID
 	State        SchedState
 
 	// TaskPosition is used for creating owner and processors on captures.
