@@ -35,8 +35,11 @@ type ChangefeedID struct {
 
 // ChangefeedInfo is a minimal info collection to describe a changefeed.
 type ChangefeedInfo struct {
-	ID       model.ChangeFeedID
-	SinkURI  string
+	ID model.ChangeFeedID
+
+	UpstreamID uint64
+	SinkURI    string
+
 	StartTs  uint64
 	TargetTs uint64
 	Config   *config.ReplicaConfig

@@ -322,15 +322,17 @@ type ControllerOb struct {
 		incomingHash uint64
 	}
 
-	captures       *chann.DrainableChann[[]*model.CaptureInfo]
 	getAllCaptures func() []*model.CaptureInfo
 }
 
-func newControllerObservation(s *Storage, c *model.CaptureInfo, getAllCaptures func() []*model.CaptureInfo) *ControllerOb {
+func newControllerObservation(
+	storage *Storage,
+	selfInfo *model.CaptureInfo,
+	getAllCaptures func() []*model.CaptureInfo,
+) *ControllerOb {
 	return &ControllerOb{
-		storage:        s,
-		selfInfo:       c,
-		captures:       chann.NewAutoDrainChann[[]*model.CaptureInfo](),
+		storage:        storage,
+		selfInfo:       selfInfo,
 		getAllCaptures: getAllCaptures,
 	}
 }
