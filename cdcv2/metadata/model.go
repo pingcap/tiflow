@@ -30,10 +30,14 @@ type ChangefeedIDWithEpoch struct {
 	Epoch uint64
 }
 
+// String implements fmt.Stringer interface
+func (c ChangefeedIDWithEpoch) String() string {
+	return fmt.Sprintf("%s.%d", c.ID.String(), c.Epoch)
+}
+
+// Compare compares two ChangefeedIDWithEpoch base on their string representation.
 func (c *ChangefeedIDWithEpoch) Compare(other ChangefeedIDWithEpoch) int {
-	cs := fmt.Sprintf("%s.%d", c.ID.String(), c.Epoch)
-	os := fmt.Sprintf("%s.%d", other.ID.String(), other.Epoch)
-	return strings.Compare(cs, os)
+	return strings.Compare(c.String(), other.String())
 }
 
 // ChangefeedInfo is a minimal info collection to describe a changefeed.
