@@ -14,6 +14,7 @@
 package config
 
 import (
+	"errors"
 	"time"
 
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -30,6 +31,20 @@ type ChangefeedSchedulerConfig struct {
 	WriteKeyThreshold int `toml:"write-key-threshold" json:"write-key-threshold"`
 	// Deprecated.
 	RegionPerSpan int `toml:"region-per-span" json:"region-per-span"`
+}
+
+// Validate validates the config.
+func (c *ChangefeedSchedulerConfig) Validate() error {
+	if !c.EnableTableAcrossNodes {
+		return nil
+	}
+	if c.RegionThreshold < 0 {
+		return errors.New("region-threshold must be larger than 0")
+	}
+	if c.WriteKeyThreshold < 0 {
+		return errors.New("write-key-threshold must be larger than 0")
+	}
+	return nil
 }
 
 // SchedulerConfig configs TiCDC scheduler.
@@ -91,6 +106,5 @@ func (c *SchedulerConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidServerOption.GenWithStackByArgs(
 			"add-table-batch-size must be large than 0")
 	}
-
 	return nil
 }
