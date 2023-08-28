@@ -27,6 +27,10 @@ import (
 const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
+
+	stateNormal  uint32 = 0
+	stateStopped uint32 = 1
+	stateRemoved uint32 = 2
 )
 
 type singleRegionInfo struct {
@@ -34,8 +38,8 @@ type singleRegionInfo struct {
 	span   tablepb.Span
 	rpcCtx *tikv.RPCContext
 
-	lockedRange *regionlock.LockedRange
-	createTime  time.Time
+	requestedTable *requestedTable
+	lockedRange    *regionlock.LockedRange
 }
 
 func newSingleRegionInfo(
@@ -44,10 +48,9 @@ func newSingleRegionInfo(
 	rpcCtx *tikv.RPCContext,
 ) singleRegionInfo {
 	return singleRegionInfo{
-		verID:      verID,
-		span:       span,
-		rpcCtx:     rpcCtx,
-		createTime: time.Now(),
+		verID:  verID,
+		span:   span,
+		rpcCtx: rpcCtx,
 	}
 }
 
@@ -61,7 +64,19 @@ type regionFeedState struct {
 	matcher       *matcher
 	startFeedTime time.Time
 
-	stopped atomic.Bool
+	// Transform: normal -> stopped -> removed.
+	// normal: the region is in replicating.
+	// stopped: some error happens.
+	// removed: the region is returned into the pending list,
+	//   will be re-resolved and re-scheduled later.
+	state atomic.Uint32
+
+	// All region errors should be handled in region workers.
+	// `err` is used to retrieve errors generated outside.
+	err struct {
+		sync.Mutex
+		e error
+	}
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
@@ -76,12 +91,33 @@ func (s *regionFeedState) start() {
 	s.matcher = newMatcher()
 }
 
-func (s *regionFeedState) markStopped() {
-	s.stopped.Store(true)
+// mark regionFeedState as stopped with the given error if possible.
+func (s *regionFeedState) markStopped(err error) {
+	if s.state.CompareAndSwap(stateNormal, stateStopped) {
+		if err != nil {
+			s.err.Lock()
+			defer s.err.Unlock()
+			s.err.e = err
+		}
+	}
 }
 
-func (s *regionFeedState) isStopped() bool {
-	return s.stopped.Load()
+// mark regionFeedState as removed if possible.
+func (s *regionFeedState) markRemoved() (changed bool) {
+	return s.state.CompareAndSwap(stateStopped, stateRemoved)
+}
+
+func (s *regionFeedState) isStale() bool {
+	state := s.state.Load()
+	return state == stateStopped || state == stateRemoved
+}
+
+func (s *regionFeedState) takeError() (err error) {
+	s.err.Lock()
+	defer s.err.Unlock()
+	err = s.err.e
+	s.err.e = nil
+	return
 }
 
 func (s *regionFeedState) isInitialized() bool {
@@ -102,12 +138,18 @@ func (s *regionFeedState) getLastResolvedTs() uint64 {
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	checkpointTs := &s.sri.lockedRange.CheckpointTs
+	state := s.sri.lockedRange
 	for {
-		last := checkpointTs.Load()
-		if last >= resolvedTs || checkpointTs.CompareAndSwap(last, resolvedTs) {
+		last := state.CheckpointTs.Load()
+		if last > resolvedTs {
 			return
 		}
+		if state.CheckpointTs.CompareAndSwap(last, resolvedTs) {
+			break
+		}
+	}
+	if s.sri.requestedTable != nil {
+		s.sri.requestedTable.postUpdateRegionResolvedTs(s.sri.verID.GetID(), state)
 	}
 }
 

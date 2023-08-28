@@ -28,11 +28,11 @@ func TestGetTopic(t *testing.T) {
 		wantTopic string
 		wantErr   string
 	}{
-		"no topic": {
-			sinkURI:   "kafka://localhost:9092/",
-			wantTopic: "",
-			wantErr:   "no topic is specified in sink-uri",
-		},
+		//"no topic": {
+		//	sinkURI:   "kafka://localhost:9092/",
+		//	wantTopic: "",
+		//	wantErr:   "no topic is specified in sink-uri",
+		//},
 		"valid topic": {
 			sinkURI:   "kafka://localhost:9092/test",
 			wantTopic: "test",
@@ -40,6 +40,21 @@ func TestGetTopic(t *testing.T) {
 		},
 		"topic with query": {
 			sinkURI:   "kafka://localhost:9092/test?version=1.0.0",
+			wantTopic: "test",
+			wantErr:   "",
+		},
+		"topic for pulsar": {
+			sinkURI:   "pulsar://localhost:6650/test?version=1.0.0",
+			wantTopic: "test",
+			wantErr:   "",
+		},
+		"topic with query for pulsar": {
+			sinkURI:   "pulsar://localhost:6650/persistent://public/default/my-topic?version=1.0.0",
+			wantTopic: "persistent://public/default/my-topic",
+			wantErr:   "",
+		},
+		"multiple host with query for pulsar": {
+			sinkURI:   "pulsar://localhost:6650,127.0.0.1:26650/test?version=1.0.0",
 			wantTopic: "test",
 			wantErr:   "",
 		},

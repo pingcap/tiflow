@@ -109,6 +109,14 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			RegistryName: "registry",
 		},
 	}
+	conf.Sink.PulsarConfig = &PulsarConfig{
+		PulsarVersion:           aws.String("v2.10.0"),
+		AuthenticationToken:     aws.String("token"),
+		TLSTrustCertsFilePath:   aws.String("TLSTrustCertsFilePath_path"),
+		ConnectionTimeout:       NewTimeSec(18),
+		OperationTimeout:        NewTimeSec(8),
+		BatchingMaxPublishDelay: NewTimeMill(5000),
+	}
 	conf.Sink.MySQLConfig = &MySQLConfig{
 		WorkerCount:                  aws.Int(8),
 		MaxTxnRow:                    aws.Int(100000),
@@ -227,6 +235,13 @@ func TestReplicaConfigValidate(t *testing.T) {
 	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
+
+	conf.Scheduler = &ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: true,
+		RegionThreshold:        -1,
+	}
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.Error(t, err)
 }
 
 func TestValidateAndAdjust(t *testing.T) {
