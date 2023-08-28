@@ -41,6 +41,7 @@ import (
 type options struct {
 	serverConfig         *config.ServerConfig
 	serverPdAddr         string
+	serverMetaAddr       string
 	serverConfigFilePath string
 
 	// TODO(hi-rustin): Consider using a client construction factory here.
@@ -48,6 +49,12 @@ type options struct {
 	certPath      string
 	keyPath       string
 	allowedCertCN string
+
+	// tls options required to connect to the meta stroage.
+	metaCaPath        string
+	metaCertPath      string
+	metaKeyPath       string
+	metaAllowedCertCN string
 }
 
 // newOptions creates new options for the `server` command.
@@ -85,11 +92,39 @@ func (o *options) addFlags(cmd *cobra.Command) {
 
 	cmd.Flags().StringVar(&o.serverPdAddr, "pd", "http://127.0.0.1:2379", "Set the PD endpoints to use. Use ',' to separate multiple PDs")
 	cmd.Flags().StringVar(&o.serverConfigFilePath, "config", "", "Path of the configuration file")
-
 	cmd.Flags().StringVar(&o.caPath, "ca", "", "CA certificate path for TLS connection")
 	cmd.Flags().StringVar(&o.certPath, "cert", "", "Certificate path for TLS connection")
 	cmd.Flags().StringVar(&o.keyPath, "key", "", "Private key path for TLS connection")
 	cmd.Flags().StringVar(&o.allowedCertCN, "cert-allowed-cn", "", "Verify caller's identity (cert Common Name). Use ',' to separate multiple CN")
+
+	cmd.Flags().StringVar(
+		&o.serverMetaAddr,
+		"meta", "",
+		"List of meta storage servers to connect with (scheme://ip:port), "+
+			"comma seperated",
+	)
+	cmd.Flags().StringVar(
+		&o.metaCaPath, "meta-ca", "",
+		"Path to the CA file for setting up "+
+			"TLS connection between TiCDC and meta storage",
+	)
+	cmd.Flags().StringVar(
+		&o.metaCertPath,
+		"meta-cert", "",
+		"Path to the client certificate file for setting up "+
+			"TLS connection between TiCDC and meta storage",
+	)
+	cmd.Flags().StringVar(
+		&o.metaKeyPath,
+		"meta-key", "",
+		"Path to the client key file for setting up "+
+			"TLS connection between TiCDC and meta storage",
+	)
+	cmd.Flags().StringVar(
+		&o.metaAllowedCertCN,
+		"meta-cert-allowed-cn", "",
+		"List of client certificate allowed common names, comma seperated",
+	)
 }
 
 // run runs the server cmd.
@@ -125,7 +160,10 @@ func (o *options) run(cmd *cobra.Command) error {
 
 	util.LogHTTPProxies()
 	server.RecordGoRuntimeSettings()
-	server, err := server.New(strings.Split(o.serverPdAddr, ","))
+	server, err := server.New(
+		strings.Split(o.serverPdAddr, ","),
+		strings.Split(o.serverMetaAddr, ","),
+	)
 	if err != nil {
 		log.Error("create cdc server failed", zap.Error(err))
 		return errors.Trace(err)
@@ -147,9 +185,18 @@ func (o *options) run(cmd *cobra.Command) error {
 
 // complete adapts from the command line args and config file to the data required.
 func (o *options) complete(cmd *cobra.Command) error {
-	o.serverConfig.Security = o.getCredential()
-
 	cfg := config.GetDefaultServerConfig()
+
+	o.serverConfig.Security = o.getCredential()
+	if o.serverMetaAddr == "" {
+		// backward compatible
+		o.serverMetaAddr = o.serverPdAddr
+		cfg.MetaSecurity = o.getCredential()
+	} else {
+		// only read TLS related command line options for meta storage if
+		// the meta storage address is set
+		cfg.MetaSecurity = o.getMetaCredential()
+	}
 
 	if len(o.serverConfigFilePath) > 0 {
 		// strict decode config file, but ignore debug item
@@ -231,6 +278,7 @@ func (o *options) validate() error {
 	if len(o.serverPdAddr) == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
+
 	for _, ep := range strings.Split(o.serverPdAddr, ",") {
 		// NOTICE: The configuration used here is the one that has been completed,
 		// as it may be configured by the configuration file.
@@ -252,6 +300,21 @@ func (o *options) getCredential() *security.Credential {
 		CAPath:        o.caPath,
 		CertPath:      o.certPath,
 		KeyPath:       o.keyPath,
+		CertAllowedCN: certAllowedCN,
+	}
+}
+
+// getMetaCredential returns security credential of the meta storage.
+func (o *options) getMetaCredential() *security.Credential {
+	var certAllowedCN []string
+	if len(o.allowedCertCN) != 0 {
+		certAllowedCN = strings.Split(o.metaAllowedCertCN, ",")
+	}
+
+	return &security.Credential{
+		CAPath:        o.metaCaPath,
+		CertPath:      o.metaCertPath,
+		KeyPath:       o.metaKeyPath,
 		CertAllowedCN: certAllowedCN,
 	}
 }

@@ -110,7 +110,8 @@ var defaultServerConfig = &ServerConfig{
 		CacheSizeInMB:       128, // By default use 128M memory as sorter cache.
 		MaxMemoryPercentage: 10,  // Deprecated.
 	},
-	Security: &SecurityConfig{},
+	Security:     &SecurityConfig{},
+	MetaSecurity: &SecurityConfig{},
 	KVClient: &KVClientConfig{
 		EnableMultiplexing:   true,
 		WorkerConcurrent:     8,
@@ -166,8 +167,9 @@ type ServerConfig struct {
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
-	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
-	Security *SecurityConfig `toml:"security" json:"security"`
+	Sorter       *SorterConfig   `toml:"sorter" json:"sorter"`
+	Security     *SecurityConfig `toml:"security" json:"security"` // security config for the default upstream cluster.
+	MetaSecurity *SecurityConfig `toml:"security" json:"security"`
 	// DEPRECATED: after using pull based sink, this config is useless.
 	// Because we do not control the memory usage by table anymore.
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
