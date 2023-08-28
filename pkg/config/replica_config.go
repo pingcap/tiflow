@@ -39,14 +39,15 @@ const (
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
-	MemoryQuota:        DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
-	EnableOldValue:     true,
-	CheckGCSafePoint:   true,
-	EnableSyncPoint:    util.AddressOf(false),
-	SyncPointInterval:  util.AddressOf(10 * time.Minute),
-	SyncPointRetention: util.AddressOf(24 * time.Hour),
-	BDRMode:            util.AddressOf(false),
+	MemoryQuota:          DefaultChangefeedMemoryQuota,
+	CaseSensitive:        true,
+	EnableOldValue:       true,
+	CheckGCSafePoint:     true,
+	EnableSyncPoint:      util.AddressOf(false),
+	SyncPointInterval:    util.AddressOf(10 * time.Minute),
+	SyncPointRetention:   util.AddressOf(24 * time.Hour),
+	StatusUpdateInterval: util.AddressOf(2 * time.Second),
+	BDRMode:              util.AddressOf(false),
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -124,6 +125,8 @@ type replicaConfig struct {
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.
 	BDRMode *bool `toml:"bdr-mode" json:"bdr-mode,omitempty"`
+	// StatusUpdateInterval(TODO)..
+	StatusUpdateInterval *time.Duration `toml:"status-update-interval" json:"status-update-interval,omitempty"`
 	// SyncPointInterval is only available when the downstream is DB.
 	SyncPointInterval *time.Duration `toml:"sync-point-interval" json:"sync-point-interval,omitempty"`
 	// SyncPointRetention is only available when the downstream is DB.

@@ -187,6 +187,8 @@ type ReplicaConfig struct {
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
 	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`
 
+	StatusUpdateInterval *JSONDuration `json:"status_update_interval,omitempty" swaggertype:"string"`
+
 	Filter     *FilterConfig              `json:"filter"`
 	Mounter    *MounterConfig             `json:"mounter"`
 	Sink       *SinkConfig                `json:"sink"`
@@ -216,6 +218,10 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	}
 	if c.SyncPointRetention != nil {
 		res.SyncPointRetention = &c.SyncPointRetention.duration
+	}
+
+	if c.StatusUpdateInterval != nil {
+		res.StatusUpdateInterval = &c.StatusUpdateInterval.duration
 	}
 	res.BDRMode = c.BDRMode
 
@@ -501,6 +507,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 
 	if cloned.SyncPointRetention != nil {
 		res.SyncPointRetention = &JSONDuration{*cloned.SyncPointRetention}
+	}
+
+	if cloned.StatusUpdateInterval != nil {
+		res.StatusUpdateInterval = &JSONDuration{*cloned.StatusUpdateInterval}
 	}
 
 	if cloned.Filter != nil {

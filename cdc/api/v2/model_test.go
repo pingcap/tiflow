@@ -30,14 +30,15 @@ import (
 
 // note: this is api published default value, not change it
 var defaultAPIConfig = &ReplicaConfig{
-	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
-	EnableOldValue:     true,
-	CheckGCSafePoint:   true,
-	BDRMode:            util.AddressOf(false),
-	EnableSyncPoint:    util.AddressOf(false),
-	SyncPointInterval:  &JSONDuration{10 * time.Minute},
-	SyncPointRetention: &JSONDuration{24 * time.Hour},
+	MemoryQuota:          config.DefaultChangefeedMemoryQuota,
+	CaseSensitive:        true,
+	EnableOldValue:       true,
+	CheckGCSafePoint:     true,
+	BDRMode:              util.AddressOf(false),
+	EnableSyncPoint:      util.AddressOf(false),
+	SyncPointInterval:    &JSONDuration{10 * time.Minute},
+	SyncPointRetention:   &JSONDuration{24 * time.Hour},
+	StatusUpdateInterval: &JSONDuration{1 * time.Second},
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},

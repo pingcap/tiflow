@@ -117,6 +117,9 @@ type changefeed struct {
 	downstreamObserver observer.Observer
 	observerLastTick   *atomic.Time
 
+	// statusLastUpdateTime(TODO)...
+	statusLastUpdateTime *atomic.Time
+
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
 		up *upstream.Upstream,
@@ -939,6 +942,13 @@ func (c *changefeed) updateMetrics(currentTs int64, checkpointTs, resolvedTs mod
 }
 
 func (c *changefeed) updateStatus(checkpointTs, minTableBarrierTs model.Ts) {
+	updateInterval := c.state.Info.Config.StatusUpdateInterval
+	if updateInterval != nil &&
+		c.statusLastUpdateTime != nil &&
+		time.Since(c.statusLastUpdateTime.Load()) < *updateInterval {
+		return
+	}
+
 	c.state.PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			changed := false
@@ -954,7 +964,12 @@ func (c *changefeed) updateStatus(checkpointTs, minTableBarrierTs model.Ts) {
 				changed = true
 			}
 			return status, changed, nil
-		})
+		},
+	)
+	if c.statusLastUpdateTime == nil {
+		c.statusLastUpdateTime = atomic.NewTime(time.Time{})
+	}
+	c.statusLastUpdateTime.Store(time.Now())
 }
 
 func (c *changefeed) Close(ctx cdcContext.Context) {

@@ -25,6 +25,7 @@ const (
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
+  "status-update-interval": 2000000000,
   "filter": {
     "rules": [
       "1.1"
@@ -178,6 +179,7 @@ const (
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
+  "status-update-interval": 2000000000,
   "filter": {
     "rules": [
       "1.1"
@@ -330,6 +332,7 @@ const (
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
+  "status-update-interval": 2000000000,
   "filter": {
     "rules": [
       "1.1"
