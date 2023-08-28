@@ -121,6 +121,28 @@ var (
 		},
 		// actions: lock, locate, connect.
 		[]string{"namespace", "changefeed", "action"})
+
+	lockResolveDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "lock_resolve_duration",
+			Help:      "time of lock resolve in ms",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
+		},
+		// actions: wait, run.
+		[]string{"namespace", "changefeed", "action"})
+
+	regionWorkerQueueDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_worker_queue_duration",
+			Help:      "time of queue in region worker",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
+		},
+		// actions: wait, run.
+		[]string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -138,6 +160,8 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(grpcPoolStreamGauge)
 	registry.MustRegister(regionEventsBatchSize)
 	registry.MustRegister(regionConnectDuration)
+	registry.MustRegister(lockResolveDuration)
+	registry.MustRegister(regionWorkerQueueDuration)
 
 	// Register client metrics to registry.
 	registry.MustRegister(grpcMetrics)

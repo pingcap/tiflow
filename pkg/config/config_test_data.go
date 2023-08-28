@@ -120,9 +120,10 @@ const (
   },
   "per-table-memory-quota": 0,
   "kv-client": {
-    "enable-multiplexing": false,
+    "enable-multiplexing": true,
     "worker-concurrent": 8,
     "grpc-stream-concurrent": 1,
+    "frontier-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
     "region-retry-duration": 60000000000
