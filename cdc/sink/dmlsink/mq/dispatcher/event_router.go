@@ -48,23 +48,29 @@ const (
 	partitionDispatchRuleIndexValue
 )
 
-func (r *partitionDispatchRule) fromString(rule string) {
+func (r *partitionDispatchRule) fromString(rule string) (notInDispatchRule bool) {
 	switch strings.ToLower(rule) {
 	case "default":
 		*r = partitionDispatchRuleDefault
+		return false
 	case "ts":
 		*r = partitionDispatchRuleTS
+		return false
 	case "table":
 		*r = partitionDispatchRuleTable
+		return false
 	case "rowid":
 		*r = partitionDispatchRuleIndexValue
 		log.Warn("rowid is deprecated, please use index-value instead.")
+		return false
 	case "index-value":
 		*r = partitionDispatchRuleIndexValue
+		return false
 	default:
 		*r = partitionDispatchRuleDefault
 		log.Warn("the partition dispatch rule is not default/ts/table/index-value," +
 			" use the default rule instead.")
+		return true
 	}
 }
 
@@ -104,7 +110,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
+		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue, schema)
 		t, err := getTopicDispatcher(ruleConfig, defaultTopic,
 			util.GetOrZero(cfg.Sink.Protocol), schema)
 		if err != nil {
@@ -154,7 +160,7 @@ func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
 func (s *EventRouter) GetPartitionForRowChange(
 	row *model.RowChangedEvent,
 	partitionNum int32,
-) int32 {
+) (int32, *string) {
 	_, partitionDispatcher := s.matchDispatcher(
 		row.Table.Schema, row.Table.Table,
 	)
@@ -226,13 +232,17 @@ func (s *EventRouter) matchDispatcher(
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
 func getPartitionDispatcher(
-	ruleConfig *config.DispatchRule, enableOldValue bool,
+	ruleConfig *config.DispatchRule, enableOldValue bool, schema string,
 ) partition.Dispatcher {
 	var (
 		d    partition.Dispatcher
 		rule partitionDispatchRule
 	)
-	rule.fromString(ruleConfig.PartitionRule)
+	notInDispatchRule := rule.fromString(ruleConfig.PartitionRule)
+	if schema == sink.PulsarScheme && notInDispatchRule { // in pulsar,if not in rule values, transport the value
+		return partition.NewPulsarTransportDispatcher(ruleConfig.PartitionRule)
+	}
+
 	switch rule {
 	case partitionDispatchRuleIndexValue:
 		if enableOldValue {

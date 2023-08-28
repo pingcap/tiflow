@@ -14,8 +14,6 @@
 package pulsar
 
 import (
-	"fmt"
-
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/apache/pulsar-client-go/pulsar/auth"
 	"github.com/pingcap/log"
@@ -26,11 +24,14 @@ import (
 )
 
 // FactoryCreator defines the type of factory creator.
-type FactoryCreator func(config *config.PulsarConfig, changefeedID model.ChangeFeedID, sinkConfig *config.SinkConfig) (pulsar.Client, error)
+type FactoryCreator func(config *config.PulsarConfig, changefeedID model.ChangeFeedID,
+	sinkConfig *config.SinkConfig) (pulsar.Client, error)
 
 // NewCreatorFactory returns a factory implemented based on kafka-go
-func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFeedID, sinkConfig *config.SinkConfig) (pulsar.Client, error) {
-	co := pulsar.ClientOptions{
+func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFeedID,
+	sinkConfig *config.SinkConfig,
+) (pulsar.Client, error) {
+	opt := pulsar.ClientOptions{
 		URL: config.GetBrokerURL(),
 		CustomMetricsLabels: map[string]string{
 			"changefeed": changefeedID.ID,
@@ -40,10 +41,11 @@ func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFee
 		OperationTimeout:  config.OperationTimeout.Duration(),
 		// add pulsar default metrics
 		MetricsRegisterer: mq.GetMetricRegistry(),
+		Logger:            NewPulsarLogger(),
 	}
 	var err error
 
-	co.Authentication, err = setupAuthentication(config)
+	opt.Authentication, err = setupAuthentication(config)
 	if err != nil {
 		log.Error("setup pulsar authentication fail", zap.Error(err))
 		return nil, err
@@ -54,13 +56,13 @@ func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFee
 		sinkPulsar := sinkConfig.PulsarConfig
 		if sinkPulsar.TLSCertificateFile != nil && sinkPulsar.TLSKeyFilePath != nil &&
 			sinkPulsar.TLSTrustCertsFilePath != nil {
-			co.TLSCertificateFile = *sinkPulsar.TLSCertificateFile
-			co.TLSKeyFilePath = *sinkPulsar.TLSKeyFilePath
-			co.TLSTrustCertsFilePath = *sinkPulsar.TLSTrustCertsFilePath
+			opt.TLSCertificateFile = *sinkPulsar.TLSCertificateFile
+			opt.TLSKeyFilePath = *sinkPulsar.TLSKeyFilePath
+			opt.TLSTrustCertsFilePath = *sinkPulsar.TLSTrustCertsFilePath
 		}
 	}
 
-	pulsarClient, err := pulsar.NewClient(co)
+	pulsarClient, err := pulsar.NewClient(opt)
 	if err != nil {
 		log.Error("cannot connect to pulsar", zap.Error(err))
 		return nil, err
@@ -93,7 +95,10 @@ func setupAuthentication(config *config.PulsarConfig) (pulsar.Authentication, er
 	if config.AuthTLSCertificatePath != nil && config.AuthTLSPrivateKeyPath != nil {
 		return pulsar.NewAuthenticationTLS(*config.AuthTLSCertificatePath, *config.AuthTLSPrivateKeyPath), nil
 	}
-	return nil, fmt.Errorf("no authentication method found")
+
+	log.Warn("pulsar client no authentication method found")
+
+	return nil, nil
 }
 
 // NewMockCreatorFactory returns a factory implemented based on kafka-go

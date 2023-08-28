@@ -14,6 +14,7 @@
 package partition
 
 import (
+	"strconv"
 	"sync"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -36,11 +37,17 @@ func NewTableDispatcher() *TableDispatcher {
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
+func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, *string) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	t.hasher.Reset()
 	// distribute partition by table
 	t.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	return int32(t.hasher.Sum32() % uint32(partitionNum))
+	sum32 := t.hasher.Sum32()
+	return int32(sum32 % uint32(partitionNum)), num2str(sum32)
+}
+
+func num2str(num uint32) *string {
+	s := strconv.FormatInt(int64(num), 10)
+	return &s
 }
