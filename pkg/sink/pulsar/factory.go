@@ -14,8 +14,6 @@
 package pulsar
 
 import (
-	"fmt"
-
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/apache/pulsar-client-go/pulsar/auth"
 	"github.com/pingcap/log"
@@ -93,7 +91,7 @@ func setupAuthentication(config *config.PulsarConfig) (pulsar.Authentication, er
 	if config.AuthTLSCertificatePath != nil && config.AuthTLSPrivateKeyPath != nil {
 		return pulsar.NewAuthenticationTLS(*config.AuthTLSCertificatePath, *config.AuthTLSPrivateKeyPath), nil
 	}
-	return nil, fmt.Errorf("no authentication method found")
+	return nil, nil
 }
 
 // NewMockCreatorFactory returns a factory implemented based on kafka-go

@@ -381,7 +381,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	if cfg.CertAllowedCN != nil {
 		newUpInfo.CertAllowedCN = cfg.CertAllowedCN
 	}
-
+	log.Info("update changefeed info", zap.Any("oldInfo", oldInfo), zap.Any("newInfo", newInfo))
 	changefeedInfoChanged := diff.Changed(oldInfo, newInfo)
 	upstreamInfoChanged := diff.Changed(oldUpInfo, newUpInfo)
 	if !changefeedInfoChanged && !upstreamInfoChanged {

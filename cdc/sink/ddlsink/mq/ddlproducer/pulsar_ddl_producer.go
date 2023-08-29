@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	lru "github.com/hashicorp/golang-lru"
@@ -44,6 +45,7 @@ type pulsarProducers struct {
 }
 
 // SyncBroadcastMessage pulsar consume all partitions
+// totalPartitionsNum is not used
 func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string,
 	totalPartitionsNum int32, message *common.Message,
 ) error {
@@ -53,10 +55,14 @@ func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string
 }
 
 // SyncSendMessage sends a message
-// partitionNum is not used,pulsar consume all partitions
+// partitionNum is not used, pulsar consume all partitions
 func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 	partitionNum int32, message *common.Message,
 ) error {
+	startTime := time.Now()
+	defer func() {
+		log.Info("pulsarProducers SyncSendMessage cost time", zap.Duration("cost", time.Since(startTime)))
+	}()
 	wrapperSchemaAndTopic(message)
 	mq.IncPublishedDDLCount(topic, p.id.ID, message)
 
@@ -65,6 +71,7 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 		log.Error("ddl SyncSendMessage GetProducerByTopic fail", zap.Error(err))
 		return err
 	}
+	log.Info("pulsarProducers SyncSendMessage", zap.Any("message", message), zap.String("topic", topic))
 
 	data := &pulsar.ProducerMessage{
 		Payload: message.Value,
