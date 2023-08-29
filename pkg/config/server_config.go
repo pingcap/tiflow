@@ -162,7 +162,7 @@ type ServerConfig struct {
 
 	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
 	Security *SecurityConfig `toml:"security" json:"security"`
-	// Deprecated: we don't use this field anymore after.
+	// Deprecated: we don't use this field anymore.
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
