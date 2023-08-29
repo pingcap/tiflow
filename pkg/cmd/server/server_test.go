@@ -151,9 +151,8 @@ func TestParseCfg(t *testing.T) {
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			SortDir:             config.DefaultSortDir,
-			CacheSizeInMB:       128,
-			MaxMemoryPercentage: 10,
+			SortDir:       config.DefaultSortDir,
+			CacheSizeInMB: 128,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -171,18 +170,13 @@ func TestParseCfg(t *testing.T) {
 		},
 		Debug: &config.DebugConfig{
 			DB: &config.DBConfig{
-				Count:                       8,
-				Concurrency:                 128,
-				MaxOpenFiles:                10000,
-				BlockSize:                   65536,
-				WriterBufferSize:            8388608,
-				Compression:                 "snappy",
-				WriteL0PauseTrigger:         math.MaxInt32,
-				CompactionL0Trigger:         160,
-				CompactionDeletionThreshold: 10485760,
-				CompactionPeriod:            1800,
-				IteratorMaxAliveDuration:    10000,
-				IteratorSlowReadDuration:    256,
+				Count:               8,
+				MaxOpenFiles:        10000,
+				BlockSize:           65536,
+				WriterBufferSize:    8388608,
+				Compression:         "snappy",
+				WriteL0PauseTrigger: math.MaxInt32,
+				CompactionL0Trigger: 160,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -306,9 +300,8 @@ check-balance-interval = "10s"
 		OwnerFlushInterval:     config.TomlDuration(600 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(600 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			SortDir:             config.DefaultSortDir,
-			CacheSizeInMB:       8,
-			MaxMemoryPercentage: 3,
+			SortDir:       config.DefaultSortDir,
+			CacheSizeInMB: 8,
 		},
 		Security: &config.SecurityConfig{},
 		KVClient: &config.KVClientConfig{
@@ -322,18 +315,13 @@ check-balance-interval = "10s"
 		},
 		Debug: &config.DebugConfig{
 			DB: &config.DBConfig{
-				Count:                       5,
-				Concurrency:                 6,
-				MaxOpenFiles:                7,
-				BlockSize:                   32768,
-				WriterBufferSize:            9,
-				Compression:                 "none",
-				CompactionL0Trigger:         11,
-				WriteL0PauseTrigger:         13,
-				IteratorMaxAliveDuration:    10000,
-				IteratorSlowReadDuration:    256,
-				CompactionDeletionThreshold: 15,
-				CompactionPeriod:            16,
+				Count:               5,
+				MaxOpenFiles:        7,
+				BlockSize:           32768,
+				WriterBufferSize:    9,
+				Compression:         "none",
+				CompactionL0Trigger: 11,
+				WriteL0PauseTrigger: 13,
 			},
 			Messages: &config.MessagesConfig{
 				ClientMaxBatchInterval:       config.TomlDuration(500 * time.Millisecond),
@@ -439,9 +427,8 @@ cert-allowed-cn = ["dd","ee"]
 		OwnerFlushInterval:     config.TomlDuration(150 * time.Millisecond),
 		ProcessorFlushInterval: config.TomlDuration(150 * time.Millisecond),
 		Sorter: &config.SorterConfig{
-			SortDir:             config.DefaultSortDir,
-			CacheSizeInMB:       8,
-			MaxMemoryPercentage: 3,
+			SortDir:       config.DefaultSortDir,
+			CacheSizeInMB: 8,
 		},
 		Security: &config.SecurityConfig{
 			CertPath:      "bb",
@@ -459,18 +446,13 @@ cert-allowed-cn = ["dd","ee"]
 		},
 		Debug: &config.DebugConfig{
 			DB: &config.DBConfig{
-				Count:                       8,
-				Concurrency:                 128,
-				MaxOpenFiles:                10000,
-				BlockSize:                   65536,
-				WriterBufferSize:            8388608,
-				Compression:                 "snappy",
-				WriteL0PauseTrigger:         math.MaxInt32,
-				CompactionL0Trigger:         160,
-				CompactionDeletionThreshold: 10485760,
-				CompactionPeriod:            1800,
-				IteratorMaxAliveDuration:    10000,
-				IteratorSlowReadDuration:    256,
+				Count:               8,
+				MaxOpenFiles:        10000,
+				BlockSize:           65536,
+				WriterBufferSize:    8388608,
+				Compression:         "snappy",
+				WriteL0PauseTrigger: math.MaxInt32,
+				CompactionL0Trigger: 160,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -522,18 +504,13 @@ unknown3 = 3
 	require.Nil(t, err)
 	require.Equal(t, &config.DebugConfig{
 		DB: &config.DBConfig{
-			Count:                       8,
-			Concurrency:                 128,
-			MaxOpenFiles:                10000,
-			BlockSize:                   65536,
-			WriterBufferSize:            8388608,
-			Compression:                 "snappy",
-			WriteL0PauseTrigger:         math.MaxInt32,
-			CompactionL0Trigger:         160,
-			CompactionDeletionThreshold: 10485760,
-			CompactionPeriod:            1800,
-			IteratorMaxAliveDuration:    10000,
-			IteratorSlowReadDuration:    256,
+			Count:               8,
+			MaxOpenFiles:        10000,
+			BlockSize:           65536,
+			WriterBufferSize:    8388608,
+			Compression:         "snappy",
+			WriteL0PauseTrigger: math.MaxInt32,
+			CompactionL0Trigger: 160,
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{
