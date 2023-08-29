@@ -89,6 +89,8 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 		PartitionRule: "default",
 		TopicRule:     "",
 	})
+	log.Info("dispatch rules", zap.Any("rules", ruleConfigs))
+
 	rules := make([]struct {
 		partitionDispatcher partition.Dispatcher
 		topicDispatcher     topic.Dispatcher
@@ -116,7 +118,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 			filter.Filter
 		}{partitionDispatcher: d, topicDispatcher: t, Filter: f})
 	}
-
+	log.Info("fizz: dispatch rules", zap.Any("rules", rules))
 	return &EventRouter{
 		defaultTopic: defaultTopic,
 		rules:        rules,

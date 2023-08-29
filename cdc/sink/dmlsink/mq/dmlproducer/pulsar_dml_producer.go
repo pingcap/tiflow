@@ -72,7 +72,7 @@ func NewPulsarDMLProducer(
 	errCh chan error,
 	failpointCh chan error,
 ) (DMLProducer, error) {
-	log.Info("Starting pulsar DML producer ...",
+	log.Info("Creating pulsar DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 	start := time.Now()
@@ -120,7 +120,7 @@ func NewPulsarDMLProducer(
 		failpointCh: failpointCh,
 		errChan:     errCh,
 	}
-	log.Info("Pulsar DML producer started", zap.Stringer("changefeed", p.id),
+	log.Info("Pulsar DML producer created", zap.Stringer("changefeed", p.id),
 		zap.Duration("duration", time.Since(start)))
 	return p, nil
 }
@@ -131,8 +131,7 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 	partition int32, message *common.Message,
 ) error {
 	wrapperSchemaAndTopic(message)
-	//fizz: change this log to debug level
-	log.Info("Async send message to pulsar",
+	log.Debug("Async send message to pulsar",
 		zap.Stringer("changefeed", p.id),
 		zap.String("topic", topic),
 		zap.Int32("partition", partition),
@@ -184,7 +183,6 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 				p.errChan <- e
 			} else if message.Callback != nil {
 				// success
-				log.Info("fizz, send message success!")
 				message.Callback()
 				mq.IncPublishedDMLSuccess(topic, p.id.ID, message.GetSchema())
 			}

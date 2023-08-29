@@ -373,6 +373,7 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 }
 
 func (info *ChangeFeedInfo) rmMQOnlyFields() {
+	log.Info("since the downstream is not a MQ, remove MQ only fields")
 	info.Config.Sink.DispatchRules = nil
 	info.Config.Sink.SchemaRegistry = nil
 	info.Config.Sink.EncoderConcurrency = nil

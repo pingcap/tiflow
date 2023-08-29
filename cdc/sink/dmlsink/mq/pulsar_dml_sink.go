@@ -91,7 +91,7 @@ func NewPulsarDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
+	log.Info("fizz: to create eventRouter", zap.Any("config", replicaConfig), zap.Any("dispatcher rules", replicaConfig.Sink.DispatchRules))
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, sinkURI.Scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
