@@ -191,7 +191,7 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		zap.String("protocol", w.protocol.String()),
 	)
 	// Fixed size of the batch.
-	eventsBuf := make([]mqEvent, flushBatchSize)
+	eventsBuf := make([]mqEvents, flushBatchSize)
 	for {
 		start := time.Now()
 		endIndex, err := w.batch(ctx, eventsBuf, flushInterval)
@@ -216,7 +216,7 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 
 // batch collects a batch of messages to be sent to the DML producer.
 func (w *worker) batch(
-	ctx context.Context, events []mqEvent, flushInterval time.Duration,
+	ctx context.Context, events []mqEvents, flushInterval time.Duration,
 ) (int, error) {
 	index := 0
 	max := len(events)
