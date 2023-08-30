@@ -48,7 +48,7 @@ func runFilter(cmd *cobra.Command, args []string) {
 	}
 	tableAndSchema := strings.Split(table, ".")
 	if len(tableAndSchema) != 2 {
-		fmt.Printf("invalid table name: %s\n", table)
+		fmt.Printf("the input format is invalid, only support {schema}.{table}: %s\n", table)
 		return
 	}
 
