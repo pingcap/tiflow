@@ -195,7 +195,8 @@ func TestDefaultDispatcher(t *testing.T) {
 	}
 	p := NewDefaultDispatcher(false)
 	for _, tc := range testCases {
-		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row, 16))
+		partitionNum, _ := p.DispatchRowChangedEvent(tc.row, 16)
+		require.Equal(t, tc.expectPartition, partitionNum)
 	}
 }
 
@@ -222,5 +223,7 @@ func TestDefaultDispatcherWithOldValue(t *testing.T) {
 	}
 
 	p := NewDefaultDispatcher(true)
-	require.Equal(t, int32(3), p.DispatchRowChangedEvent(row, 16))
+
+	partitionNum, _ := p.DispatchRowChangedEvent(row, 16)
+	require.Equal(t, int32(3), partitionNum)
 }
