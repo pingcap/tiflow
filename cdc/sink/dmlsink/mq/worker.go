@@ -330,6 +330,12 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				if err := w.claimCheck.WriteMessage(ctx, claimCheckMessages...); err != nil {
 					return errors.Trace(err)
 				}
+
+				if len(claimCheckMessages) > 0 {
+					log.Info("claim-check batch write messages",
+						zap.Int("totalCount", len(messages)),
+						zap.Int("claimCheckCount", len(claimCheckMessages)))
+				}
 			}
 
 			for _, message := range messages {

@@ -96,8 +96,6 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, messages ...*common.Messa
 	c.metricSendMessageDuration.Observe(time.Since(start).Seconds())
 	c.metricSendMessageCount.Add(float64(len(messages)))
 
-	log.Info("claim-check batch write messages", zap.Int("count", len(messages)))
-
 	return nil
 }
 
