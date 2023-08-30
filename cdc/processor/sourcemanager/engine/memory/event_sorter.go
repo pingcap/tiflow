@@ -141,6 +141,11 @@ func (s *EventSorter) Close() error {
 	return nil
 }
 
+// SlotsAndHasher implements engine.SortEngine.
+func (s *EventSorter) SlotsAndHasher() (slotCount int, hasher func(tablepb.Span, int) int) {
+	return 1, func(_ tablepb.Span, _ int) int { return 0 }
+}
+
 // Next implements sorter.EventIterator.
 func (s *EventIter) Next() (event *model.PolymorphicEvent, txnFinished engine.Position, err error) {
 	if len(s.resolved) == 0 {
