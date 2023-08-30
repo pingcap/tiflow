@@ -125,6 +125,10 @@ func newDMLSink(
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
 func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
+	if len(txns) == 0 {
+		return nil
+	}
+
 	s.alive.RLock()
 	defer s.alive.RUnlock()
 	if s.alive.isDead {
