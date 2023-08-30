@@ -97,10 +97,10 @@ func (l AtomicityLevel) validate(scheme string) error {
 		// Do nothing here to avoid modifying the persistence parameters.
 	case tableTxnAtomicity:
 		// MqSink only support `noneTxnAtomicity`.
-		if sink.IsMQScheme(scheme) {
-			errMsg := fmt.Sprintf("%s level atomicity is not supported by %s scheme", l, scheme)
-			return cerror.ErrSinkURIInvalid.GenWithStackByArgs(errMsg)
-		}
+		//if sink.IsMQScheme(scheme) {
+		//	errMsg := fmt.Sprintf("%s level atomicity is not supported by %s scheme", l, scheme)
+		//	return cerror.ErrSinkURIInvalid.GenWithStackByArgs(errMsg)
+		//}
 	default:
 		errMsg := fmt.Sprintf("%s level atomicity is not supported by %s scheme", l, scheme)
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(errMsg)

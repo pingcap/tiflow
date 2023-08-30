@@ -136,6 +136,9 @@ func newSink(ctx context.Context,
 
 // WriteEvents writes events to the dmlSink.
 func (s *dmlSink) WriteEvents(txnEvents ...*dmlsink.TxnCallbackableEvent) error {
+	if len(txnEvents) == 0 {
+		return nil
+	}
 	s.alive.RLock()
 	defer s.alive.RUnlock()
 	if s.alive.isDead {
