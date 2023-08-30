@@ -118,7 +118,6 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 			filter.Filter
 		}{partitionDispatcher: d, topicDispatcher: t, Filter: f})
 	}
-	log.Info("fizz: dispatch rules", zap.Any("rules", rules))
 	return &EventRouter{
 		defaultTopic: defaultTopic,
 		rules:        rules,
