@@ -231,7 +231,6 @@ max-backups = 1
 [sorter]
 sort-dir = "/tmp/just_a_test"
 cache-size-in-mb = 8
-max-memory-percentage = 3
 
 [kv-client]
 region-retry-duration = "3s"
@@ -239,7 +238,6 @@ region-retry-duration = "3s"
 [debug]
 [debug.db]
 count = 5
-concurrency = 6
 max-open-files = 7
 block-size = 32768 # 32 KB
 block-cache-size = 8
@@ -247,9 +245,6 @@ writer-buffer-size = 9
 compression = "none"
 target-file-size-base = 10
 compaction-l0-trigger = 11
-compaction-deletion-threshold = 15
-compaction-period = 16
-write-l0-slowdown-trigger = 12
 write-l0-pause-trigger = 13
 
 [debug.messages]
@@ -375,7 +370,6 @@ max-backups = 1
 [sorter]
 sort-dir = "/tmp/just_a_test"
 cache-size-in-mb = 8
-max-memory-percentage = 3
 
 [security]
 ca-path = "aa"
