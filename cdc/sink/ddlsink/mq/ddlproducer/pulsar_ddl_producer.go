@@ -71,7 +71,6 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 		log.Error("ddl SyncSendMessage GetProducerByTopic fail", zap.Error(err))
 		return err
 	}
-	log.Info("pulsarProducers SyncSendMessage", zap.Any("message", message), zap.String("topic", topic))
 
 	data := &pulsar.ProducerMessage{
 		Payload: message.Value,
