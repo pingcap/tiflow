@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -161,8 +162,8 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
 			}
-			rowEvents := filterNonSinkingEvents(mqEvent.rowEvents)
-			if err := w.encoderGroup.AddEvents(ctx, mqEvent.key.Topic, mqEvent.key.Partition, rowEvents...); err != nil {
+			events := filterNonSinkingEvents(mqEvent.rowEvents)
+			if err := w.encoderGroup.AddEvents(ctx, mqEvent.key.Topic, mqEvent.key.Partition, events...); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -231,9 +232,11 @@ func (w *worker) batch(
 			return index, nil
 		}
 		if msg.rowEvents != nil {
-			w.statistics.ObserveRows(msg.rowEvents.Event)
-			events[index] = msg
-			index++
+			for _, event := range msg.rowEvents {
+				w.statistics.ObserveRows(event.Event)
+				events[index] = msg
+				index++
+			}
 		}
 	}
 
@@ -250,9 +253,11 @@ func (w *worker) batch(
 			}
 
 			if msg.rowEvents != nil {
-				w.statistics.ObserveRows(msg.rowEvents.Event)
-				events[index] = msg
-				index++
+				for _, event := range msg.rowEvents {
+					w.statistics.ObserveRows(event.Event)
+					events[index] = msg
+					index++
+				}
 			}
 
 			if index >= max {
@@ -307,26 +312,27 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			if err = future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
-			for _, message := range future.Messages {
-				// w.claimCheck in pulsar is nil
-				if message.ClaimCheckFileName != "" && w.claimCheck != nil {
-					// send the message to the external storage.
-					if err = w.claimCheck.WriteMessage(ctx, message); err != nil {
-						log.Error("send message to the external claim check storage failed",
-							zap.String("namespace", w.changeFeedID.Namespace),
-							zap.String("changefeed", w.changeFeedID.ID),
-							zap.String("filename", message.ClaimCheckFileName),
-							zap.Error(err))
-						return errors.Trace(err)
+
+			messages := future.Messages
+			if w.claimCheck != nil {
+				var claimCheckMessages []*common.Message
+				for idx, message := range messages {
+					if message.ClaimCheckFileName != "" &&
+						w.claimCheck != nil {
+						claimCheckMessages = append(claimCheckMessages, message)
+						locationMessage, err := w.claimCheckEncoder.NewClaimCheckLocationMessage(message)
+						if err != nil {
+							return errors.Trace(err)
+						}
+						messages[idx] = locationMessage
 					}
-					// create the location message which contain the external storage location of the message.
-					locationMessage, err := w.claimCheckEncoder.NewClaimCheckLocationMessage(message)
-					if err != nil {
-						return errors.Trace(err)
-					}
-					message = locationMessage
 				}
-				// normal message, just send it to the kafka.
+				if err := w.claimCheck.WriteMessage(ctx, claimCheckMessages...); err != nil {
+					return errors.Trace(err)
+				}
+			}
+
+			for _, message := range messages {
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {

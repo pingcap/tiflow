@@ -150,7 +150,6 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 		events := txn.Event.Rows
 		callback := mergedCallback(txn.Callback, uint64(len(events)))
 
-		clear(groups)
 		for _, e := range events {
 			topic := s.alive.eventRouter.GetTopicForRowChange(e)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
@@ -171,12 +170,11 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 				SinkState: txn.SinkState,
 			})
 		}
-
-		for key, events := range groups {
-			s.alive.worker.msgChan.In() <- mqEvents{
-				key:       key,
-				rowEvents: events,
-			}
+	}
+	for key, events := range groups {
+		s.alive.worker.msgChan.In() <- mqEvents{
+			key:       key,
+			rowEvents: events,
 		}
 	}
 	return nil
