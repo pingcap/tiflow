@@ -173,10 +173,10 @@ func TestPrepareDML(t *testing.T) {
 			},
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813516},
-				sqls:            []string{"REPLACE INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
+				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
 				values:          [][]interface{}{{2, 2}},
 				rowCount:        1,
-				approximateSize: 64,
+				approximateSize: 63,
 			},
 		},
 	}
