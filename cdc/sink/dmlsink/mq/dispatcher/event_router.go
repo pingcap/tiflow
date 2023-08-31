@@ -104,7 +104,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
+		d := getPartitionDispatcher(ruleConfig)
 		t, err := getTopicDispatcher(ruleConfig, defaultTopic,
 			util.GetOrZero(cfg.Sink.Protocol), schema)
 		if err != nil {

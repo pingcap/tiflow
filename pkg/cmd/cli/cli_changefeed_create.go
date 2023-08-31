@@ -161,17 +161,6 @@ func (o *createChangefeedOptions) completeReplicaCfg() error {
 		return err
 	}
 
-	for _, rules := range cfg.Sink.DispatchRules {
-		switch strings.ToLower(rules.PartitionRule) {
-		case "rowid", "index-value":
-			if cfg.EnableOldValue {
-				cmd.Printf("[WARN] This index-value distribution mode "+
-					"does not guarantee row-level orderliness when "+
-					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
-			}
-		}
-	}
-
 	if o.commonChangefeedOptions.schemaRegistry != "" {
 		cfg.Sink.SchemaRegistry = putil.AddressOf(o.commonChangefeedOptions.schemaRegistry)
 	}
