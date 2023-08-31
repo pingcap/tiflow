@@ -120,7 +120,7 @@ func verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, err
 	}
-	// set sortEngine and EnableOldValue
+	// set sortEngine
 	cdcClusterVer, err := version.GetTiCDCClusterVersion(model.ListVersionsFromCaptureInfos(captureInfos))
 	if err != nil {
 		return nil, err
