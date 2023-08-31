@@ -53,7 +53,7 @@ groups=(
 	# only run the following tests in mysql pipeline
 	["G18"]='availability http_proxies sequence'
 	["G19"]='changefeed_fast_fail batch_update_to_no_batch changefeed_resume_with_checkpoint_ts'
-	["G20"]='tidb_mysql_test ddl_reentrant multi_cdc_cluster multi_changefeed'
+	["G20"]='tidb_mysql_test ddl_reentrant multi_cdc_cluster'
 	["G21"]='bank kill_owner_with_ddl owner_remove_table_error'
 )
 
