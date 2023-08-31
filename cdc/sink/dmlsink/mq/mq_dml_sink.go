@@ -189,9 +189,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 		totalMessageCount += len(events)
 	}
 
-	log.Info("dml sink write txn",
-		zap.Int("txn-count", len(txns)),
-		zap.Int("group-count", len(groups)),
+	log.Info("dml sink write txn", zap.Int("txn-count", len(txns)),
 		zap.Int("total-message-count", totalMessageCount))
 
 	return nil
