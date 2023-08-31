@@ -122,28 +122,30 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	}
 	// init the tikv client tls global config
 	initGlobalConfig(up.SecurityConfig)
-
-	up.PDClient, err = pd.NewClientWithContext(
-		ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
-		// the default `timeout` is 3s, maybe too small if the pd is busy,
-		// set to 10s to avoid frequent timeout.
-		pd.WithCustomTimeoutOption(10*time.Second),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		up.err.Store(err)
-		return errors.Trace(err)
+	// default upstream always use the pdClient pass from cdc server
+	if !up.isDefaultUpstream {
+		up.PDClient, err = pd.NewClientWithContext(
+			ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
+			// the default `timeout` is 3s, maybe too small if the pd is busy,
+			// set to 10s to avoid frequent timeout.
+			pd.WithCustomTimeoutOption(10*time.Second),
+			pd.WithGRPCDialOptions(
+				grpcTLSOption,
+				grpc.WithBlock(),
+				grpc.WithConnectParams(grpc.ConnectParams{
+					Backoff: backoff.Config{
+						BaseDelay:  time.Second,
+						Multiplier: 1.1,
+						Jitter:     0.1,
+						MaxDelay:   3 * time.Second,
+					},
+					MinConnectTimeout: 3 * time.Second,
+				}),
+			))
+		if err != nil {
+			up.err.Store(err)
+			return errors.Trace(err)
+		}
 	}
 	clusterID := up.PDClient.GetClusterID(ctx)
 	if up.ID != 0 && up.ID != clusterID {
@@ -240,7 +242,9 @@ func (up *Upstream) Close() {
 	}
 	atomic.StoreInt32(&up.status, closing)
 
-	if up.PDClient != nil {
+	// should never close default upstream's pdClient here
+	// because it's shared by the cdc server
+	if up.PDClient != nil && !up.isDefaultUpstream {
 		up.PDClient.Close()
 	}
 
