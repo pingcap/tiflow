@@ -101,12 +101,10 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	cfg.StartTs = 0
 	// use blackhole to workaround
 	cfg.SinkURI = "blackhole://127.0.0.1:9092/test?protocol=avro"
-	cfg.ReplicaConfig.EnableOldValue = true
 	cfg.ReplicaConfig.ForceReplicate = false
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NoError(t, err)
-	require.False(t, cfInfo.Config.EnableOldValue)
 
 	cfg.ReplicaConfig.ForceReplicate = true
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)

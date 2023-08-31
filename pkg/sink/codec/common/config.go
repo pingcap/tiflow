@@ -100,8 +100,6 @@ const (
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 	coderOPTAvroGlueSchemaRegistry         = "glue-schema-registry"
-
-	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
 
 const (
