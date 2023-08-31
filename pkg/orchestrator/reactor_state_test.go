@@ -56,7 +56,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
     "sort-dir": "",
     "config": {
         "case-sensitive": true,
-        "enable-old-value": false,
         "force-replicate": false,
         "check-gc-safe-point": true,
         "filter": {

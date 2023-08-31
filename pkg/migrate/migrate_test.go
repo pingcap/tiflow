@@ -41,7 +41,7 @@ import (
 
 const cycylicChangefeedInfo = `{"upstream-id":0,"sink-uri":"blackhole://","opts":{"a":"b"},
 "create-time":"0001-01-01T00:00:00Z","start-ts":1,"target-ts":2,"admin-job-type":0,"sort-engine":
-"memory","sort-dir":"/tmp/","config":{"case-sensitive":true,"enable-old-value":true,
+"memory","sort-dir":"/tmp/","config":{"case-sensitive":true,
 "force-replicate":false,"check-gc-safe-point":true,"filter":{"rules":["*.*"],
 "ignore-txn-start-ts":null},"mounter":{"worker-num":16},"sink":{"dispatchers":null,"protocol":"",
 "column-selectors":null,"schema-registry":""},"cyclic-replication":{"enable":true,"replica-id":0,
