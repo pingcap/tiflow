@@ -42,7 +42,7 @@ func TestChangefeedCommonInfoMarshalJSON(t *testing.T) {
 	require.NotContains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))
 
 	// when state is not normal, the error code is exist
-	cfInfo.FeedState = StateError
+	cfInfo.FeedState = StateWarning
 	cfInfoJSON, err = json.Marshal(cfInfo)
 	require.Nil(t, err)
 	require.Contains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))
@@ -68,7 +68,7 @@ func TestChangefeedDetailMarshalJSON(t *testing.T) {
 	require.NotContains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))
 
 	// when state is not normal, the error code is exist
-	cfDetail.FeedState = StateError
+	cfDetail.FeedState = StateWarning
 	cfInfoJSON, err = json.Marshal(cfDetail)
 	require.Nil(t, err)
 	require.Contains(t, string(cfInfoJSON), string(errors.ErrProcessorUnknown.RFCCode()))

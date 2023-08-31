@@ -851,6 +851,9 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 			if op.ConflictStage != optimism.ConflictDetected {
 				break
 			}
+			if ddl.strict {
+				return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
+			}
 			rev = op.Revision
 			ddl.logger.Info("operation conflict detected, waiting for resolve", zap.Stringer("info", info))
 		}

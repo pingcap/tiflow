@@ -127,7 +127,8 @@ func (suite *tableSinkWorkerSuite) createWorker(
 	ctx context.Context, memQuota uint64, splitTxn bool,
 ) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
-	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
+	// Only sourcemanager.FetcyByTable is used, so NewForTest is fine.
+	sm := sourcemanager.NewForTest(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
 		&entry.MockMountGroup{}, sortEngine, false)
 	go func() { sm.Run(ctx) }()
 
@@ -533,7 +534,8 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 	receivedEvents := sink.GetEvents()
 	receivedEvents[0].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
-	require.Equal(suite.T(), uint64(4), wrapper.getCheckpointTs().ResolvedMark())
+	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	require.Equal(suite.T(), uint64(4), checkpointTs.ResolvedMark())
 }
 
 // Test Scenario:
@@ -578,7 +580,8 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		return wrapper.getCheckpointTs().ResolvedMark() == 4
+		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		return checkpointTs.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
 	wg.Wait()
@@ -635,7 +638,8 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	require.Equal(suite.T(), uint64(3), batchID.Load())
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		return wrapper.getCheckpointTs().ResolvedMark() == 2
+		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		return checkpointTs.ResolvedMark() == 2
 	}, 5*time.Second, 10*time.Millisecond)
 
 	events = []*model.PolymorphicEvent{

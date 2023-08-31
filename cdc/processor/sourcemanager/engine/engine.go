@@ -38,9 +38,6 @@ type SortEngine interface {
 	// events are available for fetching, OnResolve is what you want.
 	Add(span tablepb.Span, events ...*model.PolymorphicEvent)
 
-	// GetResolvedTs gets resolved timestamp of the given table.
-	GetResolvedTs(span tablepb.Span) model.Ts
-
 	// OnResolve pushes action into SortEngine's hook list, which
 	// will be called after any events are resolved.
 	OnResolve(action func(tablepb.Span, model.Ts))
@@ -74,13 +71,14 @@ type SortEngine interface {
 	// GetStatsByTable gets the statistics of the given table.
 	GetStatsByTable(span tablepb.Span) TableStats
 
-	// ReceivedEvents returns the number of events received by the sort engine.
-	ReceivedEvents() int64
-
 	// Close closes the engine. All data written by this instance can be deleted.
 	//
 	// NOTE: it leads an undefined behavior to close an engine with active iterators.
 	Close() error
+
+	// SlotsAndHasher returns how many slots contained by the Engine, and
+	// a hasher for table spans.
+	SlotsAndHasher() (slotCount int, hasher func(tablepb.Span, int) int)
 }
 
 // EventIterator is an iterator to fetch events from SortEngine.

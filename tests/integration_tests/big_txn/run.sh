@@ -12,11 +12,6 @@ CDC_COUNT=3
 DB_COUNT=4
 
 function run() {
-	# storage is not supported yet.
-	if [ "$SINK_TYPE" == "storage" ]; then
-		return
-	fi
-
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR

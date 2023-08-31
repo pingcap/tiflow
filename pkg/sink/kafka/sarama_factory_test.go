@@ -90,7 +90,7 @@ func TestAsyncProducer(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	async, err := f.AsyncProducer(ctx, make(chan struct{}, 1), make(chan error, 1))
+	async, err := f.AsyncProducer(ctx, make(chan error, 1))
 	require.NoError(t, err)
 	require.NotNil(t, async)
 	async.Close()

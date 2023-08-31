@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
 
@@ -39,7 +40,7 @@ type BatchEncoder struct {
 
 func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
 	// set the `largeMessageOnlyHandleKeyColumns` to true to only encode handle key columns.
-	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, true)
+	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config, true)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -47,23 +48,29 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
-	value, err := valueMsg.encode(d.config.OnlyOutputUpdatedColumns)
+	value, err := valueMsg.encode()
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// for single message that is longer than max-message-bytes
+	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
-		log.Warn("Single message is too large for open-protocol",
+		log.Warn("Single message is too large for open-protocol, only encode handle key columns",
 			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", e.Table),
 			zap.Any("key", key))
 		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
-
-	log.Warn("open-protocol: message too large, only send handle key columns",
-		zap.Any("table", e.Table), zap.Uint64("commitTs", e.CommitTs))
 
 	return key, value, nil
 }
@@ -75,7 +82,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config.DeleteOnlyHandleKeyColumns, false)
+	keyMsg, valueMsg, err := rowChangeToMsg(e, d.config, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -83,7 +90,14 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	if err != nil {
 		return errors.Trace(err)
 	}
-	value, err := valueMsg.encode(d.config.OnlyOutputUpdatedColumns)
+	value, err := valueMsg.encode()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -92,15 +106,24 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
-		log.Warn("Single message is too large for open-protocol",
-			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
-			zap.Int("length", length),
-			zap.Any("table", e.Table),
-			zap.Any("key", key))
-		if !d.config.LargeMessageOnlyHandleKeyColumns {
+		if d.config.LargeMessageHandle.Disabled() {
+			log.Warn("Single message is too large for open-protocol",
+				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+				zap.Int("length", length),
+				zap.Any("table", e.Table),
+				zap.Any("key", key))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
+		// single message too large, claim check enabled, encode it to a new individual message.
+		if d.config.LargeMessageHandle.EnableClaimCheck() {
+			// build previous batched messages
+			d.tryBuildCallback()
+			d.appendSingleLargeMessage4ClaimCheck(key, value, e, callback)
+			return nil
+		}
+
+		// it's must that `LargeMessageHandle == LargeMessageHandleOnlyHandleKeyColumns` here.
 		key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
 		if err != nil {
 			return errors.Trace(err)
@@ -153,6 +176,13 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 		return nil, errors.Trace(err)
 	}
 	value, err := valueMsg.encode()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -224,6 +254,91 @@ func (d *BatchEncoder) tryBuildCallback() {
 		}
 		d.callbackBuff = make([]func(), 0)
 	}
+}
+
+// NewClaimCheckLocationMessage implement the ClaimCheckLocationEncoder interface.
+func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
+	keyMsg, valueMsg, err := rowChangeToMsg(origin.Event, d.config, true)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	keyMsg.OnlyHandleKey = false
+	claimCheckLocation := claimcheck.FileNameWithPrefix(d.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	keyMsg.ClaimCheckLocation = claimCheckLocation
+	key, err := keyMsg.Encode()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	value, err := valueMsg.encode()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	value, err = common.Compress(
+		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	// for single message that is longer than max-message-bytes
+	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
+	if length > d.config.MaxMessageBytes {
+		log.Warn("Single message is too large for open-protocol, "+
+			"when create the claim-check location message",
+			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("key", key))
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+	}
+
+	message := newMessage(key, value)
+	message.Ts = origin.Ts
+	message.Schema = origin.Schema
+	message.Table = origin.Table
+	message.IncRowsCount()
+	if origin.Callback != nil {
+		message.Callback = origin.Callback
+	}
+	return message, nil
+}
+
+func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
+	message := newMessage(key, value)
+	message.Ts = e.CommitTs
+	message.Schema = &e.Table.Schema
+	message.Table = &e.Table.Table
+	// ClaimCheckFileName must be set to indicate this message should be sent to the external storage.
+	message.ClaimCheckFileName = claimcheck.NewFileName()
+	message.Event = e
+	message.IncRowsCount()
+	if callback != nil {
+		message.Callback = callback
+	}
+	d.messageBuf = append(d.messageBuf, message)
+}
+
+func newMessage(key, value []byte) *common.Message {
+	versionHead := make([]byte, 8)
+	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
+	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+
+	var (
+		keyLenByte   [8]byte
+		valueLenByte [8]byte
+	)
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
+
+	message.Key = append(message.Key, keyLenByte[:]...)
+	message.Key = append(message.Key, key...)
+	message.Value = append(message.Value, valueLenByte[:]...)
+	message.Value = append(message.Value, value...)
+
+	return message
 }
 
 type batchEncoderBuilder struct {

@@ -373,7 +373,7 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	wg.Go(func() error {
-		return s.msgService.GetMessageServer().Run(ctx)
+		return s.msgService.GetMessageServer().Run(ctx, nil)
 	})
 
 	wg.Go(func() error {

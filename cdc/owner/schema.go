@@ -246,20 +246,47 @@ func (s *schemaWrap4Owner) BuildDDLEvents(
 	return s.filterDDLEvents(ddlEvents)
 }
 
+// TODO: delete this function after integration test passed.
 func (s *schemaWrap4Owner) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
 	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	for _, event := range ddlEvents {
-		ignored, err := s.filter.ShouldIgnoreDDLEvent(event)
-		if err != nil {
-			return nil, errors.Trace(err)
+		var (
+			ignored bool
+			err     error
+		)
+		if event.Type == timodel.ActionRenameTable {
+			ignored, err = s.filter.ShouldDiscardDDL(
+				event.StartTs,
+				event.Type,
+				event.PreTableInfo.TableName.Schema,
+				event.PreTableInfo.TableName.Table,
+				event.Query)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		} else {
+			ignored, err = s.filter.ShouldDiscardDDL(
+				event.StartTs,
+				event.Type,
+				event.TableInfo.TableName.Schema,
+				event.TableInfo.TableName.Table,
+				event.Query)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 		}
 		if ignored {
 			s.metricIgnoreDDLEventCounter.Inc()
-			log.Info(
-				"DDL event ignored",
+			log.Error(
+				"ignored DDL event should not be sent to owner"+
+					"please report a bug to TiCDC if you see this log"+
+					"but it is no harm to your replication",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("query", event.Query),
+				zap.String("type", event.Type.String()),
+				zap.String("schema", event.TableInfo.TableName.Schema),
+				zap.String("table", event.TableInfo.TableName.Table),
 				zap.Uint64("startTs", event.StartTs),
 				zap.Uint64("commitTs", event.CommitTs),
 			)

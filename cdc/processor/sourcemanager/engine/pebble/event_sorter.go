@@ -14,8 +14,6 @@
 package pebble
 
 import (
-	"encoding/binary"
-	"hash/fnv"
 	"math"
 	"strconv"
 	"sync"
@@ -160,44 +158,22 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 			zap.Stringer("span", &span))
 	}
 
-	maxCommitTs := model.Ts(0)
-	maxResolvedTs := model.Ts(0)
+	maxCommitTs := state.maxReceivedCommitTs.Load()
+	maxResolvedTs := state.maxReceivedResolvedTs.Load()
 	for _, event := range events {
-		state.ch.In() <- eventWithTableID{uniqueID: state.uniqueID, span: span, event: event}
 		if event.IsResolved() {
 			if event.CRTs > maxResolvedTs {
 				maxResolvedTs = event.CRTs
+				state.maxReceivedResolvedTs.Store(maxResolvedTs)
 			}
 		} else {
-			state.receivedEvents.Add(1)
 			if event.CRTs > maxCommitTs {
 				maxCommitTs = event.CRTs
+				state.maxReceivedCommitTs.Store(maxCommitTs)
 			}
 		}
+		state.ch.In() <- eventWithTableID{uniqueID: state.uniqueID, span: span, event: event}
 	}
-
-	if maxCommitTs > state.maxReceivedCommitTs.Load() {
-		state.maxReceivedCommitTs.Store(maxCommitTs)
-	}
-	if maxResolvedTs > state.maxReceivedResolvedTs.Load() {
-		state.maxReceivedResolvedTs.Store(maxResolvedTs)
-	}
-}
-
-// GetResolvedTs implements engine.SortEngine.
-func (s *EventSorter) GetResolvedTs(span tablepb.Span) model.Ts {
-	s.mu.RLock()
-	state, exists := s.tables.Get(span)
-	s.mu.RUnlock()
-
-	if !exists {
-		log.Panic("get resolved ts from an non-existent table",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span))
-	}
-
-	return state.maxReceivedResolvedTs.Load()
 }
 
 // OnResolve implements engine.SortEngine.
@@ -307,18 +283,6 @@ func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
 	}
 }
 
-// ReceivedEvents implements engine.SortEngine.
-func (s *EventSorter) ReceivedEvents() int64 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	totalReceivedEvents := int64(0)
-	s.tables.Range(func(_ tablepb.Span, state *tableState) bool {
-		totalReceivedEvents += state.receivedEvents.Load()
-		return true
-	})
-	return totalReceivedEvents
-}
-
 // Close implements engine.SortEngine.
 func (s *EventSorter) Close() error {
 	s.mu.Lock()
@@ -349,6 +313,11 @@ func (s *EventSorter) Close() error {
 		return true
 	})
 	return err
+}
+
+// SlotsAndHasher implements engine.SortEngine.
+func (s *EventSorter) SlotsAndHasher() (slotCount int, hasher func(tablepb.Span, int) int) {
+	return len(s.dbs), spanz.HashTableSpan
 }
 
 // Next implements sorter.EventIterator.
@@ -400,7 +369,6 @@ type tableState struct {
 	// For statistics.
 	maxReceivedCommitTs   atomic.Uint64
 	maxReceivedResolvedTs atomic.Uint64
-	receivedEvents        atomic.Int64
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
@@ -576,11 +544,6 @@ func genUniqueID() uint32 {
 	return atomic.AddUint32(&uniqueIDGen, 1)
 }
 
-// TODO: add test for this function.
 func getDB(span tablepb.Span, dbCount int) int {
-	h := fnv.New64()
-	b := [8]byte{}
-	binary.LittleEndian.PutUint64(b[:], uint64(span.TableID))
-	h.Write(b[:])
-	return int(h.Sum64() % uint64(dbCount))
+	return spanz.HashTableSpan(span, dbCount)
 }

@@ -51,10 +51,10 @@ func (mr *MockStatusProviderMockRecorder) GetAllChangeFeedInfo(ctx interface{}) 
 }
 
 // GetAllChangeFeedStatuses mocks base method.
-func (m *MockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatus, error) {
+func (m *MockStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllChangeFeedStatuses", ctx)
-	ret0, _ := ret[0].(map[model.ChangeFeedID]*model.ChangeFeedStatus)
+	ret0, _ := ret[0].(map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -111,10 +111,10 @@ func (mr *MockStatusProviderMockRecorder) GetChangeFeedInfo(ctx, changefeedID in
 }
 
 // GetChangeFeedStatus mocks base method.
-func (m *MockStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatus, error) {
+func (m *MockStatusProvider) GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetChangeFeedStatus", ctx, changefeedID)
-	ret0, _ := ret[0].(*model.ChangeFeedStatus)
+	ret0, _ := ret[0].(*model.ChangeFeedStatusForAPI)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -138,6 +138,21 @@ func (m *MockStatusProvider) GetProcessors(ctx context.Context) ([]*model.ProcIn
 func (mr *MockStatusProviderMockRecorder) GetProcessors(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProcessors", reflect.TypeOf((*MockStatusProvider)(nil).GetProcessors), ctx)
+}
+
+// IsChangefeedOwner mocks base method.
+func (m *MockStatusProvider) IsChangefeedOwner(ctx context.Context, id model.ChangeFeedID) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsChangefeedOwner", ctx, id)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsChangefeedOwner indicates an expected call of IsChangefeedOwner.
+func (mr *MockStatusProviderMockRecorder) IsChangefeedOwner(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsChangefeedOwner", reflect.TypeOf((*MockStatusProvider)(nil).IsChangefeedOwner), ctx, id)
 }
 
 // IsHealthy mocks base method.

@@ -16,7 +16,6 @@ package builder
 import (
 	"context"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -32,25 +31,24 @@ import (
 // NewRowEventEncoderBuilder returns an RowEventEncoderBuilder
 func NewRowEventEncoderBuilder(
 	ctx context.Context,
-	changefeedID model.ChangeFeedID,
-	c *common.Config,
+	cfg *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
-	switch c.Protocol {
+	switch cfg.Protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
-		return open.NewBatchEncoderBuilder(c), nil
+		return open.NewBatchEncoderBuilder(cfg), nil
 	case config.ProtocolCanal:
-		return canal.NewBatchEncoderBuilder(c), nil
+		return canal.NewBatchEncoderBuilder(cfg), nil
 	case config.ProtocolAvro:
-		return avro.NewBatchEncoderBuilder(ctx, changefeedID, c)
+		return avro.NewBatchEncoderBuilder(ctx, cfg)
 	case config.ProtocolMaxwell:
-		return maxwell.NewBatchEncoderBuilder(c), nil
+		return maxwell.NewBatchEncoderBuilder(cfg), nil
 	case config.ProtocolCanalJSON:
-		return canal.NewJSONRowEventEncoderBuilder(c), nil
+		return canal.NewJSONRowEventEncoderBuilder(cfg), nil
 	case config.ProtocolCraft:
-		return craft.NewBatchEncoderBuilder(c), nil
+		return craft.NewBatchEncoderBuilder(cfg), nil
 
 	default:
-		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(c.Protocol)
+		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(cfg.Protocol)
 	}
 }
 

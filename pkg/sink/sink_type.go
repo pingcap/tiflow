@@ -63,6 +63,10 @@ const (
 	AzureScheme = "azure"
 	// CloudStorageNoopScheme indicates the scheme is noop.
 	CloudStorageNoopScheme = "noop"
+	// PulsarScheme  indicates the scheme is pulsar
+	PulsarScheme = "pulsar"
+	// PulsarSSLScheme indicates the scheme is pulsar+ssl
+	PulsarSSLScheme = "pulsar+ssl"
 )
 
 // IsMQScheme returns true if the scheme belong to mq scheme.

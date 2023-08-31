@@ -60,7 +60,12 @@ const (
 	"enable-kafka-sink-v2": false,
 	"only-output-updated-columns": false,
 	"delete-only-output-handle-key-columns": false,
-	"large-message-only-handle-key-columns": false
+    "large-message-handle": {
+      "large-message-handle-option": "none",
+      "large-message-handle-compression": "",
+      "claim-check-storage-uri": ""
+    },
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
@@ -115,7 +120,10 @@ const (
   },
   "per-table-memory-quota": 0,
   "kv-client": {
+    "enable-multiplexing": true,
     "worker-concurrent": 8,
+    "grpc-stream-concurrent": 1,
+    "frontier-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
     "region-retry-duration": 60000000000
@@ -198,14 +206,14 @@ const (
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
-      "include-commit-ts": true
+      "include-commit-ts": true,
+      "binary-encoding-method":"base64"
     },
     "date-separator": "month",
     "enable-partition-separator": true,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
-	"large-message-only-handle-key-columns": true,
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -242,8 +250,30 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "claim-check-storage-uri": "",
+        "claim-check-compression": ""
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "large-message-handle-compression": "",
+        "claim-check-storage-uri": ""
+      },
+      "glue-schema-registry-config": {
+        "region":"region", 
+        "registry-name":"registry"
       }
     },
+	"pulsar-config": {
+		"pulsar-version": "v2.10.0",
+		"authentication-token": "token",
+		"tls-trust-certs-file-path": "TLSTrustCertsFilePath_path",
+		"connection-timeout": 18,
+		"operation-timeout": 8,
+		"batching-max-publish-delay": 5000
+	},
     "mysql-config": {
       "worker-count": 8,
       "max-txn-row": 100000,
@@ -264,8 +294,10 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
-    }
+      "file-size": 1024,
+      "output-column-id":false
+    },
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
@@ -326,7 +358,8 @@ const (
       "delimiter": ",",
       "quote": "\"",
       "null": "\\N",
-      "include-commit-ts": true
+      "include-commit-ts": true,
+      "binary-encoding-method":"base64"
     },
     "terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -335,7 +368,6 @@ const (
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
-	"large-message-only-handle-key-columns": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -370,8 +402,25 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only",
+        "claim-check-storage-uri": "",
+        "claim-check-compression": ""
+      },
+      "glue-schema-registry-config": {
+        "region":"region", 
+        "registry-name":"registry"
       }
     },
+	"pulsar-config": {
+		"pulsar-version": "v2.10.0",
+		"authentication-token": "token",
+		"tls-trust-certs-file-path": "TLSTrustCertsFilePath_path",
+		"connection-timeout": 18,
+		"operation-timeout": 8,
+		"batching-max-publish-delay": 5000
+	},
     "mysql-config": {
       "worker-count": 8,
       "max-txn-row": 100000,
@@ -392,8 +441,10 @@ const (
     "cloud-storage-config": {
       "worker-count": 8,
       "flush-interval": "1m",
-      "file-size": 1024
-    }
+      "file-size": 1024,
+      "output-column-id":false
+    },
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",

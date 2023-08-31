@@ -1,6 +1,9 @@
 definitions:
   config.CSVConfig:
     properties:
+      binary-encoding-method:
+        description: encoding method of binary type
+        type: string
       delimiter:
         description: delimiter between fields
         type: string
@@ -20,6 +23,8 @@ definitions:
         type: integer
       flush-interval:
         type: string
+      output-column-id:
+        type: boolean
       worker-count:
         type: integer
     type: object
@@ -64,6 +69,23 @@ definitions:
       topic:
         type: string
     type: object
+  config.GlueSchemaRegistryConfig:
+    properties:
+      access-key:
+        description: AccessKey of the schema registry
+        type: string
+      region:
+        description: Region of the schema registry
+        type: string
+      registry-name:
+        description: Name of the schema registry
+        type: string
+      secret-access-key:
+        description: SecretAccessKey of the schema registry
+        type: string
+      token:
+        type: string
+    type: object
   config.KafkaConfig:
     properties:
       auto-create-topic:
@@ -80,6 +102,8 @@ definitions:
         type: string
       enable-tls:
         type: boolean
+      glue-schema-registry-config:
+        $ref: '#/definitions/config.GlueSchemaRegistryConfig'
       insecure-skip-verify:
         type: boolean
       kafka-client-id:
@@ -88,6 +112,8 @@ definitions:
         type: string
       key:
         type: string
+      large-message-handle:
+        $ref: '#/definitions/config.LargeMessageHandleConfig'
       max-message-bytes:
         type: integer
       partition-num:
@@ -137,6 +163,15 @@ definitions:
       write-timeout:
         type: string
     type: object
+  config.LargeMessageHandleConfig:
+    properties:
+      claim-check-storage-uri:
+        type: string
+      large-message-handle-compression:
+        type: string
+      large-message-handle-option:
+        type: string
+    type: object
   config.MySQLConfig:
     properties:
       enable-batch-dml:
@@ -170,8 +205,102 @@ definitions:
       write-timeout:
         type: string
     type: object
+  config.OAuth2:
+    properties:
+      oauth2-audience:
+        description: OAuth2Audience  the URL of the resource server.
+        type: string
+      oauth2-client-id:
+        description: OAuth2ClientID  the client ID of the application.
+        type: string
+      oauth2-issuer-url:
+        description: OAuth2IssuerURL  the URL of the authorization server.
+        type: string
+      oauth2-private-key:
+        description: OAuth2PrivateKey the private key used to sign the server.
+        type: string
+      oauth2-scope:
+        description: OAuth2Scope scope
+        type: string
+    type: object
+  config.PulsarConfig:
+    properties:
+      auth-tls-certificate-path:
+        description: AuthTLSCertificatePath  create new pulsar authentication provider
+          with specified TLS certificate and private key
+        type: string
+      auth-tls-private-key-path:
+        description: AuthTLSPrivateKeyPath private key
+        type: string
+      authentication-token:
+        description: AuthenticationToken the token for the Pulsar server
+        type: string
+      basic-password:
+        description: BasicPassword with account
+        type: string
+      basic-user-name:
+        description: BasicUserName Account name for pulsar basic authentication (the
+          second priority authentication method)
+        type: string
+      batching-max-messages:
+        description: 'BatchingMaxMessages specifies the maximum number of messages
+          permitted in a batch. (default: 1000)'
+        type: integer
+      batching-max-publish-delay:
+        description: |-
+          BatchingMaxPublishDelay specifies the time period within which the messages sent will be batched (default: 10ms)
+          if batch messages are enabled. If set to a non zero value, messages will be queued until this time
+          interval or until
+        type: integer
+      compression-type:
+        description: pulsar client compression
+        type: string
+      connection-timeout:
+        description: 'ConnectionTimeout Timeout for the establishment of a TCP connection
+          (default: 5 seconds)'
+        type: integer
+      oauth2:
+        $ref: '#/definitions/config.OAuth2'
+        description: |-
+          Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id
+          and 'type' always use 'client_credentials'
+      operation-timeout:
+        description: |-
+          Set the operation timeout (default: 30 seconds)
+          Producer-create, subscribe and unsubscribe operations will be retried until this interval, after which the
+          operation will be marked as failed
+        type: integer
+      pulsar-producer-cache-size:
+        description: PulsarProducerCacheSize is the size of the cache of pulsar producers
+        type: integer
+      pulsar-version:
+        description: PulsarVersion print the version of pulsar
+        type: string
+      send-timeout:
+        description: |-
+          SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.
+          Send and SendAsync returns an error after timeout.
+          default: 30s
+        type: integer
+      tls-certificate-path:
+        type: string
+      tls-private-key-path:
+        type: string
+      tls-trust-certs-file-path:
+        type: string
+      token-from-file:
+        description: |-
+          TokenFromFile Authentication from the file token,
+          the path name of the file (the third priority authentication method)
+        type: string
+    type: object
   config.SinkConfig:
     properties:
+      advance-timeout-in-sec:
+        description: |-
+          AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
+          advanced for this given duration, the sink will be canceled and re-established.
+        type: integer
       cloud-storage-config:
         $ref: '#/definitions/config.CloudStorageConfig'
       column-selectors:
@@ -211,10 +340,6 @@ definitions:
         type: integer
       kafka-config:
         $ref: '#/definitions/config.KafkaConfig'
-      large-message-only-handle-key-columns:
-        description: LargeMessageOnlyHandleKeyColumns is only available when the downstream
-          is MQ.
-        type: boolean
       mysql-config:
         $ref: '#/definitions/config.MySQLConfig'
       only-output-updated-columns:
@@ -224,6 +349,8 @@ definitions:
       protocol:
         description: Protocol is NOT available when the downstream is DB.
         type: string
+      pulsar-config:
+        $ref: '#/definitions/config.PulsarConfig'
       safe-mode:
         description: SafeMode is only available when the downstream is DB.
         type: boolean
@@ -430,6 +557,8 @@ definitions:
     type: object
   v2.CSVConfig:
     properties:
+      binary_encoding_method:
+        type: string
       delimiter:
         type: string
       include_commit_ts:
@@ -559,6 +688,8 @@ definitions:
         type: integer
       flush_interval:
         type: string
+      output_column_id:
+        type: boolean
       worker_count:
         type: integer
     type: object
@@ -672,6 +803,23 @@ definitions:
           type: string
         type: array
     type: object
+  v2.GlueSchemaRegistryConfig:
+    properties:
+      access_key:
+        description: AccessKey of the schema registry
+        type: string
+      region:
+        description: Region of the schema registry
+        type: string
+      registry_name:
+        description: Name of the schema registry
+        type: string
+      secret_access_key:
+        description: SecretAccessKey of the schema registry
+        type: string
+      token:
+        type: string
+    type: object
   v2.IntegrityConfig:
     properties:
       corruption_handle_level:
@@ -695,6 +843,8 @@ definitions:
         type: string
       enable_tls:
         type: boolean
+      glue_schema_registry_config:
+        $ref: '#/definitions/v2.GlueSchemaRegistryConfig'
       insecure_skip_verify:
         type: boolean
       kafka_client_id:
@@ -703,6 +853,8 @@ definitions:
         type: string
       key:
         type: string
+      large_message_handle:
+        $ref: '#/definitions/v2.LargeMessageHandleConfig'
       max_message_bytes:
         type: integer
       partition_num:
@@ -750,6 +902,15 @@ definitions:
       sasl_user:
         type: string
       write_timeout:
+        type: string
+    type: object
+  v2.LargeMessageHandleConfig:
+    properties:
+      claim_check_storage_uri:
+        type: string
+      large_message_handle_compression:
+        type: string
+      large_message_handle_option:
         type: string
     type: object
   v2.LogLevelReq:
@@ -811,6 +972,58 @@ definitions:
         items:
           type: integer
         type: array
+    type: object
+  v2.PulsarConfig:
+    properties:
+      auth-tls-certificate-path:
+        type: string
+      auth-tls-private-key-path:
+        type: string
+      authentication-token:
+        type: string
+      basic-password:
+        type: string
+      basic-user-name:
+        type: string
+      batching-max-messages:
+        type: integer
+      batching-max-publish-delay:
+        type: integer
+      compression-type:
+        type: string
+      connection-timeout:
+        type: integer
+      oauth2:
+        $ref: '#/definitions/v2.PulsarOAuth2'
+      operation-timeout:
+        type: integer
+      pulsar-producer-cache-size:
+        type: integer
+      pulsar-version:
+        type: string
+      send-timeout:
+        type: integer
+      tls-certificate-path:
+        type: string
+      tls-private-key-path:
+        type: string
+      tls-trust-certs-file-path:
+        type: string
+      token-from-file:
+        type: string
+    type: object
+  v2.PulsarOAuth2:
+    properties:
+      oauth2-audience:
+        type: string
+      oauth2-client-id:
+        type: string
+      oauth2-issuer-url:
+        type: string
+      oauth2-private-key:
+        type: string
+      oauth2-scope:
+        type: string
     type: object
   v2.ReplicaConfig:
     properties:
@@ -896,6 +1109,8 @@ definitions:
     type: object
   v2.SinkConfig:
     properties:
+      advance_timeout:
+        type: integer
       cloud_storage_config:
         $ref: '#/definitions/v2.CloudStorageConfig'
       column_selectors:
@@ -922,14 +1137,14 @@ definitions:
         type: integer
       kafka_config:
         $ref: '#/definitions/v2.KafkaConfig'
-      large_message_only_handle_key_columns:
-        type: boolean
       mysql_config:
         $ref: '#/definitions/v2.MySQLConfig'
       only_output_updated_columns:
         type: boolean
       protocol:
         type: string
+      pulsar_config:
+        $ref: '#/definitions/v2.PulsarConfig'
       safe_mode:
         type: boolean
       schema_registry:
@@ -1302,7 +1517,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: notify the current owner to resign
+      description: notify the current controller to resign
       produces:
       - application/json
       responses:
@@ -1316,7 +1531,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
-      summary: notify the owner to resign
+      summary: notify the ticdc cluster controller to resign
       tags:
       - owner
   /api/v1/processors:
@@ -1719,7 +1934,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Notify the current owner to resign
+      description: Notify the current controller to resign
       produces:
       - application/json
       responses:
@@ -1735,7 +1950,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/model.HTTPError'
-      summary: Notify the owner to resign
+      summary: Notify the controller to resign
       tags:
       - owner
       - v2

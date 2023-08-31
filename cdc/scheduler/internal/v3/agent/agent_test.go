@@ -809,7 +809,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 
 	// Prepare add table is still in-progress.
 	mockTableExecutor.
-		On("AddTableSpan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("AddTableSpan", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
 	mockTableExecutor.
 		On("IsAddTableSpanFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -819,7 +819,7 @@ func TestAgentCommitAddTableDuringStopping(t *testing.T) {
 	require.Len(t, trans.SendBuffer, 0)
 
 	mockTableExecutor.
-		On("AddTableSpan", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		On("AddTableSpan", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Once()
 	mockTableExecutor.
 		On("IsAddTableSpanFinished", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -1069,8 +1069,9 @@ func newMockTableExecutor() *MockTableExecutor {
 
 // AddTableSpan adds a table span to the executor.
 func (e *MockTableExecutor) AddTableSpan(
-	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
+	ctx context.Context, span tablepb.Span, checkpoint tablepb.Checkpoint, isPrepare bool,
 ) (bool, error) {
+	startTs := checkpoint.CheckpointTs
 	log.Info("AddTableSpan",
 		zap.String("span", span.String()),
 		zap.Any("startTs", startTs),

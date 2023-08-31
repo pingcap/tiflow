@@ -21,6 +21,7 @@ import (
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	filter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -44,9 +45,10 @@ var defaultAPIConfig = &ReplicaConfig{
 	},
 	Sink: &SinkConfig{
 		CSVConfig: &CSVConfig{
-			Quote:      string(config.DoubleQuoteChar),
-			Delimiter:  config.Comma,
-			NullString: config.NULL,
+			Quote:                string(config.DoubleQuoteChar),
+			Delimiter:            config.Comma,
+			NullString:           config.NULL,
+			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
 		EncoderConcurrency:               util.AddressOf(16),
 		Terminator:                       util.AddressOf(config.CRLF),
@@ -55,7 +57,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		LargeMessageOnlyHandleKeyColumns: util.AddressOf(false),
+		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -226,4 +228,27 @@ func TestEventFilterRuleConvert(t *testing.T) {
 		require.Equal(t, c.apiRule, ToAPIEventFilterRule(c.inRule))
 		require.Equal(t, c.inRule, c.apiRule.ToInternalEventFilterRule())
 	}
+}
+
+func TestMarshalChangefeedCommonInfo(t *testing.T) {
+	t.Parallel()
+
+	cfInfo := &ChangefeedCommonInfo{
+		ID:        "test-id",
+		FeedState: model.StatePending,
+	}
+
+	cfInfoJSON, err := json.Marshal(cfInfo)
+	require.Nil(t, err)
+	require.False(t, strings.Contains(string(cfInfoJSON), "pending"))
+	require.True(t, strings.Contains(string(cfInfoJSON), "warning"))
+
+	cfInfo = &ChangefeedCommonInfo{
+		ID:        "test-id",
+		FeedState: model.StateUnInitialized,
+	}
+
+	cfInfoJSON, err = json.Marshal(cfInfo)
+	require.Nil(t, err)
+	require.True(t, strings.Contains(string(cfInfoJSON), "normal"))
 }

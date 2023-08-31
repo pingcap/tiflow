@@ -26,15 +26,16 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
-	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+	"go.uber.org/atomic"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
-var _ dmlsink.EventSink[*model.RowChangedEvent] = (*dmlSink)(nil)
+var _ dmlsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 
 // dmlSink is the mq sink.
 // It will send the events to the MQ system.
@@ -73,23 +74,20 @@ func newDMLSink(
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderConfig *common.Config,
-	encoderConcurrency int,
+	encoderGroup codec.EncoderGroup,
+	protocol config.Protocol,
+	claimCheck *claimcheck.ClaimCheck,
+	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	errCh chan error,
-) (*dmlSink, error) {
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
+) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, encoderConfig.Protocol,
-		encoderBuilder, encoderConcurrency, producer, statistics)
+	worker := newWorker(changefeedID, protocol,
+		producer, encoderGroup, claimCheck, claimCheckEncoder, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,
-		protocol:    encoderConfig.Protocol,
+		protocol:    protocol,
 		adminClient: adminClient,
 		ctx:         ctx,
 		cancel:      cancel,
@@ -119,40 +117,54 @@ func newDMLSink(
 		}
 	}()
 
-	return s, nil
+	return s
 }
 
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
-func (s *dmlSink) WriteEvents(rows ...*dmlsink.RowChangeCallbackableEvent) error {
+func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
 	s.alive.RLock()
 	defer s.alive.RUnlock()
 	if s.alive.isDead {
 		return errors.Trace(errors.New("dead dmlSink"))
 	}
-
-	for _, row := range rows {
-		if row.GetTableSinkState() != state.TableSinkSinking {
-			// The table where the event comes from is in stopping, so it's safe
-			// to drop the event directly.
-			row.Callback()
-			continue
-		}
-		topic := s.alive.eventRouter.GetTopicForRowChange(row.Event)
-		partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		partition := s.alive.eventRouter.GetPartitionForRowChange(row.Event, partitionNum)
-		// This never be blocked because this is an unbounded channel.
-		s.alive.worker.msgChan.In() <- mqEvent{
-			key: TopicPartitionKey{
-				Topic: topic, Partition: partition,
-			},
-			rowEvent: row,
+	// merge the split row callback into one callback
+	mergedCallback := func(outCallback func(), totalCount uint64) func() {
+		var acked atomic.Uint64
+		return func() {
+			if acked.Add(1) == totalCount {
+				outCallback()
+			}
 		}
 	}
-
+	for _, txn := range txns {
+		if txn.GetTableSinkState() != state.TableSinkSinking {
+			// The table where the event comes from is in stopping, so it's safe
+			// to drop the event directly.
+			txn.Callback()
+			continue
+		}
+		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
+		for _, row := range txn.Event.Rows {
+			topic := s.alive.eventRouter.GetTopicForRowChange(row)
+			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
+			// This never be blocked because this is an unbounded channel.
+			s.alive.worker.msgChan.In() <- mqEvent{
+				key: TopicPartitionKey{
+					Topic: topic, Partition: partition,
+				},
+				rowEvent: &dmlsink.RowChangeCallbackableEvent{
+					Event:     row,
+					Callback:  callback,
+					SinkState: txn.SinkState,
+				},
+			}
+		}
+	}
 	return nil
 }
 
@@ -172,6 +184,8 @@ func (s *dmlSink) Close() {
 	if s.adminClient != nil {
 		s.adminClient.Close()
 	}
+
+	common.CleanMetrics(s.id)
 }
 
 // Dead checks whether it's dead or not.

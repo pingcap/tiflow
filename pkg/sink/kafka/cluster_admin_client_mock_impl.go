@@ -100,11 +100,6 @@ func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, e
 	return nil, nil
 }
 
-// GetCoordinator implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int, error) {
-	return c.controllerID, nil
-}
-
 // GetBrokerConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
 	_ context.Context,
@@ -162,6 +157,17 @@ func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
 			}
 			result[topic] = details.TopicDetail
 		}
+	}
+	return result, nil
+}
+
+// GetTopicsPartitionsNum implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetTopicsPartitionsNum(
+	_ context.Context, topics []string,
+) (map[string]int32, error) {
+	result := make(map[string]int32, len(topics))
+	for _, topic := range topics {
+		result[topic] = c.topics[topic].NumPartitions
 	}
 	return result, nil
 }

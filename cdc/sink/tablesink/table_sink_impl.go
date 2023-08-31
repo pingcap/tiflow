@@ -110,6 +110,9 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 
 	resolvedCallbackableEvents := make([]*dmlsink.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
+		if err := ev.TrySplitAndSortUpdateEvent(); err != nil {
+			return SinkInternalError{err}
+		}
 		// We have to record the event ID for the callback.
 		ce := &dmlsink.CallbackableEvent[E]{
 			Event:     ev,
@@ -130,7 +133,9 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 // GetCheckpointTs returns the checkpoint ts of the table sink.
 func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
 	if e.state.Load() == state.TableSinkStopping {
-		e.progressTracker.checkClosed(e.backendSink.Dead())
+		if e.progressTracker.checkClosed(e.backendSink.Dead()) {
+			e.markAsClosed()
+		}
 	}
 	return e.progressTracker.advance()
 }

@@ -55,7 +55,7 @@ func NewManager4Test(
 		changefeedEpoch uint64,
 		cfg *config.SchedulerConfig,
 	) *processor {
-		return newProcessor4Test(t, state, captureInfo, m.liveness, cfg)
+		return newProcessor4Test(t, state, captureInfo, m.liveness, cfg, false)
 	}
 	return m
 }
@@ -63,7 +63,7 @@ func NewManager4Test(
 //nolint:unused
 func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 	s.manager = NewManager4Test(t, &s.liveness)
-	s.state = orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	s.state = orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{

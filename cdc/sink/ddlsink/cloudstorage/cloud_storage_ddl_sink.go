@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -41,12 +43,16 @@ type DDLSink struct {
 	// statistic is used to record the DDL metrics
 	statistics *metrics.Statistics
 	storage    storage.ExternalStorage
+
+	outputColumnID           bool
+	lastSendCheckpointTsTime time.Time
 }
 
 // NewDDLSink creates a ddl sink for cloud storage.
 func NewDDLSink(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
+	replicaConfig *config.ReplicaConfig,
 ) (*DDLSink, error) {
 	storage, err := util.GetExternalStorageFromURI(ctx, sinkURI.String())
 	if err != nil {
@@ -54,9 +60,14 @@ func NewDDLSink(ctx context.Context,
 	}
 
 	d := &DDLSink{
-		id:         changefeedID,
-		storage:    storage,
-		statistics: metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		id:                       changefeedID,
+		storage:                  storage,
+		statistics:               metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		lastSendCheckpointTsTime: time.Now(),
+	}
+
+	if replicaConfig != nil && replicaConfig.Sink.CloudStorageConfig != nil {
+		d.outputColumnID = util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.OutputColumnID)
 	}
 
 	return d, nil
@@ -87,7 +98,7 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	}
 
 	var def cloudstorage.TableDefinition
-	def.FromDDLEvent(ddl)
+	def.FromDDLEvent(ddl, d.outputColumnID)
 	if err := writeFile(def); err != nil {
 		return errors.Trace(err)
 	}
@@ -95,7 +106,7 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	if ddl.Type == timodel.ActionExchangeTablePartition {
 		// For exchange partition, we need to write the schema of the source table.
 		var sourceTableDef cloudstorage.TableDefinition
-		sourceTableDef.FromTableInfo(ddl.PreTableInfo, ddl.TableInfo.Version)
+		sourceTableDef.FromTableInfo(ddl.PreTableInfo, ddl.TableInfo.Version, d.outputColumnID)
 		return writeFile(sourceTableDef)
 	}
 	return nil
@@ -105,6 +116,16 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
+	if time.Since(d.lastSendCheckpointTsTime) < 2*time.Second {
+		log.Debug("skip write checkpoint ts to external storage",
+			zap.Any("changefeedID", d.id),
+			zap.Uint64("ts", ts))
+		return nil
+	}
+
+	defer func() {
+		d.lastSendCheckpointTsTime = time.Now()
+	}()
 	ckpt, err := json.Marshal(map[string]uint64{"checkpoint-ts": ts})
 	if err != nil {
 		return errors.Trace(err)

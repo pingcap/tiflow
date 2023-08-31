@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -55,12 +56,12 @@ const RegisterImportTaskPrefix = "/tidb/brie/import"
 // Defining it as an interface to make APIs more testable.
 type APIV2Helpers interface {
 	// verifyCreateChangefeedConfig verifies the changefeedConfig,
-	// and yield an valid changefeedInfo or error
+	// and yield a valid changefeedInfo or error
 	verifyCreateChangefeedConfig(
 		ctx context.Context,
 		cfg *ChangefeedConfig,
 		pdClient pd.Client,
-		statusProvider owner.StatusProvider,
+		ctrl controller.Controller,
 		ensureGCServiceID string,
 		kvStorage tidbkv.Storage,
 	) (*model.ChangeFeedInfo, error)
@@ -127,7 +128,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	pdClient pd.Client,
-	statusProvider owner.StatusProvider,
+	ctrl controller.Controller,
 	ensureGCServiceID string,
 	kvStorage tidbkv.Storage,
 ) (*model.ChangeFeedInfo, error) {
@@ -154,12 +155,12 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 			"invalid namespace: %s", cfg.Namespace)
 	}
 
-	cfStatus, err := statusProvider.GetChangeFeedStatus(ctx,
+	exists, err := ctrl.IsChangefeedExists(ctx,
 		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
-	if cfStatus != nil {
+	if exists {
 		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(cfg.ID)
 	}
 
@@ -195,7 +196,6 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 
 	// fill replicaConfig
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
-
 	// verify replicaConfig
 	sinkURIParsed, err := url.Parse(cfg.SinkURI)
 	if err != nil {

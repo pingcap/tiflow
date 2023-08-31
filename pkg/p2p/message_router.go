@@ -36,6 +36,8 @@ type MessageRouter interface {
 	// nil if the target peer does not exist. The returned client
 	// is canceled if RemovePeer is called on `target`.
 	GetClient(target NodeID) MessageClient
+	// GetLocalChannel returns a channel that can be used for intra-node communication.
+	GetLocalChannel() <-chan RawMessageEntry
 	// Close cancels all clients maintained internally and waits for all clients to exit.
 	Close()
 	// Err returns a channel to receive errors from.
@@ -55,17 +57,34 @@ type messageRouterImpl struct {
 	credentials  *security.Credential
 	selfID       NodeID
 	clientConfig *MessageClientConfig
+
+	enableLocalClient bool
+}
+
+// NewMessageRouterWithLocalClient creates a new MessageRouter with a local client.
+func NewMessageRouterWithLocalClient(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) *messageRouterImpl {
+	return newMessageRouterWithLocalClient(selfID, credentials, clientConfig, true)
 }
 
 // NewMessageRouter creates a new MessageRouter
-func NewMessageRouter(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) MessageRouter {
+func NewMessageRouter(selfID NodeID, credentials *security.Credential, clientConfig *MessageClientConfig) *messageRouterImpl {
+	return newMessageRouterWithLocalClient(selfID, credentials, clientConfig, false)
+}
+
+func newMessageRouterWithLocalClient(
+	selfID NodeID,
+	credentials *security.Credential,
+	clientConfig *MessageClientConfig,
+	enableLocalClient bool,
+) *messageRouterImpl {
 	return &messageRouterImpl{
-		addressMap:   make(map[NodeID]string),
-		clients:      make(map[NodeID]clientWrapper),
-		errCh:        make(chan error, 1), // one error at most
-		credentials:  credentials,
-		selfID:       selfID,
-		clientConfig: clientConfig,
+		addressMap:        make(map[NodeID]string),
+		clients:           make(map[NodeID]clientWrapper),
+		errCh:             make(chan error, 1), // one error at most
+		credentials:       credentials,
+		selfID:            selfID,
+		clientConfig:      clientConfig,
+		enableLocalClient: enableLocalClient,
 	}
 }
 
@@ -95,6 +114,18 @@ func (m *messageRouterImpl) RemovePeer(id NodeID) {
 	}
 }
 
+func (m *messageRouterImpl) GetLocalChannel() <-chan RawMessageEntry {
+	if !m.enableLocalClient {
+		return nil
+	}
+	localClient := m.GetClient(m.selfID)
+	c, ok := localClient.(*localMessageClient)
+	if !ok {
+		log.Panic("local client is not a localMessageClient")
+	}
+	return c.localCh
+}
+
 // GetClient implements MessageRouter. The client will be created lazily.
 // It returns nil if the target peer does not exist.
 func (m *messageRouterImpl) GetClient(target NodeID) MessageClient {
@@ -117,48 +148,56 @@ func (m *messageRouterImpl) GetClient(target NodeID) MessageClient {
 		return cliWrapper.MessageClient
 	}
 
-	addr, ok := m.addressMap[target]
-	if !ok {
-		log.Warn("failed to create client, no peer",
-			zap.String("target", target),
-			zap.StackSkip("stack", 1))
-		// There is no address for this target. We are not able to create a client.
-		// The client is expected to retry if the target peer is added later.
-		return nil
-	}
+	var cliWrapper clientWrapper
+	if m.enableLocalClient && target == m.selfID {
+		ctx, cancel := context.WithCancel(context.Background())
+		cliWrapper = clientWrapper{
+			MessageClient: newLocalMessageClient(ctx, m.clientConfig),
+			cancelFn:      cancel,
+		}
+	} else {
+		addr, ok := m.addressMap[target]
+		if !ok {
+			log.Warn("failed to create client, no peer",
+				zap.String("target", target),
+				zap.StackSkip("stack", 1))
+			// There is no address for this target. We are not able to create a client.
+			// The client is expected to retry if the target peer is added later.
+			return nil
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		client := NewGrpcMessageClient(m.selfID, m.clientConfig)
+		cliWrapper = clientWrapper{
+			MessageClient: client,
+			cancelFn:      cancel,
+		}
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			defer cancel()
+			err := client.Run(ctx, "tcp", addr, target, m.credentials)
+			log.Warn("p2p client exited with error",
+				zap.String("addr", addr),
+				zap.String("targetCapture", target),
+				zap.Error(err))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	client := NewMessageClient(m.selfID, m.clientConfig)
-	cliWrapper := clientWrapper{
-		MessageClient: client,
-		cancelFn:      cancel,
+			if errors.Cause(err) != context.Canceled {
+				// Send the error to the error channel.
+				select {
+				case m.errCh <- err:
+				default:
+					// We allow an error to be lost in case the channel is full.
+				}
+			}
+
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			delete(m.clients, target)
+		}()
 	}
 
 	m.clients[target] = cliWrapper
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
-		defer cancel()
-		err := client.Run(ctx, "tcp", addr, target, m.credentials)
-		log.Warn("p2p client exited with error",
-			zap.String("addr", addr),
-			zap.String("targetCapture", target),
-			zap.Error(err))
-
-		if errors.Cause(err) != context.Canceled {
-			// Send the error to the error channel.
-			select {
-			case m.errCh <- err:
-			default:
-				// We allow an error to be lost in case the channel is full.
-			}
-		}
-
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		delete(m.clients, target)
-	}()
-	return client
+	return cliWrapper.MessageClient
 }
 
 func (m *messageRouterImpl) Close() {

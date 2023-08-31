@@ -135,20 +135,6 @@ func (mr *MockSortEngineMockRecorder) FetchByTable(span, lowerBound, upperBound 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchByTable", reflect.TypeOf((*MockSortEngine)(nil).FetchByTable), span, lowerBound, upperBound)
 }
 
-// GetResolvedTs mocks base method.
-func (m *MockSortEngine) GetResolvedTs(span tablepb.Span) model.Ts {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetResolvedTs", span)
-	ret0, _ := ret[0].(model.Ts)
-	return ret0
-}
-
-// GetResolvedTs indicates an expected call of GetResolvedTs.
-func (mr *MockSortEngineMockRecorder) GetResolvedTs(span interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResolvedTs", reflect.TypeOf((*MockSortEngine)(nil).GetResolvedTs), span)
-}
-
 // GetStatsByTable mocks base method.
 func (m *MockSortEngine) GetStatsByTable(span tablepb.Span) engine.TableStats {
 	m.ctrl.T.Helper()
@@ -189,20 +175,6 @@ func (mr *MockSortEngineMockRecorder) OnResolve(action interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnResolve", reflect.TypeOf((*MockSortEngine)(nil).OnResolve), action)
 }
 
-// ReceivedEvents mocks base method.
-func (m *MockSortEngine) ReceivedEvents() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReceivedEvents")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// ReceivedEvents indicates an expected call of ReceivedEvents.
-func (mr *MockSortEngineMockRecorder) ReceivedEvents() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReceivedEvents", reflect.TypeOf((*MockSortEngine)(nil).ReceivedEvents))
-}
-
 // RemoveTable mocks base method.
 func (m *MockSortEngine) RemoveTable(span tablepb.Span) {
 	m.ctrl.T.Helper()
@@ -213,6 +185,21 @@ func (m *MockSortEngine) RemoveTable(span tablepb.Span) {
 func (mr *MockSortEngineMockRecorder) RemoveTable(span interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTable", reflect.TypeOf((*MockSortEngine)(nil).RemoveTable), span)
+}
+
+// SlotsAndHasher mocks base method.
+func (m *MockSortEngine) SlotsAndHasher() (int, func(tablepb.Span, int) int) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SlotsAndHasher")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(func(tablepb.Span, int) int)
+	return ret0, ret1
+}
+
+// SlotsAndHasher indicates an expected call of SlotsAndHasher.
+func (mr *MockSortEngineMockRecorder) SlotsAndHasher() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotsAndHasher", reflect.TypeOf((*MockSortEngine)(nil).SlotsAndHasher))
 }
 
 // MockEventIterator is a mock of EventIterator interface.

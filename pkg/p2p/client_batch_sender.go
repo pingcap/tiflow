@@ -14,8 +14,8 @@
 package p2p
 
 import (
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/pkg/errors"
 	proto "github.com/pingcap/tiflow/proto/p2p"
 )
 
@@ -26,36 +26,33 @@ const (
 	maxPreallocBatchSize = 4096
 )
 
-type (
-	messageEntry = *proto.MessageEntry
-	clientStream = proto.CDCPeerToPeer_SendMessageClient
-)
+var _ clientBatchSender[MessageEntry] = &grpcClientBatchSender{}
 
 // clientBatchSender is a batch sender that
 // batches messages and sends them through a gRPC client.
-type clientBatchSender interface {
-	Append(msg messageEntry) error
+type clientBatchSender[T any] interface {
+	Append(msg T) error
 	Flush() error
 }
 
-type clientBatchSenderImpl struct {
-	stream clientStream
+type grpcClientBatchSender struct {
+	stream MessageClientStream
 
-	buffer    []messageEntry
+	buffer    []MessageEntry
 	sizeBytes int
 
 	maxEntryCount int
 	maxSizeBytes  int
 }
 
-func newClientBatchSender(stream clientStream, maxEntryCount, maxSizeBytes int) clientBatchSender {
+func newClientBatchSender(stream MessageClientStream, maxEntryCount, maxSizeBytes int) clientBatchSender[MessageEntry] {
 	sliceCap := maxEntryCount
 	if sliceCap > maxPreallocBatchSize {
 		sliceCap = maxPreallocBatchSize
 	}
-	return &clientBatchSenderImpl{
+	return &grpcClientBatchSender{
 		stream:        stream,
-		buffer:        make([]messageEntry, 0, sliceCap),
+		buffer:        make([]MessageEntry, 0, sliceCap),
 		maxEntryCount: maxEntryCount,
 		maxSizeBytes:  maxSizeBytes,
 	}
@@ -64,7 +61,7 @@ func newClientBatchSender(stream clientStream, maxEntryCount, maxSizeBytes int) 
 // Append appends a message to the batch. If the resulting batch contains more than
 // maxEntryCount messages or the total size of messages exceeds maxSizeBytes,
 // the batch is flushed.
-func (s *clientBatchSenderImpl) Append(msg messageEntry) error {
+func (s *grpcClientBatchSender) Append(msg MessageEntry) error {
 	failpoint.Inject("ClientBatchSenderInjectError", func() {
 		failpoint.Return(errors.New("injected error"))
 	})
@@ -79,7 +76,7 @@ func (s *clientBatchSenderImpl) Append(msg messageEntry) error {
 }
 
 // Flush flushes the batch.
-func (s *clientBatchSenderImpl) Flush() error {
+func (s *grpcClientBatchSender) Flush() error {
 	failpoint.Inject("ClientBatchSenderInjectError", func() {
 		failpoint.Return(errors.New("injected error"))
 	})

@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/tikv/client-go/v2/tikv"
 )
@@ -26,68 +27,105 @@ import (
 const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
+
+	stateNormal  uint32 = 0
+	stateStopped uint32 = 1
+	stateRemoved uint32 = 2
 )
 
 type singleRegionInfo struct {
-	verID      tikv.RegionVerID
-	span       tablepb.Span
-	resolvedTs uint64
-	rpcCtx     *tikv.RPCContext
+	verID  tikv.RegionVerID
+	span   tablepb.Span
+	rpcCtx *tikv.RPCContext
+
+	requestedTable *requestedTable
+	lockedRange    *regionlock.LockedRange
 }
 
 func newSingleRegionInfo(
 	verID tikv.RegionVerID,
 	span tablepb.Span,
-	ts uint64,
 	rpcCtx *tikv.RPCContext,
 ) singleRegionInfo {
 	return singleRegionInfo{
-		verID:      verID,
-		span:       span,
-		resolvedTs: ts,
-		rpcCtx:     rpcCtx,
+		verID:  verID,
+		span:   span,
+		rpcCtx: rpcCtx,
 	}
 }
 
-type regionFeedState struct {
-	sri       singleRegionInfo
-	requestID uint64
-	stopped   int32
+func (s singleRegionInfo) resolvedTs() uint64 {
+	return s.lockedRange.CheckpointTs.Load()
+}
 
-	initialized    atomic.Bool
-	matcher        *matcher
-	startFeedTime  time.Time
-	lastResolvedTs uint64
+type regionFeedState struct {
+	sri           singleRegionInfo
+	requestID     uint64
+	matcher       *matcher
+	startFeedTime time.Time
+
+	// Transform: normal -> stopped -> removed.
+	// normal: the region is in replicating.
+	// stopped: some error happens.
+	// removed: the region is returned into the pending list,
+	//   will be re-resolved and re-scheduled later.
+	state atomic.Uint32
+
+	// All region errors should be handled in region workers.
+	// `err` is used to retrieve errors generated outside.
+	err struct {
+		sync.Mutex
+		e error
+	}
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
 	return &regionFeedState{
 		sri:       sri,
 		requestID: requestID,
-		stopped:   0,
 	}
 }
 
 func (s *regionFeedState) start() {
 	s.startFeedTime = time.Now()
-	s.lastResolvedTs = s.sri.resolvedTs
 	s.matcher = newMatcher()
 }
 
-func (s *regionFeedState) markStopped() {
-	atomic.StoreInt32(&s.stopped, 1)
+// mark regionFeedState as stopped with the given error if possible.
+func (s *regionFeedState) markStopped(err error) {
+	if s.state.CompareAndSwap(stateNormal, stateStopped) {
+		if err != nil {
+			s.err.Lock()
+			defer s.err.Unlock()
+			s.err.e = err
+		}
+	}
 }
 
-func (s *regionFeedState) isStopped() bool {
-	return atomic.LoadInt32(&s.stopped) > 0
+// mark regionFeedState as removed if possible.
+func (s *regionFeedState) markRemoved() (changed bool) {
+	return s.state.CompareAndSwap(stateStopped, stateRemoved)
+}
+
+func (s *regionFeedState) isStale() bool {
+	state := s.state.Load()
+	return state == stateStopped || state == stateRemoved
+}
+
+func (s *regionFeedState) takeError() (err error) {
+	s.err.Lock()
+	defer s.err.Unlock()
+	err = s.err.e
+	s.err.e = nil
+	return
 }
 
 func (s *regionFeedState) isInitialized() bool {
-	return s.initialized.Load()
+	return s.sri.lockedRange.Initialzied.Load()
 }
 
 func (s *regionFeedState) setInitialized() {
-	s.initialized.Store(true)
+	s.sri.lockedRange.Initialzied.Store(true)
 }
 
 func (s *regionFeedState) getRegionID() uint64 {
@@ -95,23 +133,24 @@ func (s *regionFeedState) getRegionID() uint64 {
 }
 
 func (s *regionFeedState) getLastResolvedTs() uint64 {
-	return atomic.LoadUint64(&s.lastResolvedTs)
+	return s.sri.lockedRange.CheckpointTs.Load()
 }
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	if resolvedTs > s.getLastResolvedTs() {
-		atomic.StoreUint64(&s.lastResolvedTs, resolvedTs)
+	state := s.sri.lockedRange
+	for {
+		last := state.CheckpointTs.Load()
+		if last > resolvedTs {
+			return
+		}
+		if state.CheckpointTs.CompareAndSwap(last, resolvedTs) {
+			break
+		}
 	}
-}
-
-// setRegionInfoResolvedTs is only called when the region disconnect,
-// to update the `singleRegionInfo` which is reused by reconnect.
-func (s *regionFeedState) setRegionInfoResolvedTs() {
-	if s.getLastResolvedTs() <= s.sri.resolvedTs {
-		return
+	if s.sri.requestedTable != nil {
+		s.sri.requestedTable.postUpdateRegionResolvedTs(s.sri.verID.GetID(), state)
 	}
-	s.sri.resolvedTs = s.lastResolvedTs
 }
 
 func (s *regionFeedState) getRegionInfo() singleRegionInfo {

@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/tikv"
 )
@@ -40,9 +41,9 @@ func TestSyncRegionFeedStateMapConcurrentAccess(t *testing.T) {
 				return
 			default:
 			}
-			m.setByRequestID(1, &regionFeedState{})
-			m.setByRequestID(2, &regionFeedState{})
-			m.setByRequestID(3, &regionFeedState{})
+			m.setByRequestID(1, &regionFeedState{sri: singleRegionInfo{lockedRange: &regionlock.LockedRange{}}})
+			m.setByRequestID(2, &regionFeedState{sri: singleRegionInfo{lockedRange: &regionlock.LockedRange{}}})
+			m.setByRequestID(3, &regionFeedState{sri: singleRegionInfo{lockedRange: &regionlock.LockedRange{}}})
 		}
 	}()
 	wg.Add(1)
@@ -55,7 +56,7 @@ func TestSyncRegionFeedStateMapConcurrentAccess(t *testing.T) {
 			default:
 			}
 			m.iter(func(requestID uint64, state *regionFeedState) bool {
-				_ = state.initialized.Load()
+				state.isInitialized()
 				return true
 			})
 		}
@@ -118,7 +119,8 @@ func benchmarkGetRegionState(b *testing.B, bench func(b *testing.B, sm regionSta
 	state := newRegionFeedState(newSingleRegionInfo(
 		tikv.RegionVerID{},
 		spanz.ToSpan([]byte{}, spanz.UpperBoundKey),
-		0, &tikv.RPCContext{}), 0)
+		&tikv.RPCContext{}), 0)
+	state.sri.lockedRange = &regionlock.LockedRange{}
 
 	regionCount := []int{100, 1000, 10000, 20000, 40000, 80000, 160000, 320000}
 	for _, count := range regionCount {

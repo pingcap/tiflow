@@ -313,7 +313,11 @@ func (c *consumer) emitDMLEvents(
 	case config.ProtocolCanalJSON:
 		// Always enable tidb extension for canal-json protocol
 		// because we need to get the commit ts from the extension field.
-		decoder = canal.NewBatchDecoder(true, c.codecCfg.Terminator)
+		c.codecCfg.EnableTiDBExtension = true
+		decoder, err = canal.NewBatchDecoder(ctx, c.codecCfg, nil)
+		if err != nil {
+			return errors.Trace(err)
+		}
 		err := decoder.AddKeyValue(nil, content)
 		if err != nil {
 			return errors.Trace(err)
@@ -348,12 +352,15 @@ func (c *consumer) emitDMLEvents(
 					prometheus.NewCounter(prometheus.CounterOpts{}))
 			}
 
-			if _, ok := c.tableTsMap[tableID]; !ok || row.CommitTs >= c.tableTsMap[tableID].Ts {
+			_, ok := c.tableTsMap[tableID]
+			if !ok || row.CommitTs > c.tableTsMap[tableID].Ts {
 				c.tableTsMap[tableID] = model.ResolvedTs{
 					Mode:    model.BatchResolvedMode,
 					Ts:      row.CommitTs,
 					BatchID: 1,
 				}
+			} else if row.CommitTs == c.tableTsMap[tableID].Ts {
+				c.tableTsMap[tableID] = c.tableTsMap[tableID].AdvanceBatch()
 			} else {
 				log.Warn("row changed event commit ts fallback, ignore",
 					zap.Uint64("commitTs", row.CommitTs),

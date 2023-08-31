@@ -16,7 +16,9 @@ package ddlproducer
 import (
 	"context"
 
+	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 )
@@ -37,4 +39,8 @@ type DDLProducer interface {
 
 // Factory is a function to create a producer.
 type Factory func(ctx context.Context, changefeedID model.ChangeFeedID,
-	factory kafka.Factory) (DDLProducer, error)
+	syncProducer kafka.SyncProducer) DDLProducer
+
+// PulsarFactory is a function to create a pulsar producer.
+type PulsarFactory func(ctx context.Context, changefeedID model.ChangeFeedID,
+	pConfig *config.PulsarConfig, client pulsar.Client, sinkConfig *config.SinkConfig) (DDLProducer, error)

@@ -66,7 +66,7 @@ func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	if info.State != model.StateNormal {
+	if !info.State.IsRunning() {
 		_ = c.Error(
 			cerror.WrapError(
 				cerror.ErrAPIInvalidParam,
@@ -130,7 +130,12 @@ func (h *OpenAPIV2) getProcessor(c *gin.Context) {
 // @Router	/api/v2/processors [get]
 func (h *OpenAPIV2) listProcessors(c *gin.Context) {
 	ctx := c.Request.Context()
-	infos, err := h.capture.StatusProvider().GetProcessors(ctx)
+	controller, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	infos, err := controller.GetProcessors(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return

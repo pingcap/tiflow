@@ -24,6 +24,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -317,7 +318,11 @@ func TestServerTLSWithCommonNameAndRotate(t *testing.T) {
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50),
 		retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	require.ErrorContains(t, err, "remote error: tls: bad certificate")
+	require.True(t,
+		strings.Contains(err.Error(), "remote error: tls: bad certificate") ||
+			strings.Contains(err.Error(), "remote error: tls: certificate required"),
+		"bad err: %s", err.Error(),
+	)
 
 	testTlSClient := func(securityCfg *security.Credential) error {
 		return retry.Do(ctx, func() error {

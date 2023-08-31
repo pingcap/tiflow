@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/topic"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -79,7 +80,7 @@ type EventRouter struct {
 }
 
 // NewEventRouter creates a new EventRouter.
-func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRouter, error) {
+func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*EventRouter, error) {
 	// If an event does not match any dispatching rules in the config file,
 	// it will be dispatched by the default partition dispatcher and
 	// static topic dispatcher because it matches *.* rule.
@@ -103,8 +104,9 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig)
-		t, err := getTopicDispatcher(ruleConfig, defaultTopic, util.GetOrZero(cfg.Sink.Protocol))
+		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
+		t, err := getTopicDispatcher(ruleConfig, defaultTopic,
+			util.GetOrZero(cfg.Sink.Protocol), schema)
 		if err != nil {
 			return nil, err
 		}
@@ -245,7 +247,7 @@ func getPartitionDispatcher(ruleConfig *config.DispatchRule) partition.Dispatche
 
 // getTopicDispatcher returns the topic dispatcher for a specific topic rule (aka topic expression).
 func getTopicDispatcher(
-	ruleConfig *config.DispatchRule, defaultTopic string, protocol string,
+	ruleConfig *config.DispatchRule, defaultTopic, protocol, schema string,
 ) (topic.Dispatcher, error) {
 	if ruleConfig.TopicRule == "" {
 		return topic.NewStaticTopicDispatcher(defaultTopic), nil
@@ -260,15 +262,22 @@ func getTopicDispatcher(
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
 
-		if p == config.ProtocolAvro {
-			err := topicExpr.ValidateForAvro()
+		if schema == sink.PulsarScheme {
+			err = topicExpr.PulsarValidate()
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			err := topicExpr.Validate()
-			if err != nil {
-				return nil, err
+			if p == config.ProtocolAvro {
+				err = topicExpr.ValidateForAvro()
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				err = topicExpr.Validate()
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

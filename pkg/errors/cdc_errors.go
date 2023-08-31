@@ -203,6 +203,63 @@ var (
 		"kafka config item not found",
 		errors.RFCCodeText("CDC:ErrKafkaConfigNotFound"),
 	)
+	// for pulsar
+	ErrPulsarSendMessage = errors.Normalize(
+		"pulsar send message failed",
+		errors.RFCCodeText("CDC:ErrPulsarSendMessage"),
+	)
+	ErrPulsarProducerClosed = errors.Normalize(
+		"pulsar producer closed",
+		errors.RFCCodeText("CDC:ErrPulsarProducerClosed"),
+	)
+	ErrPulsarAsyncSendMessage = errors.Normalize(
+		"pulsar async send message failed",
+		errors.RFCCodeText("CDC:ErrPulsarAsyncSendMessage"),
+	)
+	ErrPulsarFlushUnfinished = errors.Normalize(
+		"flush not finished before producer close",
+		errors.RFCCodeText("CDC:ErrPulsarFlushUnfinished"),
+	)
+	ErrPulsarInvalidPartitionNum = errors.Normalize(
+		"invalid partition num %d",
+		errors.RFCCodeText("CDC:ErrPulsarInvalidPartitionNum"),
+	)
+	ErrPulsarNewClient = errors.Normalize(
+		"new pulsar client",
+		errors.RFCCodeText("CDC:ErrPulsarNewClient"),
+	)
+	ErrPulsarNewProducer = errors.Normalize(
+		"new pulsar producer",
+		errors.RFCCodeText("CDC:ErrPulsarNewProducer"),
+	)
+	ErrPulsarInvalidClientID = errors.Normalize(
+		"invalid pulsar client ID '%s'",
+		errors.RFCCodeText("CDC:ErrPulsarInvalidClientID"),
+	)
+	ErrPulsarInvalidVersion = errors.Normalize(
+		"invalid pulsar version",
+		errors.RFCCodeText("CDC:ErrPulsarInvalidVersion"),
+	)
+	ErrPulsarInvalidConfig = errors.Normalize(
+		"pulsar config invalid",
+		errors.RFCCodeText("CDC:ErrPulsarInvalidConfig"),
+	)
+	ErrPulsarCreateTopic = errors.Normalize(
+		"pulsar create topic failed",
+		errors.RFCCodeText("CDC:ErrPulsarCreateTopic"),
+	)
+	ErrPulsarInvalidTopicExpression = errors.Normalize(
+		"invalid topic expression",
+		errors.RFCCodeText("CDC:ErrPulsarTopicExprInvalid"),
+	)
+	ErrPulsarBrokerConfigNotFound = errors.Normalize(
+		"pulsar broker config item not found",
+		errors.RFCCodeText("CDC:ErrPulsarBrokerConfigNotFound"),
+	)
+	ErrPulsarTopicNotExists = errors.Normalize("pulsar topic not exists after creation",
+		errors.RFCCodeText("CDC:ErrPulsarTopicNotExists"),
+	)
+
 	ErrRedoConfigInvalid = errors.Normalize(
 		"redo log config invalid",
 		errors.RFCCodeText("CDC:ErrRedoConfigInvalid"),
@@ -243,6 +300,12 @@ var (
 		"Codec invalid config",
 		errors.RFCCodeText("CDC:ErrCodecInvalidConfig"),
 	)
+
+	ErrCompressionFailed = errors.Normalize(
+		"Compression failed",
+		errors.RFCCodeText("CDC:ErrCompressionFailed"),
+	)
+
 	ErrSinkURIInvalid = errors.Normalize(
 		"sink uri invalid '%s'",
 		errors.RFCCodeText("CDC:ErrSinkURIInvalid"),
@@ -293,11 +356,11 @@ var (
 		errors.RFCCodeText("CDC:ErrAvroEncodeToBinary"),
 	)
 	ErrAvroSchemaAPIError = errors.Normalize(
-		"schema manager API error",
+		"schema manager API error, %s",
 		errors.RFCCodeText("CDC:ErrAvroSchemaAPIError"),
 	)
 	ErrAvroInvalidMessage = errors.Normalize(
-		"avro invalid message format",
+		"avro invalid message format, %s",
 		errors.RFCCodeText("CDC:ErrAvroInvalidMessage"),
 	)
 	ErrMaxwellEncodeFailed = errors.Normalize(
@@ -594,6 +657,11 @@ var (
 			" caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrSnapshotLostByGC"),
 	)
+	ErrGCTTLExceeded = errors.Normalize(
+		"the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded "+
+			"the GC TTL and the changefeed is blocking global GC progression",
+		errors.RFCCodeText("CDC:ErrGCTTLExceeded"),
+	)
 	ErrNotOwner = errors.Normalize(
 		"this capture is not a owner",
 		errors.RFCCodeText("CDC:ErrNotOwner"),
@@ -870,5 +938,18 @@ var (
 	ErrInvalidReplicaConfig = errors.Normalize(
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
+	)
+
+	ErrHandleDDLFailed = errors.Normalize(
+		"handle ddl failed, job: %s, query: %s, startTs: %d. "+
+			"If you want to skip this DDL and continue with replication, "+
+			"you can manually execute this DDL downstream. Afterwards, "+
+			"add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.",
+		errors.RFCCodeText("CDC:ErrHandleDDLFailed"),
+	)
+
+	ErrInvalidGlueSchemaRegistryConfig = errors.Normalize(
+		"invalid glue schema registry config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidGlueSchemaRegistryConfig"),
 	)
 )

@@ -298,6 +298,21 @@ func TestClose(t *testing.T) {
 	}, time.Second, time.Millisecond*10, "table should be stopped")
 }
 
+func TestOperationsAfterClose(t *testing.T) {
+	t.Parallel()
+
+	sink := &mockEventSink{dead: make(chan struct{})}
+	tb := New[*model.SingleTableTxn](
+		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1), model.Ts(0),
+		sink, &dmlsink.TxnEventAppender{}, prometheus.NewCounter(prometheus.CounterOpts{}))
+
+	require.True(t, tb.AsyncClose())
+
+	tb.AppendRowChangedEvents(getTestRows()...)
+	err := tb.UpdateResolvedTs(model.NewResolvedTs(105))
+	require.Nil(t, err)
+}
+
 func TestCloseCancellable(t *testing.T) {
 	t.Parallel()
 
@@ -374,26 +389,14 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 
-	go func() {
-		time.Sleep(time.Millisecond * 10)
-		sink.Close()
-	}()
+	// Table sink close should return even if callbacks are not called,
+	// because the backend sink is closed.
+	sink.Close()
+	tb.Close()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		tb.Close()
-	}()
-	require.Eventually(t, func() bool {
-		return state.TableSinkStopping == tb.state.Load()
-	}, time.Second, time.Microsecond, "table should be stopping")
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		currentTs := tb.GetCheckpointTs()
-		sink.acknowledge(105)
-		require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
-	}()
-	wg.Wait()
+	require.Equal(t, state.TableSinkStopped, tb.state.Load())
+
+	currentTs := tb.GetCheckpointTs()
+	sink.acknowledge(105)
+	require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
 }

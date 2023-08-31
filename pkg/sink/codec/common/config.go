@@ -21,6 +21,7 @@ import (
 	"github.com/imdario/mergo"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -32,6 +33,8 @@ const defaultMaxBatchSize int = 16
 
 // Config use to create the encoder
 type Config struct {
+	ChangefeedID model.ChangeFeedID
+
 	Protocol config.Protocol
 
 	// control batch behavior, only for `open-protocol` and `craft` at the moment.
@@ -41,18 +44,16 @@ type Config struct {
 	// DeleteOnlyHandleKeyColumns is true, for the delete event only output the handle key columns.
 	DeleteOnlyHandleKeyColumns bool
 
-	// LargeMessageOnlyHandleKeyColumns is true,
-	// for message large then the MaxMessageBytes only output the handle key columns.
-	LargeMessageOnlyHandleKeyColumns bool
+	LargeMessageHandle *config.LargeMessageHandleConfig
 
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
 
 	// avro only
-	AvroSchemaRegistry             string
+	AvroConfluentSchemaRegistry    string
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
-
+	AvroGlueSchemaRegistry         *config.GlueSchemaRegistryConfig
 	// EnableWatermarkEvent set to true, avro encode DDL and checkpoint event
 	// and send to the downstream kafka, they cannot be consumed by the confluent official consumer
 	// and would cause error, so this is only used for ticdc internal testing purpose, should not be
@@ -60,11 +61,12 @@ type Config struct {
 	AvroEnableWatermark bool
 
 	// for sinking to cloud storage
-	Delimiter       string
-	Quote           string
-	NullString      string
-	IncludeCommitTs bool
-	Terminator      string
+	Delimiter            string
+	Quote                string
+	NullString           string
+	IncludeCommitTs      bool
+	Terminator           string
+	BinaryEncodingMethod string
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
@@ -81,13 +83,14 @@ func NewConfig(protocol config.Protocol) *Config {
 		EnableTiDBExtension: false,
 		EnableRowChecksum:   false,
 
-		AvroSchemaRegistry:             "",
+		AvroConfluentSchemaRegistry:    "",
 		AvroDecimalHandlingMode:        "precise",
 		AvroBigintUnsignedHandlingMode: "long",
 		AvroEnableWatermark:            false,
 
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
+		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
 	}
 }
 
@@ -96,6 +99,9 @@ const (
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
+	coderOPTAvroGlueSchemaRegistry         = "glue-schema-registry"
+
+	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
 
 const (
@@ -149,6 +155,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.MaxMessageBytes = *urlParameter.MaxMessageBytes
 	}
 
+	// avro related
 	if urlParameter.AvroDecimalHandlingMode != nil &&
 		*urlParameter.AvroDecimalHandlingMode != "" {
 		c.AvroDecimalHandlingMode = *urlParameter.AvroDecimalHandlingMode
@@ -162,9 +169,16 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.AvroEnableWatermark = *urlParameter.AvroEnableWatermark
 		}
 	}
-
 	if urlParameter.AvroSchemaRegistry != "" {
-		c.AvroSchemaRegistry = urlParameter.AvroSchemaRegistry
+		c.AvroConfluentSchemaRegistry = urlParameter.AvroSchemaRegistry
+	}
+	if replicaConfig.Sink.KafkaConfig != nil &&
+		replicaConfig.Sink.KafkaConfig.GlueSchemaRegistryConfig != nil {
+		c.AvroGlueSchemaRegistry = replicaConfig.Sink.KafkaConfig.GlueSchemaRegistryConfig
+	}
+	if c.Protocol == config.ProtocolAvro && replicaConfig.ForceReplicate {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`force-replicate must be disabled, when using avro protocol`)
 	}
 
 	if replicaConfig.Sink != nil {
@@ -174,6 +188,15 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.Quote = replicaConfig.Sink.CSVConfig.Quote
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
+			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
+		}
+		if replicaConfig.Sink.KafkaConfig != nil {
+			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+		}
+		if !c.LargeMessageHandle.Disabled() && replicaConfig.ForceReplicate {
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
+				`force-replicate must be disabled, when the large message handle is enabled, large message handle: "%s"`,
+				c.LargeMessageHandle.LargeMessageHandleOption)
 		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
@@ -185,13 +208,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
-	c.LargeMessageOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.LargeMessageOnlyHandleKeyColumns)
-	if c.LargeMessageOnlyHandleKeyColumns {
-		log.Warn("large message only handle key columns is enabled, "+
-			"if the full message's size is larger than max-message-bytes, only send the handle key columns",
-			zap.Any("protocol", c.Protocol))
+	if c.DeleteOnlyHandleKeyColumns && replicaConfig.ForceReplicate {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
 	}
-
 	return nil
 }
 
@@ -227,6 +247,12 @@ func (c *Config) WithMaxMessageBytes(bytes int) *Config {
 	return c
 }
 
+// WithChangefeedID set the `changefeedID`
+func (c *Config) WithChangefeedID(id model.ChangeFeedID) *Config {
+	c.ChangefeedID = id
+	return c
+}
+
 // Validate the Config
 func (c *Config) Validate() error {
 	if c.EnableTiDBExtension &&
@@ -238,10 +264,19 @@ func (c *Config) Validate() error {
 	}
 
 	if c.Protocol == config.ProtocolAvro {
-		if c.AvroSchemaRegistry == "" {
+		if c.AvroConfluentSchemaRegistry != "" && c.AvroGlueSchemaRegistry != nil {
 			return cerror.ErrCodecInvalidConfig.GenWithStack(
-				`Avro protocol requires parameter "%s"`,
+				`Avro protocol requires only one of "%s" or "%s" to specify the schema registry`,
 				codecOPTAvroSchemaRegistry,
+				coderOPTAvroGlueSchemaRegistry,
+			)
+		}
+
+		if c.AvroConfluentSchemaRegistry == "" && c.AvroGlueSchemaRegistry == nil {
+			return cerror.ErrCodecInvalidConfig.GenWithStack(
+				`Avro protocol requires parameter "%s" or "%s" to specify the schema registry`,
+				codecOPTAvroSchemaRegistry,
+				coderOPTAvroGlueSchemaRegistry,
 			)
 		}
 
@@ -290,5 +325,30 @@ func (c *Config) Validate() error {
 		)
 	}
 
+	if c.LargeMessageHandle != nil {
+		err := c.LargeMessageHandle.Validate(c.Protocol, c.EnableTiDBExtension)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+const (
+	// SchemaRegistryTypeConfluent is the type of Confluent Schema Registry
+	SchemaRegistryTypeConfluent = "confluent"
+	// SchemaRegistryTypeGlue is the type of AWS Glue Schema Registry
+	SchemaRegistryTypeGlue = "glue"
+)
+
+// SchemaRegistryType returns the type of schema registry
+func (c *Config) SchemaRegistryType() string {
+	if c.AvroConfluentSchemaRegistry != "" {
+		return SchemaRegistryTypeConfluent
+	}
+	if c.AvroGlueSchemaRegistry != nil {
+		return SchemaRegistryTypeGlue
+	}
+	return "unknown"
 }

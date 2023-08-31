@@ -85,6 +85,11 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 		// DDLs on multiple schema or tables, ignore them.
 		return nil
 	}
+	if job.Type == timodel.ActionRenameTable && job.SchemaName != "" {
+		// DDL on single table with schema name, ignore it.
+		return nil
+	}
+
 	if job.Type == timodel.ActionCreateSchema ||
 		job.Type == timodel.ActionDropSchema {
 		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
@@ -165,11 +170,11 @@ func NewSnapshotFromMeta(
 			return nil, cerror.WrapError(cerror.ErrMetaListDatabases, err)
 		}
 		for _, tableInfo := range tableInfos {
-			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
-			if filter.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
-				log.Debug("ignore table", zap.String("table", tableInfo.TableName.String()))
+			if filter.ShouldIgnoreTable(dbinfo.Name.O, tableInfo.Name.O) {
+				log.Debug("ignore table", zap.String("table", tableInfo.Name.O))
 				continue
 			}
+			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,
 				tag:    tag,
@@ -428,6 +433,12 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		err := s.inner.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
+		}
+		// If it a rename table job and the schema does not exist,
+		// there is no need to create the table, since this table
+		// will not be replicated in the future.
+		if _, ok := s.inner.schemaByID(job.SchemaID); !ok {
+			return nil
 		}
 		// create table
 		err = s.inner.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)

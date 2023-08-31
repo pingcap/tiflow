@@ -58,8 +58,7 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 	if !hasNext || ty != model.MessageTypeRow {
-		return nil,
-			cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
+		return nil, cerror.ErrCraftCodecInvalidData.GenWithStack("not found row changed event message")
 	}
 	oldValue, newValue, err := b.decoder.RowChangedEvent(b.index)
 	if err != nil {

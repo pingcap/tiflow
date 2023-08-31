@@ -161,10 +161,13 @@ func TestParseCfg(t *testing.T) {
 			CertAllowedCN: []string{"dd", "ee"},
 		},
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent:    8,
-			WorkerPoolSize:      0,
-			RegionScanLimit:     40,
-			RegionRetryDuration: config.TomlDuration(time.Minute),
+			EnableMultiplexing:   true,
+			WorkerConcurrent:     8,
+			GrpcStreamConcurrent: 1,
+			FrontierConcurrent:   8,
+			WorkerPoolSize:       0,
+			RegionScanLimit:      40,
+			RegionRetryDuration:  config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
 			DB: &config.DBConfig{
@@ -309,10 +312,13 @@ check-balance-interval = "10s"
 		},
 		Security: &config.SecurityConfig{},
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent:    8,
-			WorkerPoolSize:      0,
-			RegionScanLimit:     40,
-			RegionRetryDuration: config.TomlDuration(3 * time.Second),
+			EnableMultiplexing:   true,
+			WorkerConcurrent:     8,
+			GrpcStreamConcurrent: 1,
+			FrontierConcurrent:   8,
+			WorkerPoolSize:       0,
+			RegionScanLimit:      40,
+			RegionRetryDuration:  config.TomlDuration(3 * time.Second),
 		},
 		Debug: &config.DebugConfig{
 			DB: &config.DBConfig{
@@ -443,10 +449,13 @@ cert-allowed-cn = ["dd","ee"]
 			CertAllowedCN: []string{"dd", "ee"},
 		},
 		KVClient: &config.KVClientConfig{
-			WorkerConcurrent:    8,
-			WorkerPoolSize:      0,
-			RegionScanLimit:     40,
-			RegionRetryDuration: config.TomlDuration(time.Minute),
+			EnableMultiplexing:   true,
+			WorkerConcurrent:     8,
+			GrpcStreamConcurrent: 1,
+			FrontierConcurrent:   8,
+			WorkerPoolSize:       0,
+			RegionScanLimit:      40,
+			RegionRetryDuration:  config.TomlDuration(time.Minute),
 		},
 		Debug: &config.DebugConfig{
 			DB: &config.DBConfig{

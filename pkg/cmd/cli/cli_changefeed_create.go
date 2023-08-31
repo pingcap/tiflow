@@ -16,6 +16,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/fatih/color"
@@ -147,6 +148,27 @@ func (o *createChangefeedOptions) completeReplicaCfg() error {
 	if len(o.commonChangefeedOptions.configFile) > 0 {
 		if err := o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
 			return err
+		}
+	}
+
+	uri, err := url.Parse(o.commonChangefeedOptions.sinkURI)
+	if err != nil {
+		return err
+	}
+
+	err = cfg.ValidateAndAdjust(uri)
+	if err != nil {
+		return err
+	}
+
+	for _, rules := range cfg.Sink.DispatchRules {
+		switch strings.ToLower(rules.PartitionRule) {
+		case "rowid", "index-value":
+			if cfg.EnableOldValue {
+				cmd.Printf("[WARN] This index-value distribution mode "+
+					"does not guarantee row-level orderliness when "+
+					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
+			}
 		}
 	}
 

@@ -222,9 +222,23 @@ type Syncer struct {
 	// `lower_case_table_names` setting of upstream db
 	SourceTableNamesFlavor conn.LowerCaseTableNamesFlavor
 
-	tsOffset                  atomic.Int64    // time offset between upstream and syncer, DM's timestamp - MySQL's timestamp
-	secondsBehindMaster       atomic.Int64    // current task delay second behind upstream
-	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
+	// time difference between upstream and DM nodes: time of DM - time of upstream.
+	// we use this to calculate replication lag more accurately when clock is not synced
+	// on either upstream or DM nodes.
+	tsOffset atomic.Int64
+	// this field measures the time difference in seconds between current time of DM and
+	// the minimal timestamp of currently processing binlog events.
+	// this lag will consider time difference between upstream and DM nodes
+	secondsBehindMaster atomic.Int64
+	// stores the last job TS(binlog event timestamp) of each worker,
+	// if there's no active job, the corresponding worker's TS is reset to 0.
+	// since DML worker runs jobs in batch, the TS is the TS of the first job in the batch.
+	// We account for skipped events too, if the distance between up and downstream is long,
+	// and there's no interested binlog event in between, we can have a decreasing lag.
+	// 	- 0 is for skip jobs
+	// 	- 1 is ddl worker
+	// 	- 2+ is for DML worker job idx=(queue id + 2)
+	workerJobTSArray          []*atomic.Int64
 	lastCheckpointFlushedTime time.Time
 
 	firstMeetBinlogTS *int64
@@ -607,6 +621,10 @@ func (s *Syncer) reset() {
 	if s.streamerController != nil {
 		s.streamerController.Close()
 	}
+	s.secondsBehindMaster.Store(0)
+	for _, jobTS := range s.workerJobTSArray {
+		jobTS.Store(0)
+	}
 	// create new job chans
 	s.newJobChans()
 	s.checkpoint.DiscardPendingSnapshots()
@@ -880,7 +898,7 @@ func (s *Syncer) calcReplicationLag(headerTS int64) int64 {
 
 // updateReplicationJobTS store job TS, it is called after every batch dml job / one skip job / one ddl job is added and committed.
 func (s *Syncer) updateReplicationJobTS(job *job, jobIdx int) {
-	// when job is nil mean no job in this bucket, need do reset this bucket job ts to 0
+	// when job is nil mean no job in this bucket, need to reset this bucket job ts to 0
 	if job == nil {
 		s.workerJobTSArray[jobIdx].Store(0)
 	} else {
@@ -1723,7 +1741,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	if fresh && s.cfg.Mode == config.ModeAll {
+	if fresh && config.HasLoad(s.cfg.Mode) {
 		delLoadTask = true
 		flushCheckpoint = true
 		freshAndAllMode = true
@@ -2345,6 +2363,35 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if err2 != nil {
 				return err2
 			}
+		case *replication.TransactionPayloadEvent:
+			for _, tpev := range ev.Events {
+				switch tpevt := tpev.Event.(type) {
+				case *replication.RowsEvent:
+					eventIndex++
+					s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(tpevt.Rows)))
+					ec.header.EventType = tpev.Header.EventType
+					sourceTable, err2 = s.handleRowsEvent(tpevt, ec)
+					if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
+						if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
+							affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
+						}
+						affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
+					}
+				case *replication.QueryEvent:
+					originSQL = strings.TrimSpace(string(tpevt.Query))
+					err2 = s.ddlWorker.HandleQueryEvent(tpevt, ec, originSQL)
+				case *replication.XIDEvent:
+					eventType = "XID"
+					needContinue, err2 = funcCommit()
+				default:
+					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
+				}
+			}
+			if needContinue {
+				continue
+			}
+		default:
+			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
 		}
 		if err2 != nil {
 			if err := s.handleEventError(err2, startLocation, endLocation, e.Header.EventType == replication.QUERY_EVENT, originSQL); err != nil {

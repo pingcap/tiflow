@@ -93,7 +93,6 @@ type processor struct {
 	metricProcessorErrorCounter  prometheus.Counter
 	metricProcessorTickDuration  prometheus.Observer
 	metricsProcessorMemoryGauge  prometheus.Gauge
-	metricRemainKVEventGauge     prometheus.Gauge
 }
 
 // checkReadyForMessages checks whether all necessary Etcd keys have been established.
@@ -109,12 +108,13 @@ var _ scheduler.TableExecutor = (*processor)(nil)
 // 2. Prepare phase for 2 phase scheduling, `isPrepare` should be true.
 // 3. Replicating phase for 2 phase scheduling, `isPrepare` should be false
 func (p *processor) AddTableSpan(
-	ctx context.Context, span tablepb.Span, startTs model.Ts, isPrepare bool,
+	ctx context.Context, span tablepb.Span, checkpoint tablepb.Checkpoint, isPrepare bool,
 ) (bool, error) {
 	if !p.checkReadyForMessages() {
 		return false, nil
 	}
 
+	startTs := checkpoint.CheckpointTs
 	if startTs == 0 {
 		log.Panic("table start ts must not be 0",
 			zap.String("captureID", p.captureInfo.ID),
@@ -144,6 +144,11 @@ func (p *processor) AddTableSpan(
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
+				if p.redo.r.Enabled() {
+					// ResolvedTs is store in external storage when redo log is enabled, so we need to
+					// start table with ResolvedTs in redoDMLManager.
+					p.redo.r.StartTable(span, checkpoint.ResolvedTs)
+				}
 				if err := p.sinkManager.r.StartTable(span, startTs); err != nil {
 					return false, errors.Trace(err)
 				}
@@ -223,7 +228,8 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 	var tableResolvedTs, tableCheckpointTs uint64
 	var state tablepb.TableState
 	done := func() bool {
-		state, alreadyExist := p.sinkManager.r.GetTableState(span)
+		var alreadyExist bool
+		state, alreadyExist = p.sinkManager.r.GetTableState(span)
 		if alreadyExist {
 			stats := p.sinkManager.r.GetTableStats(span)
 			tableResolvedTs = stats.ResolvedTs
@@ -345,7 +351,7 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 	span tablepb.Span, sinkStats sinkmanager.TableStats,
 ) tablepb.Stats {
 	pullerStats := p.sourceManager.r.GetTablePullerStats(span)
-	now, _ := p.upstream.PDClock.CurrentTime()
+	now := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
@@ -373,8 +379,8 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 		ResolvedTs:   sortStats.ReceivedMaxResolvedTs,
 	}
 	stats.StageCheckpoints["sorter-egress"] = tablepb.Checkpoint{
-		CheckpointTs: sinkStats.ReceivedMaxCommitTs,
-		ResolvedTs:   sinkStats.ReceivedMaxCommitTs,
+		CheckpointTs: sinkStats.ResolvedTs,
+		ResolvedTs:   sinkStats.ResolvedTs,
 	}
 
 	return stats
@@ -408,8 +414,6 @@ func newProcessor(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricsProcessorMemoryGauge: processorMemoryGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricRemainKVEventGauge: remainKVEventsGauge.
-			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
@@ -420,7 +424,6 @@ func newProcessor(
 var processorIgnorableError = []*errors.Error{
 	cerror.ErrAdminStopProcessor,
 	cerror.ErrReactorFinished,
-	cerror.ErrRedoWriterStopped,
 }
 
 // isProcessorIgnorableError returns true if the error means the processor exits
@@ -799,6 +802,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		p.changefeedID,
 		schemaStorage,
 		f,
+		false, /* isOwner */
 	)
 	if err != nil {
 		return errors.Trace(err)
@@ -893,9 +897,6 @@ func (p *processor) refreshMetrics() {
 		return
 	}
 	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.r.GetAllCurrentTableSpansCount()))
-	sortEngineReceivedEvents := p.sourceManager.r.ReceivedEvents()
-	tableSinksReceivedEvents := p.sinkManager.r.ReceivedEvents()
-	p.metricRemainKVEventGauge.Set(float64(sortEngineReceivedEvents - tableSinksReceivedEvents))
 }
 
 // Close closes the processor. It must be called explicitly to stop all sub-components.
@@ -959,14 +960,7 @@ func (p *processor) cleanupMetrics() {
 	processorTickDuration.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 	processorMemoryGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
 
-	ok := remainKVEventsGauge.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID)
-	if !ok {
-		log.Warn("delete remain kv events gauge metrics failed",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
-	}
-
-	ok = puller.PullerEventCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID, "kv")
+	ok := puller.PullerEventCounter.DeleteLabelValues(p.changefeedID.Namespace, p.changefeedID.ID, "kv")
 	if !ok {
 		log.Warn("delete puller event counter metrics failed",
 			zap.String("namespace", p.changefeedID.Namespace),

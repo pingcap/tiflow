@@ -64,6 +64,7 @@ type Config struct {
 	FileIndexWidth           int
 	DateSeparator            string
 	EnablePartitionSeparator bool
+	OutputColumnID           bool
 }
 
 // NewConfig returns the default cloud storage sink config.
@@ -114,6 +115,9 @@ func (c *Config) Apply(
 	c.DateSeparator = util.GetOrZero(replicaConfig.Sink.DateSeparator)
 	c.EnablePartitionSeparator = util.GetOrZero(replicaConfig.Sink.EnablePartitionSeparator)
 	c.FileIndexWidth = util.GetOrZero(replicaConfig.Sink.FileIndexWidth)
+	if replicaConfig.Sink.CloudStorageConfig != nil {
+		c.OutputColumnID = util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.OutputColumnID)
+	}
 
 	if c.FileIndexWidth < config.MinFileIndexWidth || c.FileIndexWidth > config.MaxFileIndexWidth {
 		c.FileIndexWidth = config.DefaultFileIndexWidth

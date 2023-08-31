@@ -20,6 +20,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -35,7 +36,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	uri := fmt.Sprintf("file:///%s", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI)
+	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, nil)
 	require.Nil(t, err)
 
 	ddlEvent := &model.DDLEvent{
@@ -99,7 +100,7 @@ func TestWriteCheckpointTs(t *testing.T) {
 	uri := fmt.Sprintf("file:///%s", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI)
+	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, nil)
 	require.Nil(t, err)
 	tables := []*model.TableInfo{
 		{
@@ -124,6 +125,7 @@ func TestWriteCheckpointTs(t *testing.T) {
 		},
 	}
 
+	time.Sleep(3 * time.Second)
 	err = sink.WriteCheckpointTs(ctx, 100, tables)
 	require.Nil(t, err)
 	metadata, err := os.ReadFile(path.Join(parentDir, "metadata"))

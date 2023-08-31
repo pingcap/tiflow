@@ -205,7 +205,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		return nil, nil
 	}()
-	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
+	if err != nil && !cerror.ShouldFailChangefeed(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
@@ -379,12 +379,13 @@ func datum2Column(
 		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
-			Name:    colName,
-			Type:    colInfo.GetType(),
-			Charset: colInfo.GetCharset(),
-			Value:   colValue,
-			Default: defaultValue,
-			Flag:    tableInfo.ColumnsFlag[colID],
+			Name:      colName,
+			Type:      colInfo.GetType(),
+			Charset:   colInfo.GetCharset(),
+			Collation: colInfo.GetCollate(),
+			Value:     colValue,
+			Default:   defaultValue,
+			Flag:      tableInfo.ColumnsFlag[colID],
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
@@ -723,7 +724,12 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 		case mysql.TypeEnum:
 			// For enum type, if no default value and not null is set,
 			// the default value is the first element of the enum list
-			d = types.NewDatum(col.FieldType.GetElem(0))
+			name := col.FieldType.GetElem(0)
+			enumValue, err := types.ParseEnumName(col.FieldType.GetElems(), name, col.GetCollate())
+			if err != nil {
+				return d, nil, 0, "", errors.Trace(err)
+			}
+			d = types.NewMysqlEnumDatum(enumValue)
 		case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar:
 			return d, emptyBytes, sizeOfEmptyBytes, "", nil
 		default:

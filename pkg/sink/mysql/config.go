@@ -113,7 +113,11 @@ type Config struct {
 	TLS                    string
 	ForceReplicate         bool
 
-	IsTiDB          bool // IsTiDB is true if the downstream is TiDB
+	IsTiDB bool // IsTiDB is true if the downstream is TiDB
+	// IsBDRModeSupported is true if the downstream is TiDB and write source is existed.
+	// write source exists when the downstream is TiDB and version is greater than or equal to v6.5.0.
+	IsWriteSourceExisted bool
+
 	SourceID        uint64
 	BatchDMLEnable  bool
 	MultiStmtEnable bool

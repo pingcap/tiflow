@@ -20,15 +20,17 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/sink/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
@@ -39,17 +41,10 @@ import (
 func verifyCreateChangefeedConfig(
 	ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
-	capture capture.Capture,
+	up *upstream.Upstream,
+	ctrl controller.Controller,
+	ectdClient etcd.CDCEtcdClient,
 ) (*model.ChangeFeedInfo, error) {
-	upManager, err := capture.GetUpstreamManager()
-	if err != nil {
-		return nil, err
-	}
-	up, err := upManager.GetDefaultUpstream()
-	if err != nil {
-		return nil, err
-	}
-
 	// verify sinkURI
 	if changefeedConfig.SinkURI == "" {
 		return nil, cerror.ErrSinkURIInvalid.GenWithStackByArgs("sink-uri is empty, can't not create a changefeed without sink-uri")
@@ -60,12 +55,11 @@ func verifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s", changefeedConfig.ID)
 	}
 	// check if the changefeed exists
-	cfStatus, err := capture.StatusProvider().GetChangeFeedStatus(ctx,
-		model.DefaultChangeFeedID(changefeedConfig.ID))
+	ok, err := ctrl.IsChangefeedExists(ctx, model.DefaultChangeFeedID(changefeedConfig.ID))
 	if err != nil && cerror.ErrChangeFeedNotExists.NotEqual(err) {
 		return nil, err
 	}
-	if cfStatus != nil {
+	if ok {
 		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changefeedConfig.ID)
 	}
 
@@ -83,7 +77,7 @@ func verifyCreateChangefeedConfig(
 	if err := gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		up.PDClient,
-		capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
+		ectdClient.GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		model.DefaultChangeFeedID(changefeedConfig.ID),
 		ensureTTL, changefeedConfig.StartTS); err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
@@ -122,7 +116,7 @@ func verifyCreateChangefeedConfig(
 		return nil, err
 	}
 
-	captureInfos, err := capture.StatusProvider().GetCaptures(ctx)
+	captureInfos, err := ctrl.GetCaptures(ctx)
 	if err != nil {
 		return nil, err
 	}

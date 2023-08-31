@@ -91,6 +91,12 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrNewStore, err))
 		return
 	}
+	ctrl, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	// We should not close kvStorage since all kvStorage in cdc is the same one.
 	// defer kvStorage.Close()
 	// TODO: We should get a kvStorage from upstream instead of creating a new one
@@ -98,7 +104,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		ctx,
 		cfg,
 		pdClient,
-		h.capture.StatusProvider(),
+		ctrl,
 		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceCreating),
 		kvStorage)
 	if err != nil {
@@ -225,14 +231,19 @@ func hasRunningImport(ctx context.Context, cli *clientv3.Client) error {
 func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 	ctx := c.Request.Context()
 	state := c.Query(apiOpVarChangefeedState)
-	statuses, err := h.capture.StatusProvider().GetAllChangeFeedStatuses(ctx)
+	controller, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	checkpointTs, err := controller.GetAllChangeFeedCheckpointTs(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 	namespace := getNamespaceValueWithDefault(c)
 
-	infos, err := h.capture.StatusProvider().GetAllChangeFeedInfo(ctx)
+	infos, err := controller.GetAllChangeFeedInfo(ctx)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -241,7 +252,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 	commonInfos := make([]ChangefeedCommonInfo, 0)
 	changefeeds := make([]model.ChangeFeedID, 0)
 
-	for cfID := range statuses {
+	for cfID := range infos {
 		// filter by namespace
 		if cfID.Namespace == namespace {
 			changefeeds = append(changefeeds, cfID)
@@ -260,7 +271,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 		if !exist {
 			continue
 		}
-		cfStatus := statuses[cfID]
+		changefeedCheckpointTs, ok := checkpointTs[cfID]
 
 		if !cfInfo.State.IsNeeded(state) {
 			// if the value of `state` is not 'all', only return changefeed
@@ -270,21 +281,27 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 
 		// return the common info only.
 		commonInfo := &ChangefeedCommonInfo{
-			UpstreamID:   cfInfo.UpstreamID,
-			Namespace:    cfID.Namespace,
-			ID:           cfID.ID,
-			FeedState:    cfInfo.State,
-			RunningError: cfInfo.Error,
+			UpstreamID: cfInfo.UpstreamID,
+			Namespace:  cfID.Namespace,
+			ID:         cfID.ID,
+			FeedState:  cfInfo.State,
 		}
+
+		if cfInfo.Error != nil {
+			commonInfo.RunningError = cfInfo.Error
+		} else {
+			commonInfo.RunningError = cfInfo.Warning
+		}
+
 		// if the state is normal, we shall not return the error info
 		// because changefeed will is retrying. errors will confuse the users
 		if commonInfo.FeedState == model.StateNormal {
 			commonInfo.RunningError = nil
 		}
 
-		if cfStatus != nil {
-			commonInfo.CheckpointTSO = cfStatus.CheckpointTs
-			tm := oracle.GetTimeFromTS(cfStatus.CheckpointTs)
+		if ok {
+			commonInfo.CheckpointTSO = changefeedCheckpointTs
+			tm := oracle.GetTimeFromTS(changefeedCheckpointTs)
 			commonInfo.CheckpointTime = model.JSONTime(tm)
 		}
 
@@ -301,7 +318,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 func getNamespaceValueWithDefault(c *gin.Context) string {
 	namespace := c.Query(apiOpVarNamespace)
 	if namespace == "" {
-		namespace = "default"
+		namespace = model.DefaultNamespace
 	}
 	return namespace
 }
@@ -559,7 +576,12 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
-	_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	ctrl, err := h.capture.GetController()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	exist, err := ctrl.IsChangefeedExists(ctx, changefeedID)
 	if err != nil {
 		if cerror.ErrChangeFeedNotExists.Equal(err) {
 			c.JSON(http.StatusOK, &EmptyResponse{})
@@ -568,7 +590,12 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	if !exist {
+		c.JSON(http.StatusOK, &EmptyResponse{})
+		return
+	}
 
+	// todo: controller call metastroe api to remove the changefeed
 	job := model.AdminJob{
 		CfID: changefeedID,
 		Type: model.AdminRemove,
@@ -582,12 +609,15 @@ func (h *OpenAPIV2) deleteChangefeed(c *gin.Context) {
 	// Owner needs at least two ticks to remove a changefeed,
 	// we need to wait for it.
 	err = retry.Do(ctx, func() error {
-		_, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+		exist, err = ctrl.IsChangefeedExists(ctx, changefeedID)
 		if err != nil {
 			if strings.Contains(err.Error(), "ErrChangeFeedNotExists") {
 				return nil
 			}
 			return err
+		}
+		if !exist {
+			return nil
 		}
 		return cerror.ErrChangeFeedDeletionUnfinished.GenWithStackByArgs(changefeedID)
 	},
