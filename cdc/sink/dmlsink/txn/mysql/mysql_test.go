@@ -112,23 +112,29 @@ func TestPrepareDML(t *testing.T) {
 				sqls:    []string{},
 				values:  [][]interface{}{},
 			},
-		}, {
+		},
+		// delete event
+		{
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
-						Value: 1,
-					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
-						Value: 1,
-					}},
+					PreColumns: []*model.Column{
+						nil,
+						{
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						},
+						{
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 1,
+						},
+					},
 					IndexColumns: [][]int{{1, 2}},
 				},
 			},
@@ -139,23 +145,29 @@ func TestPrepareDML(t *testing.T) {
 				rowCount:        1,
 				approximateSize: 74,
 			},
-		}, {
+		},
+		// insert event.
+		{
 			input: []*model.RowChangedEvent{
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
-						Value: 2,
-					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
-						Value: 2,
-					}},
+					Columns: []*model.Column{
+						nil,
+						{
+							Name:  "a1",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 2,
+						},
+						{
+							Name:  "a3",
+							Type:  mysql.TypeLong,
+							Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+							Value: 2,
+						},
+					},
 					IndexColumns: [][]int{{1, 2}},
 				},
 			},
@@ -168,6 +180,7 @@ func TestPrepareDML(t *testing.T) {
 			},
 		},
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ms := newMySQLBackendWithoutDB(ctx)

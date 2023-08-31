@@ -529,8 +529,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	values := make([][]interface{}, 0, s.rows)
 	callbacks := make([]dmlsink.CallbackFunc, 0, len(s.events))
 
-	// translateToInsert control the update and insert behavior
-	// we only translate into insert when old value is enabled and safe mode is disabled
+	// translateToInsert control the update and insert behavior.
 	translateToInsert := !s.cfg.SafeMode
 
 	rowCount := 0
