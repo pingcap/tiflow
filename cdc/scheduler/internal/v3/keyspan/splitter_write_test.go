@@ -17,8 +17,10 @@ import (
 	"context"
 	"encoding/hex"
 	"math"
+	"strconv"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -132,21 +134,21 @@ func TestSplitRegionsByWrittenKeysHotspot1(t *testing.T) {
 	re.Len(info.Counts, 4)
 	re.EqualValues(1, info.Counts[0])
 	re.EqualValues(1, info.Counts[1])
-	re.EqualValues(4, info.Counts[2])
-	re.EqualValues(1, info.Counts[3])
+	re.EqualValues(1, info.Counts[2])
+	re.EqualValues(4, info.Counts[3])
 	re.Len(info.Weights, 4)
 	re.EqualValues(101, info.Weights[0])
 	re.EqualValues(2, info.Weights[1])
-	re.EqualValues(107, info.Weights[2])
-	re.EqualValues(101, info.Weights[3])
+	re.EqualValues(101, info.Weights[2])
+	re.EqualValues(107, info.Weights[3])
 	re.Len(info.Spans, 4)
 	re.EqualValues(startKeys[2], info.Spans[0].StartKey)
 	re.EqualValues(endKeys[2], info.Spans[0].EndKey)
 	re.EqualValues(startKeys[3], info.Spans[1].StartKey)
 	re.EqualValues(endKeys[3], info.Spans[1].EndKey)
 	re.EqualValues(startKeys[4], info.Spans[2].StartKey)
-	re.EqualValues(endKeys[7], info.Spans[2].EndKey)
-	re.EqualValues(startKeys[8], info.Spans[3].StartKey)
+	re.EqualValues(endKeys[4], info.Spans[2].EndKey)
+	re.EqualValues(startKeys[5], info.Spans[3].StartKey)
 	re.EqualValues(endKeys[8], info.Spans[3].EndKey)
 }
 
@@ -158,13 +160,13 @@ func TestSplitRegionsByWrittenKeysHotspot2(t *testing.T) {
 	regions, startKeys, endKeys := prepareRegionsInfo(
 		[7]int{1000, 1, 1, 1, 100, 1, 99})
 
-	info := splitRegionsByWrittenKeys(0, regions, 0, 4, spanRegionLimit) // [2], [3,4,5], [6,7], [8]
+	info := splitRegionsByWrittenKeys(0, regions, 0, 4, spanRegionLimit)
 	re.Len(info.Spans, 4)
 	re.EqualValues(startKeys[2], info.Spans[0].StartKey)
 	re.EqualValues(endKeys[2], info.Spans[0].EndKey)
 	re.EqualValues(startKeys[3], info.Spans[1].StartKey)
-	re.EqualValues(endKeys[5], info.Spans[1].EndKey)
-	re.EqualValues(startKeys[6], info.Spans[2].StartKey)
+	re.EqualValues(endKeys[6], info.Spans[1].EndKey)
+	re.EqualValues(startKeys[7], info.Spans[2].StartKey)
 	re.EqualValues(endKeys[7], info.Spans[2].EndKey)
 	re.EqualValues(startKeys[8], info.Spans[3].StartKey)
 	re.EqualValues(endKeys[8], info.Spans[3].EndKey)
@@ -213,4 +215,24 @@ func TestSplitRegionsByWrittenKeysConfig(t *testing.T) {
 		WriteKeyThreshold: 0,
 	})
 	require.Empty(t, spans)
+}
+
+func TestSplitEven(t *testing.T) {
+	tblID := model.TableID(1)
+	regionCount := 4653 + 1051 + 745 + 9530 + 1
+	regions := make([]pdutil.RegionInfo, regionCount)
+	for i := 0; i < regionCount; i++ {
+		regions[i] = pdutil.RegionInfo{
+			ID:          uint64(i),
+			StartKey:    "" + strconv.Itoa(i),
+			EndKey:      "" + strconv.Itoa(i),
+			WrittenKeys: 2,
+		}
+	}
+	info := splitRegionsByWrittenKeys(tblID, regions, 1, 5, 50000)
+	require.Len(t, info.Counts, 5)
+	require.Len(t, info.Weights, 5)
+	for _, w := range info.Weights {
+		require.Equal(t, 9588, w)
+	}
 }

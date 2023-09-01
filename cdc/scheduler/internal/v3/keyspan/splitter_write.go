@@ -160,9 +160,6 @@ func splitRegionsByWrittenKeys(
 				weights = append(weights, int(pageWrittenKeys))
 				pageWrittenKeys = 0
 				pageStartIdx = idx
-				// update writtenKeysPerPage to make the rest regions evenly split
-				// to the rest pages.
-				writtenKeysPerPage = (totalWriteNormalized - accWrittenKeys) / uint64(restPages)
 				accWrittenKeys = 0
 				pageRegionsCount = 0
 				break
