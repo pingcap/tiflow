@@ -55,7 +55,7 @@ func TestLocalFileTriggeredByJobRemoval(t *testing.T) {
 		resID)
 	require.NoError(t, err)
 
-	_, err = handle.BrExternalStorage().Create(context.Background(), "1.txt")
+	_, err = handle.BrExternalStorage().Create(context.Background(), "1.txt", nil)
 	require.NoError(t, err)
 	err = handle.Persist(ctx)
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestLocalFileRecordRemovedTriggeredByExecutorOffline(t *testing.T) {
 		"job-1",
 		"/local/resource-1")
 	require.NoError(t, err)
-	_, err = handle.BrExternalStorage().Create(context.Background(), "1.txt")
+	_, err = handle.BrExternalStorage().Create(context.Background(), "1.txt", nil)
 	require.NoError(t, err)
 	err = handle.Persist(ctx)
 	require.NoError(t, err)

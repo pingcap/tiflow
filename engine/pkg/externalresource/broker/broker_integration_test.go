@@ -183,7 +183,7 @@ func createS3ResourceForWorker(
 		defer cancel()
 		for index, fileName := range newTestFiles {
 			filePath := fmt.Sprintf("%s/%s/%s", creator, resName, fileName)
-			f, err := resStorage.Create(ctx, fileName)
+			f, err := resStorage.Create(ctx, fileName, nil)
 			require.NoError(t, err)
 			content := filePath + fmt.Sprintf("_index-%d", index)
 			// FIXME(CharlesCheung): If nothing is written, f.Close will report an error.
@@ -252,7 +252,7 @@ func TestIntegrationBrokerOpenNewS3Storage(t *testing.T) {
 	cli.AssertExpectations(t)
 	cli.ExpectedCalls = nil
 
-	f, err := hdl.BrExternalStorage().Create(context.Background(), "1.txt")
+	f, err := hdl.BrExternalStorage().Create(context.Background(), "1.txt", nil)
 	require.NoError(t, err)
 
 	err = f.Close(context.Background())
