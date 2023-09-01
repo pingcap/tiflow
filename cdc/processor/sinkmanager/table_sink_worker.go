@@ -231,7 +231,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, e)
+			x, size, err := handleRowChangedEvents(w.changefeedID, task.span, e)
 			if err != nil {
 				return err
 			}

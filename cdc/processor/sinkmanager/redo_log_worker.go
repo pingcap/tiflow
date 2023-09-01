@@ -145,7 +145,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e.Row != nil {
 			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, e)
+			x, size, err = handleRowChangedEvents(w.changefeedID, task.span, e)
 			if err != nil {
 				return errors.Trace(err)
 			}

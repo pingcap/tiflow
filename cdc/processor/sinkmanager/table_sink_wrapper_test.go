@@ -151,7 +151,7 @@ func TestConvertNilRowChangedEvents(t *testing.T) {
 	events := []*model.PolymorphicEvent{nil}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	result, size, err := convertRowChangedEvents(changefeedID, span, events...)
+	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
@@ -174,7 +174,7 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 
-	result, size, err := convertRowChangedEvents(changefeedID, span, events...)
+	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
@@ -226,7 +226,7 @@ func TestConvertRowChangedEventsHandleKeyColumnUpdated(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	result, size, err := convertRowChangedEvents(changefeedID, span, events...)
+	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
 	require.Equal(t, uint64(224), size)
@@ -278,7 +278,7 @@ func TestConvertRowChangedEventsNonHandleKeyColumnUpdated(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	result, size, err := convertRowChangedEvents(changefeedID, span, events...)
+	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(224), size)
