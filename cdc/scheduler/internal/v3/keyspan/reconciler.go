@@ -30,12 +30,17 @@ import (
 	"go.uber.org/zap"
 )
 
-const spanRegionLimit = 50000
+const (
+	// spanRegionLimit is the maximum number of regions a span can cover.
+	spanRegionLimit = 100000
+	// spanNumberCoefficient is the coefficient that use to
+	// multiply the number of captures to get the number of spans.
+	spanNumberCoefficient = 3
+)
 
 type splitter interface {
 	split(
 		ctx context.Context, span tablepb.Span, totalCaptures int,
-		config *config.ChangefeedSchedulerConfig,
 	) []tablepb.Span
 }
 
@@ -72,8 +77,8 @@ func NewReconciler(
 		config:       config,
 		splitter: []splitter{
 			// write splitter has the highest priority.
-			newWriteSplitter(changefeedID, pdapi),
-			newRegionCountSplitter(changefeedID, up.RegionCache),
+			newWriteSplitter(changefeedID, pdapi, config.WriteKeyThreshold),
+			newRegionCountSplitter(changefeedID, up.RegionCache, config.RegionThreshold),
 		},
 	}, nil
 }
@@ -121,7 +126,7 @@ func (m *Reconciler) Reconcile(
 			spans := []tablepb.Span{tableSpan}
 			if compat.CheckSpanReplicationEnabled() {
 				for _, splitter := range m.splitter {
-					spans = splitter.split(ctx, tableSpan, len(aliveCaptures), m.config)
+					spans = splitter.split(ctx, tableSpan, len(aliveCaptures))
 					if len(spans) > 1 {
 						break
 					}
@@ -207,4 +212,16 @@ func (m *Reconciler) Reconcile(
 		}
 	}
 	return m.spanCache
+}
+
+func getSpansNumber(regionNum, captureNum int) int {
+	spanNum := 1
+	if regionNum > 1 {
+		// spanNumber = max(captureNum * spanNumberCoefficient, totalRegions / spanRegionLimit)
+		spanNum = captureNum * spanNumberCoefficient
+		if regionNum/spanRegionLimit > spanNum {
+			spanNum = regionNum / spanRegionLimit
+		}
+	}
+	return spanNum
 }

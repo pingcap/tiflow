@@ -110,12 +110,12 @@ func TestRegionCountSplitSpan(t *testing.T) {
 	}
 
 	for i, cs := range cases {
-		splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache)
 		cfg := &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
 			RegionThreshold:        1,
 		}
-		spans := splitter.split(context.Background(), cs.span, cs.totalCaptures, cfg)
+		splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache, cfg.RegionThreshold)
+		spans := splitter.split(context.Background(), cs.span, cs.totalCaptures)
 		require.Equalf(t, cs.expectSpans, spans, "%d %s", i, &cs.span)
 	}
 }
@@ -174,16 +174,15 @@ func TestRegionCountEvenlySplitSpan(t *testing.T) {
 		},
 	}
 	for i, cs := range cases {
-		splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache)
 		cfg := &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
 			RegionThreshold:        1,
 		}
+		splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache, cfg.RegionThreshold)
 		spans := splitter.split(
 			context.Background(),
 			tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
 			cs.totalCaptures,
-			cfg,
 		)
 		if cs.totalCaptures == 0 {
 			require.Equalf(t, 1, len(spans), "%d %v", i, cs)
@@ -217,13 +216,13 @@ func TestSplitSpanRegionOutOfOrder(t *testing.T) {
 	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_1"), EndKey: []byte("t1_4")}, 2)
 	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, 3)
 
-	splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache)
 	cfg := &config.ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: true,
 		RegionThreshold:        1,
 	}
+	splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache, cfg.RegionThreshold)
 	span := tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}
-	spans := splitter.split(context.Background(), span, 1, cfg)
+	spans := splitter.split(context.Background(), span, 1)
 	require.Equal(
 		t, []tablepb.Span{{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}}, spans)
 }

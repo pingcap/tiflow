@@ -21,28 +21,28 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 )
 
 type regionCountSplitter struct {
-	changefeedID model.ChangeFeedID
-	regionCache  RegionCache
+	changefeedID    model.ChangeFeedID
+	regionCache     RegionCache
+	regionThreshold int
 }
 
 func newRegionCountSplitter(
-	changefeedID model.ChangeFeedID, regionCache RegionCache,
+	changefeedID model.ChangeFeedID, regionCache RegionCache, regionThreshold int,
 ) *regionCountSplitter {
 	return &regionCountSplitter{
-		changefeedID: changefeedID,
-		regionCache:  regionCache,
+		changefeedID:    changefeedID,
+		regionCache:     regionCache,
+		regionThreshold: regionThreshold,
 	}
 }
 
 func (m *regionCountSplitter) split(
-	ctx context.Context, span tablepb.Span, totalCaptures int,
-	config *config.ChangefeedSchedulerConfig,
+	ctx context.Context, span tablepb.Span, captureNum int,
 ) []tablepb.Span {
 	bo := tikv.NewBackoffer(ctx, 500)
 	regions, err := m.regionCache.ListRegionIDsInKeyRange(bo, span.StartKey, span.EndKey)
@@ -54,29 +54,21 @@ func (m *regionCountSplitter) split(
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
-	if len(regions) <= config.RegionThreshold || totalCaptures == 0 {
+	if len(regions) <= m.regionThreshold || captureNum == 0 {
 		log.Info("schedulerv3: skip split span by region count",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.String("span", span.String()),
-			zap.Int("totalCaptures", totalCaptures),
+			zap.Int("totalCaptures", captureNum),
 			zap.Int("regionCount", len(regions)),
-			zap.Int("regionThreshold", config.RegionThreshold))
+			zap.Int("regionThreshold", m.regionThreshold))
 		return []tablepb.Span{span}
 	}
 
-	pages := totalCaptures
+	stepper := newEvenlySplitStepper(
+		getSpansNumber(len(regions), captureNum),
+		len(regions))
 
-	totalRegions := len(regions)
-	if totalRegions == 0 {
-		pages = 1
-	}
-
-	if totalRegions/spanRegionLimit > pages {
-		pages = totalRegions / spanRegionLimit
-	}
-
-	stepper := newEvenlySplitStepper(pages, totalRegions)
 	spans := make([]tablepb.Span, 0, stepper.SpanCount())
 	start, end := 0, stepper.Step()
 	for {
@@ -133,9 +125,9 @@ func (m *regionCountSplitter) split(
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.String("span", span.String()),
 		zap.Int("spans", len(spans)),
-		zap.Int("totalCaptures", totalCaptures),
+		zap.Int("totalCaptures", captureNum),
 		zap.Int("regionCount", len(regions)),
-		zap.Int("regionThreshold", config.RegionThreshold),
+		zap.Int("regionThreshold", m.regionThreshold),
 		zap.Int("spanRegionLimit", spanRegionLimit))
 	return spans
 }
