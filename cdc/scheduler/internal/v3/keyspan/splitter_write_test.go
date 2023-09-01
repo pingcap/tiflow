@@ -217,7 +217,7 @@ func TestSplitRegionsByWrittenKeysConfig(t *testing.T) {
 	require.Empty(t, spans)
 }
 
-func TestSplitEven(t *testing.T) {
+func TestSplitRegionEven(t *testing.T) {
 	tblID := model.TableID(1)
 	regionCount := 4653 + 1051 + 745 + 9530 + 1
 	regions := make([]pdutil.RegionInfo, regionCount)
