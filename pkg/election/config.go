@@ -70,6 +70,9 @@ type Config struct {
 	//
 	// It defaults to 8 seconds if not set.
 	RenewDeadline time.Duration
+	// ExitOnRenewFail indicates whether the current member should exit when
+	// failing to renew the lease.
+	ExitOnRenewFail bool
 }
 
 // AdjustAndValidate adjusts the config and validates it.

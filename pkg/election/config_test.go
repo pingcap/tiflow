@@ -19,8 +19,8 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/engine/pkg/election"
-	"github.com/pingcap/tiflow/engine/pkg/election/mock"
+	"github.com/pingcap/tiflow/pkg/election"
+	"github.com/pingcap/tiflow/pkg/election/mock"
 	"github.com/stretchr/testify/require"
 )
 

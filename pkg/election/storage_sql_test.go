@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package election_test
+package election
 
 import (
 	"context"
@@ -20,19 +20,19 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/tiflow/engine/pkg/election"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func newSQLStorageAndMock(t *testing.T) (*election.SQLStorage, sqlmock.Sqlmock) {
+func newSQLStorageAndMock(t *testing.T) (*SQLStorage, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE IF NOT EXISTS leader_election (id int NOT NULL, version bigint NOT NULL, record text NOT NULL, PRIMARY KEY (id))")).
+	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE IF NOT EXISTS leader_election " +
+		"(id int NOT NULL, version bigint NOT NULL, record text NOT NULL, PRIMARY KEY (id))")).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	s, err := election.NewSQLStorage(db, "leader_election")
+	s, err := NewSQLStorage(db, "leader_election")
 	require.NoError(t, err)
 
 	return s, mock
@@ -47,7 +47,7 @@ func TestSQLStorageGetEmptyRecord(t *testing.T) {
 		WithArgs(1).WillReturnRows(sqlmock.NewRows([]string{"version", "record"}))
 	record, err := s.Get(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, &election.Record{}, record)
+	require.Equal(t, &Record{}, record)
 }
 
 func TestSQLStorageGetExistingRecord(t *testing.T) {
@@ -55,9 +55,9 @@ func TestSQLStorageGetExistingRecord(t *testing.T) {
 
 	s, mock := newSQLStorageAndMock(t)
 
-	expectedRecord := &election.Record{
+	expectedRecord := &Record{
 		LeaderID: "id1",
-		Members: []*election.Member{
+		Members: []*Member{
 			{
 				ID:   "id1",
 				Name: "name1",
@@ -84,9 +84,9 @@ func TestSQLStorageInsertRecord(t *testing.T) {
 
 	s, mock := newSQLStorageAndMock(t)
 
-	record := &election.Record{
+	record := &Record{
 		LeaderID: "id1",
-		Members: []*election.Member{
+		Members: []*Member{
 			{
 				ID:   "id1",
 				Name: "name1",
@@ -109,9 +109,9 @@ func TestSQLStorageUpdateRecord(t *testing.T) {
 
 	s, mock := newSQLStorageAndMock(t)
 
-	record := &election.Record{
+	record := &Record{
 		LeaderID: "id1",
-		Members: []*election.Member{
+		Members: []*Member{
 			{
 				ID:   "id1",
 				Name: "name1",
@@ -131,4 +131,34 @@ func TestSQLStorageUpdateRecord(t *testing.T) {
 		WithArgs(int64(2), recordBytes, 1, int64(1)).WillReturnResult(sqlmock.NewResult(0, 1))
 	err = s.Update(context.Background(), record)
 	require.NoError(t, err)
+}
+
+func TestInMemorySQLStorage(t *testing.T) {
+	t.Parallel()
+
+	dbName := t.TempDir()
+	s, err := NewInMemorySQLStorage(dbName, "leader_election")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	record := &Record{
+		LeaderID: "id1",
+		Members: []*Member{
+			{
+				ID:   "id1",
+				Name: "name1",
+			},
+		},
+		Version: 0, // 0 means record not created before.
+	}
+	err = s.Update(ctx, record)
+	require.NoError(t, err)
+
+	recordRead, err := s.Get(ctx)
+	require.NoError(t, err)
+	require.Equal(t, record.Members, recordRead.Members)
+	require.Equal(t, record.LeaderID, recordRead.LeaderID)
+	require.Equal(t, record.Version+1, recordRead.Version)
 }

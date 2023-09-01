@@ -14,7 +14,6 @@
 package metadata
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -22,48 +21,41 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
-// ChangefeedID identifies a changefeed.
-type ChangefeedID struct {
-	model.ChangeFeedID
+// ChangefeedIDWithEpoch identifies a changefeed.
+type ChangefeedIDWithEpoch struct {
+	ID model.ChangeFeedID
 
 	// Epoch can't be specified by users. It's used by TiCDC internally
 	// to tell distinct changefeeds with a same ID.
 	Epoch uint64
+}
 
-	// Combine of name and epoch, for comparing 2 ChangefeedInfos.
-	Comparable string
+// String implements fmt.Stringer interface
+func (c ChangefeedIDWithEpoch) String() string {
+	return fmt.Sprintf("%s.%d", c.ID.String(), c.Epoch)
+}
+
+// Compare compares two ChangefeedIDWithEpoch base on their string representation.
+func (c *ChangefeedIDWithEpoch) Compare(other ChangefeedIDWithEpoch) int {
+	return strings.Compare(c.String(), other.String())
 }
 
 // ChangefeedInfo is a minimal info collection to describe a changefeed.
 type ChangefeedInfo struct {
-	ID       model.ChangeFeedID
-	SinkURI  string
+	ChangefeedIDWithEpoch
+
+	UpstreamID uint64
+	SinkURI    string
+
 	StartTs  uint64
 	TargetTs uint64
 	Config   *config.ReplicaConfig
-}
-
-// UpstreamInfo is a minimal info collection to describe an upstream.
-type UpstreamInfo struct {
-	ID            uint64
-	PDEndpoints   string
-	KeyPath       string
-	CertPath      string
-	CAPath        string
-	CertAllowedCN []string
 }
 
 // ChangefeedProgress is for changefeed progress.
 type ChangefeedProgress struct {
 	CheckpointTs      uint64
 	MinTableBarrierTs uint64
-}
-
-// CaptureInfo indicates a capture.
-type CaptureInfo struct {
-	ID            string
-	AdvertiseAddr string
-	Version       string
 }
 
 // -------------------- About owner schedule -------------------- //
@@ -113,8 +105,8 @@ const (
 
 // ScheduledChangefeed is for owner and processor schedule.
 type ScheduledChangefeed struct {
-	ChangefeedID ChangefeedID
-	CaptureID    string
+	ChangefeedID ChangefeedIDWithEpoch
+	CaptureID    model.CaptureID
 	State        SchedState
 
 	// TaskPosition is used for creating owner and processors on captures.
@@ -127,107 +119,6 @@ type ScheduledChangefeed struct {
 type ChangefeedSchedule struct {
 	Owner      ScheduledChangefeed
 	Processors []ScheduledChangefeed
-}
-
-// Querier is used to query informations from metadata storage.
-type Querier interface {
-	// GetChangefeed queries some or all changefeeds.
-	GetChangefeeds(...model.ChangeFeedID) ([]*ChangefeedInfo, []ChangefeedID, error)
-
-	// GetCaptures queries some or all captures.
-	GetCaptures(...string) ([]*CaptureInfo, error)
-}
-
-// CaptureObservation is for observing and updating metadata on a CAPTURE instance.
-//
-// All intrefaces are thread-safe and shares one same Context.
-type CaptureObservation interface {
-	// CaptureInfo tells the caller who am I.
-	Self() *CaptureInfo
-
-	// Heartbeat tells the metadata storage I'm still alive.
-	Heartbeat(context.Context) error
-
-	// TakeControl blocks until becomes controller or gets canceled.
-	TakeControl() (ControllerObservation, error)
-
-	// Advance advances some changefeed progresses.
-	Advance(cfs []ChangefeedID, progresses []ChangefeedProgress) error
-
-	// Fetch owner modifications.
-	OwnerChanges() <-chan ScheduledChangefeed
-
-	// When an owner exits, inform the metadata storage.
-	PostOwnerRemoved(cf ChangefeedID) error
-
-	// Fetch processor list modifications.
-	ProcessorChanges() <-chan ScheduledChangefeed
-
-	// When a processor exits, inform the metadata storage.
-	PostProcessorRemoved(cf ChangefeedID) error
-}
-
-// ControllerObservation is for observing and updating meta by Controller.
-//
-// All intrefaces are thread-safe and shares one same Context.
-type ControllerObservation interface {
-	// CreateChangefeed creates a changefeed, Epoch will be filled into the input ChangefeedInfo.
-	CreateChangefeed(cf *ChangefeedInfo, up *UpstreamInfo) (ChangefeedID, error)
-
-	// RemoveChangefeed removes a changefeed, will auto stop owner and processors.
-	RemoveChangefeed(cf ChangefeedID) error
-
-	// Fetch the latest capture list in the TiCDC cluster.
-	RefreshCaptures() (captures []*CaptureInfo, changed bool)
-
-	// Schedule a changefeed owner to a given target.
-	// Notes:
-	//   * the target capture can fetch the event by `OwnerChanges`.
-	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetOwner(cf ChangefeedID, target ScheduledChangefeed) error
-
-	// Schedule some captures as workers to a given changefeed.
-	// Notes:
-	//   * target captures can fetch the event by `ProcessorChanges`.
-	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetProcessors(cf ChangefeedID, workers []ScheduledChangefeed) error
-
-	// Get current schedule of the given changefeed.
-	GetChangefeedSchedule(cf ChangefeedID) (ChangefeedSchedule, error)
-
-	// Get a snapshot of all changefeeds current schedule.
-	ScheduleSnapshot() ([]ChangefeedSchedule, []*CaptureInfo, error)
-}
-
-// OwnerObservation is for observing and updating running status of a changefeed.
-//
-// All intrefaces are thread-safe and shares one same Context.
-type OwnerObservation interface {
-	Self() (*ChangefeedInfo, ChangefeedID)
-
-	// PauseChangefeed pauses a changefeed.
-	PauseChangefeed() error
-
-	// ResumeChangefeed resumes a changefeed.
-	ResumeChangefeed() error
-
-	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
-	UpdateChangefeed(*ChangefeedInfo) error
-
-	// set the changefeed to state finished.
-	SetChangefeedFinished() error
-
-	// Set the changefeed to state failed.
-	SetChangefeedFailed(err model.RunningError) error
-
-	// Set the changefeed to state warning.
-	SetChangefeedWarning(warn model.RunningError) error
-
-	// Set the changefeed to state pending.
-	SetChangefeedPending() error
-
-	// Fetch the latest capture list to launch processors.
-	RefreshProcessors() (captures []ScheduledChangefeed, changed bool)
 }
 
 // CheckScheduleState checks whether role state transformation is valid or not.

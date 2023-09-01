@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/tiflow/engine/pkg/election"
-	"github.com/pingcap/tiflow/engine/pkg/election/mock"
+	"github.com/pingcap/tiflow/pkg/election"
+	"github.com/pingcap/tiflow/pkg/election/mock"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -94,7 +94,7 @@ func TestElectorBasic(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := elector.Run(ctx)
+			err := elector.RunElection(ctx)
 			require.Error(t, err)
 			require.Equal(t, context.Canceled, errors.Cause(err))
 		}()
@@ -251,7 +251,7 @@ func TestElectorRenewFailure(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		err := e1.Run(ctx)
+		err := e1.RunElection(ctx)
 		require.Error(t, err)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -280,7 +280,7 @@ func TestElectorRenewFailure(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := e2.Run(ctx)
+		err := e2.RunElection(ctx)
 		require.Error(t, err)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -372,7 +372,7 @@ func TestLeaderCallbackUnexpectedExit(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := e1.Run(ctx)
+		err := e1.RunElection(ctx)
 		require.Error(t, err)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
@@ -400,7 +400,7 @@ func TestLeaderCallbackUnexpectedExit(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		err := e2.Run(ctx)
+		err := e2.RunElection(ctx)
 		require.Error(t, err)
 		require.Equal(t, context.Canceled, errors.Cause(err))
 	}()
