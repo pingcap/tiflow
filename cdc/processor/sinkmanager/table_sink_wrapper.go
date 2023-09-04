@@ -475,7 +475,8 @@ func shouldSplitUpdateEvent(updateEvent *model.RowChangedEvent) bool {
 	for i := range updateEvent.Columns {
 		col := updateEvent.Columns[i]
 		preCol := updateEvent.PreColumns[i]
-		if col != nil && col.Flag.IsUniqueKey() && preCol != nil && preCol.Flag.IsUniqueKey() {
+		if col != nil && (col.Flag.IsUniqueKey() || col.Flag.IsHandleKey()) &&
+			preCol != nil && (preCol.Flag.IsUniqueKey() || preCol.Flag.IsHandleKey()) {
 			colValueString := model.ColumnValueString(col.Value)
 			preColValueString := model.ColumnValueString(preCol.Value)
 			if colValueString != preColValueString {
