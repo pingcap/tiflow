@@ -262,7 +262,6 @@ func TestSpanRegionLimit(t *testing.T) {
 		copy(shuffled, nums)
 
 		for i := n - 1; i > 0; i-- {
-			// 在每次交换时，添加一个保留原始数据的概率
 			if rand.Float64() < preservationRate {
 				continue
 			}

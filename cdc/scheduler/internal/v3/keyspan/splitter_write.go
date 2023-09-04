@@ -172,7 +172,9 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV1(
 		regionCount++
 		spanWriteWeight += regions[i].NormalizedWeight
 		spanWriteKeys += regions[i].WrittenKeys
-		// If the restSpans count is one, we will use the rest regions as the last span.
+		// If the restSpans count is one, and the restWeight is less than writeLimitPerSpan,
+		// we will use the rest regions as the last span. If the restWeight is larger than writeLimitPerSpan,
+		// then we need to add more restSpans (restWeight / writeLimitPerSpan) to split the rest regions.
 		if restSpans == 1 {
 			if restWeight < int64(writeLimitPerSpan) {
 				spans = append(spans, tablepb.Span{
@@ -334,7 +336,9 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV2(
 		regionCount++
 		spanWriteWeight += regions[i].NormalizedWeight
 		spanWriteKeys += regions[i].WrittenKeys
-		// If the restSpans count is one, we will use the rest regions as the last span.
+		// If the restSpans count is one, and the restWeight is less than writeLimitPerSpan,
+		// we will use the rest regions as the last span. If the restWeight is larger than writeLimitPerSpan,
+		// then we need to add more restSpans (restWeight / writeLimitPerSpan) to split the rest regions.
 		if restSpans == 1 {
 			if restWeight <= int64(writeLimitPerSpan) {
 				spans = append(spans, tablepb.Span{
