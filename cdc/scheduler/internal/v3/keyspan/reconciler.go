@@ -32,10 +32,10 @@ import (
 
 const (
 	// spanRegionLimit is the maximum number of regions a span can cover.
-	spanRegionLimit = 100000
-	// spanNumberCoefficient is the coefficient that use to
+	spanRegionLimit = 50000
+	// baseSpanNumberCoefficient is the base coefficient that use to
 	// multiply the number of captures to get the number of spans.
-	spanNumberCoefficient = 3
+	baseSpanNumberCoefficient = 3
 )
 
 type splitter interface {
@@ -215,10 +215,14 @@ func (m *Reconciler) Reconcile(
 }
 
 func getSpansNumber(regionNum, captureNum int) int {
+	coefficient := captureNum - 1
+	if baseSpanNumberCoefficient > coefficient {
+		coefficient = baseSpanNumberCoefficient
+	}
 	spanNum := 1
 	if regionNum > 1 {
-		// spanNumber = max(captureNum * spanNumberCoefficient, totalRegions / spanRegionLimit)
-		spanNum = captureNum * spanNumberCoefficient
+		// spanNumber = max(captureNum * coefficient, totalRegions / spanRegionLimit)
+		spanNum = captureNum * coefficient
 		if regionNum/spanRegionLimit > spanNum {
 			spanNum = regionNum / spanRegionLimit
 		}

@@ -169,6 +169,9 @@ type RegionInfo struct {
 	StartKey    string `json:"start_key"`
 	EndKey      string `json:"end_key"`
 	WrittenKeys uint64 `json:"written_keys"`
+	// NormalizedWeight is the written keys normalized
+	// by the average region written keys of a same table.
+	NormalizedWeight uint64
 }
 
 // RegionsInfo contains some regions with the detailed region info.
