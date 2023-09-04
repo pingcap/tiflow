@@ -192,11 +192,10 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV1(
 				weights = append(weights, lastSpanWriteWeight)
 				writeKeys = append(writeKeys, lastSpanWriteKey)
 				break
-			} else {
-				// If the restWeight is larger than writeLimitPerSpan,
-				// then we need to update the restSpans.
-				restSpans = int(restWeight) / int(writeLimitPerSpan)
 			}
+			// If the restWeight is larger than writeLimitPerSpan,
+			// then we need to update the restSpans.
+			restSpans = int(restWeight) / int(writeLimitPerSpan)
 		}
 
 		// If the restRegions is less than equal to restSpans,
