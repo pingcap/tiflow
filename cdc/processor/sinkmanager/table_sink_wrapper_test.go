@@ -108,7 +108,7 @@ func createTableSinkWrapper(
 		100,
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
-	wrapper.tableSink.s, wrapper.tableSink.version = wrapper.tableSinkCreater()
+	wrapper.tableSink.s, wrapper.tableSink.version = wrapper.tableSinkCreator()
 	return wrapper, sink
 }
 

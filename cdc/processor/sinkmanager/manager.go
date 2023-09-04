@@ -418,7 +418,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 		for {
 			select {
 			case <-m.managerCtx.Done():
-				log.Info("Background GC is stoped because context is canceled",
+				log.Info("Background GC is stopped because context is canceled",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID))
 				return
