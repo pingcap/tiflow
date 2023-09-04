@@ -435,7 +435,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 					if time.Since(sink.lastCleanTime) < cleanTableInterval {
 						return true
 					}
-					checkpointTs, _, _ := sink.getCheckpointTs()
+					checkpointTs := sink.getCheckpointTs()
 					resolvedMark := checkpointTs.ResolvedMark()
 					if resolvedMark == 0 {
 						return true
@@ -907,7 +907,7 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span))
 	}
-	checkpointTs, _, _ := value.(*tableSinkWrapper).getCheckpointTs()
+	checkpointTs := value.(*tableSinkWrapper).getCheckpointTs()
 	log.Info("Remove table sink successfully",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -976,27 +976,25 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 	tableSink := value.(*tableSinkWrapper)
 
-	checkpointTs, version, advanced := tableSink.getCheckpointTs()
-	m.sinkMemQuota.Release(span, checkpointTs)
-	m.redoMemQuota.Release(span, checkpointTs)
+	details := tableSink.getSinkDetails()
+	m.sinkMemQuota.Release(span, details.checkpointTs)
+	m.redoMemQuota.Release(span, details.checkpointTs)
 
 	advanceTimeoutInSec := util.GetOrZero(m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec)
 	if advanceTimeoutInSec <= 0 {
-		log.Warn("AdvanceTimeoutInSec is not set, use default value", zap.Any("sinkConfig", m.changefeedInfo.Config.Sink))
 		advanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
 	}
 	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
-	if version > 0 && time.Since(advanced) > stuckCheck &&
-		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
+	if !details.inClosing && details.version > 0 && time.Since(details.advanced) > stuckCheck &&
+		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(details.checkpointTs.Ts)) > stuckCheck {
 		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
-			zap.Any("checkpointTs", checkpointTs),
+			zap.Any("checkpointTs", details.checkpointTs),
 			zap.Float64("stuckCheck", stuckCheck.Seconds()),
-			zap.Uint64("factoryVersion", version))
-		tableSink.updateTableSinkAdvanced()
-		m.putSinkFactoryError(errors.New("table sink stuck"), version)
+			zap.Uint64("factoryVersion", details.version))
+		m.putSinkFactoryError(errors.New("table sink stuck"), details.version)
 	}
 
 	var resolvedTs model.Ts
@@ -1007,17 +1005,17 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
-	if resolvedTs < checkpointTs.ResolvedMark() {
+	if resolvedTs < details.checkpointTs.ResolvedMark() {
 		log.Error("sinkManager: resolved ts should not less than checkpoint ts",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("resolvedTs", resolvedTs),
-			zap.Any("checkpointTs", checkpointTs),
+			zap.Any("checkpointTs", details.checkpointTs),
 			zap.Uint64("barrierTs", tableSink.barrierTs.Load()))
 	}
 	return TableStats{
-		CheckpointTs: checkpointTs.ResolvedMark(),
+		CheckpointTs: details.checkpointTs.ResolvedMark(),
 		ResolvedTs:   resolvedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
 	}
