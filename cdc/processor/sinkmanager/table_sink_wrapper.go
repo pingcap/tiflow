@@ -447,22 +447,20 @@ func handleRowChangedEvents(
 			continue
 		}
 
-		if !rowEvent.IsUpdate() {
+		if !(rowEvent.IsUpdate() && shouldSplitUpdateEvent(rowEvent)) {
 			size += e.Row.ApproximateBytes()
 			rowChangedEvents = append(rowChangedEvents, e.Row)
 			continue
 		}
 
-		if shouldSplitUpdateEvent(rowEvent) {
-			deleteEvent, insertEvent, err := splitUpdateEvent(rowEvent)
-			if err != nil {
-				return nil, 0, errors.Trace(err)
-			}
-			// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-			size += deleteEvent.ApproximateBytes()
-			size += insertEvent.ApproximateBytes()
-			rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
+		deleteEvent, insertEvent, err := splitUpdateEvent(rowEvent)
+		if err != nil {
+			return nil, 0, errors.Trace(err)
 		}
+		// NOTICE: Please do not change the order, the delete event always comes before the insert event.
+		size += deleteEvent.ApproximateBytes()
+		size += insertEvent.ApproximateBytes()
+		rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
 	}
 	return rowChangedEvents, uint64(size), nil
 }
@@ -495,18 +493,13 @@ func splitUpdateEvent(updateEvent *model.RowChangedEvent) (*model.RowChangedEven
 		return nil, nil, errors.New("nil event cannot be split")
 	}
 
-	// If there is an update to handle key columns,
-	// we need to split the event into two events to be compatible with the old format.
-	// NOTICE: Here we don't need a full deep copy because
-	// our two events need Columns and PreColumns respectively,
-	// so it won't have an impact and no more full deep copy wastes memory.
 	deleteEvent := *updateEvent
 	deleteEvent.Columns = nil
 
-	insertEvent := *updateEvent
-	insertEvent.PreColumns = nil
+	// set the `PreColumns` to nil to make the update into an insert.
+	updateEvent.PreColumns = nil
 
-	return &deleteEvent, &insertEvent, nil
+	return &deleteEvent, updateEvent, nil
 }
 
 func genReplicateTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {

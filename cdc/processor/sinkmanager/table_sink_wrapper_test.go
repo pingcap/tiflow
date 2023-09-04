@@ -145,7 +145,7 @@ func TestUpdateReceivedSorterResolvedTs(t *testing.T) {
 	require.Equal(t, tablepb.TableStatePrepared, wrapper.getState())
 }
 
-func TestConvertNilRowChangedEvents(t *testing.T) {
+func TestHandleNilRowChangedEvents(t *testing.T) {
 	t.Parallel()
 
 	events := []*model.PolymorphicEvent{nil}
@@ -157,7 +157,7 @@ func TestConvertNilRowChangedEvents(t *testing.T) {
 	require.Equal(t, uint64(0), size)
 }
 
-func TestConvertEmptyRowChangedEvents(t *testing.T) {
+func TestHandleEmptyRowChangedEvents(t *testing.T) {
 	t.Parallel()
 
 	events := []*model.PolymorphicEvent{
@@ -180,7 +180,7 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 	require.Equal(t, uint64(0), size)
 }
 
-func TestConvertRowChangedEventsHandleKeyColumnUpdated(t *testing.T) {
+func TestHandleRowChangedEventsUniqueKeyColumnUpdated(t *testing.T) {
 	t.Parallel()
 
 	columns := []*model.Column{
@@ -191,7 +191,7 @@ func TestConvertRowChangedEventsHandleKeyColumnUpdated(t *testing.T) {
 		},
 		{
 			Name:  "col2",
-			Flag:  model.HandleKeyFlag,
+			Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 			Value: "col2-value-updated",
 		},
 	}
@@ -203,7 +203,7 @@ func TestConvertRowChangedEventsHandleKeyColumnUpdated(t *testing.T) {
 		},
 		{
 			Name:  "col2",
-			Flag:  model.HandleKeyFlag,
+			Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 			Value: "col2-value",
 		},
 	}
@@ -229,13 +229,16 @@ func TestConvertRowChangedEventsHandleKeyColumnUpdated(t *testing.T) {
 	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
-	require.Equal(t, uint64(224), size)
+	require.Equal(t, uint64(448), size)
+
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
 }
 
-func TestConvertRowChangedEventsNonHandleKeyColumnUpdated(t *testing.T) {
+func TestHandleRowChangedEventsNonUniqueKeyColumnUpdated(t *testing.T) {
 	t.Parallel()
 
-	// Update non-handle key.
+	// Update non-unique key.
 	columns := []*model.Column{
 		{
 			Name:  "col1",
@@ -244,7 +247,7 @@ func TestConvertRowChangedEventsNonHandleKeyColumnUpdated(t *testing.T) {
 		},
 		{
 			Name:  "col2",
-			Flag:  model.HandleKeyFlag,
+			Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 			Value: "col2-value",
 		},
 	}
@@ -256,7 +259,7 @@ func TestConvertRowChangedEventsNonHandleKeyColumnUpdated(t *testing.T) {
 		},
 		{
 			Name:  "col2",
-			Flag:  model.HandleKeyFlag,
+			Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
 			Value: "col2-value",
 		},
 	}
