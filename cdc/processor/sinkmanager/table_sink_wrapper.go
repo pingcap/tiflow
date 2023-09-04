@@ -231,14 +231,16 @@ func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 	defer t.tableSink.RUnlock()
 	if t.tableSink.s != nil {
 		checkpointTs := t.tableSink.s.GetCheckpointTs()
-
 		t.tableSink.advancedMu.Lock()
 		if t.tableSink.checkpointTs.Less(checkpointTs) {
 			t.tableSink.checkpointTs = checkpointTs
 			t.tableSink.advanced = time.Now()
 		}
 		t.tableSink.advancedMu.Unlock()
+		return checkpointTs
 	}
+	t.tableSink.advancedMu.Lock()
+	defer t.tableSink.advancedMu.Unlock()
 	return t.tableSink.checkpointTs
 }
 
@@ -362,12 +364,14 @@ func (t *tableSinkWrapper) doTableSinkClear() {
 	}
 	t.tableSink.closeStarted = false
 	checkpointTs := t.tableSink.s.GetCheckpointTs()
+	t.tableSink.advancedMu.Lock()
 	if t.tableSink.checkpointTs.Less(checkpointTs) {
 		t.tableSink.checkpointTs = checkpointTs
 	}
+	t.tableSink.advanced = time.Now()
+	t.tableSink.advancedMu.Unlock()
 	t.tableSink.s = nil
 	t.tableSink.version = 0
-	t.tableSink.advanced = time.Now()
 }
 
 // When the attached sink fail, there can be some events that have already been
