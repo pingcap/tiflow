@@ -17,7 +17,6 @@ const (
 	testCfgTestReplicaConfigOutDated = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -170,7 +169,6 @@ const (
 	testCfgTestReplicaConfigMarshal1 = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -262,7 +260,7 @@ const (
         "claim-check-storage-uri": ""
       },
       "glue-schema-registry-config": {
-        "region":"region", 
+        "region":"region",
         "registry-name":"registry"
       }
     },
@@ -322,7 +320,6 @@ const (
 	testCfgTestReplicaConfigMarshal2 = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -409,7 +406,7 @@ const (
         "claim-check-compression": ""
       },
       "glue-schema-registry-config": {
-        "region":"region", 
+        "region":"region",
         "registry-name":"registry"
       }
     },

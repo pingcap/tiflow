@@ -189,7 +189,6 @@ func TestApplySinkURIParamsToConfig(t *testing.T) {
 	expected.SafeMode = false
 	expected.Timezone = `"UTC"`
 	expected.tidbTxnMode = "pessimistic"
-	expected.EnableOldValue = true
 	expected.CachePrepStmts = true
 	uriStr := "mysql://127.0.0.1:3306/?worker-count=64&max-txn-row=20" +
 		"&max-multi-update-row=80&max-multi-update-row-size=512" +

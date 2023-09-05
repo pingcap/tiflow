@@ -48,7 +48,6 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	})
 	cfg.ReplicaConfig = GetDefaultReplicaConfig()
 	cfg.ReplicaConfig.ForceReplicate = true
-	cfg.ReplicaConfig.EnableOldValue = false
 	cfg.SinkURI = "mysql://"
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	// disable old value but force replicate, and using mysql sink.
@@ -90,7 +89,6 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 	cfg.TargetTs = 6
-	cfg.ReplicaConfig.EnableOldValue = false
 	cfg.SinkURI = "aaab://"
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
@@ -103,12 +101,10 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	cfg.StartTs = 0
 	// use blackhole to workaround
 	cfg.SinkURI = "blackhole://127.0.0.1:9092/test?protocol=avro"
-	cfg.ReplicaConfig.EnableOldValue = true
 	cfg.ReplicaConfig.ForceReplicate = false
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NoError(t, err)
-	require.False(t, cfInfo.Config.EnableOldValue)
 
 	cfg.ReplicaConfig.ForceReplicate = true
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
@@ -165,16 +161,4 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	cfg.TargetTs = 9
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.NotNil(t, err)
-
-	cfg.StartTs = 0
-	cfg.TargetTs = 0
-	cfg.ReplicaConfig.EnableOldValue = true
-	cfg.SinkURI = "blackhole://127.0.0.1:9092/test?protocol=avro"
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
-	require.NoError(t, err)
-	require.False(t, newCfInfo.Config.EnableOldValue)
-
-	cfg.ReplicaConfig.ForceReplicate = true
-	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
-	require.Error(t, cerror.ErrOldValueNotEnabled, err)
 }
