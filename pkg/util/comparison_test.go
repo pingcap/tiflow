@@ -41,6 +41,12 @@ func TestAreStringSlicesEquivalent(t *testing.T) {
 			b:    []string{"qux", "quux", "corge"},
 			want: false,
 		},
+		{
+			name: "nil elements",
+			a:    []string{},
+			b:    []string{},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
