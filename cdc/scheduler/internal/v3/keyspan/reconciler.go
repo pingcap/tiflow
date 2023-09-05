@@ -214,6 +214,8 @@ func (m *Reconciler) Reconcile(
 	return m.spanCache
 }
 
+const maxSpanNumber = 100
+
 func getSpansNumber(regionNum, captureNum int) int {
 	coefficient := captureNum - 1
 	if baseSpanNumberCoefficient > coefficient {
@@ -226,6 +228,9 @@ func getSpansNumber(regionNum, captureNum int) int {
 		if regionNum/spanRegionLimit > spanNum {
 			spanNum = regionNum / spanRegionLimit
 		}
+	}
+	if spanNum > maxSpanNumber {
+		spanNum = maxSpanNumber
 	}
 	return spanNum
 }
