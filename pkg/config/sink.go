@@ -548,12 +548,24 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 				"schema-registry is used by confluent schema registry, " +
 				"glue-schema-registry-config is used by aws glue schema registry")
 	}
-	if s.KafkaConfig != nil && s.KafkaConfig.GlueSchemaRegistryConfig != nil {
-		err := s.KafkaConfig.GlueSchemaRegistryConfig.Validate()
-		if err != nil {
-			return err
+
+	if s.KafkaConfig != nil {
+		if s.KafkaConfig.GlueSchemaRegistryConfig != nil {
+			err := s.KafkaConfig.GlueSchemaRegistryConfig.Validate()
+			if err != nil {
+				return err
+			}
 		}
+
+		if s.KafkaConfig.LargeMessageHandle != nil {
+			s.KafkaConfig.LargeMessageHandle.Adjust()
+		}
+
 	}
+
+	//if s.KafkaConfig != nil && s.KafkaConfig.GlueSchemaRegistryConfig != nil {
+
+	//}
 
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
@@ -656,7 +668,7 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
-	// Validate that protocol is compatible with the scheme. For testing purposes,
+	// AdjustAndValidate that protocol is compatible with the scheme. For testing purposes,
 	// any protocol should be legal for blackhole.
 	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
 		_, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
