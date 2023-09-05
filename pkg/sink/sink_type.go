@@ -85,3 +85,7 @@ func IsStorageScheme(scheme string) bool {
 	return scheme == FileScheme || scheme == S3Scheme || scheme == GCSScheme ||
 		scheme == GSScheme || scheme == AzblobScheme || scheme == AzureScheme || scheme == CloudStorageNoopScheme
 }
+
+func IsPulsarScheme(scheme string) bool {
+	return scheme == PulsarScheme || scheme == PulsarSSLScheme
+}

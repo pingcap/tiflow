@@ -95,6 +95,10 @@ func (m *Message) GetTable() string {
 	return *m.Table
 }
 
+func (m *Message) SetPartitionKey(key string) {
+	m.PartitionKey = &key
+}
+
 // GetPartitionKey returns the GetPartitionKey
 func (m *Message) GetPartitionKey() string {
 	if m.PartitionKey == nil {
