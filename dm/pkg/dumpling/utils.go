@@ -54,11 +54,11 @@ func ParseMetaData(
 	}
 	defer fd.Close()
 
-	return parseMetaDataByReader(filename, flavor, fd)
+	return ParseMetaDataByReader(filename, flavor, fd)
 }
 
-// ParseMetaData parses mydumper's output meta file by created reader and returns binlog location.
-func parseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Location, *binlog.Location, error) {
+// ParseMetaDataByReader parses mydumper's output meta file by created reader and returns binlog location.
+func ParseMetaDataByReader(filename, flavor string, rd io.Reader) (*binlog.Location, *binlog.Location, error) {
 	invalidErr := fmt.Errorf("file %s invalid format", filename)
 
 	var (
