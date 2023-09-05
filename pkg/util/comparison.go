@@ -17,6 +17,7 @@ import "sort"
 
 // AreStringSlicesEquivalent checks if two string slices are equivalent.
 // If the slices are of the same length and contain the same elements (but possibly in different order), the function returns true.
+// Note: This function does modify the slices. Please be caution of this if you are using it.
 func AreStringSlicesEquivalent(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
