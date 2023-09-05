@@ -259,3 +259,20 @@ func TestBatchAddRateLimit(t *testing.T) {
 	require.Equal(t, allSpan, reconciler.tableSpans[2].spans)
 	require.Equal(t, 1, len(reconciler.tableSpans))
 }
+
+func TestGetSpansNumber(t *testing.T) {
+	tc := []struct {
+		regionCount int
+		captureNum  int
+		expected    int
+	}{
+		{1, 10, 1},
+		{100, 2, 6},
+		{100, 3, 9},
+		{100, 5, 20},
+		{10000, 11, 100},
+	}
+	for _, c := range tc {
+		require.Equal(t, c.expected, getSpansNumber(c.regionCount, c.captureNum))
+	}
+}
