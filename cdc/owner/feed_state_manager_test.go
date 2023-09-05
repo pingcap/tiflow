@@ -426,7 +426,6 @@ func TestChangefeedStatusNotExist(t *testing.T) {
     "sort-engine": "unified",
     "config": {
         "case-sensitive": true,
-        "enable-old-value": true,
         "force-replicate": false,
         "check-gc-safe-point": true,
         "filter": {

@@ -100,8 +100,6 @@ const (
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 	coderOPTAvroGlueSchemaRegistry         = "glue-schema-registry"
-
-	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
 
 const (
@@ -201,12 +199,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
-	}
-	if c.OnlyOutputUpdatedColumns && !replicaConfig.EnableOldValue {
-		return cerror.ErrCodecInvalidConfig.GenWithStack(
-			`old value must be enabled when configuration "%s" is true.`,
-			codecOPTOnlyOutputUpdatedColumns,
-		)
 	}
 
 	if replicaConfig.Integrity != nil {

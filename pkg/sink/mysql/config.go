@@ -112,7 +112,6 @@ type Config struct {
 	Timezone               string
 	TLS                    string
 	ForceReplicate         bool
-	EnableOldValue         bool
 
 	IsTiDB bool // IsTiDB is true if the downstream is TiDB
 	// IsBDRModeSupported is true if the downstream is TiDB and write source is existed.
@@ -198,7 +197,6 @@ func (c *Config) Apply(
 	getBatchDMLEnable(urlParameter, &c.BatchDMLEnable)
 	getMultiStmtEnable(urlParameter, &c.MultiStmtEnable)
 	getCachePrepStmts(urlParameter, &c.CachePrepStmts)
-	c.EnableOldValue = replicaConfig.EnableOldValue
 	c.ForceReplicate = replicaConfig.ForceReplicate
 	c.SourceID = replicaConfig.Sink.TiDBSourceID
 

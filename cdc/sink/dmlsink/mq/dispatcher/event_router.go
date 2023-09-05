@@ -104,7 +104,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
+		d := getPartitionDispatcher(ruleConfig)
 		t, err := getTopicDispatcher(ruleConfig, defaultTopic,
 			util.GetOrZero(cfg.Sink.Protocol), schema)
 		if err != nil {
@@ -225,9 +225,7 @@ func (s *EventRouter) matchDispatcher(
 }
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
-func getPartitionDispatcher(
-	ruleConfig *config.DispatchRule, enableOldValue bool,
-) partition.Dispatcher {
+func getPartitionDispatcher(ruleConfig *config.DispatchRule) partition.Dispatcher {
 	var (
 		d    partition.Dispatcher
 		rule partitionDispatchRule
@@ -235,18 +233,13 @@ func getPartitionDispatcher(
 	rule.fromString(ruleConfig.PartitionRule)
 	switch rule {
 	case partitionDispatchRuleIndexValue:
-		if enableOldValue {
-			log.Warn("This index-value distribution mode " +
-				"does not guarantee row-level orderliness when " +
-				"switching on the old value, so please use caution!")
-		}
 		d = partition.NewIndexValueDispatcher()
 	case partitionDispatchRuleTS:
 		d = partition.NewTsDispatcher()
 	case partitionDispatchRuleTable:
 		d = partition.NewTableDispatcher()
 	case partitionDispatchRuleDefault:
-		d = partition.NewDefaultDispatcher(enableOldValue)
+		d = partition.NewDefaultDispatcher()
 	}
 
 	return d

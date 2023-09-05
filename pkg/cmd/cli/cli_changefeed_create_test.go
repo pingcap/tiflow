@@ -24,7 +24,6 @@ import (
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -133,7 +132,7 @@ func TestChangefeedCreateCli(t *testing.T) {
 	cmd := newCmdCreateChangefeed(f)
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "cf.toml")
-	err := os.WriteFile(configPath, []byte("enable-old-value=false\r\nenable-sync-point=true\r\nsync-point-interval='20m'"), 0o644)
+	err := os.WriteFile(configPath, []byte("enable-sync-point=true\r\nsync-point-interval='20m'"), 0o644)
 	require.Nil(t, err)
 	os.Args = []string{
 		"create",
@@ -172,41 +171,6 @@ func TestChangefeedCreateCli(t *testing.T) {
 	cmd = newCmdCreateChangefeed(f)
 	o := newCreateChangefeedOptions(newChangefeedCommonOptions())
 	o.commonChangefeedOptions.sortDir = "/tmp/test"
-	require.NoError(t, o.complete(f, cmd))
+	require.NoError(t, o.complete(f))
 	require.Contains(t, o.validate(cmd).Error(), "creating changefeed with `--sort-dir`")
-}
-
-func TestChangefeedCreateCliAdjustEnableOldValue(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	f := newMockFactory(ctrl)
-
-	// enable old value, but use avro as the encoding protocol, should be set to false.
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "adjust-old-value.toml")
-	err := os.WriteFile(configPath, []byte("enable-old-value=true"), 0o644)
-	require.NoError(t, err)
-
-	cmd := new(cobra.Command)
-	o := newChangefeedCommonOptions()
-	o.addFlags(cmd)
-
-	require.NoError(t, cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", configPath)}))
-	require.NoError(t, cmd.ParseFlags([]string{"--sink-uri=kafka://127.0.0.1:9092/test?protocol=avro"}))
-
-	opt := newCreateChangefeedOptions(o)
-	require.NoError(t, opt.complete(f, cmd))
-	require.False(t, opt.cfg.EnableOldValue)
-
-	// also enable the force replicate, should return error
-	configPath = filepath.Join(dir, "enable-old-value-force-replicate.toml")
-	err = os.WriteFile(configPath, []byte("enable-old-value=true\r\nforce-replicate = true"), 0o644)
-	require.NoError(t, err)
-
-	require.NoError(t, cmd.ParseFlags([]string{"--sink-uri=kafka://127.0.0.1:9092/test?protocol=avro"}))
-	require.NoError(t, cmd.ParseFlags([]string{fmt.Sprintf("--config=%s", configPath)}))
-
-	opt = newCreateChangefeedOptions(o)
-	err = opt.complete(f, cmd)
-	require.Error(t, cerror.ErrOldValueNotEnabled, err)
 }

@@ -107,19 +107,6 @@ func (l AtomicityLevel) validate(scheme string) error {
 	return nil
 }
 
-// ForceEnableOldValueProtocols specifies which protocols need to be forced to enable old value.
-var ForceEnableOldValueProtocols = map[string]struct{}{
-	ProtocolCanal.String():     {},
-	ProtocolCanalJSON.String(): {},
-	ProtocolMaxwell.String():   {},
-}
-
-// ForceDisableOldValueProtocols specifies protocols need to be forced to disable old value.
-var ForceDisableOldValueProtocols = map[string]struct{}{
-	ProtocolAvro.String(): {},
-	ProtocolCsv.String():  {},
-}
-
 // SinkConfig represents sink config for a changefeed
 type SinkConfig struct {
 	TxnAtomicity *AtomicityLevel `toml:"transaction-atomicity" json:"transaction-atomicity,omitempty"`
