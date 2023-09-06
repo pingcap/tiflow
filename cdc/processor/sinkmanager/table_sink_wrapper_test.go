@@ -182,22 +182,11 @@ func TestHandleEmptyRowChangedEvents(t *testing.T) {
 	require.Equal(t, uint64(0), size)
 }
 
-func TestHandleRowChangedEventsUniqueKeyColumnUpdated(t *testing.T) {
+func TestHandleRowChangedEventNormalEvent(t *testing.T) {
 	t.Parallel()
 
+	// Update non-unique key.
 	columns := []*model.Column{
-		{
-			Name:  "col1",
-			Flag:  model.BinaryFlag,
-			Value: "col1-value-updated",
-		},
-		{
-			Name:  "col2",
-			Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
-			Value: "col2-value-updated",
-		},
-	}
-	preColumns := []*model.Column{
 		{
 			Name:  "col1",
 			Flag:  model.BinaryFlag,
@@ -206,51 +195,7 @@ func TestHandleRowChangedEventsUniqueKeyColumnUpdated(t *testing.T) {
 		{
 			Name:  "col2",
 			Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
-			Value: "col2-value",
-		},
-	}
-
-	// the handle key updated, should be split into 2 events
-	events := []*model.PolymorphicEvent{
-		{
-			CRTs:  1,
-			RawKV: &model.RawKVEntry{OpType: model.OpTypePut},
-			Row: &model.RowChangedEvent{
-				CommitTs:   1,
-				Columns:    columns,
-				PreColumns: preColumns,
-				Table: &model.TableName{
-					Schema: "test",
-					Table:  "test",
-				},
-			},
-		},
-	}
-	changefeedID := model.DefaultChangeFeedID("1")
-	span := spanz.TableIDToComparableSpan(1)
-	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(result))
-	require.Equal(t, uint64(448), size)
-
-	require.True(t, result[0].IsDelete())
-	require.True(t, result[1].IsInsert())
-}
-
-func TestHandleRowChangedEventsNonUniqueKeyColumnUpdated(t *testing.T) {
-	t.Parallel()
-
-	// Update non-unique key.
-	columns := []*model.Column{
-		{
-			Name:  "col1",
-			Flag:  model.BinaryFlag,
-			Value: "col1-value-updated",
-		},
-		{
-			Name:  "col2",
-			Flag:  model.HandleKeyFlag | model.UniqueKeyFlag,
-			Value: "col2-value",
+			Value: "col2-value-updated",
 		},
 	}
 	preColumns := []*model.Column{

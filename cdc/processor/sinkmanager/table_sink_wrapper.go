@@ -455,7 +455,6 @@ func handleRowChangedEvents(
 		}
 
 		rowEvent := e.Row
-
 		// Some transactions could generate empty row change event, such as
 		// begin; insert into t (id) values (1); delete from t where id=1; commit;
 		// Just ignore these row changed events.
@@ -468,60 +467,10 @@ func handleRowChangedEvents(
 			continue
 		}
 
-		if !(rowEvent.IsUpdate() && shouldSplitUpdateEvent(rowEvent)) {
-			size += e.Row.ApproximateBytes()
-			rowChangedEvents = append(rowChangedEvents, e.Row)
-			continue
-		}
-
-		deleteEvent, insertEvent, err := splitUpdateEvent(rowEvent)
-		if err != nil {
-			return nil, 0, errors.Trace(err)
-		}
-		// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-		size += deleteEvent.ApproximateBytes()
-		size += insertEvent.ApproximateBytes()
-		rowChangedEvents = append(rowChangedEvents, deleteEvent, insertEvent)
+		size += rowEvent.ApproximateBytes()
+		rowChangedEvents = append(rowChangedEvents, rowEvent)
 	}
 	return rowChangedEvents, uint64(size), nil
-}
-
-// shouldSplitUpdateEvent return true if the unique key column is modified.
-func shouldSplitUpdateEvent(updateEvent *model.RowChangedEvent) bool {
-	// nil event will never be split.
-	if updateEvent == nil {
-		return false
-	}
-
-	for i := range updateEvent.Columns {
-		col := updateEvent.Columns[i]
-		preCol := updateEvent.PreColumns[i]
-		if col != nil && (col.Flag.IsUniqueKey() || col.Flag.IsHandleKey()) &&
-			preCol != nil && (preCol.Flag.IsUniqueKey() || preCol.Flag.IsHandleKey()) {
-			colValueString := model.ColumnValueString(col.Value)
-			preColValueString := model.ColumnValueString(preCol.Value)
-			if colValueString != preColValueString {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-// splitUpdateEvent splits an update event into a delete and an insert event.
-func splitUpdateEvent(updateEvent *model.RowChangedEvent) (*model.RowChangedEvent, *model.RowChangedEvent, error) {
-	if updateEvent == nil {
-		return nil, nil, errors.New("nil event cannot be split")
-	}
-
-	deleteEvent := *updateEvent
-	deleteEvent.Columns = nil
-
-	// set the `PreColumns` to nil to make the update into an insert.
-	updateEvent.PreColumns = nil
-
-	return &deleteEvent, updateEvent, nil
 }
 
 func genReplicateTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {

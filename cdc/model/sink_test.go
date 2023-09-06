@@ -563,3 +563,41 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
 }
+
+func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
+	txn := &SingleTableTxn{
+		Rows: make([]*RowChangedEvent, 0, 1),
+	}
+
+	txn.Rows = append(txn.Rows, &RowChangedEvent{
+		PreColumns: []*Column{
+			{
+				Name:  "col1",
+				Flag:  BinaryFlag,
+				Value: "col1-value",
+			},
+			{
+				Name:  "col2",
+				Flag:  HandleKeyFlag | UniqueKeyFlag,
+				Value: "col2-value",
+			},
+		},
+
+		Columns: []*Column{
+			{
+				Name:  "col1",
+				Flag:  BinaryFlag,
+				Value: "col1-value",
+			},
+			{
+				Name:  "col2",
+				Flag:  HandleKeyFlag | UniqueKeyFlag,
+				Value: "col2-value-updated",
+			},
+		},
+	})
+
+	err := txn.TrySplitAndSortUpdateEvent()
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 2)
+}

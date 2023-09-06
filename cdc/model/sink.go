@@ -768,9 +768,6 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
 func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
-	if len(t.Rows) < 2 {
-		return nil
-	}
 	newRows, err := trySplitAndSortUpdateEvent(t.Rows)
 	if err != nil {
 		return errors.Trace(err)
