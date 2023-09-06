@@ -46,7 +46,7 @@
 //	ch := chann.New[int](chann.Cap(-42)) // or unbounded channel
 //
 // Furthermore, all channels provides methods to send (In()),
-// receive (Out()), and close (CleanMetrics()).
+// receive (Out()), and close (Close()).
 //
 // An unbounded channel is not a buffered channel with infinite capacity,
 // and they have different memory model semantics in terms of receiving
@@ -54,7 +54,7 @@
 // after a send is complete. However, the recipient of an unbounded channel
 // may be available within a bounded time frame after a send is complete.
 //
-// Note that to close a channel, must use CleanMetrics() method instead of the
+// Note that to close a channel, must use Close() method instead of the
 // language built-in method
 // Two additional methods: ApproxLen and Cap returns the current status
 // of the channel: an approximation of the current length of the channel,

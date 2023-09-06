@@ -307,7 +307,7 @@ func (r *progressTracker) doCheckClosed() bool {
 	lastCheck := r.lastCheckClosed.Load()
 	for now > lastCheck+int64(warnDuration.Seconds()) {
 		if r.lastCheckClosed.CompareAndSwap(lastCheck, now) {
-			log.Warn("CleanMetrics table doesn't return in time, may be stuck",
+			log.Warn("Close table doesn't return in time, may be stuck",
 				zap.Stringer("span", &r.span),
 				zap.Int("trackingCount", trackingCount),
 				zap.Any("lastMinResolvedTs", resolvedTs))

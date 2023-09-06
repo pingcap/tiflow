@@ -315,13 +315,13 @@ func (s *syncWriter) Close() {
 		zap.String("changefeed", s.changefeedID.ID))
 	start := time.Now()
 	if err := s.w.Close(); err != nil {
-		log.Warn("CleanMetrics kafka sync producer failed",
+		log.Warn("Close kafka sync producer failed",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)),
 			zap.Error(err))
 	} else {
-		log.Info("CleanMetrics kafka sync producer success",
+		log.Info("Close kafka sync producer success",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)))
@@ -347,13 +347,13 @@ func (a *asyncWriter) Close() {
 	go func() {
 		start := time.Now()
 		if err := a.w.Close(); err != nil {
-			log.Warn("CleanMetrics kafka async producer failed",
+			log.Warn("Close kafka async producer failed",
 				zap.String("namespace", a.changefeedID.Namespace),
 				zap.String("changefeed", a.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)),
 				zap.Error(err))
 		} else {
-			log.Info("CleanMetrics kafka async producer success",
+			log.Info("Close kafka async producer success",
 				zap.String("namespace", a.changefeedID.Namespace),
 				zap.String("changefeed", a.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))

@@ -295,7 +295,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			if err = future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
-
 			for _, message := range future.Messages {
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, error) {

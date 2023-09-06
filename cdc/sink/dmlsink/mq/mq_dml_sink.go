@@ -132,7 +132,6 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			}
 		}
 	}
-
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
@@ -140,7 +139,6 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			txn.Callback()
 			continue
 		}
-
 		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
@@ -162,7 +160,6 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			}
 		}
 	}
-
 	return nil
 }
 

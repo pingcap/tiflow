@@ -78,7 +78,6 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message, 
 	if err != nil {
 		return errors.Trace(err)
 	}
-
 	c.metricSendMessageDuration.Observe(time.Since(start).Seconds())
 	c.metricSendMessageCount.Inc()
 	return nil

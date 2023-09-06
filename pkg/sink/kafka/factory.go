@@ -135,7 +135,7 @@ func (p *saramaSyncProducer) Close() {
 		//   goal is not to get stuck with the owner tick.
 		start := time.Now()
 		if err := p.client.Close(); err != nil {
-			log.Warn("CleanMetrics Kafka DDL client with error",
+			log.Warn("Close Kafka DDL client with error",
 				zap.String("namespace", p.id.Namespace),
 				zap.String("changefeed", p.id.ID),
 				zap.Duration("duration", time.Since(start)),
@@ -149,7 +149,7 @@ func (p *saramaSyncProducer) Close() {
 		start = time.Now()
 		err := p.producer.Close()
 		if err != nil {
-			log.Error("CleanMetrics Kafka DDL producer with error",
+			log.Error("Close Kafka DDL producer with error",
 				zap.String("namespace", p.id.Namespace),
 				zap.String("changefeed", p.id.ID),
 				zap.Duration("duration", time.Since(start)),
@@ -188,17 +188,17 @@ func (p *saramaAsyncProducer) Close() {
 		// operations. When we close the `kafkaSaramaProducer`,
 		// there is no need for TiCDC to make sure that all buffered messages are flushed.
 		// Consider the situation where the broker is irresponsive. If the client were not
-		// closed, `asyncProducer.CleanMetrics()` would waste a mount of time to try flush all messages.
+		// closed, `asyncProducer.Close()` would waste a mount of time to try flush all messages.
 		// To prevent the scenario mentioned above, close the client first.
 		start := time.Now()
 		if err := p.client.Close(); err != nil {
-			log.Warn("CleanMetrics kafka async producer client error",
+			log.Warn("Close kafka async producer client error",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)),
 				zap.Error(err))
 		} else {
-			log.Info("CleanMetrics kafka async producer client success",
+			log.Info("Close kafka async producer client success",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
@@ -206,13 +206,13 @@ func (p *saramaAsyncProducer) Close() {
 
 		start = time.Now()
 		if err := p.producer.Close(); err != nil {
-			log.Warn("CleanMetrics kafka async producer error",
+			log.Warn("Close kafka async producer error",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)),
 				zap.Error(err))
 		} else {
-			log.Info("CleanMetrics kafka async producer success",
+			log.Info("Close kafka async producer success",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Duration("duration", time.Since(start)))
