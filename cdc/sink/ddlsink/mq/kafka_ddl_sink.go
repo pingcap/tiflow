@@ -104,7 +104,8 @@ func NewKafkaDDLSink(
 	}
 
 	start := time.Now()
-	log.Info("Try to create a DDL sink producer", zap.Any("options", options))
+	log.Info("Try to create a DDL sink producer",
+		zap.String("changefeed", changefeedID.String()))
 	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)

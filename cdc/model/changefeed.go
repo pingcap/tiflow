@@ -561,11 +561,11 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 }
 
 func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProtocol string, newQuery url.Values) {
-	oldRawQuery := uri.RawQuery
 	newRawQuery := newQuery.Encode()
+	maskedURI, _ := util.MaskSinkURI(uri.String())
 	log.Info("handle incompatible protocol from sink URI",
-		zap.String("oldUriQuery", oldRawQuery),
-		zap.String("fixedUriQuery", newQuery.Encode()))
+		zap.String("oldURI", maskedURI),
+		zap.String("newProtocol", newProtocol))
 
 	uri.RawQuery = newRawQuery
 	fixedSinkURI := uri.String()

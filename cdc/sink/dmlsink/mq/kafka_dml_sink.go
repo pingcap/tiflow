@@ -140,8 +140,7 @@ func NewKafkaDMLSink(
 	)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),
-		zap.String("changefeedID", changefeedID.ID),
-		zap.Any("options", options))
+		zap.String("changefeedID", changefeedID.ID))
 
 	return s, nil
 }

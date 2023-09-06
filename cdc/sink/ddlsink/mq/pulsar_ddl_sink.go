@@ -62,7 +62,8 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	log.Info("Try to create a DDL sink producer", zap.Any("pulsarConfig", pConfig))
+	log.Info("Try to create a DDL sink producer",
+		zap.String("changefeed", changefeedID.String()))
 
 	// NewEventRouter
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, sinkURI.Scheme)

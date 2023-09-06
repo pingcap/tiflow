@@ -71,10 +71,11 @@ func NewPulsarDMLSink(
 	}
 
 	failpointCh := make(chan error, 1)
-	log.Info("Try to create a DML sink producer", zap.Any("pulsar", pConfig))
+	log.Info("Try to create a DML sink producer", zap.String("changefeed", changefeedID.String()))
 	start := time.Now()
 	p, err := producerCreator(ctx, changefeedID, client, replicaConfig.Sink, errCh, failpointCh)
 	log.Info("DML sink producer created",
+		zap.String("changefeed", changefeedID.String()),
 		zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		defer func() {
