@@ -58,6 +58,7 @@ type ClaimCheckLocationEncoder interface {
 // RowEventEncoderBuilder builds row encoder with context.
 type RowEventEncoderBuilder interface {
 	Build() RowEventEncoder
+	CleanMetrics()
 }
 
 // TxnEventEncoder is an abstraction for txn events encoder.

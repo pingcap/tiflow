@@ -137,3 +137,8 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return newBatchEncoder(b.config)
 }
+
+// CleanMetrics do nothing
+func (b *batchEncoderBuilder) CleanMetrics() {
+	return // do nothing
+}

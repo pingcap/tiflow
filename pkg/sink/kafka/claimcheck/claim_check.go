@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 // ClaimCheck manage send message to the claim-check external storage.
@@ -64,37 +63,23 @@ func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID
 }
 
 // WriteMessage write message to the claim check external storage.
-func (c *ClaimCheck) WriteMessage(ctx context.Context, messages ...*common.Message) error {
-	if len(messages) == 0 {
-		return nil
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
+func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message, fileName string) error {
 	start := time.Now()
-	for idx := 0; idx < len(messages); idx++ {
-		message := messages[idx]
-		g.Go(func() error {
-			m := common.ClaimCheckMessage{
-				Key:   message.Key,
-				Value: message.Value,
-			}
-			data, err := json.Marshal(m)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			err = c.storage.WriteFile(ctx, message.ClaimCheckFileName, data)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			return nil
-		})
+	m := common.ClaimCheckMessage{
+		Key:   message.Key,
+		Value: message.Value,
 	}
-	err := g.Wait()
+	data, err := json.Marshal(m)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	err = c.storage.WriteFile(ctx, fileName, data)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	c.metricSendMessageDuration.Observe(time.Since(start).Seconds())
-	c.metricSendMessageCount.Add(float64(len(messages)))
+	c.metricSendMessageCount.Inc()
 
 	return nil
 }

@@ -28,8 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -68,9 +66,6 @@ type worker struct {
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
-	// claimCheckEncoder is used to encode message which has claim-check location, send to kafka.
-	claimCheckEncoder codec.ClaimCheckLocationEncoder
-
 	encoderGroup codec.EncoderGroup
 
 	// producer is used to send the messages to the Kafka broker.
@@ -84,8 +79,6 @@ type worker struct {
 	metricMQWorkerBatchDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
-
-	claimCheck *claimcheck.ClaimCheck
 }
 
 // newWorker creates a new flush worker.
@@ -94,8 +87,6 @@ func newWorker(
 	protocol config.Protocol,
 	producer dmlproducer.DMLProducer,
 	encoderGroup codec.EncoderGroup,
-	claimCheck *claimcheck.ClaimCheck,
-	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
@@ -105,8 +96,6 @@ func newWorker(
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      encoderGroup,
 		producer:                          producer,
-		claimCheck:                        claimCheck,
-		claimCheckEncoder:                 claimCheckEncoder,
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
@@ -313,32 +302,7 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 
-			messages := future.Messages
-			if w.claimCheck != nil {
-				var claimCheckMessages []*common.Message
-				for idx, message := range messages {
-					if message.ClaimCheckFileName != "" &&
-						w.claimCheck != nil {
-						claimCheckMessages = append(claimCheckMessages, message)
-						locationMessage, err := w.claimCheckEncoder.NewClaimCheckLocationMessage(message)
-						if err != nil {
-							return errors.Trace(err)
-						}
-						messages[idx] = locationMessage
-					}
-				}
-				if err := w.claimCheck.WriteMessage(ctx, claimCheckMessages...); err != nil {
-					return errors.Trace(err)
-				}
-
-				if len(claimCheckMessages) > 0 {
-					log.Info("claim-check batch write messages",
-						zap.Int("totalCount", len(messages)),
-						zap.Int("claimCheckCount", len(claimCheckMessages)))
-				}
-			}
-
-			for _, message := range messages {
+			for _, message := range future.Messages {
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, error) {
 					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
@@ -357,10 +321,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 func (w *worker) close() {
 	w.msgChan.CloseAndDrain()
 	w.producer.Close()
-	if w.claimCheck != nil {
-		w.claimCheck.Close()
-	}
-
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)

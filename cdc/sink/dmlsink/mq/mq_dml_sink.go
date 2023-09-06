@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -78,14 +77,11 @@ func newDMLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
-	claimCheck *claimcheck.ClaimCheck,
-	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, protocol,
-		producer, encoderGroup, claimCheck, claimCheckEncoder, statistics)
+	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,

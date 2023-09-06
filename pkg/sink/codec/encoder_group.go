@@ -83,7 +83,7 @@ func NewEncoderGroup(builder RowEventEncoderBuilder,
 
 func (g *encoderGroup) Run(ctx context.Context) error {
 	defer func() {
-		encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
+		g.cleanMetrics()
 		log.Info("encoder group exited",
 			zap.String("namespace", g.changefeedID.Namespace),
 			zap.String("changefeed", g.changefeedID.ID))
@@ -149,6 +149,11 @@ func (g *encoderGroup) AddEvents(
 
 func (g *encoderGroup) Output() <-chan *future {
 	return g.outputCh
+}
+
+func (g *encoderGroup) cleanMetrics() {
+	encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
+	g.builder.CleanMetrics()
 }
 
 type future struct {
