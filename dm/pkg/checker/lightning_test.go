@@ -139,3 +139,29 @@ func TestClusterVersion(t *testing.T) {
 	require.Equal(t, lightningMsg, result.Errors[0].ShortErr)
 	require.Equal(t, StateFailure, result.Errors[0].Severity)
 }
+
+func TestTableEmpty(t *testing.T) {
+	ctx := context.Background()
+	c := &LightningTableEmptyChecker{inner: mockPrecheckItem{pass: true}}
+	result := c.Check(ctx)
+	require.Equal(t, StateSuccess, result.State)
+	require.Len(t, result.Errors, 0)
+	require.Equal(t, "", result.Extra)
+
+	c.inner = mockPrecheckItem{err: errors.New("mock error")}
+	result = c.Check(ctx)
+	require.Equal(t, StateFailure, result.State)
+	require.Equal(t, "", result.Extra)
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, "mock error", result.Errors[0].ShortErr)
+	require.Equal(t, StateFailure, result.Errors[0].Severity)
+
+	lightningMsg := "table(s) [test.t1] are not empty"
+	c.inner = mockPrecheckItem{msg: lightningMsg}
+	result = c.Check(ctx)
+	require.Equal(t, StateFailure, result.State)
+	require.Equal(t, "", result.Extra)
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, lightningMsg, result.Errors[0].ShortErr)
+	require.Equal(t, StateFailure, result.Errors[0].Severity)
+}
