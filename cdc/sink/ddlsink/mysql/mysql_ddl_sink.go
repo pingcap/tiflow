@@ -138,6 +138,10 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	switch ddl.Type {
 	case timodel.ActionAddIndex:
 		m.waitAsyncDDLFinished(ctx, ddl)
+		log.Info("put DDL into async ddl channel",
+			zap.String("changefeed", m.id.String()),
+			zap.String("ddl", ddl.Query),
+			zap.Uint64("commitTs", ddl.CommitTs))
 		m.async.ddlCh.In() <- ddl
 		m.async.ddlMap.Store(ddl.TableInfo.ID, make(chan struct{}))
 		return nil
@@ -300,6 +304,15 @@ func (m *DDLSink) Close() {
 
 // Run loop.
 func (m *DDLSink) asyncExec() error {
+	defer func() {
+		m.async.ddlMap.Range(func(key, value interface{}) bool {
+			log.Warn("ddl is skip due async worker exits",
+				zap.String("changefeedID", m.id.String()),
+				zap.Uint64("tableID", key.(uint64)))
+			return true
+		})
+	}()
+
 	log.Info("async ddl worker starts",
 		zap.String("changefeedID", m.id.String()))
 	for {
