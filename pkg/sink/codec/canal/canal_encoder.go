@@ -181,9 +181,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 }
 
 // CleanMetrics is a no-op for canalBatchEncoder.
-func (b *batchEncoderBuilder) CleanMetrics() {
-	return // do nothing
-}
+func (b *batchEncoderBuilder) CleanMetrics() {}
 
 // NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
 func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {

@@ -202,7 +202,7 @@ func (w *worker) batch(
 	ctx context.Context, events []mqEvent, flushInterval time.Duration,
 ) (int, error) {
 	index := 0
-	max := len(events)
+	maxBatchSize := len(events)
 	// We need to receive at least one message or be interrupted,
 	// otherwise it will lead to idling.
 	select {
@@ -238,7 +238,7 @@ func (w *worker) batch(
 				index++
 			}
 
-			if index >= max {
+			if index >= maxBatchSize {
 				return index, nil
 			}
 		case <-w.ticker.C:

@@ -91,7 +91,7 @@ func (n *Notifier) remove(index int) {
 }
 
 // Close closes the notify and stops all receiver in this notifier
-// Note we must `Close` the notifier if we can't ensure each receiver of this
+// Note we must `CleanMetrics` the notifier if we can't ensure each receiver of this
 // notifier is called `Stop` in order to prevent goroutine leak.
 func (n *Notifier) Close() {
 	n.mu.Lock()

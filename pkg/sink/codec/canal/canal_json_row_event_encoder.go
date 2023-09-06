@@ -445,7 +445,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 				return errors.Trace(err)
 			}
 
-			m, err = c.NewClaimCheckLocationMessage(e, callback, claimCheckFileName)
+			m, err = c.newClaimCheckLocationMessage(e, callback, claimCheckFileName)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -456,9 +456,10 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
-func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(event *model.RowChangedEvent, callback func(), fileName string) (*common.Message, error) {
-	claimCheckLocation := claimcheck.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, fileName)
+func (c *JSONRowEventEncoder) newClaimCheckLocationMessage(
+	event *model.RowChangedEvent, callback func(), fileName string,
+) (*common.Message, error) {
+	claimCheckLocation := c.claimCheck.FileNameWithPrefix(fileName)
 	value, err := newJSONMessageForDML(c.builder, event, c.config, true, claimCheckLocation)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -521,11 +522,16 @@ type jsonRowEventEncoderBuilder struct {
 
 // NewJSONRowEventEncoderBuilder creates a canal-json batchEncoderBuilder.
 func NewJSONRowEventEncoderBuilder(ctx context.Context, config *common.Config) (codec.RowEventEncoderBuilder, error) {
-	claimCheck, err := claimcheck.New(ctx, config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var (
+		claimCheck *claimcheck.ClaimCheck
+		err        error
+	)
+	if config.LargeMessageHandle.EnableClaimCheck() {
+		claimCheck, err = claimcheck.New(ctx, config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
-
 	return &jsonRowEventEncoderBuilder{
 		config:     config,
 		claimCheck: claimCheck,
@@ -555,5 +561,5 @@ func shouldIgnoreColumn(col *model.Column,
 }
 
 func (b *jsonRowEventEncoderBuilder) CleanMetrics() {
-	b.claimCheck.Close()
+	b.claimCheck.CleanMetrics()
 }

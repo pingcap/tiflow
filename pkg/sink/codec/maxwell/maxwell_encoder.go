@@ -139,6 +139,4 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 }
 
 // CleanMetrics do nothing
-func (b *batchEncoderBuilder) CleanMetrics() {
-	return // do nothing
-}
+func (b *batchEncoderBuilder) CleanMetrics() {}

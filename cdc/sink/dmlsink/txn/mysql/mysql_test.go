@@ -702,7 +702,7 @@ func TestNewMySQLBackend(t *testing.T) {
 
 	require.Nil(t, err)
 	require.Nil(t, sink.Close())
-	// Test idempotency of `Close` interface
+	// Test idempotency of `CleanMetrics` interface
 	require.Nil(t, sink.Close())
 }
 

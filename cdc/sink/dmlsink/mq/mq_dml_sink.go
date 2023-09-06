@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/atomic"
 )
@@ -183,8 +182,6 @@ func (s *dmlSink) Close() {
 	if s.adminClient != nil {
 		s.adminClient.Close()
 	}
-
-	common.CleanMetrics(s.id)
 }
 
 // Dead checks whether it's dead or not.

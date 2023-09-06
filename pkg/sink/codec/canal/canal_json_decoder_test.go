@@ -32,10 +32,12 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 		codecConfig.EnableTiDBExtension = encodeEnable
 		codecConfig.Terminator = config.CRLF
-		encoder := newJSONRowEventEncoder(codecConfig)
-		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, nil)
+		builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		encoder := builder.Build()
+
+		err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, nil)
 		require.NoError(t, err)
 
 		messages := encoder.Build()
@@ -95,7 +97,9 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 		codecConfig.EnableTiDBExtension = encodeEnable
 
-		encoder := newJSONRowEventEncoder(codecConfig)
+		builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		encoder := builder.Build()
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)
 		require.NoError(t, err)

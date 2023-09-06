@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	defaultEncoderGroupSize = 16
-	defaultInputChanSize    = 256
+	defaultEncoderGroupSize = 32
+	defaultInputChanSize    = 128
 	defaultMetricInterval   = 15 * time.Second
 )
 
@@ -154,6 +154,7 @@ func (g *encoderGroup) Output() <-chan *future {
 func (g *encoderGroup) cleanMetrics() {
 	encoderGroupInputChanSizeGauge.DeleteLabelValues(g.changefeedID.Namespace, g.changefeedID.ID)
 	g.builder.CleanMetrics()
+	common.CleanMetrics(g.changefeedID)
 }
 
 type future struct {

@@ -113,9 +113,7 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 }
 
 // CleanMetrics do nothing
-func (b *batchEncoderBuilder) CleanMetrics() {
-	return // do nothing
-}
+func (b *batchEncoderBuilder) CleanMetrics() {}
 
 // NewBatchEncoderBuilder creates a craft batchEncoderBuilder.
 func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {

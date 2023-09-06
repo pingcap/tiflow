@@ -261,14 +261,16 @@ func (d *BatchEncoder) tryBuildCallback() {
 }
 
 // NewClaimCheckLocationMessage implement the ClaimCheckLocationEncoder interface.
-func (d *BatchEncoder) NewClaimCheckLocationMessage(event *model.RowChangedEvent, callback func(), fileName string) (*common.Message, error) {
+func (d *BatchEncoder) newClaimCheckLocationMessage(
+	event *model.RowChangedEvent, callback func(), fileName string,
+) (*common.Message, error) {
 	keyMsg, valueMsg, err := rowChangeToMsg(event, d.config, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	keyMsg.OnlyHandleKey = false
-	claimCheckLocation := claimcheck.FileNameWithPrefix(d.config.LargeMessageHandle.ClaimCheckStorageURI, fileName)
+	claimCheckLocation := d.claimCheck.FileNameWithPrefix(fileName)
 	keyMsg.ClaimCheckLocation = claimCheckLocation
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -310,7 +312,9 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(event *model.RowChangedEvent
 	return message, nil
 }
 
-func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(ctx context.Context, key, value []byte, e *model.RowChangedEvent, callback func()) error {
+func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(
+	ctx context.Context, key, value []byte, e *model.RowChangedEvent, callback func(),
+) error {
 	message := newMessage(key, value)
 	message.Ts = e.CommitTs
 	message.Schema = &e.Table.Schema
@@ -322,7 +326,7 @@ func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(ctx context.Context, 
 		return errors.Trace(err)
 	}
 
-	message, err := d.NewClaimCheckLocationMessage(e, callback, claimCheckFileName)
+	message, err := d.newClaimCheckLocationMessage(e, callback, claimCheckFileName)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -362,18 +366,23 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 }
 
 func (b *batchEncoderBuilder) CleanMetrics() {
-	b.claimCheck.Close()
+	b.claimCheck.CleanMetrics()
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.
 func NewBatchEncoderBuilder(
 	ctx context.Context, config *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
-	claimCheck, err := claimcheck.New(ctx, config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var (
+		claimCheck *claimcheck.ClaimCheck
+		err        error
+	)
+	if config.LargeMessageHandle.EnableClaimCheck() {
+		claimCheck, err = claimcheck.New(ctx, config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
-
 	return &batchEncoderBuilder{
 		config:     config,
 		claimCheck: claimCheck,

@@ -16,7 +16,6 @@ package open
 import (
 	"context"
 	"database/sql"
-	"path/filepath"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -28,7 +27,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/stretchr/testify/require"
 )
 
@@ -162,19 +160,25 @@ func TestMaxMessageBytes(t *testing.T) {
 	// just can hold it.
 	a := 173
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(a)
-	encoder := NewBatchEncoderBuilder(codecConfig).Build()
-	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
+	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.NoError(t, err)
 
 	// cannot hold a single message
 	codecConfig = codecConfig.WithMaxMessageBytes(a - 1)
-	encoder = NewBatchEncoderBuilder(codecConfig).Build()
+	builder, err = NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder = builder.Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.ErrorIs(t, err, cerror.ErrMessageTooLarge)
 
 	// make sure each batch's `Length` not greater than `max-message-bytes`
 	codecConfig = codecConfig.WithMaxMessageBytes(256)
-	encoder = NewBatchEncoderBuilder(codecConfig).Build()
+	builder, err = NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder = builder.Build()
 	for i := 0; i < 10000; i++ {
 		err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 		require.NoError(t, err)
@@ -188,12 +192,16 @@ func TestMaxMessageBytes(t *testing.T) {
 
 func TestMaxBatchSize(t *testing.T) {
 	t.Parallel()
+
+	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(1048576)
 	codecConfig.MaxBatchSize = 64
-	encoder := NewBatchEncoderBuilder(codecConfig).Build()
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
 
 	for i := 0; i < 10000; i++ {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
+		err := encoder.AppendRowChangedEvent(ctx, "", testEvent, nil)
 		require.NoError(t, err)
 	}
 
@@ -297,7 +305,9 @@ func TestOpenProtocolBatchCodec(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(8192)
 	codecConfig.MaxBatchSize = 64
 	tester := internal.NewDefaultBatchTester()
-	tester.TestBatchCodec(t, NewBatchEncoderBuilder(codecConfig),
+	builder, err := NewBatchEncoderBuilder(context.Background(), codecConfig)
+	require.NoError(t, err)
+	tester.TestBatchCodec(t, builder,
 		func(key []byte, value []byte) (codec.RowEventDecoder, error) {
 			decoder, err := NewBatchDecoder(context.Background(), codecConfig, nil)
 			require.NoError(t, err)
@@ -313,10 +323,11 @@ func TestEncodeDecodeE2E(t *testing.T) {
 	topic := "test"
 
 	codecConfig := common.NewConfig(config.ProtocolOpen)
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
 
-	encoder := NewBatchEncoder(codecConfig)
-
-	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
+	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
 	require.NoError(t, err)
 
 	message := encoder.Build()[0]
@@ -353,7 +364,9 @@ func TestE2EDDLCompression(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolOpen)
 	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
 
-	encoder := NewBatchEncoder(codecConfig)
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
 
 	// encode DDL event
 	message, err := encoder.EncodeDDLEvent(testCaseDDL)
@@ -405,11 +418,13 @@ func TestE2EHandleKeyOnlyEvent(t *testing.T) {
 
 	codecConfig.MaxMessageBytes = 251
 
-	encoder := NewBatchEncoder(codecConfig)
-
 	ctx := context.Background()
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
+
 	topic := "test"
-	err := encoder.AppendRowChangedEvent(ctx, topic, largeTestEvent, nil)
+	err = encoder.AppendRowChangedEvent(ctx, topic, largeTestEvent, nil)
 	require.NoError(t, err)
 
 	message := encoder.Build()[0]
@@ -452,12 +467,15 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
 	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
 	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/claim-check"
-	encoder := NewBatchEncoderBuilder(codecConfig).Build()
 
-	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
+
+	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
 	require.NoError(t, err)
 
-	// cannot hold this message, encode it as claim check message by force.
+	// cannot hold this message, it's encoded as the claim check location message.
 	err = encoder.AppendRowChangedEvent(ctx, topic, largeTestEvent, func() {})
 	require.NoError(t, err)
 
@@ -467,26 +485,7 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	messages := encoder.Build()
 	require.Len(t, messages, 3)
 
-	require.Empty(t, messages[0].ClaimCheckFileName)
-	require.NotEmptyf(t, messages[1].ClaimCheckFileName, "claim check file name should not be empty")
-	require.Empty(t, messages[2].ClaimCheckFileName)
-
-	// write the large message to the external storage, the local filesystem in this case.
-	largeMessage := messages[1]
-
-	changefeedID := model.DefaultChangeFeedID("claim-check-test")
-	claimCheckStorage, err := claimcheck.New(ctx, codecConfig.LargeMessageHandle.ClaimCheckStorageURI, changefeedID)
-	require.NoError(t, err)
-	defer claimCheckStorage.Close()
-
-	err = claimCheckStorage.WriteMessage(ctx, largeMessage)
-	require.NoError(t, err)
-
-	// claimCheckLocationMessage send to the kafka.
-	claimCheckLocationMessage, err := encoder.(codec.ClaimCheckLocationEncoder).NewClaimCheckLocationMessage(largeMessage)
-	require.NoError(t, err)
-	require.Empty(t, claimCheckLocationMessage.ClaimCheckFileName)
-
+	claimCheckLocationMessage := messages[1]
 	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
 	require.NoError(t, err)
 	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
@@ -496,9 +495,6 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, messageType, model.MessageTypeRow)
 	require.True(t, ok)
-
-	_, claimCheckFileName := filepath.Split(decoder.(*BatchDecoder).nextKey.ClaimCheckLocation)
-	require.Equal(t, largeMessage.ClaimCheckFileName, claimCheckFileName)
 
 	decodedLargeEvent, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
