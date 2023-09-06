@@ -361,7 +361,7 @@ func newClient(tlsConfig *tls.Config, endpoints ...string) (*clientv3.Client, er
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return client, err
+	return client, nil
 }
 
 // CreateRawEtcdClient creates etcd v3 client with detecting endpoints.
@@ -439,7 +439,7 @@ func CreateRawEtcdClient(tlsConfig *tls.Config, endpoints ...string) (*clientv3.
 		}
 	}(client)
 
-	return client, err
+	return client, nil
 }
 
 type healthyClient struct {
