@@ -65,21 +65,22 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 }
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
+	advancer := newRedoLogAdvancer(task, w.memQuota, requestMemSize, w.redoDMLManager)
+	// The task is finished and some required memory isn't used.
+	defer advancer.cleanup()
+
 	lowerBound, upperBound := validateAndAdjustBound(
 		w.changefeedID,
 		&task.span,
 		task.lowerBound,
 		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
 	)
+	advancer.lastPos = lowerBound.Prev()
 
 	var cache *eventAppender
 	if w.eventCache != nil {
 		cache = w.eventCache.maybeCreateAppender(task.span, lowerBound)
 	}
-
-	advancer := newRedoLogAdvancer(task, w.memQuota, requestMemSize, w.redoDMLManager)
-	// The task is finished and some required memory isn't used.
-	defer advancer.cleanup()
 
 	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
@@ -124,11 +125,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				cache.pushBatch(nil, 0, upperBound)
 			}
 
-			return advancer.finish(
-				ctx,
-				cachedSize,
-				upperBound,
-			)
+			return advancer.finish(ctx, cachedSize, upperBound)
 		}
 
 		allEventCount += 1
