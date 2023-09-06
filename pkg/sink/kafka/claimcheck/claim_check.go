@@ -64,7 +64,6 @@ func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID
 
 // WriteMessage write message to the claim check external storage.
 func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message, fileName string) error {
-	start := time.Now()
 	m := common.ClaimCheckMessage{
 		Key:   message.Key,
 		Value: message.Value,
@@ -73,6 +72,8 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message, 
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	start := time.Now()
 	err = c.storage.WriteFile(ctx, fileName, data)
 	if err != nil {
 		return errors.Trace(err)
@@ -80,7 +81,6 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message, 
 
 	c.metricSendMessageDuration.Observe(time.Since(start).Seconds())
 	c.metricSendMessageCount.Inc()
-
 	return nil
 }
 

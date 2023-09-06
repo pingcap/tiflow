@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
@@ -32,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"go.uber.org/atomic"
-	"go.uber.org/zap"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -121,10 +119,6 @@ func newDMLSink(
 // WriteEvents writes events to the sink.
 // This is an asynchronously and thread-safe method.
 func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTableTxn]) error {
-	if len(txns) == 0 {
-		return nil
-	}
-
 	s.alive.RLock()
 	defer s.alive.RUnlock()
 	if s.alive.isDead {
@@ -140,7 +134,6 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 		}
 	}
 
-	groups := make(map[TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent, 0)
 	for _, txn := range txns {
 		if txn.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
@@ -149,44 +142,27 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			continue
 		}
 
-		events := txn.Event.Rows
-		callback := mergedCallback(txn.Callback, uint64(len(events)))
-
-		for _, e := range events {
-			topic := s.alive.eventRouter.GetTopicForRowChange(e)
+		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
+		for _, row := range txn.Event.Rows {
+			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
 			if err != nil {
 				return errors.Trace(err)
 			}
-			partition := s.alive.eventRouter.GetPartitionForRowChange(e, partitionNum)
-			key := TopicPartitionKey{
-				Topic:     topic,
-				Partition: partition,
+			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
+			// This never be blocked because this is an unbounded channel.
+			s.alive.worker.msgChan.In() <- mqEvent{
+				key: TopicPartitionKey{
+					Topic: topic, Partition: partition,
+				},
+				rowEvent: &dmlsink.RowChangeCallbackableEvent{
+					Event:     row,
+					Callback:  callback,
+					SinkState: txn.SinkState,
+				},
 			}
-			if _, ok := groups[key]; !ok {
-				groups[key] = make([]*dmlsink.RowChangeCallbackableEvent, 0)
-			}
-			groups[key] = append(groups[key], &dmlsink.RowChangeCallbackableEvent{
-				Event:     e,
-				Callback:  callback,
-				SinkState: txn.SinkState,
-			})
 		}
 	}
-	for key, events := range groups {
-		s.alive.worker.msgChan.In() <- mqEvents{
-			key:       key,
-			rowEvents: events,
-		}
-	}
-
-	totalMessageCount := 0
-	for _, events := range groups {
-		totalMessageCount += len(events)
-	}
-
-	log.Info("dml sink write txn", zap.Int("txn-count", len(txns)),
-		zap.Int("total-message-count", totalMessageCount))
 
 	return nil
 }
