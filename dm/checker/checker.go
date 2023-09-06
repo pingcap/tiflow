@@ -533,6 +533,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			}
 			c.checkList = append(c.checkList, checker.NewLightningCDCPiTRChecker(lChecker))
 		}
+		if _, ok := c.checkingItems[config.LightningTableEmptyChecking]; ok {
+			lChecker, err := builder.BuildPrecheckItem(precheck.CheckTargetTableEmpty)
+			if err != nil {
+				return err
+			}
+			c.checkList = append(c.checkList, checker.NewLightningEmptyTableChecker(lChecker))
+		}
 	}
 
 	c.tctx.Logger.Info(c.displayCheckingItems())
