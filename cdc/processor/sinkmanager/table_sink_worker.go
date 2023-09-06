@@ -129,6 +129,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		&task.span,
 		task.lowerBound,
 		task.getUpperBound(task.tableSink.getUpperBoundTs()))
+	advancer.lastPos = lowerBound.Prev()
 
 	allEventSize := uint64(0)
 	allEventCount := 0
@@ -211,6 +212,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			performCallback(lowerBound.Prev())
 			return nil
 		}
+		advancer.lastPos = lowerBound.Prev()
 	}
 
 	// lowerBound and upperBound are both closed intervals.

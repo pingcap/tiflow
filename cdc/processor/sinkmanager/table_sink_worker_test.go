@@ -716,3 +716,47 @@ func (suite *tableSinkWorkerSuite) TestFetchFromCacheWithFailure() {
 	cancel()
 	wg.Wait()
 }
+
+// When starts to handle a task, advancer.lastPos should be set to a correct position.
+// Otherwise if advancer.lastPos isn't updated during scanning, callback will get an
+// invalid `advancer.lastPos`.
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
+	}
+	w, e := suite.createWorker(ctx, 0, true)
+	defer w.sinkMemQuota.Close()
+	suite.addEventsToSortEngine(events, e)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	defer sink.Close()
+
+	chShouldBeClosed := make(chan struct{}, 1)
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), genLowerBound().Prev(), lastWritePos)
+		close(chShouldBeClosed)
+	}
+	taskChan <- &sinkTask{
+		span:          suite.testSpan,
+		lowerBound:    genLowerBound(),
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return true },
+	}
+
+	<-chShouldBeClosed
+	cancel()
+	wg.Wait()
+}
