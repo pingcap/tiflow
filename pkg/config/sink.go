@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -540,6 +541,33 @@ type CloudStorageConfig struct {
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
+	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
+		return err
+	}
+
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+		return nil
+	}
+
+	protocol, _ := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
+
+	if s.KafkaConfig != nil && s.KafkaConfig.LargeMessageHandle != nil {
+		var (
+			enableTiDBExtension bool
+			err                 error
+		)
+		if s := sinkURI.Query().Get("enable-tidb-extension"); s != "" {
+			enableTiDBExtension, err = strconv.ParseBool(s)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		err = s.KafkaConfig.LargeMessageHandle.AdjustAndValidate(protocol, enableTiDBExtension)
+		if err != nil {
+			return err
+		}
+	}
+
 	if s.SchemaRegistry != nil &&
 		(s.KafkaConfig != nil && s.KafkaConfig.GlueSchemaRegistryConfig != nil) {
 		return cerror.ErrInvalidReplicaConfig.
@@ -548,19 +576,12 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 				"schema-registry is used by confluent schema registry, " +
 				"glue-schema-registry-config is used by aws glue schema registry")
 	}
+
 	if s.KafkaConfig != nil && s.KafkaConfig.GlueSchemaRegistryConfig != nil {
 		err := s.KafkaConfig.GlueSchemaRegistryConfig.Validate()
 		if err != nil {
 			return err
 		}
-	}
-
-	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
-		return err
-	}
-
-	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
-		return nil
 	}
 
 	if s.PulsarConfig != nil {
@@ -595,7 +616,6 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		s.Terminator = util.AddressOf(CRLF)
 	}
 
-	protocol, _ := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
 	if util.GetOrZero(s.DeleteOnlyOutputHandleKeyColumns) && protocol == ProtocolCsv {
 		return cerror.ErrSinkInvalidConfig.GenWithStack(
 			"CSV protocol always output all columns for the delete event, " +
@@ -656,7 +676,7 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
-	// Validate that protocol is compatible with the scheme. For testing purposes,
+	// Adjust that protocol is compatible with the scheme. For testing purposes,
 	// any protocol should be legal for blackhole.
 	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
 		_, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
