@@ -366,7 +366,9 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 }
 
 func (b *batchEncoderBuilder) CleanMetrics() {
-	b.claimCheck.CleanMetrics()
+	if b.claimCheck != nil {
+		b.claimCheck.CleanMetrics()
+	}
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.

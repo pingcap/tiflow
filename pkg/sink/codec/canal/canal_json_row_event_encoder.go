@@ -561,5 +561,7 @@ func shouldIgnoreColumn(col *model.Column,
 }
 
 func (b *jsonRowEventEncoderBuilder) CleanMetrics() {
-	b.claimCheck.CleanMetrics()
+	if b.claimCheck != nil {
+		b.claimCheck.CleanMetrics()
+	}
 }
