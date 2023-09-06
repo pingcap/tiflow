@@ -441,7 +441,7 @@ func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint6
 func handleRowChangedEvents(
 	changefeed model.ChangeFeedID, span tablepb.Span,
 	events ...*model.PolymorphicEvent,
-) ([]*model.RowChangedEvent, uint64, error) {
+) ([]*model.RowChangedEvent, uint64) {
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
@@ -470,7 +470,7 @@ func handleRowChangedEvents(
 		size += rowEvent.ApproximateBytes()
 		rowChangedEvents = append(rowChangedEvents, rowEvent)
 	}
-	return rowChangedEvents, uint64(size), nil
+	return rowChangedEvents, uint64(size)
 }
 
 func genReplicateTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {

@@ -153,8 +153,7 @@ func TestHandleNilRowChangedEvents(t *testing.T) {
 	events := []*model.PolymorphicEvent{nil}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
-	require.NoError(t, err)
+	result, size := handleRowChangedEvents(changefeedID, span, events...)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
 }
@@ -176,8 +175,7 @@ func TestHandleEmptyRowChangedEvents(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 
-	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
-	require.NoError(t, err)
+	result, size := handleRowChangedEvents(changefeedID, span, events...)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
 }
@@ -228,8 +226,7 @@ func TestHandleRowChangedEventNormalEvent(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	result, size, err := handleRowChangedEvents(changefeedID, span, events...)
-	require.NoError(t, err)
+	result, size := handleRowChangedEvents(changefeedID, span, events...)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(224), size)
 }
