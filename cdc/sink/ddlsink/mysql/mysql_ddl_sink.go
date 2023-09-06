@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/pingcap/failpoint"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
@@ -59,6 +61,13 @@ type DDLSink struct {
 	// statistics is the statistics of this sink.
 	// We use it to record the DDL count.
 	statistics *metrics.Statistics
+
+	async struct {
+		ctx    context.Context
+		cancel func()
+		ddlCh  *chann.DrainableChann[*model.DDLEvent]
+		ddlMap sync.Map
+	}
 }
 
 // NewDDLSink creates a new DDLSink.
@@ -84,22 +93,62 @@ func NewDDLSink(
 		return nil, err
 	}
 
+	asyncCtx, cancel := context.WithCancel(ctx)
 	m := &DDLSink{
 		id:         changefeedID,
 		db:         db,
 		cfg:        cfg,
 		statistics: metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		async: struct {
+			ctx    context.Context
+			cancel func()
+			ddlCh  *chann.DrainableChann[*model.DDLEvent]
+			ddlMap sync.Map
+		}{
+			ctx:    asyncCtx,
+			cancel: cancel,
+			ddlCh:  chann.NewAutoDrainChann[*model.DDLEvent](chann.Cap(-1)),
+			ddlMap: sync.Map{},
+		},
 	}
 
+	go func() {
+		m.asyncExec()
+	}()
 	log.Info("MySQL DDL sink is created",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID))
 	return m, nil
 }
 
+func (m *DDLSink) waitAsyncDDLFinished(ctx context.Context, ddl *model.DDLEvent) {
+	v, ok := m.async.ddlMap.Load(ddl.TableInfo.ID)
+	if !ok {
+		return
+	}
+	select {
+	case <-ctx.Done():
+	case <-v.(chan struct{}):
+		return
+	}
+}
+
 // WriteDDLEvent writes a DDL event to the mysql database.
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	return m.execDDLWithMaxRetries(ctx, ddl)
+	switch ddl.Type {
+	case timodel.ActionAddIndex:
+		m.waitAsyncDDLFinished(ctx, ddl)
+		m.async.ddlCh.In() <- ddl
+		m.async.ddlMap.Store(ddl.TableInfo.ID, make(chan struct{}))
+		return nil
+	case timodel.ActionDropIndex,
+		timodel.ActionMultiSchemaChange,
+		timodel.ActionRenameIndex, timodel.ActionAlterIndexVisibility:
+		m.waitAsyncDDLFinished(ctx, ddl)
+		return m.execDDLWithMaxRetries(ctx, ddl)
+	default:
+		return m.execDDLWithMaxRetries(ctx, ddl)
+	}
 }
 
 func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
@@ -235,6 +284,7 @@ func (m *DDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.Tabl
 
 // Close closes the database connection.
 func (m *DDLSink) Close() {
+	m.async.cancel()
 	if m.statistics != nil {
 		m.statistics.Close()
 	}
@@ -244,6 +294,41 @@ func (m *DDLSink) Close() {
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
 				zap.Error(err))
+		}
+	}
+}
+
+// Run loop.
+func (m *DDLSink) asyncExec() error {
+	log.Info("async ddl worker starts",
+		zap.String("changefeedID", m.id.String()))
+	for {
+		select {
+		case <-m.async.ctx.Done():
+			log.Info("async ddl worker exits as canceled",
+				zap.String("changefeedID", m.id.String()))
+			return nil
+		case ddlEvent := <-m.async.ddlCh.Out():
+			if ddlEvent != nil {
+				if err := m.execDDLWithMaxRetries(m.async.ctx, ddlEvent); err != nil {
+					log.Error("async exec ddl failed",
+						zap.String("changefeedID", m.id.String()),
+						zap.Uint64("commitTs", ddlEvent.CommitTs),
+						zap.String("ddl", ddlEvent.Query))
+				}
+				ch, ok := m.async.ddlMap.LoadAndDelete(ddlEvent.TableInfo.ID)
+				if !ok {
+					log.Error("load ddl from map failed",
+						zap.String("changefeedID", m.id.String()),
+						zap.Uint64("commitTs", ddlEvent.CommitTs),
+						zap.String("ddl", ddlEvent.Query))
+				}
+				close(ch.(chan struct{}))
+				log.Error("async exec ddl done",
+					zap.String("changefeedID", m.id.String()),
+					zap.Uint64("commitTs", ddlEvent.CommitTs),
+					zap.String("ddl", ddlEvent.Query))
+			}
 		}
 	}
 }
