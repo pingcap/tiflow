@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -324,4 +325,23 @@ func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
 		compatible := isSinkCompatibleWithSpanReplication(u)
 		require.Equal(t, compatible, tt.compatible, tt.name)
 	}
+}
+
+func TestValidateAndAdjustLargeMessageHandle(t *testing.T) {
+	cfg := GetDefaultReplicaConfig()
+	cfg.Sink.KafkaConfig = &KafkaConfig{
+		LargeMessageHandle: NewDefaultLargeMessageHandleConfig(),
+	}
+	cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = ""
+	cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleCompression = ""
+
+	rawURL := "kafka://127.0.0.1:9092/canal-json-test?protocol=canal-json&enable-tidb-extension=true"
+	sinkURL, err := url.Parse(rawURL)
+	require.NoError(t, err)
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
+
+	require.Equal(t, LargeMessageHandleOptionNone, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption)
+	require.Equal(t, compression.None, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleCompression)
 }
