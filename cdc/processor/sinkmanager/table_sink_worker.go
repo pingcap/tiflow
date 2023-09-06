@@ -133,8 +133,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if !callbackIsPerformed {
 			task.callback(pos)
 			callbackIsPerformed = true
-		} else {
-			panic("should never be performed twice")
 		}
 	}
 
@@ -202,9 +200,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if err != nil {
 			return errors.Trace(err)
 		}
-		// We have drained all events from the cache, we can return directly.
-		// No need to get events from the source manager again.
 		if drained {
+			// If drained is true it means we have drained all events from the cache,
+			// we can return directly instead of get events from the source manager again.
 			performCallback(lowerBound.Prev())
 			return nil
 		}
