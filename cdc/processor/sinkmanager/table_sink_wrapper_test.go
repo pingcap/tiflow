@@ -362,7 +362,7 @@ func TestNewTableSinkWrapper(t *testing.T) {
 	require.Equal(t, uint64(10), checkpointTs.ResolvedMark())
 }
 
-func TestTableSinkWrapperCloseStarted(t *testing.T) {
+func TestTableSinkWrapperSinkDetails(t *testing.T) {
 	t.Parallel()
 
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
@@ -382,9 +382,7 @@ func TestTableSinkWrapperCloseStarted(t *testing.T) {
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
 
-	require.False(t, wrapper.tableSink.closeStarted)
 	require.False(t, wrapper.initTableSink())
-	require.False(t, wrapper.tableSink.closeStarted)
 
 	wrapper.tableSinkCreater = func() (tablesink.TableSink, uint64) {
 		*version += 1
@@ -393,25 +391,19 @@ func TestTableSinkWrapperCloseStarted(t *testing.T) {
 
 	require.True(t, wrapper.initTableSink())
 	require.Equal(t, wrapper.tableSink.version, uint64(1))
-	require.False(t, wrapper.tableSink.closeStarted)
 
 	require.True(t, wrapper.asyncCloseTableSink())
-	require.True(t, wrapper.tableSink.closeStarted)
 
 	wrapper.doTableSinkClear()
-	require.False(t, wrapper.tableSink.closeStarted)
 	require.Nil(t, wrapper.tableSink.s)
 	require.Equal(t, wrapper.tableSink.version, uint64(0))
 
 	require.True(t, wrapper.initTableSink())
 	require.Equal(t, wrapper.tableSink.version, uint64(2))
-	require.False(t, wrapper.tableSink.closeStarted)
 
 	wrapper.closeTableSink()
-	require.True(t, wrapper.tableSink.closeStarted)
 
 	wrapper.doTableSinkClear()
-	require.False(t, wrapper.tableSink.closeStarted)
 	require.Nil(t, wrapper.tableSink.s)
 	require.Equal(t, wrapper.tableSink.version, uint64(0))
 }
