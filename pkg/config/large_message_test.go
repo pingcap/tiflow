@@ -75,5 +75,4 @@ func TestLargeMessageHandle4OpenProtocol(t *testing.T) {
 	err = largeMessageHandle.AdjustAndValidate(ProtocolOpen, true)
 	require.NoError(t, err)
 	require.Equal(t, LargeMessageHandleOptionHandleKeyOnly, largeMessageHandle.LargeMessageHandleOption)
-
 }
