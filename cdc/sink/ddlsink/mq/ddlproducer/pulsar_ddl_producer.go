@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
-	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	lru "github.com/hashicorp/golang-lru"
@@ -59,10 +58,6 @@ func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string
 func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 	partitionNum int32, message *common.Message,
 ) error {
-	startTime := time.Now()
-	defer func() {
-		log.Info("pulsarProducers SyncSendMessage cost time", zap.Duration("cost", time.Since(startTime)))
-	}()
 	wrapperSchemaAndTopic(message)
 	mq.IncPublishedDDLCount(topic, p.id.ID, message)
 
@@ -102,7 +97,7 @@ func NewPulsarProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
-	topicName, err := util.GetTopic(pConfig.GetSinkURI())
+	topicName, err := util.GetTopic(pConfig.U)
 	if err != nil {
 		return nil, err
 	}

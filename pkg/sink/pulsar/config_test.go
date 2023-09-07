@@ -64,7 +64,7 @@ func TestPulsarConfig(t *testing.T) {
 
 			replicaConfig.Sink.PulsarConfig = p
 			// Call function under test
-			config, err := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
+			config, err := AdjustPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 
 			// Assert error value
 			if tt.wantErr {
@@ -76,7 +76,7 @@ func TestPulsarConfig(t *testing.T) {
 			// If no error is expected, assert config values
 			if !tt.wantErr {
 				assert.Equal(t, config.CompressionType.Value(), pulsar.LZ4)
-				assert.Equal(t, config.GetBrokerURL(), "pulsar://127.0.0.1:6650")
+				assert.Equal(t, config.BrokerURL, "pulsar://127.0.0.1:6650")
 				assert.Equal(t, config.ConnectionTimeout.Duration(), defaultConnectionTimeout*time.Second)
 				assert.Equal(t, config.OperationTimeout.Duration(), 998*time.Second)
 				assert.Equal(t, *config.BatchingMaxMessages, defaultBatchingMaxSize)
@@ -91,9 +91,9 @@ func TestGetBrokerURL(t *testing.T) {
 	sink, _ := url.Parse("pulsar://localhost:6650/test")
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	config, _ := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
+	config, _ := AdjustPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 
-	assert.Equal(t, config.GetBrokerURL(), "pulsar://localhost:6650")
+	assert.Equal(t, config.BrokerURL, "pulsar://localhost:6650")
 }
 
 func TestGetSinkURI(t *testing.T) {
@@ -101,18 +101,18 @@ func TestGetSinkURI(t *testing.T) {
 		"?max-message-bytes=5000&compression=lz4")
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	config, _ := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
+	config, _ := AdjustPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 
-	assert.Equal(t, config.GetSinkURI(), sink)
+	assert.Equal(t, config.U, sink)
 }
 
 func TestGetDefaultTopicName(t *testing.T) {
 	sink, _ := url.Parse("pulsar://localhost:6650/test")
 	replicaConfig := config.GetDefaultReplicaConfig()
-	config, _ := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
+	config, _ := AdjustPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 	assert.Equal(t, config.GetDefaultTopicName(), "test")
 
 	sink, _ = url.Parse("pulsar://127.0.0.1:6650/persistent://tenant/namespace/test-topic")
-	config, _ = NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
+	config, _ = AdjustPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 	assert.Equal(t, config.GetDefaultTopicName(), "persistent://tenant/namespace/test-topic")
 }

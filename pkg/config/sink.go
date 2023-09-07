@@ -485,26 +485,6 @@ func (c *PulsarConfig) validate() (err error) {
 	return nil
 }
 
-// GetBrokerURL get broker url
-func (c *PulsarConfig) GetBrokerURL() string {
-	return c.BrokerURL
-}
-
-// SetBrokerURL get broker url
-func (c *PulsarConfig) SetBrokerURL(brokerURL string) {
-	c.BrokerURL = brokerURL
-}
-
-// GetSinkURI get sink uri
-func (c *PulsarConfig) GetSinkURI() *url.URL {
-	return c.U
-}
-
-// SetSinkURI get sink uri
-func (c *PulsarConfig) SetSinkURI(u *url.URL) {
-	c.U = u
-}
-
 // GetDefaultTopicName get default topic name
 func (c *PulsarConfig) GetDefaultTopicName() string {
 	topicName := c.U.Path

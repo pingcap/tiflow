@@ -57,7 +57,7 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	pConfig, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
+	pConfig, err := pulsarConfig.AdjustPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
