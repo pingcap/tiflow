@@ -35,14 +35,6 @@ import (
 
 var version uint64 = 0
 
-// sinkDetails is generated from `tableSinkWrapper.tableSink`.
-type sinkDetails struct {
-	version      uint64
-	resolvedTs   model.ResolvedTs
-	checkpointTs model.ResolvedTs
-	advanced     time.Time
-}
-
 // tableSinkWrapper is a wrapper of TableSink, it is used in SinkManager to manage TableSink.
 // Because in the SinkManager, we write data to TableSink and RedoManager concurrently,
 // so current sink node can not be reused.
@@ -131,6 +123,7 @@ func newTableSinkWrapper(
 
 	res.tableSink.version = 0
 	res.tableSink.checkpointTs = model.NewResolvedTs(startTs)
+	res.tableSink.resolvedTs = model.NewResolvedTs(startTs)
 	res.tableSink.advanced = time.Now()
 
 	res.receivedSorterResolvedTs.Store(startTs)
@@ -212,21 +205,6 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	defer t.tableSink.innerMu.Unlock()
 	t.tableSink.resolvedTs = ts
 	return t.tableSink.s.UpdateResolvedTs(ts)
-}
-
-func (t *tableSinkWrapper) getSinkDetails() (d sinkDetails) {
-	t.getCheckpointTs()
-
-	t.tableSink.RLock()
-	defer t.tableSink.RUnlock()
-	t.tableSink.innerMu.Lock()
-	defer t.tableSink.innerMu.Unlock()
-
-	d.version = t.tableSink.version
-	d.resolvedTs = t.tableSink.resolvedTs
-	d.checkpointTs = t.tableSink.checkpointTs
-	d.advanced = t.tableSink.advanced
-	return
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
@@ -369,6 +347,7 @@ func (t *tableSinkWrapper) doTableSinkClear() {
 	if t.tableSink.checkpointTs.Less(checkpointTs) {
 		t.tableSink.checkpointTs = checkpointTs
 	}
+	t.tableSink.resolvedTs = checkpointTs
 	t.tableSink.advanced = time.Now()
 	t.tableSink.innerMu.Unlock()
 	t.tableSink.s = nil
@@ -440,6 +419,31 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 		t.rangeEventCounts = t.rangeEventCounts[idx:]
 	}
 	return shouldClean
+}
+
+func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint64) {
+	t.getCheckpointTs()
+
+	t.tableSink.RLock()
+	t.tableSink.innerMu.Lock()
+	version := t.tableSink.version
+	resolvedTs := t.tableSink.resolvedTs
+	checkpointTs := t.tableSink.checkpointTs
+	advanced := t.tableSink.advanced
+	t.tableSink.RUnlock()
+	t.tableSink.innerMu.Unlock()
+
+	// What these conditions mean:
+	// 1. the table sink has been associated with a valid sink;
+	// 2. its checkpoint hasn't been advanced for a while;
+	// 3. but the table upperbound is advanced correctly;
+	// 4. its checkpoint is less than the emited point.
+	if version > 0 && time.Since(advanced) > stuckCheck &&
+		oracle.GetTimeFromTS(t.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck &&
+		checkpointTs.Less(resolvedTs) {
+		return true, version
+	}
+	return false, uint64(0)
 }
 
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.

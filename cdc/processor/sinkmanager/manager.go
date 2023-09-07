@@ -972,9 +972,9 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 	tableSink := value.(*tableSinkWrapper)
 
-	details := tableSink.getSinkDetails()
-	m.sinkMemQuota.Release(span, details.checkpointTs)
-	m.redoMemQuota.Release(span, details.checkpointTs)
+	checkpointTs := tableSink.getCheckpointTs()
+	m.sinkMemQuota.Release(span, checkpointTs)
+	m.redoMemQuota.Release(span, checkpointTs)
 
 	advanceTimeoutInSec := util.GetOrZero(m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec)
 	if advanceTimeoutInSec <= 0 {
@@ -982,22 +982,15 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
 
-	// What these conditions mean:
-	// 1. the table sink has been associated with a valid sink;
-	// 2. its checkpoint hasn't been advanced for a while;
-	// 3. but the table upperbound is advanced correctly;
-	// 4. its checkpoint is less than the emited point.
-	if details.version > 0 && time.Since(details.advanced) > stuckCheck &&
-		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(details.checkpointTs.Ts)) > stuckCheck &&
-		details.checkpointTs.Less(details.resolvedTs) &&
-		m.putSinkFactoryError(errors.New("table sink stuck"), details.version) {
+	isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
+	if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
 		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
-			zap.Any("checkpointTs", details.checkpointTs),
+			zap.Any("checkpointTs", checkpointTs),
 			zap.Float64("stuckCheck", stuckCheck.Seconds()),
-			zap.Uint64("factoryVersion", details.version))
+			zap.Uint64("factoryVersion", version))
 	}
 
 	var resolvedTs model.Ts
@@ -1008,17 +1001,17 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
-	if resolvedTs < details.checkpointTs.ResolvedMark() {
+	if resolvedTs < checkpointTs.ResolvedMark() {
 		log.Error("sinkManager: resolved ts should not less than checkpoint ts",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("resolvedTs", resolvedTs),
-			zap.Any("checkpointTs", details.checkpointTs),
+			zap.Any("checkpointTs", checkpointTs),
 			zap.Uint64("barrierTs", tableSink.barrierTs.Load()))
 	}
 	return TableStats{
-		CheckpointTs: details.checkpointTs.ResolvedMark(),
+		CheckpointTs: checkpointTs.ResolvedMark(),
 		ResolvedTs:   resolvedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
 	}
