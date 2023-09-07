@@ -41,7 +41,6 @@ const (
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        DefaultChangefeedMemoryQuota,
 	CaseSensitive:      true,
-	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    util.AddressOf(false),
 	SyncPointInterval:  util.AddressOf(10 * time.Minute),
@@ -111,7 +110,6 @@ type ReplicaConfig replicaConfig
 type replicaConfig struct {
 	MemoryQuota      uint64 `toml:"memory-quota" json:"memory-quota"`
 	CaseSensitive    bool   `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
 	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	// EnableSyncPoint is only available when the downstream is a Database.
@@ -201,11 +199,6 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err != nil {
 			return err
 		}
-
-		err = c.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-		if err != nil {
-			return err
-		}
 	}
 
 	if c.Consistent != nil {
@@ -291,52 +284,4 @@ func (c *ReplicaConfig) FixMemoryQuota() {
 func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 	return u != nil &&
 		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
-}
-
-// AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
-func (c *ReplicaConfig) AdjustEnableOldValue(scheme, protocol string) {
-	if sink.IsMySQLCompatibleScheme(scheme) {
-		return
-	}
-
-	if c.EnableOldValue {
-		_, ok := ForceDisableOldValueProtocols[protocol]
-		if ok {
-			log.Warn("Attempting to replicate with old value enabled, but the specified protocol must disable old value. "+
-				"CDC will disable old value and continue.", zap.String("protocol", protocol))
-			c.EnableOldValue = false
-		}
-		return
-	}
-
-	_, ok := ForceEnableOldValueProtocols[protocol]
-	if ok {
-		log.Warn("Attempting to replicate with old value disabled, but the specified protocol must enable old value. "+
-			"CDC will enable old value and continue.", zap.String("protocol", protocol))
-		c.EnableOldValue = true
-	}
-}
-
-func (c *ReplicaConfig) adjustEnableOldValueAndVerifyForceReplicate(sinkURI *url.URL) error {
-	scheme := strings.ToLower(sinkURI.Scheme)
-	protocol := sinkURI.Query().Get(ProtocolKey)
-	if protocol != "" {
-		c.Sink.Protocol = util.AddressOf(protocol)
-	}
-	protocol = util.GetOrZero(c.Sink.Protocol)
-	c.AdjustEnableOldValue(scheme, protocol)
-
-	if !c.ForceReplicate {
-		return nil
-	}
-
-	// MySQL Sink require the old value feature must be enabled to allow delete event send to downstream.
-	if sink.IsMySQLCompatibleScheme(scheme) {
-		if !c.EnableOldValue {
-			log.Error("force replicate, old value feature is disabled for the changefeed using mysql sink")
-			return cerror.ErrIncompatibleConfig.GenWithStackByArgs()
-		}
-	}
-
-	return nil
 }

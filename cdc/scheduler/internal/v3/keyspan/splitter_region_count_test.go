@@ -77,7 +77,8 @@ func TestRegionCountSplitSpan(t *testing.T) {
 			totalCaptures: 4,
 			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
 			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_2")},   // 2 region
+				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_1")},   // 1 region
+				{TableID: 1, StartKey: []byte("t1_1"), EndKey: []byte("t1_2")}, // 1 region
 				{TableID: 1, StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, // 1 region
 				{TableID: 1, StartKey: []byte("t1_3"), EndKey: []byte("t1_4")}, // 1 region
 				{TableID: 1, StartKey: []byte("t1_4"), EndKey: []byte("t2")},   // 1 region
@@ -87,8 +88,10 @@ func TestRegionCountSplitSpan(t *testing.T) {
 			totalCaptures: 3,
 			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
 			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_2")},   // 2 region
-				{TableID: 1, StartKey: []byte("t1_2"), EndKey: []byte("t1_4")}, // 2 region
+				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_1")},   // 1 region
+				{TableID: 1, StartKey: []byte("t1_1"), EndKey: []byte("t1_2")}, // 1 region
+				{TableID: 1, StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, // 1 region
+				{TableID: 1, StartKey: []byte("t1_3"), EndKey: []byte("t1_4")}, // 1 region
 				{TableID: 1, StartKey: []byte("t1_4"), EndKey: []byte("t2")},   // 1 region
 			},
 		},
@@ -96,26 +99,31 @@ func TestRegionCountSplitSpan(t *testing.T) {
 			totalCaptures: 2,
 			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
 			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_3")}, // 3 region
-				{TableID: 1, StartKey: []byte("t1_3"), EndKey: []byte("t2")}, // 2 region
+				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_1")},   // 1 region
+				{TableID: 1, StartKey: []byte("t1_1"), EndKey: []byte("t1_2")}, // 1 region
+				{TableID: 1, StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, // 1 region
+				{TableID: 1, StartKey: []byte("t1_3"), EndKey: []byte("t1_4")}, // 1 region
+				{TableID: 1, StartKey: []byte("t1_4"), EndKey: []byte("t2")},   // 1 region
 			},
 		},
 		{
 			totalCaptures: 1,
 			span:          tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
 			expectSpans: []tablepb.Span{
-				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}, // 5 region
+				{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t1_2")},   // 2 region
+				{TableID: 1, StartKey: []byte("t1_2"), EndKey: []byte("t1_4")}, // 2 region
+				{TableID: 1, StartKey: []byte("t1_4"), EndKey: []byte("t2")},   // 1 region
 			},
 		},
 	}
 
 	for i, cs := range cases {
-		splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache)
 		cfg := &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
 			RegionThreshold:        1,
 		}
-		spans := splitter.split(context.Background(), cs.span, cs.totalCaptures, cfg)
+		splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache, cfg.RegionThreshold)
+		spans := splitter.split(context.Background(), cs.span, cs.totalCaptures)
 		require.Equalf(t, cs.expectSpans, spans, "%d %s", i, &cs.span)
 	}
 }
@@ -134,64 +142,66 @@ func TestRegionCountEvenlySplitSpan(t *testing.T) {
 
 	cases := []struct {
 		totalCaptures  int
+		expectedSpans  int
 		expectSpansMin int
 		expectSpansMax int
 	}{
 		{
 			totalCaptures:  0,
+			expectedSpans:  1,
 			expectSpansMin: 1000,
 			expectSpansMax: 1000,
 		},
 		{
 			totalCaptures:  1,
-			expectSpansMin: 1000,
-			expectSpansMax: 1000,
-		},
-		{
-			totalCaptures:  3,
+			expectedSpans:  3,
 			expectSpansMin: 333,
 			expectSpansMax: 334,
 		},
 		{
+			totalCaptures:  3,
+			expectedSpans:  9,
+			expectSpansMin: 111,
+			expectSpansMax: 113,
+		},
+		{
 			totalCaptures:  7,
-			expectSpansMin: 142,
-			expectSpansMax: 143,
+			expectedSpans:  42,
+			expectSpansMin: 23,
+			expectSpansMax: 24,
 		},
 		{
 			totalCaptures:  999,
+			expectedSpans:  100,
 			expectSpansMin: 1,
-			expectSpansMax: 2,
+			expectSpansMax: 10,
 		},
 		{
 			totalCaptures:  1000,
+			expectedSpans:  100,
 			expectSpansMin: 1,
-			expectSpansMax: 1,
+			expectSpansMax: 10,
 		},
 		{
 			totalCaptures:  2000,
+			expectedSpans:  100,
 			expectSpansMin: 1,
-			expectSpansMax: 1,
+			expectSpansMax: 10,
 		},
 	}
 	for i, cs := range cases {
-		splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache)
 		cfg := &config.ChangefeedSchedulerConfig{
 			EnableTableAcrossNodes: true,
 			RegionThreshold:        1,
 		}
+		splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache, cfg.RegionThreshold)
 		spans := splitter.split(
 			context.Background(),
 			tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")},
 			cs.totalCaptures,
-			cfg,
 		)
-		if cs.totalCaptures == 0 {
-			require.Equalf(t, 1, len(spans), "%d %v", i, cs)
-		} else if cs.totalCaptures <= 1000 {
-			require.Equalf(t, cs.totalCaptures, len(spans), "%d %v", i, cs)
-		} else {
-			require.Equalf(t, 1000, len(spans), "%d %v", i, cs)
-		}
+
+		require.Equalf(t, cs.expectedSpans, len(spans), "%d %v", i, cs)
 
 		for _, span := range spans {
 			start, end := 0, 1000
@@ -217,13 +227,13 @@ func TestSplitSpanRegionOutOfOrder(t *testing.T) {
 	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_1"), EndKey: []byte("t1_4")}, 2)
 	cache.regions.ReplaceOrInsert(tablepb.Span{StartKey: []byte("t1_2"), EndKey: []byte("t1_3")}, 3)
 
-	splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache)
 	cfg := &config.ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: true,
 		RegionThreshold:        1,
 	}
+	splitter := newRegionCountSplitter(model.ChangeFeedID{}, cache, cfg.RegionThreshold)
 	span := tablepb.Span{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}
-	spans := splitter.split(context.Background(), span, 1, cfg)
+	spans := splitter.split(context.Background(), span, 1)
 	require.Equal(
 		t, []tablepb.Span{{TableID: 1, StartKey: []byte("t1"), EndKey: []byte("t2")}}, spans)
 }

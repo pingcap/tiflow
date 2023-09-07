@@ -61,7 +61,7 @@ func Encode(cc string, data []byte) ([]byte, error) {
 	default:
 	}
 
-	return nil, cerror.ErrCompressionFailed.GenWithStack("Unsupported compression %d", cc)
+	return nil, cerror.ErrCompressionFailed.GenWithStack("Unsupported compression %s", cc)
 }
 
 // Decode the given data by the given compression codec.
@@ -81,5 +81,5 @@ func Decode(cc string, data []byte) ([]byte, error) {
 	default:
 	}
 
-	return nil, cerror.ErrCompressionFailed.GenWithStack("Unsupported compression %d", cc)
+	return nil, cerror.ErrCompressionFailed.GenWithStack("Unsupported compression %s", cc)
 }

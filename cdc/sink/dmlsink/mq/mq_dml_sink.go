@@ -151,16 +151,11 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			if err != nil {
 				return errors.Trace(err)
 			}
-
-			partitionIndex := int32(0)
-			// If the partitionNum is 0, it means the sink is pulsar sink.
-			if partitionNum != 0 {
-				partitionIndex = s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
-			}
+			index, key := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
 			// This never be blocked because this is an unbounded channel.
 			s.alive.worker.msgChan.In() <- mqEvent{
 				key: TopicPartitionKey{
-					Topic: topic, Partition: partitionIndex,
+					Topic: topic, Partition: index, PartitionKey: key,
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
 					Event:     row,

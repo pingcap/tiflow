@@ -46,6 +46,7 @@ const (
 	partitionDispatchRuleTS
 	partitionDispatchRuleTable
 	partitionDispatchRuleIndexValue
+	partitionDispatchRuleKey
 )
 
 func (r *partitionDispatchRule) fromString(rule string) {
@@ -62,9 +63,7 @@ func (r *partitionDispatchRule) fromString(rule string) {
 	case "index-value":
 		*r = partitionDispatchRuleIndexValue
 	default:
-		*r = partitionDispatchRuleDefault
-		log.Warn("the partition dispatch rule is not default/ts/table/index-value," +
-			" use the default rule instead.")
+		*r = partitionDispatchRuleKey
 	}
 }
 
@@ -106,7 +105,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
+		d := getPartitionDispatcher(ruleConfig, schema)
 		t, err := getTopicDispatcher(ruleConfig, defaultTopic,
 			util.GetOrZero(cfg.Sink.Protocol), schema)
 		if err != nil {
@@ -155,7 +154,7 @@ func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
 func (s *EventRouter) GetPartitionForRowChange(
 	row *model.RowChangedEvent,
 	partitionNum int32,
-) int32 {
+) (int32, string) {
 	_, partitionDispatcher := s.matchDispatcher(
 		row.Table.Schema, row.Table.Table,
 	)
@@ -226,9 +225,7 @@ func (s *EventRouter) matchDispatcher(
 }
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
-func getPartitionDispatcher(
-	ruleConfig *config.DispatchRule, enableOldValue bool,
-) partition.Dispatcher {
+func getPartitionDispatcher(ruleConfig *config.DispatchRule, schema string) partition.Dispatcher {
 	var (
 		d    partition.Dispatcher
 		rule partitionDispatchRule
@@ -236,18 +233,21 @@ func getPartitionDispatcher(
 	rule.fromString(ruleConfig.PartitionRule)
 	switch rule {
 	case partitionDispatchRuleIndexValue:
-		if enableOldValue {
-			log.Warn("This index-value distribution mode " +
-				"does not guarantee row-level orderliness when " +
-				"switching on the old value, so please use caution!")
-		}
 		d = partition.NewIndexValueDispatcher()
 	case partitionDispatchRuleTS:
 		d = partition.NewTsDispatcher()
 	case partitionDispatchRuleTable:
 		d = partition.NewTableDispatcher()
 	case partitionDispatchRuleDefault:
-		d = partition.NewDefaultDispatcher(enableOldValue)
+		d = partition.NewDefaultDispatcher()
+	case partitionDispatchRuleKey:
+		if sink.IsPulsarScheme(schema) {
+			d = partition.NewKeyDispatcher(ruleConfig.PartitionRule)
+		} else {
+			log.Warn("the partition dispatch rule is not default/ts/table/index-value," +
+				" use the default rule instead.")
+			d = partition.NewDefaultDispatcher()
+		}
 	}
 
 	return d
@@ -264,29 +264,32 @@ func getTopicDispatcher(
 	// check if this rule is a valid topic expression
 	topicExpr := topic.Expression(ruleConfig.TopicRule)
 
+	// validate the topic expression for pulsar sink
+	if sink.IsPulsarScheme(schema) {
+		err := topicExpr.PulsarValidate()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// validate the topic expression for kafka sink
+	var p config.Protocol
+	var err error
 	if protocol != "" {
-		p, err := config.ParseSinkProtocolFromString(protocol)
+		p, err = config.ParseSinkProtocolFromString(protocol)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 		}
-
-		if schema == sink.PulsarScheme {
-			err = topicExpr.PulsarValidate()
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			if p == config.ProtocolAvro {
-				err = topicExpr.ValidateForAvro()
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				err = topicExpr.Validate()
-				if err != nil {
-					return nil, err
-				}
-			}
+	}
+	if p == config.ProtocolAvro {
+		err = topicExpr.ValidateForAvro()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err = topicExpr.Validate()
+		if err != nil {
+			return nil, err
 		}
 	}
 	return topic.NewDynamicTopicDispatcher(topicExpr), nil

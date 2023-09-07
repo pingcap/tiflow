@@ -16,13 +16,14 @@ package util
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	gcsStorage "cloud.google.com/go/storage"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -193,11 +194,11 @@ func (s *extStorageWithTimeout) WalkDir(
 
 // Create opens a file writer by path. path is relative path to storage base path
 func (s *extStorageWithTimeout) Create(
-	ctx context.Context, path string,
+	ctx context.Context, path string, option *storage.WriterOption,
 ) (storage.ExternalFileWriter, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.Create(ctx, path)
+	return s.ExternalStorage.Create(ctx, path, option)
 }
 
 // Rename file name from oldFileName to newFileName
@@ -230,9 +231,9 @@ func IsNotExistInExtStorage(err error) bool {
 		return true
 	}
 
-	var errResp *azblob.StorageError
-	if internalErr, ok := err.(*azblob.InternalError); ok && internalErr.As(&errResp) {
-		if errResp.ErrorCode == azblob.StorageErrorCodeBlobNotFound {
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		if respErr.StatusCode == http.StatusNotFound {
 			return true
 		}
 	}

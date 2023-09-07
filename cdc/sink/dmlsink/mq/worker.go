@@ -44,8 +44,9 @@ const (
 
 // TopicPartitionKey contains the topic and partition key of the message.
 type TopicPartitionKey struct {
-	Topic     string
-	Partition int32
+	Topic        string
+	Partition    int32
+	PartitionKey string
 }
 
 // mqEvent is the event of the mq worker.
@@ -169,7 +170,12 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 					zap.Any("event", event))
 				continue
 			}
-			if err := w.encoderGroup.AddEvents(ctx, event.key.Topic, event.key.Partition, event.rowEvent); err != nil {
+			if err := w.encoderGroup.AddEvents(
+				ctx,
+				event.key.Topic,
+				event.key.Partition,
+				event.key.PartitionKey,
+				event.rowEvent); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -200,7 +206,8 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		msgs := eventsBuf[:endIndex]
 		partitionedRows := w.group(msgs)
 		for key, events := range partitionedRows {
-			if err := w.encoderGroup.AddEvents(ctx, key.Topic, key.Partition, events...); err != nil {
+			if err := w.encoderGroup.
+				AddEvents(ctx, key.Topic, key.Partition, key.PartitionKey, events...); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -327,7 +334,12 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				// normal message, just send it to the kafka.
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, error) {
-					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
+					message.SetPartitionKey(future.PartitionKey)
+					if err := w.producer.AsyncSendMessage(
+						ctx,
+						future.Topic,
+						future.Partition,
+						message); err != nil {
 						return 0, err
 					}
 					return message.GetRowsCount(), nil
