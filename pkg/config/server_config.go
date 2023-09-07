@@ -106,9 +106,8 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-		SortDir:             DefaultSortDir,
-		CacheSizeInMB:       128, // By default use 128M memory as sorter cache.
-		MaxMemoryPercentage: 10,  // Deprecated.
+		SortDir:       DefaultSortDir,
+		CacheSizeInMB: 128, // By default, use 128M memory as sorter cache.
 	},
 	Security: &SecurityConfig{},
 	KVClient: &KVClientConfig{
@@ -127,17 +126,12 @@ var defaultServerConfig = &ServerConfig{
 			Count: 8,
 			// Following configs are optimized for write/read throughput.
 			// Users should not change them.
-			Concurrency:                 128,
-			MaxOpenFiles:                10000,
-			BlockSize:                   65536,
-			WriterBufferSize:            8388608,
-			Compression:                 "snappy",
-			WriteL0PauseTrigger:         math.MaxInt32,
-			CompactionL0Trigger:         160,
-			CompactionDeletionThreshold: 10485760,
-			CompactionPeriod:            1800,
-			IteratorMaxAliveDuration:    10000,
-			IteratorSlowReadDuration:    256,
+			MaxOpenFiles:        10000,
+			BlockSize:           65536,
+			WriterBufferSize:    8388608,
+			Compression:         "snappy",
+			WriteL0PauseTrigger: math.MaxInt32,
+			CompactionL0Trigger: 160,
 		},
 		Messages: defaultMessageConfig.Clone(),
 
@@ -168,8 +162,7 @@ type ServerConfig struct {
 
 	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
 	Security *SecurityConfig `toml:"security" json:"security"`
-	// DEPRECATED: after using pull based sink, this config is useless.
-	// Because we do not control the memory usage by table anymore.
+	// Deprecated: we don't use this field anymore.
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
