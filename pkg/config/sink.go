@@ -324,6 +324,8 @@ type KafkaConfig struct {
 	Key                          *string      `toml:"key" json:"key,omitempty"`
 	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+
+	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in KafkaConfig

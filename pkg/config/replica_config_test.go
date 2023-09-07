@@ -123,6 +123,11 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		FlushInterval: aws.String("1m"),
 		FileSize:      aws.Int(1024),
 	}
+	conf.Sink.KafkaConfig = &KafkaConfig{
+		LargeMessageHandle: &LargeMessageHandleConfig{
+			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
+		},
+	}
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)

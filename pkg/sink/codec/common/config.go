@@ -38,7 +38,7 @@ type Config struct {
 	MaxBatchSize    int
 
 	// onlyHandleKeyColumns is true, for the delete event only output the handle key columns.
-	OnlyHandleKeyColumns bool
+	DeleteOnlyHandleKeyColumns bool
 
 	EnableTiDBExtension bool
 	EnableRowChecksum   bool
@@ -58,6 +58,8 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
+
+	LargeMessageHandle *config.LargeMessageHandleConfig
 }
 
 // NewConfig return a Config for codec
@@ -75,6 +77,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		AvroBigintUnsignedHandlingMode: "long",
 
 		OnlyOutputUpdatedColumns: false,
+
+		LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
 	}
 }
 
@@ -155,6 +159,16 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
 		}
+
+		if replicaConfig.Sink.KafkaConfig != nil {
+			if replicaConfig.Sink.KafkaConfig.LargeMessageHandle != nil {
+				c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+			}
+			if c.LargeMessageHandle.HandleKeyOnly() && replicaConfig.ForceReplicate {
+				return cerror.ErrCodecInvalidConfig.GenWithStack(
+					`force-replicate must be disabled, when the large message handle option is set to "handle-key-only"`)
+			}
+		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
@@ -170,7 +184,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
 
-	c.OnlyHandleKeyColumns = !replicaConfig.EnableOldValue
+	c.DeleteOnlyHandleKeyColumns = !replicaConfig.EnableOldValue
 
 	return nil
 }
@@ -267,6 +281,13 @@ func (c *Config) Validate() error {
 		return cerror.ErrCodecInvalidConfig.Wrap(
 			errors.Errorf("invalid max-batch-size %d", c.MaxBatchSize),
 		)
+	}
+
+	if c.LargeMessageHandle != nil {
+		err := c.LargeMessageHandle.Validate(c.Protocol, c.EnableTiDBExtension)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

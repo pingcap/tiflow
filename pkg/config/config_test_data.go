@@ -53,6 +53,11 @@ const (
       }
     ],
     "enable-partition-separator": true,
+    "kafka-config": {
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
+      }
+    },
     "protocol": "open-protocol",
     "advance-timeout-in-sec": 150
   },
@@ -200,6 +205,11 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
+    "kafka-config": {
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
+      }
+    },
     "only-output-updated-columns": false,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
@@ -327,6 +337,11 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
+    "kafka-config": {
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
+      }
+    },
     "only-output-updated-columns": false,
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,

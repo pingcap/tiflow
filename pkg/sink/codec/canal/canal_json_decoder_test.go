@@ -25,6 +25,8 @@ import (
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 	t.Parallel()
+
+	ctx := context.Background()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
 		encoder := newJSONRowEventEncoder(&common.Config{
@@ -42,7 +44,12 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		msg := messages[0]
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewBatchDecoder(msg.Value, decodeEnable, "")
+			codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+			codecConfig.EnableTiDBExtension = decodeEnable
+			decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
+			err = decoder.AddKeyValue(msg.Key, msg.Value)
+			require.NoError(t, err)
 
 			ty, hasNext, err := decoder.HasNext()
 			require.Nil(t, err)
@@ -83,11 +90,12 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 
 func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 	t.Parallel()
+
+	ctx := context.Background()
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := &JSONRowEventEncoder{
-			builder: newCanalEntryBuilder(),
-			config:  &common.Config{EnableTiDBExtension: encodeEnable},
-		}
+		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+		codecConfig.EnableTiDBExtension = encodeEnable
+		encoder := newJSONRowEventEncoder(codecConfig)
 		require.NotNil(t, encoder)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)
@@ -95,7 +103,12 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 		require.NotNil(t, result)
 
 		for _, decodeEnable := range []bool{false, true} {
-			decoder := NewBatchDecoder(result.Value, decodeEnable, "")
+			codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+			codecConfig.EnableTiDBExtension = decodeEnable
+			decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
+			err = decoder.AddKeyValue(nil, result.Value)
+			require.NoError(t, err)
 
 			ty, hasNext, err := decoder.HasNext()
 			require.Nil(t, err)
@@ -130,7 +143,16 @@ func TestCanalJSONBatchDecoderWithTerminator(t *testing.T) {
 	encodedValue := `{"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"INSERT","es":1668067205238,"ts":1668067206650,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2014-06-04","LastName":"Smith","OfficeLocation":"New York","id":"101"}],"old":null}
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"UPDATE","es":1668067229137,"ts":1668067230720,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":[{"FirstName":"Bob","HireDate":"2014-06-04","LastName":"Smith","OfficeLocation":"New York","id":"101"}]}
 {"id":0,"database":"test","table":"employee","pkNames":["id"],"isDdl":false,"type":"DELETE","es":1668067230388,"ts":1668067231725,"sql":"","sqlType":{"FirstName":12,"HireDate":91,"LastName":12,"OfficeLocation":12,"id":4},"mysqlType":{"FirstName":"varchar","HireDate":"date","LastName":"varchar","OfficeLocation":"varchar","id":"int"},"data":[{"FirstName":"Bob","HireDate":"2015-10-08","LastName":"Smith","OfficeLocation":"Los Angeles","id":"101"}],"old":null}`
-	decoder := NewBatchDecoder([]byte(encodedValue), false, "\n")
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.LargeMessageHandle = config.NewDefaultLargeMessageHandleConfig()
+	codecConfig.Terminator = "\n"
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(nil, []byte(encodedValue))
+	require.NoError(t, err)
 	cnt := 0
 	for {
 		tp, hasNext, err := decoder.HasNext()
