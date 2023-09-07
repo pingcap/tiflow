@@ -39,11 +39,6 @@ const (
 	defaultBackoffMaxElapsedTime      = 30 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
-
-	// If all states recorded in window are 'normal', it can be assumed that the changefeed
-	// is running steady. And then if we enter a state other than normal at next tick,
-	// the backoff must be reset.
-	defaultStateWindowSize = 512
 )
 
 // feedStateManager manages the ReactorState of a changefeed
