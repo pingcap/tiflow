@@ -81,6 +81,6 @@ func NewReconcilerForTests(
 	return &Reconciler{
 		tableSpans: make(map[int64]splittedSpans),
 		config:     config,
-		splitter:   []splitter{newRegionCountSplitter(model.ChangeFeedID{}, cache)},
+		splitter:   []splitter{newRegionCountSplitter(model.ChangeFeedID{}, cache, config.RegionPerSpan)},
 	}
 }

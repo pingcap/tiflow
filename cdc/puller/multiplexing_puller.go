@@ -46,7 +46,7 @@ type tableProgress struct {
 	tableName  string
 
 	initialized          atomic.Bool
-	resolvedTsUpdated    time.Time
+	resolvedTsUpdated    atomic.Int64
 	resolvedTs           atomic.Uint64
 	maxIngressResolvedTs atomic.Uint64
 
@@ -153,6 +153,8 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		resolvedEventsCache: make(chan kv.MultiplexingEvent, 16),
 		tsTracker:           frontier.NewFrontier(0, spans...),
 	}
+	progress.initialized.Store(false)
+	progress.resolvedTsUpdated.Store(time.Now().Unix())
 
 	progress.consume.f = func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
 		progress.consume.RLock()
@@ -407,7 +409,7 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 	}
 	if resolvedTs > p.resolvedTs.Load() {
 		p.resolvedTs.Store(resolvedTs)
-		p.resolvedTsUpdated = time.Now()
+		p.resolvedTsUpdated.Store(time.Now().Unix())
 		raw := &model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved}
 		err = p.consume.f(ctx, raw, p.spans)
 	}
@@ -416,7 +418,8 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 }
 
 func (p *tableProgress) resolveLock(currentTime time.Time) {
-	if !p.initialized.Load() || time.Since(p.resolvedTsUpdated) < resolveLockFence {
+	resolvedTsUpdated := time.Unix(p.resolvedTsUpdated.Load(), 0)
+	if !p.initialized.Load() || time.Since(resolvedTsUpdated) < resolveLockFence {
 		return
 	}
 	resolvedTs := p.resolvedTs.Load()

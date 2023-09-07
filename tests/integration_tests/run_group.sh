@@ -44,16 +44,16 @@ groups=(
 	["G10"]='default_value simple cdc_server_tips event_filter'
 	["G11"]='resolve_lock move_table autorandom generate_column'
 	["G12"]='many_pk_or_uk capture_session_done_during_task ddl_attributes'
-	["G13"]='tiflash new_ci_collation_without_old_value region_merge common_1'
+	["G13"]='tiflash region_merge common_1'
 	["G14"]='big_txn changefeed_finish force_replicate_table'
-	["G15"]='new_ci_collation_with_old_value batch_add_table multi_rocks'
+	["G15"]='new_ci_collation batch_add_table multi_rocks'
 	# currently G16 is not running in kafka pipeline
 	["G16"]='owner_resign processor_etcd_worker_delay sink_hang'
 	["G17"]='clustered_index processor_resolved_ts_fallback'
 	# only run the following tests in mysql pipeline
 	["G18"]='availability http_proxies sequence'
 	["G19"]='changefeed_fast_fail batch_update_to_no_batch changefeed_resume_with_checkpoint_ts'
-	["G20"]='tidb_mysql_test ddl_reentrant multi_cdc_cluster multi_changefeed'
+	["G20"]='tidb_mysql_test ddl_reentrant multi_cdc_cluster'
 	["G21"]='bank kill_owner_with_ddl owner_remove_table_error'
 )
 

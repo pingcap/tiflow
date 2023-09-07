@@ -100,8 +100,6 @@ const (
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
 	codecOPTAvroSchemaRegistry             = "schema-registry"
 	coderOPTAvroGlueSchemaRegistry         = "glue-schema-registry"
-
-	codecOPTOnlyOutputUpdatedColumns = "only-output-updated-columns"
 )
 
 const (
@@ -190,7 +188,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
 		}
-		if replicaConfig.Sink.KafkaConfig != nil {
+		if replicaConfig.Sink.KafkaConfig != nil && replicaConfig.Sink.KafkaConfig.LargeMessageHandle != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
 		}
 		if !c.LargeMessageHandle.Disabled() && replicaConfig.ForceReplicate {
@@ -201,12 +199,6 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
-	}
-	if c.OnlyOutputUpdatedColumns && !replicaConfig.EnableOldValue {
-		return cerror.ErrCodecInvalidConfig.GenWithStack(
-			`old value must be enabled when configuration "%s" is true.`,
-			codecOPTOnlyOutputUpdatedColumns,
-		)
 	}
 
 	if replicaConfig.Integrity != nil {
@@ -332,7 +324,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.LargeMessageHandle != nil {
-		err := c.LargeMessageHandle.Validate(c.Protocol, c.EnableTiDBExtension)
+		err := c.LargeMessageHandle.AdjustAndValidate(c.Protocol, c.EnableTiDBExtension)
 		if err != nil {
 			return err
 		}

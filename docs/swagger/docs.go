@@ -2833,9 +2833,6 @@ var doc = `{
                 "consistent": {
                     "$ref": "#/definitions/v2.ConsistentConfig"
                 },
-                "enable_old_value": {
-                    "type": "boolean"
-                },
                 "enable_sync_point": {
                     "type": "boolean"
                 },
