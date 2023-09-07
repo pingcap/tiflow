@@ -162,10 +162,11 @@ func (s *server) prepare(ctx context.Context) error {
 	// Collect all endpoints from pd here to make the server more robust.
 	// Because in some scenarios, the deployer may only provide one pd endpoint,
 	// this will cause the TiCDC server to fail to restart when some pd node is down.
-	s.pdEndpoints, err = s.pdAPIClient.CollectMemberEndpoints(ctx)
+	allPDEndpoints, err := s.pdAPIClient.CollectMemberEndpoints(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	s.pdEndpoints = append(s.pdEndpoints, allPDEndpoints...)
 	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
 	// we do not pass a `context` to create a the etcd client,
 	// to prevent it's cancelled when the server is closing.
