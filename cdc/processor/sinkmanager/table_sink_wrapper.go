@@ -208,8 +208,6 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
-	upperbound := t.getUpperBoundTs()
-
 	t.tableSink.RLock()
 	defer t.tableSink.RUnlock()
 	t.tableSink.innerMu.Lock()
@@ -220,7 +218,7 @@ func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 		if t.tableSink.checkpointTs.Less(checkpointTs) {
 			t.tableSink.checkpointTs = checkpointTs
 			t.tableSink.advanced = time.Now()
-		} else if checkpointTs.ResolvedMark() >= upperbound {
+		} else if !checkpointTs.Less(t.tableSink.resolvedTs) {
 			t.tableSink.advanced = time.Now()
 		}
 	}
@@ -437,7 +435,7 @@ func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint6
 	// 1. the table sink has been associated with a valid sink;
 	// 2. its checkpoint hasn't been advanced for a while;
 	// 3. but the table upperbound is advanced correctly;
-	// 4. its checkpoint is less than the emited point.
+	// 4. its checkpoint is less than the emitted point.
 	if version > 0 && time.Since(advanced) > stuckCheck &&
 		oracle.GetTimeFromTS(t.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck &&
 		checkpointTs.Less(resolvedTs) {
