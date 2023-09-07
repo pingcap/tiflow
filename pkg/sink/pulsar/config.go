@@ -65,7 +65,7 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 		return nil, err
 	}
 
-	c.U = sinkURI
+	c.SinkURI = sinkURI
 	c.BrokerURL = sinkURI.Scheme + "://" + sinkURI.Host
 
 	if pulsarConfig == nil {
@@ -73,7 +73,7 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 		return c, nil
 	}
 
-	pulsarConfig.U = c.U
+	pulsarConfig.SinkURI = c.SinkURI
 
 	if len(sinkURI.Scheme) == 0 || len(sinkURI.Host) == 0 {
 		return nil, fmt.Errorf("BrokerURL is empty")

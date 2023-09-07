@@ -97,7 +97,7 @@ func NewPulsarProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
-	topicName, err := util.GetTopic(pConfig.U)
+	topicName, err := util.GetTopic(pConfig.SinkURI)
 	if err != nil {
 		return nil, err
 	}

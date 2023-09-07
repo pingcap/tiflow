@@ -103,7 +103,7 @@ func TestGetSinkURI(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	config, _ := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 
-	assert.Equal(t, config.U, sink)
+	assert.Equal(t, config.SinkURI, sink)
 }
 
 func TestGetDefaultTopicName(t *testing.T) {

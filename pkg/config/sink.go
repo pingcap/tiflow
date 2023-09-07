@@ -467,8 +467,8 @@ type PulsarConfig struct {
 	// BrokerURL is used to configure service brokerUrl for the Pulsar service.
 	// This parameter is a part of the `sink-uri`. Internal use only.
 	BrokerURL string `toml:"-" json:"-"`
-	// U is the parsed sinkURI. Internal use only.
-	U *url.URL `toml:"-" json:"-"`
+	// SinkURI is the parsed sinkURI. Internal use only.
+	SinkURI *url.URL `toml:"-" json:"-"`
 }
 
 // Check get broker url
@@ -487,7 +487,7 @@ func (c *PulsarConfig) validate() (err error) {
 
 // GetDefaultTopicName get default topic name
 func (c *PulsarConfig) GetDefaultTopicName() string {
-	topicName := c.U.Path
+	topicName := c.SinkURI.Path
 	return topicName[1:]
 }
 
