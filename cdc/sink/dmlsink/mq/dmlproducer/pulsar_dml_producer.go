@@ -131,15 +131,6 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 	partition int32, message *common.Message,
 ) error {
 	wrapperSchemaAndTopic(message)
-	log.Debug("Async send message to pulsar",
-		zap.Stringer("changefeed", p.id),
-		zap.String("topic", topic),
-		zap.Int32("partition", partition),
-		zap.String("key", message.GetPartitionKey()),
-		zap.String("schema", message.GetSchema()),
-		zap.String("table", message.GetTable()),
-		zap.Int("rowsCount", message.GetRowsCount()),
-		zap.String("protocol", message.Protocol.String()))
 
 	// We have to hold the lock to avoid writing to a closed producer.
 	// Close may be blocked for a long time.
