@@ -100,6 +100,9 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			AvroDecimalHandlingMode:        aws.String("string"),
 			AvroBigintUnsignedHandlingMode: aws.String("string"),
 		},
+		LargeMessageHandle: &LargeMessageHandleConfig{
+			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
+		},
 	}
 	conf.Sink.MySQLConfig = &MySQLConfig{
 		WorkerCount:                  aws.Int(8),
@@ -123,15 +126,11 @@ func TestReplicaConfigMarshal(t *testing.T) {
 		FlushInterval: aws.String("1m"),
 		FileSize:      aws.Int(1024),
 	}
-	conf.Sink.KafkaConfig = &KafkaConfig{
-		LargeMessageHandle: &LargeMessageHandleConfig{
-			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
-		},
-	}
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)
-	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	b = mustIndentJSON(t, b)
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, b)
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)
