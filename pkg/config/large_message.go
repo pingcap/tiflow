@@ -34,8 +34,11 @@ func NewDefaultLargeMessageHandleConfig() *LargeMessageHandleConfig {
 	}
 }
 
-// Validate the LargeMessageHandleConfig.
-func (c *LargeMessageHandleConfig) Validate(protocol Protocol, enableTiDBExtension bool) error {
+// AdjustAndValidate the LargeMessageHandleConfig.
+func (c *LargeMessageHandleConfig) AdjustAndValidate(protocol Protocol, enableTiDBExtension bool) error {
+	if c.LargeMessageHandleOption == "" {
+		c.LargeMessageHandleOption = LargeMessageHandleOptionNone
+	}
 	if c.LargeMessageHandleOption == LargeMessageHandleOptionNone {
 		return nil
 	}

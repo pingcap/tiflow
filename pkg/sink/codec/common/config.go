@@ -284,7 +284,7 @@ func (c *Config) Validate() error {
 	}
 
 	if c.LargeMessageHandle != nil {
-		err := c.LargeMessageHandle.Validate(c.Protocol, c.EnableTiDBExtension)
+		err := c.LargeMessageHandle.AdjustAndValidate(c.Protocol, c.EnableTiDBExtension)
 		if err != nil {
 			return err
 		}

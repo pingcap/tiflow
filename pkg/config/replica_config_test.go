@@ -418,3 +418,20 @@ func TestMaskSensitiveData(t *testing.T) {
 	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLPassword)
 	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLGssAPIPassword)
 }
+
+func TestValidateAndAdjustLargeMessageHandle(t *testing.T) {
+	cfg := GetDefaultReplicaConfig()
+	cfg.Sink.KafkaConfig = &KafkaConfig{
+		LargeMessageHandle: NewDefaultLargeMessageHandleConfig(),
+	}
+	cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = ""
+
+	rawURL := "kafka://127.0.0.1:9092/canal-json-test?protocol=canal-json&enable-tidb-extension=true"
+	sinkURL, err := url.Parse(rawURL)
+	require.NoError(t, err)
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
+
+	require.Equal(t, LargeMessageHandleOptionNone, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption)
+}

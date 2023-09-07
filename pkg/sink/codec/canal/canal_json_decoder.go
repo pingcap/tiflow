@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/goccy/go-json"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
