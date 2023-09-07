@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // ConsistentConfig represents replication consistency config for a changefeed.
@@ -55,4 +56,9 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 			fmt.Sprintf("invalid storage uri: %s", c.Storage))
 	}
 	return redo.ValidateStorage(uri)
+}
+
+// MaskSensitiveData masks sensitive data in ConsistentConfig
+func (c *ConsistentConfig) MaskSensitiveData() {
+	c.Storage = util.MaskSensitiveDataInURI(c.Storage)
 }

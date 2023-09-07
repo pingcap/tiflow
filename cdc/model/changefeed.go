@@ -240,9 +240,9 @@ func (info *ChangeFeedInfo) String() (str string) {
 		return
 	}
 
-	clone.SinkURI, err = util.MaskSinkURI(clone.SinkURI)
-	if err != nil {
-		log.Error("failed to marshal changefeed info", zap.Error(err))
+	clone.SinkURI = util.MaskSensitiveDataInURI(clone.SinkURI)
+	if clone.Config != nil {
+		clone.Config.MaskSensitiveData()
 	}
 
 	str, err = clone.Marshal()
