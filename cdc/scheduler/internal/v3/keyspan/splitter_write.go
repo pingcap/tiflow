@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"go.uber.org/zap"
 )
@@ -28,24 +27,36 @@ import (
 const regionWrittenKeyBase = 1
 
 type writeSplitter struct {
-	changefeedID model.ChangeFeedID
-	pdAPIClient  pdutil.PDAPIClient
+	changefeedID      model.ChangeFeedID
+	pdAPIClient       pdutil.PDAPIClient
+	writeKeyThreshold int
+}
+
+type splitRegionsInfo struct {
+	RegionCounts []int
+	Weights      []uint64
+	WriteKeys    []uint64
+	Spans        []tablepb.Span
 }
 
 func newWriteSplitter(
-	changefeedID model.ChangeFeedID, pdAPIClient pdutil.PDAPIClient,
+	changefeedID model.ChangeFeedID,
+	pdAPIClient pdutil.PDAPIClient,
+	writeKeyThreshold int,
 ) *writeSplitter {
 	return &writeSplitter{
-		changefeedID: changefeedID,
-		pdAPIClient:  pdAPIClient,
+		changefeedID:      changefeedID,
+		pdAPIClient:       pdAPIClient,
+		writeKeyThreshold: writeKeyThreshold,
 	}
 }
 
 func (m *writeSplitter) split(
-	ctx context.Context, span tablepb.Span, totalCaptures int,
-	config *config.ChangefeedSchedulerConfig,
+	ctx context.Context,
+	span tablepb.Span,
+	captureNum int,
 ) []tablepb.Span {
-	if config.WriteKeyThreshold == 0 {
+	if m.writeKeyThreshold == 0 {
 		return nil
 	}
 	regions, err := m.pdAPIClient.ScanRegions(ctx, span)
@@ -59,12 +70,8 @@ func (m *writeSplitter) split(
 		return nil
 	}
 
-	pages := totalCaptures
-	if len(regions)/spanRegionLimit > pages {
-		pages = len(regions) / spanRegionLimit
-	}
-
-	if pages <= 1 {
+	spansNum := getSpansNumber(len(regions), captureNum)
+	if spansNum <= 1 {
 		log.Warn("schedulerv3: only one capture and the regions number less than"+
 			" the maxSpanRegionLimit, skip split span",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -74,54 +81,60 @@ func (m *writeSplitter) split(
 		return []tablepb.Span{span}
 	}
 
-	info := splitRegionsByWrittenKeys(span.TableID,
-		regions,
-		config.WriteKeyThreshold,
-		pages,
-		spanRegionLimit)
-
+	splitInfo := m.splitRegionsByWrittenKeysV1(span.TableID, regions, spansNum)
 	log.Info("schedulerv3: split span by written keys",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.String("span", span.String()),
-		zap.Ints("counts", info.Counts),
-		zap.Ints("weights", info.Weights),
-		zap.Int("spans", len(info.Spans)),
-		zap.Int("totalCaptures", totalCaptures),
-		zap.Int("writeKeyThreshold", config.WriteKeyThreshold),
+		zap.Ints("perSpanRegionCounts", splitInfo.RegionCounts),
+		zap.Uint64s("weights", splitInfo.Weights),
+		zap.Int("spans", len(splitInfo.Spans)),
+		zap.Int("totalCaptures", captureNum),
+		zap.Int("writeKeyThreshold", m.writeKeyThreshold),
 		zap.Int("spanRegionLimit", spanRegionLimit))
-	return info.Spans
+
+	return splitInfo.Spans
 }
 
-type splitRegionsInfo struct {
-	Counts  []int
-	Weights []int
-	Spans   []tablepb.Span
-}
-
-// splitRegionsByWrittenKeys returns a slice of regions that evenly split the range by write keys.
-// pages is the number of splits to make, actually it is the number of captures.
-func splitRegionsByWrittenKeys(
-	tableID model.TableID, regions []pdutil.RegionInfo,
-	writeKeyThreshold int, pages int, spanRegionLimit int,
+// splitRegionsByWrittenKeysV1 tries to split the regions into at least `baseSpansNum` spans,
+// each span has approximately the same write weight.
+// The algorithm is:
+//  1. Sum the written keys of all regions, and normalize the written keys of each region by
+//     adding baseline weights (regionWrittenKeyBase) to each region's written keys. Which takes
+//     the region number into account.
+//  2. Calculate the writeLimitPerSpan.
+//  3. Split the table into spans:
+//     3.1 If the total write is less than writeKeyThreshold, don't need to split the regions.
+//     3.2 If the restSpans count is one, and the restWeight is less than writeLimitPerSpan,
+//     we will use the rest regions as the last span. If the restWeight is larger than writeLimitPerSpan,
+//     then we need to add more restSpans (restWeight / writeLimitPerSpan) to split the rest regions.
+//     3.3 If the restRegions is less than equal to restSpans, then every region will be a span.
+//     3.4 If the spanWriteWeight is larger than writeLimitPerSpan or the regionCount is larger
+//     than spanRegionLimit, then use the region range from spanStartIndex to i to as a span.
+//  4. Return the split result.
+func (m *writeSplitter) splitRegionsByWrittenKeysV1(
+	tableID model.TableID,
+	regions []pdutil.RegionInfo,
+	baseSpansNum int,
 ) *splitRegionsInfo {
 	decodeKey := func(hexkey string) []byte {
 		key, _ := hex.DecodeString(hexkey)
 		return key
 	}
-	totalWriteNormalized := uint64(0)
-	totalWrite := totalWriteNormalized
+
+	totalWrite, totalWriteNormalized := uint64(0), uint64(0)
 	for i := range regions {
 		totalWrite += regions[i].WrittenKeys
-		// Override 0 to 1 to reflect the baseline cost of a region.
-		// Also, it makes split evenly when there is no write.
 		regions[i].WrittenKeys += regionWrittenKeyBase
 		totalWriteNormalized += regions[i].WrittenKeys
 	}
-	if totalWrite < uint64(writeKeyThreshold) {
+
+	// 1. If the total write is less than writeKeyThreshold
+	// don't need to split the regions
+	if totalWrite < uint64(m.writeKeyThreshold) {
 		return &splitRegionsInfo{
-			Counts:  []int{len(regions)},
-			Weights: []int{int(totalWriteNormalized)},
+			RegionCounts: []int{len(regions)},
+			Weights:      []uint64{totalWriteNormalized},
 			Spans: []tablepb.Span{{
 				TableID:  tableID,
 				StartKey: tablepb.Key(decodeKey(regions[0].StartKey)),
@@ -130,65 +143,104 @@ func splitRegionsByWrittenKeys(
 		}
 	}
 
-	writtenKeysPerPage := totalWriteNormalized / uint64(pages)
-	counts := make([]int, 0, pages)
-	weights := make([]int, 0, pages)
-	spans := make([]tablepb.Span, 0, pages)
-	accWrittenKeys, pageWrittenKeys := uint64(0), uint64(0)
-	pageStartIdx, pageLastIdx := 0, 0
-	pageRegionsCount := 0
-	// split the table into pages-1 spans, each span has writtenKeysPerPage written keys.
-	for i := 1; i < pages; i++ {
-		for idx := pageStartIdx; idx < len(regions); idx++ {
-			restPages := pages - i
-			restRegions := len(regions) - idx
-			pageLastIdx = idx
-			currentWrittenKeys := regions[idx].WrittenKeys
-			// If there is at least one region, and the rest regions can't fill the rest pages or
-			// the accWrittenKeys plus currentWrittenKeys is larger than writtenKeysPerPage,
-			// then use the region from pageStartIdx to idx-1 to as a span and start a new page.
-			if (idx > pageStartIdx) &&
-				((restPages >= restRegions) ||
-					(accWrittenKeys+currentWrittenKeys > writtenKeysPerPage) ||
-					pageRegionsCount >= spanRegionLimit) {
+	// 2. Calculate the writeLimitPerSpan, if one span's write is larger that
+	// this number, we should create a new span.
+	writeLimitPerSpan := totalWriteNormalized / uint64(baseSpansNum)
+
+	// The result of this method
+	var (
+		regionCounts = make([]int, 0, baseSpansNum)
+		writeKeys    = make([]uint64, 0, baseSpansNum)
+		weights      = make([]uint64, 0, baseSpansNum)
+		spans        = make([]tablepb.Span, 0, baseSpansNum)
+	)
+
+	// Temp variables used in the loop
+	var (
+		spanWriteWeight = uint64(0)
+		spanStartIndex  = 0
+		restSpans       = baseSpansNum
+		regionCount     = 0
+		restWeight      = int64(totalWriteNormalized)
+	)
+
+	// 3. Split the table into spans, each span has approximately
+	// `writeWeightPerSpan` weight or `spanRegionLimit` regions.
+	for i := 0; i < len(regions); i++ {
+		restRegions := len(regions) - i
+		regionCount++
+		spanWriteWeight += regions[i].WrittenKeys
+		// If the restSpans count is one, and the restWeight is less than writeLimitPerSpan,
+		// we will use the rest regions as the last span. If the restWeight is larger than writeLimitPerSpan,
+		// then we need to add more restSpans (restWeight / writeLimitPerSpan) to split the rest regions.
+		if restSpans == 1 {
+			if restWeight < int64(writeLimitPerSpan) {
 				spans = append(spans, tablepb.Span{
 					TableID:  tableID,
-					StartKey: tablepb.Key(decodeKey(regions[pageStartIdx].StartKey)),
-					EndKey:   tablepb.Key(decodeKey(regions[idx-1].EndKey)),
+					StartKey: tablepb.Key(decodeKey(regions[spanStartIndex].StartKey)),
+					EndKey:   tablepb.Key(decodeKey(regions[len(regions)-1].EndKey)),
 				})
-				counts = append(counts, idx-pageStartIdx)
-				weights = append(weights, int(pageWrittenKeys))
-				pageWrittenKeys = 0
-				pageStartIdx = idx
-				// update writtenKeysPerPage to make the rest regions evenly split
-				// to the rest pages.
-				writtenKeysPerPage = (totalWriteNormalized - accWrittenKeys) / uint64(restPages)
-				accWrittenKeys = 0
-				pageRegionsCount = 0
+
+				lastSpanRegionCount := len(regions) - spanStartIndex
+				lastSpanWriteWeight := uint64(0)
+				lastSpanWriteKey := uint64(0)
+				for j := spanStartIndex; j < len(regions); j++ {
+					lastSpanWriteKey += regions[j].WrittenKeys
+					lastSpanWriteWeight += regions[j].WrittenKeys
+				}
+				regionCounts = append(regionCounts, lastSpanRegionCount)
+				weights = append(weights, lastSpanWriteWeight)
+				writeKeys = append(writeKeys, lastSpanWriteKey)
 				break
 			}
-			pageWrittenKeys += currentWrittenKeys
-			accWrittenKeys += currentWrittenKeys
-			pageRegionsCount++
+			// If the restWeight is larger than writeLimitPerSpan,
+			// then we need to update the restSpans.
+			restSpans = int(restWeight) / int(writeLimitPerSpan)
+		}
+
+		// If the restRegions is less than equal to restSpans,
+		// then every region will be a span.
+		if restRegions <= restSpans {
+			spans = append(spans, tablepb.Span{
+				TableID:  tableID,
+				StartKey: tablepb.Key(decodeKey(regions[spanStartIndex].StartKey)),
+				EndKey:   tablepb.Key(decodeKey(regions[i].EndKey)),
+			})
+			regionCounts = append(regionCounts, regionCount)
+			weights = append(weights, spanWriteWeight)
+
+			// reset the temp variables to start a new span
+			restSpans--
+			restWeight -= int64(spanWriteWeight)
+			spanWriteWeight = 0
+			regionCount = 0
+			spanStartIndex = i + 1
+			continue
+		}
+
+		// If the spanWriteWeight is larger than writeLimitPerSpan or the regionCount
+		// is larger than spanRegionLimit, then use the region range from
+		// spanStartIndex to i to as a span.
+		if spanWriteWeight > writeLimitPerSpan || regionCount >= spanRegionLimit {
+			spans = append(spans, tablepb.Span{
+				TableID:  tableID,
+				StartKey: tablepb.Key(decodeKey(regions[spanStartIndex].StartKey)),
+				EndKey:   tablepb.Key(decodeKey(regions[i].EndKey)),
+			})
+			regionCounts = append(regionCounts, regionCount)
+			weights = append(weights, spanWriteWeight)
+			// reset the temp variables to start a new span
+			restSpans--
+			restWeight -= int64(spanWriteWeight)
+			spanWriteWeight = 0
+			regionCount = 0
+			spanStartIndex = i + 1
 		}
 	}
-
-	// The last span contains the rest regions.
-	spans = append(spans, tablepb.Span{
-		TableID:  tableID,
-		StartKey: tablepb.Key(decodeKey(regions[pageLastIdx].StartKey)),
-		EndKey:   tablepb.Key(decodeKey(regions[len(regions)-1].EndKey)),
-	})
-	counts = append(counts, len(regions)-pageLastIdx)
-	pageWrittenKeys = 0
-	for idx := pageLastIdx; idx < len(regions); idx++ {
-		pageWrittenKeys += regions[idx].WrittenKeys
-	}
-	weights = append(weights, int(pageWrittenKeys))
-
 	return &splitRegionsInfo{
-		Counts:  counts,
-		Weights: weights,
-		Spans:   spans,
+		RegionCounts: regionCounts,
+		Weights:      weights,
+		WriteKeys:    writeKeys,
+		Spans:        spans,
 	}
 }

@@ -662,7 +662,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				if c.eventRouter != nil {
-					target := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
+					target, _ := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
 					if partition != target {
 						log.Panic("RowChangedEvent dispatched to wrong partition",
 							zap.Int32("obtained", partition),

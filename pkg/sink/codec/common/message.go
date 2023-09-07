@@ -42,12 +42,6 @@ type Message struct {
 	rowsCount int               // rows in one Message
 	Callback  func()            // Callback function will be called when the message is sent to the sink.
 
-	// ClaimCheckFileName is set if the message should be sent to the claim check storage.
-	// it's only the file name, since the claim check storage writer know the path.
-	ClaimCheckFileName string
-
-	Event *model.RowChangedEvent
-
 	// PartitionKey for pulsar, route messages to one or different partitions
 	PartitionKey *string
 }
@@ -93,6 +87,12 @@ func (m *Message) GetTable() string {
 		return ""
 	}
 	return *m.Table
+}
+
+// SetPartitionKey sets the PartitionKey for a message
+// PartitionKey is used for pulsar producer, route messages to one or different partitions
+func (m *Message) SetPartitionKey(key string) {
+	m.PartitionKey = &key
 }
 
 // GetPartitionKey returns the GetPartitionKey
