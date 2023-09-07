@@ -30,12 +30,11 @@ import (
 
 // NewRowEventEncoderBuilder returns an RowEventEncoderBuilder
 func NewRowEventEncoderBuilder(
-	ctx context.Context,
-	cfg *common.Config,
+	ctx context.Context, cfg *common.Config,
 ) (codec.RowEventEncoderBuilder, error) {
 	switch cfg.Protocol {
 	case config.ProtocolDefault, config.ProtocolOpen:
-		return open.NewBatchEncoderBuilder(cfg), nil
+		return open.NewBatchEncoderBuilder(ctx, cfg)
 	case config.ProtocolCanal:
 		return canal.NewBatchEncoderBuilder(cfg), nil
 	case config.ProtocolAvro:
@@ -43,7 +42,7 @@ func NewRowEventEncoderBuilder(
 	case config.ProtocolMaxwell:
 		return maxwell.NewBatchEncoderBuilder(cfg), nil
 	case config.ProtocolCanalJSON:
-		return canal.NewJSONRowEventEncoderBuilder(cfg), nil
+		return canal.NewJSONRowEventEncoderBuilder(ctx, cfg)
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(cfg), nil
 

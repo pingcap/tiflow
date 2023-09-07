@@ -293,17 +293,21 @@ type JSONRowEventEncoder struct {
 	builder  *canalEntryBuilder
 	messages []*common.Message
 
+	claimCheck *claimcheck.ClaimCheck
+
 	config *common.Config
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
-func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
-	encoder := &JSONRowEventEncoder{
-		builder:  newCanalEntryBuilder(),
-		messages: make([]*common.Message, 0, 1),
-		config:   config,
+func newJSONRowEventEncoder(
+	config *common.Config, claimCheck *claimcheck.ClaimCheck,
+) codec.RowEventEncoder {
+	return &JSONRowEventEncoder{
+		builder:    newCanalEntryBuilder(),
+		messages:   make([]*common.Message, 0, 1),
+		config:     config,
+		claimCheck: claimCheck,
 	}
-	return encoder
 }
 
 func (c *JSONRowEventEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
@@ -367,7 +371,7 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 
 // AppendRowChangedEvent implements the interface EventJSONBatchEncoder
 func (c *JSONRowEventEncoder) AppendRowChangedEvent(
-	_ context.Context,
+	ctx context.Context,
 	_ string,
 	e *model.RowChangedEvent,
 	callback func(),
@@ -436,8 +440,15 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		}
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
-			m.Event = e
-			m.ClaimCheckFileName = claimcheck.NewFileName()
+			claimCheckFileName := claimcheck.NewFileName()
+			if err := c.claimCheck.WriteMessage(ctx, m, claimCheckFileName); err != nil {
+				return errors.Trace(err)
+			}
+
+			m, err = c.newClaimCheckLocationMessage(e, callback, claimCheckFileName)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 
@@ -445,10 +456,11 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
-func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
-	claimCheckLocation := claimcheck.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
-	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true, claimCheckLocation)
+func (c *JSONRowEventEncoder) newClaimCheckLocationMessage(
+	event *model.RowChangedEvent, callback func(), fileName string,
+) (*common.Message, error) {
+	claimCheckLocation := c.claimCheck.FileNameWithPrefix(fileName)
+	value, err := newJSONMessageForDML(c.builder, event, c.config, true, claimCheckLocation)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
@@ -461,7 +473,7 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 	}
 
 	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
-	result.Callback = origin.Callback
+	result.Callback = callback
 	result.IncRowsCount()
 
 	length := result.Length()
@@ -469,7 +481,7 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		log.Warn("Single message is too large for canal-json, when create the claim check location message",
 			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
 			zap.Int("length", length),
-			zap.Any("table", origin.Event.Table))
+			zap.Any("table", event.Table))
 		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(length)
 	}
 	return result, nil
@@ -504,16 +516,31 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 
 type jsonRowEventEncoderBuilder struct {
 	config *common.Config
+
+	claimCheck *claimcheck.ClaimCheck
 }
 
 // NewJSONRowEventEncoderBuilder creates a canal-json batchEncoderBuilder.
-func NewJSONRowEventEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
-	return &jsonRowEventEncoderBuilder{config: config}
+func NewJSONRowEventEncoderBuilder(ctx context.Context, config *common.Config) (codec.RowEventEncoderBuilder, error) {
+	var (
+		claimCheck *claimcheck.ClaimCheck
+		err        error
+	)
+	if config.LargeMessageHandle.EnableClaimCheck() {
+		claimCheck, err = claimcheck.New(ctx, config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	return &jsonRowEventEncoderBuilder{
+		config:     config,
+		claimCheck: claimCheck,
+	}, nil
 }
 
 // Build a `jsonRowEventEncoderBuilder`
 func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
-	return newJSONRowEventEncoder(b.config)
+	return newJSONRowEventEncoder(b.config, b.claimCheck)
 }
 
 func shouldIgnoreColumn(col *model.Column,
@@ -531,4 +558,10 @@ func shouldIgnoreColumn(col *model.Column,
 		}
 	}
 	return false
+}
+
+func (b *jsonRowEventEncoderBuilder) CleanMetrics() {
+	if b.claimCheck != nil {
+		b.claimCheck.CleanMetrics()
+	}
 }
