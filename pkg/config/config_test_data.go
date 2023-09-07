@@ -17,7 +17,6 @@ const (
 	testCfgTestReplicaConfigOutDated = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -120,9 +119,10 @@ const (
   },
   "per-table-memory-quota": 0,
   "kv-client": {
-    "enable-multiplexing": false,
+    "enable-multiplexing": true,
     "worker-concurrent": 8,
     "grpc-stream-concurrent": 1,
+    "frontier-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
     "region-retry-duration": 60000000000
@@ -169,7 +169,6 @@ const (
 	testCfgTestReplicaConfigMarshal1 = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -261,7 +260,7 @@ const (
         "claim-check-storage-uri": ""
       },
       "glue-schema-registry-config": {
-        "region":"region", 
+        "region":"region",
         "registry-name":"registry"
       }
     },
@@ -321,7 +320,6 @@ const (
 	testCfgTestReplicaConfigMarshal2 = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -408,7 +406,7 @@ const (
         "claim-check-compression": ""
       },
       "glue-schema-registry-config": {
-        "region":"region", 
+        "region":"region",
         "registry-name":"registry"
       }
     },

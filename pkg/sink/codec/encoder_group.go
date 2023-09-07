@@ -41,7 +41,7 @@ type EncoderGroup interface {
 	// AddEvents add events into the group, handled by one of the encoders
 	// all input events should belong to the same topic and partition, this should be guaranteed by the caller
 	AddEvents(ctx context.Context, topic string, partition int32,
-		events ...*dmlsink.RowChangeCallbackableEvent) error
+		partitionKey string, events ...*dmlsink.RowChangeCallbackableEvent) error
 	// Output returns a channel produce futures
 	Output() <-chan *future
 }
@@ -128,9 +128,10 @@ func (g *encoderGroup) AddEvents(
 	ctx context.Context,
 	topic string,
 	partition int32,
+	partitionKey string,
 	events ...*dmlsink.RowChangeCallbackableEvent,
 ) error {
-	future := newFuture(topic, partition, events...)
+	future := newFuture(topic, partition, partitionKey, events...)
 	index := atomic.AddUint64(&g.index, 1) % uint64(g.count)
 	select {
 	case <-ctx.Done():
@@ -152,21 +153,23 @@ func (g *encoderGroup) Output() <-chan *future {
 }
 
 type future struct {
-	Topic     string
-	Partition int32
-	events    []*dmlsink.RowChangeCallbackableEvent
-	Messages  []*common.Message
+	Topic        string
+	Partition    int32
+	PartitionKey string
+	events       []*dmlsink.RowChangeCallbackableEvent
+	Messages     []*common.Message
 
 	done chan struct{}
 }
 
-func newFuture(topic string, partition int32,
+func newFuture(topic string, partition int32, partitionKey string,
 	events ...*dmlsink.RowChangeCallbackableEvent,
 ) *future {
 	return &future{
-		Topic:     topic,
-		Partition: partition,
-		events:    events,
+		Topic:        topic,
+		Partition:    partition,
+		PartitionKey: partitionKey,
+		events:       events,
 
 		done: make(chan struct{}),
 	}

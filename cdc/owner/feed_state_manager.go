@@ -102,7 +102,7 @@ func (m *feedStateManager) resetErrRetry() {
 // isChangefeedStable check if there are states other than 'normal' in this sliding window.
 func (m *feedStateManager) isChangefeedStable() bool {
 	for _, val := range m.stateHistory {
-		if val != model.StateNormal {
+		if val == model.StatePending {
 			return false
 		}
 	}

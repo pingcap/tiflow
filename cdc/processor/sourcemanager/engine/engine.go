@@ -75,6 +75,10 @@ type SortEngine interface {
 	//
 	// NOTE: it leads an undefined behavior to close an engine with active iterators.
 	Close() error
+
+	// SlotsAndHasher returns how many slots contained by the Engine, and
+	// a hasher for table spans.
+	SlotsAndHasher() (slotCount int, hasher func(tablepb.Span, int) int)
 }
 
 // EventIterator is an iterator to fetch events from SortEngine.

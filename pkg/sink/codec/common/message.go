@@ -95,6 +95,12 @@ func (m *Message) GetTable() string {
 	return *m.Table
 }
 
+// SetPartitionKey sets the PartitionKey for a message
+// PartitionKey is used for pulsar producer, route messages to one or different partitions
+func (m *Message) SetPartitionKey(key string) {
+	m.PartitionKey = &key
+}
+
 // GetPartitionKey returns the GetPartitionKey
 func (m *Message) GetPartitionKey() string {
 	if m.PartitionKey == nil {

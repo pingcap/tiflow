@@ -61,7 +61,8 @@ func (suite *redoLogWorkerSuite) createWorker(
 	ctx context.Context, memQuota uint64,
 ) (*redoWorker, engine.SortEngine, *mockRedoDMLManager) {
 	sortEngine := memory.New(context.Background())
-	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
+	// Only sourcemanager.FetcyByTable is used, so NewForTest is fine.
+	sm := sourcemanager.NewForTest(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
 		&entry.MockMountGroup{}, sortEngine, false)
 	go func() { _ = sm.Run(ctx) }()
 
@@ -74,7 +75,7 @@ func (suite *redoLogWorkerSuite) createWorker(
 	eventCache := newRedoEventCache(suite.testChangefeedID, 1024)
 
 	return newRedoWorker(suite.testChangefeedID, sm, quota,
-		redoDMLManager, eventCache, false), sortEngine, redoDMLManager
+		redoDMLManager, eventCache), sortEngine, redoDMLManager
 }
 
 func (suite *redoLogWorkerSuite) addEventsToSortEngine(

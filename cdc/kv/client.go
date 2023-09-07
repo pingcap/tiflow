@@ -1199,7 +1199,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 			}
 			state.start()
 			worker.setRegionState(event.RegionId, state)
-		} else if state.isStopped() {
+		} else if state.isStale() {
 			log.Warn("drop event due to region feed stopped",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
