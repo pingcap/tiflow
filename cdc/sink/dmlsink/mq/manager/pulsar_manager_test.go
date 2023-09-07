@@ -33,7 +33,7 @@ func newPulsarConfig(t *testing.T) (*config.PulsarConfig, *url.URL) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	require.NoError(t, err)
-	c, err := pulsarConfig.AdjustPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
+	c, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	require.NoError(t, err)
 	return c, sinkURI
 }
