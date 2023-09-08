@@ -71,7 +71,8 @@ const (
 
 // IsMQScheme returns true if the scheme belong to mq scheme.
 func IsMQScheme(scheme string) bool {
-	return scheme == KafkaScheme || scheme == KafkaSSLScheme
+	return scheme == KafkaScheme || scheme == KafkaSSLScheme ||
+		scheme == PulsarScheme || scheme == PulsarSSLScheme
 }
 
 // IsMySQLCompatibleScheme returns true if the scheme is compatible with MySQL.

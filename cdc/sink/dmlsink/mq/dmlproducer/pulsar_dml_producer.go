@@ -72,9 +72,10 @@ func NewPulsarDMLProducer(
 	errCh chan error,
 	failpointCh chan error,
 ) (DMLProducer, error) {
-	log.Info("Starting pulsar DML producer ...",
+	log.Info("Creating pulsar DML producer ...",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
+	start := time.Now()
 
 	var pulsarConfig *config.PulsarConfig
 	if sinkConfig.PulsarConfig == nil {
@@ -119,7 +120,8 @@ func NewPulsarDMLProducer(
 		failpointCh: failpointCh,
 		errChan:     errCh,
 	}
-
+	log.Info("Pulsar DML producer created", zap.Stringer("changefeed", p.id),
+		zap.Duration("duration", time.Since(start)))
 	return p, nil
 }
 
@@ -169,7 +171,16 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 					zap.String("changefeed", p.id.ID),
 					zap.Error(err))
 				mq.IncPublishedDMLFail(topic, p.id.ID, message.GetSchema())
-				p.errChan <- e
+				// use this select to avoid send error to a closed channel
+				// the ctx will always be called before the errChan is closed
+				select {
+				case <-ctx.Done():
+					return
+				case p.errChan <- e:
+				default:
+					log.Warn("Error channel is full in pulsar DML producer",
+						zap.Stringer("changefeed", p.id), zap.Error(e))
+				}
 			} else if message.Callback != nil {
 				// success
 				message.Callback()

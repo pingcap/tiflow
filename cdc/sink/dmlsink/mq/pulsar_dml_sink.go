@@ -91,7 +91,6 @@ func NewPulsarDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, sinkURI.Scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
