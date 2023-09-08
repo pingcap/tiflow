@@ -144,7 +144,7 @@ func newDDLJob(qec *queryEventContext) *job {
 		ddls:        qec.needHandleDDLs,
 		originSQL:   qec.originSQL,
 
-		location:        qec.lastLocation,
+		location:        qec.endLocation,
 		startLocation:   qec.startLocation,
 		currentLocation: qec.endLocation,
 		eventHeader:     qec.header,
