@@ -3064,9 +3064,23 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 		return nil, err
 	}
 
-	affectedTbls := make(map[string]map[string]struct{})
 	for _, sql := range qec.splitDDLs {
+<<<<<<< HEAD
 		ddlInfo, err := s.genDDLInfo(qec, sql)
+=======
+		sqls, err := s.ddlWorker.processOneDDL(qec, sql)
+		if err != nil {
+			s.tctx.L().Warn("processOneDDL failed", zap.Error(err))
+			qec.appliedDDLs = append(qec.appliedDDLs, sql)
+		} else {
+			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
+		}
+	}
+
+	affectedTbls := make(map[string]map[string]struct{})
+	for _, sql := range qec.appliedDDLs {
+		ddlInfo, err := s.ddlWorker.genDDLInfo(qec, sql)
+>>>>>>> 2e8893a67c (dm: track table schema for online ddl when use binlog skip (#9700))
 		if err != nil {
 			return nil, err
 		}
