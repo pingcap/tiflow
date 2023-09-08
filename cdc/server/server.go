@@ -176,7 +176,7 @@ func (s *server) prepare(ctx context.Context) error {
 	// the key will be kept for the lease TTL, which is 10 seconds,
 	// then cause the new owner cannot be elected immediately after the old owner offline.
 	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
-	etcdCli, err := etcd.CreateRawEtcdClient(tlsConfig, s.pdEndpoints...)
+	etcdCli, err := etcd.CreateRawEtcdClient(tlsConfig, grpcTLSOption, s.pdEndpoints...)
 	if err != nil {
 		return errors.Trace(err)
 	}
