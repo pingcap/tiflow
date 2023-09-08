@@ -87,12 +87,16 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 // AddDefaultUpstream add the default upstream
 func (m *Manager) AddDefaultUpstream(pdEndpoints []string,
 	conf *security.Credential,
+	pdClient pd.Client,
 ) (*Upstream, error) {
 	up := newUpstream(pdEndpoints, conf)
+	// use the pdClient pass from cdc server as the default upstream
+	// to reduce the creation times of pdClient to make cdc server more stable
+	up.isDefaultUpstream = true
+	up.PDClient = pdClient
 	if err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID); err != nil {
 		return nil, err
 	}
-	up.isDefaultUpstream = true
 	m.defaultUpstream = up
 	m.ups.Store(up.ID, up)
 	log.Info("default upstream is added", zap.Uint64("id", up.ID))
