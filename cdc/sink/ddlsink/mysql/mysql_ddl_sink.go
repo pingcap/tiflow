@@ -112,9 +112,7 @@ func NewDDLSink(
 		},
 	}
 
-	go func() {
-		m.asyncExec()
-	}()
+	go m.asyncExec()
 	log.Info("MySQL DDL sink is created",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID))
@@ -303,7 +301,7 @@ func (m *DDLSink) Close() {
 }
 
 // Run loop.
-func (m *DDLSink) asyncExec() error {
+func (m *DDLSink) asyncExec() {
 	defer func() {
 		m.async.ddlMap.Range(func(key, value interface{}) bool {
 			log.Warn("ddl is skip due async worker exits",
@@ -320,7 +318,7 @@ func (m *DDLSink) asyncExec() error {
 		case <-m.async.ctx.Done():
 			log.Info("async ddl worker exits as canceled",
 				zap.String("changefeedID", m.id.String()))
-			return nil
+			return
 		case ddlEvent := <-m.async.ddlCh.Out():
 			if ddlEvent != nil {
 				if err := m.execDDLWithMaxRetries(m.async.ctx, ddlEvent); err != nil {
