@@ -2843,6 +2843,7 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 		sqls, err := s.ddlWorker.processOneDDL(qec, sql)
 		if err != nil {
 			s.tctx.L().Warn("processOneDDL failed", zap.Error(err))
+			qec.appliedDDLs = append(qec.appliedDDLs, sql)
 		} else {
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
