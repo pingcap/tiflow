@@ -36,7 +36,10 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 )
 
 // etcd operation names
@@ -341,7 +344,7 @@ const (
 	healthyPath = "health"
 )
 
-func newClient(tlsConfig *tls.Config, endpoints ...string) (*clientv3.Client, error) {
+func newClient(tlsConfig *tls.Config, grpcDialOption grpc.DialOption, endpoints ...string) (*clientv3.Client, error) {
 	if len(endpoints) == 0 {
 		return nil, errors.New("empty endpoints")
 	}
@@ -357,6 +360,23 @@ func newClient(tlsConfig *tls.Config, endpoints ...string) (*clientv3.Client, er
 		DialTimeout:          defaultEtcdClientTimeout,
 		DialKeepAliveTime:    defaultDialKeepAliveTime,
 		DialKeepAliveTimeout: defaultDialKeepAliveTimeout,
+		DialOptions: []grpc.DialOption{
+			grpcDialOption,
+			grpc.WithBlock(),
+			grpc.WithConnectParams(grpc.ConnectParams{
+				Backoff: backoff.Config{
+					BaseDelay:  time.Second,
+					Multiplier: 1.1,
+					Jitter:     0.1,
+					MaxDelay:   3 * time.Second,
+				},
+				MinConnectTimeout: 3 * time.Second,
+			}),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:    10 * time.Second,
+				Timeout: 20 * time.Second,
+			}),
+		},
 	})
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -366,8 +386,8 @@ func newClient(tlsConfig *tls.Config, endpoints ...string) (*clientv3.Client, er
 
 // CreateRawEtcdClient creates etcd v3 client with detecting endpoints.
 // It will check the health of endpoints periodically, and update endpoints if needed.
-func CreateRawEtcdClient(tlsConfig *tls.Config, endpoints ...string) (*clientv3.Client, error) {
-	client, err := newClient(tlsConfig, endpoints...)
+func CreateRawEtcdClient(tlsConfig *tls.Config, grpcDialOption grpc.DialOption, endpoints ...string) (*clientv3.Client, error) {
+	client, err := newClient(tlsConfig, grpcDialOption, endpoints...)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +395,8 @@ func CreateRawEtcdClient(tlsConfig *tls.Config, endpoints ...string) (*clientv3.
 	tickerInterval := defaultDialKeepAliveTime
 
 	checker := &healthyChecker{
-		tlsConfig: tlsConfig,
+		tlsConfig:      tlsConfig,
+		grpcDialOption: grpcDialOption,
 	}
 	eps := syncUrls(client)
 	checker.update(eps)
@@ -448,8 +469,9 @@ type healthyClient struct {
 }
 
 type healthyChecker struct {
-	sync.Map  // map[string]*healthyClient
-	tlsConfig *tls.Config
+	sync.Map       // map[string]*healthyClient
+	tlsConfig      *tls.Config
+	grpcDialOption grpc.DialOption
 }
 
 func (checker *healthyChecker) patrol(ctx context.Context) []string {
@@ -508,7 +530,7 @@ func (checker *healthyChecker) update(eps []string) {
 }
 
 func (checker *healthyChecker) addClient(ep string, lastHealth time.Time) {
-	client, err := newClient(checker.tlsConfig, ep)
+	client, err := newClient(checker.tlsConfig, checker.grpcDialOption, ep)
 	if err != nil {
 		log.Error("failed to create etcd healthy client", zap.Error(err))
 		return
