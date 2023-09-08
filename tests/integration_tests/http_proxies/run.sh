@@ -75,7 +75,7 @@ function prepare() {
 }
 
 function check() {
-	services=($(cat $WORK_DIR/test_proxy.lo | xargs -L1 dirname | sort | uniq))
+	services=($(cat $WORK_DIR/test_proxy.log | xargs -L1 dirname | sort | uniq))
 	service_type_count=${#services[@]}
 	echo "captured services: "
 	echo ${services[@]}
