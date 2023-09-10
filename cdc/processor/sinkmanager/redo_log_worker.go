@@ -72,7 +72,6 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 }
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
-<<<<<<< HEAD
 	lowerBound := task.lowerBound
 	upperBound := task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs())
 	lowerPhs := oracle.GetTimeFromTS(lowerBound.CommitTs)
@@ -92,34 +91,16 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 			zap.Int64("tableID", task.tableID),
 			zap.Any("upperBound", upperBound))
 	}
-=======
-	advancer := newRedoLogAdvancer(task, w.memQuota, requestMemSize, w.redoDMLManager)
-	// The task is finished and some required memory isn't used.
-	defer advancer.cleanup()
-
-	lowerBound, upperBound := validateAndAdjustBound(
-		w.changefeedID,
-		&task.span,
-		task.lowerBound,
-		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
-	)
-	advancer.lastPos = lowerBound.Prev()
->>>>>>> 85dcc860d3 (sink(cdc): fix "dead dmlSink" error in sink workers (#9686))
 
 	var cache *eventAppender
 	if w.eventCache != nil {
 		cache = w.eventCache.maybeCreateAppender(task.tableID, lowerBound)
 	}
 
-<<<<<<< HEAD
 	// Events are pushed into redoEventCache if possible. Otherwise, their memory will
 	// be released after they are written into redo files. Then we need to release their
 	// memory quota, which can be calculated based on rowsSize and cachedSize.
 	rowsSize := uint64(0)
-=======
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
-	allEventCount := 0
->>>>>>> 85dcc860d3 (sink(cdc): fix "dead dmlSink" error in sink workers (#9686))
 	cachedSize := uint64(0)
 	rows := make([]*model.RowChangedEvent, 0, 1024)
 
@@ -279,12 +260,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				// Still need to update cache upper boundary even if no events.
 				cache.pushBatch(nil, 0, lastPos)
 			}
-<<<<<<< HEAD
 			return maybeEmitBatchEvents(true, true)
-=======
-
-			return advancer.finish(ctx, cachedSize, upperBound)
->>>>>>> 85dcc860d3 (sink(cdc): fix "dead dmlSink" error in sink workers (#9686))
 		}
 		allEventCount += 1
 
