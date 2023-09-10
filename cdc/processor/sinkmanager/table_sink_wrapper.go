@@ -434,11 +434,8 @@ func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint6
 	// What these conditions mean:
 	// 1. the table sink has been associated with a valid sink;
 	// 2. its checkpoint hasn't been advanced for a while;
-	// 3. but the table upperbound is advanced correctly;
-	// 4. its checkpoint is less than the emitted point.
-	if version > 0 && time.Since(advanced) > stuckCheck &&
-		oracle.GetTimeFromTS(t.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck &&
-		checkpointTs.Less(resolvedTs) {
+	// 3. its checkpoint is less than the emitted point.
+	if version > 0 && time.Since(advanced) > stuckCheck && checkpointTs.Less(resolvedTs) {
 		return true, version
 	}
 	return false, uint64(0)
