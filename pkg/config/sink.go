@@ -464,12 +464,11 @@ type PulsarConfig struct {
 	// and 'type' always use 'client_credentials'
 	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
 
-	// Configure the service brokerUrl for the Pulsar service.
-	// This parameter from the sink-uri
-	brokerURL string `toml:"-" json:"-"`
-
-	// parse the sinkURI
-	u *url.URL `toml:"-" json:"-"`
+	// BrokerURL is used to configure service brokerUrl for the Pulsar service.
+	// This parameter is a part of the `sink-uri`. Internal use only.
+	BrokerURL string `toml:"-" json:"-"`
+	// SinkURI is the parsed sinkURI. Internal use only.
+	SinkURI *url.URL `toml:"-" json:"-"`
 }
 
 // Check get broker url
@@ -486,29 +485,9 @@ func (c *PulsarConfig) validate() (err error) {
 	return nil
 }
 
-// GetBrokerURL get broker url
-func (c *PulsarConfig) GetBrokerURL() string {
-	return c.brokerURL
-}
-
-// SetBrokerURL get broker url
-func (c *PulsarConfig) SetBrokerURL(brokerURL string) {
-	c.brokerURL = brokerURL
-}
-
-// GetSinkURI get sink uri
-func (c *PulsarConfig) GetSinkURI() *url.URL {
-	return c.u
-}
-
-// SetSinkURI get sink uri
-func (c *PulsarConfig) SetSinkURI(u *url.URL) {
-	c.u = u
-}
-
 // GetDefaultTopicName get default topic name
 func (c *PulsarConfig) GetDefaultTopicName() string {
-	topicName := c.u.Path
+	topicName := c.SinkURI.Path
 	return topicName[1:]
 }
 

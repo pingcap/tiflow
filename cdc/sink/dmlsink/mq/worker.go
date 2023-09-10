@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -68,9 +67,6 @@ type worker struct {
 	// ticker used to force flush the messages when the interval is reached.
 	ticker *time.Ticker
 
-	// claimCheckEncoder is used to encode message which has claim-check location, send to kafka.
-	claimCheckEncoder codec.ClaimCheckLocationEncoder
-
 	encoderGroup codec.EncoderGroup
 
 	// producer is used to send the messages to the Kafka broker.
@@ -84,8 +80,6 @@ type worker struct {
 	metricMQWorkerBatchDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
-
-	claimCheck *claimcheck.ClaimCheck
 }
 
 // newWorker creates a new flush worker.
@@ -94,8 +88,6 @@ func newWorker(
 	protocol config.Protocol,
 	producer dmlproducer.DMLProducer,
 	encoderGroup codec.EncoderGroup,
-	claimCheck *claimcheck.ClaimCheck,
-	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
@@ -105,8 +97,6 @@ func newWorker(
 		ticker:                            time.NewTicker(flushInterval),
 		encoderGroup:                      encoderGroup,
 		producer:                          producer,
-		claimCheck:                        claimCheck,
-		claimCheckEncoder:                 claimCheckEncoder,
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
@@ -219,7 +209,7 @@ func (w *worker) batch(
 	ctx context.Context, events []mqEvent, flushInterval time.Duration,
 ) (int, error) {
 	index := 0
-	max := len(events)
+	maxBatchSize := len(events)
 	// We need to receive at least one message or be interrupted,
 	// otherwise it will lead to idling.
 	select {
@@ -255,7 +245,7 @@ func (w *worker) batch(
 				index++
 			}
 
-			if index >= max {
+			if index >= maxBatchSize {
 				return index, nil
 			}
 		case <-w.ticker.C:
@@ -313,25 +303,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, message := range future.Messages {
-				// w.claimCheck in pulsar is nil
-				if message.ClaimCheckFileName != "" && w.claimCheck != nil {
-					// send the message to the external storage.
-					if err = w.claimCheck.WriteMessage(ctx, message); err != nil {
-						log.Error("send message to the external claim check storage failed",
-							zap.String("namespace", w.changeFeedID.Namespace),
-							zap.String("changefeed", w.changeFeedID.ID),
-							zap.String("filename", message.ClaimCheckFileName),
-							zap.Error(err))
-						return errors.Trace(err)
-					}
-					// create the location message which contain the external storage location of the message.
-					locationMessage, err := w.claimCheckEncoder.NewClaimCheckLocationMessage(message)
-					if err != nil {
-						return errors.Trace(err)
-					}
-					message = locationMessage
-				}
-				// normal message, just send it to the kafka.
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, error) {
 					message.SetPartitionKey(future.PartitionKey)
@@ -355,10 +326,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 func (w *worker) close() {
 	w.msgChan.CloseAndDrain()
 	w.producer.Close()
-	if w.claimCheck != nil {
-		w.claimCheck.Close()
-	}
-
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)

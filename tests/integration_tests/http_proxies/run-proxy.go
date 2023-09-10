@@ -24,8 +24,15 @@ import (
 )
 
 func main() {
+	defer func() {
+		fmt.Println("proxy stopped")
+	}()
+
 	grpc_proxy.RegisterDefaultFlags()
 	flag.Parse()
+
+	log.Info("starting proxy", zap.Any("flags", flag.Args()))
+
 	proxy, err := grpc_proxy.New(
 		grpc_proxy.WithInterceptor(intercept),
 		grpc_proxy.DefaultFlags(),
@@ -37,6 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to start proxy", zap.Error(err))
 	}
+	fmt.Println("proxy started")
 }
 
 func intercept(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {

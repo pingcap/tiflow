@@ -106,7 +106,8 @@ func TestAddDefaultUpstream(t *testing.T) {
 	) error {
 		return errors.New("test")
 	}
-	_, err := m.AddDefaultUpstream([]string{}, &security.Credential{})
+	pdClient := &gc.MockPDClient{}
+	_, err := m.AddDefaultUpstream([]string{}, &security.Credential{}, pdClient)
 	require.NotNil(t, err)
 	up, err := m.GetDefaultUpstream()
 	require.Nil(t, up)
@@ -117,7 +118,7 @@ func TestAddDefaultUpstream(t *testing.T) {
 		up.ID = uint64(2)
 		return nil
 	}
-	_, err = m.AddDefaultUpstream([]string{}, &security.Credential{})
+	_, err = m.AddDefaultUpstream([]string{}, &security.Credential{}, pdClient)
 	require.Nil(t, err)
 	up, err = m.GetDefaultUpstream()
 	require.NotNil(t, up)

@@ -91,7 +91,6 @@ func NewPulsarDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, sinkURI.Scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -111,8 +110,7 @@ func NewPulsarDMLSink(
 	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	encoderGroup := codec.NewEncoderGroup(encoderBuilder, concurrency, changefeedID)
 
-	s := newDMLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderGroup,
-		protocol, nil, nil, errCh)
+	s := newDMLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderGroup, protocol, errCh)
 
 	return s, nil
 }

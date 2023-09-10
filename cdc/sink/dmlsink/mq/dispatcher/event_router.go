@@ -88,6 +88,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 		PartitionRule: "default",
 		TopicRule:     "",
 	})
+
 	rules := make([]struct {
 		partitionDispatcher partition.Dispatcher
 		topicDispatcher     topic.Dispatcher
@@ -115,7 +116,6 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 			filter.Filter
 		}{partitionDispatcher: d, topicDispatcher: t, Filter: f})
 	}
-
 	return &EventRouter{
 		defaultTopic: defaultTopic,
 		rules:        rules,

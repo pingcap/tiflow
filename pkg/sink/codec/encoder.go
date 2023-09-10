@@ -50,14 +50,10 @@ type RowEventEncoder interface {
 	MessageBuilder
 }
 
-// ClaimCheckLocationEncoder is an abstraction for claim check encoder.
-type ClaimCheckLocationEncoder interface {
-	NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error)
-}
-
 // RowEventEncoderBuilder builds row encoder with context.
 type RowEventEncoderBuilder interface {
 	Build() RowEventEncoder
+	CleanMetrics()
 }
 
 // TxnEventEncoder is an abstraction for txn events encoder.

@@ -1039,6 +1039,9 @@ func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return NewAvroEncoder(b.namespace, b.schemaM, b.config)
 }
 
+// CleanMetrics is a no-op for AvroEventBatchEncoder.
+func (b *batchEncoderBuilder) CleanMetrics() {}
+
 // NewAvroEncoder return a avro encoder.
 func NewAvroEncoder(namespace string, schemaM SchemaManager, config *common.Config) codec.RowEventEncoder {
 	return &BatchEncoder{
