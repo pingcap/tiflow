@@ -60,6 +60,29 @@ func addEventsToSortEngine(t *testing.T, events []*model.PolymorphicEvent, sortE
 	}
 }
 
+func genPolymorphicResolvedEvent(resolvedTs uint64) *model.PolymorphicEvent {
+	return &model.PolymorphicEvent{
+		CRTs: resolvedTs,
+		RawKV: &model.RawKVEntry{
+			OpType: model.OpTypeResolved,
+			CRTs:   resolvedTs,
+		},
+	}
+}
+
+func genPolymorphicEvent(startTs, commitTs uint64, tableID model.TableID) *model.PolymorphicEvent {
+	return &model.PolymorphicEvent{
+		StartTs: startTs,
+		CRTs:    commitTs,
+		RawKV: &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			StartTs: startTs,
+			CRTs:    commitTs,
+		},
+		Row: genRowChangedEvent(startTs, commitTs, tableID),
+	}
+}
+
 // It is ok to use the same tableID in test.
 //
 //nolint:unparam
@@ -1099,20 +1122,19 @@ func TestWorkerSuite(t *testing.T) {
 	suite.Run(t, new(workerSuite))
 }
 
-func (suite *tableSinkWorkerSuite) TestFetchFromCacheWithFailure() {
+func (suite *workerSuite) TestFetchFromCacheWithFailure() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		genPolymorphicEvent(1, 3, suite.testSpan),
-		genPolymorphicEvent(1, 3, suite.testSpan),
-		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 3, 1),
+		genPolymorphicEvent(1, 3, 1),
+		genPolymorphicEvent(1, 3, 1),
 		genPolymorphicResolvedEvent(4),
 	}
 	// Only for three events.
-	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(ctx, eventSize, true)
-	w.eventCache = newRedoEventCache(suite.testChangefeedID, 1024*1024)
+	w, e := createWorker(model.ChangeFeedID{}, 1024*1024, true, 1)
+	w.eventCache = newRedoEventCache(model.ChangeFeedID{}, 1024*1024)
 	defer w.sinkMemQuota.Close()
-	suite.addEventsToSortEngine(events, e)
+	addEventsToSortEngine(suite.T(), events, e, 1)
 
 	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/TableSinkWorkerFetchFromCache", "return")
 	defer func() {
@@ -1128,7 +1150,7 @@ func (suite *tableSinkWorkerSuite) TestFetchFromCacheWithFailure() {
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	wrapper, sink := createTableSinkWrapper(model.ChangeFeedID{}, 1)
 	defer sink.Close()
 
 	chShouldBeClosed := make(chan struct{}, 1)
@@ -1136,7 +1158,7 @@ func (suite *tableSinkWorkerSuite) TestFetchFromCacheWithFailure() {
 		close(chShouldBeClosed)
 	}
 	taskChan <- &sinkTask{
-		span:          suite.testSpan,
+		tableID:       1,
 		lowerBound:    genLowerBound(),
 		getUpperBound: genUpperBoundGetter(4),
 		tableSink:     wrapper,
@@ -1152,15 +1174,15 @@ func (suite *tableSinkWorkerSuite) TestFetchFromCacheWithFailure() {
 // When starts to handle a task, advancer.lastPos should be set to a correct position.
 // Otherwise if advancer.lastPos isn't updated during scanning, callback will get an
 // invalid `advancer.lastPos`.
-func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
+func (suite *workerSuite) TestHandleTaskWithoutMemory() {
 	ctx, cancel := context.WithCancel(context.Background())
 	events := []*model.PolymorphicEvent{
-		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 3, 1),
 		genPolymorphicResolvedEvent(4),
 	}
-	w, e := suite.createWorker(ctx, 0, true)
+	w, e := createWorker(model.ChangeFeedID{}, 0, true, 1)
 	defer w.sinkMemQuota.Close()
-	suite.addEventsToSortEngine(events, e)
+	addEventsToSortEngine(suite.T(), events, e, 1)
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
@@ -1171,7 +1193,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 		require.Equal(suite.T(), context.Canceled, err)
 	}()
 
-	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	wrapper, sink := createTableSinkWrapper(model.ChangeFeedID{}, 1)
 	defer sink.Close()
 
 	chShouldBeClosed := make(chan struct{}, 1)
@@ -1180,7 +1202,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 		close(chShouldBeClosed)
 	}
 	taskChan <- &sinkTask{
-		span:          suite.testSpan,
+		tableID:       1,
 		lowerBound:    genLowerBound(),
 		getUpperBound: genUpperBoundGetter(4),
 		tableSink:     wrapper,
@@ -1191,4 +1213,20 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 	<-chShouldBeClosed
 	cancel()
 	wg.Wait()
+}
+
+func genLowerBound() engine.Position {
+	return engine.Position{
+		StartTs:  0,
+		CommitTs: 1,
+	}
+}
+
+func genUpperBoundGetter(commitTs model.Ts) func(_ model.Ts) engine.Position {
+	return func(_ model.Ts) engine.Position {
+		return engine.Position{
+			StartTs:  commitTs - 1,
+			CommitTs: commitTs,
+		}
+	}
 }
