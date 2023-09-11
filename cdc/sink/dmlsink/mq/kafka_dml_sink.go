@@ -111,20 +111,9 @@ func NewKafkaDMLSink(
 	}
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
-<<<<<<< HEAD
 	dmlProducer := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
 	s := newDMLSink(ctx, changefeed, dmlProducer, adminClient, topicManager, eventRouter, encoderBuilder,
 		replicaConfig.Sink.EncoderConcurrency, protocol, errCh)
-=======
-	dmlProducer := producerCreator(ctx, changefeedID, asyncProducer, metricsCollector, errCh, failpointCh)
-	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
-	encoderGroup := codec.NewEncoderGroup(encoderBuilder, concurrency, changefeedID)
-	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, encoderGroup, protocol, errCh)
-	log.Info("DML sink producer created",
-		zap.String("namespace", changefeedID.Namespace),
-		zap.String("changefeedID", changefeedID.ID))
->>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691))
 
 	return s, nil
 }

@@ -841,27 +841,3 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	g.tableIDs[key] = g.currentTableID
 	return g.currentTableID
 }
-<<<<<<< HEAD
-=======
-
-func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Error("open db failed", zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(10 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err = db.PingContext(ctx); err != nil {
-		log.Error("ping db failed", zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-	log.Info("open db success", zap.String("dsn", dsn))
-	return db, nil
-}
->>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691))

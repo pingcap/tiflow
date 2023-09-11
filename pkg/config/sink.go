@@ -18,11 +18,7 @@ import (
 	"net/url"
 	"strings"
 
-<<<<<<< HEAD
-=======
-	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/aws/aws-sdk-go-v2/aws"
->>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691))
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -156,14 +152,11 @@ type SinkConfig struct {
 
 // MaskSensitiveData masks sensitive data in SinkConfig
 func (s *SinkConfig) MaskSensitiveData() {
-	if s.SchemaRegistry != nil {
-		s.SchemaRegistry = aws.String(util.MaskSensitiveDataInURI(*s.SchemaRegistry))
+	if s.SchemaRegistry != "" {
+		s.SchemaRegistry = util.MaskSensitiveDataInURI(s.SchemaRegistry)
 	}
 	if s.KafkaConfig != nil {
 		s.KafkaConfig.MaskSensitiveData()
-	}
-	if s.PulsarConfig != nil {
-		s.PulsarConfig.MaskSensitiveData()
 	}
 }
 
@@ -297,7 +290,6 @@ type CodecConfig struct {
 
 // KafkaConfig represents a kafka sink configuration
 type KafkaConfig struct {
-<<<<<<< HEAD
 	PartitionNum                 *int32       `toml:"partition-num" json:"partition-num,omitempty"`
 	ReplicationFactor            *int16       `toml:"replication-factor" json:"replication-factor,omitempty"`
 	KafkaVersion                 *string      `toml:"kafka-version" json:"kafka-version,omitempty"`
@@ -332,233 +324,17 @@ type KafkaConfig struct {
 	Key                          *string      `toml:"key" json:"key,omitempty"`
 	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
-=======
-	PartitionNum                 *int32                    `toml:"partition-num" json:"partition-num,omitempty"`
-	ReplicationFactor            *int16                    `toml:"replication-factor" json:"replication-factor,omitempty"`
-	KafkaVersion                 *string                   `toml:"kafka-version" json:"kafka-version,omitempty"`
-	MaxMessageBytes              *int                      `toml:"max-message-bytes" json:"max-message-bytes,omitempty"`
-	Compression                  *string                   `toml:"compression" json:"compression,omitempty"`
-	KafkaClientID                *string                   `toml:"kafka-client-id" json:"kafka-client-id,omitempty"`
-	AutoCreateTopic              *bool                     `toml:"auto-create-topic" json:"auto-create-topic,omitempty"`
-	DialTimeout                  *string                   `toml:"dial-timeout" json:"dial-timeout,omitempty"`
-	WriteTimeout                 *string                   `toml:"write-timeout" json:"write-timeout,omitempty"`
-	ReadTimeout                  *string                   `toml:"read-timeout" json:"read-timeout,omitempty"`
-	RequiredAcks                 *int                      `toml:"required-acks" json:"required-acks,omitempty"`
-	SASLUser                     *string                   `toml:"sasl-user" json:"sasl-user,omitempty"`
-	SASLPassword                 *string                   `toml:"sasl-password" json:"sasl-password,omitempty"`
-	SASLMechanism                *string                   `toml:"sasl-mechanism" json:"sasl-mechanism,omitempty"`
-	SASLGssAPIAuthType           *string                   `toml:"sasl-gssapi-auth-type" json:"sasl-gssapi-auth-type,omitempty"`
-	SASLGssAPIKeytabPath         *string                   `toml:"sasl-gssapi-keytab-path" json:"sasl-gssapi-keytab-path,omitempty"`
-	SASLGssAPIKerberosConfigPath *string                   `toml:"sasl-gssapi-kerberos-config-path" json:"sasl-gssapi-kerberos-config-path,omitempty"`
-	SASLGssAPIServiceName        *string                   `toml:"sasl-gssapi-service-name" json:"sasl-gssapi-service-name,omitempty"`
-	SASLGssAPIUser               *string                   `toml:"sasl-gssapi-user" json:"sasl-gssapi-user,omitempty"`
-	SASLGssAPIPassword           *string                   `toml:"sasl-gssapi-password" json:"sasl-gssapi-password,omitempty"`
-	SASLGssAPIRealm              *string                   `toml:"sasl-gssapi-realm" json:"sasl-gssapi-realm,omitempty"`
-	SASLGssAPIDisablePafxfast    *bool                     `toml:"sasl-gssapi-disable-pafxfast" json:"sasl-gssapi-disable-pafxfast,omitempty"`
-	SASLOAuthClientID            *string                   `toml:"sasl-oauth-client-id" json:"sasl-oauth-client-id,omitempty"`
-	SASLOAuthClientSecret        *string                   `toml:"sasl-oauth-client-secret" json:"sasl-oauth-client-secret,omitempty"`
-	SASLOAuthTokenURL            *string                   `toml:"sasl-oauth-token-url" json:"sasl-oauth-token-url,omitempty"`
-	SASLOAuthScopes              []string                  `toml:"sasl-oauth-scopes" json:"sasl-oauth-scopes,omitempty"`
-	SASLOAuthGrantType           *string                   `toml:"sasl-oauth-grant-type" json:"sasl-oauth-grant-type,omitempty"`
-	SASLOAuthAudience            *string                   `toml:"sasl-oauth-audience" json:"sasl-oauth-audience,omitempty"`
-	EnableTLS                    *bool                     `toml:"enable-tls" json:"enable-tls,omitempty"`
-	CA                           *string                   `toml:"ca" json:"ca,omitempty"`
-	Cert                         *string                   `toml:"cert" json:"cert,omitempty"`
-	Key                          *string                   `toml:"key" json:"key,omitempty"`
-	InsecureSkipVerify           *bool                     `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
-	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
-	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
-	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
 }
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
 func (k *KafkaConfig) MaskSensitiveData() {
-	k.SASLPassword = aws.String("********")
-	k.SASLGssAPIPassword = aws.String("********")
-	k.SASLOAuthClientSecret = aws.String("********")
-	k.Key = aws.String("********")
-	if k.GlueSchemaRegistryConfig != nil {
-		k.GlueSchemaRegistryConfig.AccessKey = "********"
-		k.GlueSchemaRegistryConfig.Token = "********"
-		k.GlueSchemaRegistryConfig.SecretAccessKey = "********"
+	k.SASLPassword = aws.String("******")
+	k.SASLGssAPIPassword = aws.String("******")
+	k.SASLOAuthClientSecret = aws.String("******")
+	k.Key = aws.String("******")
+	if k.SASLOAuthTokenURL != nil {
+		k.SASLOAuthTokenURL = aws.String(util.MaskSensitiveDataInURI(*k.SASLOAuthTokenURL))
 	}
-}
-
-// PulsarCompressionType is the compression type for pulsar
-type PulsarCompressionType string
-
-// Value returns the pulsar compression type
-func (p *PulsarCompressionType) Value() pulsar.CompressionType {
-	if p == nil {
-		return 0
-	}
-	switch strings.ToLower(string(*p)) {
-	case "lz4":
-		return pulsar.LZ4
-	case "zlib":
-		return pulsar.ZLib
-	case "zstd":
-		return pulsar.ZSTD
-	default:
-		return 0 // default is no compression
-	}
-}
-
-// TimeMill is the time in milliseconds
-type TimeMill int
-
-// Duration returns the time in seconds as a duration
-func (t *TimeMill) Duration() time.Duration {
-	if t == nil {
-		return 0
-	}
-	return time.Duration(*t) * time.Millisecond
-}
-
-// NewTimeMill returns a new time in milliseconds
-func NewTimeMill(x int) *TimeMill {
-	t := TimeMill(x)
-	return &t
-}
-
-// TimeSec is the time in seconds
-type TimeSec int
-
-// Duration returns the time in seconds as a duration
-func (t *TimeSec) Duration() time.Duration {
-	if t == nil {
-		return 0
-	}
-	return time.Duration(*t) * time.Second
-}
-
-// NewTimeSec returns a new time in seconds
-func NewTimeSec(x int) *TimeSec {
-	t := TimeSec(x)
-	return &t
-}
-
-// OAuth2 is the configuration for OAuth2
-type OAuth2 struct {
-	// OAuth2IssuerURL  the URL of the authorization server.
-	OAuth2IssuerURL string `toml:"oauth2-issuer-url" json:"oauth2-issuer-url,omitempty"`
-	// OAuth2Audience  the URL of the resource server.
-	OAuth2Audience string `toml:"oauth2-audience" json:"oauth2-audience,omitempty"`
-	// OAuth2PrivateKey the private key used to sign the server.
-	OAuth2PrivateKey string `toml:"oauth2-private-key" json:"oauth2-private-key,omitempty"`
-	// OAuth2ClientID  the client ID of the application.
-	OAuth2ClientID string `toml:"oauth2-client-id" json:"oauth2-client-id,omitempty"`
-	// OAuth2Scope scope
-	OAuth2Scope string `toml:"oauth2-scope" json:"oauth2-scope,omitempty"`
-}
-
-func (o *OAuth2) validate() (err error) {
-	if o == nil {
-		return nil
-	}
-	if len(o.OAuth2IssuerURL) == 0 || len(o.OAuth2ClientID) == 0 || len(o.OAuth2PrivateKey) == 0 ||
-		len(o.OAuth2Audience) == 0 {
-		return fmt.Errorf("issuer-url and audience and private-key and client-id not be empty")
-	}
-	return nil
-}
-
-// PulsarConfig pulsar sink configuration
-type PulsarConfig struct {
-	TLSKeyFilePath        *string `toml:"tls-certificate-path" json:"tls-certificate-path,omitempty"`
-	TLSCertificateFile    *string `toml:"tls-certificate-file" json:"tls-private-key-path,omitempty"`
-	TLSTrustCertsFilePath *string `toml:"tls-trust-certs-file-path" json:"tls-trust-certs-file-path,omitempty"`
-
-	// PulsarProducerCacheSize is the size of the cache of pulsar producers
-	PulsarProducerCacheSize *int32 `toml:"pulsar-producer-cache-size" json:"pulsar-producer-cache-size,omitempty"`
-
-	// PulsarVersion print the version of pulsar
-	PulsarVersion *string `toml:"pulsar-version" json:"pulsar-version,omitempty"`
-
-	// pulsar client compression
-	CompressionType *PulsarCompressionType `toml:"compression-type" json:"compression-type,omitempty"`
-
-	// AuthenticationToken the token for the Pulsar server
-	AuthenticationToken *string `toml:"authentication-token" json:"authentication-token,omitempty"`
-
-	// ConnectionTimeout Timeout for the establishment of a TCP connection (default: 5 seconds)
-	ConnectionTimeout *TimeSec `toml:"connection-timeout" json:"connection-timeout,omitempty"`
-
-	// Set the operation timeout (default: 30 seconds)
-	// Producer-create, subscribe and unsubscribe operations will be retried until this interval, after which the
-	// operation will be marked as failed
-	OperationTimeout *TimeSec `toml:"operation-timeout" json:"operation-timeout,omitempty"`
-
-	// BatchingMaxMessages specifies the maximum number of messages permitted in a batch. (default: 1000)
-	BatchingMaxMessages *uint `toml:"batching-max-messages" json:"batching-max-messages,omitempty"`
-
-	// BatchingMaxPublishDelay specifies the time period within which the messages sent will be batched (default: 10ms)
-	// if batch messages are enabled. If set to a non zero value, messages will be queued until this time
-	// interval or until
-	BatchingMaxPublishDelay *TimeMill `toml:"batching-max-publish-delay" json:"batching-max-publish-delay,omitempty"`
-
-	// SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.
-	// Send and SendAsync returns an error after timeout.
-	// default: 30s
-	SendTimeout *TimeSec `toml:"send-timeout" json:"send-timeout,omitempty"`
-
-	// TokenFromFile Authentication from the file token,
-	// the path name of the file (the third priority authentication method)
-	TokenFromFile *string `toml:"token-from-file" json:"token-from-file,omitempty"`
-
-	// BasicUserName Account name for pulsar basic authentication (the second priority authentication method)
-	BasicUserName *string `toml:"basic-user-name" json:"basic-user-name,omitempty"`
-	// BasicPassword with account
-	BasicPassword *string `toml:"basic-password" json:"basic-password,omitempty"`
-
-	// AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key
-	AuthTLSCertificatePath *string `toml:"auth-tls-certificate-path" json:"auth-tls-certificate-path,omitempty"`
-	// AuthTLSPrivateKeyPath private key
-	AuthTLSPrivateKeyPath *string `toml:"auth-tls-private-key-path" json:"auth-tls-private-key-path,omitempty"`
-
-	// Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id
-	// and 'type' always use 'client_credentials'
-	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
-
-	// BrokerURL is used to configure service brokerUrl for the Pulsar service.
-	// This parameter is a part of the `sink-uri`. Internal use only.
-	BrokerURL string `toml:"-" json:"-"`
-	// SinkURI is the parsed sinkURI. Internal use only.
-	SinkURI *url.URL `toml:"-" json:"-"`
-}
-
-// MaskSensitiveData masks sensitive data in PulsarConfig
-func (c *PulsarConfig) MaskSensitiveData() {
-	if c.AuthenticationToken != nil {
-		c.AuthenticationToken = aws.String("******")
-	}
-	if c.BasicPassword != nil {
-		c.BasicPassword = aws.String("******")
-	}
-	if c.OAuth2 != nil {
-		c.OAuth2.OAuth2PrivateKey = "******"
-	}
-}
-
-// Check get broker url
-func (c *PulsarConfig) validate() (err error) {
-	if c.OAuth2 != nil {
-		if err = c.OAuth2.validate(); err != nil {
-			return err
-		}
-		if c.TLSTrustCertsFilePath == nil {
-			return fmt.Errorf("oauth2 is not empty but tls-trust-certs-file-path is empty")
-		}
-	}
-
-	return nil
-}
-
-// GetDefaultTopicName get default topic name
-func (c *PulsarConfig) GetDefaultTopicName() string {
-	topicName := c.SinkURI.Path
-	return topicName[1:]
->>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691))
 }
 
 // MySQLConfig represents a MySQL sink configuration
