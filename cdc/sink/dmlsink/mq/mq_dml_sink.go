@@ -185,3 +185,8 @@ func (s *dmlSink) Close() {
 func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
 }
+
+// Scheme returns the scheme of this sink.
+func (s *dmlSink) Scheme() string {
+	return sink.KafkaScheme
+}

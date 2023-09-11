@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -48,6 +49,15 @@ type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
 
 	// For dataflow metrics.
 	metricsTableSinkTotalRows prometheus.Counter
+
+	// splitSingleUpdate control whether split a single update event into delete and insert events.
+	// For the MySQL Sink, there is no need to split a single unique key changed update event, this
+	// is also to keep the backward compatibility, the same behavior as before.
+	// For the Kafka Sink and Storage sink, we need to split a single unique key changed update event
+	// 1. Avro and CSV does not output the previous column values for the update event, so it would
+	// cause consumer missing data if the unique key changed event is not split.
+	// 2. Index-Value Dispatcher can work correctly if the unique key changed event is split.
+	splitSingleUpdate bool
 }
 
 // New an eventTableSink with given backendSink and event appender.
@@ -70,6 +80,7 @@ func New[E dmlsink.TableEvent, P dmlsink.Appender[E]](
 		eventBuffer:               make([]E, 0, 1024),
 		state:                     state.TableSinkSinking,
 		metricsTableSinkTotalRows: totalRowsCounter,
+		splitSingleUpdate:         !sink.IsMySQLCompatibleScheme(backendSink.Scheme()),
 	}
 }
 
@@ -110,7 +121,7 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 
 	resolvedCallbackableEvents := make([]*dmlsink.CallbackableEvent[E], 0, len(resolvedEvents))
 	for _, ev := range resolvedEvents {
-		if err := ev.TrySplitAndSortUpdateEvent(); err != nil {
+		if err := ev.TrySplitAndSortUpdateEvent(e.splitSingleUpdate); err != nil {
 			return SinkInternalError{err}
 		}
 		// We have to record the event ID for the callback.

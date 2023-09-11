@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/causality"
 	"github.com/pingcap/tiflow/pkg/config"
-	psink "github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"golang.org/x/sync/errgroup"
 )
@@ -72,7 +72,7 @@ func NewMySQLSink(
 	conflictDetectorSlots uint64,
 ) (*dmlSink, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx, changefeedID, psink.TxnSink)
+	statistics := metrics.NewStatistics(ctx, changefeedID, sink.TxnSink)
 
 	backendImpls, err := mysql.NewMySQLBackends(ctx, changefeedID, sinkURI, replicaConfig, GetDBConnImpl, statistics)
 	if err != nil {
@@ -172,4 +172,8 @@ func (s *dmlSink) Close() {
 // Dead checks whether it's dead or not.
 func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
+}
+
+func (s *dmlSink) Scheme() string {
+	return sink.MySQLScheme
 }

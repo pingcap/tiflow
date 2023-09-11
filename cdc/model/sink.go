@@ -271,7 +271,7 @@ func (r *RedoLog) GetCommitTs() Ts {
 }
 
 // TrySplitAndSortUpdateEvent redo log do nothing
-func (r *RedoLog) TrySplitAndSortUpdateEvent() error {
+func (r *RedoLog) TrySplitAndSortUpdateEvent(_ bool) error {
 	return nil
 }
 
@@ -379,7 +379,7 @@ func (r *RowChangedEvent) GetCommitTs() uint64 {
 }
 
 // TrySplitAndSortUpdateEvent do nothing
-func (r *RowChangedEvent) TrySplitAndSortUpdateEvent() error {
+func (r *RowChangedEvent) TrySplitAndSortUpdateEvent(_ bool) error {
 	return nil
 }
 
@@ -767,8 +767,9 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 }
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
-func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
-	if len(t.Rows) < 2 {
+func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(splitSingleUpdateEvent bool) error {
+	// the txn only have one row, and no need to split the update event, just return
+	if len(t.Rows) < 2 && !splitSingleUpdateEvent {
 		return nil
 	}
 	newRows, err := trySplitAndSortUpdateEvent(t.Rows)

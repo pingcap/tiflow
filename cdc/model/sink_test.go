@@ -597,7 +597,12 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 		},
 	})
 
-	err := txn.TrySplitAndSortUpdateEvent()
+	// assume it's Kafka or storage sink.
+	err := txn.TrySplitAndSortUpdateEvent(true)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 2)
+
+	err = txn.TrySplitAndSortUpdateEvent(false)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
 }
