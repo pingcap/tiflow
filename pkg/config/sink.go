@@ -18,10 +18,12 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -154,6 +156,16 @@ type KafkaConfig struct {
 	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
+// MaskSensitiveData masks sensitive data in SinkConfig
+func (s *SinkConfig) MaskSensitiveData() {
+	if s.SchemaRegistry != "" {
+		s.SchemaRegistry = util.MaskSensitiveDataInURI(s.SchemaRegistry)
+	}
+	if s.KafkaConfig != nil {
+		s.KafkaConfig.MaskSensitiveData()
+	}
+}
+
 // CSVConfig defines a series of configuration items for csv codec.
 type CSVConfig struct {
 	// delimiter between fields
@@ -271,6 +283,23 @@ type DispatchRule struct {
 type ColumnSelector struct {
 	Matcher []string `toml:"matcher" json:"matcher"`
 	Columns []string `toml:"columns" json:"columns"`
+}
+
+// CodecConfig represents a MQ codec configuration
+type CodecConfig struct {
+	EnableTiDBExtension            *bool   `toml:"enable-tidb-extension" json:"enable-tidb-extension,omitempty"`
+	MaxBatchSize                   *int    `toml:"max-batch-size" json:"max-batch-size,omitempty"`
+	AvroEnableWatermark            *bool   `toml:"avro-enable-watermark" json:"avro-enable-watermark"`
+	AvroDecimalHandlingMode        *string `toml:"avro-decimal-handling-mode" json:"avro-decimal-handling-mode,omitempty"`
+	AvroBigintUnsignedHandlingMode *string `toml:"avro-bigint-unsigned-handling-mode" json:"avro-bigint-unsigned-handling-mode,omitempty"`
+}
+
+// MaskSensitiveData masks sensitive data in KafkaConfig
+func (k *KafkaConfig) MaskSensitiveData() {
+	k.SASLOAuthClientSecret = aws.String("******")
+	if k.SASLOAuthTokenURL != nil {
+		k.SASLOAuthTokenURL = aws.String(util.MaskSensitiveDataInURI(*k.SASLOAuthTokenURL))
+	}
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {

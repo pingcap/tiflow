@@ -144,7 +144,7 @@ func newMySQLSyncPointStore(
 		return nil, cerror.ErrMySQLConnectionError.Wrap(err).GenWithStack("fail to open MySQL connection")
 	}
 
-	log.Info("Start mysql syncpoint sink")
+	log.Info("Start mysql syncpoint sink", zap.String("changefeed", id.String()))
 
 	return &mysqlSyncPointStore{
 		db:                     syncDB,
@@ -213,7 +213,7 @@ func (s *mysqlSyncPointStore) SinkSyncPoint(ctx context.Context,
 	var secondaryTs string
 	err = row.Scan(&secondaryTs)
 	if err != nil {
-		log.Info("sync table: get tidb_current_ts err")
+		log.Info("sync table: get tidb_current_ts err", zap.String("changefeed", id.String()))
 		err2 := tx.Rollback()
 		if err2 != nil {
 			log.Error("failed to write syncpoint table", zap.Error(err))

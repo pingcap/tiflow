@@ -304,13 +304,6 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
-	infoStr, err := info.Marshal()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
 	o, err := h.capture.GetOwner()
 	if err != nil {
 		_ = c.Error(err)
@@ -338,7 +331,9 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	log.Info("Create changefeed successfully!", zap.String("id", changefeedConfig.ID), zap.String("changefeed", infoStr))
+	log.Info("Create changefeed successfully!",
+		zap.String("id", changefeedConfig.ID),
+		zap.String("changefeed", info.String()))
 	c.Status(http.StatusAccepted)
 }
 

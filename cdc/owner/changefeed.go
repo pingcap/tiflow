@@ -615,7 +615,7 @@ LOOP2:
 		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", c.resolvedTs),
-		zap.Stringer("info", c.state.Info))
+		zap.String("info", c.state.Info.String()))
 
 	return nil
 }
@@ -688,7 +688,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 		zap.Any("status", c.state.Status),
-		zap.Stringer("info", c.state.Info),
+		zap.String("info", c.state.Info.String()),
 		zap.Bool("isRemoved", c.isRemoved))
 }
 
