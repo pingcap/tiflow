@@ -218,12 +218,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			return errors.Trace(err)
 		}
 		if drained {
-			w.sinkMemQuota.Refund(availableMem - usedMem)
-			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
-				zap.Uint64("memory", availableMem-usedMem))
 			performCallback(lowerBound.Prev())
 			return nil
 		}

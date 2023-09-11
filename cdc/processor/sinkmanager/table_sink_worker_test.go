@@ -70,6 +70,7 @@ func genPolymorphicResolvedEvent(resolvedTs uint64) *model.PolymorphicEvent {
 	}
 }
 
+//nolint:all
 func genPolymorphicEvent(startTs, commitTs uint64, tableID model.TableID) *model.PolymorphicEvent {
 	return &model.PolymorphicEvent{
 		StartTs: startTs,
