@@ -843,7 +843,7 @@ function run() {
 	DM_COLUMN_INDEX
 	DM_DML_EXECUTE_ERROR
 	DM_KEY_NOT_FOUND
-	start=2
+	start=1
 	end=5
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		DM_${i}
