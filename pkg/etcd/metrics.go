@@ -23,7 +23,16 @@ var etcdRequestCounter = prometheus.NewCounterVec(
 		Help:      "request counter of etcd operation",
 	}, []string{"type"})
 
+var etcdStateGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: "ticdc",
+		Subsystem: "etcd",
+		Name:      "etcd_client",
+		Help:      "Etcd client states.",
+	}, []string{"type"})
+
 // InitMetrics registers the etcd request counter.
 func InitMetrics(registry *prometheus.Registry) {
+	prometheus.MustRegister(etcdStateGauge)
 	registry.MustRegister(etcdRequestCounter)
 }

@@ -85,31 +85,31 @@ const (
 	defaultRequestTimeout = 5 * time.Second
 )
 
-// pdAPIClient is the api client of Placement Driver, include grpc client and http client.
-type pdAPIClient struct {
+// PDAPIClient is the api client of Placement Driver, include grpc client and http client.
+type PDAPIClient struct {
 	grpcClient pd.Client
 	httpClient *httputil.Client
 }
 
 // NewPDAPIClient create a new pdAPIClient.
-func NewPDAPIClient(pdClient pd.Client, conf *config.SecurityConfig) (*pdAPIClient, error) {
+func NewPDAPIClient(pdClient pd.Client, conf *config.SecurityConfig) (*PDAPIClient, error) {
 	dialClient, err := httputil.NewClient(conf)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &pdAPIClient{
+	return &PDAPIClient{
 		grpcClient: pdClient,
 		httpClient: dialClient,
 	}, nil
 }
 
 // Close the pd api client, at the moment only close idle http connections if there is any.
-func (pc *pdAPIClient) Close() {
+func (pc *PDAPIClient) Close() {
 	pc.httpClient.CloseIdleConnections()
 }
 
 // UpdateMetaLabel is a reentrant function that updates the meta-region label of upstream cluster.
-func (pc *pdAPIClient) UpdateMetaLabel(ctx context.Context) error {
+func (pc *PDAPIClient) UpdateMetaLabel(ctx context.Context) error {
 	err := retry.Do(ctx, func() error {
 		ctx, cancel := context.WithTimeout(ctx, defaultRequestTimeout)
 		defer cancel()
@@ -146,7 +146,7 @@ type ListServiceGCSafepoint struct {
 }
 
 // ListGcServiceSafePoint list gc service safepoint from PD
-func (pc *pdAPIClient) ListGcServiceSafePoint(
+func (pc *PDAPIClient) ListGcServiceSafePoint(
 	ctx context.Context,
 ) (*ListServiceGCSafepoint, error) {
 	var (
@@ -172,7 +172,7 @@ func (pc *pdAPIClient) ListGcServiceSafePoint(
 	return resp, err
 }
 
-func (pc *pdAPIClient) patchMetaLabel(ctx context.Context) error {
+func (pc *PDAPIClient) patchMetaLabel(ctx context.Context) error {
 	url := pc.grpcClient.GetLeaderAddr() + regionLabelPrefix
 	header := http.Header{"Content-Type": {"application/json"}}
 	content := []byte(addMetaJSON)
@@ -182,7 +182,7 @@ func (pc *pdAPIClient) patchMetaLabel(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
-func (pc *pdAPIClient) listGcServiceSafePoint(
+func (pc *PDAPIClient) listGcServiceSafePoint(
 	ctx context.Context,
 ) (*ListServiceGCSafepoint, error) {
 	url := pc.grpcClient.GetLeaderAddr() + gcServiceSafePointURL
@@ -201,7 +201,7 @@ func (pc *pdAPIClient) listGcServiceSafePoint(
 }
 
 // CollectMemberEndpoints return all members' endpoint
-func (pc *pdAPIClient) CollectMemberEndpoints(ctx context.Context) ([]string, error) {
+func (pc *PDAPIClient) CollectMemberEndpoints(ctx context.Context) ([]string, error) {
 	members, err := pc.grpcClient.GetAllMembers(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -217,7 +217,7 @@ func (pc *pdAPIClient) CollectMemberEndpoints(ctx context.Context) ([]string, er
 }
 
 // Healthy return error if the member corresponding to the endpoint is unhealthy
-func (pc *pdAPIClient) Healthy(ctx context.Context, endpoint string) error {
+func (pc *PDAPIClient) Healthy(ctx context.Context, endpoint string) error {
 	url := endpoint + healthyAPI
 	resp, err := pc.httpClient.Get(ctx, fmt.Sprintf("%s/", url))
 	if err != nil {
