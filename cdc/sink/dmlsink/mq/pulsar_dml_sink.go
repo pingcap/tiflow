@@ -58,6 +58,11 @@ func NewPulsarDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if !util.IsPulsarSupportedProtocols(protocol) {
+		return nil, cerror.ErrSinkURIInvalid.
+			GenWithStackByArgs("unsupported protocol, " +
+				"pulsar sink currently only support these protocols: [canal-json, canal, maxwell]")
+	}
 
 	pConfig, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	if err != nil {
