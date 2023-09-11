@@ -278,6 +278,7 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 				zap.Error(err))
 			m.clearSinkFactory()
 
+			// To release memory quota ASAP, close all table sinks manually.
 			start := time.Now()
 			log.Info("Sink manager is closing all table sinks",
 				zap.String("namespace", m.changefeedID.Namespace),
@@ -381,22 +382,17 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
-func (m *SinkManager) putSinkFactoryError(err error, version uint64) {
+func (m *SinkManager) putSinkFactoryError(err error, version uint64) (success bool) {
 	m.sinkFactory.Lock()
 	defer m.sinkFactory.Unlock()
-	skipped := true
 	if version == m.sinkFactory.version {
 		select {
 		case m.sinkFactory.errors <- err:
-			skipped = false
 		default:
 		}
+		return true
 	}
-	log.Info("Sink manager tries to put an sink error",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Bool("skipped", skipped),
-		zap.String("error", err.Error()))
+	return false
 }
 
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
@@ -445,7 +441,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 					if time.Since(sink.lastCleanTime) < cleanTableInterval {
 						continue
 					}
-					checkpointTs, _, _ := sink.getCheckpointTs()
+					checkpointTs := sink.getCheckpointTs()
 					resolvedMark := checkpointTs.ResolvedMark()
 					if resolvedMark == 0 {
 						continue
@@ -916,7 +912,7 @@ func (m *SinkManager) RemoveTable(tableID model.TableID) {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
-	checkpointTs, _, _ := value.(*tableSinkWrapper).getCheckpointTs()
+	checkpointTs := value.(*tableSinkWrapper).getCheckpointTs()
 	log.Info("Remove table sink successfully",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -984,18 +980,24 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	}
 	tableSink := value.(*tableSinkWrapper)
 
+<<<<<<< HEAD
 	checkpointTs, version, advanced := tableSink.getCheckpointTs()
 	m.sinkMemQuota.Release(tableID, checkpointTs)
 	m.redoMemQuota.Release(tableID, checkpointTs)
+=======
+	checkpointTs := tableSink.getCheckpointTs()
+	m.sinkMemQuota.Release(span, checkpointTs)
+	m.redoMemQuota.Release(span, checkpointTs)
+>>>>>>> c410cff8ec (sink(cdc): improve table sink advance timeout machanism (#9666))
 
 	advanceTimeoutInSec := m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec
 	if advanceTimeoutInSec <= 0 {
-		log.Warn("AdvanceTimeoutInSec is not set, use default value", zap.Any("sinkConfig", m.changefeedInfo.Config.Sink))
 		advanceTimeoutInSec = config.DefaultAdvanceTimeoutInSec
 	}
 	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
-	if version > 0 && time.Since(advanced) > stuckCheck &&
-		oracle.GetTimeFromTS(tableSink.getUpperBoundTs()).Sub(oracle.GetTimeFromTS(checkpointTs.Ts)) > stuckCheck {
+
+	isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
+	if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
 		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
@@ -1003,8 +1005,6 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 			zap.Any("checkpointTs", checkpointTs),
 			zap.Float64("stuckCheck", stuckCheck.Seconds()),
 			zap.Uint64("factoryVersion", version))
-		tableSink.updateTableSinkAdvanced()
-		m.putSinkFactoryError(errors.New("table sink stuck"), version)
 	}
 
 	var resolvedTs model.Ts

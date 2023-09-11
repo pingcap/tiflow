@@ -18,6 +18,7 @@ import (
 	"math"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type mockSink struct {
@@ -329,3 +331,128 @@ func TestGetUpperBoundTs(t *testing.T) {
 	wrapper.barrierTs.Store(uint64(12))
 	require.Equal(t, uint64(11), wrapper.getUpperBoundTs())
 }
+<<<<<<< HEAD
+=======
+
+func TestNewTableSinkWrapper(t *testing.T) {
+	t.Parallel()
+	wrapper := newTableSinkWrapper(
+		model.DefaultChangeFeedID("1"),
+		spanz.TableIDToComparableSpan(1),
+		nil,
+		tablepb.TableStatePrepared,
+		model.Ts(10),
+		model.Ts(20),
+		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
+	)
+	require.NotNil(t, wrapper)
+	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
+	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
+	checkpointTs := wrapper.getCheckpointTs()
+	require.Equal(t, uint64(10), checkpointTs.ResolvedMark())
+}
+
+func TestTableSinkWrapperSinkVersion(t *testing.T) {
+	t.Parallel()
+
+	innerTableSink := tablesink.New[*model.RowChangedEvent](
+		model.ChangeFeedID{}, tablepb.Span{}, model.Ts(0),
+		newMockSink(), &dmlsink.RowChangeEventAppender{},
+		prometheus.NewCounter(prometheus.CounterOpts{}),
+	)
+	version := new(uint64)
+
+	wrapper := newTableSinkWrapper(
+		model.DefaultChangeFeedID("1"),
+		spanz.TableIDToComparableSpan(1),
+		func() (tablesink.TableSink, uint64) { return nil, 0 },
+		tablepb.TableStatePrepared,
+		model.Ts(10),
+		model.Ts(20),
+		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
+	)
+
+	require.False(t, wrapper.initTableSink())
+
+	wrapper.tableSinkCreator = func() (tablesink.TableSink, uint64) {
+		*version += 1
+		return innerTableSink, *version
+	}
+
+	require.True(t, wrapper.initTableSink())
+	require.Equal(t, wrapper.tableSink.version, uint64(1))
+
+	require.True(t, wrapper.asyncCloseTableSink())
+
+	wrapper.doTableSinkClear()
+	require.Nil(t, wrapper.tableSink.s)
+	require.Equal(t, wrapper.tableSink.version, uint64(0))
+
+	require.True(t, wrapper.initTableSink())
+	require.Equal(t, wrapper.tableSink.version, uint64(2))
+
+	wrapper.closeTableSink()
+
+	wrapper.doTableSinkClear()
+	require.Nil(t, wrapper.tableSink.s)
+	require.Equal(t, wrapper.tableSink.version, uint64(0))
+}
+
+func TestTableSinkWrapperSinkInner(t *testing.T) {
+	t.Parallel()
+
+	innerTableSink := tablesink.New[*model.RowChangedEvent](
+		model.ChangeFeedID{}, tablepb.Span{}, model.Ts(0),
+		newMockSink(), &dmlsink.RowChangeEventAppender{},
+		prometheus.NewCounter(prometheus.CounterOpts{}),
+	)
+	version := new(uint64)
+
+	wrapper := newTableSinkWrapper(
+		model.DefaultChangeFeedID("1"),
+		spanz.TableIDToComparableSpan(1),
+		func() (tablesink.TableSink, uint64) {
+			*version += 1
+			return innerTableSink, *version
+		},
+		tablepb.TableStatePrepared,
+		oracle.GoTimeToTS(time.Now()),
+		oracle.GoTimeToTS(time.Now().Add(10000*time.Second)),
+		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
+	)
+
+	require.True(t, wrapper.initTableSink())
+
+	wrapper.closeAndClearTableSink()
+
+	// Shouldn't be stuck because version is 0.
+	require.Equal(t, wrapper.tableSink.version, uint64(0))
+	isStuck, _ := wrapper.sinkMaybeStuck(100 * time.Millisecond)
+	require.False(t, isStuck)
+
+	// Shouldn't be stuck because tableSink.advanced is just updated.
+	require.True(t, wrapper.initTableSink())
+	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
+	require.False(t, isStuck)
+
+	// Shouldn't be stuck because upperbound hasn't been advanced.
+	time.Sleep(200 * time.Millisecond)
+	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
+	require.False(t, isStuck)
+
+	// Shouldn't be stuck because `getCheckpointTs` will update tableSink.advanced.
+	nowTs := oracle.GoTimeToTS(time.Now())
+	wrapper.updateReceivedSorterResolvedTs(nowTs)
+	wrapper.barrierTs.Store(nowTs)
+	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
+	require.False(t, isStuck)
+
+	time.Sleep(200 * time.Millisecond)
+	nowTs = oracle.GoTimeToTS(time.Now())
+	wrapper.updateReceivedSorterResolvedTs(nowTs)
+	wrapper.barrierTs.Store(nowTs)
+	wrapper.updateResolvedTs(model.NewResolvedTs(nowTs))
+	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
+	require.True(t, isStuck)
+}
+>>>>>>> c410cff8ec (sink(cdc): improve table sink advance timeout machanism (#9666))
