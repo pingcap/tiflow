@@ -111,8 +111,10 @@ func TestMaskSensitiveDataInURI(t *testing.T) {
 		tests = append(tests, struct {
 			uri    string
 			masked string
-		}{"kafka://127.0.0.1:9093/cdc?" + q + "=verysecure",
-			"kafka://127.0.0.1:9093/cdc?" + q + "=xxxxx"})
+		}{
+			"kafka://127.0.0.1:9093/cdc?" + q + "=verysecure",
+			"kafka://127.0.0.1:9093/cdc?" + q + "=xxxxx",
+		})
 	}
 
 	for _, tt := range tests {

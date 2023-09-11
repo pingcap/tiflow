@@ -117,7 +117,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CertAllowedCN: cfg.CertAllowedCN,
 	}
 	o, err := h.capture.GetOwner()
-
 	// cannot create changefeed if there are running lightning/restore tasks
 	if err != nil {
 		needRemoveGCSafePoint = true
