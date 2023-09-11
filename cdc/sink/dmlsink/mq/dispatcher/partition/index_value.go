@@ -41,10 +41,7 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 	defer r.lock.Unlock()
 	r.hasher.Reset()
 	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	// FIXME(leoppro): if the row events includes both pre-cols and cols
-	// the dispatch logic here is wrong
 
-	// distribute partition by rowid or unique column value
 	dispatchCols := row.Columns
 	if len(row.Columns) == 0 {
 		dispatchCols = row.PreColumns
