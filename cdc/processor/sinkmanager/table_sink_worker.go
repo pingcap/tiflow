@@ -115,7 +115,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 	// Used to record the last written position.
 	// We need to use it to update the lower bound of the table sink.
-	var lastPos engine.Position
+	var lastPos engine.Position = lowerBound.Prev()
 
 	// To advance table sink in different cases: splitTxn is true or not.
 	committedTxnSize := uint64(0) // Can be used in `advanceTableSink`.
@@ -130,19 +130,95 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	// is false, and it won't break transaction atomicity to downstreams.
 	batchID := uint64(1)
 
-	if w.eventCache != nil {
-		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &batchID)
-		if err != nil {
-			return errors.Trace(err)
+	allEventSize := uint64(0)
+	allEventCount := 0
+
+	callbackIsPerformed := false
+	performCallback := func(pos engine.Position) {
+		if !callbackIsPerformed {
+			task.callback(pos)
+			callbackIsPerformed = true
 		}
-		if drained {
+	}
+
+	defer func() {
+		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
+		metrics.OutputEventCount.WithLabelValues(
+			task.tableSink.changefeed.Namespace,
+			task.tableSink.changefeed.ID,
+			"kv",
+		).Add(float64(allEventCount))
+
+		if w.eventCache == nil {
+			eventCount := newRangeEventCount(lastPos, allEventCount)
+			task.tableSink.updateRangeEventCounts(eventCount)
+		}
+
+		log.Debug("Sink task finished",
+			zap.String("namespace", w.changefeedID.Namespace),
+			zap.String("changefeed", w.changefeedID.ID),
+			zap.Int64("tableID", task.tableID),
+			zap.Any("lowerBound", lowerBound),
+			zap.Any("upperBound", upperBound),
+			zap.Bool("splitTxn", w.splitTxn),
+			zap.Int("receivedEvents", allEventCount),
+			zap.Any("lastPos", lastPos),
+			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(lastPos.CommitTs)).Seconds()),
+			zap.Error(finalErr))
+
+		if finalErr == nil {
+			// Otherwise we can't ensure all events before `lastPos` are emitted.
+			performCallback(lastPos)
+		} else {
+			switch errors.Cause(finalErr).(type) {
+			// If it's a warning, close the table sink and wait all pending
+			// events have been reported. Then we can continue the table
+			// at the checkpoint position.
+			case tablesink.SinkInternalError:
+				task.tableSink.closeAndClearTableSink()
+				// After the table sink is cleared all pending events are sent out or dropped.
+				// So we can re-add the table into sinkMemQuota.
+				w.sinkMemQuota.ClearTable(task.tableSink.tableID)
+
+				// Restart the table sink based on the checkpoint position.
+				if err := task.tableSink.restart(ctx); err == nil {
+					checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+					ckpt := checkpointTs.ResolvedMark()
+					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+					performCallback(lastWrittenPos)
+					log.Info("table sink has been restarted",
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
+						zap.Int64("tableID", task.tableID),
+						zap.Any("lastWrittenPos", lastWrittenPos),
+						zap.String("sinkError", finalErr.Error()))
+					finalErr = err
+				}
+			default:
+			}
+		}
+
+		// The task is finished and some required memory isn't used.
+		if availableMem > usedMem {
 			w.sinkMemQuota.Refund(availableMem - usedMem)
 			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
 				zap.Uint64("memory", availableMem-usedMem))
-			task.callback(lowerBound.Prev())
+		}
+	}()
+
+	if w.eventCache != nil {
+		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound, &batchID)
+		failpoint.Inject("TableSinkWorkerFetchFromCache", func() {
+			err = tablesink.NewSinkInternalError(errors.New("TableSinkWorkerFetchFromCacheInjected"))
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if drained {
+			performCallback(lowerBound.Prev())
 			return nil
 		}
 	}
@@ -265,80 +341,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	}
 
 	// lowerBound and upperBound are both closed intervals.
-	allEventSize := uint64(0)
-	allEventCount := 0
 	iter := w.sourceManager.FetchByTable(task.tableID, lowerBound, upperBound, w.sinkMemQuota)
 	defer func() {
-		w.metricRedoEventCacheMiss.Add(float64(allEventSize))
-		metrics.OutputEventCount.WithLabelValues(
-			task.tableSink.changefeed.Namespace,
-			task.tableSink.changefeed.ID,
-			"kv",
-		).Add(float64(allEventCount))
-
-		if w.eventCache == nil {
-			eventCount := newRangeEventCount(lastPos, allEventCount)
-			task.tableSink.updateRangeEventCounts(eventCount)
-		}
-
 		if err := iter.Close(); err != nil {
 			log.Error("Sink worker fails to close iterator",
 				zap.String("namespace", w.changefeedID.Namespace),
 				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int64("tableID", task.tableID),
 				zap.Error(err))
-		}
-
-		log.Debug("Sink task finished",
-			zap.String("namespace", w.changefeedID.Namespace),
-			zap.String("changefeed", w.changefeedID.ID),
-			zap.Int64("tableID", task.tableID),
-			zap.Any("lowerBound", lowerBound),
-			zap.Any("upperBound", upperBound),
-			zap.Bool("splitTxn", w.splitTxn),
-			zap.Int("receivedEvents", allEventCount),
-			zap.Any("lastPos", lastPos),
-			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(lastPos.CommitTs)).Seconds()),
-			zap.Error(finalErr))
-
-		if finalErr == nil {
-			// Otherwise we can't ensure all events before `lastPos` are emitted.
-			task.callback(lastPos)
-		} else {
-			switch errors.Cause(finalErr).(type) {
-			// If it's a warning, close the table sink and wait all pending
-			// events have been reported. Then we can continue the table
-			// at the checkpoint position.
-			case tablesink.SinkInternalError:
-				task.tableSink.closeAndClearTableSink()
-				// After the table sink is cleared all pending events are sent out or dropped.
-				// So we can re-add the table into sinkMemQuota.
-				w.sinkMemQuota.ClearTable(task.tableSink.tableID)
-
-				// Restart the table sink based on the checkpoint position.
-				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
-					checkpointTs, _, _ := task.tableSink.getCheckpointTs()
-					ckpt := checkpointTs.ResolvedMark()
-					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
-					task.callback(lastWrittenPos)
-					log.Info("table sink has been restarted",
-						zap.String("namespace", w.changefeedID.Namespace),
-						zap.String("changefeed", w.changefeedID.ID),
-						zap.Int64("tableID", task.tableID),
-						zap.Any("lastWrittenPos", lastWrittenPos))
-				}
-			default:
-			}
-		}
-
-		// The task is finished and some required memory isn't used.
-		if availableMem > usedMem {
-			w.sinkMemQuota.Refund(availableMem - usedMem)
-			log.Debug("MemoryQuotaTracing: refund memory for table sink task",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Int64("tableID", task.tableID),
-				zap.Uint64("memory", availableMem-usedMem))
 		}
 	}()
 

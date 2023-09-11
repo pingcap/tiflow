@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
@@ -56,6 +57,30 @@ func addEventsToSortEngine(t *testing.T, events []*model.PolymorphicEvent, sortE
 	sortEngine.AddTable(tableID)
 	for _, event := range events {
 		sortEngine.Add(tableID, event)
+	}
+}
+
+func genPolymorphicResolvedEvent(resolvedTs uint64) *model.PolymorphicEvent {
+	return &model.PolymorphicEvent{
+		CRTs: resolvedTs,
+		RawKV: &model.RawKVEntry{
+			OpType: model.OpTypeResolved,
+			CRTs:   resolvedTs,
+		},
+	}
+}
+
+//nolint:all
+func genPolymorphicEvent(startTs, commitTs uint64, tableID model.TableID) *model.PolymorphicEvent {
+	return &model.PolymorphicEvent{
+		StartTs: startTs,
+		CRTs:    commitTs,
+		RawKV: &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			StartTs: startTs,
+			CRTs:    commitTs,
+		},
+		Row: genRowChangedEvent(startTs, commitTs, tableID),
 	}
 }
 
@@ -1096,4 +1121,113 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 
 func TestWorkerSuite(t *testing.T) {
 	suite.Run(t, new(workerSuite))
+}
+
+func (suite *workerSuite) TestFetchFromCacheWithFailure() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(1, 3, 1),
+		genPolymorphicEvent(1, 3, 1),
+		genPolymorphicEvent(1, 3, 1),
+		genPolymorphicResolvedEvent(4),
+	}
+	// Only for three events.
+	w, e := createWorker(model.ChangeFeedID{}, 1024*1024, true, 1)
+	w.eventCache = newRedoEventCache(model.ChangeFeedID{}, 1024*1024)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, 1)
+
+	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/TableSinkWorkerFetchFromCache", "return")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/TableSinkWorkerFetchFromCache")
+	}()
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(model.ChangeFeedID{}, 1)
+	defer sink.Close()
+
+	chShouldBeClosed := make(chan struct{}, 1)
+	callback := func(lastWritePos engine.Position) {
+		close(chShouldBeClosed)
+	}
+	taskChan <- &sinkTask{
+		tableID:       1,
+		lowerBound:    genLowerBound(),
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+
+	<-chShouldBeClosed
+	cancel()
+	wg.Wait()
+}
+
+// When starts to handle a task, advancer.lastPos should be set to a correct position.
+// Otherwise if advancer.lastPos isn't updated during scanning, callback will get an
+// invalid `advancer.lastPos`.
+func (suite *workerSuite) TestHandleTaskWithoutMemory() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(1, 3, 1),
+		genPolymorphicResolvedEvent(4),
+	}
+	w, e := createWorker(model.ChangeFeedID{}, 0, true, 1)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, 1)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(model.ChangeFeedID{}, 1)
+	defer sink.Close()
+
+	chShouldBeClosed := make(chan struct{}, 1)
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), genLowerBound().Prev(), lastWritePos)
+		close(chShouldBeClosed)
+	}
+	taskChan <- &sinkTask{
+		tableID:       1,
+		lowerBound:    genLowerBound(),
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return true },
+	}
+
+	<-chShouldBeClosed
+	cancel()
+	wg.Wait()
+}
+
+func genLowerBound() engine.Position {
+	return engine.Position{
+		StartTs:  0,
+		CommitTs: 1,
+	}
+}
+
+func genUpperBoundGetter(commitTs model.Ts) func(_ model.Ts) engine.Position {
+	return func(_ model.Ts) engine.Position {
+		return engine.Position{
+			StartTs:  commitTs - 1,
+			CommitTs: commitTs,
+		}
+	}
 }
