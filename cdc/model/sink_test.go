@@ -564,7 +564,7 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 	require.Equal(t, 1, len(result))
 }
 
-var uk_updated_event = &RowChangedEvent{
+var ukUpdatedEvent = &RowChangedEvent{
 	PreColumns: []*Column{
 		{
 			Name:  "col1",
@@ -594,7 +594,7 @@ var uk_updated_event = &RowChangedEvent{
 
 func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	txn := &SingleTableTxn{
-		Rows: []*RowChangedEvent{uk_updated_event},
+		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
 
 	// assume it's Kafka or storage sink.
@@ -603,7 +603,7 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	require.Len(t, txn.Rows, 2)
 
 	txn = &SingleTableTxn{
-		Rows: []*RowChangedEvent{uk_updated_event},
+		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
 	err = txn.TrySplitAndSortUpdateEvent(false)
 	require.NoError(t, err)
