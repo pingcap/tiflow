@@ -564,35 +564,33 @@ func TestTrySplitAndSortUpdateEvent(t *testing.T) {
 	require.Equal(t, 1, len(result))
 }
 
-var (
-	uk_updated_event = &RowChangedEvent{
-		PreColumns: []*Column{
-			{
-				Name:  "col1",
-				Flag:  BinaryFlag,
-				Value: "col1-value",
-			},
-			{
-				Name:  "col2",
-				Flag:  HandleKeyFlag | UniqueKeyFlag,
-				Value: "col2-value",
-			},
+var uk_updated_event = &RowChangedEvent{
+	PreColumns: []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
 		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag | UniqueKeyFlag,
+			Value: "col2-value",
+		},
+	},
 
-		Columns: []*Column{
-			{
-				Name:  "col1",
-				Flag:  BinaryFlag,
-				Value: "col1-value",
-			},
-			{
-				Name:  "col2",
-				Flag:  HandleKeyFlag | UniqueKeyFlag,
-				Value: "col2-value-updated",
-			},
+	Columns: []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
 		},
-	}
-)
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag | UniqueKeyFlag,
+			Value: "col2-value-updated",
+		},
+	},
+}
 
 func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	txn := &SingleTableTxn{
