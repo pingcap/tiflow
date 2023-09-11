@@ -274,6 +274,7 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
 }
 
+<<<<<<< HEAD
 // AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
 func (c *ReplicaConfig) AdjustEnableOldValue(scheme, protocol string) {
 	if sink.IsMySQLCompatibleScheme(scheme) {
@@ -322,3 +323,14 @@ func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url
 
 	return nil
 }
+=======
+// MaskSensitiveData masks sensitive data in ReplicaConfig
+func (c *ReplicaConfig) MaskSensitiveData() {
+	if c.Sink != nil {
+		c.Sink.MaskSensitiveData()
+	}
+	if c.Consistent != nil {
+		c.Consistent.MaskSensitiveData()
+	}
+}
+>>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691))

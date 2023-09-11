@@ -102,8 +102,13 @@ func NewKafkaDDLSink(
 	}
 
 	start := time.Now()
+<<<<<<< HEAD
 	log.Info("Try to create a DDL sink producer", zap.Any("options", options))
 
+=======
+	log.Info("Try to create a DDL sink producer",
+		zap.String("changefeed", changefeedID.String()))
+>>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691))
 	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
