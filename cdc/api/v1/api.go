@@ -304,14 +304,6 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-<<<<<<< HEAD
-
-	infoStr, err := info.Marshal()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
 	o, err := h.capture.GetOwner()
 	if err != nil {
 		_ = c.Error(err)
@@ -323,8 +315,6 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-=======
->>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691))
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            up.ID,
 		PDEndpoints:   strings.Join(up.PdEndpoints, ","),

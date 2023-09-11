@@ -119,19 +119,7 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/kafka_ddl_sink.go
 	s, err := newDDLSink(ctx, p, topicManager, eventRouter, encoderConfig)
-=======
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
-	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	start := time.Now()
-	log.Info("Try to create a DDL sink producer",
-		zap.String("changefeed", changefeedID.String()))
-	syncProducer, err := factory.SyncProducer(ctx)
->>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691)):cdc/sink/ddlsink/mq/kafka_ddl_sink.go
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

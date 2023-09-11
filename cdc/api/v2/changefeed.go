@@ -116,19 +116,9 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CAPath:        cfg.CAPath,
 		CertAllowedCN: cfg.CertAllowedCN,
 	}
-<<<<<<< HEAD
-	infoStr, err := info.Marshal()
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
 	o, err := h.capture.GetOwner()
-=======
 
 	// cannot create changefeed if there are running lightning/restore tasks
-	tlsCfg, err := credential.ToTLSConfig()
->>>>>>> 6ea9a41117 (*(ticdc): do not print password in cdc log (#9691))
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
