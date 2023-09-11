@@ -268,6 +268,7 @@ func (m *DDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.
 				zap.Uint64("commitTs", ddl.CommitTs),
 				zap.String("ddl", ddl.Query))
 			done <- err
+			return
 		}
 		log.Info("async exec ddl done",
 			zap.String("changefeedID", m.id.String()),
@@ -279,14 +280,15 @@ func (m *DDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.
 		case <-ctx.Done():
 			log.Info("async ddl exits as canceled",
 				zap.String("changefeedID", m.id.String()),
-				zap.Uint64("commitTs", ddl.CommitTs))
-			return nil
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("ddl", ddl.Query))
 		case err := <-done:
 			return err
 		case <-tick.C:
 			log.Info("async ddl is still running",
 				zap.String("changefeedID", m.id.String()),
-				zap.Uint64("commitTs", ddl.CommitTs))
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("ddl", ddl.Query))
 			return nil
 		}
 	}
