@@ -423,19 +423,16 @@ func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint6
 	t.getCheckpointTs()
 
 	t.tableSink.RLock()
+	defer t.tableSink.RUnlock()
 	t.tableSink.innerMu.Lock()
-	version := t.tableSink.version
-	resolvedTs := t.tableSink.resolvedTs
-	checkpointTs := t.tableSink.checkpointTs
-	advanced := t.tableSink.advanced
-	t.tableSink.RUnlock()
-	t.tableSink.innerMu.Unlock()
+	defer t.tableSink.innerMu.Unlock()
 
 	// What these conditions mean:
 	// 1. the table sink has been associated with a valid sink;
 	// 2. its checkpoint hasn't been advanced for a while;
-	// 3. its checkpoint is less than the emitted point.
-	if version > 0 && time.Since(advanced) > stuckCheck && checkpointTs.Less(resolvedTs) {
+	version := t.tableSink.version
+	advanced := t.tableSink.advanced
+	if version > 0 && time.Since(advanced) > stuckCheck {
 		return true, version
 	}
 	return false, uint64(0)
