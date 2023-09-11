@@ -296,7 +296,10 @@ type CodecConfig struct {
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
 func (k *KafkaConfig) MaskSensitiveData() {
-	k.SASLOAuthClientSecret = aws.String("********")
+	k.SASLOAuthClientSecret = aws.String("******")
+	if k.SASLOAuthTokenURL != nil {
+		k.SASLOAuthTokenURL = aws.String(util.MaskSensitiveDataInURI(*k.SASLOAuthTokenURL))
+	}
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
