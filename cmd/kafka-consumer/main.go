@@ -946,7 +946,7 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.Error("open db failed", zap.String("dsn", dsn), zap.Error(err))
+		log.Error("open db failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
@@ -957,7 +957,7 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
-		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
+		log.Error("ping db failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	log.Info("open db success", zap.String("dsn", dsn))

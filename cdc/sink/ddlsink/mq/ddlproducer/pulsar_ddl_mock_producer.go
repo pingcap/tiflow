@@ -17,7 +17,6 @@ import (
 	"context"
 
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -35,9 +34,6 @@ type PulsarMockProducers struct {
 func (p *PulsarMockProducers) SyncBroadcastMessage(ctx context.Context, topic string,
 	totalPartitionsNum int32, message *common.Message,
 ) error {
-	// call SyncSendMessage
-
-	log.Info("pulsarProducers SyncBroadcastMessage in")
 	return p.SyncSendMessage(ctx, topic, totalPartitionsNum, message)
 }
 
