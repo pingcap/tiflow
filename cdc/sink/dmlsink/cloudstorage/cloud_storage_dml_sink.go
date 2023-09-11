@@ -271,6 +271,7 @@ func (s *DMLSink) Dead() <-chan struct{} {
 	return s.dead
 }
 
+// Scheme returns the sink scheme.
 func (s *DMLSink) Scheme() string {
 	return s.scheme
 }
