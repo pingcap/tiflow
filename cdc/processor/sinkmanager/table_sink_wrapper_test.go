@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -59,6 +60,10 @@ func (m *mockSink) GetWriteTimes() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.writeTimes
+}
+
+func (m *mockSink) Scheme() string {
+	return sink.BlackHoleScheme
 }
 
 func (m *mockSink) Close() {}
@@ -269,7 +274,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	enableOldValue := false
 	result, size, err := convertRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(result))
+	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(216), size)
 
 	// Update non-handle key.

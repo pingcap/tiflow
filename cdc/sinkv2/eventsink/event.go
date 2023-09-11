@@ -22,8 +22,9 @@ import (
 type TableEvent interface {
 	// GetCommitTs returns the commit timestamp of the event.
 	GetCommitTs() uint64
-	// TrySplitAndSortUpdateEvent split the update to delete and insert if the unique key is updated
-	TrySplitAndSortUpdateEvent() error
+	// TrySplitAndSortUpdateEvent split the update to delete and insert if the unique key is updated.
+	// Note that sinkScheme is used to control the split behavior.
+	TrySplitAndSortUpdateEvent(sinkScheme string) error
 }
 
 // CallbackFunc is the callback function for callbackable event.

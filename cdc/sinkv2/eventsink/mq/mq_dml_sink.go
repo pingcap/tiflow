@@ -15,6 +15,8 @@ package mq
 
 import (
 	"context"
+	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -42,7 +44,8 @@ var _ eventsink.EventSink[*model.SingleTableTxn] = (*dmlSink)(nil)
 // It will send the events to the MQ system.
 type dmlSink struct {
 	// id indicates this sink belongs to which processor(changefeed).
-	id model.ChangeFeedID
+	id     model.ChangeFeedID
+	scheme string
 	// protocol indicates the protocol used by this sink.
 	protocol config.Protocol
 
@@ -65,6 +68,7 @@ type dmlSink struct {
 }
 
 func newSink(ctx context.Context,
+	sinkURI *url.URL,
 	producer dmlproducer.DMLProducer,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
@@ -86,6 +90,7 @@ func newSink(ctx context.Context,
 
 	s := &dmlSink{
 		id:       changefeedID,
+		scheme:   strings.ToLower(sinkURI.Scheme),
 		protocol: encoderConfig.Protocol,
 		ctx:      ctx,
 		cancel:   cancel,
@@ -166,6 +171,10 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 	}
 
 	return nil
+}
+
+func (s *dmlSink) Scheme() string {
+	return s.scheme
 }
 
 // Close closes the sink.

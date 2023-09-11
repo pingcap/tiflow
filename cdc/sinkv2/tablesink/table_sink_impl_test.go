@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +38,10 @@ type mockEventSink struct {
 func (m *mockEventSink) WriteEvents(rows ...*eventsink.TxnCallbackableEvent) error {
 	m.events = append(m.events, rows...)
 	return nil
+}
+
+func (m *mockEventSink) Scheme() string {
+	return sink.BlackHoleScheme
 }
 
 func (m *mockEventSink) Close() {
