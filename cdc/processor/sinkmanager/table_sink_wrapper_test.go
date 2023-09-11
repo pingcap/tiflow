@@ -331,40 +331,20 @@ func TestGetUpperBoundTs(t *testing.T) {
 	wrapper.barrierTs.Store(uint64(12))
 	require.Equal(t, uint64(11), wrapper.getUpperBoundTs())
 }
-<<<<<<< HEAD
-=======
-
-func TestNewTableSinkWrapper(t *testing.T) {
-	t.Parallel()
-	wrapper := newTableSinkWrapper(
-		model.DefaultChangeFeedID("1"),
-		spanz.TableIDToComparableSpan(1),
-		nil,
-		tablepb.TableStatePrepared,
-		model.Ts(10),
-		model.Ts(20),
-		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
-	)
-	require.NotNil(t, wrapper)
-	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
-	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
-	checkpointTs := wrapper.getCheckpointTs()
-	require.Equal(t, uint64(10), checkpointTs.ResolvedMark())
-}
 
 func TestTableSinkWrapperSinkVersion(t *testing.T) {
 	t.Parallel()
 
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
-		model.ChangeFeedID{}, tablepb.Span{}, model.Ts(0),
-		newMockSink(), &dmlsink.RowChangeEventAppender{},
+		model.ChangeFeedID{}, 1, model.Ts(0),
+		newMockSink(), &eventsink.RowChangeEventAppender{},
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 	)
 	version := new(uint64)
 
 	wrapper := newTableSinkWrapper(
 		model.DefaultChangeFeedID("1"),
-		spanz.TableIDToComparableSpan(1),
+		1,
 		func() (tablesink.TableSink, uint64) { return nil, 0 },
 		tablepb.TableStatePrepared,
 		model.Ts(10),
@@ -374,7 +354,7 @@ func TestTableSinkWrapperSinkVersion(t *testing.T) {
 
 	require.False(t, wrapper.initTableSink())
 
-	wrapper.tableSinkCreator = func() (tablesink.TableSink, uint64) {
+	wrapper.tableSinkCreater = func() (tablesink.TableSink, uint64) {
 		*version += 1
 		return innerTableSink, *version
 	}
@@ -402,15 +382,15 @@ func TestTableSinkWrapperSinkInner(t *testing.T) {
 	t.Parallel()
 
 	innerTableSink := tablesink.New[*model.RowChangedEvent](
-		model.ChangeFeedID{}, tablepb.Span{}, model.Ts(0),
-		newMockSink(), &dmlsink.RowChangeEventAppender{},
+		model.ChangeFeedID{}, 1, model.Ts(0),
+		newMockSink(), &eventsink.RowChangeEventAppender{},
 		prometheus.NewCounter(prometheus.CounterOpts{}),
 	)
 	version := new(uint64)
 
 	wrapper := newTableSinkWrapper(
 		model.DefaultChangeFeedID("1"),
-		spanz.TableIDToComparableSpan(1),
+		1,
 		func() (tablesink.TableSink, uint64) {
 			*version += 1
 			return innerTableSink, *version
@@ -455,4 +435,3 @@ func TestTableSinkWrapperSinkInner(t *testing.T) {
 	isStuck, _ = wrapper.sinkMaybeStuck(100 * time.Millisecond)
 	require.True(t, isStuck)
 }
->>>>>>> c410cff8ec (sink(cdc): improve table sink advance timeout machanism (#9666))

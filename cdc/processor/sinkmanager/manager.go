@@ -980,15 +980,9 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	}
 	tableSink := value.(*tableSinkWrapper)
 
-<<<<<<< HEAD
-	checkpointTs, version, advanced := tableSink.getCheckpointTs()
+	checkpointTs := tableSink.getCheckpointTs()
 	m.sinkMemQuota.Release(tableID, checkpointTs)
 	m.redoMemQuota.Release(tableID, checkpointTs)
-=======
-	checkpointTs := tableSink.getCheckpointTs()
-	m.sinkMemQuota.Release(span, checkpointTs)
-	m.redoMemQuota.Release(span, checkpointTs)
->>>>>>> c410cff8ec (sink(cdc): improve table sink advance timeout machanism (#9666))
 
 	advanceTimeoutInSec := m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec
 	if advanceTimeoutInSec <= 0 {
