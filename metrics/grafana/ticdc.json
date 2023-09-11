@@ -1063,7 +1063,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(increase(tikv_cdc_scan_duration_seconds_sum{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (type, instance)",
+              "expr": "sum(increase(tikv_cdc_scan_tasks{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", instance=~\"$tikv_instance\"}[1m])) by (type, instance)",
               "format": "time_series",
               "hide": false,
               "intervalFactor": 1,
