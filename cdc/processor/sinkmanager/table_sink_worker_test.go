@@ -963,7 +963,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndDoNotAdvanceTableUntilMee
 	receivedEvents[2].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 3, "No more events should be sent to sink")
 
-	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	checkpointTs := wrapper.getCheckpointTs()
 	require.Equal(suite.T(), uint64(2), checkpointTs.ResolvedMark(), "Only can advance resolved mark to 2")
 }
 
@@ -1046,7 +1046,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableUntilTaskIsFi
 	receivedEvents := sink.GetEvents()
 	receivedEvents[0].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
-	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	checkpointTs := wrapper.getCheckpointTs()
 	require.Equal(suite.T(), uint64(4), checkpointTs.ResolvedMark())
 }
 
@@ -1112,7 +1112,7 @@ func (suite *workerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNoWorkload(
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		checkpointTs := wrapper.getCheckpointTs()
 		return checkpointTs.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
