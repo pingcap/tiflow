@@ -26,6 +26,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
@@ -46,19 +47,18 @@ func (p *mockPD) GetTS(_ context.Context) (int64, int64, error) {
 
 // newFeedStateManager4Test creates feedStateManager for test
 func newFeedStateManager4Test(
-	initialIntervalInMs time.Duration,
-	maxIntervalInMs time.Duration,
-	maxElapsedTimeInMs time.Duration,
+	initialIntervalInMs, maxIntervalInMs, maxElapsedTimeInMs int,
 	multiplier float64,
 ) *feedStateManager {
 	f := new(feedStateManager)
 	f.upstream = new(upstream.Upstream)
 	f.upstream.PDClient = &mockPD{}
+	f.upstream.PDClock = pdutil.NewClock4Test()
 
 	f.errBackoff = backoff.NewExponentialBackOff()
-	f.errBackoff.InitialInterval = initialIntervalInMs * time.Millisecond
-	f.errBackoff.MaxInterval = maxIntervalInMs * time.Millisecond
-	f.errBackoff.MaxElapsedTime = maxElapsedTimeInMs * time.Millisecond
+	f.errBackoff.InitialInterval = time.Duration(initialIntervalInMs) * time.Millisecond
+	f.errBackoff.MaxInterval = time.Duration(maxIntervalInMs) * time.Millisecond
+	f.errBackoff.MaxElapsedTime = time.Duration(maxElapsedTimeInMs) * time.Millisecond
 	f.errBackoff.Multiplier = multiplier
 	f.errBackoff.RandomizationFactor = 0
 
@@ -690,7 +690,7 @@ func TestBackoffNeverStops(t *testing.T) {
 func TestUpdateChangefeedEpoch(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	// Set a long backoff time
-	manager := newFeedStateManager4Test(time.Hour, time.Hour, 0, 1.0)
+	manager := newFeedStateManager4Test(int(time.Hour), int(time.Hour), 0, 1.0)
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -738,4 +738,200 @@ func TestUpdateChangefeedEpoch(t *testing.T) {
 			require.NotEqual(t, previousEpoch, state.Info.Epoch)
 		}
 	}
+}
+
+func TestHandleWarning(t *testing.T) {
+	ctx := cdcContext.NewBackendContext4Test(true)
+	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.Nil(t, status)
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 200,
+		}, true, nil
+	})
+
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateNormal, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	// 1. test when an warning occurs, the changefeed state will be changed to warning
+	// and it will still keep running
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Warning: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	// some patches will be generated when the manager.Tick is called
+	// so we need to apply the patches before we check the state
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateWarning, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	// 2. test when the changefeed is in warning state, and the checkpointTs is not progressing,
+	// the changefeed state will remain warning
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.NotNil(t, status)
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 200,
+		}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateWarning, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	// 3. test when the changefeed is in warning state, and the checkpointTs is progressing,
+	// the changefeed state will be changed to normal
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.NotNil(t, status)
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 201,
+		}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateNormal, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	// 4. test when the changefeed is in warning state, and the checkpointTs is not progressing
+	// for defaultBackoffMaxElapsedTime time, the changefeed state will be changed to failed
+	// and it will stop running
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Warning: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	// some patches will be generated when the manager.Tick is called
+	// so we need to apply the patches before we check the state
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateWarning, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Warning: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+	// mock the checkpointTs is not progressing for defaultBackoffMaxElapsedTime time
+	manager.checkpointTsAdvanced = manager.
+		checkpointTsAdvanced.Add(-(defaultBackoffMaxElapsedTime + 1))
+	// resolveTs = 202 > checkpointTs = 201
+	manager.Tick(state, 202)
+	// some patches will be generated when the manager.Tick is called
+	// so we need to apply the patches before we check the state
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateFailed, state.Info.State)
+	require.False(t, manager.ShouldRunning())
+}
+
+func TestErrorAfterWarning(t *testing.T) {
+	t.Parallel()
+
+	maxElapsedTimeInMs := 2000
+	ctx := cdcContext.NewBackendContext4Test(true)
+	manager := newFeedStateManager4Test(200, 1600, maxElapsedTimeInMs, 2.0)
+	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+		ctx.ChangefeedVars().ID)
+	tester := orchestrator.NewReactorStateTester(t, state, nil)
+	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+		require.Nil(t, info)
+		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}}, true, nil
+	})
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.Nil(t, status)
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 200,
+		}, true, nil
+	})
+
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateNormal, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	// 1. test when an warning occurs, the changefeed state will be changed to warning
+	// and it will still keep running
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Warning: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	// some patches will be generated when the manager.Tick is called
+	// so we need to apply the patches before we check the state
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateWarning, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	// 2. test when the changefeed is in warning state, and the checkpointTs is not progressing,
+	// the changefeed state will remain warning
+	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+		require.NotNil(t, status)
+		return &model.ChangeFeedStatus{
+			CheckpointTs: 200,
+		}, true, nil
+	})
+	tester.MustApplyPatches()
+	manager.Tick(state, 0)
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateWarning, state.Info.State)
+	require.True(t, manager.ShouldRunning())
+
+	// 3. Sleep maxElapsedTimeInMs to wait backoff timeout. And when an error occurs after an warning,
+	// the backoff will be reseted, and changefeed state will be changed to warning and it will still
+	// keep running.
+	time.Sleep(time.Millisecond * time.Duration(maxElapsedTimeInMs))
+	state.PatchTaskPosition(ctx.GlobalVars().CaptureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			return &model.TaskPosition{Error: &model.RunningError{
+				Addr:    ctx.GlobalVars().CaptureInfo.AdvertiseAddr,
+				Code:    "[CDC:ErrSinkManagerRunError]", // it is fake error
+				Message: "fake error for test",
+			}}, true, nil
+		})
+	tester.MustApplyPatches()
+
+	manager.Tick(state, 0)
+	// some patches will be generated when the manager.Tick is called
+	// so we need to apply the patches before we check the state
+	tester.MustApplyPatches()
+	require.Equal(t, model.StatePending, state.Info.State)
+	require.False(t, manager.ShouldRunning())
+	manager.Tick(state, 0)
+
+	// some patches will be generated when the manager.Tick is called
+	// so we need to apply the patches before we check the state
+	tester.MustApplyPatches()
+	require.Equal(t, model.StateWarning, state.Info.State)
+	require.True(t, manager.ShouldRunning())
 }
