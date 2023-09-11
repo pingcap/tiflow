@@ -535,7 +535,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 	receivedEvents := sink.GetEvents()
 	receivedEvents[0].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
-	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	checkpointTs := wrapper.getCheckpointTs()
 	require.Equal(suite.T(), uint64(4), checkpointTs.ResolvedMark())
 }
 
@@ -581,7 +581,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		checkpointTs := wrapper.getCheckpointTs()
 		return checkpointTs.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
@@ -639,7 +639,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	require.Equal(suite.T(), uint64(3), batchID.Load())
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		checkpointTs := wrapper.getCheckpointTs()
 		return checkpointTs.ResolvedMark() == 2
 	}, 5*time.Second, 10*time.Millisecond)
 

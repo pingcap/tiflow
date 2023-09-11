@@ -176,7 +176,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 				// Restart the table sink based on the checkpoint position.
 				if err := task.tableSink.restart(ctx); err == nil {
-					checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+					checkpointTs := task.tableSink.getCheckpointTs()
 					ckpt := checkpointTs.ResolvedMark()
 					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
 					performCallback(lastWrittenPos)
