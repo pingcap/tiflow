@@ -135,12 +135,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CAPath:        cfg.CAPath,
 		CertAllowedCN: cfg.CertAllowedCN,
 	}
-	infoStr, err := info.Marshal()
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
 
 	// cannot create changefeed if there are running lightning/restore tasks
 	tlsCfg, err := credential.ToTLSConfig()
@@ -176,7 +170,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
-		zap.String("changefeed", infoStr))
+		zap.String("changefeed", info.String()))
 	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
 		nil, true))

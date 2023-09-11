@@ -649,6 +649,7 @@ func (s *Syncer) reset() {
 		s.sgk.ResetGroups()
 		s.pessimist.Reset()
 	case config.ShardOptimistic:
+		s.osgk.Reset()
 		s.optimist.Reset()
 	}
 }
@@ -2886,8 +2887,18 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 		return nil, err
 	}
 
-	affectedTbls := make(map[string]map[string]struct{})
 	for _, sql := range qec.splitDDLs {
+		sqls, err := s.ddlWorker.processOneDDL(qec, sql)
+		if err != nil {
+			s.tctx.L().Warn("processOneDDL failed", zap.Error(err))
+			qec.appliedDDLs = append(qec.appliedDDLs, sql)
+		} else {
+			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
+		}
+	}
+
+	affectedTbls := make(map[string]map[string]struct{})
+	for _, sql := range qec.appliedDDLs {
 		ddlInfo, err := s.ddlWorker.genDDLInfo(qec, sql)
 		if err != nil {
 			return nil, err

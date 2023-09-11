@@ -29,7 +29,7 @@ type FactoryCreator func(config *config.PulsarConfig, changefeedID model.ChangeF
 // NewCreatorFactory returns a factory implemented based on kafka-go
 func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFeedID, sinkConfig *config.SinkConfig) (pulsar.Client, error) {
 	option := pulsar.ClientOptions{
-		URL: config.GetBrokerURL(),
+		URL: config.BrokerURL,
 		CustomMetricsLabels: map[string]string{
 			"changefeed": changefeedID.ID,
 			"namespace":  changefeedID.Namespace,

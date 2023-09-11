@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -158,6 +159,19 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+}
+
+// MaskSensitiveData masks sensitive data in SinkConfig
+func (s *SinkConfig) MaskSensitiveData() {
+	if s.SchemaRegistry != nil {
+		s.SchemaRegistry = aws.String(util.MaskSensitiveDataInURI(*s.SchemaRegistry))
+	}
+	if s.KafkaConfig != nil {
+		s.KafkaConfig.MaskSensitiveData()
+	}
+	if s.PulsarConfig != nil {
+		s.PulsarConfig.MaskSensitiveData()
+	}
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -328,6 +342,19 @@ type KafkaConfig struct {
 	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
 }
 
+// MaskSensitiveData masks sensitive data in KafkaConfig
+func (k *KafkaConfig) MaskSensitiveData() {
+	k.SASLPassword = aws.String("********")
+	k.SASLGssAPIPassword = aws.String("********")
+	k.SASLOAuthClientSecret = aws.String("********")
+	k.Key = aws.String("********")
+	if k.GlueSchemaRegistryConfig != nil {
+		k.GlueSchemaRegistryConfig.AccessKey = "********"
+		k.GlueSchemaRegistryConfig.Token = "********"
+		k.GlueSchemaRegistryConfig.SecretAccessKey = "********"
+	}
+}
+
 // PulsarCompressionType is the compression type for pulsar
 type PulsarCompressionType string
 
@@ -464,12 +491,24 @@ type PulsarConfig struct {
 	// and 'type' always use 'client_credentials'
 	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
 
-	// Configure the service brokerUrl for the Pulsar service.
-	// This parameter from the sink-uri
-	brokerURL string `toml:"-" json:"-"`
+	// BrokerURL is used to configure service brokerUrl for the Pulsar service.
+	// This parameter is a part of the `sink-uri`. Internal use only.
+	BrokerURL string `toml:"-" json:"-"`
+	// SinkURI is the parsed sinkURI. Internal use only.
+	SinkURI *url.URL `toml:"-" json:"-"`
+}
 
-	// parse the sinkURI
-	u *url.URL `toml:"-" json:"-"`
+// MaskSensitiveData masks sensitive data in PulsarConfig
+func (c *PulsarConfig) MaskSensitiveData() {
+	if c.AuthenticationToken != nil {
+		c.AuthenticationToken = aws.String("******")
+	}
+	if c.BasicPassword != nil {
+		c.BasicPassword = aws.String("******")
+	}
+	if c.OAuth2 != nil {
+		c.OAuth2.OAuth2PrivateKey = "******"
+	}
 }
 
 // Check get broker url
@@ -486,29 +525,9 @@ func (c *PulsarConfig) validate() (err error) {
 	return nil
 }
 
-// GetBrokerURL get broker url
-func (c *PulsarConfig) GetBrokerURL() string {
-	return c.brokerURL
-}
-
-// SetBrokerURL get broker url
-func (c *PulsarConfig) SetBrokerURL(brokerURL string) {
-	c.brokerURL = brokerURL
-}
-
-// GetSinkURI get sink uri
-func (c *PulsarConfig) GetSinkURI() *url.URL {
-	return c.u
-}
-
-// SetSinkURI get sink uri
-func (c *PulsarConfig) SetSinkURI(u *url.URL) {
-	c.u = u
-}
-
 // GetDefaultTopicName get default topic name
 func (c *PulsarConfig) GetDefaultTopicName() string {
-	topicName := c.u.Path
+	topicName := c.SinkURI.Path
 	return topicName[1:]
 }
 

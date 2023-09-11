@@ -124,23 +124,18 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		&task.span,
 		task.lowerBound,
 		task.getUpperBound(task.tableSink.getUpperBoundTs()))
-	if w.eventCache != nil {
-		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		// We have drained all events from the cache, we can return directly.
-		// No need to get events from the source manager again.
-		if drained {
-			task.callback(lowerBound.Prev())
-			return nil
-		}
-	}
+	advancer.lastPos = lowerBound.Prev()
 
 	allEventSize := uint64(0)
 	allEventCount := 0
-	// lowerBound and upperBound are both closed intervals.
-	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
+
+	callbackIsPerformed := false
+	performCallback := func(pos engine.Position) {
+		if !callbackIsPerformed {
+			task.callback(pos)
+			callbackIsPerformed = true
+		}
+	}
 
 	defer func() {
 		// Collect metrics.
@@ -153,13 +148,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			task.tableSink.updateRangeEventCounts(eventCount)
 		}
 
-		if err := iter.Close(); err != nil {
-			log.Error("Sink worker fails to close iterator",
-				zap.String("namespace", w.changefeedID.Namespace),
-				zap.String("changefeed", w.changefeedID.ID),
-				zap.Stringer("span", &task.span),
-				zap.Error(err))
-		}
 		log.Debug("Sink task finished",
 			zap.String("namespace", w.changefeedID.Namespace),
 			zap.String("changefeed", w.changefeedID.ID),
@@ -174,7 +162,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 		// Otherwise we can't ensure all events before `lastPos` are emitted.
 		if finalErr == nil {
-			task.callback(advancer.lastPos)
+			performCallback(advancer.lastPos)
 		} else {
 			switch errors.Cause(finalErr).(type) {
 			// If it's a warning, close the table sink and wait all pending
@@ -187,19 +175,50 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 				w.sinkMemQuota.ClearTable(task.tableSink.span)
 
 				// Restart the table sink based on the checkpoint position.
-				if finalErr = task.tableSink.restart(ctx); finalErr == nil {
-					checkpointTs, _, _ := task.tableSink.getCheckpointTs()
+				if err := task.tableSink.restart(ctx); err == nil {
+					checkpointTs := task.tableSink.getCheckpointTs()
 					ckpt := checkpointTs.ResolvedMark()
 					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
-					task.callback(lastWrittenPos)
+					performCallback(lastWrittenPos)
 					log.Info("table sink has been restarted",
 						zap.String("namespace", w.changefeedID.Namespace),
 						zap.String("changefeed", w.changefeedID.ID),
 						zap.Stringer("span", &task.span),
-						zap.Any("lastWrittenPos", lastWrittenPos))
+						zap.Any("lastWrittenPos", lastWrittenPos),
+						zap.String("sinkError", finalErr.Error()))
+					finalErr = err
 				}
 			default:
 			}
+		}
+	}()
+
+	if w.eventCache != nil {
+		drained, err := w.fetchFromCache(task, &lowerBound, &upperBound)
+		failpoint.Inject("TableSinkWorkerFetchFromCache", func() {
+			err = tablesink.NewSinkInternalError(errors.New("TableSinkWorkerFetchFromCacheInjected"))
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if drained {
+			// If drained is true it means we have drained all events from the cache,
+			// we can return directly instead of get events from the source manager again.
+			performCallback(lowerBound.Prev())
+			return nil
+		}
+		advancer.lastPos = lowerBound.Prev()
+	}
+
+	// lowerBound and upperBound are both closed intervals.
+	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.sinkMemQuota)
+	defer func() {
+		if err := iter.Close(); err != nil {
+			log.Error("Sink worker fails to close iterator",
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
+				zap.Stringer("span", &task.span),
+				zap.Error(err))
 		}
 	}()
 

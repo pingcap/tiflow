@@ -285,3 +285,13 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 	return u != nil &&
 		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
 }
+
+// MaskSensitiveData masks sensitive data in ReplicaConfig
+func (c *ReplicaConfig) MaskSensitiveData() {
+	if c.Sink != nil {
+		c.Sink.MaskSensitiveData()
+	}
+	if c.Consistent != nil {
+		c.Consistent.MaskSensitiveData()
+	}
+}

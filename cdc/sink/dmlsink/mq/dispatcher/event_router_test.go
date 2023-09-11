@@ -248,7 +248,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 	}, "test", "kafka")
 	require.Nil(t, err)
 
-	p := d.GetPartitionForRowChange(&model.RowChangedEvent{
+	p, _ := d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_default1", Table: "table"},
 		Columns: []*model.Column{
 			{
@@ -260,7 +260,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		IndexColumns: [][]int{{0}},
 	}, 16)
 	require.Equal(t, int32(14), p)
-	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
+	p, _ = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_default2", Table: "table"},
 		Columns: []*model.Column{
 			{
@@ -273,12 +273,12 @@ func TestGetPartitionForRowChange(t *testing.T) {
 	}, 16)
 	require.Equal(t, int32(0), p)
 
-	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
+	p, _ = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table:    &model.TableName{Schema: "test_table", Table: "table"},
 		CommitTs: 1,
 	}, 16)
 	require.Equal(t, int32(15), p)
-	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
+	p, _ = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_index_value", Table: "table"},
 		Columns: []*model.Column{
 			{
@@ -293,7 +293,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		},
 	}, 10)
 	require.Equal(t, int32(1), p)
-	p = d.GetPartitionForRowChange(&model.RowChangedEvent{
+	p, _ = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table:    &model.TableName{Schema: "a", Table: "table"},
 		CommitTs: 1,
 	}, 2)

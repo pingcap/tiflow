@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
@@ -81,6 +82,7 @@ type captureImpl struct {
 	liveness         model.Liveness
 	config           *config.ServerConfig
 
+	pdClient        pd.Client
 	pdEndpoints     []string
 	ownerMu         sync.Mutex
 	owner           owner.Owner
@@ -128,6 +130,7 @@ func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
 	sortEngineMangerFactory *factory.SortEngineFactory,
+	pdClient pd.Client,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
@@ -142,8 +145,8 @@ func NewCapture(pdEndpoints []string,
 		newController:       controller.NewController,
 		info:                &model.CaptureInfo{},
 		sortEngineFactory:   sortEngineMangerFactory,
-
-		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
+		migrator:            migrate.NewMigrator(etcdClient, pdEndpoints, conf),
+		pdClient:            pdClient,
 	}
 }
 
@@ -227,7 +230,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		c.upstreamManager.Close()
 	}
 	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
-	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security)
+	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security, c.pdClient)
 	if err != nil {
 		return errors.Trace(err)
 	}

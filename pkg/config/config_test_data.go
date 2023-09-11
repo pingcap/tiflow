@@ -105,7 +105,7 @@ const (
   "sorter": {
     "sort-dir": "/tmp/sorter",
     "cache-size-in-mb": 128,
-    "max-memory-percentage": 10,
+    "max-memory-percentage": 0,
     "max-memory-consumption": 0,
     "num-workerpool-goroutine": 0,
     "num-concurrent-worker": 0,
@@ -130,17 +130,12 @@ const (
   "debug": {
     "db": {
       "count": 8,
-      "concurrency": 128,
       "max-open-files": 10000,
       "block-size": 65536,
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "write-l0-pause-trigger": 2147483647,
-      "compaction-l0-trigger": 160,
-      "compaction-deletion-threshold": 10485760,
-      "compaction-period": 1800,
-      "iterator-max-alive-duration": 10000,
-      "iterator-slow-read-duration": 256
+      "compaction-l0-trigger": 160
     },
     "messages": {
       "client-max-batch-interval": 10000000,
@@ -248,11 +243,6 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
-      },
-      "large-message-handle": {
-        "large-message-handle-option": "handle-key-only",
-        "claim-check-storage-uri": "",
-        "claim-check-compression": ""
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",

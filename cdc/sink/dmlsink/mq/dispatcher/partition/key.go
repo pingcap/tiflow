@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,21 +14,24 @@
 package partition
 
 import (
-	"fmt"
-
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
-// TsDispatcher is a partition dispatcher which dispatch events based on ts.
-type TsDispatcher struct{}
+// KeyDispatcher is a partition dispatcher which dispatches events
+// using the provided partition key.
+type KeyDispatcher struct {
+	partitionKey string
+}
 
-// NewTsDispatcher creates a TsDispatcher.
-func NewTsDispatcher() *TsDispatcher {
-	return &TsDispatcher{}
+// NewKeyDispatcher creates a TableDispatcher.
+func NewKeyDispatcher(partitionKey string) *KeyDispatcher {
+	return &KeyDispatcher{
+		partitionKey: partitionKey,
+	}
 }
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (t *TsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string) {
-	return int32(row.CommitTs % uint64(partitionNum)), fmt.Sprintf("%d", row.CommitTs)
+func (t *KeyDispatcher) DispatchRowChangedEvent(*model.RowChangedEvent, int32) (int32, string) {
+	return 0, t.partitionKey
 }

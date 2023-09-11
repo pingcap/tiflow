@@ -51,6 +51,7 @@ func checkSinkURI(sinkURI *url.URL) error {
 }
 
 // NewPulsarConfig new pulsar config
+// TODO(dongmen): make this method more concise.
 func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*config.PulsarConfig, error) {
 	c := &config.PulsarConfig{
 		ConnectionTimeout:       toSec(defaultConnectionTimeout),
@@ -64,20 +65,20 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 		return nil, err
 	}
 
-	c.SetSinkURI(sinkURI)
-	c.SetBrokerURL(sinkURI.Scheme + "://" + sinkURI.Host)
+	c.SinkURI = sinkURI
+	c.BrokerURL = sinkURI.Scheme + "://" + sinkURI.Host
 
 	if pulsarConfig == nil {
 		log.L().Debug("new pulsar config", zap.Any("config", c))
 		return c, nil
 	}
 
-	pulsarConfig.SetSinkURI(c.GetSinkURI())
+	pulsarConfig.SinkURI = c.SinkURI
 
 	if len(sinkURI.Scheme) == 0 || len(sinkURI.Host) == 0 {
 		return nil, fmt.Errorf("BrokerURL is empty")
 	}
-	pulsarConfig.SetBrokerURL(c.GetBrokerURL())
+	pulsarConfig.BrokerURL = c.BrokerURL
 
 	// merge default config
 	if pulsarConfig.ConnectionTimeout == nil {
