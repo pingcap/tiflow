@@ -296,6 +296,8 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		// we split ddls and handle the appliedDDLs
 	}
 
+	// for ddl, update lastLocation to endLocation to advance checkpoint
+	qec.lastLocation = qec.endLocation
 	ddl.logger.Info("ready to split ddl", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
 
 	// TiDB can't handle multi schema change DDL, so we split it here.

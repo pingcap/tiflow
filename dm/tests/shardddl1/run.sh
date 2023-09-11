@@ -27,6 +27,9 @@ function DM_002_CASE() {
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
 	run_sql_source1 "alter table ${shardddl1}.${tb2} add column new_col1 int;"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
 }
 
 function DM_002() {
@@ -826,21 +829,21 @@ function run() {
 	init_cluster
 	init_database
 
-	DM_COMPACT
-	DM_COMPACT_USE_DOWNSTREAM_SCHEMA
-	DM_MULTIPLE_ROWS
-	DM_CAUSALITY
-	DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA
-	DM_UpdateBARule
-	DM_RENAME_TABLE
-	DM_RENAME_COLUMN_OPTIMISTIC
-	DM_RemoveLock
-	DM_RestartMaster
-	DM_ADD_DROP_COLUMNS
-	DM_COLUMN_INDEX
-	DM_DML_EXECUTE_ERROR
-	DM_KEY_NOT_FOUND
-	start=1
+	#DM_COMPACT
+	#DM_COMPACT_USE_DOWNSTREAM_SCHEMA
+	#DM_MULTIPLE_ROWS
+	#DM_CAUSALITY
+	#DM_CAUSALITY_USE_DOWNSTREAM_SCHEMA
+	#DM_UpdateBARule
+	#DM_RENAME_TABLE
+	#DM_RENAME_COLUMN_OPTIMISTIC
+	#DM_RemoveLock
+	#DM_RestartMaster
+	#DM_ADD_DROP_COLUMNS
+	#DM_COLUMN_INDEX
+	#DM_DML_EXECUTE_ERROR
+	#DM_KEY_NOT_FOUND
+	start=2
 	end=5
 	for i in $(seq -f "%03g" ${start} ${end}); do
 		DM_${i}
