@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"flag"
 	"fmt"
 	"math"
@@ -45,6 +44,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -72,8 +72,6 @@ type consumerOption struct {
 
 	downstreamURI string
 	partitionNum  int
-	// upstreamTiDBDSN is the dsn of the upstream TiDB cluster
-	upstreamTiDBDSN string
 }
 
 func newConsumerOption() *consumerOption {
@@ -87,15 +85,13 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	// the default value of partitionNum is 1
 	o.partitionNum = 1
 
-	s := upstreamURI.Query().Get("version")
-
 	o.topic = strings.TrimFunc(upstreamURI.Path, func(r rune) bool {
 		return r == '/'
 	})
 
 	o.address = strings.Split(upstreamURI.Host, ",")
 
-	s = upstreamURI.Query().Get("protocol")
+	s := upstreamURI.Query().Get("protocol")
 	if s != "" {
 		protocol, err := config.ParseSinkProtocolFromString(s)
 		if err != nil {
@@ -153,17 +149,14 @@ func main() {
 	)
 
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
-
-	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
+	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "pulsar uri")
 	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
-	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
-
+	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of pulsar consumer")
+	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for pulsar SSL connection")
+	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for pulsar SSL connection")
+	flag.StringVar(&consumerOption.key, "key", "", "Private key path for pulsar SSL connection")
 	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
-	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
-	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for Kafka SSL connection")
-	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for Kafka SSL connection")
-	flag.StringVar(&consumerOption.key, "key", "", "Private key path for Kafka SSL connection")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -185,8 +178,8 @@ func main() {
 		log.Panic("invalid upstream-uri", zap.Error(err))
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
-	if scheme != "pulsar" {
-		log.Panic("invalid upstream-uri scheme, the scheme of upstream-uri must be `pulsar`",
+	if !sink.IsPulsarScheme(scheme) {
+		log.Panic("invalid upstream-uri scheme, the scheme of upstream-uri must be pulsar schema",
 			zap.String("upstreamURI", upstreamURIStr))
 	}
 
@@ -213,9 +206,14 @@ func main() {
 		case <-ctx.Done():
 			return
 		case msg := <-pulsarConsumer.Chan():
-			fmt.Printf("Received message msgId: %#v -- content: '%s'\n", msg.ID(), string(msg.Payload()))
+			log.Info(fmt.Sprintf("Received message msgId: %#v -- content: '%s'\n",
+				msg.ID(),
+				string(msg.Payload())))
+			err := consumer.HandleMsg(msg)
+			if err != nil {
+				log.Panic("Error consuming message", zap.Error(err))
+			}
 			pulsarConsumer.Ack(msg)
-			consumer.ready = make(chan bool)
 		}
 	}()
 
@@ -229,7 +227,6 @@ func main() {
 		}
 	}()
 
-	<-consumer.ready // wait till the consumer has been set up
 	log.Info("TiCDC consumer up and running!...")
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)
@@ -276,13 +273,11 @@ type partitionSinks struct {
 	resolvedTs uint64
 }
 
-// Consumer represents a Sarama consumer group consumer
+// Consumer represents a local pulsar consumer
 type Consumer struct {
-	ready chan bool
-
 	ddlList              []*model.DDLEvent
 	ddlListMu            sync.Mutex
-	ddlWithMaxCommitTs   *model.DDLEvent
+	lastReceivedDDL      *model.DDLEvent
 	ddlSink              ddlsink.Sink
 	fakeTableIDGenerator *fakeTableIDGenerator
 
@@ -370,7 +365,6 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		return nil, errors.Trace(err)
 	}
 	c.ddlSink = ddlSink
-	c.ready = make(chan bool)
 	return c, nil
 }
 
@@ -402,8 +396,8 @@ func (g *eventsGroup) Resolve(resolveTs uint64) []*model.RowChangedEvent {
 	return result
 }
 
-// ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
-func (c *Consumer) ConsumeMsg(msg pulsar.Message) error {
+// HandleMsg handles the message received from the pulsar consumer
+func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 	c.sinksMu.Lock()
 	sink := c.sinks[0]
 	c.sinksMu.Unlock()
@@ -432,159 +426,120 @@ func (c *Consumer) ConsumeMsg(msg pulsar.Message) error {
 
 	log.Info("start consume claim",
 		zap.String("topic", msg.Topic()),
-		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
+		zap.Int64("Offset", int64(*msg.Index())))
 
 	eventGroups := make(map[int64]*eventsGroup)
-	for message := range claim.Messages() {
-		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
-			log.Error("add key value to the decoder failed", zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		counter := 0
-		for {
-			tp, hasNext, err := decoder.HasNext()
-			if err != nil {
-				log.Panic("decode message key failed", zap.Error(err))
-			}
-			if !hasNext {
-				break
-			}
-
-			counter++
-			// If the message containing only one event exceeds the length limit, CDC will allow it and issue a warning.
-			if len(message.Key)+len(message.Value) > c.option.maxMessageBytes && counter > 1 {
-				log.Panic("kafka max-messages-bytes exceeded",
-					zap.Int("max-message-bytes", c.option.maxMessageBytes),
-					zap.Int("receivedBytes", len(message.Key)+len(message.Value)))
-			}
-
-			switch tp {
-			case model.MessageTypeDDL:
-				// for some protocol, DDL would be dispatched to all partitions,
-				// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
-				// if we receive `a` from partition-1, which would be seemed as DDL regression,
-				// then cause the consumer panic, but it was a duplicate one.
-				// so we only handle DDL received from partition-0 should be enough.
-				// but all DDL event messages should be consumed.
-				ddl, err := decoder.NextDDLEvent()
-				if err != nil {
-					log.Panic("decode message value failed",
-						zap.ByteString("value", message.Value),
-						zap.Error(err))
-				}
-				if partition == 0 {
-					c.appendDDL(ddl)
-				}
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
-			case model.MessageTypeRow:
-				row, err := decoder.NextRowChangedEvent()
-				if err != nil {
-					log.Panic("decode message value failed",
-						zap.ByteString("value", message.Value),
-						zap.Error(err))
-				}
-
-				if c.eventRouter != nil {
-					target := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
-					if partition != target {
-						log.Panic("RowChangedEvent dispatched to wrong partition",
-							zap.Int32("obtained", partition),
-							zap.Int32("expected", target),
-							zap.Int32("partitionNum", c.option.partitionNum),
-							zap.Any("row", row),
-						)
-					}
-				}
-
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
-					log.Warn("RowChangedEvent fallback row, ignore it",
-						zap.Uint64("commitTs", row.CommitTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Int32("partition", partition),
-						zap.Any("row", row))
-					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-					session.MarkMessage(message, "")
-					continue
-				}
-				var partitionID int64
-				if row.Table.IsPartition {
-					partitionID = row.Table.TableID
-				}
-				tableID := c.fakeTableIDGenerator.
-					generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				row.Table.TableID = tableID
-
-				group, ok := eventGroups[tableID]
-				if !ok {
-					group = newEventsGroup()
-					eventGroups[tableID] = group
-				}
-
-				group.Append(row)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
-			case model.MessageTypeResolved:
-				ts, err := decoder.NextResolvedEvent()
-				if err != nil {
-					log.Panic("decode message value failed",
-						zap.ByteString("value", message.Value),
-						zap.Error(err))
-				}
-
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ts < globalResolvedTs || ts < partitionResolvedTs {
-					log.Warn("partition resolved ts fallback, skip it",
-						zap.Uint64("ts", ts),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Int32("partition", partition))
-					session.MarkMessage(message, "")
-					continue
-				}
-
-				for tableID, group := range eventGroups {
-					events := group.Resolve(ts)
-					if len(events) == 0 {
-						continue
-					}
-					if _, ok := sink.tableSinksMap.Load(tableID); !ok {
-						sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
-							model.DefaultChangeFeedID("kafka-consumer"),
-							spanz.TableIDToComparableSpan(tableID),
-							events[0].CommitTs,
-							prometheus.NewCounter(prometheus.CounterOpts{}),
-						))
-					}
-					s, _ := sink.tableSinksMap.Load(tableID)
-					s.(tablesink.TableSink).AppendRowChangedEvents(events...)
-					commitTs := events[len(events)-1].CommitTs
-					lastCommitTs, ok := sink.tablesCommitTsMap.Load(tableID)
-					if !ok || lastCommitTs.(uint64) < commitTs {
-						sink.tablesCommitTsMap.Store(tableID, commitTs)
-					}
-				}
-				log.Debug("update partition resolved ts",
-					zap.Uint64("ts", ts), zap.Int32("partition", partition))
-				atomic.StoreUint64(&sink.resolvedTs, ts)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
-
-			}
-
-		}
-
-		if counter > c.option.maxBatchSize {
-			log.Panic("Open Protocol max-batch-size exceeded", zap.Int("max-batch-size", c.option.maxBatchSize),
-				zap.Int("actual-batch-size", counter))
-		}
+	if err := decoder.AddKeyValue([]byte(msg.Key()), msg.Payload()); err != nil {
+		log.Error("add key value to the decoder failed", zap.Error(err))
+		return errors.Trace(err)
 	}
 
+	counter := 0
+	for {
+		tp, hasNext, err := decoder.HasNext()
+		if err != nil {
+			log.Panic("decode message key failed", zap.Error(err))
+		}
+		if !hasNext {
+			break
+		}
+
+		counter++
+		switch tp {
+		case model.MessageTypeDDL:
+			// for some protocol, DDL would be dispatched to all partitions,
+			// Consider that DDL a, b, c received from partition-0, the latest DDL is c,
+			// if we receive `a` from partition-1, which would be seemed as DDL regression,
+			// then cause the consumer panic, but it was a duplicate one.
+			// so we only handle DDL received from partition-0 should be enough.
+			// but all DDL event messages should be consumed.
+			ddl, err := decoder.NextDDLEvent()
+			if err != nil {
+				log.Panic("decode message value failed",
+					zap.ByteString("value", msg.Payload()),
+					zap.Error(err))
+			}
+			c.appendDDL(ddl)
+		case model.MessageTypeRow:
+			row, err := decoder.NextRowChangedEvent()
+			if err != nil {
+				log.Panic("decode message value failed",
+					zap.ByteString("value", msg.Payload()),
+					zap.Error(err))
+			}
+			globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
+			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+			if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
+				log.Warn("RowChangedEvent fallback row, ignore it",
+					zap.Uint64("commitTs", row.CommitTs),
+					zap.Uint64("globalResolvedTs", globalResolvedTs),
+					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+					zap.Int32("partition", msg.ID().PartitionIdx()),
+					zap.Any("row", row))
+				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+				continue
+			}
+			var partitionID int64
+			if row.Table.IsPartition {
+				partitionID = row.Table.TableID
+			}
+			// use schema, table and tableID to identify a table
+			tableID := c.fakeTableIDGenerator.
+				generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
+			row.Table.TableID = tableID
+
+			group, ok := eventGroups[tableID]
+			if !ok {
+				group = newEventsGroup()
+				eventGroups[tableID] = group
+			}
+			group.Append(row)
+		case model.MessageTypeResolved:
+			ts, err := decoder.NextResolvedEvent()
+			if err != nil {
+				log.Panic("decode message value failed",
+					zap.ByteString("value", msg.Payload()),
+					zap.Error(err))
+			}
+
+			globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
+			partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
+			if ts < globalResolvedTs || ts < partitionResolvedTs {
+				log.Warn("partition resolved ts fallback, skip it",
+					zap.Uint64("ts", ts),
+					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+					zap.Uint64("globalResolvedTs", globalResolvedTs),
+					zap.Int32("partition", msg.ID().PartitionIdx()))
+				continue
+			}
+
+			for tableID, group := range eventGroups {
+				events := group.Resolve(ts)
+				if len(events) == 0 {
+					continue
+				}
+				if _, ok := sink.tableSinksMap.Load(tableID); !ok {
+					sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
+						model.DefaultChangeFeedID("kafka-consumer"),
+						spanz.TableIDToComparableSpan(tableID),
+						events[0].CommitTs,
+						prometheus.NewCounter(prometheus.CounterOpts{}),
+					))
+				}
+				s, _ := sink.tableSinksMap.Load(tableID)
+				s.(tablesink.TableSink).AppendRowChangedEvents(events...)
+				commitTs := events[len(events)-1].CommitTs
+				lastCommitTs, ok := sink.tablesCommitTsMap.Load(tableID)
+				if !ok || lastCommitTs.(uint64) < commitTs {
+					sink.tablesCommitTsMap.Store(tableID, commitTs)
+				}
+			}
+			log.Debug("update partition resolved ts",
+				zap.Uint64("ts", ts), zap.Int32("partition", msg.ID().PartitionIdx()))
+			atomic.StoreUint64(&sink.resolvedTs, ts)
+		}
+
+	}
 	return nil
 }
 
@@ -594,17 +549,17 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlListMu.Lock()
 	defer c.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
-	if c.ddlWithMaxCommitTs != nil && ddl.CommitTs < c.ddlWithMaxCommitTs.CommitTs {
-		log.Panic("DDL CommitTs < maxCommitTsDDL.CommitTs",
+	if c.lastReceivedDDL != nil && ddl.CommitTs < c.lastReceivedDDL.CommitTs {
+		log.Panic("DDL CommitTs < lastReceivedDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
+			zap.Uint64("lastReceivedDDLCommitTs", c.lastReceivedDDL.CommitTs),
 			zap.Any("DDL", ddl))
 	}
 
 	// A rename tables DDL job contains multiple DDL events with same CommitTs.
 	// So to tell if a DDL is redundant or not, we must check the equivalence of
 	// the current DDL and the DDL with max CommitTs.
-	if ddl == c.ddlWithMaxCommitTs {
+	if ddl == c.lastReceivedDDL {
 		log.Info("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
 			zap.Any("DDL", ddl))
 		return
@@ -612,7 +567,7 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 
 	c.ddlList = append(c.ddlList, ddl)
 	log.Info("DDL event received", zap.Any("DDL", ddl))
-	c.ddlWithMaxCommitTs = ddl
+	c.lastReceivedDDL = ddl
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -646,7 +601,8 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 	return nil
 }
 
-func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
+// getMinResolvedTs returns the minimum resolvedTs of all the partitionSinks
+func (c *Consumer) getMinResolvedTs() (result uint64, err error) {
 	result = uint64(math.MaxUint64)
 	err = c.forEachSink(func(sink *partitionSinks) error {
 		a := atomic.LoadUint64(&sink.resolvedTs)
@@ -660,64 +616,61 @@ func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
 
 // Run the Consumer
 func (c *Consumer) Run(ctx context.Context) error {
-	ticker := time.NewTicker(100 * time.Millisecond)
+	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-		}
+			// 1. Get the minimum resolvedTs of all the partitionSinks
+			minResolvedTs, err := c.getMinResolvedTs()
+			if err != nil {
+				return errors.Trace(err)
+			}
 
-		minPartitionResolvedTs, err := c.getMinPartitionResolvedTs()
-		if err != nil {
-			return errors.Trace(err)
-		}
+			// 2. check if there is a DDL event that can be executed
+			//   if there is, execute it and update the minResolvedTs
+			nextDDL := c.getFrontDDL()
+			if nextDDL != nil && minResolvedTs >= nextDDL.CommitTs {
+				// flush DMLs that commitTs <= todoDDL.CommitTs
+				if err := c.forEachSink(func(sink *partitionSinks) error {
+					return flushRowChangedEvents(ctx, sink, nextDDL.CommitTs)
+				}); err != nil {
+					return errors.Trace(err)
+				}
 
-		// handle DDL
-		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
-			// flush DMLs
+				// all DMLs with commitTs <= todoDDL.CommitTs have been flushed to downstream,
+				// so we can execute the DDL now.
+				if err := c.ddlSink.WriteDDLEvent(ctx, nextDDL); err != nil {
+					return errors.Trace(err)
+				}
+				c.popDDL()
+			}
+
+			// 3. Update global resolved ts
+			if c.globalResolvedTs > minResolvedTs {
+				log.Panic("global ResolvedTs fallback",
+					zap.Uint64("globalResolvedTs", c.globalResolvedTs),
+					zap.Uint64("minPartitionResolvedTs", minResolvedTs))
+			}
+			if c.globalResolvedTs < minResolvedTs {
+				c.globalResolvedTs = minResolvedTs
+			}
+
+			// 4. flush all the DMLs that commitTs <= globalResolvedTs
 			if err := c.forEachSink(func(sink *partitionSinks) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+				return flushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 			}); err != nil {
 				return errors.Trace(err)
 			}
-
-			// DDL can be executed, do it first.
-			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-				return errors.Trace(err)
-			}
-			c.popDDL()
-
-			if todoDDL.CommitTs < minPartitionResolvedTs {
-				log.Info("update minPartitionResolvedTs by DDL",
-					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-					zap.Any("DDL", todoDDL))
-			}
-			minPartitionResolvedTs = todoDDL.CommitTs
-		}
-
-		// update global resolved ts
-		if c.globalResolvedTs > minPartitionResolvedTs {
-			log.Panic("global ResolvedTs fallback",
-				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
-				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
-		}
-
-		if c.globalResolvedTs < minPartitionResolvedTs {
-			c.globalResolvedTs = minPartitionResolvedTs
-		}
-
-		if err := c.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
-		}); err != nil {
-			return errors.Trace(err)
 		}
 	}
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
+// flushRowChangedEvents flushes all the DMLs that commitTs <= resolvedTs
+// Note: This function is synchronous, it will block until all the DMLs are flushed.
+func flushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -766,25 +719,4 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	g.currentTableID++
 	g.tableIDs[key] = g.currentTableID
 	return g.currentTableID
-}
-
-func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Error("open db failed", zap.String("dsn", dsn), zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
-	db.SetConnMaxLifetime(10 * time.Minute)
-
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	if err = db.PingContext(ctx); err != nil {
-		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
-		return nil, errors.Trace(err)
-	}
-	log.Info("open db success", zap.String("dsn", dsn))
-	return db, nil
 }
