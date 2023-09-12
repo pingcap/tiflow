@@ -30,14 +30,18 @@ func toCMPBytes(i int) []byte {
 
 func BenchmarkSpanForwardAndFrontier(b *testing.B) {
 	tests := []struct {
+		order   string
 		regions int
 		rounds  int
 	}{
-		{900_000, 10},
-		{400_000, 10},
+		{"random", 900_000, 10},
+		{"random", 400_000, 10},
+		{"ordered", 900_000, 10},
+		{"ordered", 400_000, 10},
 	}
 
 	for _, test := range tests {
+		order := test.order
 		regions := test.regions
 		rounds := test.rounds
 
@@ -49,11 +53,22 @@ func BenchmarkSpanForwardAndFrontier(b *testing.B) {
 		totalSpan := tablepb.Span{StartKey: spans[0].StartKey, EndKey: spans[len(spans)-1].EndKey}
 		f := NewFrontier(0, totalSpan)
 
-		r := rand.New(rand.NewSource(time.Now().Unix()))
-		b.ResetTimer()
-		b.Run(fmt.Sprintf("%d(region)-%d(round)", regions, rounds), func(b *testing.B) {
+		offsets := make([]uint64, 0, regions*rounds)
+		if order == "random" {
+			r := rand.New(rand.NewSource(time.Now().Unix()))
 			for i := 0; i < regions*rounds; i++ {
-				offset := r.Uint64() % uint64(regions)
+				offsets = append(offsets, r.Uint64()%uint64(regions))
+			}
+		} else {
+			for i := 0; i < regions*rounds; i++ {
+				offsets = append(offsets, uint64(i)%uint64(regions))
+			}
+		}
+
+		b.ResetTimer()
+		b.Run(fmt.Sprintf("%s-%d(region)-%d(round)", order, regions, rounds), func(b *testing.B) {
+			for i := 0; i < regions*rounds; i++ {
+				offset := offsets[i]
 				span := spans[offset]
 				if spanz.IsSubSpan(span, totalSpan) {
 					f.Forward(offset, span, offset)
