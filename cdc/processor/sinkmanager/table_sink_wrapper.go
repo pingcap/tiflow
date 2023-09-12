@@ -437,12 +437,12 @@ func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint6
 	return false, uint64(0)
 }
 
-// convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
+// handleRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
-func convertRowChangedEvents(
+func handleRowChangedEvents(
 	changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool,
 	events ...*model.PolymorphicEvent,
-) ([]*model.RowChangedEvent, uint64, error) {
+) ([]*model.RowChangedEvent, uint64) {
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
@@ -472,7 +472,7 @@ func convertRowChangedEvents(
 		size += e.Row.ApproximateBytes()
 		rowChangedEvents = append(rowChangedEvents, e.Row)
 	}
-	return rowChangedEvents, uint64(size), nil
+	return rowChangedEvents, uint64(size)
 }
 
 func genReplicateTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {

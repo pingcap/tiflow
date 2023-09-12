@@ -773,7 +773,7 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
 func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(sinkScheme string) error {
-	if !t.shouldSplitTxn(sinkScheme) {
+	if !t.shouldSplitUpdateEvent(sinkScheme) {
 		return nil
 	}
 
@@ -785,12 +785,14 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(sinkScheme string) error {
 	return nil
 }
 
-func (t *SingleTableTxn) shouldSplitTxn(sinkScheme string) bool {
+func (t *SingleTableTxn) shouldSplitUpdateEvent(sinkScheme string) bool {
+	// For mysql sink, we do not split single-row transactions to restore
+	// upstream events as much as possible.
 	if len(t.Rows) < 2 && sink.IsMySQLCompatibleScheme(sinkScheme) {
 		return false
 	}
-	// For MQ or storage sink, we need to split the transaction with single row, since some
-	// protocols (such as csv and avro) do not support old value.
+	// For MQ and storage sink, we need to split the transaction with single row, since some
+	// protocols (such as csv and avro) do not support old value in update event.
 	return true
 }
 
