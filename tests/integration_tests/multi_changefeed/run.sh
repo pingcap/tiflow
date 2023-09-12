@@ -19,17 +19,8 @@ function check_old_value_enabled() {
 	# When old value is turned on, we will have both column and pre-column in the update.
 	# So here we have 2 (pre val) and 3 (new val).
 	update_with_old_value_count=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log" | grep 'pre\-columns\\\":\[' | grep '\"columns\\\":\[' | grep 'value\\\":2' | grep -c 'value\\\":3')
-	if [[ "$update_with_old_value_count" -ne 1 ]]; then
+	if [[ "$update_with_old_value_count" -ne 2 ]]; then
 		echo "can't found update row with old value"
-		exit 1
-	fi
-
-	# check if exist a update row without `pre-column`
-	# When old value is turned off, we only have the column in the update.
-	# So here we only have 3 (new val).
-	update_without_old_value_count=$(grep "BlackHoleSink: WriteEvents" "$1/cdc.log" | grep 'pre\-columns\\\":null' | grep -c 'value\\\":3')
-	if [[ "$update_without_old_value_count" -ne 1 ]]; then
-		echo "can't found update row without old value"
 		exit 1
 	fi
 

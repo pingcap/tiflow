@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -40,6 +41,11 @@ func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChange
 	}
 
 	return nil
+}
+
+// Scheme returns the sink scheme.
+func (s *Sink) Scheme() string {
+	return sink.BlackHoleScheme
 }
 
 // Close do nothing.

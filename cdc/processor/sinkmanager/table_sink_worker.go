@@ -39,9 +39,6 @@ type sinkWorker struct {
 	eventCache    *redoEventCache
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
-	// enableOldValue indicates whether to enable the old value feature.
-	// If it is enabled, we need to deal with the compatibility of the data format.
-	enableOldValue bool
 
 	metricRedoEventCacheHit  prometheus.Counter
 	metricRedoEventCacheMiss prometheus.Counter
@@ -55,16 +52,14 @@ func newSinkWorker(
 	redoQuota *memquota.MemQuota,
 	eventCache *redoEventCache,
 	splitTxn bool,
-	enableOldValue bool,
 ) *sinkWorker {
 	return &sinkWorker{
-		changefeedID:   changefeedID,
-		sourceManager:  sourceManager,
-		sinkMemQuota:   sinkQuota,
-		redoMemQuota:   redoQuota,
-		eventCache:     eventCache,
-		splitTxn:       splitTxn,
-		enableOldValue: enableOldValue,
+		changefeedID:  changefeedID,
+		sourceManager: sourceManager,
+		sinkMemQuota:  sinkQuota,
+		redoMemQuota:  redoQuota,
+		eventCache:    eventCache,
+		splitTxn:      splitTxn,
 
 		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
 		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
@@ -381,10 +376,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.tableID, w.enableOldValue, e)
-			if err != nil {
-				return err
-			}
+			x, size := handleRowChangedEvents(w.changefeedID, task.tableID, e)
 			events = append(events, x...)
 			allEventSize += size
 			usedMem += size

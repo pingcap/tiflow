@@ -437,12 +437,11 @@ func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint6
 	return false, uint64(0)
 }
 
-// convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
+// handleRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
-func convertRowChangedEvents(
-	changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool,
-	events ...*model.PolymorphicEvent,
-) ([]*model.RowChangedEvent, uint64, error) {
+func handleRowChangedEvents(
+	changefeed model.ChangeFeedID, tableID model.TableID, events ...*model.PolymorphicEvent,
+) ([]*model.RowChangedEvent, uint64) {
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
@@ -470,85 +469,9 @@ func convertRowChangedEvents(
 		}
 
 		size += e.Row.ApproximateBytes()
-
-		// This indicates that it is an update event,
-		// and after enable old value internally by default(but disable in the configuration).
-		// We need to handle the update event to be compatible with the old format.
-		if e.Row.IsUpdate() && !enableOldValue {
-			if shouldSplitUpdateEvent(e) {
-				deleteEvent, insertEvent, err := splitUpdateEvent(e)
-				if err != nil {
-					return nil, 0, errors.Trace(err)
-				}
-				// NOTICE: Please do not change the order, the delete event always comes before the insert event.
-				rowChangedEvents = append(rowChangedEvents, deleteEvent.Row, insertEvent.Row)
-			} else {
-				// If the handle key columns are not updated, PreColumns is directly ignored.
-				e.Row.PreColumns = nil
-				rowChangedEvents = append(rowChangedEvents, e.Row)
-			}
-		} else {
-			rowChangedEvents = append(rowChangedEvents, e.Row)
-		}
+		rowChangedEvents = append(rowChangedEvents, e.Row)
 	}
-	return rowChangedEvents, uint64(size), nil
-}
-
-// shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
-// whether the handle key column has been modified.
-// If the handle key column is modified,
-// we need to use splitUpdateEvent to split the update event into a delete and an insert event.
-func shouldSplitUpdateEvent(updateEvent *model.PolymorphicEvent) bool {
-	// nil event will never be split.
-	if updateEvent == nil {
-		return false
-	}
-
-	for i := range updateEvent.Row.Columns {
-		col := updateEvent.Row.Columns[i]
-		preCol := updateEvent.Row.PreColumns[i]
-		if col != nil && col.Flag.IsHandleKey() && preCol != nil && preCol.Flag.IsHandleKey() {
-			colValueString := model.ColumnValueString(col.Value)
-			preColValueString := model.ColumnValueString(preCol.Value)
-			// If one handle key columns is updated, we need to split the event row.
-			if colValueString != preColValueString {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// splitUpdateEvent splits an update event into a delete and an insert event.
-func splitUpdateEvent(
-	updateEvent *model.PolymorphicEvent,
-) (*model.PolymorphicEvent, *model.PolymorphicEvent, error) {
-	if updateEvent == nil {
-		return nil, nil, errors.New("nil event cannot be split")
-	}
-
-	// If there is an update to handle key columns,
-	// we need to split the event into two events to be compatible with the old format.
-	// NOTICE: Here we don't need a full deep copy because
-	// our two events need Columns and PreColumns respectively,
-	// so it won't have an impact and no more full deep copy wastes memory.
-	deleteEvent := *updateEvent
-	deleteEventRow := *updateEvent.Row
-	deleteEventRowKV := *updateEvent.RawKV
-	deleteEvent.Row = &deleteEventRow
-	deleteEvent.RawKV = &deleteEventRowKV
-
-	deleteEvent.Row.Columns = nil
-
-	insertEvent := *updateEvent
-	insertEventRow := *updateEvent.Row
-	insertEventRowKV := *updateEvent.RawKV
-	insertEvent.Row = &insertEventRow
-	insertEvent.RawKV = &insertEventRowKV
-	// NOTICE: clean up pre cols for insert event.
-	insertEvent.Row.PreColumns = nil
-
-	return &deleteEvent, &insertEvent, nil
+	return rowChangedEvents, uint64(size)
 }
 
 func genReplicateTs(ctx context.Context, pdClient pd.Client) (model.Ts, error) {
