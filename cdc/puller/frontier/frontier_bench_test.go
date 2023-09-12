@@ -28,23 +28,25 @@ func toCMPBytes(i int) []byte {
 	return []byte(s)
 }
 
-func BenchmarkSpanForwardAndFrontier(b *testing.B) {
-	tests := []struct {
-		order   string
-		regions int
-		rounds  int
-	}{
-		{"random", 900_000, 10},
-		{"random", 400_000, 10},
-		{"ordered", 900_000, 10},
-		{"ordered", 400_000, 10},
-	}
+func BenchmarkSpanForwardAndFrontier_random_900k_10(b *testing.B) {
+	benchmarkSpanForwardAndFrontier(b, "random", 900_000, 10)
+}
 
-	for _, test := range tests {
-		order := test.order
-		regions := test.regions
-		rounds := test.rounds
+func BenchmarkSpanForwardAndFrontier_ordered_900k_10(b *testing.B) {
+	benchmarkSpanForwardAndFrontier(b, "ordered", 900_000, 10)
+}
 
+func BenchmarkSpanForwardAndFrontier_random_400k_10(b *testing.B) {
+	benchmarkSpanForwardAndFrontier(b, "random", 400_000, 10)
+}
+
+func BenchmarkSpanForwardAndFrontier_ordered_400k_10(b *testing.B) {
+	benchmarkSpanForwardAndFrontier(b, "ordered", 400_000, 10)
+}
+
+func benchmarkSpanForwardAndFrontier(b *testing.B, order string, regions, rounds int) {
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
 		spans := make([]tablepb.Span, 0, regions)
 		for i := 0; i < regions; i++ {
 			span := tablepb.Span{StartKey: toCMPBytes(i), EndKey: toCMPBytes(i + 1)}
@@ -65,19 +67,19 @@ func BenchmarkSpanForwardAndFrontier(b *testing.B) {
 			}
 		}
 
-		b.ResetTimer()
-		b.Run(fmt.Sprintf("%s-%d(region)-%d(round)", order, regions, rounds), func(b *testing.B) {
-			for i := 0; i < regions*rounds; i++ {
-				offset := offsets[i]
-				span := spans[offset]
-				if spanz.IsSubSpan(span, totalSpan) {
-					f.Forward(offset, span, offset)
-					if i%regions == 0 {
-						f.Frontier()
-					}
+		b.StartTimer()
+		start := time.Now()
+		for i := 0; i < regions*rounds; i++ {
+			offset := offsets[i]
+			span := spans[offset]
+			if spanz.IsSubSpan(span, totalSpan) {
+				f.Forward(offset, span, offset)
+				if i%regions == 0 {
+					f.Frontier()
 				}
 			}
-		})
+		}
+		b.Logf("finishes a round, time in ms: %d", time.Since(start).Milliseconds())
 	}
 }
 
