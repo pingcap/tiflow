@@ -20,6 +20,7 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -597,15 +598,14 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
 
-	// assume it's Kafka or storage sink.
-	err := txn.TrySplitAndSortUpdateEvent(true)
+	err := txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 2)
 
 	txn = &SingleTableTxn{
 		Rows: []*RowChangedEvent{ukUpdatedEvent},
 	}
-	err = txn.TrySplitAndSortUpdateEvent(false)
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 1)
 }
