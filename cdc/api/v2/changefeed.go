@@ -430,7 +430,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-
+	log.Info("Update changefeed", zap.Any("updateCfConfig", updateCfConfig))
 	if err = h.helpers.verifyUpstream(ctx, updateCfConfig, oldCfInfo); err != nil {
 		_ = c.Error(errors.Trace(err))
 		return

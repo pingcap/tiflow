@@ -108,7 +108,5 @@ func GetTopicManagerAndTryCreateTopic(
 }
 
 func IsPulsarSupportedProtocols(p config.Protocol) bool {
-	return p == config.ProtocolCanalJSON ||
-		p == config.ProtocolCanal ||
-		p == config.ProtocolMaxwell
+	return p == config.ProtocolCanalJSON
 }

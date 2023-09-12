@@ -15,7 +15,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"math"
 	"net/url"
@@ -48,21 +47,23 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	tpulsar "github.com/pingcap/tiflow/pkg/sink/pulsar"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
-type consumerOption struct {
+type ConsumerOption struct {
 	address []string
 	topic   string
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
 
-	// the replicaConfig of the changefeed which produce data to the kafka topic
+	// the replicaConfig of the changefeed which produce data to the pulsar topic
 	replicaConfig *config.ReplicaConfig
 
 	logPath       string
@@ -74,14 +75,14 @@ type consumerOption struct {
 	partitionNum  int
 }
 
-func newConsumerOption() *consumerOption {
-	return &consumerOption{
+func newConsumerOption() *ConsumerOption {
+	return &ConsumerOption{
 		protocol: config.ProtocolDefault,
 	}
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
-func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
+func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	// the default value of partitionNum is 1
 	o.partitionNum = 1
 
@@ -140,24 +141,34 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	return nil
 }
 
+var (
+	upstreamURIStr string
+	configFile     string
+	consumerOption = newConsumerOption()
+)
+
 func main() {
-	consumerOption := newConsumerOption()
+	var cmd = &cobra.Command{
+		Use: "pulsar consumer",
+		Run: run,
+	}
+	// Flags for the root command
+	cmd.Flags().StringVar(&configFile, "config", "", "config file for changefeed")
+	cmd.Flags().StringVar(&upstreamURIStr, "upstream-uri", "", "pulsar uri")
+	cmd.Flags().StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
+	cmd.Flags().StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of pulsar consumer")
+	cmd.Flags().StringVar(&consumerOption.ca, "ca", "", "CA certificate path for pulsar SSL connection")
+	cmd.Flags().StringVar(&consumerOption.cert, "cert", "", "Certificate path for pulsar SSL connection")
+	cmd.Flags().StringVar(&consumerOption.key, "key", "", "Private key path for pulsar SSL connection")
+	cmd.Flags().StringVar(&consumerOption.logPath, "log-file", "cdc_pulsar_consumer.log", "log file path")
+	cmd.Flags().StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
 
-	var (
-		upstreamURIStr string
-		configFile     string
-	)
+	if err := cmd.Execute(); err != nil {
+		fmt.Println(err)
+	}
+}
 
-	flag.StringVar(&configFile, "config", "", "config file for changefeed")
-	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "pulsar uri")
-	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
-	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of pulsar consumer")
-	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for pulsar SSL connection")
-	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for pulsar SSL connection")
-	flag.StringVar(&consumerOption.key, "key", "", "Private key path for pulsar SSL connection")
-	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
-	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
-	flag.Parse()
+func run(cmd *cobra.Command, args []string) {
 
 	err := logutil.InitLogger(&logutil.Config{
 		Level: consumerOption.logLevel,
@@ -180,6 +191,7 @@ func main() {
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if !sink.IsPulsarScheme(scheme) {
 		log.Panic("invalid upstream-uri scheme, the scheme of upstream-uri must be pulsar schema",
+			zap.String("schema", scheme),
 			zap.String("upstreamURI", upstreamURIStr))
 	}
 
@@ -197,23 +209,30 @@ func main() {
 	pulsarConsumer, client := NewPulsarConsumer(consumerOption)
 	defer client.Close()
 	defer pulsarConsumer.Close()
+	msgChan := pulsarConsumer.Chan()
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		select {
-		case <-ctx.Done():
-			return
-		case msg := <-pulsarConsumer.Chan():
-			log.Info(fmt.Sprintf("Received message msgId: %#v -- content: '%s'\n",
-				msg.ID(),
-				string(msg.Payload())))
-			err := consumer.HandleMsg(msg)
-			if err != nil {
-				log.Panic("Error consuming message", zap.Error(err))
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("terminating: context cancelled")
+				return
+			case consumerMsg := <-msgChan:
+				log.Debug(fmt.Sprintf("Received message msgId: %#v -- content: '%s'\n",
+					consumerMsg.ID(),
+					string(consumerMsg.Payload())))
+				err := consumer.HandleMsg(consumerMsg.Message)
+				if err != nil {
+					log.Panic("Error consuming message", zap.Error(err))
+				}
+				err = pulsarConsumer.AckID(consumerMsg.Message.ID())
+				if err != nil {
+					log.Panic("Error ack message", zap.Error(err))
+				}
 			}
-			pulsarConsumer.Ack(msg)
 		}
 	}()
 
@@ -240,13 +259,14 @@ func main() {
 	wg.Wait()
 }
 
-func NewPulsarConsumer(option *consumerOption) (pulsar.Consumer, pulsar.Client) {
-	pulsarURL := strings.Join(option.address, ",")
+func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) {
+	pulsarURL := "pulsar" + "://" + option.address[0]
 	topicName := option.topic
 	subscriptionName := "pulsar-test-subscription"
 
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
-		URL: pulsarURL,
+		URL:    pulsarURL,
+		Logger: tpulsar.NewPulsarLogger(),
 	})
 	if err != nil {
 		log.Fatal("can't create pulsar client: %v", zap.Error(err))
@@ -275,6 +295,7 @@ type partitionSinks struct {
 
 // Consumer represents a local pulsar consumer
 type Consumer struct {
+	eventGroups          map[int64]*eventsGroup
 	ddlList              []*model.DDLEvent
 	ddlListMu            sync.Mutex
 	lastReceivedDDL      *model.DDLEvent
@@ -295,13 +316,13 @@ type Consumer struct {
 
 	codecConfig *common.Config
 
-	option *consumerOption
+	option *ConsumerOption
 }
 
 // NewConsumer creates a new cdc pulsar consumer
-// the consumer is responsible for consuming the data from the kafka topic
+// the consumer is responsible for consuming the data from the pulsar topic
 // and write the data to the downstream.
-func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
+func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	c := new(Consumer)
 	c.option = o
 
@@ -322,12 +343,8 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		c.codecConfig.AvroEnableWatermark = true
 	}
 
-	if o.replicaConfig != nil && o.replicaConfig.Sink != nil && o.replicaConfig.Sink.KafkaConfig != nil {
-		c.codecConfig.LargeMessageHandle = o.replicaConfig.Sink.KafkaConfig.LargeMessageHandle
-	}
-
 	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.topic, "kafka")
+		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.topic, "pulsar")
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -365,6 +382,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		return nil, errors.Trace(err)
 	}
 	c.ddlSink = ddlSink
+	c.eventGroups = make(map[int64]*eventsGroup)
 	return c, nil
 }
 
@@ -424,11 +442,6 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 		return errors.Trace(err)
 	}
 
-	log.Info("start consume claim",
-		zap.String("topic", msg.Topic()),
-		zap.Int64("Offset", int64(*msg.Index())))
-
-	eventGroups := make(map[int64]*eventsGroup)
 	if err := decoder.AddKeyValue([]byte(msg.Key()), msg.Payload()); err != nil {
 		log.Error("add key value to the decoder failed", zap.Error(err))
 		return errors.Trace(err)
@@ -488,10 +501,10 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
 			row.Table.TableID = tableID
 
-			group, ok := eventGroups[tableID]
+			group, ok := c.eventGroups[tableID]
 			if !ok {
 				group = newEventsGroup()
-				eventGroups[tableID] = group
+				c.eventGroups[tableID] = group
 			}
 			group.Append(row)
 		case model.MessageTypeResolved:
@@ -513,18 +526,23 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				continue
 			}
 
-			for tableID, group := range eventGroups {
+			for tableID, group := range c.eventGroups {
 				events := group.Resolve(ts)
 				if len(events) == 0 {
 					continue
 				}
 				if _, ok := sink.tableSinksMap.Load(tableID); !ok {
-					sink.tableSinksMap.Store(tableID, c.sinkFactory.CreateTableSinkForConsumer(
-						model.DefaultChangeFeedID("kafka-consumer"),
+					log.Info("create table sink for consumer", zap.Any("tableID", tableID))
+					tableSink := c.sinkFactory.CreateTableSinkForConsumer(
+						model.DefaultChangeFeedID("pulsar-consumer"),
 						spanz.TableIDToComparableSpan(tableID),
 						events[0].CommitTs,
-						prometheus.NewCounter(prometheus.CounterOpts{}),
-					))
+						prometheus.NewCounter(prometheus.CounterOpts{}))
+
+					log.Info("table sink created", zap.Any("tableID", tableID),
+						zap.Any("tableSink", tableSink.GetCheckpointTs()))
+
+					sink.tableSinksMap.Store(tableID, tableSink)
 				}
 				s, _ := sink.tableSinksMap.Load(tableID)
 				s.(tablesink.TableSink).AppendRowChangedEvents(events...)
@@ -534,8 +552,6 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 					sink.tablesCommitTsMap.Store(tableID, commitTs)
 				}
 			}
-			log.Debug("update partition resolved ts",
-				zap.Uint64("ts", ts), zap.Int32("partition", msg.ID().PartitionIdx()))
 			atomic.StoreUint64(&sink.resolvedTs, ts)
 		}
 
@@ -645,7 +661,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 				if err := c.ddlSink.WriteDDLEvent(ctx, nextDDL); err != nil {
 					return errors.Trace(err)
 				}
-				c.popDDL()
+				ddl := c.popDDL()
+				log.Info("DDL executed", zap.Any("DDL", ddl))
 			}
 
 			// 3. Update global resolved ts
@@ -654,6 +671,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 					zap.Uint64("globalResolvedTs", c.globalResolvedTs),
 					zap.Uint64("minPartitionResolvedTs", minResolvedTs))
 			}
+
 			if c.globalResolvedTs < minResolvedTs {
 				c.globalResolvedTs = minResolvedTs
 			}

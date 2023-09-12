@@ -78,6 +78,12 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 		return err
 	}
 
+	if message.Type == model.MessageTypeDDL {
+		log.Info("pulsarProducers SyncSendMessage success",
+			zap.Any("mID", mID), zap.String("topic", topic),
+			zap.String("ddl", string(message.Value)))
+	}
+
 	log.Debug("pulsarProducers SyncSendMessage success",
 		zap.Any("mID", mID), zap.String("topic", topic))
 
