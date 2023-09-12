@@ -15,46 +15,52 @@ package frontier
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/spanz"
 )
 
 func toCMPBytes(i int) []byte {
-	s := fmt.Sprintf("%09d", i)
+	s := fmt.Sprintf("t_XXXXXXXX_r_%09d", i)
 	return []byte(s)
 }
 
-func BenchmarkSpanFrontier(b *testing.B) {
+func BenchmarkSpanForwardAndFrontier(b *testing.B) {
 	tests := []struct {
-		name string
-		n    int
+		regions int
+		rounds  int
 	}{
-		{name: "5k", n: 5000},
-		{name: "10k", n: 10_000},
-		{name: "50k", n: 50_000},
-		{name: "100k", n: 100_000},
+		{900_000, 10},
+		{400_000, 10},
 	}
 
 	for _, test := range tests {
-		n := test.n
+		regions := test.regions
+		rounds := test.rounds
 
-		b.Run(test.name, func(b *testing.B) {
-			spans := make([]tablepb.Span, 0, n)
-			for i := 0; i < n; i++ {
-				span := tablepb.Span{
-					StartKey: toCMPBytes(i),
-					EndKey:   toCMPBytes(i + 1),
+		spans := make([]tablepb.Span, 0, regions)
+		for i := 0; i < regions; i++ {
+			span := tablepb.Span{StartKey: toCMPBytes(i), EndKey: toCMPBytes(i + 1)}
+			spans = append(spans, span)
+		}
+		totalSpan := tablepb.Span{StartKey: spans[0].StartKey, EndKey: spans[len(spans)-1].EndKey}
+		f := NewFrontier(0, totalSpan)
+
+		r := rand.New(rand.NewSource(time.Now().Unix()))
+		b.ResetTimer()
+		b.Run(fmt.Sprintf("%d(region)-%d(round)", regions, rounds), func(b *testing.B) {
+			for i := 0; i < regions*rounds; i++ {
+				offset := r.Uint64() % uint64(regions)
+				span := spans[offset]
+				if spanz.IsSubSpan(span, totalSpan) {
+					f.Forward(offset, span, offset)
+					if i%regions == 0 {
+						f.Frontier()
+					}
 				}
-				spans = append(spans, span)
-			}
-
-			f := NewFrontier(0, spans...)
-
-			b.ResetTimer()
-
-			for i := 0; i < b.N; i++ {
-				f.Forward(0, spans[i%n], uint64(i))
 			}
 		})
 	}
