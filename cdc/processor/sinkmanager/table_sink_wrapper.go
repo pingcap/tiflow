@@ -440,8 +440,7 @@ func (t *tableSinkWrapper) sinkMaybeStuck(stuckCheck time.Duration) (bool, uint6
 // handleRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
 func handleRowChangedEvents(
-	changefeed model.ChangeFeedID, tableID model.TableID, enableOldValue bool,
-	events ...*model.PolymorphicEvent,
+	changefeed model.ChangeFeedID, tableID model.TableID, events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64) {
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))

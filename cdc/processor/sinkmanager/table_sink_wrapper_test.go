@@ -144,8 +144,7 @@ func TestConvertNilRowChangedEvents(t *testing.T) {
 	events := []*model.PolymorphicEvent{nil}
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
-	enableOldVlaue := false
-	result, size := handleRowChangedEvents(changefeedID, tableID, enableOldVlaue, events...)
+	result, size := handleRowChangedEvents(changefeedID, tableID, events...)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
 }
@@ -165,8 +164,7 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
-	enableOldValue := false
-	result, size := handleRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size := handleRowChangedEvents(changefeedID, tableID, events...)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
 }
@@ -216,8 +214,7 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
-	enableOldValue := true
-	result, size := handleRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size := handleRowChangedEvents(changefeedID, tableID, events...)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(216), size)
 }
@@ -268,8 +265,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	tableID := model.TableID(1)
-	enableOldValue := false
-	result, size := handleRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size := handleRowChangedEvents(changefeedID, tableID, events...)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(216), size)
 
@@ -314,7 +310,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 			},
 		},
 	}
-	result, size = handleRowChangedEvents(changefeedID, tableID, enableOldValue, events...)
+	result, size = handleRowChangedEvents(changefeedID, tableID, events...)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(216), size)
 }
