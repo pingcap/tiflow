@@ -785,14 +785,19 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(sinkScheme string) error {
 	return nil
 }
 
+// Whether split a single update event into delete and insert events？
+//
+// For the MySQL Sink, there is no need to split a single unique key changed update event, this
+// is also to keep the backward compatibility, the same behavior as before.
+//
+// For the Kafka and Storage sink, always split a single unique key changed update event, since:
+// 1. Avro and CSV does not output the previous column values for the update event, so it would
+// cause consumer missing data if the unique key changed event is not split.
+// 2. Index-Value Dispatcher cannot work correctly if the unique key changed event isn't split.
 func (t *SingleTableTxn) shouldSplitUpdateEvent(sinkScheme string) bool {
-	// For mysql sink, we do not split single-row transactions to restore
-	// upstream events as much as possible.
 	if len(t.Rows) < 2 && sink.IsMySQLCompatibleScheme(sinkScheme) {
 		return false
 	}
-	// For MQ and storage sink, we need to split the transaction with single row, since some
-	// protocols (such as csv and avro) do not support old value in update event.
 	return true
 }
 
