@@ -63,6 +63,8 @@ type dmlSink struct {
 
 	wg   sync.WaitGroup
 	dead chan struct{}
+
+	scheme string
 }
 
 func newDMLSink(
@@ -74,6 +76,7 @@ func newDMLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
+	scheme string,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
@@ -87,6 +90,7 @@ func newDMLSink(
 		ctx:         ctx,
 		cancel:      cancel,
 		dead:        make(chan struct{}),
+		scheme:      scheme,
 	}
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
@@ -188,5 +192,5 @@ func (s *dmlSink) Dead() <-chan struct{} {
 
 // Scheme returns the scheme of this sink.
 func (s *dmlSink) Scheme() string {
-	return sink.KafkaScheme
+	return s.scheme
 }

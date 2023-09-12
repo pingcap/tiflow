@@ -16,7 +16,6 @@ package factory
 import (
 	"context"
 	"net/url"
-	"strings"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -46,7 +45,7 @@ func New(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
 	}
-	scheme := strings.ToLower(sinkURI.Scheme)
+	scheme := sink.GetScheme(sinkURI)
 	switch scheme {
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory

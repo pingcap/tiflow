@@ -173,7 +173,6 @@ func TestNewEventTableSink(t *testing.T) {
 	require.NotNil(t, tb.eventAppender, "eventAppender should be set")
 	require.Equal(t, 0, len(tb.eventBuffer), "eventBuffer should be empty")
 	require.Equal(t, state.TableSinkSinking, tb.state, "table sink should be sinking")
-	require.True(t, tb.splitSingleUpdate, "splitSingleUpdate should be true")
 }
 
 func TestAppendRowChangedEvents(t *testing.T) {

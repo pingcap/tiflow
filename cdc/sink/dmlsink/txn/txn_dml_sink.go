@@ -54,6 +54,8 @@ type dmlSink struct {
 	dead chan struct{}
 
 	statistics *metrics.Statistics
+
+	scheme string
 }
 
 // GetDBConnImpl is the implementation of pmysql.Factory.
@@ -84,11 +86,13 @@ func NewMySQLSink(
 	for _, impl := range backendImpls {
 		backends = append(backends, impl)
 	}
-	sink := newSink(ctx, changefeedID, backends, errCh, conflictDetectorSlots)
-	sink.statistics = statistics
-	sink.cancel = cancel
 
-	return sink, nil
+	s := newSink(ctx, changefeedID, backends, errCh, conflictDetectorSlots)
+	s.statistics = statistics
+	s.cancel = cancel
+	s.scheme = sink.GetScheme(sinkURI)
+
+	return s, nil
 }
 
 func newSink(ctx context.Context,
@@ -175,5 +179,5 @@ func (s *dmlSink) Dead() <-chan struct{} {
 }
 
 func (s *dmlSink) Scheme() string {
-	return sink.MySQLScheme
+	return s.scheme
 }
