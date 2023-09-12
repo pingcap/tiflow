@@ -84,6 +84,11 @@ func NewDDLSink(
 		return nil, err
 	}
 
+	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
 	m := &DDLSink{
 		id:         changefeedID,
 		db:         db,
@@ -99,7 +104,7 @@ func NewDDLSink(
 
 // WriteDDLEvent writes a DDL event to the mysql database.
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if ddl.Type == timodel.ActionAddIndex {
+	if ddl.Type == timodel.ActionAddIndex && m.cfg.IsTiDB {
 		return m.asyncExecAddIndexDDLIfTimeout(ctx, ddl)
 	}
 	return m.execDDLWithMaxRetries(ctx, ddl)
