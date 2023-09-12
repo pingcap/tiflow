@@ -107,6 +107,7 @@ func GetTopicManagerAndTryCreateTopic(
 	return topicManager, nil
 }
 
+// IsPulsarSupportedProtocols returns whether the protocol is supported by pulsar.
 func IsPulsarSupportedProtocols(p config.Protocol) bool {
 	return p == config.ProtocolCanalJSON
 }

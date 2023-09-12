@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,6 +56,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// ConsumerOption represents the options of the pulsar consumer
 type ConsumerOption struct {
 	address []string
 	topic   string
@@ -148,7 +149,7 @@ var (
 )
 
 func main() {
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use: "pulsar consumer",
 		Run: run,
 	}
@@ -169,7 +170,6 @@ func main() {
 }
 
 func run(cmd *cobra.Command, args []string) {
-
 	err := logutil.InitLogger(&logutil.Config{
 		Level: consumerOption.logLevel,
 		File:  consumerOption.logPath,
@@ -259,6 +259,7 @@ func run(cmd *cobra.Command, args []string) {
 	wg.Wait()
 }
 
+// NewPulsarConsumer creates a pulsar consumer
 func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) {
 	pulsarURL := "pulsar" + "://" + option.address[0]
 	topicName := option.topic
@@ -354,7 +355,7 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
-	for i := 0; i < int(o.partitionNum); i++ {
+	for i := 0; i < o.partitionNum; i++ {
 		c.sinks[i] = &partitionSinks{}
 	}
 
