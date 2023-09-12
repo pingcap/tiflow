@@ -13,6 +13,11 @@
 
 package sink
 
+import (
+	"net/url"
+	"strings"
+)
+
 // Type is the type of sink.
 type Type int
 
@@ -90,4 +95,9 @@ func IsStorageScheme(scheme string) bool {
 // IsPulsarScheme returns true if the scheme belong to pulsar scheme.
 func IsPulsarScheme(scheme string) bool {
 	return scheme == PulsarScheme || scheme == PulsarSSLScheme
+}
+
+// GetScheme returns the scheme of the url.
+func GetScheme(url *url.URL) string {
+	return strings.ToLower(url.Scheme)
 }
