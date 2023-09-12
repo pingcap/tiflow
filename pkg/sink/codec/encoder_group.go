@@ -23,15 +23,15 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	defaultEncoderGroupSize = 32
-	defaultInputChanSize    = 128
-	defaultMetricInterval   = 15 * time.Second
+	defaultInputChanSize  = 128
+	defaultMetricInterval = 15 * time.Second
 )
 
 // EncoderGroup manages a group of encoders
@@ -62,7 +62,7 @@ func NewEncoderGroup(builder RowEventEncoderBuilder,
 	count int, changefeedID model.ChangeFeedID,
 ) *encoderGroup {
 	if count <= 0 {
-		count = defaultEncoderGroupSize
+		count = config.DefaultEncoderGroupConcurrency
 	}
 
 	inputCh := make([]chan *future, count)

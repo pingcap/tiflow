@@ -59,7 +59,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 			NullString:           NULL,
 			BinaryEncodingMethod: BinaryEncodingBase64,
 		},
-		EncoderConcurrency:               util.AddressOf(16),
+		EncoderConcurrency:               util.AddressOf(DefaultEncoderGroupConcurrency),
 		Terminator:                       util.AddressOf(CRLF),
 		DateSeparator:                    util.AddressOf(DateSeparatorDay.String()),
 		EnablePartitionSeparator:         util.AddressOf(true),
