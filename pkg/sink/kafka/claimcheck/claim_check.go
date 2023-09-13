@@ -48,13 +48,15 @@ func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID
 	externalStorage, err := util.GetExternalStorageFromURI(ctx, storageURI)
 	if err != nil {
 		log.Error("create external storage failed",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
 			zap.String("storageURI", storageURI),
 			zap.Duration("duration", time.Since(start)),
 			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
-	log.Info("claim-check enabled",
+	log.Info("claim-check create the external storage success",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.String("storageURI", storageURI),
