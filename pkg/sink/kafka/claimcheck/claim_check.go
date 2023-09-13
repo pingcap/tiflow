@@ -44,6 +44,10 @@ type ClaimCheck struct {
 
 // New return a new ClaimCheck.
 func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
+	log.Info("claim check enabled, start create the external storage",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.String("storageURI", storageURI))
 	start := time.Now()
 	externalStorage, err := util.GetExternalStorageFromURI(ctx, storageURI)
 	if err != nil {
