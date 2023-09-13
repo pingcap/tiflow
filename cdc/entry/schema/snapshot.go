@@ -482,7 +482,7 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 	case timodel.ActionRemovePartitioning, timodel.ActionAlterTablePartitioning:
-		err := s.inner.alterPartitioning(job, job.BinlogInfo.FinishedTS)
+		err := s.inner.alterPartitioning(job)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -1011,7 +1011,7 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 }
 
 // alterPartitioning changes the table id and updates the TableInfo (including the partitioning info)
-func (s *snapshot) alterPartitioning(job *timodel.Job, currentTS uint64) error {
+func (s *snapshot) alterPartitioning(job *timodel.Job) error {
 	// first drop the table (will work with both partitioned and non-partitioned tables
 	err := s.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
 	if err != nil {
