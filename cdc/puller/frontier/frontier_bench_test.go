@@ -73,7 +73,7 @@ func benchmarkSpanForwardAndFrontier(b *testing.B, order string, regions, rounds
 			offset := offsets[i]
 			span := spans[offset]
 			if spanz.IsSubSpan(span, totalSpan) {
-				f.Forward(offset, span, offset)
+				f.Forward(offset, span, uint64(1))
 				if i%regions == 0 {
 					f.Frontier()
 				}
