@@ -953,8 +953,13 @@ var (
 		errors.RFCCodeText("CDC:ErrInvalidGlueSchemaRegistryConfig"),
 	)
 
+	// cdc v2
 	ErrElectorNotLeader = errors.Normalize(
 		"%s is not leader",
 		errors.RFCCodeText("CDC:ErrNotLeader"),
+	)
+	ErrNotController = errors.Normalize(
+		"not controller",
+		errors.RFCCodeText("CDC:ErrNotController"),
 	)
 )
