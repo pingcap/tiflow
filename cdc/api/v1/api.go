@@ -308,13 +308,6 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
-	infoStr, err := info.Marshal()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            up.ID,
 		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
@@ -331,7 +324,9 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		return
 	}
 
-	log.Info("Create changefeed successfully!", zap.String("id", changefeedConfig.ID), zap.String("changefeed", infoStr))
+	log.Info("Create changefeed successfully!",
+		zap.String("id", changefeedConfig.ID),
+		zap.String("changefeed", info.String()))
 	c.Status(http.StatusAccepted)
 }
 

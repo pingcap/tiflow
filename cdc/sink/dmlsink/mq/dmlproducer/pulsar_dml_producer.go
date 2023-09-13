@@ -79,8 +79,7 @@ func NewPulsarDMLProducer(
 
 	var pulsarConfig *config.PulsarConfig
 	if sinkConfig.PulsarConfig == nil {
-		log.Error("new pulsar DML producer fail",
-			zap.Any("sink:pulsar config is empty", sinkConfig.PulsarConfig))
+		log.Error("new pulsar DML producer fail,sink:pulsar config is empty")
 		return nil, cerror.ErrPulsarInvalidConfig.
 			GenWithStackByArgs("pulsar config is empty")
 	}
