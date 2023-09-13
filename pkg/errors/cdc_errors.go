@@ -196,7 +196,7 @@ var (
 		errors.RFCCodeText("CDC:ErrKafkaCreateTopic"),
 	)
 	ErrKafkaInvalidTopicExpression = errors.Normalize(
-		"invalid topic expression, %s",
+		"invalid topic expression",
 		errors.RFCCodeText("CDC:ErrKafkaTopicExprInvalid"),
 	)
 	ErrKafkaConfigNotFound = errors.Normalize(
