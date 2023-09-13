@@ -15,7 +15,6 @@ package v2
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -24,17 +23,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
-	pd "github.com/tikv/pd/client"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
@@ -442,30 +440,26 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", oldCfInfo.String()),
 		zap.Any("upstreamInfo", OldUpInfo))
 
-	upManager, err := h.capture.GetUpstreamManager()
-	if err != nil {
-		_ = c.Error(err)
-		return
+	var pdAddrs []string
+	var credentials *security.Credential
+	if OldUpInfo != nil {
+		pdAddrs = strings.Split(OldUpInfo.PDEndpoints, ",")
+		credentials = &security.Credential{
+			CAPath:        OldUpInfo.CAPath,
+			CertPath:      OldUpInfo.CertPath,
+			KeyPath:       OldUpInfo.KeyPath,
+			CertAllowedCN: OldUpInfo.CertAllowedCN,
+		}
 	}
-
-	var storage tidbkv.Storage
-	// if PDAddrs is not empty, use it to create a new kvstore
 	if len(updateCfConfig.PDAddrs) != 0 {
-		pdAddrs := updateCfConfig.PDAddrs
-		credentials := updateCfConfig.PDConfig.toCredential()
-		storage, err = h.helpers.createTiStore(pdAddrs, credentials)
-		if err != nil {
-			_ = c.Error(errors.Trace(err))
-		}
-	} else { // get the upstream of the changefeed to get the kvstore
-		up, ok := upManager.Get(oldCfInfo.UpstreamID)
-		if !ok {
-			_ = c.Error(errors.New(fmt.Sprintf("upstream %d not found", oldCfInfo.UpstreamID)))
-			return
-		}
-		storage = up.KVStorage
+		pdAddrs = updateCfConfig.PDAddrs
+		credentials = updateCfConfig.PDConfig.toCredential()
 	}
 
+	storage, err := h.helpers.createTiStore(pdAddrs, credentials)
+	if err != nil {
+		_ = c.Error(errors.Trace(err))
+	}
 	newCfInfo, newUpInfo, err := h.helpers.verifyUpdateChangefeedConfig(ctx,
 		updateCfConfig, oldCfInfo, OldUpInfo, storage, cfStatus.CheckpointTs)
 	if err != nil {
@@ -719,26 +713,24 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		return
 	}
 
-	var pdClient pd.Client
-	// if PDAddrs is empty, use the default pdClient
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
 			_ = c.Error(err)
 			return
 		}
-		pdClient = up.PDClient
-	} else {
-		credential := cfg.PDConfig.toCredential()
-		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-		if err != nil {
-			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-			return
-		}
-		defer pdClient.Close()
+		cfg.PDConfig = getUpstreamPDConfig(up)
 	}
+	credential := cfg.PDConfig.toCredential()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+	if err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	defer pdClient.Close()
 
 	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,
