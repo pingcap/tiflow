@@ -1,4 +1,5 @@
 drop database if exists `partition_table`;
+drop database if exists `partition_table2`;
 create database `partition_table`;
 use `partition_table`;
 
