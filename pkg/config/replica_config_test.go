@@ -345,3 +345,41 @@ func TestValidateAndAdjustLargeMessageHandle(t *testing.T) {
 	require.Equal(t, LargeMessageHandleOptionNone, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption)
 	require.Equal(t, compression.None, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleCompression)
 }
+
+func TestMaskSensitiveData(t *testing.T) {
+	config := ReplicaConfig{
+		Sink:       nil,
+		Consistent: nil,
+	}
+	config.MaskSensitiveData()
+	require.Nil(t, config.Sink)
+	require.Nil(t, config.Consistent)
+	config.Sink = &SinkConfig{}
+	config.Sink.KafkaConfig = &KafkaConfig{
+		SASLOAuthTokenURL:     aws.String("http://abc.com?password=bacd"),
+		SASLOAuthClientSecret: aws.String("bacd"),
+		SASLPassword:          aws.String("bacd"),
+		SASLGssAPIPassword:    aws.String("bacd"),
+		Key:                   aws.String("bacd"),
+		GlueSchemaRegistryConfig: &GlueSchemaRegistryConfig{
+			AccessKey:       "abc",
+			SecretAccessKey: "def",
+			Token:           "aaa",
+		},
+	}
+	config.Sink.SchemaRegistry = aws.String("http://abc.com?password=bacd")
+	config.Consistent = &ConsistentConfig{
+		Storage: "http://abc.com?password=bacd",
+	}
+	config.MaskSensitiveData()
+	require.Equal(t, "http://abc.com?password=xxxxx", *config.Sink.SchemaRegistry)
+	require.Equal(t, "http://abc.com?password=xxxxx", config.Consistent.Storage)
+	require.Equal(t, "http://abc.com?password=xxxxx", *config.Sink.KafkaConfig.SASLOAuthTokenURL)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLOAuthClientSecret)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.Key)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLPassword)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLGssAPIPassword)
+	require.Equal(t, "******", config.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey)
+	require.Equal(t, "******", config.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token)
+	require.Equal(t, "******", config.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey)
+}
