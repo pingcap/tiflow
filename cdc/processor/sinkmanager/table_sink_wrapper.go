@@ -33,7 +33,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var version uint64 = 0
+var tableSinkWrapperVersion uint64 = 0
 
 // tableSinkWrapper is a wrapper of TableSink, it is used in SinkManager to manage TableSink.
 // Because in the SinkManager, we write data to TableSink and RedoManager concurrently,
@@ -110,7 +110,7 @@ func newTableSinkWrapper(
 	genReplicateTs func(ctx context.Context) (model.Ts, error),
 ) *tableSinkWrapper {
 	res := &tableSinkWrapper{
-		version:          atomic.AddUint64(&version, 1),
+		version:          atomic.AddUint64(&tableSinkWrapperVersion, 1),
 		changefeed:       changefeed,
 		tableID:          tableID,
 		tableSinkCreater: tableSinkCreater,

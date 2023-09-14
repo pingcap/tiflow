@@ -32,6 +32,20 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// Category is for different DML sink categories.
+type Category = int
+
+const (
+	// CategoryTxn is for Txn sink.
+	CategoryTxn Category = 1
+	// CategoryMQ is for MQ sink.
+	CategoryMQ = 2
+	// CategoryCloudStorage is for CloudStorage sink.
+	CategoryCloudStorage = 3
+	// CategoryBlackhole is for Blackhole sink.
+	CategoryBlackhole = 4
+)
+
 // SinkFactory is the factory of sink.
 // It is responsible for creating sink and closing it.
 // Because there is no way to convert the eventsink.EventSink[*model.RowChangedEvent]
@@ -41,6 +55,7 @@ type SinkFactory struct {
 	sinkType sink.Type
 	rowSink  eventsink.EventSink[*model.RowChangedEvent]
 	txnSink  eventsink.EventSink[*model.SingleTableTxn]
+	category Category
 }
 
 // New creates a new SinkFactory by schema.
@@ -64,6 +79,7 @@ func New(ctx context.Context,
 		}
 		s.txnSink = txnSink
 		s.sinkType = sink.TxnSink
+		s.category = CategoryTxn
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)
@@ -72,6 +88,7 @@ func New(ctx context.Context,
 		}
 		s.txnSink = mqs
 		s.sinkType = sink.TxnSink
+		s.category = CategoryMQ
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		storageSink, err := cloudstorage.NewCloudStorageSink(ctx, sinkURI, cfg, errCh)
 		if err != nil {
@@ -79,10 +96,12 @@ func New(ctx context.Context,
 		}
 		s.txnSink = storageSink
 		s.sinkType = sink.TxnSink
+		s.category = CategoryCloudStorage
 	case sink.BlackHoleScheme:
 		bs := blackhole.New()
 		s.rowSink = bs
 		s.sinkType = sink.RowSink
+		s.category = CategoryBlackhole
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
@@ -145,4 +164,12 @@ func (s *SinkFactory) Close() {
 	default:
 		panic("unknown sink type")
 	}
+}
+
+// Category returns category of s.
+func (s *SinkFactory) Category() Category {
+	if s.category == 0 {
+		panic("should never happen")
+	}
+	return s.category
 }
