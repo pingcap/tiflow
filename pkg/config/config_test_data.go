@@ -145,7 +145,8 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
-    "enable-new-sink": true
+    "enable-new-sink": true,
+    "enable-kv-connect-backoff": false
   },
   "cluster-id": "default",
   "max-memory-percentage": 70

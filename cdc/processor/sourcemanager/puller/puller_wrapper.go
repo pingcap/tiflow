@@ -85,7 +85,7 @@ func (n *Wrapper) Start(
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
-	kvCfg := config.GetGlobalServerConfig().KVClient
+	serverConfig := config.GetGlobalServerConfig()
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	n.p = puller.New(
@@ -97,7 +97,7 @@ func (n *Wrapper) Start(
 		up.PDClock,
 		n.startTs,
 		n.tableSpan(),
-		kvCfg,
+		serverConfig,
 		n.changefeed,
 		n.tableID,
 		n.tableName,
