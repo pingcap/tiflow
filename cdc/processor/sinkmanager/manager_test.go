@@ -372,7 +372,7 @@ func TestSinkManagerNeedsStuckCheck(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
 	changefeedInfo := getChangefeedInfo()
-	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	manager, _ := createManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
 	defer func() {
 		cancel()
 		manager.Close()
