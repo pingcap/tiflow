@@ -50,7 +50,7 @@ var defaultAPIConfig = &ReplicaConfig{
 			NullString:           config.NULL,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
-		EncoderConcurrency:               util.AddressOf(16),
+		EncoderConcurrency:               util.AddressOf(config.DefaultEncoderGroupConcurrency),
 		Terminator:                       util.AddressOf(config.CRLF),
 		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
 		EnablePartitionSeparator:         util.AddressOf(true),

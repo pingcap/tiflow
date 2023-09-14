@@ -17,6 +17,7 @@ import (
 	"context"
 	"math"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -65,6 +66,7 @@ type eventFragment struct {
 // It will send the events to cloud storage systems.
 type DMLSink struct {
 	changefeedID model.ChangeFeedID
+	scheme       string
 	// last sequence number
 	lastSeqNum uint64
 	// encodingWorkers defines a group of workers for encoding events.
@@ -133,6 +135,7 @@ func NewDMLSink(ctx context.Context,
 	wgCtx, wgCancel := context.WithCancel(ctx)
 	s := &DMLSink{
 		changefeedID:    changefeedID,
+		scheme:          strings.ToLower(sinkURI.Scheme),
 		encodingWorkers: make([]*encodingWorker, defaultEncodingConcurrency),
 		workers:         make([]*dmlWorker, cfg.WorkerCount),
 		statistics:      metrics.NewStatistics(wgCtx, changefeedID, sink.TxnSink),
@@ -266,4 +269,9 @@ func (s *DMLSink) Close() {
 // Dead checks whether it's dead or not.
 func (s *DMLSink) Dead() <-chan struct{} {
 	return s.dead
+}
+
+// Scheme returns the sink scheme.
+func (s *DMLSink) Scheme() string {
+	return s.scheme
 }
