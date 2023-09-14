@@ -50,22 +50,23 @@ const (
 	partitionDispatchRuleKey
 )
 
-func (r *partitionDispatchRule) fromString(rule string) {
+// GetPartitionRule return the partition rule by the given rule name.
+func GetPartitionRule(rule string) partitionDispatchRule {
 	switch strings.ToLower(rule) {
 	case "default":
-		*r = partitionDispatchRuleDefault
+		return partitionDispatchRuleDefault
 	case "ts":
-		*r = partitionDispatchRuleTS
+		return partitionDispatchRuleTS
 	case "table":
-		*r = partitionDispatchRuleTable
+		return partitionDispatchRuleTable
 	case "rowid":
-		*r = partitionDispatchRuleIndexValue
+		return partitionDispatchRuleIndexValue
 		log.Warn("rowid is deprecated, please use index-value instead.")
 	case "index-value":
-		*r = partitionDispatchRuleIndexValue
+		return partitionDispatchRuleIndexValue
 	default:
-		*r = partitionDispatchRuleKey
 	}
+	return partitionDispatchRuleKey
 }
 
 // EventRouter is a router, it determines which topic and which partition
@@ -80,7 +81,7 @@ type EventRouter struct {
 }
 
 // NewEventRouter creates a new EventRouter.
-func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*EventRouter, error) {
+func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, scheme string) (*EventRouter, error) {
 	// If an event does not match any dispatching rules in the config file,
 	// it will be dispatched by the default partition dispatcher and
 	// static topic dispatcher because it matches *.* rule.
@@ -105,9 +106,9 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic, schema string) (*Ev
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig, schema)
+		d := getPartitionDispatcher(ruleConfig, scheme)
 		t, err := getTopicDispatcher(ruleConfig, defaultTopic,
-			util.GetOrZero(cfg.Sink.Protocol), schema)
+			util.GetOrZero(cfg.Sink.Protocol), scheme)
 		if err != nil {
 			return nil, err
 		}
@@ -225,12 +226,10 @@ func (s *EventRouter) matchDispatcher(
 }
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
-func getPartitionDispatcher(ruleConfig *config.DispatchRule, schema string) partition.Dispatcher {
-	var (
-		d    partition.Dispatcher
-		rule partitionDispatchRule
-	)
-	rule.fromString(ruleConfig.PartitionRule)
+func getPartitionDispatcher(ruleConfig *config.DispatchRule, scheme string) partition.Dispatcher {
+	var d partition.Dispatcher
+	rule := GetPartitionRule(ruleConfig.PartitionRule)
+
 	switch rule {
 	case partitionDispatchRuleIndexValue:
 		d = partition.NewIndexValueDispatcher()
@@ -241,7 +240,7 @@ func getPartitionDispatcher(ruleConfig *config.DispatchRule, schema string) part
 	case partitionDispatchRuleDefault:
 		d = partition.NewDefaultDispatcher()
 	case partitionDispatchRuleKey:
-		if sink.IsPulsarScheme(schema) {
+		if sink.IsPulsarScheme(scheme) {
 			d = partition.NewKeyDispatcher(ruleConfig.PartitionRule)
 		} else {
 			log.Warn("the partition dispatch rule is not default/ts/table/index-value," +
@@ -249,7 +248,6 @@ func getPartitionDispatcher(ruleConfig *config.DispatchRule, schema string) part
 			d = partition.NewDefaultDispatcher()
 		}
 	}
-
 	return d
 }
 
