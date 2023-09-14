@@ -64,7 +64,7 @@ func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID
 			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
-	
+
 	log.Info("claim-check create the external storage success",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
