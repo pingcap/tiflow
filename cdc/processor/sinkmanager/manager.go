@@ -995,29 +995,17 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	}
 	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
 
-<<<<<<< HEAD
-	isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
-	if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
-		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Int64("tableID", tableID),
-			zap.Any("checkpointTs", checkpointTs),
-			zap.Float64("stuckCheck", stuckCheck.Seconds()),
-			zap.Uint64("factoryVersion", version))
-=======
 	if m.needsStuckCheck() {
 		isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
 		if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
 			log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span),
+				zap.Int64("tableID", tableID),
 				zap.Any("checkpointTs", checkpointTs),
 				zap.Float64("stuckCheck", stuckCheck.Seconds()),
 				zap.Uint64("factoryVersion", sinkVersion))
 		}
->>>>>>> 141c9a782f (sink(cdc): only check sink stuck for MQ sinks (#9742))
 	}
 
 	var resolvedTs model.Ts

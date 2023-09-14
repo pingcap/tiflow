@@ -52,15 +52,10 @@ const (
 // to eventsink.EventSink[eventsink.TableEvent].
 // So we have to use this factory to create and store the sink.
 type SinkFactory struct {
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 	sinkType sink.Type
 	rowSink  eventsink.EventSink[*model.RowChangedEvent]
 	txnSink  eventsink.EventSink[*model.SingleTableTxn]
-=======
-	rowSink  dmlsink.EventSink[*model.RowChangedEvent]
-	txnSink  dmlsink.EventSink[*model.SingleTableTxn]
 	category Category
->>>>>>> 141c9a782f (sink(cdc): only check sink stuck for MQ sinks (#9742)):cdc/sink/dmlsink/factory/factory.go
 }
 
 // New creates a new SinkFactory by schema.
@@ -83,11 +78,8 @@ func New(ctx context.Context,
 			return nil, err
 		}
 		s.txnSink = txnSink
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 		s.sinkType = sink.TxnSink
-=======
 		s.category = CategoryTxn
->>>>>>> 141c9a782f (sink(cdc): only check sink stuck for MQ sinks (#9742)):cdc/sink/dmlsink/factory/factory.go
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		mqs, err := mq.NewKafkaDMLSink(ctx, sinkURI, cfg, errCh,
 			kafka.NewSaramaAdminClient, dmlproducer.NewKafkaDMLProducer)
@@ -95,39 +87,21 @@ func New(ctx context.Context,
 			return nil, err
 		}
 		s.txnSink = mqs
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 		s.sinkType = sink.TxnSink
-=======
 		s.category = CategoryMQ
->>>>>>> 141c9a782f (sink(cdc): only check sink stuck for MQ sinks (#9742)):cdc/sink/dmlsink/factory/factory.go
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		storageSink, err := cloudstorage.NewCloudStorageSink(ctx, sinkURI, cfg, errCh)
 		if err != nil {
 			return nil, err
 		}
 		s.txnSink = storageSink
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 		s.sinkType = sink.TxnSink
-=======
 		s.category = CategoryCloudStorage
->>>>>>> 141c9a782f (sink(cdc): only check sink stuck for MQ sinks (#9742)):cdc/sink/dmlsink/factory/factory.go
 	case sink.BlackHoleScheme:
 		bs := blackhole.New()
 		s.rowSink = bs
-<<<<<<< HEAD:cdc/sinkv2/eventsink/factory/factory.go
 		s.sinkType = sink.RowSink
-=======
 		s.category = CategoryBlackhole
-	case sink.PulsarScheme:
-		mqs, err := mq.NewPulsarDMLSink(ctx, changefeedID, sinkURI, cfg, errCh,
-			manager.NewPulsarTopicManager,
-			pulsarConfig.NewCreatorFactory, dmlproducer.NewPulsarDMLProducer)
-		if err != nil {
-			return nil, err
-		}
-		s.txnSink = mqs
-		s.category = CategoryMQ
->>>>>>> 141c9a782f (sink(cdc): only check sink stuck for MQ sinks (#9742)):cdc/sink/dmlsink/factory/factory.go
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
