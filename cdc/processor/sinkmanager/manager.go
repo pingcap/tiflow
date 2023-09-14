@@ -304,6 +304,12 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}
 }
 
+func (m *SinkManager) needsStuckCheck() bool {
+	m.sinkFactory.Lock()
+	defer m.sinkFactory.Unlock()
+	return m.sinkFactory.f != nil && m.sinkFactory.f.Category() == factory.CategoryMQ
+}
+
 func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 	m.sinkFactory.Lock()
 	defer m.sinkFactory.Unlock()
@@ -980,15 +986,17 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	}
 	stuckCheck := time.Duration(advanceTimeoutInSec) * time.Second
 
-	isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
-	if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
-		log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span),
-			zap.Any("checkpointTs", checkpointTs),
-			zap.Float64("stuckCheck", stuckCheck.Seconds()),
-			zap.Uint64("factoryVersion", version))
+	if m.needsStuckCheck() {
+		isStuck, sinkVersion := tableSink.sinkMaybeStuck(stuckCheck)
+		if isStuck && m.putSinkFactoryError(errors.New("table sink stuck"), sinkVersion) {
+			log.Warn("Table checkpoint is stuck too long, will restart the sink backend",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Stringer("span", &span),
+				zap.Any("checkpointTs", checkpointTs),
+				zap.Float64("stuckCheck", stuckCheck.Seconds()),
+				zap.Uint64("factoryVersion", sinkVersion))
+		}
 	}
 
 	var resolvedTs model.Ts
