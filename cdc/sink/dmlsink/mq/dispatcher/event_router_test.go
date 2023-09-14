@@ -21,121 +21,113 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/topic"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
 )
+
+func newReplicaConfig4DispatcherTest() *config.ReplicaConfig {
+	return &config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				// rule-0
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				// rule-1
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				// rule-2
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				// rule-3
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				// rule-4
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				// rule-5
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
+			},
+		},
+	}
+}
 
 func TestEventRouter(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(config.GetDefaultReplicaConfig(), "test", "kafka")
-	require.Nil(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
+	require.NoError(t, err)
 	require.Equal(t, "test", d.GetDefaultTopic())
 	topicDispatcher, partitionDispatcher := d.matchDispatcher("test", "test")
 	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
 
-	d, err = NewEventRouter(&config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{
-					Matcher:       []string{"test_default1.*"},
-					PartitionRule: "default",
-				},
-				{
-					Matcher:       []string{"test_default2.*"},
-					PartitionRule: "unknown-dispatcher",
-				},
-				{
-					Matcher:       []string{"test_table.*"},
-					PartitionRule: "table",
-					TopicRule:     "hello_{schema}_world",
-				},
-				{
-					Matcher:       []string{"test_index_value.*"},
-					PartitionRule: "index-value",
-					TopicRule:     "{schema}_world",
-				},
-				{
-					Matcher:       []string{"test.*"},
-					PartitionRule: "rowid",
-					TopicRule:     "hello_{schema}",
-				},
-				{
-					Matcher:       []string{"*.*", "!*.test"},
-					PartitionRule: "ts",
-					TopicRule:     "{schema}_{table}",
-				},
-			},
-		},
-	}, "", "kafka")
-	require.Nil(t, err)
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test", "table1")
-	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
+	actual := topicDispatcher.Substitute("test", "test")
+	require.Equal(t, d.defaultTopic, actual)
 
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("sbs", "table2")
-	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.TsDispatcher{}, partitionDispatcher)
+	replicaConfig = newReplicaConfig4DispatcherTest()
+	d, err = NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "", sink.KafkaScheme)
+	require.NoError(t, err)
 
+	// no matched, use the default
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("sbs", "test")
 	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
 
+	// match rule-0
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_default1", "test")
 	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
 
+	// match rule-1
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_default2", "test")
 	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
 
+	// match rule-2
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_table", "test")
 	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.TableDispatcher{}, partitionDispatcher)
 
+	// match rule-4
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_index_value", "test")
 	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
+
+	// match rule-4
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("test", "table1")
+	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
+
+	// match rule-5
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("sbs", "table2")
+	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.TsDispatcher{}, partitionDispatcher)
 }
 
 func TestGetActiveTopics(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(&config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{
-					Matcher:       []string{"test_default1.*"},
-					PartitionRule: "default",
-				},
-				{
-					Matcher:       []string{"test_default2.*"},
-					PartitionRule: "unknown-dispatcher",
-				},
-				{
-					Matcher:       []string{"test_table.*"},
-					PartitionRule: "table",
-					TopicRule:     "hello_{schema}_world",
-				},
-				{
-					Matcher:       []string{"test_index_value.*"},
-					PartitionRule: "index-value",
-					TopicRule:     "{schema}_world",
-				},
-				{
-					Matcher:       []string{"test.*"},
-					PartitionRule: "rowid",
-					TopicRule:     "hello_{schema}",
-				},
-				{
-					Matcher:       []string{"*.*", "!*.test"},
-					PartitionRule: "ts",
-					TopicRule:     "{schema}_{table}",
-				},
-			},
-		},
-	}, "test", "kafka")
-	require.Nil(t, err)
+	replicaConfig := newReplicaConfig4DispatcherTest()
+	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
+	require.NoError(t, err)
 	names := []model.TableName{
 		{Schema: "test_default1", Table: "table"},
 		{Schema: "test_default2", Table: "table"},
@@ -151,58 +143,30 @@ func TestGetActiveTopics(t *testing.T) {
 func TestGetTopicForRowChange(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(&config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{
-					Matcher:       []string{"test_default1.*"},
-					PartitionRule: "default",
-				},
-				{
-					Matcher:       []string{"test_default2.*"},
-					PartitionRule: "unknown-dispatcher",
-				},
-				{
-					Matcher:       []string{"test_table.*"},
-					PartitionRule: "table",
-					TopicRule:     "hello_{schema}_world",
-				},
-				{
-					Matcher:       []string{"test_index_value.*"},
-					PartitionRule: "index-value",
-					TopicRule:     "{schema}_world",
-				},
-				{
-					Matcher:       []string{"test.*"},
-					PartitionRule: "rowid",
-					TopicRule:     "hello_{schema}",
-				},
-				{
-					Matcher:       []string{"*.*", "!*.test"},
-					PartitionRule: "ts",
-					TopicRule:     "{schema}_{table}",
-				},
-			},
-		},
-	}, "test", "kafka")
-	require.Nil(t, err)
+	replicaConfig := newReplicaConfig4DispatcherTest()
+	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", "kafka")
+	require.NoError(t, err)
 
 	topicName := d.GetTopicForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_default1", Table: "table"},
 	})
 	require.Equal(t, "test", topicName)
+
 	topicName = d.GetTopicForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_default2", Table: "table"},
 	})
 	require.Equal(t, "test", topicName)
+
 	topicName = d.GetTopicForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_table", Table: "table"},
 	})
 	require.Equal(t, "hello_test_table_world", topicName)
+
 	topicName = d.GetTopicForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_index_value", Table: "table"},
 	})
 	require.Equal(t, "test_index_value_world", topicName)
+
 	topicName = d.GetTopicForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "a", Table: "table"},
 	})
@@ -212,41 +176,9 @@ func TestGetTopicForRowChange(t *testing.T) {
 func TestGetPartitionForRowChange(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(&config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{
-					Matcher:       []string{"test_default1.*"},
-					PartitionRule: "default",
-				},
-				{
-					Matcher:       []string{"test_default2.*"},
-					PartitionRule: "unknown-dispatcher",
-				},
-				{
-					Matcher:       []string{"test_table.*"},
-					PartitionRule: "table",
-					TopicRule:     "hello_{schema}_world",
-				},
-				{
-					Matcher:       []string{"test_index_value.*"},
-					PartitionRule: "index-value",
-					TopicRule:     "{schema}_world",
-				},
-				{
-					Matcher:       []string{"test.*"},
-					PartitionRule: "rowid",
-					TopicRule:     "hello_{schema}",
-				},
-				{
-					Matcher:       []string{"*.*", "!*.test"},
-					PartitionRule: "ts",
-					TopicRule:     "{schema}_{table}",
-				},
-			},
-		},
-	}, "test", "kafka")
-	require.Nil(t, err)
+	replicaConfig := newReplicaConfig4DispatcherTest()
+	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
+	require.NoError(t, err)
 
 	p, _ := d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_default1", Table: "table"},
@@ -260,6 +192,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		IndexColumns: [][]int{{0}},
 	}, 16)
 	require.Equal(t, int32(14), p)
+
 	p, _ = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_default2", Table: "table"},
 		Columns: []*model.Column{
@@ -278,6 +211,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		CommitTs: 1,
 	}, 16)
 	require.Equal(t, int32(15), p)
+
 	p, _ = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_index_value", Table: "table"},
 		Columns: []*model.Column{
@@ -293,6 +227,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		},
 	}, 10)
 	require.Equal(t, int32(1), p)
+
 	p, _ = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table:    &model.TableName{Schema: "a", Table: "table"},
 		CommitTs: 1,
@@ -303,7 +238,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(&config.ReplicaConfig{
+	replicaConfig := &config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
 				{
@@ -313,8 +248,7 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 				},
 			},
 		},
-	}, "test", "kafka")
-	require.Nil(t, err)
+	}
 
 	tests := []struct {
 		protocol     config.Protocol
@@ -351,15 +285,16 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		rule := d.GetDLLDispatchRuleByProtocol(test.protocol)
-		require.Equal(t, test.expectedRule, rule)
+		router, err := NewEventRouter(replicaConfig, test.protocol, "test", sink.KafkaScheme)
+		require.NoError(t, err)
+		require.Equal(t, test.expectedRule, router.GetDLLDispatchRule())
 	}
 }
 
 func TestGetTopicForDDL(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(&config.ReplicaConfig{
+	replicaConfig := &config.ReplicaConfig{
 		Sink: &config.SinkConfig{
 			DispatchRules: []*config.DispatchRule{
 				{
@@ -374,8 +309,10 @@ func TestGetTopicForDDL(t *testing.T) {
 				},
 			},
 		},
-	}, "test", "kafka")
-	require.Nil(t, err)
+	}
+
+	d, err := NewEventRouter(replicaConfig, config.ProtocolDefault, "test", "kafka")
+	require.NoError(t, err)
 
 	tests := []struct {
 		ddl           *model.DDLEvent

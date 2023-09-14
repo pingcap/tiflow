@@ -38,21 +38,13 @@ const (
 	PartitionZero = 0
 )
 
-type partitionDispatchRule int
-
-const (
-	partitionDispatchRuleDefault partitionDispatchRule = iota
-	partitionDispatchRuleTS
-	partitionDispatchRuleTable
-	partitionDispatchRuleIndexValue
-	partitionDispatchRuleKey
-)
-
 // EventRouter is a router, it determines which topic and which partition
 // an event should be dispatched to.
 type EventRouter struct {
-	defaultTopic string
-	rules        []struct {
+	defaultTopic    string
+	ddlDispatchRule DDLDispatchRule
+
+	rules []struct {
 		partitionDispatcher partition.Dispatcher
 		topicDispatcher     topic.Dispatcher
 		filter.Filter
@@ -98,10 +90,21 @@ func NewEventRouter(
 			filter.Filter
 		}{partitionDispatcher: d, topicDispatcher: t, Filter: f})
 	}
+
 	return &EventRouter{
-		defaultTopic: defaultTopic,
-		rules:        rules,
+		defaultTopic:    defaultTopic,
+		ddlDispatchRule: getDDLDispatchRule(protocol),
+		rules:           rules,
 	}, nil
+}
+
+func getDDLDispatchRule(protocol config.Protocol) DDLDispatchRule {
+	switch protocol {
+	case config.ProtocolCanal, config.ProtocolCanalJSON:
+		return PartitionZero
+	default:
+	}
+	return PartitionAll
 }
 
 // GetTopicForRowChange returns the target topic for row changes.
@@ -145,15 +148,9 @@ func (s *EventRouter) GetPartitionForRowChange(
 	)
 }
 
-// GetDLLDispatchRuleByProtocol returns the DDL
-// distribution rule according to the protocol.
-func (s *EventRouter) GetDLLDispatchRuleByProtocol(
-	protocol config.Protocol,
-) DDLDispatchRule {
-	if protocol == config.ProtocolCanal || protocol == config.ProtocolCanalJSON {
-		return PartitionZero
-	}
-	return PartitionAll
+// GetDLLDispatchRule returns the DDL distribution rules.
+func (s *EventRouter) GetDLLDispatchRule() DDLDispatchRule {
+	return s.ddlDispatchRule
 }
 
 // GetActiveTopics returns a list of the corresponding topics
