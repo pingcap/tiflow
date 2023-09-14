@@ -100,7 +100,7 @@ func TestSQLStorageInsertRecord(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO leader_election (id, version, record) VALUES (?, ?, ?)")).
 		WithArgs(1, int64(1), recordBytes).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	err = s.Update(context.Background(), record)
+	err = s.Update(context.Background(), record, true)
 	require.NoError(t, err)
 }
 
@@ -124,12 +124,12 @@ func TestSQLStorageUpdateRecord(t *testing.T) {
 
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE leader_election SET version = ?, record = ? WHERE id = ? AND version = ?")).
 		WithArgs(int64(2), recordBytes, 1, int64(1)).WillReturnResult(sqlmock.NewResult(0, 0))
-	err = s.Update(context.Background(), record)
+	err = s.Update(context.Background(), record, true)
 	require.True(t, errors.Is(err, errors.ErrElectionRecordConflict))
 
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE leader_election SET version = ?, record = ? WHERE id = ? AND version = ?")).
 		WithArgs(int64(2), recordBytes, 1, int64(1)).WillReturnResult(sqlmock.NewResult(0, 1))
-	err = s.Update(context.Background(), record)
+	err = s.Update(context.Background(), record, true)
 	require.NoError(t, err)
 }
 
@@ -153,7 +153,7 @@ func TestInMemorySQLStorage(t *testing.T) {
 		},
 		Version: 0, // 0 means record not created before.
 	}
-	err = s.Update(ctx, record)
+	err = s.Update(ctx, record, true)
 	require.NoError(t, err)
 
 	recordRead, err := s.Get(ctx)

@@ -47,8 +47,8 @@ func TestElectorBasic(t *testing.T) {
 			return record.Clone(), nil
 		})
 
-	s.EXPECT().Update(gomock.Any(), gomock.Any()).AnyTimes().
-		DoAndReturn(func(ctx context.Context, r *election.Record) error {
+	s.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().
+		DoAndReturn(func(ctx context.Context, r *election.Record, _ bool) error {
 			recordLock.Lock()
 			defer recordLock.Unlock()
 
@@ -183,7 +183,7 @@ func TestElectorRenewFailure(t *testing.T) {
 		return record.Clone(), nil
 	}
 
-	updateRecord := func(_ context.Context, r *election.Record) error {
+	updateRecord := func(_ context.Context, r *election.Record, _ bool) error {
 		recordLock.Lock()
 		defer recordLock.Unlock()
 
@@ -207,12 +207,12 @@ func TestElectorRenewFailure(t *testing.T) {
 			}
 			return getRecord(ctx)
 		})
-	s1.EXPECT().Update(gomock.Any(), gomock.Any()).AnyTimes().
-		DoAndReturn(func(ctx context.Context, r *election.Record) error {
+	s1.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().
+		DoAndReturn(func(ctx context.Context, r *election.Record, isLeaderChanged bool) error {
 			if err := s1Err.Load(); err != nil {
 				return err
 			}
-			if err := updateRecord(ctx, r); err != nil {
+			if err := updateRecord(ctx, r, isLeaderChanged); err != nil {
 				return err
 			}
 			s1LastRenew = time.Now()
@@ -221,7 +221,7 @@ func TestElectorRenewFailure(t *testing.T) {
 
 	s2 := mock.NewMockStorage(gomock.NewController(t))
 	s2.EXPECT().Get(gomock.Any()).AnyTimes().DoAndReturn(getRecord)
-	s2.EXPECT().Update(gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(updateRecord)
+	s2.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().DoAndReturn(updateRecord)
 
 	const (
 		leaseDuration = time.Second * 1
@@ -321,8 +321,8 @@ func TestLeaderCallbackUnexpectedExit(t *testing.T) {
 			return record.Clone(), nil
 		})
 
-	s.EXPECT().Update(gomock.Any(), gomock.Any()).AnyTimes().
-		DoAndReturn(func(ctx context.Context, r *election.Record) error {
+	s.EXPECT().Update(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes().
+		DoAndReturn(func(ctx context.Context, r *election.Record, _ bool) error {
 			recordLock.Lock()
 			defer recordLock.Unlock()
 

@@ -141,12 +141,14 @@ func (e *electorImpl) renew(ctx context.Context) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, e.config.RenewDeadline)
 	defer cancel()
 
-	return e.updateRecord(ctx, func(record *Record) error {
+	return e.updateRecord(ctx, func(record *Record) (error, bool) {
 		var activeMembers []*Member
+		var isLeaderChanged bool
 		for _, m := range record.Members {
 			if e.isLeaseExpired(m.ID) {
 				if m.ID == record.LeaderID {
 					record.LeaderID = ""
+					isLeaderChanged = true
 					log.Info(
 						"leader lease expired",
 						zap.String("leaderID", m.ID),
@@ -183,11 +185,13 @@ func (e *electorImpl) renew(ctx context.Context) (err error) {
 		if time.Now().Before(e.resignUntil) {
 			if record.LeaderID == e.config.ID {
 				record.LeaderID = ""
+				isLeaderChanged = true
 				log.Info("try to resign leadership")
 			}
 		} else if record.LeaderID == "" {
 			// Elect a new leader if no leader exists.
 			record.LeaderID = e.config.ID
+			isLeaderChanged = true
 			log.Info(
 				"try to elect self as leader",
 				zap.String("id", e.config.ID),
@@ -195,7 +199,7 @@ func (e *electorImpl) renew(ctx context.Context) (err error) {
 				zap.String("address", e.config.Address),
 			)
 		}
-		return nil
+		return nil, isLeaderChanged
 	})
 }
 
@@ -241,9 +245,11 @@ func (e *electorImpl) release(ctx context.Context, removeSelf bool) error {
 	ctx, cancel := context.WithTimeout(ctx, defaultReleaseTimeout)
 	defer cancel()
 
-	return e.updateRecord(ctx, func(record *Record) error {
+	return e.updateRecord(ctx, func(record *Record) (error, bool) {
+		var isLeaderChanged bool
 		if record.LeaderID == e.config.ID {
 			record.LeaderID = ""
+			isLeaderChanged = true
 		}
 		if removeSelf {
 			for i, m := range record.Members {
@@ -253,11 +259,14 @@ func (e *electorImpl) release(ctx context.Context, removeSelf bool) error {
 				}
 			}
 		}
-		return nil
+		return nil, isLeaderChanged
 	})
 }
 
-func (e *electorImpl) updateRecord(ctx context.Context, f func(*Record) error) error {
+func (e *electorImpl) updateRecord(
+	ctx context.Context,
+	f func(*Record) (err error, isLeaderChanged bool),
+) error {
 	// Divide 2 is for more retries.
 	backoffBaseDelayInMs := int64(e.config.RenewInterval/time.Millisecond) / 2
 	// Make sure the retry delay is less than the deadline, otherwise the retry has no chance to execute.
@@ -277,11 +286,12 @@ func (e *electorImpl) updateRecord(ctx context.Context, f func(*Record) error) e
 		}
 		e.setObservedRecord(record)
 
-		if err := f(record); err != nil {
+		var isLeaderChanged bool
+		if err, isLeaderChanged = f(record); err != nil {
 			return errors.Trace(err)
 		}
 
-		if err := s.Update(ctx, record); err != nil {
+		if err := s.Update(ctx, record, isLeaderChanged); err != nil {
 			return errors.Trace(err)
 		}
 		e.setObservedRecord(record)
