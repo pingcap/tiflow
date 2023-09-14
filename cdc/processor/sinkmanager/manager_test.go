@@ -365,3 +365,18 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 		log.Panic("must get an error instead of a timeout")
 	}
 }
+
+func TestSinkManagerNeedsStuckCheck(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 16)
+	changefeedInfo := getChangefeedInfo()
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"), changefeedInfo, errCh)
+	defer func() {
+		cancel()
+		manager.Close()
+	}()
+
+	require.False(t, manager.needsStuckCheck())
+}
