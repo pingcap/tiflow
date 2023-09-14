@@ -39,13 +39,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// Category is for different DML sink categories.
 type Category = int
 
 const (
-	CategoryTxn          Category = 1
-	CategoryMQ                    = 2
-	CategoryCloudStorage          = 3
-	CategoryBlackhole             = 4
+	// CategoryTxn is for Txn sink.
+	CategoryTxn Category = 1
+	// CategoryMQ is for MQ sink.
+	CategoryMQ = 2
+	// CategoryCloudStorage is for CloudStorage sink.
+	CategoryCloudStorage = 3
+	// CategoryBlackhole is for Blackhole sink.
+	CategoryBlackhole = 4
 )
 
 // SinkFactory is the factory of sink.
@@ -172,6 +177,7 @@ func (s *SinkFactory) Close() {
 	}
 }
 
+// Category returns category of s.
 func (s *SinkFactory) Category() Category {
 	if s.category == 0 {
 		panic("should never happen")
