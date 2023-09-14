@@ -989,7 +989,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 			zap.Stringer("span", &span),
 			zap.Any("checkpointTs", checkpointTs),
 			zap.Float64("stuckCheck", stuckCheck.Seconds()),
-			zap.Uint64("factoryVersion", version))
+			zap.Uint64("factoryVersion", sinkVersion))
 	}
 
 	var resolvedTs model.Ts
