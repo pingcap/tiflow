@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"math"
@@ -48,6 +49,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -71,14 +73,17 @@ var (
 	protocol            config.Protocol
 	enableTiDBExtension bool
 
-	// eventRouterReplicaConfig only used to initialize the consumer's eventRouter
+	// replicaConfig only used to initialize the consumer's eventRouter
 	// which then can be used to check RowChangedEvent dispatched correctness
-	eventRouterReplicaConfig *config.ReplicaConfig
+	replicaConfig *config.ReplicaConfig
 
 	logPath       string
 	logLevel      string
 	timezone      string
 	ca, cert, key string
+
+	// upstreamTiDBDSN is the dsn of the upstream TiDB cluster
+	upstreamTiDBDSN string
 )
 
 func init() {
@@ -90,6 +95,7 @@ func init() {
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
 	flag.StringVar(&downstreamURIStr, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 	flag.StringVar(&logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
 	flag.StringVar(&logLevel, "log-level", "info", "log file path")
@@ -195,15 +201,15 @@ func init() {
 	}
 
 	if configFile != "" {
-		eventRouterReplicaConfig = config.GetDefaultReplicaConfig()
-		eventRouterReplicaConfig.Sink.Protocol = protocol.String()
-		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", eventRouterReplicaConfig)
+		replicaConfig = config.GetDefaultReplicaConfig()
+		replicaConfig.Sink.Protocol = protocol.String()
+		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
 		if err != nil {
 			log.Panic("invalid config file for kafka consumer",
 				zap.Error(err),
 				zap.String("config", configFile))
 		}
-		if _, err := filter.VerifyTableRules(eventRouterReplicaConfig.Filter); err != nil {
+		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
 			log.Panic("verify rule failed", zap.Error(err))
 		}
 	}
@@ -380,10 +386,13 @@ type Consumer struct {
 	// initialize to 0 by default
 	globalResolvedTs uint64
 
-	protocol            config.Protocol
-	enableTiDBExtension bool
+	protocol config.Protocol
 
 	eventRouter *dispatcher.EventRouter
+
+	codecConfig *common.Config
+
+	upstreamTiDB *sql.DB
 }
 
 // NewConsumer creates a new cdc kafka consumer
@@ -400,7 +409,20 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		tableIDs: make(map[string]int64),
 	}
 	c.protocol = protocol
-	c.enableTiDBExtension = enableTiDBExtension
+
+	c.codecConfig = common.NewConfig(c.protocol)
+	c.codecConfig.EnableTiDBExtension = enableTiDBExtension
+	if replicaConfig != nil && replicaConfig.Sink != nil && replicaConfig.Sink.KafkaConfig != nil {
+		c.codecConfig.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
+	}
+
+	if c.codecConfig.LargeMessageHandle.HandleKeyOnly() {
+		db, err := openDB(ctx, upstreamTiDBDSN)
+		if err != nil {
+			return nil, err
+		}
+		c.upstreamTiDB = db
+	}
 
 	// this means user has input config file to enable dispatcher check
 	// some protocol does not provide enough information to check the
@@ -410,8 +432,8 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 	// when try to enable dispatcher check for any protocol and dispatch
 	// rule, make sure decoded `RowChangedEvent` contains information
 	// identical to the CDC side.
-	if eventRouterReplicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(eventRouterReplicaConfig, kafkaTopic)
+	if replicaConfig != nil {
+		eventRouter, err := dispatcher.NewEventRouter(replicaConfig, kafkaTopic)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -514,24 +536,37 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		panic("sink should initialized")
 	}
 
+	ctx := context.Background()
+	var (
+		decoder codec.RowEventDecoder
+		err     error
+	)
+
+	switch c.protocol {
+	case config.ProtocolOpen, config.ProtocolDefault:
+		decoder, err = open.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
+	case config.ProtocolCanalJSON:
+		decoder, err = canal.NewBatchDecoder(ctx, c.codecConfig, c.upstreamTiDB)
+		if err != nil {
+			return err
+		}
+	default:
+		log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Info("start consume claim",
+		zap.String("topic", claim.Topic()), zap.Int32("partition", partition),
+		zap.Int64("initialOffset", claim.InitialOffset()), zap.Int64("highWaterMarkOffset", claim.HighWaterMarkOffset()))
+
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		var (
-			decoder codec.RowEventDecoder
-			err     error
-		)
-		switch c.protocol {
-		case config.ProtocolOpen, config.ProtocolDefault:
-			decoder, err = open.NewBatchDecoder(message.Key, message.Value)
-		case config.ProtocolCanalJSON:
-			decoder = canal.NewBatchDecoder(message.Value, c.enableTiDBExtension, "")
-		default:
-			log.Panic("Protocol not supported", zap.Any("Protocol", c.protocol))
-		}
-		if err != nil {
+		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
+			log.Error("add key value to the decoder failed", zap.Error(err))
 			return errors.Trace(err)
 		}
-
 		counter := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
@@ -840,4 +875,25 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 	g.currentTableID++
 	g.tableIDs[key] = g.currentTableID
 	return g.currentTableID
+}
+
+func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Error("open db failed", zap.String("dsn", dsn), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(10 * time.Minute)
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err = db.PingContext(ctx); err != nil {
+		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	log.Info("open db success", zap.String("dsn", dsn))
+	return db, nil
 }

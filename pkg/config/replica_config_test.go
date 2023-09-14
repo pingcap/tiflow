@@ -100,6 +100,9 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			AvroDecimalHandlingMode:        aws.String("string"),
 			AvroBigintUnsignedHandlingMode: aws.String("string"),
 		},
+		LargeMessageHandle: &LargeMessageHandleConfig{
+			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
+		},
 	}
 	conf.Sink.MySQLConfig = &MySQLConfig{
 		WorkerCount:                  aws.Int(8),
@@ -126,7 +129,8 @@ func TestReplicaConfigMarshal(t *testing.T) {
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)
-	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	b = mustIndentJSON(t, b)
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, b)
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)
@@ -412,4 +416,21 @@ func TestMaskSensitiveData(t *testing.T) {
 	require.Equal(t, "******", *config.Sink.KafkaConfig.Key)
 	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLPassword)
 	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLGssAPIPassword)
+}
+
+func TestValidateAndAdjustLargeMessageHandle(t *testing.T) {
+	cfg := GetDefaultReplicaConfig()
+	cfg.Sink.KafkaConfig = &KafkaConfig{
+		LargeMessageHandle: NewDefaultLargeMessageHandleConfig(),
+	}
+	cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = ""
+
+	rawURL := "kafka://127.0.0.1:9092/canal-json-test?protocol=canal-json&enable-tidb-extension=true"
+	sinkURL, err := url.Parse(rawURL)
+	require.NoError(t, err)
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
+
+	require.Equal(t, LargeMessageHandleOptionNone, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption)
 }

@@ -1434,6 +1434,9 @@ var doc = `{
                 "key": {
                     "type": "string"
                 },
+                "large-message-handle": {
+                    "$ref": "#/definitions/config.LargeMessageHandleConfig"
+                },
                 "max-message-bytes": {
                     "type": "integer"
                 },
@@ -1504,6 +1507,14 @@ var doc = `{
                     "type": "string"
                 },
                 "write-timeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "config.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "large-message-handle-option": {
                     "type": "string"
                 }
             }
@@ -2319,6 +2330,9 @@ var doc = `{
                 "key": {
                     "type": "string"
                 },
+                "large_message_handle": {
+                    "$ref": "#/definitions/v2.LargeMessageHandleConfig"
+                },
                 "max_message_bytes": {
                     "type": "integer"
                 },
@@ -2389,6 +2403,14 @@ var doc = `{
                     "type": "string"
                 },
                 "write_timeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "large_message_handle_option": {
                     "type": "string"
                 }
             }

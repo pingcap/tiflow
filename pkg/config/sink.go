@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -324,6 +325,8 @@ type KafkaConfig struct {
 	Key                          *string      `toml:"key" json:"key,omitempty"`
 	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+
+	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
@@ -366,6 +369,24 @@ type CloudStorageConfig struct {
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
+	}
+
+	protocol, _ := ParseSinkProtocolFromString(s.Protocol)
+	if s.KafkaConfig != nil && s.KafkaConfig.LargeMessageHandle != nil {
+		var (
+			enableTiDBExtension bool
+			err                 error
+		)
+		if s := sinkURI.Query().Get("enable-tidb-extension"); s != "" {
+			enableTiDBExtension, err = strconv.ParseBool(s)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		err = s.KafkaConfig.LargeMessageHandle.AdjustAndValidate(protocol, enableTiDBExtension)
+		if err != nil {
+			return err
+		}
 	}
 
 	for _, rule := range s.DispatchRules {
