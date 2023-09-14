@@ -347,14 +347,17 @@ type KafkaConfig struct {
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
 func (k *KafkaConfig) MaskSensitiveData() {
-	k.SASLPassword = aws.String("********")
-	k.SASLGssAPIPassword = aws.String("********")
-	k.SASLOAuthClientSecret = aws.String("********")
-	k.Key = aws.String("********")
+	k.SASLPassword = aws.String("******")
+	k.SASLGssAPIPassword = aws.String("******")
+	k.SASLOAuthClientSecret = aws.String("******")
+	k.Key = aws.String("******")
 	if k.GlueSchemaRegistryConfig != nil {
-		k.GlueSchemaRegistryConfig.AccessKey = "********"
-		k.GlueSchemaRegistryConfig.Token = "********"
-		k.GlueSchemaRegistryConfig.SecretAccessKey = "********"
+		k.GlueSchemaRegistryConfig.AccessKey = "******"
+		k.GlueSchemaRegistryConfig.Token = "******"
+		k.GlueSchemaRegistryConfig.SecretAccessKey = "******"
+	}
+	if k.SASLOAuthTokenURL != nil {
+		k.SASLOAuthTokenURL = aws.String(util.MaskSensitiveDataInURI(*k.SASLOAuthTokenURL))
 	}
 }
 
