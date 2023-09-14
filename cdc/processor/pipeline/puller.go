@@ -68,7 +68,7 @@ func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 	ctxC, cancel := context.WithCancel(ctx)
 	ctxC = contextutil.PutCaptureAddrInCtx(ctxC, ctx.GlobalVars().CaptureInfo.AdvertiseAddr)
 	ctxC = contextutil.PutRoleInCtx(ctxC, util.RoleProcessor)
-	kvCfg := config.GetGlobalServerConfig().KVClient
+	serverCfg := config.GetGlobalServerConfig()
 	// NOTICE: always pull the old value internally
 	// See also: https://github.com/pingcap/tiflow/issues/2301.
 	n.plr = puller.New(
@@ -80,7 +80,7 @@ func (n *pullerNode) startWithSorterNode(ctx pipeline.NodeContext,
 		up.PDClock,
 		n.startTs,
 		n.tableSpan(),
-		kvCfg,
+		serverCfg,
 		n.changefeed,
 		n.tableID,
 		n.tableName,
