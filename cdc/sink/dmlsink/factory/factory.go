@@ -39,14 +39,24 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+type Category = int
+
+const (
+	CategoryTxn          Category = 1
+	CategoryMQ                    = 2
+	CategoryCloudStorage          = 3
+	CategoryBlackhole             = 4
+)
+
 // SinkFactory is the factory of sink.
 // It is responsible for creating sink and closing it.
 // Because there is no way to convert the eventsink.EventSink[*model.RowChangedEvent]
 // to eventsink.EventSink[eventsink.TableEvent].
 // So we have to use this factory to create and store the sink.
 type SinkFactory struct {
-	rowSink dmlsink.EventSink[*model.RowChangedEvent]
-	txnSink dmlsink.EventSink[*model.SingleTableTxn]
+	rowSink  dmlsink.EventSink[*model.RowChangedEvent]
+	txnSink  dmlsink.EventSink[*model.SingleTableTxn]
+	category Category
 }
 
 // New creates a new SinkFactory by schema.
@@ -72,6 +82,7 @@ func New(
 			return nil, err
 		}
 		s.txnSink = txnSink
+		s.category = CategoryTxn
 	case sink.KafkaScheme, sink.KafkaSSLScheme:
 		factoryCreator := kafka.NewSaramaFactory
 		if util.GetOrZero(cfg.Sink.EnableKafkaSinkV2) {
@@ -83,15 +94,18 @@ func New(
 			return nil, err
 		}
 		s.txnSink = mqs
+		s.category = CategoryMQ
 	case sink.S3Scheme, sink.FileScheme, sink.GCSScheme, sink.GSScheme, sink.AzblobScheme, sink.AzureScheme, sink.CloudStorageNoopScheme:
 		storageSink, err := cloudstorage.NewDMLSink(ctx, changefeedID, sinkURI, cfg, errCh)
 		if err != nil {
 			return nil, err
 		}
 		s.txnSink = storageSink
+		s.category = CategoryCloudStorage
 	case sink.BlackHoleScheme:
 		bs := blackhole.NewDMLSink()
 		s.rowSink = bs
+		s.category = CategoryBlackhole
 	case sink.PulsarScheme:
 		mqs, err := mq.NewPulsarDMLSink(ctx, changefeedID, sinkURI, cfg, errCh,
 			manager.NewPulsarTopicManager,
@@ -100,6 +114,7 @@ func New(
 			return nil, err
 		}
 		s.txnSink = mqs
+		s.category = CategoryMQ
 	default:
 		return nil,
 			cerror.ErrSinkURIInvalid.GenWithStack("the sink scheme (%s) is not supported", schema)
@@ -155,4 +170,11 @@ func (s *SinkFactory) Close() {
 	if s.txnSink != nil {
 		s.txnSink.Close()
 	}
+}
+
+func (s *SinkFactory) Category() Category {
+	if s.category == 0 {
+		panic("should never happen")
+	}
+	return s.category
 }
