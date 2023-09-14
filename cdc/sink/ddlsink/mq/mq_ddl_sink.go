@@ -94,7 +94,7 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	}
 
 	topic := k.eventRouter.GetTopicForDDL(ddl)
-	partitionRule := k.eventRouter.GetDLLDispatchRuleByProtocol(k.protocol)
+	partitionRule := k.eventRouter.GetDLLDispatchRule(k.protocol)
 	log.Debug("Emit ddl event",
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("query", ddl.Query),
