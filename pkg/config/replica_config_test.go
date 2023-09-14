@@ -383,3 +383,33 @@ func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, config.EnableOldValue)
 }
+
+func TestMaskSensitiveData(t *testing.T) {
+	config := ReplicaConfig{
+		Sink:       nil,
+		Consistent: nil,
+	}
+	config.MaskSensitiveData()
+	require.Nil(t, config.Sink)
+	require.Nil(t, config.Consistent)
+	config.Sink = &SinkConfig{}
+	config.Sink.KafkaConfig = &KafkaConfig{
+		SASLOAuthTokenURL:     aws.String("http://abc.com?password=bacd"),
+		SASLOAuthClientSecret: aws.String("bacd"),
+		SASLPassword:          aws.String("bacd"),
+		SASLGssAPIPassword:    aws.String("bacd"),
+		Key:                   aws.String("bacd"),
+	}
+	config.Sink.SchemaRegistry = "http://abc.com?password=bacd"
+	config.Consistent = &ConsistentConfig{
+		Storage: "http://abc.com?password=bacd",
+	}
+	config.MaskSensitiveData()
+	require.Equal(t, "http://abc.com?password=xxxxx", config.Sink.SchemaRegistry)
+	require.Equal(t, "http://abc.com?password=xxxxx", config.Consistent.Storage)
+	require.Equal(t, "http://abc.com?password=xxxxx", *config.Sink.KafkaConfig.SASLOAuthTokenURL)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLOAuthClientSecret)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.Key)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLPassword)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLGssAPIPassword)
+}

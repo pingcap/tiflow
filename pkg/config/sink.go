@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -147,6 +148,16 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+}
+
+// MaskSensitiveData masks sensitive data in SinkConfig
+func (s *SinkConfig) MaskSensitiveData() {
+	if s.SchemaRegistry != "" {
+		s.SchemaRegistry = util.MaskSensitiveDataInURI(s.SchemaRegistry)
+	}
+	if s.KafkaConfig != nil {
+		s.KafkaConfig.MaskSensitiveData()
+	}
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -313,6 +324,17 @@ type KafkaConfig struct {
 	Key                          *string      `toml:"key" json:"key,omitempty"`
 	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+}
+
+// MaskSensitiveData masks sensitive data in KafkaConfig
+func (k *KafkaConfig) MaskSensitiveData() {
+	k.SASLPassword = aws.String("******")
+	k.SASLGssAPIPassword = aws.String("******")
+	k.SASLOAuthClientSecret = aws.String("******")
+	k.Key = aws.String("******")
+	if k.SASLOAuthTokenURL != nil {
+		k.SASLOAuthTokenURL = aws.String(util.MaskSensitiveDataInURI(*k.SASLOAuthTokenURL))
+	}
 }
 
 // MySQLConfig represents a MySQL sink configuration
