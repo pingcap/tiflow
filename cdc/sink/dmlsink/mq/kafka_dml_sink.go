@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -90,7 +91,8 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, topic, sinkURI.Scheme)
+	scheme := sink.GetScheme(sinkURI)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, topic, scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -116,7 +118,7 @@ func NewKafkaDMLSink(
 	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	encoderGroup := codec.NewEncoderGroup(encoderBuilder, concurrency, changefeedID)
 	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, encoderGroup, protocol, errCh)
+		eventRouter, encoderGroup, protocol, scheme, errCh)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeedID", changefeedID.ID))

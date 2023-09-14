@@ -78,6 +78,9 @@ const (
 	// DefaultPulsarProducerCacheSize is the default size of the cache for producers
 	// 10240 producers maybe cost 1.1G memory
 	DefaultPulsarProducerCacheSize = 10240
+
+	// DefaultEncoderGroupConcurrency is the default concurrency of encoder group.
+	DefaultEncoderGroupConcurrency = 32
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.

@@ -16,7 +16,6 @@ package factory
 import (
 	"context"
 	"net/url"
-	"strings"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -63,7 +62,7 @@ func New(
 	}
 
 	s := &SinkFactory{}
-	schema := strings.ToLower(sinkURI.Scheme)
+	schema := sink.GetScheme(sinkURI)
 	switch schema {
 	case sink.MySQLScheme, sink.MySQLSSLScheme, sink.TiDBScheme, sink.TiDBSSLScheme:
 		txnSink, err := txn.NewMySQLSink(ctx, changefeedID, sinkURI, cfg, errCh,

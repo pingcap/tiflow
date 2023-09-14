@@ -34,7 +34,7 @@ const (
     "worker-num": 3
   },
   "sink": {
-    "encoder-concurrency": 16,
+    "encoder-concurrency": 32,
     "terminator": "\r\n",
 	"date-separator": "day",
     "dispatch-rules": [
@@ -182,7 +182,7 @@ const (
     "worker-num": 3
   },
   "sink": {
-  	"encoder-concurrency": 16,
+  	"encoder-concurrency": 32,
     "protocol": "open-protocol",
     "column-selectors": [
       {
@@ -327,7 +327,7 @@ const (
     "worker-num": 3
   },
   "sink": {
-    "encoder-concurrency": 16,
+    "encoder-concurrency": 32,
     "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [
