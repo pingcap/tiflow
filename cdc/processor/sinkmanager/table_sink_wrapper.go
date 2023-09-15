@@ -440,8 +440,8 @@ func convertRowChangedEvents(
 				if protocol != config.ProtocolCsv {
 					// If the handle key columns are not updated, PreColumns is directly ignored.
 					e.Row.PreColumns = nil
-					rowChangedEvents = append(rowChangedEvents, e.Row)
 				}
+				rowChangedEvents = append(rowChangedEvents, e.Row)
 			}
 		} else {
 			rowChangedEvents = append(rowChangedEvents, e.Row)
