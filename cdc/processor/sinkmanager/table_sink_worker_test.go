@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -137,7 +138,8 @@ func (suite *tableSinkWorkerSuite) createWorker(
 	quota.ForceAcquire(testEventSize)
 	quota.AddTable(suite.testSpan)
 
-	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
+	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil,
+		splitTxn, false, config.ProtocolDefault), sortEngine
 }
 
 func (suite *tableSinkWorkerSuite) addEventsToSortEngine(

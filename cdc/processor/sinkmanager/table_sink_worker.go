@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -69,7 +70,7 @@ type sinkWorker struct {
 	// If it is enabled, we need to deal with the compatibility of the data format.
 	enableOldValue bool
 
-	scheme string
+	protocol config.Protocol
 
 	// Metrics.
 	metricRedoEventCacheHit  prometheus.Counter
@@ -86,7 +87,7 @@ func newSinkWorker(
 	eventCache *redoEventCache,
 	splitTxn bool,
 	enableOldValue bool,
-	scheme string,
+	protocol config.Protocol,
 ) *sinkWorker {
 	return &sinkWorker{
 		changefeedID:   changefeedID,
@@ -97,7 +98,7 @@ func newSinkWorker(
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
 
-		scheme: scheme,
+		protocol: protocol,
 
 		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
 		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
@@ -240,7 +241,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, w.scheme, e)
+			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, w.protocol, e)
 			if err != nil {
 				return err
 			}
