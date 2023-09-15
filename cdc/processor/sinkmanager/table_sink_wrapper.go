@@ -437,7 +437,7 @@ func convertRowChangedEvents(
 				// NOTICE: Please do not change the order, the delete event always comes before the insert event.
 				rowChangedEvents = append(rowChangedEvents, deleteEvent.Row, insertEvent.Row)
 			} else {
-				if protocol == config.ProtocolCsv {
+				if protocol != config.ProtocolCsv {
 					// If the handle key columns are not updated, PreColumns is directly ignored.
 					e.Row.PreColumns = nil
 					rowChangedEvents = append(rowChangedEvents, e.Row)
