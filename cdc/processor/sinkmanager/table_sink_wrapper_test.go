@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -64,6 +65,10 @@ func (m *mockSink) Close() {}
 
 func (m *mockSink) Dead() <-chan struct{} {
 	return make(chan struct{})
+}
+
+func (m *mockSink) Scheme() string {
+	return sink.BlackHoleScheme
 }
 
 func (m *mockSink) AckAllEvents() {
@@ -151,9 +156,7 @@ func TestConvertNilRowChangedEvents(t *testing.T) {
 	events := []*model.PolymorphicEvent{nil}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	enableOldVlaue := false
-	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldVlaue, events...)
-	require.NoError(t, err)
+	result, size := handleRowChangedEvents(changefeedID, span, events...)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
 }
@@ -173,9 +176,7 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	enableOldValue := false
-	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
-	require.NoError(t, err)
+	result, size := handleRowChangedEvents(changefeedID, span, events...)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
 }
@@ -225,9 +226,7 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	enableOldValue := true
-	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
-	require.NoError(t, err)
+	result, size := handleRowChangedEvents(changefeedID, span, events...)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(224), size)
 }
@@ -278,10 +277,8 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	}
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
-	enableOldValue := false
-	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(result))
+	result, size := handleRowChangedEvents(changefeedID, span, events...)
+	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(224), size)
 
 	// Update non-handle key.
@@ -325,8 +322,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 			},
 		},
 	}
-	result, size, err = convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
-	require.NoError(t, err)
+	result, size = handleRowChangedEvents(changefeedID, span, events...)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(224), size)
 }

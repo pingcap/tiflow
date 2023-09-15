@@ -194,7 +194,6 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}()
 
 	splitTxn := m.changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn()
-	enableOldValue := m.changefeedInfo.Config.EnableOldValue
 
 	gcErrors := make(chan error, 16)
 	sinkErrors := make(chan error, 16)
@@ -204,7 +203,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.sinkEg == nil {
 		var sinkCtx context.Context
 		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
-		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue)
+		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn)
 		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -224,7 +223,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.redoDMLMgr != nil && m.redoEg == nil {
 		var redoCtx context.Context
 		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
-		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue)
+		m.startRedoWorkers(redoCtx, m.redoEg)
 		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -389,20 +388,20 @@ func (m *SinkManager) putSinkFactoryError(err error, version uint64) {
 		zap.String("error", err.Error()))
 }
 
-func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
+func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
-			m.eventCache, splitTxn, enableOldValue)
+			m.eventCache, splitTxn)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.sinkTaskChan) })
 	}
 }
 
-func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, enableOldValue bool) {
+func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group) {
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoDMLMgr, m.eventCache, enableOldValue)
+			m.redoDMLMgr, m.eventCache)
 		m.redoWorkers = append(m.redoWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.redoTaskChan) })
 	}

@@ -33,7 +33,6 @@ type redoWorker struct {
 	memQuota       *memquota.MemQuota
 	redoDMLManager redo.DMLManager
 	eventCache     *redoEventCache
-	enableOldValue bool
 }
 
 func newRedoWorker(
@@ -42,7 +41,6 @@ func newRedoWorker(
 	quota *memquota.MemQuota,
 	redoDMLMgr redo.DMLManager,
 	eventCache *redoEventCache,
-	enableOldValue bool,
 ) *redoWorker {
 	return &redoWorker{
 		changefeedID:   changefeedID,
@@ -50,7 +48,6 @@ func newRedoWorker(
 		memQuota:       quota,
 		redoDMLManager: redoDMLMgr,
 		eventCache:     eventCache,
-		enableOldValue: enableOldValue,
 	}
 }
 
@@ -148,10 +145,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e.Row != nil {
 			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			x, size = handleRowChangedEvents(w.changefeedID, task.span, e)
 			advancer.appendEvents(x, size)
 		}
 

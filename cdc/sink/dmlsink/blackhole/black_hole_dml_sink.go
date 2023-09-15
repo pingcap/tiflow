@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -48,4 +49,8 @@ func (s *DMLSink) Close() {}
 // Dead returns a checker.
 func (s *DMLSink) Dead() <-chan struct{} {
 	return make(chan struct{})
+}
+
+func (s *DMLSink) Scheme() string {
+	return sink.BlackHoleScheme
 }

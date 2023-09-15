@@ -74,7 +74,7 @@ func (suite *redoLogWorkerSuite) createWorker(
 	eventCache := newRedoEventCache(suite.testChangefeedID, 1024)
 
 	return newRedoWorker(suite.testChangefeedID, sm, quota,
-		redoDMLManager, eventCache, false), sortEngine, redoDMLManager
+		redoDMLManager, eventCache), sortEngine, redoDMLManager
 }
 
 func (suite *redoLogWorkerSuite) addEventsToSortEngine(
