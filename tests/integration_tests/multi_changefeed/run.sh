@@ -23,7 +23,7 @@ function check_old_value_enabled() {
 		echo "can't found update row with old value"
 		exit 1
 	fi
-	
+
 	# check delete rows
 	# check if exist a delete row with a complete `pre-column`
 	# When old value is turned on, the pre-column in our delete will include all the columns.
