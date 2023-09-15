@@ -27,22 +27,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// DDLDispatchRule is the dispatch rule for DDL event.
-type DDLDispatchRule int
-
-const (
-	// PartitionAll means the DDL event will be broadcast to all the partitions.
-	PartitionAll DDLDispatchRule = -1
-	// PartitionZero means the DDL event will be dispatched to partition 0.
-	// NOTICE: Only for canal and canal-json protocol.
-	PartitionZero = 0
-)
-
 // EventRouter is a router, it determines which topic and which partition
 // an event should be dispatched to.
 type EventRouter struct {
-	defaultTopic    string
-	ddlDispatchRule DDLDispatchRule
+	defaultTopic string
 
 	rules []struct {
 		partitionDispatcher partition.Dispatcher
@@ -92,19 +80,9 @@ func NewEventRouter(
 	}
 
 	return &EventRouter{
-		defaultTopic:    defaultTopic,
-		ddlDispatchRule: getDDLDispatchRule(protocol),
-		rules:           rules,
+		defaultTopic: defaultTopic,
+		rules:        rules,
 	}, nil
-}
-
-func getDDLDispatchRule(protocol config.Protocol) DDLDispatchRule {
-	switch protocol {
-	case config.ProtocolCanal, config.ProtocolCanalJSON:
-		return PartitionZero
-	default:
-	}
-	return PartitionAll
 }
 
 // GetTopicForRowChange returns the target topic for row changes.
@@ -146,11 +124,6 @@ func (s *EventRouter) GetPartitionForRowChange(
 	return partitionDispatcher.DispatchRowChangedEvent(
 		row, partitionNum,
 	)
-}
-
-// GetDLLDispatchRule returns the DDL distribution rules.
-func (s *EventRouter) GetDLLDispatchRule() DDLDispatchRule {
-	return s.ddlDispatchRule
 }
 
 // GetActiveTopics returns a list of the corresponding topics
