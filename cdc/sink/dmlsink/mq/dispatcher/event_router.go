@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/topic"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
@@ -201,7 +202,7 @@ func getPartitionDispatcher(rule string, scheme string) partition.Dispatcher {
 
 // getTopicDispatcher returns the topic dispatcher for a specific topic rule (aka topic expression).
 func getTopicDispatcher(
-	rule string, defaultTopic string, protocol config.Protocol, schema string,
+	rule string, defaultTopic string, protocol config.Protocol, scheme string,
 ) (topic.Dispatcher, error) {
 	if rule == "" {
 		return topic.NewStaticTopicDispatcher(defaultTopic), nil
@@ -214,21 +215,21 @@ func getTopicDispatcher(
 	// check if this rule is a valid topic expression
 	topicExpr := topic.Expression(rule)
 
-	// validate the topic expression for pulsar sink
-	if sink.IsPulsarScheme(schema) {
-		err := topicExpr.PulsarValidate()
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	var err error
-	// validate the topic expression for kafka sink
-	switch protocol {
-	case config.ProtocolAvro:
-		err = topicExpr.ValidateForAvro()
-	default:
-		err = topicExpr.Validate()
+	// validate the topic expression for pulsar sink
+	if sink.IsPulsarScheme(scheme) {
+		err = topicExpr.PulsarValidate()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	} else {
+		// validate the topic expression for kafka sink
+		switch protocol {
+		case config.ProtocolAvro:
+			err = topicExpr.ValidateForAvro()
+		default:
+			err = topicExpr.Validate()
+		}
 	}
 	if err != nil {
 		return nil, err

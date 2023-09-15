@@ -163,6 +163,9 @@ kafka_consumer:
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
 
+pulsar_consumer:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_pulsar_consumer ./cmd/pulsar-consumer/main.go
+
 kafka_consumer_image: 
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	DOCKER_BUILDKIT=1 docker build -f ./deployments/ticdc/docker/kafka-consumer.Dockerfile . -t ticdc:kafka-consumer  --platform linux/amd64
@@ -170,6 +173,10 @@ kafka_consumer_image:
 storage_consumer_image: 
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	DOCKER_BUILDKIT=1 docker build -f ./deployments/ticdc/docker/storage-consumer.Dockerfile . -t ticdc:storage-consumer  --platform linux/amd64
+
+pulsar_consumer_image: 
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	DOCKER_BUILDKIT=1 docker build -f ./deployments/ticdc/docker/pulsar-consumer.Dockerfile . -t ticdc:pulsar-consumer  --platform linux/amd64
 
 filter_helper:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_filter_helper ./cmd/filter-helper/main.go
@@ -215,7 +222,7 @@ check_third_party_binary:
 	@which bin/minio
 	@which bin/bin/schema-registry-start
 
-integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer
+integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/... \

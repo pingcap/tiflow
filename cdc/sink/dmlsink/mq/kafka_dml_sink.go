@@ -104,7 +104,7 @@ func NewKafkaDMLSink(
 
 	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	failpointCh := make(chan error, 1)

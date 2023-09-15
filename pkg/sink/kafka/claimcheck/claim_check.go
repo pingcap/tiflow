@@ -30,6 +30,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultTimeout = 5 * time.Minute
+)
+
 // ClaimCheck manage send message to the claim-check external storage.
 type ClaimCheck struct {
 	storage storage.ExternalStorage
@@ -44,15 +48,28 @@ type ClaimCheck struct {
 
 // New return a new ClaimCheck.
 func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
-	externalStorage, err := util.GetExternalStorageFromURI(ctx, storageURI)
+	log.Info("claim check enabled, start create the external storage",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)))
+
+	start := time.Now()
+	externalStorage, err := util.GetExternalStorageWithTimeout(ctx, storageURI, defaultTimeout)
 	if err != nil {
+		log.Error("create external storage failed",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
-	log.Info("claim-check enabled",
+	log.Info("claim-check create the external storage success",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.String("storageURI", storageURI))
+		zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)),
+		zap.Duration("duration", time.Since(start)))
 
 	return &ClaimCheck{
 		changefeedID:              changefeedID,
