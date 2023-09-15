@@ -21,6 +21,9 @@ import (
 )
 
 var (
+	// hardCodeTopicNameRe is used to match a topic name which is hard code in the config
+	hardCodeTopicNameRe = regexp.MustCompile(`^([A-Za-z0-9\._\-]+)$`)
+
 	// topicNameRE is used to match a valid topic expression
 	topicNameRE = regexp.MustCompile(
 		`^[A-Za-z0-9\._\-]*(\{schema\})?([A-Za-z0-9\._\-]*\{table\})?[A-Za-z0-9\._\-]*$`,
@@ -58,13 +61,14 @@ const kafkaTopicNameMaxLength = 249
 type Expression string
 
 // Validate checks whether a kafka topic name is valid or not.
+// return true if the expression is hard coded.
 func (e Expression) Validate() error {
 	// validate the topic expression
-	if ok := topicNameRE.MatchString(string(e)); !ok {
-		return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs()
+	if ok := topicNameRE.MatchString(string(e)); ok {
+		return nil
 	}
 
-	return nil
+	return errors.ErrKafkaInvalidTopicExpression.GenWithStackByArgs()
 }
 
 // ValidateForAvro checks whether topic pattern is {schema}_{table}, the only allowed
@@ -129,4 +133,9 @@ func (e Expression) PulsarValidate() error {
 	}
 
 	return nil
+}
+
+// IsHardCode checks whether a topic name is hard code or not.
+func IsHardCode(topicName string) bool {
+	return hardCodeTopicNameRe.MatchString(topicName)
 }

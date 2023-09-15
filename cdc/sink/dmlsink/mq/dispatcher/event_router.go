@@ -207,6 +207,10 @@ func getTopicDispatcher(
 		return topic.NewStaticTopicDispatcher(defaultTopic), nil
 	}
 
+	if topic.IsHardCode(rule) {
+		return topic.NewStaticTopicDispatcher(rule), nil
+	}
+
 	// check if this rule is a valid topic expression
 	topicExpr := topic.Expression(rule)
 
