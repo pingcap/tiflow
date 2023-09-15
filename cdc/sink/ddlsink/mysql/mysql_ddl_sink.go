@@ -257,6 +257,8 @@ func (m *DDLSink) Close() {
 }
 
 // asyncExecAddIndexDDLIfTimeout executes ddl in async mode.
+// this function only works in TiDB, because TiDB will save ddl jobs
+// and execute them asynchronously even if ticdc crashed.
 func (m *DDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.DDLEvent) error {
 	done := make(chan error, 1)
 	// wait for 2 seconds at most
@@ -284,12 +286,15 @@ func (m *DDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.
 
 	select {
 	case <-ctx.Done():
+		// if the ddl is canceled, we just return nil, if the ddl is not received by tidb,
+		// the downstream ddl is lost, because the checkpoint ts is forwarded.
 		log.Info("async add index ddl exits as canceled",
 			zap.String("changefeedID", m.id.String()),
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.String("ddl", ddl.Query))
 		return nil
 	case err := <-done:
+		// if the ddl is executed within 2 seconds, we just return the result to the caller.
 		return err
 	case <-tick.C:
 		// if the ddl is still running, we just return nil,
