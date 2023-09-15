@@ -201,10 +201,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	splitTxn := m.changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn()
 	enableOldValue := m.changefeedInfo.Config.EnableOldValue
 
-	protocol, err := config.ParseSinkProtocolFromString(m.changefeedInfo.Config.Sink.Protocol)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	protocol, _ := config.ParseSinkProtocolFromString(m.changefeedInfo.Config.Sink.Protocol)
 
 	gcErrors := make(chan error, 16)
 	sinkFactoryErrors := make(chan error, 16)
