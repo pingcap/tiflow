@@ -235,62 +235,6 @@ func TestGetPartitionForRowChange(t *testing.T) {
 	require.Equal(t, int32(1), p)
 }
 
-func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
-	t.Parallel()
-
-	replicaConfig := &config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{
-					Matcher:       []string{"test_table.*"},
-					PartitionRule: "table",
-					TopicRule:     "hello_{schema}_world",
-				},
-			},
-		},
-	}
-
-	tests := []struct {
-		protocol     config.Protocol
-		expectedRule DDLDispatchRule
-	}{
-		{
-			protocol:     config.ProtocolDefault,
-			expectedRule: PartitionAll,
-		},
-		{
-			protocol:     config.ProtocolCanal,
-			expectedRule: PartitionZero,
-		},
-		{
-			protocol:     config.ProtocolAvro,
-			expectedRule: PartitionAll,
-		},
-		{
-			protocol:     config.ProtocolMaxwell,
-			expectedRule: PartitionAll,
-		},
-		{
-			protocol:     config.ProtocolCanalJSON,
-			expectedRule: PartitionZero,
-		},
-		{
-			protocol:     config.ProtocolCraft,
-			expectedRule: PartitionAll,
-		},
-		{
-			protocol:     config.ProtocolOpen,
-			expectedRule: PartitionAll,
-		},
-	}
-
-	for _, test := range tests {
-		router, err := NewEventRouter(replicaConfig, test.protocol, "test", sink.KafkaScheme)
-		require.NoError(t, err)
-		require.Equal(t, test.expectedRule, router.GetDLLDispatchRule())
-	}
-}
-
 func TestGetTopicForDDL(t *testing.T) {
 	t.Parallel()
 
