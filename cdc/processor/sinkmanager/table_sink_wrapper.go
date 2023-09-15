@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -393,7 +394,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 // convertRowChangedEvents uses to convert RowChangedEvents to TableSinkRowChangedEvents.
 // It will deal with the old value compatibility.
 func convertRowChangedEvents(
-	changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool,
+	changefeed model.ChangeFeedID, span tablepb.Span, enableOldValue bool, scheme string,
 	events ...*model.PolymorphicEvent,
 ) ([]*model.RowChangedEvent, uint64, error) {
 	size := 0
@@ -436,9 +437,11 @@ func convertRowChangedEvents(
 				// NOTICE: Please do not change the order, the delete event always comes before the insert event.
 				rowChangedEvents = append(rowChangedEvents, deleteEvent.Row, insertEvent.Row)
 			} else {
-				// If the handle key columns are not updated, PreColumns is directly ignored.
-				e.Row.PreColumns = nil
-				rowChangedEvents = append(rowChangedEvents, e.Row)
+				if !sink.IsStorageScheme(scheme) {
+					// If the handle key columns are not updated, PreColumns is directly ignored.
+					e.Row.PreColumns = nil
+					rowChangedEvents = append(rowChangedEvents, e.Row)
+				}
 			}
 		} else {
 			rowChangedEvents = append(rowChangedEvents, e.Row)

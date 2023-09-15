@@ -17,6 +17,8 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -200,6 +202,12 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	splitTxn := m.changefeedInfo.Config.Sink.TxnAtomicity.ShouldSplitTxn()
 	enableOldValue := m.changefeedInfo.Config.EnableOldValue
 
+	uri, err := url.Parse(m.changefeedInfo.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	scheme := strings.ToLower(uri.Scheme)
+
 	gcErrors := make(chan error, 16)
 	sinkFactoryErrors := make(chan error, 16)
 	sinkErrors := make(chan error, 16)
@@ -209,7 +217,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.sinkEg == nil {
 		var sinkCtx context.Context
 		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
-		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue)
+		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn, enableOldValue, scheme)
 		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -229,7 +237,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	if m.redoDMLMgr != nil && m.redoEg == nil {
 		var redoCtx context.Context
 		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
-		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue)
+		m.startRedoWorkers(redoCtx, m.redoEg, enableOldValue, scheme)
 		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
 		m.wg.Add(1)
 		go func() {
@@ -366,20 +374,24 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
-func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool) {
+func (m *SinkManager) startSinkWorkers(
+	ctx context.Context, eg *errgroup.Group, splitTxn bool, enableOldValue bool, scheme string,
+) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, m.redoMemQuota,
-			m.eventCache, splitTxn, enableOldValue)
+			m.eventCache, splitTxn, enableOldValue, scheme)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.sinkTaskChan) })
 	}
 }
 
-func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group, enableOldValue bool) {
+func (m *SinkManager) startRedoWorkers(
+	ctx context.Context, eg *errgroup.Group, enableOldValue bool, scheme string,
+) {
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoDMLMgr, m.eventCache, enableOldValue)
+			m.redoDMLMgr, m.eventCache, enableOldValue, scheme)
 		m.redoWorkers = append(m.redoWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.redoTaskChan) })
 	}

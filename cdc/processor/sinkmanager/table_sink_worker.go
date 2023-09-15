@@ -69,6 +69,8 @@ type sinkWorker struct {
 	// If it is enabled, we need to deal with the compatibility of the data format.
 	enableOldValue bool
 
+	scheme string
+
 	// Metrics.
 	metricRedoEventCacheHit  prometheus.Counter
 	metricRedoEventCacheMiss prometheus.Counter
@@ -84,6 +86,7 @@ func newSinkWorker(
 	eventCache *redoEventCache,
 	splitTxn bool,
 	enableOldValue bool,
+	scheme string,
 ) *sinkWorker {
 	return &sinkWorker{
 		changefeedID:   changefeedID,
@@ -93,6 +96,8 @@ func newSinkWorker(
 		eventCache:     eventCache,
 		splitTxn:       splitTxn,
 		enableOldValue: enableOldValue,
+
+		scheme: scheme,
 
 		metricRedoEventCacheHit:  RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "hit"),
 		metricRedoEventCacheMiss: RedoEventCacheAccess.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "miss"),
@@ -235,7 +240,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if e.Row != nil {
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
+			x, size, err := convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, w.scheme, e)
 			if err != nil {
 				return err
 			}
