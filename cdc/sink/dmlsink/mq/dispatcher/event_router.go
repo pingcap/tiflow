@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/topic"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -267,29 +268,30 @@ func getTopicDispatcher(
 	if sink.IsPulsarScheme(schema) {
 		err := topicExpr.PulsarValidate()
 		if err != nil {
-			return nil, err
+			return nil, errors.Trace(err)
+		}
+	} else {
+		// validate the topic expression for kafka sink
+		var p config.Protocol
+		var err error
+		if protocol != "" {
+			p, err = config.ParseSinkProtocolFromString(protocol)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
+			}
+		}
+		if p == config.ProtocolAvro {
+			err = topicExpr.ValidateForAvro()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			err = topicExpr.Validate()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
-	// validate the topic expression for kafka sink
-	var p config.Protocol
-	var err error
-	if protocol != "" {
-		p, err = config.ParseSinkProtocolFromString(protocol)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-	}
-	if p == config.ProtocolAvro {
-		err = topicExpr.ValidateForAvro()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		err = topicExpr.Validate()
-		if err != nil {
-			return nil, err
-		}
-	}
 	return topic.NewDynamicTopicDispatcher(topicExpr), nil
 }
