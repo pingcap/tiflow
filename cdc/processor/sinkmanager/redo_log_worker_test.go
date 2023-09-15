@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -74,7 +75,7 @@ func (suite *redoLogWorkerSuite) createWorker(
 	eventCache := newRedoEventCache(suite.testChangefeedID, 1024)
 
 	return newRedoWorker(suite.testChangefeedID, sm, quota,
-		redoDMLManager, eventCache, false), sortEngine, redoDMLManager
+		redoDMLManager, eventCache, false, config.ProtocolDefault), sortEngine, redoDMLManager
 }
 
 func (suite *redoLogWorkerSuite) addEventsToSortEngine(

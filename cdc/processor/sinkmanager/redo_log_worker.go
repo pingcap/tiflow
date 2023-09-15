@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -34,6 +35,8 @@ type redoWorker struct {
 	redoDMLManager redo.DMLManager
 	eventCache     *redoEventCache
 	enableOldValue bool
+
+	protocol config.Protocol
 }
 
 func newRedoWorker(
@@ -43,6 +46,7 @@ func newRedoWorker(
 	redoDMLMgr redo.DMLManager,
 	eventCache *redoEventCache,
 	enableOldValue bool,
+	protocol config.Protocol,
 ) *redoWorker {
 	return &redoWorker{
 		changefeedID:   changefeedID,
@@ -51,6 +55,7 @@ func newRedoWorker(
 		redoDMLManager: redoDMLMgr,
 		eventCache:     eventCache,
 		enableOldValue: enableOldValue,
+		protocol:       protocol,
 	}
 }
 
@@ -148,7 +153,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e.Row != nil {
 			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
+			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, w.protocol, e)
 			if err != nil {
 				return errors.Trace(err)
 			}

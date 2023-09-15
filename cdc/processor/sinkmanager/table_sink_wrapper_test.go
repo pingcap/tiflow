@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -123,7 +124,7 @@ func TestConvertNilRowChangedEvents(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 	enableOldVlaue := false
-	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldVlaue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldVlaue, config.ProtocolDefault, events...)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
@@ -145,7 +146,7 @@ func TestConvertEmptyRowChangedEvents(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 	enableOldValue := false
-	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, config.ProtocolDefault, events...)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(result))
 	require.Equal(t, uint64(0), size)
@@ -197,7 +198,7 @@ func TestConvertRowChangedEventsWhenEnableOldValue(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 	enableOldValue := true
-	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, config.ProtocolDefault, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(224), size)
@@ -250,7 +251,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("1")
 	span := spanz.TableIDToComparableSpan(1)
 	enableOldValue := false
-	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
+	result, size, err := convertRowChangedEvents(changefeedID, span, enableOldValue, config.ProtocolDefault, events...)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(result))
 	require.Equal(t, uint64(224), size)
@@ -296,7 +297,7 @@ func TestConvertRowChangedEventsWhenDisableOldValue(t *testing.T) {
 			},
 		},
 	}
-	result, size, err = convertRowChangedEvents(changefeedID, span, enableOldValue, events...)
+	result, size, err = convertRowChangedEvents(changefeedID, span, enableOldValue, config.ProtocolDefault, events...)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(result))
 	require.Equal(t, uint64(224), size)
