@@ -124,7 +124,6 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	// which will be responsible for automatically creating topics when they don't exist.
 	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
 	// then the auto-created topic will not be created as configured by ticdc.
-
 	partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 	if err != nil {
 		return errors.Trace(err)

@@ -279,3 +279,57 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		0, "No topic and partition should be broadcast")
 }
+
+func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
+	t.Parallel()
+
+	replicaConfig := &config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		protocol     config.Protocol
+		expectedRule DDLDispatchRule
+	}{
+		{
+			protocol:     config.ProtocolDefault,
+			expectedRule: PartitionAll,
+		},
+		{
+			protocol:     config.ProtocolCanal,
+			expectedRule: PartitionZero,
+		},
+		{
+			protocol:     config.ProtocolAvro,
+			expectedRule: PartitionAll,
+		},
+		{
+			protocol:     config.ProtocolMaxwell,
+			expectedRule: PartitionAll,
+		},
+		{
+			protocol:     config.ProtocolCanalJSON,
+			expectedRule: PartitionZero,
+		},
+		{
+			protocol:     config.ProtocolCraft,
+			expectedRule: PartitionAll,
+		},
+		{
+			protocol:     config.ProtocolOpen,
+			expectedRule: PartitionAll,
+		},
+	}
+
+	for _, test := range tests {
+		require.Equal(t, test.expectedRule, getDDLDispatchRule(test.protocol))
+	}
+}
