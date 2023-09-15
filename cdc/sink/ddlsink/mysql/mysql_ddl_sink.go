@@ -259,42 +259,46 @@ func (m *DDLSink) Close() {
 // asyncExecAddIndexDDLIfTimeout executes ddl in async mode.
 func (m *DDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.DDLEvent) error {
 	done := make(chan error, 1)
-	// wait for 1 second at most
-	tick := time.NewTimer(1 * time.Second)
+	// wait for 2 seconds at most
+	tick := time.NewTimer(2 * time.Second)
 	defer tick.Stop()
-	log.Info("async exec ddl start",
+	log.Info("async exec add index ddl start",
 		zap.String("changefeedID", m.id.String()),
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("ddl", ddl.Query))
 	go func() {
 		if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
-			log.Error("async exec ddl failed",
+			log.Error("async exec add index ddl failed",
 				zap.String("changefeedID", m.id.String()),
 				zap.Uint64("commitTs", ddl.CommitTs),
 				zap.String("ddl", ddl.Query))
 			done <- err
 			return
 		}
-		log.Info("async exec ddl done",
+		log.Info("async exec add index ddl done",
 			zap.String("changefeedID", m.id.String()),
-			zap.Uint64("commitTs", ddl.CommitTs))
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("ddl", ddl.Query))
 		done <- nil
 	}()
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("async ddl exits as canceled",
-				zap.String("changefeedID", m.id.String()),
-				zap.Uint64("commitTs", ddl.CommitTs),
-				zap.String("ddl", ddl.Query))
-		case err := <-done:
-			return err
-		case <-tick.C:
-			log.Info("async ddl is still running",
-				zap.String("changefeedID", m.id.String()),
-				zap.Uint64("commitTs", ddl.CommitTs),
-				zap.String("ddl", ddl.Query))
-			return nil
-		}
+
+	select {
+	case <-ctx.Done():
+		log.Info("async add index ddl exits as canceled",
+			zap.String("changefeedID", m.id.String()),
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("ddl", ddl.Query))
+		return nil
+	case err := <-done:
+		return err
+	case <-tick.C:
+		// if the ddl is still running, we just return nil,
+		// then if the ddl is failed, the downstream ddl is lost.
+		// because the checkpoint ts is forwarded.
+		log.Info("async add index ddl is still running",
+			zap.String("changefeedID", m.id.String()),
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("ddl", ddl.Query))
+		return nil
 	}
 }

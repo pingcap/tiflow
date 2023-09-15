@@ -147,7 +147,7 @@ func TestNeedSwitchDB(t *testing.T) {
 func TestAsyncExecAddIndex(t *testing.T) {
 	t.Parallel()
 
-	ddlExecutionTime := time.Millisecond * 2000
+	ddlExecutionTime := time.Millisecond * 3000
 	dbIndex := 0
 	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -201,6 +201,6 @@ func TestAsyncExecAddIndex(t *testing.T) {
 	err = sink.WriteDDLEvent(ctx, ddl1)
 	require.Nil(t, err)
 	require.True(t, time.Since(start) < ddlExecutionTime)
-	require.True(t, time.Since(start) >= time.Second)
+	require.True(t, time.Since(start) >= 2*time.Second)
 	sink.Close()
 }
