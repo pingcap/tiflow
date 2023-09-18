@@ -52,8 +52,8 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	// disable old value but force replicate, and using mysql sink.
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
-	require.Nil(t, err)
-	require.NotNil(t, cfInfo)
+	require.NotNil(t, err)
+	require.Nil(t, cfInfo)
 	cfg.ReplicaConfig.ForceReplicate = false
 	cfg.ReplicaConfig.IgnoreIneligibleTable = true
 	cfg.SinkURI = "blackhole://"
