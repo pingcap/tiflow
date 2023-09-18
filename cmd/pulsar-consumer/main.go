@@ -345,7 +345,7 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	}
 
 	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.topic, "pulsar")
+		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, sink.PulsarScheme)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
