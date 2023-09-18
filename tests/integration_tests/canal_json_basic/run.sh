@@ -29,7 +29,6 @@ function run() {
 
 	# determine the sink uri and run corresponding consumer
 	# currently only kafka and pulsar are supported
-	SINK_URI = ""
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&kafka-version=${KAFKA_VERSION}"
 		run_kafka_consumer $WORK_DIR $SINK_URI
