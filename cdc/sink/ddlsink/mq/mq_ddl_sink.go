@@ -31,6 +31,26 @@ import (
 	"go.uber.org/zap"
 )
 
+// DDLDispatchRule is the dispatch rule for DDL event.
+type DDLDispatchRule int
+
+const (
+	// PartitionZero means the DDL event will be dispatched to partition 0.
+	// NOTICE: Only for canal and canal-json protocol.
+	PartitionZero DDLDispatchRule = iota
+	// PartitionAll means the DDL event will be broadcast to all the partitions.
+	PartitionAll
+)
+
+func getDDLDispatchRule(protocol config.Protocol) DDLDispatchRule {
+	switch protocol {
+	case config.ProtocolCanal, config.ProtocolCanalJSON:
+		return PartitionZero
+	default:
+	}
+	return PartitionAll
+}
+
 // Assert Sink implementation
 var _ ddlsink.Sink = (*DDLSink)(nil)
 
@@ -94,33 +114,29 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	}
 
 	topic := k.eventRouter.GetTopicForDDL(ddl)
-	partitionRule := k.eventRouter.GetDLLDispatchRuleByProtocol(k.protocol)
-	log.Info("Emit ddl event",
-		zap.String("topic", topic),
+	partitionRule := getDDLDispatchRule(k.protocol)
+	log.Debug("Emit ddl event",
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("query", ddl.Query),
 		zap.String("namespace", k.id.Namespace),
 		zap.String("changefeed", k.id.ID))
-	if partitionRule == dispatcher.PartitionAll {
-		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
-		if err != nil {
-			return errors.Trace(err)
-		}
+	// Notice: We must call GetPartitionNum here,
+	// which will be responsible for automatically creating topics when they don't exist.
+	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
+	// then the auto-created topic will not be created as configured by ticdc.
+	partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if partitionRule == PartitionAll {
 		err = k.statistics.RecordDDLExecution(func() error {
 			return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		})
 		return errors.Trace(err)
 	}
-	// Notice: We must call GetPartitionNum here,
-	// which will be responsible for automatically creating topics when they don't exist.
-	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
-	// then the auto-created topic will not be created as configured by ticdc.
-	_, err = k.topicManager.GetPartitionNum(ctx, topic)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	err = k.statistics.RecordDDLExecution(func() error {
-		return k.producer.SyncSendMessage(ctx, topic, dispatcher.PartitionZero, msg)
+		return k.producer.SyncSendMessage(ctx, topic, 0, msg)
 	})
 	return errors.Trace(err)
 }

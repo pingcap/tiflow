@@ -92,7 +92,7 @@ func NewKafkaDMLSink(
 	}
 
 	scheme := sink.GetScheme(sinkURI)
-	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, topic, scheme)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, topic, scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
