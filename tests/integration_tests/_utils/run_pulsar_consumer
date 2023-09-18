@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# parameter 1: work directory
+# parameter 2: changefeed_sink_uri
+# parameter 3: log suffix
+
+set -e
+
+workdir=$1
+changefeed_sink_uri=$2
+log_suffix=$3
+pwd=$pwd
+
+echo "[$(date)] <<<<<< START Pulsar consumer in $TEST_NAME case >>>>>>"
+cd $workdir
+
+# Because there is no transaction concept in pulsar,
+# we need to set `batch-dml-enable` to false to avoid data inconsistency.
+downstream_uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false"
+
+# output debug log to allow us to check the consumer's behavior when it encounters errors
+cdc_pulsar_consumer --log-file $workdir/cdc_pulsar_consumer$log_suffix.log --log-level debug --upstream-uri $changefeed_sink_uri --downstream-uri ${downstream_uri} >>$workdir/cdc_pulsar_consumer_stdout$log_suffix.log 2>&1 &
+
+cd $pwd
