@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"net/url"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -148,12 +149,12 @@ func TestAsyncExecAddIndex(t *testing.T) {
 	t.Parallel()
 
 	ddlExecutionTime := time.Millisecond * 3000
-	dbIndex := 0
+	var dbIndex int32 = 0
 	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
-			dbIndex++
+			atomic.AddInt32(&dbIndex, 1)
 		}()
-		if dbIndex == 0 {
+		if atomic.LoadInt32(&dbIndex) == 0 {
 			// test db
 			db, err := pmysql.MockTestDB(true)
 			require.Nil(t, err)
