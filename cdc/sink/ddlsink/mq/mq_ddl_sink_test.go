@@ -283,12 +283,12 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, DDLDispatchRule(PartitionZero), getDDLDispatchRule(config.ProtocolCanal))
-	require.Equal(t, DDLDispatchRule(PartitionZero), getDDLDispatchRule(config.ProtocolCanalJSON))
+	require.Equal(t, PartitionZero, getDDLDispatchRule(config.ProtocolCanal))
+	require.Equal(t, PartitionZero, getDDLDispatchRule(config.ProtocolCanalJSON))
 
-	require.Equal(t, DDLDispatchRule(PartitionAll), getDDLDispatchRule(config.ProtocolOpen))
-	require.Equal(t, DDLDispatchRule(PartitionAll), getDDLDispatchRule(config.ProtocolDefault))
-	require.Equal(t, DDLDispatchRule(PartitionAll), getDDLDispatchRule(config.ProtocolAvro))
-	require.Equal(t, DDLDispatchRule(PartitionAll), getDDLDispatchRule(config.ProtocolMaxwell))
-	require.Equal(t, DDLDispatchRule(PartitionAll), getDDLDispatchRule(config.ProtocolCraft))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolOpen))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolDefault))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolAvro))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolMaxwell))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolCraft))
 }
