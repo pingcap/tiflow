@@ -32,8 +32,6 @@ import (
 )
 
 func TestWriteDDLEvent(t *testing.T) {
-	t.Parallel()
-
 	dbIndex := 0
 	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		defer func() {
@@ -146,8 +144,6 @@ func TestNeedSwitchDB(t *testing.T) {
 }
 
 func TestAsyncExecAddIndex(t *testing.T) {
-	t.Parallel()
-
 	ddlExecutionTime := time.Millisecond * 3000
 	var dbIndex int32 = 0
 	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
