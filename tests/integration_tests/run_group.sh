@@ -18,7 +18,7 @@ kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error
 kafka_only_protocol="canal_json_adapter_compatibility canal_json_basic multi_topics avro_basic canal_json_handle_key_only open_protocol_handle_key_only canal_json_claim_check open_protocol_claim_check"
 kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
-storage_only="lossy_ddl"
+storage_only="lossy_ddl storage_csv_update"
 storage_only_csv="csv_storage_basic csv_storage_multi_tables_ddl csv_storage_partition_table"
 storage_only_canal_json="canal_json_storage_basic canal_json_storage_partition_table"
 
