@@ -111,7 +111,8 @@ var defaultServerConfig = &ServerConfig{
 	},
 	Security: &SecurityConfig{},
 	KVClient: &KVClientConfig{
-		EnableMultiplexing:   true,
+		// TODO: fizz, remove this after testing
+		EnableMultiplexing:   false,
 		WorkerConcurrent:     8,
 		GrpcStreamConcurrent: 1,
 		FrontierConcurrent:   8,
