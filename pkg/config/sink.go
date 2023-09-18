@@ -609,6 +609,11 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		}
 	}
 
+	if sink.IsPulsarScheme(sinkURI.Scheme) && s.PulsarConfig == nil {
+		s.PulsarConfig = &PulsarConfig{
+			SinkURI: sinkURI,
+		}
+	}
 	if s.PulsarConfig != nil {
 		if err := s.PulsarConfig.validate(); err != nil {
 			return err
