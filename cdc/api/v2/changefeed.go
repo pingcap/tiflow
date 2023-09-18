@@ -456,7 +456,8 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 
 	var storage tidbkv.Storage
 	// if PDAddrs is not empty, use it to create a new kvstore
-	if len(updateCfConfig.PDAddrs) != 0 {
+	// Note: upManager is nil in some unit test cases
+	if len(updateCfConfig.PDAddrs) != 0 || upManager == nil {
 		pdAddrs := updateCfConfig.PDAddrs
 		credentials := updateCfConfig.PDConfig.toCredential()
 		storage, err = h.helpers.createTiStore(pdAddrs, credentials)
