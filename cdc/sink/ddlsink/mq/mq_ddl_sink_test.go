@@ -283,53 +283,12 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 	t.Parallel()
 
-	replicaConfig := &config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{
-					Matcher:       []string{"test_table.*"},
-					PartitionRule: "table",
-					TopicRule:     "hello_{schema}_world",
-				},
-			},
-		},
-	}
+	require.Equal(t, PartitionZero, getDDLDispatchRule(config.ProtocolCanal))
+	require.Equal(t, PartitionZero, getDDLDispatchRule(config.ProtocolCanalJSON))
 
-	tests := []struct {
-		protocol     config.Protocol
-		expectedRule DDLDispatchRule
-	}{
-		{
-			protocol:     config.ProtocolDefault,
-			expectedRule: PartitionAll,
-		},
-		{
-			protocol:     config.ProtocolCanal,
-			expectedRule: PartitionZero,
-		},
-		{
-			protocol:     config.ProtocolAvro,
-			expectedRule: PartitionAll,
-		},
-		{
-			protocol:     config.ProtocolMaxwell,
-			expectedRule: PartitionAll,
-		},
-		{
-			protocol:     config.ProtocolCanalJSON,
-			expectedRule: PartitionZero,
-		},
-		{
-			protocol:     config.ProtocolCraft,
-			expectedRule: PartitionAll,
-		},
-		{
-			protocol:     config.ProtocolOpen,
-			expectedRule: PartitionAll,
-		},
-	}
-
-	for _, test := range tests {
-		require.Equal(t, test.expectedRule, getDDLDispatchRule(test.protocol))
-	}
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolOpen))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolDefault))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolAvro))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolMaxwell))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolCraft))
 }
