@@ -46,6 +46,8 @@ func TestWriteDDLEvent(t *testing.T) {
 		// normal db
 		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 		require.Nil(t, err)
+		mock.ExpectQuery("select tidb_version()").
+			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
 		mock.ExpectBegin()
 		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectExec("ALTER TABLE test.t1 ADD COLUMN a int").WillReturnResult(sqlmock.NewResult(1, 1))
