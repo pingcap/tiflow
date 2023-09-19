@@ -206,10 +206,7 @@ func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 		return nil, errors.Trace(err)
 	}
 
-	outboundMessages, barrier, err := a.handleMessage(inboundMessages)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	outboundMessages, barrier := a.handleMessage(inboundMessages)
 
 	responses, err := a.tableM.poll(ctx)
 	if err != nil {
@@ -237,9 +234,7 @@ func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 	}
 }
 
-func (a *agent) handleMessage(msg []*schedulepb.Message) (
-	result []*schedulepb.Message, barrier *schedulepb.Barrier, err error,
-) {
+func (a *agent) handleMessage(msg []*schedulepb.Message) (result []*schedulepb.Message, barrier *schedulepb.Barrier) {
 	for _, message := range msg {
 		ownerCaptureID := message.GetFrom()
 		header := message.GetHeader()
