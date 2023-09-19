@@ -77,7 +77,7 @@ func newConsumerOption() *ConsumerOption {
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
-func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
+func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
 	// the default value of partitionNum is 1
 	o.partitionNum = 1
 
@@ -120,7 +120,6 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		zap.String("topic", o.topic),
 		zap.Any("protocol", o.protocol),
 		zap.Bool("enableTiDBExtension", o.enableTiDBExtension))
-	return nil
 }
 
 var (
@@ -176,10 +175,7 @@ func run(cmd *cobra.Command, args []string) {
 			zap.String("upstreamURI", upstreamURIStr))
 	}
 
-	err = consumerOption.Adjust(upstreamURI, configFile)
-	if err != nil {
-		log.Panic("adjust consumer option failed", zap.Error(err))
-	}
+	consumerOption.Adjust(upstreamURI, configFile)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	consumer, err := NewConsumer(ctx, consumerOption)
