@@ -61,7 +61,7 @@ type MultiplexingEvent struct {
 // SharedClient is shared in many tables. Methods are thread-safe.
 type SharedClient struct {
 	changefeed model.ChangeFeedID
-	config     *config.KVClientConfig
+	config     *config.ServerConfig
 	metrics    sharedClientMetrics
 
 	clusterID  uint64
@@ -150,7 +150,7 @@ type requestedTable struct {
 // NewSharedClient creates a client.
 func NewSharedClient(
 	changefeed model.ChangeFeedID,
-	cfg *config.KVClientConfig,
+	cfg *config.ServerConfig,
 	filterLoop bool,
 	pd pd.Client,
 	grpcPool GrpcPool,
@@ -254,8 +254,8 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	s.clusterID = s.pd.GetClusterID(ctx)
 
 	g, ctx := errgroup.WithContext(ctx)
-	s.workers = make([]*sharedRegionWorker, 0, s.config.WorkerConcurrent)
-	for i := uint(0); i < s.config.WorkerConcurrent; i++ {
+	s.workers = make([]*sharedRegionWorker, 0, s.config.KVClient.WorkerConcurrent)
+	for i := uint(0); i < s.config.KVClient.WorkerConcurrent; i++ {
 		worker := newSharedRegionWorker(s)
 		g.Go(func() error { return worker.run(ctx) })
 		s.workers = append(s.workers, worker)
@@ -411,7 +411,7 @@ func (s *SharedClient) requestStore(
 
 	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
 	s.requestedStores[storeAddr] = rs
-	for i := uint(0); i < s.config.GrpcStreamConcurrent; i++ {
+	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := s.newStream(ctx, g, rs)
 		rs.streams = append(rs.streams, stream)
 	}

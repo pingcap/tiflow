@@ -72,7 +72,7 @@ func TestNewClient(t *testing.T) {
 	defer regionCache.Close()
 	cli := NewCDCClient(
 		context.Background(), pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, model.DefaultChangeFeedID(""), 0, "", false)
+		config.GetDefaultServerConfig(), model.DefaultChangeFeedID(""), 0, "", false)
 	require.NotNil(t, cli)
 }
 
@@ -324,7 +324,7 @@ func TestConnectOfflineTiKV(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		context.Background(), pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	// Take care of the eventCh, it's used to output resolvedTs event or kv event
 	// It will stuck the normal routine
 	eventCh := make(chan model.RegionFeedEvent, 50)
@@ -426,7 +426,7 @@ func TestRecvLargeMessageSize(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -526,7 +526,7 @@ func TestHandleError(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -685,7 +685,7 @@ func TestCompatibilityWithSameConn(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	var wg2 sync.WaitGroup
 	wg2.Add(1)
@@ -752,7 +752,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	var wg2 sync.WaitGroup
@@ -821,7 +821,7 @@ func testHandleFeedEvent(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -1282,7 +1282,7 @@ func TestStreamSendWithError(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -1394,7 +1394,7 @@ func testStreamRecvWithError(t *testing.T, failpointStr string) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -1527,7 +1527,7 @@ func TestStreamRecvWithErrorAndResolvedGoBack(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -1736,7 +1736,7 @@ func TestIncompatibleTiKV(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	// NOTICE: eventCh may block the main logic of EventFeed
 	eventCh := make(chan model.RegionFeedEvent, 128)
 	wg.Add(1)
@@ -1813,7 +1813,7 @@ func TestNoPendingRegionError(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 
 	wg.Add(1)
@@ -1892,7 +1892,7 @@ func TestDropStaleRequest(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -2006,7 +2006,7 @@ func TestResolveLock(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -2111,7 +2111,7 @@ func testEventCommitTsFallback(t *testing.T, events []*cdcpb.ChangeDataEvent) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	var clientWg sync.WaitGroup
 	clientWg.Add(1)
@@ -2239,7 +2239,7 @@ func testEventAfterFeedStop(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -2426,7 +2426,7 @@ func TestOutOfRegionRangeEvent(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -2644,7 +2644,7 @@ func TestResolveLockNoCandidate(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -2740,7 +2740,7 @@ func TestFailRegionReentrant(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -2823,7 +2823,7 @@ func TestClientV1UnlockRangeReentrant(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -2891,7 +2891,7 @@ func testClientErrNoPendingRegion(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -2969,7 +2969,7 @@ func testKVClientForceReconnect(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -3120,7 +3120,7 @@ func TestConcurrentProcessRangeRequest(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 100)
 	wg.Add(1)
 	go func() {
@@ -3237,7 +3237,7 @@ func TestEvTimeUpdate(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -3363,7 +3363,7 @@ func TestRegionWorkerExitWhenIsIdle(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	wg.Add(1)
 	go func() {
@@ -3455,7 +3455,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 50)
 	baseAllocatedID := currentRequestID()
 
@@ -3537,7 +3537,7 @@ func TestPrewriteNotMatchError(t *testing.T) {
 
 func createFakeEventFeedSession() *eventFeedSession {
 	return newEventFeedSession(
-		&CDCClient{config: config.GetDefaultServerConfig().KVClient},
+		&CDCClient{config: config.GetDefaultServerConfig()},
 		tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
 		nil, /*lockResolver*/
 		100, /*startTs*/

@@ -199,7 +199,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {
@@ -293,7 +293,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	defer regionCache.Close()
 	cdcClient := NewCDCClient(
 		ctx, pdClient, grpcPool, regionCache, pdutil.NewClock4Test(),
-		config.GetDefaultServerConfig().KVClient, changefeed, 0, "", false)
+		config.GetDefaultServerConfig(), changefeed, 0, "", false)
 	eventCh := make(chan model.RegionFeedEvent, 1000000)
 	wg.Add(1)
 	go func() {

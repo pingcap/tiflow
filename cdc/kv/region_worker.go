@@ -157,7 +157,7 @@ func newRegionWorker(
 		rtsManager:    newRegionTsManager(),
 		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
 		storeAddr:     addr,
-		concurrency:   int(s.client.config.WorkerConcurrent),
+		concurrency:   int(s.client.config.KVClient.WorkerConcurrent),
 		metrics:       newRegionWorkerMetrics(changefeedID),
 		inputPending:  0,
 	}

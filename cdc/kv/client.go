@@ -46,6 +46,7 @@ import (
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -156,7 +157,7 @@ var NewCDCKVClient = NewCDCClient
 type CDCClient struct {
 	pd pd.Client
 
-	config    *config.KVClientConfig
+	config    *config.ServerConfig
 	clusterID uint64
 
 	grpcPool GrpcPool
@@ -177,6 +178,8 @@ type CDCClient struct {
 	// filterLoop is used in BDR mode, when it is true, tikv cdc component
 	// will filter data that are written by another TiCDC.
 	filterLoop bool
+
+	ratelimiterMap sync.Map
 }
 
 type tableStoreStat struct {
@@ -192,7 +195,7 @@ func NewCDCClient(
 	grpcPool GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
-	cfg *config.KVClientConfig,
+	cfg *config.ServerConfig,
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
 	tableName string,
@@ -208,17 +211,18 @@ func NewCDCClient(
 		regionCache: regionCache,
 		pdClock:     pdClock,
 
-		changefeed: changefeed,
-		tableID:    tableID,
-		tableName:  tableName,
-		filterLoop: filterLoop,
+		changefeed:     changefeed,
+		tableID:        tableID,
+		tableName:      tableName,
+		filterLoop:     filterLoop,
+		ratelimiterMap: sync.Map{},
 	}
 	c.tableStoreStats.v = make(map[string]*tableStoreStat)
 	return c
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream *eventFeedStream, newStreamErr error) {
-	newStreamErr = retry.Do(ctx, func() (err error) {
+	streamFunc := func() (err error) {
 		var conn *sharedConn
 		defer func() {
 			if err != nil && conn != nil {
@@ -248,10 +252,20 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			zap.String("changefeed", c.changefeed.ID),
 			zap.String("addr", addr))
 		return nil
-	}, retry.WithBackoffBaseDelay(500),
-		retry.WithMaxTries(2),
-		retry.WithIsRetryableErr(cerror.IsRetryableError),
-	)
+	}
+	if c.config.Debug.EnableKVConnectBackOff {
+		newStreamErr = retry.Do(ctx, streamFunc,
+			retry.WithBackoffBaseDelay(100),
+			retry.WithMaxTries(2),
+			retry.WithIsRetryableErr(cerror.IsRetryableError),
+		)
+	}
+	limit, _ := c.ratelimiterMap.LoadOrStore(addr, rate.NewLimiter(rate.Limit(5), 1))
+	if !limit.(*rate.Limiter).Allow() {
+		newStreamErr = errors.Errorf("rate limit exceed, addr: %s", addr)
+		return
+	}
+	newStreamErr = streamFunc()
 	return
 }
 
@@ -842,7 +856,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			}
 			return nil
 		}, retry.WithBackoffMaxDelay(500),
-			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.RegionRetryDuration)))
+			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.KVClient.RegionRetryDuration)))
 		if retryErr != nil {
 			log.Warn("load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),

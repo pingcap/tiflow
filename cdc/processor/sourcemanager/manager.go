@@ -198,15 +198,15 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.multiplexing {
-		clientConfig := config.GetGlobalServerConfig().KVClient
+		serverConfig := config.GetGlobalServerConfig()
 		client := kv.NewSharedClient(
-			m.changefeedID, clientConfig, m.bdrMode,
+			m.changefeedID, serverConfig, m.bdrMode,
 			m.up.PDClient, m.up.GrpcPool, m.up.RegionCache, m.up.PDClock,
 			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
 		)
 		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
 			m.changefeedID, client, m.engine,
-			int(clientConfig.FrontierConcurrent),
+			int(serverConfig.KVClient.FrontierConcurrent),
 		)
 
 		close(m.ready)
