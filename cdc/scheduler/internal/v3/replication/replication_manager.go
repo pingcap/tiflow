@@ -512,24 +512,25 @@ func (r *Manager) AdvanceCheckpoint(
 	barrier *schedulepb.BarrierWithMinTs,
 	redoMetaManager redo.MetaManager,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
-	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs *uint64) {
+	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs uint64) (uint64, uint64) {
 		flushedMeta := redoMetaManager.GetFlushedMeta()
 		log.Debug("owner gets flushed redo meta",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Uint64("flushedCheckpointTs", flushedMeta.CheckpointTs),
 			zap.Uint64("flushedResolvedTs", flushedMeta.ResolvedTs))
-		if flushedMeta.ResolvedTs != 0 && flushedMeta.ResolvedTs < *newResolvedTs {
-			*newResolvedTs = flushedMeta.ResolvedTs
+		if flushedMeta.ResolvedTs != 0 && flushedMeta.ResolvedTs < newResolvedTs {
+			newResolvedTs = flushedMeta.ResolvedTs
 		}
 
-		if *newCheckpointTs > *newResolvedTs {
-			*newCheckpointTs = *newResolvedTs
+		if newCheckpointTs > newResolvedTs {
+			newCheckpointTs = newResolvedTs
 		}
 
-		if barrier.GlobalBarrierTs > *newResolvedTs {
-			barrier.GlobalBarrierTs = *newResolvedTs
+		if barrier.GlobalBarrierTs > newResolvedTs {
+			barrier.GlobalBarrierTs = newResolvedTs
 		}
+		return newCheckpointTs, newResolvedTs
 	}
 
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
@@ -596,7 +597,7 @@ func (r *Manager) AdvanceCheckpoint(
 		if redoMetaManager.Enabled() {
 			// If redo is enabled, GlobalBarrierTs should be limited by redo flushed meta.
 			newResolvedTs = barrier.RedoBarrierTs
-			limitBarrierWithRedo(&newCheckpointTs, &newResolvedTs)
+			limitBarrierWithRedo(newCheckpointTs, newResolvedTs)
 		}
 		return checkpointCannotProceed, checkpointCannotProceed
 	}
@@ -649,7 +650,7 @@ func (r *Manager) AdvanceCheckpoint(
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Uint64("newCheckpointTs", newCheckpointTs),
 			zap.Uint64("newResolvedTs", newResolvedTs))
-		limitBarrierWithRedo(&newCheckpointTs, &newResolvedTs)
+		return limitBarrierWithRedo(newCheckpointTs, newResolvedTs)
 	}
 
 	return newCheckpointTs, newResolvedTs
