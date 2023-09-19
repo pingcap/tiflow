@@ -456,7 +456,7 @@ func (s *Server) initElector() error {
 		return errors.Errorf("failed to convert conn to *sql.DB, got %T", conn)
 	}
 
-	sqlStorage, err := election.NewSQLStorage(db, leaderElectionTable)
+	sqlStorage, err := election.NewORMStorageFromSQLDB(db, leaderElectionTable)
 	if err != nil {
 		return err
 	}
