@@ -385,7 +385,18 @@ func TestHandleJob(t *testing.T) {
 	cfg.Filter.Rules = []string{
 		"test1.t1",
 		"test1.t2",
+		"test1.testStartTs",
 	}
+	// test start ts filter
+	cfg.Filter.IgnoreTxnStartTs = []uint64{1}
+	// test event filter
+	cfg.Filter.EventFilters = []*config.EventFilterRule{
+		{
+			Matcher:   []string{"test1.*"},
+			IgnoreSQL: []string{"alter table test1.t1 add column c1 int"},
+		},
+	}
+
 	f, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
@@ -422,6 +433,22 @@ func TestHandleJob(t *testing.T) {
 		skip, err := ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.t1 add column c1 int")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+
+		job = helper.DDL2Job("create table test1.testStartTs(id int)")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.testStartTs add column c1 int")
+		job.StartTS = 1
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
 
 		job = helper.DDL2Job("create table test1.t2(id int)")
 		skip, err = ddlJobPullerImpl.handleJob(job)
