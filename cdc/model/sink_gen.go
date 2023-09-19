@@ -42,6 +42,12 @@ func (z *Column) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Charset")
 				return
 			}
+		case "collation":
+			z.Collation, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Collation")
+				return
+			}
 		case "ApproximateBytes":
 			z.ApproximateBytes, err = dc.ReadInt()
 			if err != nil {
@@ -61,9 +67,9 @@ func (z *Column) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *Column) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 4
+	// map header, size 5
 	// write "name"
-	err = en.Append(0x84, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
+	err = en.Append(0x85, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -92,6 +98,16 @@ func (z *Column) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Charset")
 		return
 	}
+	// write "collation"
+	err = en.Append(0xa9, 0x63, 0x6f, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e)
+	if err != nil {
+		return
+	}
+	err = en.WriteString(z.Collation)
+	if err != nil {
+		err = msgp.WrapError(err, "Collation")
+		return
+	}
 	// write "ApproximateBytes"
 	err = en.Append(0xb0, 0x41, 0x70, 0x70, 0x72, 0x6f, 0x78, 0x69, 0x6d, 0x61, 0x74, 0x65, 0x42, 0x79, 0x74, 0x65, 0x73)
 	if err != nil {
@@ -108,9 +124,9 @@ func (z *Column) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *Column) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 4
+	// map header, size 5
 	// string "name"
-	o = append(o, 0x84, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
+	o = append(o, 0x85, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Name)
 	// string "type"
 	o = append(o, 0xa4, 0x74, 0x79, 0x70, 0x65)
@@ -118,6 +134,9 @@ func (z *Column) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "charset"
 	o = append(o, 0xa7, 0x63, 0x68, 0x61, 0x72, 0x73, 0x65, 0x74)
 	o = msgp.AppendString(o, z.Charset)
+	// string "collation"
+	o = append(o, 0xa9, 0x63, 0x6f, 0x6c, 0x6c, 0x61, 0x74, 0x69, 0x6f, 0x6e)
+	o = msgp.AppendString(o, z.Collation)
 	// string "ApproximateBytes"
 	o = append(o, 0xb0, 0x41, 0x70, 0x70, 0x72, 0x6f, 0x78, 0x69, 0x6d, 0x61, 0x74, 0x65, 0x42, 0x79, 0x74, 0x65, 0x73)
 	o = msgp.AppendInt(o, z.ApproximateBytes)
@@ -160,6 +179,12 @@ func (z *Column) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "Charset")
 				return
 			}
+		case "collation":
+			z.Collation, bts, err = msgp.ReadStringBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "Collation")
+				return
+			}
 		case "ApproximateBytes":
 			z.ApproximateBytes, bts, err = msgp.ReadIntBytes(bts)
 			if err != nil {
@@ -180,7 +205,7 @@ func (z *Column) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *Column) Msgsize() (s int) {
-	s = 1 + 5 + msgp.StringPrefixSize + len(z.Name) + 5 + msgp.ByteSize + 8 + msgp.StringPrefixSize + len(z.Charset) + 17 + msgp.IntSize
+	s = 1 + 5 + msgp.StringPrefixSize + len(z.Name) + 5 + msgp.ByteSize + 8 + msgp.StringPrefixSize + len(z.Charset) + 10 + msgp.StringPrefixSize + len(z.Collation) + 17 + msgp.IntSize
 	return
 }
 

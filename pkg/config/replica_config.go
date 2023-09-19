@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -64,6 +65,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnablePartitionSeparator: true,
 		EnableKafkaSinkV2:        false,
 		TiDBSourceID:             1,
+		AdvanceTimeoutInSec:      util.AddressOf(DefaultAdvanceTimeoutInSec),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -319,4 +321,14 @@ func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url
 	}
 
 	return nil
+}
+
+// MaskSensitiveData masks sensitive data in ReplicaConfig
+func (c *ReplicaConfig) MaskSensitiveData() {
+	if c.Sink != nil {
+		c.Sink.MaskSensitiveData()
+	}
+	if c.Consistent != nil {
+		c.Consistent.MaskSensitiveData()
+	}
 }

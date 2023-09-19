@@ -133,7 +133,8 @@ func initProcessor4Test(
         },
         "sink": {
             "dispatchers": null,
-            "protocol": "open-protocol"
+            "protocol": "open-protocol",
+            "advance-timeout-in-sec": 150
         }
     },
     "state": "normal",
@@ -631,7 +632,7 @@ func TestIgnorableError(t *testing.T) {
 		{nil, true},
 		{cerror.ErrAdminStopProcessor.GenWithStackByArgs(), true},
 		{cerror.ErrReactorFinished.GenWithStackByArgs(), true},
-		{cerror.ErrRedoWriterStopped.GenWithStackByArgs(), true},
+		{cerror.ErrRedoWriterStopped.GenWithStackByArgs(), false},
 		{errors.Trace(context.Canceled), true},
 		{cerror.ErrProcessorTableNotFound.GenWithStackByArgs(), false},
 		{errors.New("test error"), false},

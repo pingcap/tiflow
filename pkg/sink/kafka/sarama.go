@@ -38,21 +38,20 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	}
 	config.Version = version
 
-	// Producer fetch metadata from brokers frequently, if metadata cannot be
-	// refreshed easily, this would indicate the network condition between the
+	// Admin client would refresh metadata periodically,
+	// if metadata cannot be refreshed easily, this would indicate the network condition between the
 	// capture server and kafka broker is not good.
-	// In the scenario that cannot get response from Kafka server, this default
-	// setting can help to get response more quickly.
-	config.Metadata.Retry.Max = 1
-	config.Metadata.Retry.Backoff = 100 * time.Millisecond
-	// This Timeout is useless if the `RefreshMetadata` time cost is less than it.
-	config.Metadata.Timeout = 1 * time.Minute
+	// Set the timeout to 2 minutes to ensure that the underlying client does not retry for too long.
+	// If retrying to obtain the metadata fails, simply return the error and let sinkManager rebuild the sink.
+	config.Metadata.Retry.Max = 10
+	config.Metadata.Retry.Backoff = 200 * time.Millisecond
+	config.Metadata.Timeout = 2 * time.Minute
 
-	// Admin.Retry take effect on `ClusterAdmin` related operations,
-	// only `CreateTopic` for cdc now. set the `Timeout` to `1m` to make CI stable.
-	config.Admin.Retry.Max = 5
-	config.Admin.Retry.Backoff = 100 * time.Millisecond
-	config.Admin.Timeout = 1 * time.Minute
+	config.Admin.Retry.Max = 10
+	config.Admin.Retry.Backoff = 200 * time.Millisecond
+	// This timeout control the request timeout for each admin request.
+	// set it as the read timeout.
+	config.Admin.Timeout = 10 * time.Second
 
 	// Producer.Retry take effect when the producer try to send message to kafka
 	// brokers. If kafka cluster is healthy, just the default value should be enough.
@@ -123,7 +122,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	return config, err
+	return config, nil
 }
 
 func completeSaramaSASLConfig(ctx context.Context, config *sarama.Config, o *Options) error {

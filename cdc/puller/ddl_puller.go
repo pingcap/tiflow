@@ -123,7 +123,11 @@ func (p *ddlJobPullerImpl) Run(ctx context.Context, _ ...chan<- error) error {
 						return cerror.WrapError(cerror.ErrHandleDDLFailed,
 							err, job.String(), job.Query, job.StartTS, job.StartTS)
 					}
-					log.Info("handle job", zap.Stringer("job", job), zap.Bool("skip", skip))
+					log.Info("handle ddl job",
+						zap.String("namespace", p.changefeedID.Namespace),
+						zap.String("changefeed", p.changefeedID.ID),
+						zap.String("query", job.Query),
+						zap.Stringer("job", job), zap.Bool("skip", skip))
 					if skip {
 						continue
 					}

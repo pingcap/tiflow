@@ -96,6 +96,10 @@ func (r *redoEventCache) removeTable(span tablepb.Span) {
 	}
 }
 
+func (r *redoEventCache) clear() {
+	r.metricRedoEventCache.Set(0.0)
+}
+
 func (r *redoEventCache) maybeCreateAppender(
 	span tablepb.Span, lowerBound engine.Position,
 ) *eventAppender {

@@ -17,9 +17,11 @@ import (
 	"encoding/binary"
 	"hash/fnv"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"go.uber.org/zap"
@@ -100,16 +102,24 @@ func genRowKeys(row *model.RowChangedEvent) [][]byte {
 	return keys
 }
 
-func genKeyList(columns []*model.Column, iIdx int, colIdx []int, tableID int64) []byte {
+func genKeyList(
+	columns []*model.Column, iIdx int, colIdx []int, tableID int64,
+) []byte {
 	var key []byte
 	for _, i := range colIdx {
 		// if a column value is null, we can ignore this index
 		// If the index contain generated column, we can't use this key to detect conflict with other DML,
-		// Because such as insert can't specified the generated value.
+		// Because such as insert can't specify the generated value.
 		if columns[i] == nil || columns[i].Value == nil || columns[i].Flag.IsGeneratedColumn() {
 			return nil
 		}
-		key = append(key, []byte(model.ColumnValueString(columns[i].Value))...)
+
+		val := model.ColumnValueString(columns[i].Value)
+		if columnNeeds2LowerCase(columns[i].Type, columns[i].Collation) {
+			val = strings.ToLower(val)
+		}
+
+		key = append(key, []byte(val)...)
 		key = append(key, 0)
 	}
 	if len(key) == 0 {
@@ -120,4 +130,17 @@ func genKeyList(columns []*model.Column, iIdx int, colIdx []int, tableID int64) 
 	binary.BigEndian.PutUint64(tableKey[8:], uint64(tableID))
 	key = append(key, tableKey...)
 	return key
+}
+
+func columnNeeds2LowerCase(mysqlType byte, collation string) bool {
+	switch mysqlType {
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
+		return collationNeeds2LowerCase(collation)
+	}
+	return false
+}
+
+func collationNeeds2LowerCase(collation string) bool {
+	return strings.HasSuffix(collation, "_ci")
 }

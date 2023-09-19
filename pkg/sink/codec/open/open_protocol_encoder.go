@@ -37,6 +37,33 @@ type BatchEncoder struct {
 	config *common.Config
 }
 
+func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent) ([]byte, []byte, error) {
+	// set the `largeMessageOnlyHandleKeyColumns` to true to only encode handle key columns.
+	keyMsg, valueMsg := rowChangeToMsg(e, d.config, true)
+	key, err := keyMsg.Encode()
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	value, err := valueMsg.encode(d.config.OnlyOutputUpdatedColumns)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+
+	// for single message that is longer than max-message-bytes
+	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
+	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
+	if length > d.config.MaxMessageBytes {
+		log.Error("Single message is too large for open-protocol, only encode handle key columns",
+			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("table", e.Table),
+			zap.Any("key", key))
+		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+	}
+
+	return key, value, nil
+}
+
 // AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
 	_ context.Context,
@@ -44,7 +71,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	keyMsg, valueMsg := rowChangeToMsg(e, d.config.OnlyHandleKeyColumns)
+	keyMsg, valueMsg := rowChangeToMsg(e, d.config, false)
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return errors.Trace(err)
@@ -54,21 +81,22 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
-	var keyLenByte [8]byte
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	var valueLenByte [8]byte
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
 	// for single message that is longer than max-message-bytes, do not send it.
 	// 16 is the length of `keyLenByte` and `valueLenByte`, 8 is the length of `versionHead`
 	length := len(key) + len(value) + common.MaxRecordOverhead + 16 + 8
 	if length > d.config.MaxMessageBytes {
-		log.Warn("Single message is too large for open-protocol",
-			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
-			zap.Int("length", length),
-			zap.Any("table", e.Table),
-			zap.Any("key", key))
-		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		if d.config.LargeMessageHandle.Disabled() {
+			log.Error("Single message is too large for open-protocol",
+				zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
+				zap.Int("length", length),
+				zap.Any("table", e.Table),
+				zap.Any("key", key))
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+		key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
+		if err != nil {
+			return errors.Trace(err)
+		}
 	}
 
 	if len(d.messageBuf) == 0 ||
@@ -83,6 +111,13 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		d.messageBuf = append(d.messageBuf, msg)
 		d.curBatchSize = 0
 	}
+
+	var (
+		keyLenByte   [8]byte
+		valueLenByte [8]byte
+	)
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
 
 	message := d.messageBuf[len(d.messageBuf)-1]
 	message.Key = append(message.Key, keyLenByte[:]...)

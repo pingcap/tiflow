@@ -53,7 +53,8 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol"
+    "protocol": "open-protocol",
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
@@ -236,6 +237,9 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
       }
     },
     "mysql-config": {
@@ -259,7 +263,8 @@ const (
       "worker-count": 8,
       "flush-interval": "1m",
       "file-size": 1024
-    }
+    },
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
@@ -325,6 +330,11 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
+    "kafka-config": {
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
+      }
+    },
     "only-output-updated-columns": false,
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
@@ -385,7 +395,8 @@ const (
       "worker-count": 8,
       "flush-interval": "1m",
       "file-size": 1024
-    }
+    },
+    "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",

@@ -163,6 +163,9 @@ func TestHandleRenameTable(t *testing.T) {
 		"test1.t66",
 		"test1.t99",
 		"test1.t100",
+		"test1.t20230808",
+		"test1.t202308081",
+		"test1.t202308082",
 
 		"test2.t4",
 
@@ -214,7 +217,17 @@ func TestHandleRenameTable(t *testing.T) {
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55")
+		job = helper.DDL2Job("create database ignore1")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("create table ignore1.a(id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55, ignore1.a to ignore1.b")
 
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.NoError(t, err)
@@ -308,6 +321,20 @@ func TestHandleRenameTable(t *testing.T) {
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
+		job = helper.DDL2Job("create table test1.t20230808 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("create table test1.t202308081 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("create table test1.t202308082 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 		// since test1.99 in filter rule, we replicate it
 		job = helper.DDL2Job("rename table test1.t99 to test1.t999")
 		skip, err := ddlJobPullerImpl.handleJob(job)
@@ -328,6 +355,22 @@ func TestHandleRenameTable(t *testing.T) {
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
+
+		// since test1.t20230808 is  in filter rule, replicate it
+		// ref: https://github.com/pingcap/tiflow/issues/9488
+		job = helper.DDL2Job("rename table test1.t20230808 to ignore1.ignore")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		// FIXME(dongmen): since test1.t202308081 and test1.t202308082 are in filter rule, it should be replicated
+		// but now it will throw an error since schema ignore1 are not in schemaStorage
+		// ref: https://github.com/pingcap/tiflow/issues/9488
+		job = helper.DDL2Job("rename table test1.t202308081 to ignore1.ignore1, test1.t202308082 to ignore1.dongmen")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NotNil(t, err)
+		require.True(t, skip)
+		require.Contains(t, err.Error(), "ErrSnapshotSchemaNotFound")
 	}
 }
 

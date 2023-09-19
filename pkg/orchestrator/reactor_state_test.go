@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
+	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +70,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
         },
         "sink": {
             "dispatchers": null,
-            "protocol": "open-protocol"
+            "protocol": "open-protocol",
+            "advance-timeout-in-sec": 150
         },
         "consistent": {
             "level": "normal",
@@ -123,10 +125,13 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
-						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
-						Integrity:        config.GetDefaultReplicaConfig().Integrity,
+						Sink: &config.SinkConfig{
+							Protocol:            "open-protocol",
+							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -173,10 +178,13 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
-						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
-						Integrity:        config.GetDefaultReplicaConfig().Integrity,
+						Sink: &config.SinkConfig{
+							Protocol:            "open-protocol",
+							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -228,10 +236,13 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
-						Sink:             &config.SinkConfig{Protocol: "open-protocol"},
-						Consistent:       &config.ConsistentConfig{Level: "normal", Storage: "local"},
-						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
-						Integrity:        config.GetDefaultReplicaConfig().Integrity,
+						Sink: &config.SinkConfig{
+							Protocol:            "open-protocol",
+							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
+						},
+						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},

@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // EmptyResponse return empty {} to http client
@@ -284,6 +285,15 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
 				}
 			}
+
+			var largeMessageHandle *config.LargeMessageHandleConfig
+			if c.Sink.KafkaConfig.LargeMessageHandle != nil {
+				oldConfig := c.Sink.KafkaConfig.LargeMessageHandle
+				largeMessageHandle = &config.LargeMessageHandleConfig{
+					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
+				}
+			}
+
 			kafkaConfig = &config.KafkaConfig{
 				PartitionNum:                 c.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            c.Sink.KafkaConfig.ReplicationFactor,
@@ -319,6 +329,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				Key:                          c.Sink.KafkaConfig.Key,
 				InsecureSkipVerify:           c.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
+				LargeMessageHandle:           largeMessageHandle,
 			}
 		}
 		var mysqlConfig *config.MySQLConfig
@@ -368,6 +379,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			MySQLConfig:              mysqlConfig,
 			CloudStorageConfig:       cloudStorageConfig,
 			SafeMode:                 c.Sink.SafeMode,
+		}
+		if c.Sink.AdvanceTimeoutInSec != nil {
+			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
 		}
 	}
 	if c.Mounter != nil {
@@ -487,6 +501,15 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
 				}
 			}
+
+			var largeMessageHandle *LargeMessageHandleConfig
+			if cloned.Sink.KafkaConfig.LargeMessageHandle != nil {
+				oldConfig := cloned.Sink.KafkaConfig.LargeMessageHandle
+				largeMessageHandle = &LargeMessageHandleConfig{
+					LargeMessageHandleOption: oldConfig.LargeMessageHandleOption,
+				}
+			}
+
 			kafkaConfig = &KafkaConfig{
 				PartitionNum:                 cloned.Sink.KafkaConfig.PartitionNum,
 				ReplicationFactor:            cloned.Sink.KafkaConfig.ReplicationFactor,
@@ -522,6 +545,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Key:                          cloned.Sink.KafkaConfig.Key,
 				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
 				CodecConfig:                  codeConfig,
+				LargeMessageHandle:           largeMessageHandle,
 			}
 		}
 		var mysqlConfig *MySQLConfig
@@ -571,6 +595,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MySQLConfig:              mysqlConfig,
 			CloudStorageConfig:       cloudStorageConfig,
 			SafeMode:                 cloned.Sink.SafeMode,
+		}
+		if cloned.Sink.AdvanceTimeoutInSec != nil {
+			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
 		}
 	}
 	if cloned.Consistent != nil {
@@ -722,6 +749,7 @@ type SinkConfig struct {
 	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	AdvanceTimeoutInSec      *uint               `json:"advance_timeout,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -943,6 +971,8 @@ type KafkaConfig struct {
 	Key                          *string      `json:"key,omitempty"`
 	InsecureSkipVerify           *bool        `json:"insecure_skip_verify,omitempty"`
 	CodecConfig                  *CodecConfig `json:"codec_config,omitempty"`
+
+	LargeMessageHandle *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
 }
 
 // MySQLConfig represents a MySQL sink configuration
@@ -978,4 +1008,10 @@ type ChangefeedStatus struct {
 	CheckpointTs uint64        `json:"checkpoint_ts"`
 	LastError    *RunningError `json:"last_error,omitempty"`
 	LastWarning  *RunningError `json:"last_warning,omitempty"`
+}
+
+// LargeMessageHandleConfig denotes the large message handling config
+// This is the same as config.LargeMessageHandleConfig
+type LargeMessageHandleConfig struct {
+	LargeMessageHandleOption string `json:"large_message_handle_option"`
 }

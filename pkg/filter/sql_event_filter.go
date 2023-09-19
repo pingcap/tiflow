@@ -14,6 +14,8 @@
 package filter
 
 import (
+	"sync"
+
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
@@ -95,14 +97,21 @@ func verifyIgnoreEvents(types []bf.EventType) error {
 
 // sqlEventFilter is a filter that filters DDL/DML event by its type or query.
 type sqlEventFilter struct {
-	p     *parser.Parser
-	rules []*sqlEventRule
+	// Please be careful, parser.Parser is not thread safe.
+	pLock sync.Mutex
+	// Currently, parser is only used to parse ddl query.
+	// So we can use a lock to protect it.
+	// If we want to use it to parse dml query in the future,
+	// we should create a parser for each goroutine.
+	ddlParser *parser.Parser
+	rules     []*sqlEventRule
 }
 
 func newSQLEventFilter(cfg *config.FilterConfig) (*sqlEventFilter, error) {
 	res := &sqlEventFilter{
-		p: parser.New(),
+		ddlParser: parser.New(),
 	}
+
 	for _, rule := range cfg.EventFilters {
 		if err := res.addRule(rule); err != nil {
 			return nil, errors.Trace(err)
@@ -143,7 +152,10 @@ func (f *sqlEventFilter) shouldSkipDDL(
 	log.Info("sql event filter handle ddl event",
 		zap.Any("ddlType", ddlType), zap.String("schema", schema),
 		zap.String("table", table), zap.String("query", query))
-	evenType, err := ddlToEventType(f.p, query, ddlType)
+	f.pLock.Lock()
+	evenType, err := ddlToEventType(f.ddlParser, query, ddlType)
+	f.pLock.Unlock()
+
 	if err != nil {
 		return false, err
 	}

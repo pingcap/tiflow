@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -691,26 +692,6 @@ func (o *ownerImpl) updateGCSafepoint(
 	return nil
 }
 
-// ignoreFailedChangeFeedWhenGC checks if a failed changefeed should be ignored
-// when calculating the gc safepoint of the associated upstream.
-func (o *ownerImpl) ignoreFailedChangeFeedWhenGC(
-	state *orchestrator.ChangefeedReactorState,
-) bool {
-	upID := state.Info.UpstreamID
-	us, exist := o.upstreamManager.Get(upID)
-	if !exist {
-		log.Warn("upstream not found", zap.Uint64("ID", upID))
-		return false
-	}
-	// in case the changefeed failed right after it is created
-	// and the status is not initialized yet.
-	ts := state.Info.StartTs
-	if state.Status != nil {
-		ts = state.Status.CheckpointTs
-	}
-	return us.GCManager.IgnoreFailedChangeFeed(ts)
-}
-
 // calculateGCSafepoint calculates GCSafepoint for different upstream.
 // Note: we need to maintain a TiCDC service GC safepoint for each upstream TiDB cluster
 // to prevent upstream TiDB GC from removing data that is still needed by TiCDC.
@@ -722,17 +703,7 @@ func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState)
 	forceUpdateMap := make(map[uint64]interface{})
 
 	for changefeedID, changefeedState := range state.Changefeeds {
-		if changefeedState.Info == nil {
-			continue
-		}
-
-		switch changefeedState.Info.State {
-		case model.StateNormal, model.StateStopped, model.StateError:
-		case model.StateFailed:
-			if o.ignoreFailedChangeFeedWhenGC(changefeedState) {
-				continue
-			}
-		default:
+		if changefeedState.Info == nil || !changefeedState.Info.NeedBlockGC() {
 			continue
 		}
 
@@ -754,6 +725,20 @@ func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState)
 		if !exist {
 			forceUpdateMap[upstreamID] = nil
 		}
+	}
+	// check if the upstream has a changefeed, if not we should update the gc safepoint
+	err := o.upstreamManager.Visit(func(up *upstream.Upstream) error {
+		if _, exist := minCheckpointTsMap[up.ID]; !exist {
+			ts, err := up.PDClock.CurrentTime()
+			if err != nil {
+				return errors.Annotatef(err, "upstream %d get pd time failed", up.ID)
+			}
+			minCheckpointTsMap[up.ID] = oracle.GoTimeToTS(ts)
+		}
+		return nil
+	})
+	if err != nil {
+		log.Warn("get pd time failed failed", zap.Error(err))
 	}
 	return minCheckpointTsMap, forceUpdateMap
 }

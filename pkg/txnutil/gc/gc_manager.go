@@ -38,9 +38,6 @@ type Manager interface {
 	// Set `forceUpdate` to force Manager update.
 	TryUpdateGCSafePoint(ctx context.Context, checkpointTs model.Ts, forceUpdate bool) error
 	CheckStaleCheckpointTs(ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts) error
-	// IgnoreFailedChangeFeed verifies whether a failed changefeed should be
-	// disregarded. When calculating the GC safepoint of the related upstream,
-	IgnoreFailedChangeFeed(checkpointTs uint64) bool
 }
 
 type gcManager struct {
@@ -138,23 +135,4 @@ func (m *gcManager) CheckStaleCheckpointTs(
 		}
 	}
 	return nil
-}
-
-func (m *gcManager) IgnoreFailedChangeFeed(
-	checkpointTs uint64,
-) bool {
-	pdTime, err := m.pdClock.CurrentTime()
-	if err != nil {
-		log.Warn("failed to get ts",
-			zap.String("GcManagerID", m.gcServiceID),
-			zap.Error(err),
-		)
-		return false
-	}
-	// ignore the changefeed if its current checkpoint TS is earlier
-	// than the (currentPDTso - failedFeedDataRetentionTime).
-	gcSafepointUpperBound := checkpointTs - 1
-	return pdTime.Sub(
-		oracle.GetTimeFromTS(gcSafepointUpperBound),
-	) > time.Duration(m.gcTTL)*time.Second
 }

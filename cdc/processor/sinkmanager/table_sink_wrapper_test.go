@@ -74,6 +74,22 @@ func (m *mockSink) AckAllEvents() {
 	}
 }
 
+type mockDelayedTableSink struct {
+	tablesink.TableSink
+
+	closeCnt    int
+	closeTarget int
+}
+
+func (t *mockDelayedTableSink) AsyncClose() bool {
+	t.closeCnt++
+	if t.closeCnt >= t.closeTarget {
+		t.TableSink.Close()
+		return true
+	}
+	return false
+}
+
 //nolint:unparam
 func createTableSinkWrapper(
 	changefeedID model.ChangeFeedID, span tablepb.Span,
@@ -86,24 +102,37 @@ func createTableSinkWrapper(
 	wrapper := newTableSinkWrapper(
 		changefeedID,
 		span,
-		func() tablesink.TableSink { return innerTableSink },
+		func() (tablesink.TableSink, uint64) { return innerTableSink, 1 },
 		tableState,
 		0,
 		100,
 		func(_ context.Context) (model.Ts, error) { return math.MaxUint64, nil },
 	)
-	wrapper.tableSink = wrapper.tableSinkCreater()
+	wrapper.tableSink.s, wrapper.tableSink.version = wrapper.tableSinkCreater()
 	return wrapper, sink
 }
 
-func TestTableSinkWrapperClose(t *testing.T) {
+func TestTableSinkWrapperStop(t *testing.T) {
 	t.Parallel()
 
 	wrapper, _ := createTableSinkWrapper(
 		model.DefaultChangeFeedID("1"), spanz.TableIDToComparableSpan(1))
+	wrapper.tableSink.s = &mockDelayedTableSink{
+		TableSink:   wrapper.tableSink.s,
+		closeCnt:    0,
+		closeTarget: 10,
+	}
 	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
-	wrapper.stop()
+
+	closeCnt := 0
+	for {
+		closeCnt++
+		if wrapper.asyncStop() {
+			break
+		}
+	}
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
+	require.Equal(t, 10, closeCnt, "table sink should be closed 10 times")
 }
 
 func TestUpdateReceivedSorterResolvedTs(t *testing.T) {
@@ -329,5 +358,6 @@ func TestNewTableSinkWrapper(t *testing.T) {
 	require.NotNil(t, wrapper)
 	require.Equal(t, uint64(10), wrapper.getUpperBoundTs())
 	require.Equal(t, uint64(10), wrapper.getReceivedSorterResolvedTs())
-	require.Equal(t, uint64(10), wrapper.getCheckpointTs().ResolvedMark())
+	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	require.Equal(t, uint64(10), checkpointTs.ResolvedMark())
 }

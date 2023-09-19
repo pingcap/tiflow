@@ -29,61 +29,68 @@ import (
 	"go.uber.org/zap"
 )
 
-func newJSONMessageForDML(
+func fillColumns(columns []*model.Column, out *jwriter.Writer,
+	onlyOutputUpdatedColumn bool,
+	onlyHandleKeyColumns bool,
+	newColumnMap map[string]*model.Column,
 	builder *canalEntryBuilder,
+) error {
+	if len(columns) == 0 {
+		out.RawString("null")
+		return nil
+	}
+	out.RawByte('[')
+	out.RawByte('{')
+	isFirst := true
+	for _, col := range columns {
+		if col != nil {
+			// column equal, do not output it
+			if onlyOutputUpdatedColumn && shouldIgnoreColumn(col, newColumnMap) {
+				continue
+			}
+			if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+				continue
+			}
+			if isFirst {
+				isFirst = false
+			} else {
+				out.RawByte(',')
+			}
+			mysqlType := getMySQLType(col)
+			javaType, err := getJavaSQLType(col, mysqlType)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			value, err := builder.formatValue(col.Value, javaType)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			}
+			out.String(col.Name)
+			out.RawByte(':')
+			if col.Value == nil {
+				out.RawString("null")
+			} else {
+				out.String(value)
+			}
+		}
+	}
+	out.RawByte('}')
+	out.RawByte(']')
+	return nil
+}
+
+func newJSONMessageForDML(
 	e *model.RowChangedEvent,
 	config *common.Config,
+	builder *canalEntryBuilder,
+	messageTooLarge bool,
 ) ([]byte, error) {
 	isDelete := e.IsDelete()
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
-	filling := func(columns []*model.Column, out *jwriter.Writer,
-		onlyOutputUpdatedColumn bool,
-		onlyHandleKeyColumns bool,
-		newColumnMap map[string]*model.Column,
-	) error {
-		if len(columns) == 0 {
-			out.RawString("null")
-			return nil
-		}
-		out.RawByte('[')
-		out.RawByte('{')
-		isFirst := true
-		for _, col := range columns {
-			if col != nil {
-				// column equal, do not output it
-				if onlyOutputUpdatedColumn && shouldIgnoreColumn(col, newColumnMap) {
-					continue
-				}
-				if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
-					continue
-				}
-				if isFirst {
-					isFirst = false
-				} else {
-					out.RawByte(',')
-				}
-				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
-				if err != nil {
-					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-				}
-				value, err := builder.formatValue(col.Value, javaType)
-				if err != nil {
-					return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-				}
-				out.String(col.Name)
-				out.RawByte(':')
-				if col.Value == nil {
-					out.RawString("null")
-				} else {
-					out.String(value)
-				}
-			}
-		}
-		out.RawByte('}')
-		out.RawByte(']')
-		return nil
+	onlyHandleKey := messageTooLarge
+	if isDelete && config.DeleteOnlyHandleKeyColumns {
+		onlyHandleKey = true
 	}
 
 	out := &jwriter.Writer{}
@@ -155,7 +162,7 @@ func newJSONMessageForDML(
 		emptyColumn := true
 		for _, col := range columns {
 			if col != nil {
-				if isDelete && config.OnlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+				if onlyHandleKey && !col.Flag.IsHandleKey() {
 					continue
 				}
 				if emptyColumn {
@@ -206,13 +213,13 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.PreColumns, out, false, config.OnlyHandleKeyColumns, nil); err != nil {
+		if err := fillColumns(e.PreColumns, out, false, onlyHandleKey, nil, builder); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out, false, false, nil); err != nil {
+		if err := fillColumns(e.Columns, out, false, onlyHandleKey, nil, builder); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
@@ -224,11 +231,11 @@ func newJSONMessageForDML(
 			}
 		}
 		out.RawString(",\"old\":")
-		if err := filling(e.PreColumns, out, config.OnlyOutputUpdatedColumns, false, newColsMap); err != nil {
+		if err := fillColumns(e.PreColumns, out, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, builder); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := filling(e.Columns, out, false, false, nil); err != nil {
+		if err := fillColumns(e.Columns, out, false, onlyHandleKey, nil, builder); err != nil {
 			return nil, err
 		}
 	} else {
@@ -241,6 +248,14 @@ func newJSONMessageForDML(
 		out.RawByte('{')
 		out.RawString("\"commitTs\":")
 		out.Uint64(e.CommitTs)
+
+		if messageTooLarge {
+			if config.LargeMessageHandle.HandleKeyOnly() {
+				out.RawByte(',')
+				out.RawString("\"onlyHandleKey\":true")
+			}
+		}
+
 		out.RawByte('}')
 	}
 	out.RawByte('}')
@@ -335,20 +350,11 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	value, err := newJSONMessageForDML(c.builder, e, c.config)
+	value, err := newJSONMessageForDML(e, c.config, c.builder, false)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	length := len(value) + common.MaxRecordOverhead
-	// for single message that is longer than max-message-bytes, do not send it.
-	if length > c.config.MaxMessageBytes {
-		log.Warn("Single message is too large for canal-json",
-			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
-			zap.Int("length", length),
-			zap.Any("table", e.Table))
-		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
-	}
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
@@ -360,6 +366,32 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		Callback: callback,
 	}
 	m.IncRowsCount()
+
+	if m.Length() > c.config.MaxMessageBytes {
+		// for single message that is longer than max-message-bytes, do not send it.
+		if c.config.LargeMessageHandle.Disabled() {
+			log.Error("Single message is too large for canal-json",
+				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+				zap.Int("length", m.Length()),
+				zap.Any("table", e.Table))
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+
+		if c.config.LargeMessageHandle.HandleKeyOnly() {
+			value, err = newJSONMessageForDML(e, c.config, c.builder, true)
+			if err != nil {
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
+			m.Value = value
+			if m.Length() > c.config.MaxMessageBytes {
+				log.Error("Single message is too large for canal-json, only encode handle-key columns",
+					zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
+					zap.Int("length", m.Length()),
+					zap.Any("table", e.Table))
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
+		}
+	}
 
 	c.messages = append(c.messages, m)
 	return nil

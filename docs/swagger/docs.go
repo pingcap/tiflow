@@ -1434,6 +1434,9 @@ var doc = `{
                 "key": {
                     "type": "string"
                 },
+                "large-message-handle": {
+                    "$ref": "#/definitions/config.LargeMessageHandleConfig"
+                },
                 "max-message-bytes": {
                     "type": "integer"
                 },
@@ -1508,6 +1511,14 @@ var doc = `{
                 }
             }
         },
+        "config.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "large-message-handle-option": {
+                    "type": "string"
+                }
+            }
+        },
         "config.MySQLConfig": {
             "type": "object",
             "properties": {
@@ -1561,6 +1572,10 @@ var doc = `{
         "config.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance-timeout-in-sec": {
+                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
+                    "type": "integer"
+                },
                 "cloud-storage-config": {
                     "$ref": "#/definitions/config.CloudStorageConfig"
                 },
@@ -2315,6 +2330,9 @@ var doc = `{
                 "key": {
                     "type": "string"
                 },
+                "large_message_handle": {
+                    "$ref": "#/definitions/v2.LargeMessageHandleConfig"
+                },
                 "max_message_bytes": {
                     "type": "integer"
                 },
@@ -2385,6 +2403,14 @@ var doc = `{
                     "type": "string"
                 },
                 "write_timeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.LargeMessageHandleConfig": {
+            "type": "object",
+            "properties": {
+                "large_message_handle_option": {
                     "type": "string"
                 }
             }
@@ -2609,6 +2635,9 @@ var doc = `{
         "v2.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance_timeout": {
+                    "type": "integer"
+                },
                 "cloud_storage_config": {
                     "$ref": "#/definitions/v2.CloudStorageConfig"
                 },

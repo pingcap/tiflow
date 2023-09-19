@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
+	tikvconfig "github.com/tikv/client-go/v2/config"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	uatomic "github.com/uber-go/atomic"
@@ -119,6 +120,8 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 		up.err.Store(err)
 		return errors.Trace(err)
 	}
+	// init the tikv client tls global config
+	initGlobalConfig(up.SecurityConfig)
 
 	up.PDClient, err = pd.NewClientWithContext(
 		ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
@@ -210,6 +213,20 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	log.Info("upstream initialize successfully", zap.Uint64("upstreamID", up.ID))
 	atomic.StoreInt32(&up.status, normal)
 	return nil
+}
+
+// initGlobalConfig initializes the global config for tikv client tls.
+// region cache health check will use the global config.
+// TODO: remove this function after tikv client tls is refactored.
+func initGlobalConfig(secCfg *config.SecurityConfig) {
+	if secCfg.CAPath != "" || secCfg.CertPath != "" || secCfg.KeyPath != "" {
+		conf := tikvconfig.GetGlobalConfig()
+		conf.Security.ClusterSSLCA = secCfg.CAPath
+		conf.Security.ClusterSSLCert = secCfg.CertPath
+		conf.Security.ClusterSSLKey = secCfg.KeyPath
+		conf.Security.ClusterVerifyCN = secCfg.CertAllowedCN
+		tikvconfig.StoreGlobalConfig(conf)
+	}
 }
 
 // Close all resources.

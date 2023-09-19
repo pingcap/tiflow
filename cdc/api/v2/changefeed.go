@@ -127,12 +127,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CAPath:        cfg.CAPath,
 		CertAllowedCN: cfg.CertAllowedCN,
 	}
-	infoStr, err := info.Marshal()
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
 
 	// cannot create changefeed if there are running lightning/restore tasks
 	tlsCfg, err := credential.ToTLSConfig()
@@ -168,7 +162,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
-		zap.String("changefeed", infoStr))
+		zap.String("changefeed", info.String()))
 	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
 		nil, true))
@@ -263,12 +257,18 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 
 		// return the common info only.
 		commonInfo := &ChangefeedCommonInfo{
-			UpstreamID:   cfInfo.UpstreamID,
-			Namespace:    cfID.Namespace,
-			ID:           cfID.ID,
-			FeedState:    cfInfo.State,
-			RunningError: cfInfo.Error,
+			UpstreamID: cfInfo.UpstreamID,
+			Namespace:  cfID.Namespace,
+			ID:         cfID.ID,
+			FeedState:  cfInfo.State,
 		}
+
+		if cfInfo.Error != nil {
+			commonInfo.RunningError = cfInfo.Error
+		} else {
+			commonInfo.RunningError = cfInfo.Warning
+		}
+
 		// if the state is normal, we shall not return the error info
 		// because changefeed will is retrying. errors will confuse the users
 		if commonInfo.FeedState == model.StateNormal {

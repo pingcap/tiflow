@@ -86,10 +86,12 @@ func TestWriteEvents(t *testing.T) {
 		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
-	events := make([]*dmlsink.RowChangeCallbackableEvent, 0, 3000)
+	events := make([]*dmlsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)
 	for i := 0; i < 3000; i++ {
-		events = append(events, &dmlsink.RowChangeCallbackableEvent{
-			Event:     row,
+		events = append(events, &dmlsink.TxnCallbackableEvent{
+			Event: &model.SingleTableTxn{
+				Rows: []*model.RowChangedEvent{row},
+			},
 			Callback:  func() {},
 			SinkState: &tableStatus,
 		})

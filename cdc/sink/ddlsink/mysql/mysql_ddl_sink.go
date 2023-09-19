@@ -19,7 +19,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -101,12 +100,7 @@ func NewDDLSink(
 
 // WriteDDLEvent writes a DDL event to the mysql database.
 func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	err := m.execDDLWithMaxRetries(ctx, ddl)
-	// we should not retry changefeed if DDL failed by return an unretryable error.
-	if !errorutil.IsRetryableDDLError(err) {
-		return cerror.WrapChangefeedUnretryableErr(err)
-	}
-	return errors.Trace(err)
+	return m.execDDLWithMaxRetries(ctx, ddl)
 }
 
 func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
