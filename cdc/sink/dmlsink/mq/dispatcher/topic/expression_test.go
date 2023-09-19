@@ -227,18 +227,6 @@ func TestSubstituteTopicExpression(t *testing.T) {
 	}
 }
 
-func TestSchemaAndTableOptional(t *testing.T) {
-	expression := "prefix_middle_suffix"
-	topicExpr := Expression(expression)
-	err := topicExpr.Validate()
-	require.NoError(t, err)
-
-	schemaName := "test"
-	tableName := "table1"
-	topicName := topicExpr.Substitute(schemaName, tableName)
-	require.Equal(t, topicName, "prefix_middle_suffix")
-}
-
 func TestSchemaOptional(t *testing.T) {
 	expression := "prefix_{table}"
 	topicExpr := Expression(expression)

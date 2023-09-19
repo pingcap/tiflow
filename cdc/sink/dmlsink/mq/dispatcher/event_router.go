@@ -202,7 +202,7 @@ func getPartitionDispatcher(rule string, scheme string) partition.Dispatcher {
 
 // getTopicDispatcher returns the topic dispatcher for a specific topic rule (aka topic expression).
 func getTopicDispatcher(
-	rule string, defaultTopic string, protocol config.Protocol, scheme string,
+	rule string, defaultTopic string, protocol config.Protocol, schema string,
 ) (topic.Dispatcher, error) {
 	if rule == "" {
 		return topic.NewStaticTopicDispatcher(defaultTopic), nil
@@ -217,7 +217,7 @@ func getTopicDispatcher(
 
 	var err error
 	// validate the topic expression for pulsar sink
-	if sink.IsPulsarScheme(scheme) {
+	if sink.IsPulsarScheme(schema) {
 		err = topicExpr.PulsarValidate()
 		if err != nil {
 			return nil, errors.Trace(err)
