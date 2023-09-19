@@ -771,7 +771,8 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(span tablepb.Span, ts model
 func (m *SinkManager) UpdateBarrierTs(globalBarrierTs model.Ts, tableBarrier map[model.TableID]model.Ts) {
 	m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
 		barrierTs := globalBarrierTs
-		if tableBarrierTs, ok := tableBarrier[span.TableID]; ok && tableBarrierTs > barrierTs {
+		if tableBarrierTs, ok := tableBarrier[span.TableID]; ok && tableBarrierTs < barrierTs {
+			// TODO: is it possible that table barrier is less than global barrier?
 			barrierTs = tableBarrierTs
 		}
 		value.(*tableSinkWrapper).updateBarrierTs(barrierTs)
