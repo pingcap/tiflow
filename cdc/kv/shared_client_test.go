@@ -126,7 +126,7 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	cluster.Bootstrap(11, []uint64{1, 2, 3}, []uint64{4, 5, 6}, 6)
 
 	client := NewSharedClient(model.ChangeFeedID{ID: "test"},
-		&config.KVClientConfig{WorkerConcurrent: 1, GrpcStreamConcurrent: 1},
+		&config.ServerConfig{KVClient: &config.KVClientConfig{WorkerConcurrent: 1, GrpcStreamConcurrent: 1}},
 		false, pdClient, grpcPool, regionCache, pdClock, lockResolver)
 	defer client.Close()
 
