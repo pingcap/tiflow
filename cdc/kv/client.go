@@ -261,6 +261,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			retry.WithMaxTries(2),
 			retry.WithIsRetryableErr(cerror.IsRetryableError),
 		)
+		return
 	}
 	limit, _ := c.rateLimiterMap.LoadOrStore(addr, rate.NewLimiter(rate.Limit(5), 1))
 	if !limit.(*rate.Limiter).Allow() {
