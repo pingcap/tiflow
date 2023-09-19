@@ -768,11 +768,8 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(span tablepb.Span, ts model
 func (m *SinkManager) UpdateBarrierTs(globalBarrierTs model.Ts, tableBarrier map[model.TableID]model.Ts) {
 	m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
 		barrierTs := globalBarrierTs
-		if tableBarrierTs, ok := tableBarrier[span.TableID]; ok && tableBarrierTs < barrierTs {
-			log.Panic("tableBarrierTs should be always greater than globalBarrierTs",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-				zap.Stringer("span", &span))
+		if tableBarrierTs, ok := tableBarrier[span.TableID]; ok && tableBarrierTs < globalBarrierTs {
+			barrierTs = tableBarrierTs
 		}
 		value.(*tableSinkWrapper).updateBarrierTs(barrierTs)
 		return true
