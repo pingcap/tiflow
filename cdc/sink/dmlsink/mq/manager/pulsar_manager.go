@@ -52,7 +52,7 @@ func NewPulsarTopicManager(
 // Neither synchronous nor asynchronous sending of pulsar will use PartitionNum
 // but this method is used in mq_ddl_sink.go, so an empty implementation is required
 func (m *pulsarTopicManager) GetPartitionNum(ctx context.Context, topic string) (int32, error) {
-	return 0, nil
+	return 1, nil
 }
 
 // CreateTopicAndWaitUntilVisible no need to create first

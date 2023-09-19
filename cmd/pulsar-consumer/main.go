@@ -35,12 +35,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	ddlsinkfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
 	eventsinkfactory "github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
-	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	sutil "github.com/pingcap/tiflow/cdc/sink/util"
-	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -63,9 +60,6 @@ type ConsumerOption struct {
 
 	protocol            config.Protocol
 	enableTiDBExtension bool
-
-	// the replicaConfig of the changefeed which produce data to the pulsar topic
-	replicaConfig *config.ReplicaConfig
 
 	logPath       string
 	logLevel      string
@@ -118,19 +112,6 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 			}
 		}
 		o.enableTiDBExtension = enableTiDBExtension
-	}
-
-	if configFile != "" {
-		replicaConfig := config.GetDefaultReplicaConfig()
-		replicaConfig.Sink.Protocol = util.AddressOf(o.protocol.String())
-		err := cmdUtil.StrictDecodeFile(configFile, "pulsar consumer", replicaConfig)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
-			return errors.Trace(err)
-		}
-		o.replicaConfig = replicaConfig
 	}
 
 	log.Info("consumer option adjusted",
@@ -311,8 +292,6 @@ type Consumer struct {
 	// initialize to 0 by default
 	globalResolvedTs uint64
 
-	eventRouter *dispatcher.EventRouter
-
 	tz *time.Location
 
 	codecConfig *common.Config
@@ -342,14 +321,6 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
 	if c.codecConfig.Protocol == config.ProtocolAvro {
 		c.codecConfig.AvroEnableWatermark = true
-	}
-
-	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, sink.PulsarScheme)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		c.eventRouter = eventRouter
 	}
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
