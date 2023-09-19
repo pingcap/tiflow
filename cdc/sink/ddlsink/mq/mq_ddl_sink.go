@@ -35,11 +35,11 @@ import (
 type DDLDispatchRule int
 
 const (
-	// PartitionAll means the DDL event will be broadcast to all the partitions.
-	PartitionAll DDLDispatchRule = -1
 	// PartitionZero means the DDL event will be dispatched to partition 0.
 	// NOTICE: Only for canal and canal-json protocol.
-	PartitionZero = 0
+	PartitionZero DDLDispatchRule = iota
+	// PartitionAll means the DDL event will be broadcast to all the partitions.
+	PartitionAll
 )
 
 func getDDLDispatchRule(protocol config.Protocol) DDLDispatchRule {
@@ -136,7 +136,7 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return errors.Trace(err)
 	}
 	err = k.statistics.RecordDDLExecution(func() error {
-		return k.producer.SyncSendMessage(ctx, topic, PartitionZero, msg)
+		return k.producer.SyncSendMessage(ctx, topic, 0, msg)
 	})
 	return errors.Trace(err)
 }
