@@ -275,25 +275,28 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (
 	*schedulepb.Message, *schedulepb.Barrier, error,
 ) {
+	// NOTE: for a given table, we don't check ResolvedTs should never less than CheckpointTs
+	// because if redo is enabled, the table's ResolvedTs can be less than the global Barrier.
+	// For example, consider such steps:
+	// 1. currently CheckpointTs is 90, and RedoMeta.ResolvedTs is 100. However,
+	//    there could be a table whose RedoResolvedTs has been advanced to 110.
+	// 2. then balance the table to another processor. StartTs and CheckpointTs of the table
+	//    will become 90.
+	// 3. then RedoResolvedTs can be advanced to 110, which will also advance global BarrierTs
+	//    to 110.
+	// 4. after the just re-scheduled table finds global BarrierTs has been advanced, it can
+	//    advance its CheckpointTs to 110, although its local RedoResolvedTs is still 90.
 	allTables := a.tableM.getAllTableSpans()
 	result := make([]tablepb.TableStatus, 0, allTables.Len())
 
-	isValidCheckpointTs := true
 	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
 		status := table.getTableSpanStatus(request.CollectStats)
-		isValidCheckpointTs = status.Checkpoint.CheckpointTs <= status.Checkpoint.ResolvedTs
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
 		result = append(result, status)
-		return isValidCheckpointTs
+		return true
 	})
-	if !isValidCheckpointTs {
-		status := result[len(result)-1]
-		checkpointTs := status.Checkpoint.CheckpointTs
-		resolvedTs := status.Checkpoint.ResolvedTs
-		return nil, nil, errors.ErrInvalidCheckpointTs.GenWithStackByArgs(checkpointTs, resolvedTs)
-	}
 	for _, span := range request.GetSpans() {
 		if _, ok := allTables.Get(span); !ok {
 			status := a.tableM.getTableSpanStatus(span, request.CollectStats)

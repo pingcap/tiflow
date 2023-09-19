@@ -573,6 +573,13 @@ func (r *Manager) AdvanceCheckpoint(
 		return true
 	})
 	if cannotProceed {
+		if redoMetaManager.Enabled() {
+			// If redo is enabled, GlobalBarrierTs should be limited by redo flushed meta.
+			flushedMeta := redoMetaManager.GetFlushedMeta()
+			if barrier.GlobalBarrierTs > flushedMeta.ResolvedTs {
+				barrier.GlobalBarrierTs = flushedMeta.ResolvedTs
+			}
+		}
 		return checkpointCannotProceed, checkpointCannotProceed
 	}
 	if slowestRange.TableID != 0 {
