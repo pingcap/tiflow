@@ -36,7 +36,7 @@ function run() {
 		run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/test_table${i}?protocol=canal-json&version=${KAFKA_VERSION}&enable-tidb-extension=true" "" ${i}
 	done
 
-  run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/workload?protocol=canal-json&enable-tidb-extension=true" ""
+	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/workload?protocol=canal-json&enable-tidb-extension=true" ""
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
 	for i in $(seq 1 3); do
