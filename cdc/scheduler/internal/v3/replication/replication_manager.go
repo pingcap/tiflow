@@ -595,6 +595,7 @@ func (r *Manager) AdvanceCheckpoint(
 	if cannotProceed {
 		if redoMetaManager.Enabled() {
 			// If redo is enabled, GlobalBarrierTs should be limited by redo flushed meta.
+			newResolvedTs = barrier.RedoBarrierTs
 			limitBarrierWithRedo(&newCheckpointTs, &newResolvedTs)
 		}
 		return checkpointCannotProceed, checkpointCannotProceed
