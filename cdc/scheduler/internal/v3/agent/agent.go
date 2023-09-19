@@ -254,10 +254,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 		switch message.GetMsgType() {
 		case schedulepb.MsgHeartbeat:
 			var reMsg *schedulepb.Message
-			reMsg, barrier, err = a.handleMessageHeartbeat(message.GetHeartbeat())
-			if err != nil {
-				return
-			}
+			reMsg, barrier = a.handleMessageHeartbeat(message.GetHeartbeat())
 			result = append(result, reMsg)
 		case schedulepb.MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
@@ -272,9 +269,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 	return
 }
 
-func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (
-	*schedulepb.Message, *schedulepb.Barrier, error,
-) {
+func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedulepb.Message, *schedulepb.Barrier) {
 	// NOTE: for a given table, we don't check ResolvedTs should never less than CheckpointTs
 	// because if redo is enabled, the table's ResolvedTs can be less than the global Barrier.
 	// For example, consider such steps:
@@ -323,7 +318,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (
 		zap.String("changefeed", a.ChangeFeedID.ID),
 		zap.Any("message", message))
 
-	return message, request.GetBarrier(), nil
+	return message, request.GetBarrier()
 }
 
 type dispatchTableTaskStatus int32

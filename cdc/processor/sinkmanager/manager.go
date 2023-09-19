@@ -772,8 +772,10 @@ func (m *SinkManager) UpdateBarrierTs(globalBarrierTs model.Ts, tableBarrier map
 	m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
 		barrierTs := globalBarrierTs
 		if tableBarrierTs, ok := tableBarrier[span.TableID]; ok && tableBarrierTs < barrierTs {
-			// TODO: is it possible that table barrier is less than global barrier?
-			barrierTs = tableBarrierTs
+			log.Panic("tableBarrierTs should be always greater than globalBarrierTs",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Stringer("span", &span))
 		}
 		value.(*tableSinkWrapper).updateBarrierTs(barrierTs)
 		return true
