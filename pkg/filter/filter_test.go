@@ -140,54 +140,6 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 
 func TestShouldDiscardDDL(t *testing.T) {
 	t.Parallel()
-
-	cfg := &config.ReplicaConfig{
-		Filter: &config.FilterConfig{},
-	}
-	filter, err := NewFilter(cfg, "")
-	require.Nil(t, err)
-
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropSchema, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionCreateTable, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropTable, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddColumn, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropColumn, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddIndex, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropIndex, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionTruncateTable, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionModifyColumn, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionRenameTable, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionRenameTables, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionSetDefaultValue, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionModifyTableComment, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionRenameIndex, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddTablePartition, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropTablePartition, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionCreateView, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionModifyTableCharsetAndCollate, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionTruncateTablePartition, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropView, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionRecoverTable, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionModifySchemaCharsetAndCollate, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddPrimaryKey, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropPrimaryKey, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAddColumns, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionDropColumns, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionRebaseAutoID, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionAlterIndexVisibility, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionMultiSchemaChange, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionExchangeTablePartition, "", ""))
-	require.False(t, filter.ShouldDiscardDDL(timodel.ActionReorganizePartition, "", ""))
-
-	// Discard sequence DDL.
-	require.True(t, filter.ShouldDiscardDDL(timodel.ActionAddForeignKey, "", ""))
-	require.True(t, filter.ShouldDiscardDDL(timodel.ActionCreateSequence, "", ""))
-	require.True(t, filter.ShouldDiscardDDL(timodel.ActionAlterSequence, "", ""))
-	require.True(t, filter.ShouldDiscardDDL(timodel.ActionDropSequence, "", ""))
-}
-
-func TestShouldIgnoreDDL(t *testing.T) {
-	t.Parallel()
 	testCases := []struct {
 		cases []struct {
 			startTs uint64
@@ -212,7 +164,10 @@ func TestShouldIgnoreDDL(t *testing.T) {
 		}{
 			{1, "sns", "", "create database test", timodel.ActionCreateSchema, false},
 			{1, "sns", "", "drop database test", timodel.ActionDropSchema, false},
-			{1, "sns", "", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci", timodel.ActionModifySchemaCharsetAndCollate, false},
+			{
+				1, "sns", "", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci",
+				timodel.ActionModifySchemaCharsetAndCollate, false,
+			},
 			{1, "ecom", "", "create database test", timodel.ActionCreateSchema, false},
 			{1, "ecom", "aa", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
 			{1, "ecom", "", "create database test", timodel.ActionCreateSchema, false},
@@ -230,9 +185,12 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			ignore  bool
 		}{
 			{1, "schema", "C1", "create database test", timodel.ActionCreateSchema, false},
-			{1, "schema", "", "drop database test", timodel.ActionDropSchema, true},
-			{1, "schema", "", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci", timodel.ActionModifySchemaCharsetAndCollate, true},
-			{1, "schema", "aa", "create table test.t1(a int primary key)", timodel.ActionCreateTable, true},
+			{1, "test", "", "drop database test1", timodel.ActionDropSchema, true},
+			{
+				1, "dbname", "", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci",
+				timodel.ActionModifySchemaCharsetAndCollate, true,
+			},
+			{1, "test", "aa", "create table test.t1(a int primary key)", timodel.ActionCreateTable, true},
 			{1, "schema", "C1", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
 			{1, "schema", "", "create table test.t1(a int primary key)", timodel.ActionCreateTable, true},
 		},
@@ -247,8 +205,11 @@ func TestShouldIgnoreDDL(t *testing.T) {
 			ignore  bool
 		}{
 			{1, "ts", "", "create database test", timodel.ActionCreateSchema, true},
-			{2, "ts", "student", "drop database test", timodel.ActionDropSchema, true},
-			{3, "ts", "teacher", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci", timodel.ActionModifySchemaCharsetAndCollate, true},
+			{2, "ts", "student", "drop database test2", timodel.ActionDropSchema, true},
+			{
+				3, "ts", "teacher", "ALTER DATABASE dbname CHARACTER SET utf8 COLLATE utf8_general_ci",
+				timodel.ActionModifySchemaCharsetAndCollate, true,
+			},
 			{4, "ts", "man", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
 			{5, "ts", "fruit", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
 			{6, "ts", "insect", "create table test.t1(a int primary key)", timodel.ActionCreateTable, false},
@@ -320,11 +281,28 @@ func TestShouldIgnoreDDL(t *testing.T) {
 		}, "")
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
-			tableInfo := &model.TableInfo{TableName: model.TableName{Schema: tc.schema, Table: tc.table}}
-			ddl := &model.DDLEvent{StartTs: tc.startTs, TableInfo: tableInfo, Query: tc.query}
-			ignore, err := filter.ShouldIgnoreDDLEvent(ddl)
+			ignore, err := filter.ShouldDiscardDDL(tc.startTs, tc.ddlType, tc.schema, tc.table, tc.query)
 			require.Nil(t, err, "%#v", tc)
 			require.Equal(t, tc.ignore, ignore, "%#v", tc)
 		}
+	}
+}
+
+func TestIsAllowedDDL(t *testing.T) {
+	type testCase struct {
+		timodel.ActionType
+		allowed bool
+	}
+	testCases := make([]testCase, 0, len(allowDDLList))
+	for _, action := range allowDDLList {
+		testCases = append(testCases, testCase{action, true})
+	}
+	testCases = append(testCases, testCase{timodel.ActionAddForeignKey, false})
+	testCases = append(testCases, testCase{timodel.ActionDropForeignKey, false})
+	testCases = append(testCases, testCase{timodel.ActionCreateSequence, false})
+	testCases = append(testCases, testCase{timodel.ActionAlterSequence, false})
+	testCases = append(testCases, testCase{timodel.ActionDropSequence, false})
+	for _, tc := range testCases {
+		require.Equal(t, tc.allowed, isAllowedDDL(tc.ActionType), "%#v", tc)
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/parser"
+	timodel "github.com/pingcap/tidb/parser/model"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -136,21 +137,29 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 }
 
 // skipDDLEvent skips ddl event by its type and query.
-func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
-	evenType, err := ddlToEventType(f.p, ddl.Query, ddl.Type)
+func (f *sqlEventFilter) shouldSkipDDL(
+	ddlType timodel.ActionType, schema, table, query string,
+) (bool, error) {
+	log.Info("sql event filter handle ddl event",
+		zap.Any("ddlType", ddlType), zap.String("schema", schema),
+		zap.String("table", table), zap.String("query", query))
+	evenType, err := ddlToEventType(f.p, query, ddlType)
 	if err != nil {
 		return false, err
 	}
 	if evenType == bf.NullEvent {
 		log.Warn("sql event filter unsupported ddl type, do nothing",
-			zap.String("type", ddl.Type.String()),
-			zap.String("query", ddl.Query))
+			zap.String("type", ddlType.String()),
+			zap.String("query", query))
 		return false, nil
 	}
 
-	rules := f.getRules(ddl.TableInfo.TableName.Schema, ddl.TableInfo.TableName.Table)
+	rules := f.getRules(schema, table)
 	for _, rule := range rules {
-		action, err := rule.bf.Filter(binlogFilterSchemaPlaceholder, binlogFilterTablePlaceholder, evenType, ddl.Query)
+		action, err := rule.bf.Filter(
+			binlogFilterSchemaPlaceholder,
+			binlogFilterTablePlaceholder,
+			evenType, query)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
