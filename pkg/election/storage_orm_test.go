@@ -208,7 +208,7 @@ func TestORMStorageTxnWithLeaderCheck(t *testing.T) {
 	doNothing := func(*gorm.DB) error {
 		return nil
 	}
-	err := s.TxnWithLeaderCheck(context.Background(), "leader1", doNothing)
+	err := s.TxnWithLeaderLock(context.Background(), "leader1", doNothing)
 	require.ErrorIs(t, err, errors.ErrElectorNotLeader)
 
 	mock.ExpectBegin()
@@ -223,6 +223,6 @@ func TestORMStorageTxnWithLeaderCheck(t *testing.T) {
 		require.NoError(t, err)
 		return nil
 	}
-	err = s.TxnWithLeaderCheck(context.Background(), "leader1", doTxn)
+	err = s.TxnWithLeaderLock(context.Background(), "leader1", doTxn)
 	require.NoError(t, err)
 }

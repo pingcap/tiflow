@@ -186,7 +186,8 @@ func (s *ORMStorage) create(ctx context.Context, record *Record) error {
 	})
 }
 
-func (s *ORMStorage) TxnWithLeaderCheck(ctx context.Context, leaderID string, fc func(tx *gorm.DB) error) error {
+// TxnWithLeaderLock execute a transaction with leader row locked.
+func (s *ORMStorage) TxnWithLeaderLock(ctx context.Context, leaderID string, fc func(tx *gorm.DB) error) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var do DO
 		ret := tx.Select("leader_id").Where("id = ? and leader_id = ?", leaderRowID, leaderID).
