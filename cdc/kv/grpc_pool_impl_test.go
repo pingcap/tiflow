@@ -15,10 +15,18 @@ package kv
 
 import (
 	"context"
+	"net"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 // Use clientSuite for some special reasons, the embed etcd uses zap as the only candidate
@@ -102,4 +110,80 @@ func TestConnArrayRecycle(t *testing.T) {
 	empty = pool.bucketConns[addr].recycle()
 	require.True(t, empty)
 	require.Len(t, pool.bucketConns[addr].conns, 0)
+}
+
+func TestConnectToUnavailable(t *testing.T) {
+	targets := []string{"127.0.0.1:9999", "9.9.9.9:9999"}
+	for _, target := range targets {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+
+		conn, err := createClientConn(ctx, &security.Credential{}, target)
+		require.NotNil(t, conn)
+		require.Nil(t, err)
+
+		rpc := cdcpb.NewChangeDataClient(conn)
+		_, err = rpc.EventFeedV2(ctx)
+		require.NotNil(t, err)
+		cancel()
+	}
+
+	service := make(chan *grpc.Server, 1)
+	var wg sync.WaitGroup
+	var addr string
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Nil(t, runGrpcService(&addr, service))
+	}()
+
+	if svc := <-service; svc != nil {
+		time.Sleep(time.Second)
+		conn, err := createClientConn(context.Background(), &security.Credential{}, addr)
+		require.NotNil(t, conn)
+		require.Nil(t, err)
+
+		rpc := cdcpb.NewChangeDataClient(conn)
+		client, err := rpc.EventFeedV2(context.Background())
+		require.Nil(t, err)
+
+		_, err = client.Header()
+		require.Nil(t, err)
+
+		err = client.Send(&cdcpb.ChangeDataRequest{
+			RequestId: 0,
+			RegionId:  0,
+			Request:   &cdcpb.ChangeDataRequest_Deregister_{},
+		})
+		require.Equal(t, "EOF", err.Error())
+
+		_, err = client.Recv()
+		require.Equal(t, codes.Unimplemented, status.Code(err))
+
+		svc.Stop()
+	}
+	wg.Wait()
+}
+
+func runGrpcService(addr *string, service chan<- *grpc.Server) error {
+	defer close(service)
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+
+	kaep := keepalive.EnforcementPolicy{
+		MinTime:             3 * time.Second,
+		PermitWithoutStream: true,
+	}
+	kasp := keepalive.ServerParameters{
+		MaxConnectionIdle:     10 * time.Second,
+		MaxConnectionAge:      10 * time.Second,
+		MaxConnectionAgeGrace: 5 * time.Second,
+		Time:                  3 * time.Second,
+		Timeout:               1 * time.Second,
+	}
+	grpcServer := grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
+	service <- grpcServer
+	*addr = lis.Addr().String()
+	return grpcServer.Serve(lis)
 }

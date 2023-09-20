@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
+	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/chann"
@@ -68,7 +69,7 @@ type SharedClient struct {
 	filterLoop bool
 
 	pd           pd.Client
-	grpcPool     GrpcPool
+	grpcPool     *sharedconn.ConnAndClientPool
 	regionCache  *tikv.RegionCache
 	pdClock      pdutil.Clock
 	lockResolver txnutil.LockResolver
@@ -120,14 +121,17 @@ type requestedStream struct {
 	preFetchForConnecting *singleRegionInfo
 	requests              *chann.DrainableChann[singleRegionInfo]
 
-	// init is for initializing client and conn asynchronously.
-	client cdcpb.ChangeData_EventFeedClient
-	conn   *sharedConn
+	multiplexing *sharedconn.ConnAndClient
 
 	requestedRegions struct {
 		sync.RWMutex
 		// map[subscriptionID]map[regionID]*regionFeedState
 		m map[SubscriptionID]map[uint64]*regionFeedState
+	}
+
+	tableExclusives struct {
+		m         map[SubscriptionID]*sharedconn.ConnAndClient
+		receivers chan *sharedconn.ConnAndClient
 	}
 }
 
@@ -153,7 +157,7 @@ func NewSharedClient(
 	cfg *config.KVClientConfig,
 	filterLoop bool,
 	pd pd.Client,
-	grpcPool GrpcPool,
+	grpcPool *sharedconn.ConnAndClientPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
 	lockResolver txnutil.LockResolver,
@@ -435,19 +439,20 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 
 func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, stream *requestedStream) (err error) {
 	defer func() {
-		closeSendErr := stream.client.CloseSend()
-		log.Info("event feed close send for grpc stream",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr),
-			zap.Uint64("streamID", stream.streamID),
-			zap.String("reason", err.Error()),
-			zap.Error(closeSendErr))
+		if stream.multiplexing != nil {
+			_ = stream.multiplexing.Client().CloseSend()
+			log.Info("event feed close send for grpc stream",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Uint64("storeID", rs.storeID),
+				zap.String("addr", rs.storeAddr),
+				zap.Uint64("streamID", stream.streamID),
+				zap.String("reason", err.Error()))
+		}
 	}()
 
-	doSend := func(req *cdcpb.ChangeDataRequest) error {
-		if err := stream.client.Send(req); err != nil {
+	doSend := func(cc *sharedconn.ConnAndClient, req *cdcpb.ChangeDataRequest) error {
+		if err := cc.Client().Send(req); err != nil {
 			log.Warn("event feed send request to grpc stream failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -491,14 +496,22 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 	sri := *stream.preFetchForConnecting
 	stream.preFetchForConnecting = nil
 	for {
+		// It means it's a special task from stopping the table.
 		if sri.lockedRange == nil {
-			// It means it's a special task from stopping the table.
-			req := &cdcpb.ChangeDataRequest{
-				RequestId: uint64(sri.requestedTable.subscriptionID),
-				Request:   &cdcpb.ChangeDataRequest_Deregister_{},
-			}
-			if err = doSend(req); err != nil {
-				return err
+			if stream.multiplexing != nil {
+				req := &cdcpb.ChangeDataRequest{
+					RequestId: uint64(sri.requestedTable.subscriptionID),
+					Request:   &cdcpb.ChangeDataRequest_Deregister_{},
+				}
+				if err = doSend(stream.multiplexing, req); err != nil {
+					return err
+				}
+			} else {
+				cc := stream.tableExclusives.m[sri.requestedTable.subscriptionID]
+				if cc != nil {
+					cc.Release()
+					delete(stream.tableExclusives.m, sri.requestedTable.subscriptionID)
+				}
 			}
 			// NOTE: some principles to help understand deregistering a table:
 			// 1. after a Deregister(requestID) message is sent out, no more region requests
@@ -530,7 +543,23 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 			stream.setState(subscriptionID, sri.verID.GetID(), state)
 
 			req := s.createRegionRequest(sri)
-			if err = doSend(req); err != nil {
+			cc := stream.tableExclusives.m[sri.requestedTable.subscriptionID]
+			if cc == nil {
+				cc, err = s.grpcPool.Connect(ctx, rs.storeAddr)
+				if err == nil {
+					return err
+				}
+				if cc.Multiplexing() {
+					cc.Release()
+					return errors.New("multiplexing is enabled, will re-establish the stream")
+				}
+				stream.tableExclusives.m[sri.requestedTable.subscriptionID] = cc
+				select {
+				case <-ctx.Done():
+				case stream.tableExclusives.receivers <- cc:
+				}
+			}
+			if err = doSend(cc, req); err != nil {
 				return err
 			}
 		}
@@ -541,9 +570,13 @@ func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, str
 	}
 }
 
-func (s *SharedClient) receiveFromStream(ctx context.Context, rs *requestedStore, stream *requestedStream) (err error) {
+func (s *SharedClient) receiveFromStream(
+	ctx context.Context, rs *requestedStore, stream *requestedStream,
+	cc *sharedconn.ConnAndClient,
+) (err error) {
+	client := cc.Client()
 	for {
-		cevent, err := stream.client.Recv()
+		cevent, err := client.Recv()
 		if err != nil {
 			log.Info("event feed receive from grpc stream failed",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -643,6 +676,11 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 				stream.preFetchForConnecting = new(singleRegionInfo)
 				*stream.preFetchForConnecting = sri
 			}
+			if stream.preFetchForConnecting.lockedRange == nil {
+				stream.preFetchForConnecting = nil
+				continue
+			}
+
 			if canceled := s.runStream(ctx, r, stream); canceled {
 				return nil
 			}
@@ -670,14 +708,27 @@ func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requ
 }
 
 func (s *SharedClient) clearStream(r *requestedStore, stream *requestedStream) {
-	if stream.conn != nil {
-		s.grpcPool.ReleaseConn(stream.conn, r.storeAddr)
-		stream.conn = nil
+	if stream.multiplexing != nil {
+		stream.multiplexing.Release()
+	}
+	for _, cc := range stream.tableExclusives.m {
+		cc.Release()
 	}
 }
 
 func (s *SharedClient) runStream(ctx context.Context, rs *requestedStore, stream *requestedStream) (canceled bool) {
 	ctx, cancel := context.WithCancel(ctx)
+	if err := version.CheckStoreVersion(ctx, s.pd, rs.storeID); err != nil {
+		log.Info("event feed check store version fails",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Uint64("storeID", rs.storeID),
+			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", stream.streamID),
+			zap.Error(err))
+		return false
+	}
+
 	defer func() {
 		log.Info("event feed grpc stream exits",
 			zap.String("namespace", s.changefeed.Namespace),
@@ -697,34 +748,36 @@ func (s *SharedClient) runStream(ctx context.Context, rs *requestedStore, stream
 		zap.String("addr", rs.storeAddr),
 		zap.Uint64("streamID", stream.streamID))
 
-	init := func(ctx context.Context, stream *requestedStream) (err error) {
-		if stream.conn, err = s.grpcPool.GetConn(rs.storeAddr); err != nil {
-			return errors.Trace(err)
-		}
-		if err = version.CheckStoreVersion(ctx, s.pd, rs.storeID); err != nil {
-			return errors.Trace(err)
-		}
-		rpc := cdcpb.NewChangeDataClient(stream.conn.ClientConn)
-		ctx = getContextFromFeatures(ctx, []string{rpcMetaFeatureStreamMultiplexing})
-		if stream.client, err = rpc.EventFeedV2(ctx); err != nil {
-			return errors.Trace(err)
-		}
-		return nil
-	}
-
-	if err := init(ctx, stream); err != nil {
+	cc, err := s.grpcPool.Connect(ctx, rs.storeAddr)
+	if err != nil {
 		log.Warn("event feed create grpc stream failed",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("storeID", rs.storeID),
 			zap.String("addr", rs.storeAddr),
 			zap.Uint64("streamID", stream.streamID),
+			zap.Bool("multiplexing", true),
 			zap.Error(err))
 	} else {
-		// sendToStream and receiveFromStream print logs by selves.
 		g, ctx := errgroup.WithContext(ctx)
-		g.Go(func() (err error) { return s.sendToStream(ctx, rs, stream) })
-		g.Go(func() (err error) { return s.receiveFromStream(ctx, rs, stream) })
+		if cc.Multiplexing() {
+			stream.multiplexing = cc
+			g.Go(func() error { return s.receiveFromStream(ctx, rs, stream, stream.multiplexing) })
+		} else {
+			cc.Release()
+			g.Go(func() error {
+				for {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case cc := <-stream.tableExclusives.receivers:
+						g.Go(func() error { return s.receiveFromStream(ctx, rs, stream, cc) })
+					}
+				}
+			})
+		}
+		// sendToStream and receiveFromStream print logs by selves.
+		g.Go(func() error { return s.sendToStream(ctx, rs, stream) })
 		_ = g.Wait()
 	}
 	select {
