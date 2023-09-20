@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	controllerv2 "github.com/pingcap/tiflow/cdcv2/controller"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
@@ -67,11 +66,10 @@ func NewCapture(pdEndpoints []string,
 
 type captureImpl struct {
 	// captureMu is used to protect the capture info and processorManager.
-	captureMu        sync.Mutex
-	info             *model.CaptureInfo
-	processorManager processor.Manager
-	liveness         model.Liveness
-	config           *config.ServerConfig
+	captureMu sync.Mutex
+	info      *model.CaptureInfo
+	liveness  model.Liveness
+	config    *config.ServerConfig
 
 	pdClient        pd.Client
 	pdEndpoints     []string
@@ -183,9 +181,6 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 				// Propagate the cancel signal to the owner and other goroutines.
 				cancel()
 			}
-			if c.processorManager != nil {
-				c.processorManager.Close()
-			}
 			log.Info("processor manager closed", zap.String("captureID", c.info.ID))
 		}()
 
@@ -248,9 +243,6 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	c.processorManager = processor.NewManager(
-		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler)
 
 	c.grpcService.Reset(nil)
 
