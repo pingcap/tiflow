@@ -270,6 +270,12 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedule
 
 	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
 		status := table.getTableSpanStatus(request.CollectStats)
+		if status.Checkpoint.CheckpointTs > status.Checkpoint.ResolvedTs {
+			log.Warn("schedulerv3: CheckpointTs is greater than ResolvedTs",
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
+				zap.String("span", span.String()))
+		}
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
