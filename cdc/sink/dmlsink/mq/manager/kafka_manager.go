@@ -184,8 +184,6 @@ func (m *kafkaTopicManager) createTopic(
 		zap.Int16("replicationFactor", m.cfg.ReplicationFactor),
 		zap.Duration("duration", time.Since(start)),
 	)
-	m.tryUpdatePartitionsAndLogging(topicName, m.cfg.PartitionNum)
-
 	return m.cfg.PartitionNum, nil
 }
 
@@ -193,6 +191,10 @@ func (m *kafkaTopicManager) createTopic(
 func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 	ctx context.Context, topicName string,
 ) (int32, error) {
+	var (
+		partitionNum int32
+		err          error
+	)
 	// If the topic is not in the cache, we try to get the metadata of the topic.
 	// ignoreTopicErr is set to true to ignore the error if the topic is not found,
 	// which means we should create the topic later.
@@ -200,20 +202,21 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
-	if detail, ok := topicDetails[topicName]; ok {
-		m.tryUpdatePartitionsAndLogging(topicName, detail.NumPartitions)
-		return detail.NumPartitions, nil
+
+	details, ok := topicDetails[topicName]
+	partitionNum = details.NumPartitions
+	if !ok {
+		partitionNum, err = m.createTopic(ctx, topicName)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+
+		err = m.waitUntilTopicVisible(ctx, topicName)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
 	}
 
-	partitionNum, err := m.createTopic(ctx, topicName)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
-	err = m.waitUntilTopicVisible(ctx, topicName)
-	if err != nil {
-		return 0, errors.Trace(err)
-	}
-
+	m.tryUpdatePartitionsAndLogging(topicName, partitionNum)
 	return partitionNum, nil
 }
