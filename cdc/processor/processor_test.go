@@ -110,7 +110,7 @@ func newProcessor4Test(
 
 func initProcessor4Test(
 	ctx cdcContext.Context, t *testing.T, liveness *model.Liveness, enableRedo bool,
-) (*processor, *orchestrator.ReactorStateTester) {
+) (*processor, *orchestrator.ReactorStateTester, *orchestrator.ChangefeedReactorState) {
 	changefeedInfo := `
 {
     "sink-uri": "blackhole://",
@@ -150,11 +150,10 @@ func initProcessor4Test(
 		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
 	cfg := config.NewDefaultSchedulerConfig()
-	p := newProcessor4Test(t, changefeed.Info, changefeed.Status, captureInfo, liveness, cfg, enableRedo)
 
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID
-	return p, orchestrator.NewReactorStateTester(t, p.changefeed, map[string]string{
+	tester := orchestrator.NewReactorStateTester(t, changefeed, map[string]string{
 		fmt.Sprintf("%s/capture/%s",
 			etcd.DefaultClusterAndMetaPrefix,
 			captureID): `{"id":"` + captureID + `","address":"127.0.0.1:8300"}`,
@@ -165,6 +164,9 @@ func initProcessor4Test(
 			etcd.DefaultClusterAndNamespacePrefix,
 			ctx.ChangefeedVars().ID.ID): `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 	})
+	p := newProcessor4Test(t, changefeed.Info, changefeed.Status, captureInfo, liveness, cfg, enableRedo)
+
+	return p, tester, changefeed
 }
 
 type mockSchemaStorage struct {
@@ -212,20 +214,20 @@ func (a *mockAgent) Close() error {
 func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 
 	// init tick
-	err := p.Tick(ctx)
-	require.Nil(t, err)
+	checkChangefeedNormal(changefeed)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.CheckpointTs = 20
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
 
 	// no operation
-	err = p.Tick(ctx)
+	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -260,7 +262,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 		}}...,
 	)
 
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -283,7 +285,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -300,20 +302,20 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, true)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, true)
 
 	// init tick
-	err := p.Tick(ctx)
-	require.Nil(t, err)
+	checkChangefeedNormal(changefeed)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.CheckpointTs = 20
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
 
 	// no operation
-	err = p.Tick(ctx)
+	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -348,7 +350,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 		}}...,
 	)
 
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -381,7 +383,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	require.Equal(t, model.Ts(60), stats.ResolvedTs)
 	require.Equal(t, model.Ts(50), stats.BarrierTs)
 
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -398,38 +400,43 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 func TestProcessorError(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
+
 	// init tick
-	err := p.Tick(ctx)
+	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
 	// send a abnormal error
 	p.sinkManager.errors <- cerror.ErrSinkURIInvalid
-	err = p.Tick(ctx)
-	tester.MustApplyPatches()
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Error(t, err)
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
+	handleProcessorErr(p, err, changefeed)
+	tester.MustApplyPatches()
+	require.Equal(t, changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: &model.RunningError{
-			Time:    p.changefeed.TaskPositions[p.captureInfo.ID].Error.Time,
+			Time:    changefeed.TaskPositions[p.captureInfo.ID].Error.Time,
 			Addr:    "127.0.0.1:0000",
 			Code:    "CDC:ErrSinkURIInvalid",
 			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 		},
 	})
 
-	p, tester = initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed = initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
 	// send a normal error
 	p.sinkManager.errors <- context.Canceled
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
+	handleProcessorErr(p, err, changefeed)
 	tester.MustApplyPatches()
 	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
+	require.Equal(t, changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: nil,
 	})
 }
@@ -437,23 +444,23 @@ func TestProcessorError(t *testing.T) {
 func TestProcessorExit(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 	var err error
 	// init tick
-	err = p.Tick(ctx)
-	require.Nil(t, err)
+	checkChangefeedNormal(changefeed)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
 	// stop the changefeed
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.AdminJobType = model.AdminStop
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
 	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
+	require.Equal(t, changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: nil,
 	})
 }
@@ -461,14 +468,14 @@ func TestProcessorExit(t *testing.T) {
 func TestProcessorClose(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
-	err := p.Tick(ctx)
-	require.Nil(t, err)
+	checkChangefeedNormal(changefeed)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
 	// Do a no operation tick to lazy init the processor.
-	err = p.Tick(ctx)
+	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -480,19 +487,19 @@ func TestProcessorClose(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, done)
 
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
 	// push the resolvedTs and checkpointTs
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return status, true, nil
 	})
 	tester.MustApplyPatches()
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
@@ -500,14 +507,14 @@ func TestProcessorClose(t *testing.T) {
 	require.Nil(t, p.sourceManager.r)
 	require.Nil(t, p.agent)
 
-	p, tester = initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed = initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
-	err = p.Tick(ctx)
-	require.Nil(t, err)
+	checkChangefeedNormal(changefeed)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
 	// Do a no operation tick to lazy init the processor.
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -518,20 +525,20 @@ func TestProcessorClose(t *testing.T) {
 	done, err = p.AddTableSpan(ctx, spanz.TableIDToComparableSpan(2), tablepb.Checkpoint{CheckpointTs: 30}, false)
 	require.Nil(t, err)
 	require.True(t, done)
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
 	// send error
 	p.sinkManager.errors <- cerror.ErrSinkURIInvalid
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Error(t, err)
 	tester.MustApplyPatches()
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
-	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
-		Time:    p.changefeed.TaskPositions[p.captureInfo.ID].Error.Time,
+	require.Equal(t, changefeed.TaskPositions[p.captureInfo.ID].Error, &model.RunningError{
+		Time:    changefeed.TaskPositions[p.captureInfo.ID].Error.Time,
 		Addr:    "127.0.0.1:0000",
 		Code:    "CDC:ErrSinkURIInvalid",
 		Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
@@ -544,15 +551,15 @@ func TestProcessorClose(t *testing.T) {
 func TestPositionDeleted(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
-	err := p.Tick(ctx)
-	require.Nil(t, err)
+	checkChangefeedNormal(changefeed)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
-	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
 
 	// Do a no operation tick to lazy init the processor.
-	err = p.Tick(ctx)
+	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -565,18 +572,18 @@ func TestPositionDeleted(t *testing.T) {
 	require.True(t, done)
 
 	// some others delete the task position
-	p.changefeed.PatchTaskPosition(p.captureInfo.ID,
+	changefeed.PatchTaskPosition(p.captureInfo.ID,
 		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return nil, true, nil
 		})
 	tester.MustApplyPatches()
 
 	// position created again
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
-	require.Equal(t, &model.TaskPosition{}, p.changefeed.TaskPositions[p.captureInfo.ID])
-	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+	require.Equal(t, &model.TaskPosition{}, changefeed.TaskPositions[p.captureInfo.ID])
+	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
 
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
@@ -585,18 +592,18 @@ func TestPositionDeleted(t *testing.T) {
 func TestSchemaGC(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 
 	var err error
 	// init tick
-	err = p.Tick(ctx)
-	require.Nil(t, err)
+	checkChangefeedNormal(changefeed)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
 
 	updateChangeFeedPosition(t, tester,
 		model.DefaultChangeFeedID("changefeed-id-test"),
 		50)
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -647,21 +654,21 @@ func TestIgnorableError(t *testing.T) {
 func TestUpdateBarrierTs(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
+	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.CheckpointTs = 5
 		return status, true, nil
 	})
 	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).resolvedTs = 10
 
 	// init tick
-	err := p.Tick(ctx)
-	require.Nil(t, err)
+	checkChangefeedNormal(changefeed)
+	createTaskPosition(changefeed, p.captureInfo)
 	tester.MustApplyPatches()
-	require.Contains(t, p.changefeed.TaskPositions, p.captureInfo.ID)
+	require.Contains(t, changefeed.TaskPositions, p.captureInfo.ID)
 
 	// Do a no operation tick to lazy init the processor.
-	err = p.Tick(ctx)
+	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
@@ -669,15 +676,15 @@ func TestUpdateBarrierTs(t *testing.T) {
 	done, err := p.AddTableSpan(ctx, span, tablepb.Checkpoint{CheckpointTs: 5}, false)
 	require.True(t, done)
 	require.Nil(t, err)
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
 	// Global resolved ts has advanced while schema storage stalls.
-	p.changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
+	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		return status, true, nil
 	})
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
@@ -686,7 +693,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 
 	// Schema storage has advanced too.
 	p.ddlHandler.r.schemaStorage.(*mockSchemaStorage).resolvedTs = 15
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 	p.updateBarrierTs(&schedulepb.Barrier{GlobalBarrierTs: 20, TableBarriers: nil})
@@ -700,15 +707,15 @@ func TestUpdateBarrierTs(t *testing.T) {
 func TestProcessorLiveness(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 
 	// First tick for creating position.
-	err := p.Tick(ctx)
+	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
 	// Second tick for init.
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 
 	// Changing p.liveness affects p.agent liveness.
@@ -735,19 +742,19 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
-	p, tester := initProcessor4Test(ctx, t, &liveness, false)
+	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
 
 	// First tick for creating position.
-	err := p.Tick(ctx)
+	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
 	// Second tick for init.
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 
 	// TODO(qupeng): third tick for handle a warning.
-	err = p.Tick(ctx)
+	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
 
 	require.Nil(t, p.Close())
