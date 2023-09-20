@@ -181,5 +181,9 @@ func (a *saramaAdminClient) Close() {
 			zap.String("namespace", a.changefeed.Namespace),
 			zap.String("changefeed", a.changefeed.ID),
 			zap.Error(err))
+		return
 	}
+	log.Info("sarama admin client closed",
+		zap.String("namespace", a.changefeed.Namespace),
+		zap.String("changefeed", a.changefeed.ID))
 }
