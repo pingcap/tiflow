@@ -255,9 +255,10 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 	}
 
 	consumerConfig := pulsar.ConsumerOptions{
-		Topic:            topicName,
-		SubscriptionName: subscriptionName,
-		Type:             pulsar.Exclusive,
+		Topic:                       topicName,
+		SubscriptionName:            subscriptionName,
+		Type:                        pulsar.Exclusive,
+		SubscriptionInitialPosition: pulsar.SubscriptionPositionEarliest,
 	}
 
 	consumer, err := client.Subscribe(consumerConfig)
