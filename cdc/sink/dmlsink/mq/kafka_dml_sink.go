@@ -112,7 +112,7 @@ func NewKafkaDMLSink(
 
 	metricsCollector := factory.MetricsCollector(tiflowutil.RoleProcessor, adminClient)
 	dmlProducer := producerCreator(ctx, changefeed, asyncProducer, metricsCollector, errCh, failpointCh)
-	s := newDMLSink(ctx, changefeed, dmlProducer, adminClient, topicManager, eventRouter, encoderBuilder,
+	s := newDMLSink(ctx, sinkURI, changefeed, dmlProducer, adminClient, topicManager, eventRouter, encoderBuilder,
 		replicaConfig.Sink.EncoderConcurrency, protocol, errCh)
 
 	return s, nil

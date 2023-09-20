@@ -16,6 +16,7 @@ package txn
 import (
 	"context"
 	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -46,6 +47,8 @@ type dmlSink struct {
 		conflictDetector *causality.ConflictDetector[*worker, *txnEvent]
 		isDead           bool
 	}
+
+	scheme string
 
 	workers []*worker
 	cancel  func()
@@ -84,6 +87,7 @@ func NewMySQLSink(
 		backends = append(backends, impl)
 	}
 	sink := newSink(ctx, backends, errCh, conflictDetectorSlots)
+	sink.scheme = strings.ToLower(sinkURI.Scheme)
 	sink.statistics = statistics
 	sink.cancel = cancel
 
@@ -149,6 +153,11 @@ func (s *dmlSink) WriteEvents(txnEvents ...*dmlsink.TxnCallbackableEvent) error 
 		s.alive.conflictDetector.Add(newTxnEvent(txn))
 	}
 	return nil
+}
+
+// Scheme returns the sink scheme.
+func (s *dmlSink) Scheme() string {
+	return s.scheme
 }
 
 // Close closes the dmlSink. It won't wait for all pending items backend handled.
