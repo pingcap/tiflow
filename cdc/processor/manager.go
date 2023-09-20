@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -65,7 +66,8 @@ type managerImpl struct {
 	upstreamManager *upstream.Manager
 
 	newProcessor func(
-		*orchestrator.ChangefeedReactorState,
+		*model.ChangeFeedInfo,
+		*model.ChangeFeedStatus,
 		*model.CaptureInfo,
 		model.ChangeFeedID,
 		*upstream.Upstream,
@@ -125,7 +127,8 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			cfg := *m.cfg
 			cfg.ChangefeedSettings = changefeedState.Info.Config.Scheduler
 			p = m.newProcessor(
-				changefeedState, m.captureInfo, changefeedID, up, m.liveness,
+				changefeedState.Info, changefeedState.Status,
+				m.captureInfo, changefeedID, up, m.liveness,
 				currentChangefeedEpoch, &cfg)
 			m.processors[changefeedID] = p
 		}
@@ -138,7 +141,24 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			m.closeProcessor(changefeedID)
 			continue
 		}
-		if err := p.Tick(ctx); err != nil {
+		// check if the changefeed is normal before tick
+		if !checkChangefeedNormal(changefeedState) {
+			handleProcessorErr(p, cerror.ErrAdminStopProcessor.GenWithStackByArgs(), changefeedState)
+			m.closeProcessor(changefeedID)
+			continue
+		}
+		// check the capture is alive
+		changefeedState.CheckCaptureAlive(p.captureInfo.ID)
+		// check if the task position is created
+		if createTaskPosition(changefeedState, p.captureInfo) {
+			continue
+		}
+		err, warning := p.Tick(ctx, changefeedState.Info, changefeedState.Status)
+		if warning != nil {
+			patchWarning(err, p.captureInfo, changefeedState)
+		}
+		if err != nil {
+			handleProcessorErr(p, err, changefeedState)
 			// processor have already patched its error to tell the owner
 			// manager can just close the processor and continue to tick other processors
 			m.closeProcessor(changefeedID)
@@ -157,6 +177,96 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		return state, errors.Trace(err)
 	}
 	return state, nil
+}
+
+// checkChangefeedNormal checks if the changefeed is runnable.
+func checkChangefeedNormal(changefeed *orchestrator.ChangefeedReactorState) bool {
+	// check the state in this tick, make sure that the admin job type of the changefeed is not stopped
+	if changefeed.Info.AdminJobType.IsStopState() || changefeed.Status.AdminJobType.IsStopState() {
+		return false
+	}
+	// add a patch to check the changefeed is runnable when applying the patches in the etcd worker.
+	changefeed.CheckChangefeedNormal()
+	return true
+}
+
+// createTaskPosition will create a new task position if a task position does not exist.
+// task position not exist only when the processor is running first in the first tick.
+func createTaskPosition(changefeed *orchestrator.ChangefeedReactorState,
+	captureInfo *model.CaptureInfo) (skipThisTick bool) {
+	if _, exist := changefeed.TaskPositions[captureInfo.ID]; exist {
+		return false
+	}
+	changefeed.PatchTaskPosition(captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				return &model.TaskPosition{}, true, nil
+			}
+			return position, false, nil
+		})
+	return true
+}
+
+func handleProcessorErr(p *processor, err error,
+	changefeed *orchestrator.ChangefeedReactorState) {
+	if isProcessorIgnorableError(err) {
+		log.Info("processor exited",
+			zap.String("capture", p.captureInfo.ID),
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Error(err))
+		return
+	}
+	p.metricProcessorErrorCounter.Inc()
+	// record error information in etcd
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	changefeed.PatchTaskPosition(p.captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Error = &model.RunningError{
+				Time:    time.Now(),
+				Addr:    p.captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, true, nil
+		})
+	log.Error("run processor failed",
+		zap.String("capture", p.captureInfo.ID),
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.Error(err))
+}
+
+func patchWarning(err error,
+	captureInfo *model.CaptureInfo,
+	changefeed *orchestrator.ChangefeedReactorState) {
+	var code string
+	if rfcCode, ok := cerror.RFCCode(err); ok {
+		code = string(rfcCode)
+	} else {
+		code = string(cerror.ErrProcessorUnknown.RFCCode())
+	}
+	changefeed.PatchTaskPosition(captureInfo.ID,
+		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
+			if position == nil {
+				position = &model.TaskPosition{}
+			}
+			position.Warning = &model.RunningError{
+				Time:    time.Now(),
+				Addr:    captureInfo.AdvertiseAddr,
+				Code:    code,
+				Message: err.Error(),
+			}
+			return position, true, nil
+		})
 }
 
 func (m *managerImpl) closeProcessor(changefeedID model.ChangeFeedID) {

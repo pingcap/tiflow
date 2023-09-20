@@ -44,7 +44,8 @@ import (
 
 func newProcessor4Test(
 	t *testing.T,
-	state *orchestrator.ChangefeedReactorState,
+	info *model.ChangeFeedInfo,
+	status *model.ChangeFeedStatus,
 	captureInfo *model.CaptureInfo,
 	liveness *model.Liveness,
 	cfg *config.SchedulerConfig,
@@ -53,7 +54,8 @@ func newProcessor4Test(
 	changefeedID := model.ChangeFeedID4Test("processor-test", "processor-test")
 	up := upstream.NewUpstream4Test(&sinkmanager.MockPD{})
 	p := newProcessor(
-		state,
+		info,
+		status,
 		captureInfo,
 		changefeedID, up, liveness, 0, cfg)
 	// Some cases want to send errors to the processor without initializing it.
@@ -84,7 +86,7 @@ func newProcessor4Test(
 
 		p.agent = &mockAgent{executor: p, liveness: liveness}
 		p.sinkManager.r, p.sourceManager.r, _ = sinkmanager.NewManagerWithMemEngine(
-			t, changefeedID, state.Info, p.redo.r)
+			t, changefeedID, info, p.redo.r)
 		p.sinkManager.name = "SinkManager"
 		p.sinkManager.changefeedID = changefeedID
 		p.sinkManager.spawn(ctx)
@@ -148,7 +150,7 @@ func initProcessor4Test(
 		etcd.DefaultCDCClusterID, ctx.ChangefeedVars().ID)
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
 	cfg := config.NewDefaultSchedulerConfig()
-	p := newProcessor4Test(t, changefeed, captureInfo, liveness, cfg, enableRedo)
+	p := newProcessor4Test(t, changefeed.Info, changefeed.Status, captureInfo, liveness, cfg, enableRedo)
 
 	captureID := ctx.GlobalVars().CaptureInfo.ID
 	changefeedID := ctx.ChangefeedVars().ID
