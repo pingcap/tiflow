@@ -119,8 +119,6 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 
 		// single message too large, claim check enabled, encode it to a new individual message.
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
-			// build previous batched messages
-			d.tryBuildCallback()
 			if err := d.appendSingleLargeMessage4ClaimCheck(ctx, key, value, e, callback); err != nil {
 				return errors.Trace(err)
 			}
@@ -262,7 +260,7 @@ func (d *BatchEncoder) tryBuildCallback() {
 
 // NewClaimCheckLocationMessage implement the ClaimCheckLocationEncoder interface.
 func (d *BatchEncoder) newClaimCheckLocationMessage(
-	event *model.RowChangedEvent, callback func(), fileName string,
+	event *model.RowChangedEvent, fileName string,
 ) (*common.Message, error) {
 	keyMsg, valueMsg, err := rowChangeToMsg(event, d.config, true)
 	if err != nil {
@@ -306,9 +304,7 @@ func (d *BatchEncoder) newClaimCheckLocationMessage(
 	message.Schema = &event.Table.Schema
 	message.Table = &event.Table.Table
 	message.IncRowsCount()
-	if callback != nil {
-		message.Callback = callback
-	}
+
 	return message, nil
 }
 
@@ -326,11 +322,15 @@ func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(
 		return errors.Trace(err)
 	}
 
-	message, err := d.newClaimCheckLocationMessage(e, callback, claimCheckFileName)
+	message, err := d.newClaimCheckLocationMessage(e, claimCheckFileName)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	d.messageBuf = append(d.messageBuf, message)
+	if callback != nil {
+		d.callbackBuff = append(d.callbackBuff, callback)
+	}
+	d.curBatchSize++
 
 	return nil
 }
