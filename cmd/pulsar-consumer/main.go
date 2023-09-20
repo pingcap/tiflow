@@ -445,6 +445,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 					zap.ByteString("value", msg.Payload()),
 					zap.Error(err))
 			}
+			log.Info("DDL event received", zap.Any("DDL", ddl))
 			c.appendDDL(ddl)
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
@@ -621,6 +622,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 			// 2. check if there is a DDL event that can be executed
 			//   if there is, execute it and update the minResolvedTs
 			nextDDL := c.getFrontDDL()
+			if nextDDL != nil {
+				log.Info("get nextDDL", zap.Any("DDL", nextDDL))
+			}
 			if nextDDL != nil && minResolvedTs >= nextDDL.CommitTs {
 				// flush DMLs that commitTs <= todoDDL.CommitTs
 				if err := c.forEachSink(func(sink *partitionSinks) error {
@@ -628,7 +632,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 				}); err != nil {
 					return errors.Trace(err)
 				}
-
+				log.Info("begin to execute DDL", zap.Any("DDL", nextDDL))
 				// all DMLs with commitTs <= todoDDL.CommitTs have been flushed to downstream,
 				// so we can execute the DDL now.
 				if err := c.ddlSink.WriteDDLEvent(ctx, nextDDL); err != nil {
@@ -636,6 +640,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 				}
 				ddl := c.popDDL()
 				log.Info("DDL executed", zap.Any("DDL", ddl))
+				minResolvedTs = ddl.CommitTs
 			}
 
 			// 3. Update global resolved ts
