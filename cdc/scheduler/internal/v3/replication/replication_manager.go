@@ -512,8 +512,10 @@ func (r *Manager) AdvanceCheckpoint(
 	barrier *schedulepb.BarrierWithMinTs,
 	redoMetaManager redo.MetaManager,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
+	var redoFlushedResolvedTs model.Ts
 	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs uint64) (uint64, uint64) {
 		flushedMeta := redoMetaManager.GetFlushedMeta()
+		redoFlushedResolvedTs = flushedMeta.ResolvedTs
 		log.Debug("owner gets flushed redo meta",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
@@ -532,6 +534,15 @@ func (r *Manager) AdvanceCheckpoint(
 		}
 		return newCheckpointTs, newResolvedTs
 	}
+	defer func() {
+		if redoFlushedResolvedTs != 0 && barrier.GlobalBarrierTs > redoFlushedResolvedTs {
+			log.Panic("barrierTs should never greater than redo flushed",
+				zap.String("namespace", r.changefeedID.Namespace),
+				zap.String("changefeed", r.changefeedID.ID),
+				zap.Uint64("barrierTs", barrier.GlobalBarrierTs),
+				zap.Uint64("redoFlushedResolvedTs", redoFlushedResolvedTs))
+		}
+	}()
 
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestRange := tablepb.Span{}
