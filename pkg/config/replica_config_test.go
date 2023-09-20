@@ -222,6 +222,13 @@ func TestReplicaConfigValidate(t *testing.T) {
 	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
+
+	conf.Scheduler = &ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: true,
+		RegionThreshold:        -1,
+	}
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.Error(t, err)
 }
 
 func TestValidateAndAdjust(t *testing.T) {

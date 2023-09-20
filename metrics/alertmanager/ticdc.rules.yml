@@ -74,12 +74,12 @@ groups:
       summary: tikv cdc scan duration seconds more than 10 min
 
   - alert: ticdc_sink_mysql_execution_error
-    expr: changes(ticdc_sink_mysql_execution_error[1m]) > 0
+    expr: changes(ticdc_sink_execution_error[1m]) > 0
     for: 1m
     labels:
       env: ENV_LABELS_ENV
       level: warning
-      expr: changes(ticdc_sink_mysql_execution_error[1m]) > 0
+      expr: changes(ticdc_sink_execution_error[1m]) > 0
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
@@ -90,7 +90,7 @@ groups:
     for: 1m
     labels:
       env: ENV_LABELS_ENV
-      level: critical
+      level: warning
       expr: changes(ticdc_processor_exit_with_error_count[1m]) > 0
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
