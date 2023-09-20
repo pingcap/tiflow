@@ -155,7 +155,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		}
 		err, warning := p.Tick(ctx, changefeedState.Info, changefeedState.Status)
 		if warning != nil {
-			patchWarning(err, p.captureInfo, changefeedState)
+			patchWarning(warning, p.captureInfo, changefeedState)
 		}
 		if err != nil {
 			handleProcessorErr(p, err, changefeedState)
