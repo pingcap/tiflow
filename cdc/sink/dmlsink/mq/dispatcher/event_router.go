@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/topic"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
@@ -214,26 +213,23 @@ func getTopicDispatcher(
 
 	// check if this rule is a valid topic expression
 	topicExpr := topic.Expression(rule)
-
-	var err error
-	// validate the topic expression for pulsar sink
-	if sink.IsPulsarScheme(schema) {
-		err = topicExpr.PulsarValidate()
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-	} else {
-		// validate the topic expression for kafka sink
-		switch protocol {
-		case config.ProtocolAvro:
-			err = topicExpr.ValidateForAvro()
-		default:
-			err = topicExpr.Validate()
-		}
-	}
+	err := validateTopicExpression(topicExpr, schema, protocol)
 	if err != nil {
 		return nil, err
 	}
-
 	return topic.NewDynamicTopicDispatcher(topicExpr), nil
+}
+
+func validateTopicExpression(expr topic.Expression, scheme string, protocol config.Protocol) error {
+	if sink.IsPulsarScheme(scheme) {
+		return expr.PulsarValidate()
+	}
+
+	switch protocol {
+	case config.ProtocolAvro:
+		return expr.ValidateForAvro()
+	default:
+	}
+
+	return expr.Validate()
 }
