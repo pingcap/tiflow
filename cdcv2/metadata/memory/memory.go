@@ -67,7 +67,7 @@ type Storage struct {
 	progresses map[metadata.ChangefeedIDWithEpoch]metadata.ChangefeedProgress
 }
 
-func newStorage() *Storage {
+func NewStorage() *Storage {
 	s := &Storage{}
 	s.entities.cfs = make(map[model.ChangeFeedID]*metadata.ChangefeedInfo)
 	s.entities.cfids = make(map[model.ChangeFeedID]metadata.ChangefeedIDWithEpoch)
@@ -492,6 +492,24 @@ type ownerOb struct {
 		sync.Mutex
 		outgoing []metadata.ScheduledChangefeed
 		incoming []metadata.ScheduledChangefeed
+	}
+}
+
+func NewOwnerDB(s *Storage,
+	c *metadata.ChangefeedInfo,
+	id metadata.ChangefeedIDWithEpoch) *ownerOb {
+	return &ownerOb{
+		s:  s,
+		c:  c,
+		id: id,
+		processors: struct {
+			sync.Mutex
+			outgoing []metadata.ScheduledChangefeed
+			incoming []metadata.ScheduledChangefeed
+		}{
+			outgoing: make([]metadata.ScheduledChangefeed, 0, 1),
+			incoming: make([]metadata.ScheduledChangefeed, 0, 1),
+		},
 	}
 }
 

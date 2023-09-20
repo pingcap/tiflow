@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
+	capturev2 "github.com/pingcap/tiflow/cdcv2/capture"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -199,8 +200,13 @@ func (s *server) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	s.capture = capture.NewCapture(s.pdEndpoints, cdcEtcdClient,
-		s.grpcService, s.sortEngineFactory, s.pdClient)
+	if conf.Debug.EnableCaptureV2 {
+		s.capture = capturev2.NewCapture(s.pdEndpoints, cdcEtcdClient,
+			s.grpcService, s.sortEngineFactory, s.pdClient)
+	} else {
+		s.capture = capture.NewCapture(s.pdEndpoints, cdcEtcdClient,
+			s.grpcService, s.sortEngineFactory, s.pdClient)
+	}
 	return nil
 }
 
