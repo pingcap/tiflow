@@ -279,3 +279,16 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		0, "No topic and partition should be broadcast")
 }
+
+func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, PartitionZero, getDDLDispatchRule(config.ProtocolCanal))
+	require.Equal(t, PartitionZero, getDDLDispatchRule(config.ProtocolCanalJSON))
+
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolOpen))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolDefault))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolAvro))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolMaxwell))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolCraft))
+}
