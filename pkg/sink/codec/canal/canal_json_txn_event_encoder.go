@@ -50,7 +50,7 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 	callback func(),
 ) error {
 	for _, row := range txn.Rows {
-		value, err := newJSONMessageForDML(j.builder, row, j.config)
+		value, err := newJSONMessageForDML(row, j.config, j.builder, false)
 		if err != nil {
 			return errors.Trace(err)
 		}

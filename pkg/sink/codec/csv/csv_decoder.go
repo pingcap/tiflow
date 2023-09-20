@@ -74,6 +74,11 @@ func NewBatchDecoder(ctx context.Context,
 	}, nil
 }
 
+// AddKeyValue implements the EventBatchDecoder interface.
+func (b *batchDecoder) AddKeyValue(_, _ []byte) error {
+	return nil
+}
+
 // HasNext implements the RowEventDecoder interface.
 func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 	err := b.parser.ReadRow()

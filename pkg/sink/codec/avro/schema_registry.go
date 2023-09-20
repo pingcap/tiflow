@@ -368,7 +368,7 @@ func (m *schemaManager) ClearRegistry(ctx context.Context, topicName string) err
 	)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", uri, nil)
 	if err != nil {
-		log.Error("Could not construct request for clearRegistry", zap.String("uri", uri))
+		log.Error("Could not construct request for clearRegistry", zap.Error(err))
 		return cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	req.Header.Add(

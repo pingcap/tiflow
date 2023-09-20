@@ -17,11 +17,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
+	"math/rand"
 	"testing"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -30,10 +29,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -51,7 +51,7 @@ type mockManager struct {
 func (m *mockManager) CheckStaleCheckpointTs(
 	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
 ) error {
-	return cerror.ErrStartTsBeforeGC.GenWithStackByArgs()
+	return errors.ErrStartTsBeforeGC.GenWithStackByArgs()
 }
 
 var _ gc.Manager = (*mockManager)(nil)
@@ -452,9 +452,6 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(
 		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
 	) (uint64, error) {
-		// Owner will do a snapshot read at (checkpointTs - 1) from TiKV,
-		// set GC safepoint to (checkpointTs - 1)
-		require.Equal(t, safePoint, uint64(math.MaxUint64-1))
 		return 0, nil
 	}
 	err := o.updateGCSafepoint(ctx, state)
@@ -474,6 +471,17 @@ func TestUpdateGCSafePoint(t *testing.T) {
 			changefeedID1.ID),
 		[]byte(`{"config":{},"state":"failed"}`))
 	tester.MustApplyPatches()
+	gcErr := errors.ChangeFeedGCFastFailError[rand.Intn(len(errors.ChangeFeedGCFastFailError))]
+	errCode, ok := errors.RFCCode(gcErr)
+	require.True(t, ok)
+	state.Changefeeds[changefeedID1].PatchInfo(
+		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
+			if info == nil {
+				return nil, false, nil
+			}
+			info.Error = &model.RunningError{Code: string(errCode), Message: gcErr.Error()}
+			return info, true, nil
+		})
 	state.Changefeeds[changefeedID1].PatchStatus(
 		func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 			return &model.ChangeFeedStatus{CheckpointTs: 2}, true, nil
@@ -686,12 +694,24 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
 	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o.upstreamManager = upstream.NewManager4Test(nil)
 
+	stateMap := []model.FeedState{
+		model.StateNormal, model.StateStopped, model.StateError,
+		model.StateFailed, /* failed changefeed with normal error should not be ignored */
+	}
 	for i := 0; i < 100; i++ {
 		cfID := model.DefaultChangeFeedID(fmt.Sprintf("testChangefeed-%d", i))
 		upstreamID := uint64(i / 10)
-		cfInfo := &model.ChangeFeedInfo{UpstreamID: upstreamID, State: model.StateNormal}
-		cfStatus := &model.ChangeFeedStatus{CheckpointTs: uint64(i)}
+		cfStatus := &model.ChangeFeedStatus{CheckpointTs: uint64(i) + 100}
+		cfInfo := &model.ChangeFeedInfo{UpstreamID: upstreamID, State: stateMap[rand.Intn(4)]}
+		if cfInfo.State == model.StateFailed {
+			cfInfo.Error = &model.RunningError{
+				Addr:    "test",
+				Code:    "test",
+				Message: "test",
+			}
+		}
 		changefeed := &orchestrator.ChangefeedReactorState{
 			ID:     cfID,
 			Info:   cfInfo,
@@ -701,7 +721,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 
 		// expectMinTsMap will be like map[upstreamID]{0, 10, 20, ..., 90}
 		if i%10 == 0 {
-			expectMinTsMap[upstreamID] = uint64(i)
+			expectMinTsMap[upstreamID] = uint64(i) + 100
 		}
 
 		// If a changefeed does not exist in ownerImpl.changefeeds,
@@ -713,9 +733,43 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 		}
 	}
 
+	for i := 0; i < 10; i++ {
+		cfID := model.DefaultChangeFeedID(fmt.Sprintf("testChangefeed-ignored-%d", i))
+		upstreamID := uint64(i)
+		cfStatus := &model.ChangeFeedStatus{CheckpointTs: uint64(i)}
+		err := errors.ChangeFeedGCFastFailError[rand.Intn(len(errors.ChangeFeedGCFastFailError))]
+		errCode, ok := errors.RFCCode(err)
+		require.True(t, ok)
+		cfInfo := &model.ChangeFeedInfo{
+			UpstreamID: upstreamID,
+			State:      model.StateFailed,
+			Error:      &model.RunningError{Code: string(errCode), Message: err.Error()},
+		}
+		changefeed := &orchestrator.ChangefeedReactorState{
+			ID:     cfID,
+			Info:   cfInfo,
+			Status: cfStatus,
+		}
+		state.Changefeeds[cfID] = changefeed
+	}
+
 	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
 
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
+	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
+}
+
+func TestCalculateGCSafepointTsNoChangefeed(t *testing.T) {
+	state := orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	expectForceUpdateMap := make(map[uint64]interface{})
+	o := ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
+	o.upstreamManager = upstream.NewManager4Test(nil)
+	up, err := o.upstreamManager.GetDefaultUpstream()
+	require.Nil(t, err)
+	up.PDClock = pdutil.NewClock4Test()
+
+	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+	require.Equal(t, 1, len(minCheckpoinTsMap))
 	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
 }
 

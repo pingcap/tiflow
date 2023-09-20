@@ -131,8 +131,9 @@ func (c *JSONMessage) pkNameSet() map[string]struct{} {
 }
 
 type tidbExtension struct {
-	CommitTs    uint64 `json:"commitTs,omitempty"`
-	WatermarkTs uint64 `json:"watermarkTs,omitempty"`
+	CommitTs      uint64 `json:"commitTs,omitempty"`
+	WatermarkTs   uint64 `json:"watermarkTs,omitempty"`
+	OnlyHandleKey bool   `json:"onlyHandleKey,omitempty"`
 }
 
 type canalJSONMessageWithTiDBExtension struct {
@@ -157,13 +158,11 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	}
 
 	mysqlType := msg.getMySQLType()
-	javaSQLType := msg.getJavaSQLType()
 
 	var err error
 	if msg.eventType() == canal.EventType_DELETE {
 		// for `DELETE` event, `data` contain the old data, set it as the `PreColumns`
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(
-			msg.getData(), mysqlType, javaSQLType)
+		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
 		// canal-json encoder does not encode `Flag` information into the result,
 		// we have to set the `Flag` to make it can be handled by MySQL Sink.
 		// see https://github.com/pingcap/tiflow/blob/7bfce98/cdc/sink/mysql.go#L869-L888
@@ -172,16 +171,14 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	}
 
 	// for `INSERT` and `UPDATE`, `data` contain fresh data, set it as the `Columns`
-	result.Columns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(),
-		mysqlType, javaSQLType)
+	result.Columns, err = canalJSONColumnMap2RowChangeColumns(msg.getData(), mysqlType)
 	if err != nil {
 		return nil, err
 	}
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getOld(),
-			mysqlType, javaSQLType)
+		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
 		if err != nil {
 			return nil, err
 		}
@@ -191,15 +188,9 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 	return result, nil
 }
 
-func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType map[string]string, javaSQLType map[string]int32) ([]*model.Column, error) {
+func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType map[string]string) ([]*model.Column, error) {
 	result := make([]*model.Column, 0, len(cols))
 	for name, value := range cols {
-		javaType, ok := javaSQLType[name]
-		if !ok {
-			// this should not happen, else we have to check encoding for javaSQLType.
-			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
-				"java sql type does not found, column: %+v, mysqlType: %+v", name, javaSQLType)
-		}
 		mysqlTypeStr, ok := mysqlType[name]
 		if !ok {
 			// this should not happen, else we have to check encoding for mysqlType.
@@ -207,9 +198,9 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
 		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
+		isBinary := isBinaryMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
-		col := internal.NewColumn(value, mysqlType).
-			ToCanalJSONFormatColumn(name, internal.JavaSQLType(javaType))
+		col := internal.NewColumn(value, mysqlType).ToCanalJSONFormatColumn(name, isBinary)
 		result = append(result, col)
 	}
 	if len(result) == 0 {
@@ -253,4 +244,8 @@ func getDDLActionType(query string) timodel.ActionType {
 	}
 
 	return timodel.ActionNone
+}
+
+func isBinaryMySQLType(mysqlType string) bool {
+	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
 }

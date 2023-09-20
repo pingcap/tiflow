@@ -632,7 +632,7 @@ func TestIgnorableError(t *testing.T) {
 		{nil, true},
 		{cerror.ErrAdminStopProcessor.GenWithStackByArgs(), true},
 		{cerror.ErrReactorFinished.GenWithStackByArgs(), true},
-		{cerror.ErrRedoWriterStopped.GenWithStackByArgs(), true},
+		{cerror.ErrRedoWriterStopped.GenWithStackByArgs(), false},
 		{errors.Trace(context.Canceled), true},
 		{cerror.ErrProcessorTableNotFound.GenWithStackByArgs(), false},
 		{errors.New("test error"), false},

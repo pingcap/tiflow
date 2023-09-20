@@ -23,9 +23,11 @@ export UP_TIDB_HOST=$lan_addr \
 proxy_pid=""
 proxy_port=$(shuf -i 10081-20081 -n1)
 function start_proxy() {
-	echo "dumpling grpc packet to $WORK_DIR/packets.dump..."
-	GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=$proxy_port >$WORK_DIR/packets.dump &
+	echo "dumpling grpc packet to $WORK_DIR/test_proxy.log..."
+	GO111MODULE=on WORK_DIR=$WORK_DIR go run $CUR/run-proxy.go --port=$proxy_port >$WORK_DIR/test_proxy.log &
 	proxy_pid=$!
+	echo "proxy port: $proxy_port"
+	echo "proxy pid: $proxy_pid"
 }
 
 function stop_proxy() {
@@ -55,21 +57,25 @@ function prepare() {
 	sleep 5
 	export http_proxy=http://127.0.0.1:$proxy_port
 	export https_proxy=http://127.0.0.1:$proxy_port
+	echo "try to connect pd cluster via proxy, pd addr: $UP_PD_HOST_1:2379"
 	ensure 10 curl http://$UP_PD_HOST_1:2379/
 
-	echo started proxy at $proxy_pid
+	echo started proxy pid: $proxy_pid
+	echo started proxy at port: $proxy_port
 
 	cd $WORK_DIR
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
+	echo "query start ts: $start_ts"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+	echo started cdc server successfully
 
 	SINK_URI="blackhole:///"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 }
 
 function check() {
-	services=($(cat $WORK_DIR/packets.dump | xargs -L1 dirname | sort | uniq))
+	services=($(cat $WORK_DIR/test_proxy.log | xargs -L1 dirname | sort | uniq))
 	service_type_count=${#services[@]}
 	echo "captured services: "
 	echo ${services[@]}

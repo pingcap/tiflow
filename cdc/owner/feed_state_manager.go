@@ -166,8 +166,12 @@ func (m *feedStateManager) Tick(
 	}
 	errs := m.errorsReportedByProcessors()
 	m.handleError(errs...)
-	warnings := m.warningsReportedByProcessors()
-	m.handleWarning(warnings...)
+	if len(errs) == 0 {
+		// warning are come from processors' sink component
+		// they ere not fatal errors, so we don't need to stop the changefeed
+		warnings := m.warningsReportedByProcessors()
+		m.handleWarning(warnings...)
+	}
 	return
 }
 
@@ -483,7 +487,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// if there are a fastFail error in errs, we can just fastFail the changefeed
 	// and no need to patch other error to the changefeed info
 	for _, err := range errs {
-		if cerrors.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
+		if cerrors.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 				if info == nil {
 					return nil, false, nil

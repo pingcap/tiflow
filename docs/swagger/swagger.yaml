@@ -91,6 +91,8 @@ definitions:
         type: string
       key:
         type: string
+      large-message-handle:
+        $ref: '#/definitions/config.LargeMessageHandleConfig'
       max-message-bytes:
         type: integer
       partition-num:
@@ -138,6 +140,11 @@ definitions:
       sasl-user:
         type: string
       write-timeout:
+        type: string
+    type: object
+  config.LargeMessageHandleConfig:
+    properties:
+      large-message-handle-option:
         type: string
     type: object
   config.MySQLConfig:
@@ -688,6 +695,8 @@ definitions:
         type: string
       key:
         type: string
+      large_message_handle:
+        $ref: '#/definitions/v2.LargeMessageHandleConfig'
       max_message_bytes:
         type: integer
       partition_num:
@@ -735,6 +744,11 @@ definitions:
       sasl_user:
         type: string
       write_timeout:
+        type: string
+    type: object
+  v2.LargeMessageHandleConfig:
+    properties:
+      large_message_handle_option:
         type: string
     type: object
   v2.LogLevelReq:

@@ -52,7 +52,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	entry, err := d.entryBuilder.fromRowEvent(e, d.config.OnlyHandleKeyColumns)
+	entry, err := d.entryBuilder.fromRowEvent(e, d.config.DeleteOnlyHandleKeyColumns)
 	if err != nil {
 		return errors.Trace(err)
 	}

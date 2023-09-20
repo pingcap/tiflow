@@ -291,8 +291,8 @@ func (c *changefeed) handleWarning(ctx cdcContext.Context, err error) {
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context, checkpointTs uint64) error {
-	state := c.state.Info.State
-	if state == model.StateNormal || state == model.StateStopped || state == model.StateError {
+	cfInfo := c.state.Info
+	if cfInfo.NeedBlockGC() {
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrStartTsBeforeGC.FastGen("InjectChangefeedFastFailError")
 		})
@@ -644,7 +644,7 @@ LOOP2:
 		zap.Uint64("changefeedEpoch", epoch),
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Uint64("resolvedTs", c.resolvedTs),
-		zap.Stringer("info", c.state.Info))
+		zap.String("info", c.state.Info.String()))
 
 	return nil
 }
@@ -720,7 +720,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
 		zap.Any("status", c.state.Status),
-		zap.Stringer("info", c.state.Info),
+		zap.String("info", c.state.Info.String()),
 		zap.Bool("isRemoved", c.isRemoved))
 }
 

@@ -153,7 +153,7 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 		spanz.ToSpan([]byte{}, spanz.UpperBoundKey),
 		0, &tikv.RPCContext{}), 0)
 	state.start()
-	worker := newRegionWorker(model.ChangeFeedID{}, s, "")
+	worker := newRegionWorker(ctx, model.ChangeFeedID{}, s, "")
 	require.Equal(t, 2, cap(worker.outputCh))
 
 	// Receive prewrite2 with empty value.
@@ -312,7 +312,7 @@ func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 		9, &tikv.RPCContext{}),
 		0)
 	s1.start()
-	w := newRegionWorker(model.ChangeFeedID{}, s, "")
+	w := newRegionWorker(ctx, model.ChangeFeedID{}, s, "")
 
 	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
 		resolvedTs: 5,
