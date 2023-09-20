@@ -29,14 +29,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// metaRefreshInterval is the interval of refreshing metadata.
-	// We can't get the metadata too frequently, because it may cause
-	// the kafka cluster to be overloaded. Especially when there are
-	// many topics in the cluster or there are many TiCDC changefeeds.
-	metaRefreshInterval = 10 * time.Minute
-)
-
 // kafkaTopicManager is a manager for kafka topics.
 type kafkaTopicManager struct {
 	changefeedID model.ChangeFeedID
@@ -47,32 +39,21 @@ type kafkaTopicManager struct {
 	cfg *kafka.AutoCreateTopicConfig
 
 	topics sync.Map
-
-	metaRefreshTicker *time.Ticker
-
-	// cancel is used to cancel the background goroutine.
-	cancel context.CancelFunc
 }
 
 // NewKafkaTopicManager creates a new topic manager.
 func NewKafkaTopicManager(
-	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
 	role util.Role,
 ) *kafkaTopicManager {
 	mgr := &kafkaTopicManager{
-		changefeedID:      changefeedID,
-		role:              role,
-		admin:             admin,
-		cfg:               cfg,
-		metaRefreshTicker: time.NewTicker(metaRefreshInterval),
+		changefeedID: changefeedID,
+		role:         role,
+		admin:        admin,
+		cfg:          cfg,
 	}
-
-	ctx, mgr.cancel = context.WithCancel(ctx)
-	// Background refresh metadata.
-	go mgr.backgroundRefreshMeta(ctx)
 
 	return mgr
 }
@@ -94,26 +75,6 @@ func (m *kafkaTopicManager) GetPartitionNum(
 	}
 
 	return partitionNum, nil
-}
-
-func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info("Background refresh Kafka metadata goroutine exit.",
-				zap.String("namespace", m.changefeedID.Namespace),
-				zap.String("changefeed", m.changefeedID.ID),
-			)
-			return
-		case <-m.metaRefreshTicker.C:
-			// We ignore the error here, because the error may be caused by the
-			// network problem, and we can try to get the metadata next time.
-			topicPartitionNums, _ := m.fetchAllTopicsPartitionsNum(ctx)
-			for topic, partitionNum := range topicPartitionNums {
-				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
-			}
-		}
-	}
 }
 
 // tryUpdatePartitionsAndLogging try to update the partitions of the topic.
@@ -141,41 +102,6 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 			zap.Int32("partitionNumber", partitions),
 		)
 	}
-}
-
-// fetchAllTopicsPartitionsNum fetches all topics' partitions number.
-// The error returned by this method could be a transient error that is fixable by the underlying logic.
-// When handling this error, please be cautious.
-// If you simply throw the error to the caller, it may impact the robustness of your program.
-func (m *kafkaTopicManager) fetchAllTopicsPartitionsNum(
-	ctx context.Context,
-) (map[string]int32, error) {
-	var topics []string
-	m.topics.Range(func(key, value any) bool {
-		topics = append(topics, key.(string))
-		return true
-	})
-
-	start := time.Now()
-	numPartitions, err := m.admin.GetTopicsPartitionsNum(ctx, topics)
-	if err != nil {
-		log.Warn(
-			"Kafka admin client describe topics failed",
-			zap.String("namespace", m.changefeedID.Namespace),
-			zap.String("changefeed", m.changefeedID.ID),
-			zap.Error(err),
-			zap.Duration("duration", time.Since(start)),
-		)
-		return nil, err
-	}
-
-	log.Info(
-		"Kafka admin client describe topics success",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Duration("duration", time.Since(start)))
-
-	return numPartitions, nil
 }
 
 // waitUntilTopicVisible is called after CreateTopic to make sure the topic
@@ -290,9 +216,4 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 	}
 
 	return partitionNum, nil
-}
-
-// Close exits the background goroutine.
-func (m *kafkaTopicManager) Close() {
-	m.cancel()
 }

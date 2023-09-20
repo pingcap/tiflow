@@ -35,8 +35,7 @@ func TestPartitions(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
-	defer manager.Close()
+	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
 
 	partitionsNum, err := manager.GetPartitionNum(
 		ctx,
@@ -57,8 +56,8 @@ func TestCreateTopic(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
-	defer manager.Close()
+	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
+
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.Nil(t, err)
 	require.Equal(t, int32(3), partitionNum)
@@ -72,8 +71,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
-	defer manager.Close()
+	manager = NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
 		t,
@@ -88,8 +86,8 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager = NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
-	defer manager.Close()
+
+	manager = NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic-failed")
 	require.Regexp(
 		t,
@@ -110,8 +108,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
-	defer manager.Close()
+	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
 	partitionNum, err := manager.createTopic(ctx, "new_topic")
 	require.Nil(t, err)
 	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
