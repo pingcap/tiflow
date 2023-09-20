@@ -521,7 +521,7 @@ func (r *Manager) AdvanceCheckpoint(
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Uint64("flushedCheckpointTs", flushedMeta.CheckpointTs),
 			zap.Uint64("flushedResolvedTs", flushedMeta.ResolvedTs))
-		if flushedMeta.ResolvedTs != 0 && flushedMeta.ResolvedTs < newResolvedTs {
+		if flushedMeta.ResolvedTs < newResolvedTs {
 			newResolvedTs = flushedMeta.ResolvedTs
 		}
 
