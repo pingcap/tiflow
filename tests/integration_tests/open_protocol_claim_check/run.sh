@@ -27,9 +27,9 @@ function run() {
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-  sleep 3
+	sleep 3
 
-  target_ts = $(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
+	target_ts = $(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
