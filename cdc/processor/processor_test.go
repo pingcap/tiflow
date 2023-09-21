@@ -53,7 +53,7 @@ func newProcessor4Test(
 ) *processor {
 	changefeedID := model.ChangeFeedID4Test("processor-test", "processor-test")
 	up := upstream.NewUpstream4Test(&sinkmanager.MockPD{})
-	p := newProcessor(
+	p := NewProcessor(
 		info,
 		status,
 		captureInfo,

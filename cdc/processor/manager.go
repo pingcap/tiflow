@@ -93,7 +93,7 @@ func NewManager(
 		processors:                   make(map[model.ChangeFeedID]*processor),
 		commandQueue:                 make(chan *command, 4),
 		upstreamManager:              upstreamManager,
-		newProcessor:                 newProcessor,
+		newProcessor:                 NewProcessor,
 		metricProcessorCloseDuration: processorCloseDuration,
 		cfg:                          cfg,
 	}

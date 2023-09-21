@@ -53,6 +53,19 @@ const (
 	maxTries             = 3
 )
 
+// Processor is the processor of changefeed data.
+type Processor interface {
+	// Tick is called periodically to drive the Processor's internal logic.
+	// The main logic of processor is in this function, including the calculation of many kinds of ts,
+	// maintain table components, error handling, etc.
+	//
+	// It can be called in etcd ticks, so it should never be blocked.
+	// Tick Returns: error and warnings. error will be propagated to the owner, and warnings will be record.
+	Tick(cdcContext.Context, *model.ChangeFeedInfo, *model.ChangeFeedStatus) (error, error)
+}
+
+var _ Processor = (*processor)(nil)
+
 type processor struct {
 	changefeedID model.ChangeFeedID
 	captureInfo  *model.CaptureInfo
@@ -387,8 +400,8 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 	return stats
 }
 
-// newProcessor creates a new processor
-func newProcessor(
+// NewProcessor creates a new processor
+func NewProcessor(
 	info *model.ChangeFeedInfo,
 	status *model.ChangeFeedStatus,
 	captureInfo *model.CaptureInfo,
@@ -447,9 +460,10 @@ func isProcessorIgnorableError(err error) bool {
 }
 
 // Tick implements the `orchestrator.State` interface
-// the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
+// the `info` parameter is sent by metadata store, the `info` must be the latest value snapshot.
+// the `status` parameter is sent by metadata store, the `status` must be the latest value snapshot.
 // The main logic of processor is in this function, including the calculation of many kinds of ts,
-// maintain table pipeline, error handling, etc.
+// maintain table components, error handling, etc.
 //
 // It can be called in etcd ticks, so it should never be blocked.
 func (p *processor) Tick(ctx cdcContext.Context,
