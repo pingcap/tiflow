@@ -409,7 +409,7 @@ func TestHandleErrorWhenChangefeedIsPaused(t *testing.T) {
 	manager.state.Info = &model.ChangeFeedInfo{
 		State: model.StateStopped,
 	}
-	manager.handleError(err)
+	manager.HandleError(err)
 	require.Equal(t, model.StateStopped, manager.state.Info.State)
 }
 

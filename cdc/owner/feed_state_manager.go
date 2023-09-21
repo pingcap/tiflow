@@ -41,6 +41,16 @@ const (
 	defaultBackoffMultiplier          = 2.0
 )
 
+type FeedStateManager interface {
+	Tick(resolvedTs model.Ts) (adminJobPending bool)
+	HandleError(errs ...*model.RunningError)
+	HandleWarning(warnings ...*model.RunningError)
+	ShouldRunning() bool
+	ShouldRemoved() bool
+	MarkFinished()
+	PushAdminJob(job *model.AdminJob)
+}
+
 // feedStateManager manages the ReactorState of a changefeed
 // when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
@@ -71,9 +81,14 @@ type feedStateManager struct {
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
-func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
+func newFeedStateManager(up *upstream.Upstream,
+	state *orchestrator.ChangefeedReactorState) *feedStateManager {
 	f := new(feedStateManager)
 	f.upstream = up
+	f.state = state
+	if f.state != nil && f.state.Status != nil {
+		f.initCheckpointTs = state.Status.CheckpointTs
+	}
 
 	f.errBackoff = backoff.NewExponentialBackOff()
 	f.errBackoff.InitialInterval = defaultBackoffInitInterval
@@ -94,24 +109,20 @@ func (m *feedStateManager) resetErrRetry() {
 	m.lastErrorRetryTime = time.Unix(0, 0)
 }
 
-func (m *feedStateManager) Tick(
-	state *orchestrator.ChangefeedReactorState,
-	resolvedTs model.Ts,
-) (adminJobPending bool) {
-	if state.Status != nil {
-		if m.lastCheckpointTs < state.Status.CheckpointTs {
-			m.lastCheckpointTs = state.Status.CheckpointTs
+func (m *feedStateManager) Tick(resolvedTs model.Ts) (adminJobPending bool) {
+	if m.state != nil && m.state.Status != nil {
+		if m.lastCheckpointTs < m.state.Status.CheckpointTs {
+			m.lastCheckpointTs = m.state.Status.CheckpointTs
 			m.checkpointTsAdvanced = time.Now()
 		}
-		if m.state == nil || m.state.Status == nil {
+		if m.initCheckpointTs == 0 {
 			// It's the first time `m.state.Status` gets filled.
-			m.initCheckpointTs = state.Status.CheckpointTs
+			m.initCheckpointTs = m.state.Status.CheckpointTs
 		}
 	}
 
-	m.checkAndInitLastRetryCheckpointTs(state.Status)
+	m.checkAndInitLastRetryCheckpointTs(m.state.Status)
 
-	m.state = state
 	m.resolvedTs = resolvedTs
 	m.shouldBeRunning = true
 	defer func() {
@@ -178,14 +189,14 @@ func (m *feedStateManager) Tick(
 	case model.StateNormal, model.StateWarning:
 		m.checkAndChangeState()
 		errs := m.errorsReportedByProcessors()
-		m.handleError(errs...)
+		m.HandleError(errs...)
 		// only handle warnings when there are no errors
 		// otherwise, the warnings will cover the errors
 		if len(errs) == 0 {
 			// warning are come from processors' sink component
 			// they ere not fatal errors, so we don't need to stop the changefeed
 			warnings := m.warningsReportedByProcessors()
-			m.handleWarning(warnings...)
+			m.HandleWarning(warnings...)
 		}
 	}
 	return
@@ -487,7 +498,7 @@ func (m *feedStateManager) warningsReportedByProcessors() []*model.RunningError 
 	return result
 }
 
-func (m *feedStateManager) handleError(errs ...*model.RunningError) {
+func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 	if len(errs) == 0 {
 		return
 	}
@@ -553,7 +564,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	}
 }
 
-func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
+func (m *feedStateManager) HandleWarning(errs ...*model.RunningError) {
 	if len(errs) == 0 {
 		return
 	}
@@ -576,7 +587,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
 			)
 			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
-			m.handleError(&model.RunningError{
+			m.HandleError(&model.RunningError{
 				Time:    lastError.Time,
 				Addr:    lastError.Addr,
 				Code:    string(code),
