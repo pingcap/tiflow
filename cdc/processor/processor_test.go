@@ -449,7 +449,7 @@ func TestProcessorExit(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
 	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false)
-	//var err error
+	// var err error
 	// init tick
 	checkChangefeedNormal(changefeed)
 	createTaskPosition(changefeed, p.captureInfo)

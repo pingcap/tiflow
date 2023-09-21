@@ -193,7 +193,8 @@ func checkChangefeedNormal(changefeed *orchestrator.ChangefeedReactorState) bool
 // createTaskPosition will create a new task position if a task position does not exist.
 // task position not exist only when the processor is running first in the first tick.
 func createTaskPosition(changefeed *orchestrator.ChangefeedReactorState,
-	captureInfo *model.CaptureInfo) (skipThisTick bool) {
+	captureInfo *model.CaptureInfo,
+) (skipThisTick bool) {
 	if _, exist := changefeed.TaskPositions[captureInfo.ID]; exist {
 		return false
 	}
@@ -208,7 +209,8 @@ func createTaskPosition(changefeed *orchestrator.ChangefeedReactorState,
 }
 
 func handleProcessorErr(p *processor, err error,
-	changefeed *orchestrator.ChangefeedReactorState) {
+	changefeed *orchestrator.ChangefeedReactorState,
+) {
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited",
 			zap.String("capture", p.captureInfo.ID),
@@ -247,7 +249,8 @@ func handleProcessorErr(p *processor, err error,
 
 func patchWarning(err error,
 	captureInfo *model.CaptureInfo,
-	changefeed *orchestrator.ChangefeedReactorState) {
+	changefeed *orchestrator.ChangefeedReactorState,
+) {
 	var code string
 	if rfcCode, ok := cerror.RFCCode(err); ok {
 		code = string(rfcCode)
