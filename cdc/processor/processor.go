@@ -99,6 +99,10 @@ type processor struct {
 	agent           scheduler.Agent
 	changefeedEpoch uint64
 
+	// The latest changefeed info and status from meta storage. they are updated in every Tick.
+	// processor implements TableExecutor interface, so we need to add these two fields here to use them
+	// in `AddTableSpan` and `RemoveTableSpan`, otherwise we need to adjust the interface.
+	// we can refactor this step by step.
 	latestInfo   *model.ChangeFeedInfo
 	latestStatus *model.ChangeFeedStatus
 
