@@ -15,8 +15,6 @@ package kafka
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -255,20 +253,23 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 				return nil
 			}
 
-			key, _ := err.Msg.Key.Encode()
-			value, _ := err.Msg.Value.Encode()
+			messageSize := err.Msg.ByteSize(2)
+			log.Info("async end message failed", zap.Int("messageSize", messageSize))
 
-			large := &struct {
-				Key   []byte `json:"key"`
-				Value []byte `json:"value"`
-			}{
-				Key:   key,
-				Value: value,
-			}
-
-			data, _ := json.Marshal(large)
-			storage, _ := util.GetExternalStorageWithTimeout(ctx, "file:///tmp/large-message-debug", 5*time.Second)
-			_ = storage.WriteFile(ctx, fmt.Sprintf("large-message-%d", time.Now().UnixNano()), data)
+			//key, _ := err.Msg.Key.Encode()
+			//value, _ := err.Msg.Value.Encode()
+			//
+			//large := &struct {
+			//	Key   []byte `json:"key"`
+			//	Value []byte `json:"value"`
+			//}{
+			//	Key:   key,
+			//	Value: value,
+			//}
+			//
+			//data, _ := json.Marshal(large)
+			//storage, _ := util.GetExternalStorageWithTimeout(ctx, "file:///tmp/large-message-debug", 5*time.Second)
+			//_ = storage.WriteFile(ctx, fmt.Sprintf("large-message-%d", time.Now().UnixNano()), data)
 			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
 	}
