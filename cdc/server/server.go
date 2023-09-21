@@ -195,17 +195,14 @@ func (s *server) prepare(ctx context.Context) error {
 	}
 
 	s.createSortEngineFactory()
-
-	if err := s.setMemoryLimit(); err != nil {
-		return errors.Trace(err)
-	}
+	s.setMemoryLimit()
 
 	s.capture = capture.NewCapture(s.pdEndpoints, cdcEtcdClient,
 		s.grpcService, s.sortEngineFactory, s.pdClient)
 	return nil
 }
 
-func (s *server) setMemoryLimit() error {
+func (s *server) setMemoryLimit() {
 	conf := config.GetGlobalServerConfig()
 	if conf.GcTunerMemoryThreshold > maxGcTunerMemory {
 		// If total memory is larger than 512GB, we will not set memory limit.
@@ -214,7 +211,6 @@ func (s *server) setMemoryLimit() error {
 			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
 			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
 		)
-		return nil
 	}
 	if conf.GcTunerMemoryThreshold > 0 {
 		gctuner.EnableGOGCTuner.Store(true)
@@ -224,7 +220,6 @@ func (s *server) setMemoryLimit() error {
 			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
 		)
 	}
-	return nil
 }
 
 func (s *server) createSortEngineFactory() {
