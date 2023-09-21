@@ -21,11 +21,19 @@ import (
 	"github.com/pingcap/log"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 func main() {
+	defer func() {
+		fmt.Println("proxy stopped")
+	}()
+
 	grpc_proxy.RegisterDefaultFlags()
 	flag.Parse()
+
+	log.Info("starting proxy", zap.Any("flags", flag.Args()))
+
 	proxy, err := grpc_proxy.New(
 		grpc_proxy.WithInterceptor(intercept),
 		grpc_proxy.DefaultFlags(),
@@ -37,9 +45,19 @@ func main() {
 	if err != nil {
 		log.Fatal("failed to start proxy", zap.Error(err))
 	}
+	fmt.Println("proxy started")
 }
 
 func intercept(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	fmt.Println(info.FullMethod)
-	return handler(srv, ss)
+	err := handler(srv, ss)
+	if err != nil {
+		md, ok := metadata.FromIncomingContext(ss.Context())
+		log.Error("failed to handle stream",
+			zap.String("method", info.FullMethod),
+			zap.Bool("ok", ok),
+			zap.Any("metadata", md),
+			zap.Error(err))
+	}
+	return err
 }

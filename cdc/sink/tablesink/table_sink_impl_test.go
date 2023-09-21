@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,10 @@ func (m *mockEventSink) Close() {
 
 func (m *mockEventSink) Dead() <-chan struct{} {
 	return m.dead
+}
+
+func (m *mockEventSink) Scheme() string {
+	return sink.BlackHoleScheme
 }
 
 // acknowledge the txn events by call the callback function.

@@ -28,7 +28,6 @@ import (
 var customReplicaConfig = &ReplicaConfig{
 	MemoryQuota:           1123450,
 	CaseSensitive:         false,
-	EnableOldValue:        false,
 	ForceReplicate:        false,
 	IgnoreIneligibleTable: false,
 	CheckGCSafePoint:      false,
@@ -81,7 +80,6 @@ var customReplicaConfig = &ReplicaConfig{
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:      1024 * 1024 * 1024,
 	CaseSensitive:    true,
-	EnableOldValue:   true,
 	CheckGCSafePoint: true,
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},

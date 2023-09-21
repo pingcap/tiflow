@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
@@ -58,6 +59,11 @@ func NewPulsarDMLSink(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if !util.IsPulsarSupportedProtocols(protocol) {
+		return nil, cerror.ErrSinkURIInvalid.
+			GenWithStackByArgs("unsupported protocol, " +
+				"pulsar sink currently only support these protocols: [canal-json, canal, maxwell]")
+	}
 
 	pConfig, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	if err != nil {
@@ -71,10 +77,11 @@ func NewPulsarDMLSink(
 	}
 
 	failpointCh := make(chan error, 1)
-	log.Info("Try to create a DML sink producer", zap.Any("pulsar", pConfig))
+	log.Info("Try to create a DML sink producer", zap.String("changefeed", changefeedID.String()))
 	start := time.Now()
 	p, err := producerCreator(ctx, changefeedID, client, replicaConfig.Sink, errCh, failpointCh)
 	log.Info("DML sink producer created",
+		zap.String("changefeed", changefeedID.String()),
 		zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		defer func() {
@@ -85,14 +92,14 @@ func NewPulsarDMLSink(
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}
 
+	scheme := sink.GetScheme(sinkURI)
 	// The topicManager is not actually used in pulsar , it is only used to create dmlSink.
 	// TODO: Find a way to remove it in newDMLSink.
 	topicManager, err := pulsarTopicManagerCreator(pConfig, client)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, sinkURI.Scheme)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, defaultTopic, scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -111,8 +118,8 @@ func NewPulsarDMLSink(
 	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	encoderGroup := codec.NewEncoderGroup(encoderBuilder, concurrency, changefeedID)
 
-	s := newDMLSink(ctx, changefeedID, p, nil, topicManager, eventRouter, encoderGroup,
-		protocol, nil, nil, errCh)
+	s := newDMLSink(ctx, changefeedID, p, nil, topicManager,
+		eventRouter, encoderGroup, protocol, scheme, errCh)
 
 	return s, nil
 }

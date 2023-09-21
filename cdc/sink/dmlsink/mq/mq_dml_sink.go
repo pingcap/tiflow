@@ -28,9 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/atomic"
 )
 
@@ -65,6 +63,8 @@ type dmlSink struct {
 
 	wg   sync.WaitGroup
 	dead chan struct{}
+
+	scheme string
 }
 
 func newDMLSink(
@@ -76,14 +76,12 @@ func newDMLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
-	claimCheck *claimcheck.ClaimCheck,
-	claimCheckEncoder codec.ClaimCheckLocationEncoder,
+	scheme string,
 	errCh chan error,
 ) *dmlSink {
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, protocol,
-		producer, encoderGroup, claimCheck, claimCheckEncoder, statistics)
+	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
 
 	s := &dmlSink{
 		id:          changefeedID,
@@ -92,6 +90,7 @@ func newDMLSink(
 		ctx:         ctx,
 		cancel:      cancel,
 		dead:        make(chan struct{}),
+		scheme:      scheme,
 	}
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
@@ -151,11 +150,11 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			if err != nil {
 				return errors.Trace(err)
 			}
-			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
+			index, key := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
 			// This never be blocked because this is an unbounded channel.
 			s.alive.worker.msgChan.In() <- mqEvent{
 				key: TopicPartitionKey{
-					Topic: topic, Partition: partition,
+					Topic: topic, Partition: index, PartitionKey: key,
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
 					Event:     row,
@@ -184,11 +183,14 @@ func (s *dmlSink) Close() {
 	if s.adminClient != nil {
 		s.adminClient.Close()
 	}
-
-	common.CleanMetrics(s.id)
 }
 
 // Dead checks whether it's dead or not.
 func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
+}
+
+// Scheme returns the scheme of this sink.
+func (s *dmlSink) Scheme() string {
+	return s.scheme
 }

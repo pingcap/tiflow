@@ -29,19 +29,19 @@ func TestLargeMessageHandle4Compression(t *testing.T) {
 	// unsupported compression, return error
 	largeMessageHandle.LargeMessageHandleCompression = "zstd"
 
-	err := largeMessageHandle.Validate(ProtocolCanalJSON, false)
+	err := largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
 	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 
 	largeMessageHandle.LargeMessageHandleCompression = compression.LZ4
-	err = largeMessageHandle.Validate(ProtocolCanalJSON, false)
+	err = largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
 	require.NoError(t, err)
 
 	largeMessageHandle.LargeMessageHandleCompression = compression.Snappy
-	err = largeMessageHandle.Validate(ProtocolCanalJSON, false)
+	err = largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
 	require.NoError(t, err)
 
 	largeMessageHandle.LargeMessageHandleCompression = compression.None
-	err = largeMessageHandle.Validate(ProtocolCanalJSON, false)
+	err = largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
 	require.NoError(t, err)
 }
 
@@ -50,11 +50,11 @@ func TestLargeMessageHandle4NotSupportedProtocol(t *testing.T) {
 
 	largeMessageHandle := NewDefaultLargeMessageHandleConfig()
 
-	err := largeMessageHandle.Validate(ProtocolCanal, true)
+	err := largeMessageHandle.AdjustAndValidate(ProtocolCanal, true)
 	require.NoError(t, err)
 
 	largeMessageHandle.LargeMessageHandleOption = LargeMessageHandleOptionHandleKeyOnly
-	err = largeMessageHandle.Validate(ProtocolCanal, true)
+	err = largeMessageHandle.AdjustAndValidate(ProtocolCanal, true)
 	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 }
 
@@ -64,7 +64,7 @@ func TestLargeMessageHandle4CanalJSON(t *testing.T) {
 	// large-message-handle not set, always no error
 	largeMessageHandle := NewDefaultLargeMessageHandleConfig()
 
-	err := largeMessageHandle.Validate(ProtocolCanalJSON, false)
+	err := largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
 	require.NoError(t, err)
 	require.True(t, largeMessageHandle.Disabled())
 
@@ -78,11 +78,11 @@ func TestLargeMessageHandle4CanalJSON(t *testing.T) {
 		}
 
 		// `enable-tidb-extension` is false, return error
-		err := largeMessageHandle.Validate(ProtocolCanalJSON, false)
+		err := largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, false)
 		require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 
 		// `enable-tidb-extension` is true, no error
-		err = largeMessageHandle.Validate(ProtocolCanalJSON, true)
+		err = largeMessageHandle.AdjustAndValidate(ProtocolCanalJSON, true)
 		require.NoError(t, err)
 		require.Equal(t, option, largeMessageHandle.LargeMessageHandleOption)
 	}
@@ -94,7 +94,7 @@ func TestLargeMessageHandle4OpenProtocol(t *testing.T) {
 	// large-message-handle not set, always no error
 	largeMessageHandle := NewDefaultLargeMessageHandleConfig()
 
-	err := largeMessageHandle.Validate(ProtocolOpen, false)
+	err := largeMessageHandle.AdjustAndValidate(ProtocolOpen, false)
 	require.NoError(t, err)
 	require.True(t, largeMessageHandle.Disabled())
 
@@ -108,11 +108,11 @@ func TestLargeMessageHandle4OpenProtocol(t *testing.T) {
 		}
 
 		// `enable-tidb-extension` is false, return error
-		err := largeMessageHandle.Validate(ProtocolOpen, false)
+		err := largeMessageHandle.AdjustAndValidate(ProtocolOpen, false)
 		require.NoError(t, err)
 
 		// `enable-tidb-extension` is true, no error
-		err = largeMessageHandle.Validate(ProtocolOpen, true)
+		err = largeMessageHandle.AdjustAndValidate(ProtocolOpen, true)
 		require.NoError(t, err)
 		require.Equal(t, o, largeMessageHandle.LargeMessageHandleOption)
 

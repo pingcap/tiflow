@@ -32,7 +32,6 @@ import (
 var defaultAPIConfig = &ReplicaConfig{
 	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
 	CaseSensitive:      true,
-	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	BDRMode:            util.AddressOf(false),
 	EnableSyncPoint:    util.AddressOf(false),
@@ -51,7 +50,7 @@ var defaultAPIConfig = &ReplicaConfig{
 			NullString:           config.NULL,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
-		EncoderConcurrency:               util.AddressOf(16),
+		EncoderConcurrency:               util.AddressOf(config.DefaultEncoderGroupConcurrency),
 		Terminator:                       util.AddressOf(config.CRLF),
 		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
 		EnablePartitionSeparator:         util.AddressOf(true),
@@ -95,7 +94,6 @@ func TestDefaultReplicaConfig(t *testing.T) {
 
 func TestToAPIReplicaConfig(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
-	cfg.EnableOldValue = false
 	cfg.CheckGCSafePoint = false
 	cfg.Sink = &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{

@@ -7,13 +7,13 @@ export-fix-sql = true
 check-struct-only = false
 
 [task]
-    output-dir = "/tmp/tidb_cdc_test/new_ci_collation_with_old_value/sync_diff/output"
+    output-dir = "/tmp/tidb_cdc_test/new_ci_collation/sync_diff/output"
 
     source-instances = ["mysql1"]
 
     target-instance = "tidb0"
 
-    target-check-tables = ["new_ci_collation_with_old_value_test.?*"]
+    target-check-tables = ["new_ci_collation_test.?*"]
 
 [data-sources]
 [data-sources.mysql1]

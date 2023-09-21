@@ -18,7 +18,6 @@ import (
 	"math"
 	"net/url"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -240,9 +239,9 @@ func (info *ChangeFeedInfo) String() (str string) {
 		return
 	}
 
-	clone.SinkURI, err = util.MaskSinkURI(clone.SinkURI)
-	if err != nil {
-		log.Error("failed to marshal changefeed info", zap.Error(err))
+	clone.SinkURI = util.MaskSensitiveDataInURI(clone.SinkURI)
+	if clone.Config != nil {
+		clone.Config.MaskSensitiveData()
 	}
 
 	str, err = clone.Marshal()
@@ -373,6 +372,9 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 }
 
 func (info *ChangeFeedInfo) rmMQOnlyFields() {
+	log.Info("since the downstream is not a MQ, remove MQ only fields",
+		zap.String("namespace", info.Namespace),
+		zap.String("changefeed", info.ID))
 	info.Config.Sink.DispatchRules = nil
 	info.Config.Sink.SchemaRegistry = nil
 	info.Config.Sink.EncoderConcurrency = nil
@@ -431,14 +433,6 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
 	info.fixScheduler(inheritV66)
 	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
-
-	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
-		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()),
-			zap.Bool("enableOldValue", info.Config.EnableOldValue))
-		info.fixEnableOldValue()
-		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
-			zap.Bool("enableOldValue", info.Config.EnableOldValue))
-	}
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -509,18 +503,6 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 	}
 }
 
-func (info *ChangeFeedInfo) fixEnableOldValue() {
-	uri, err := url.Parse(info.SinkURI)
-	if err != nil {
-		// this is impossible to happen, since the changefeed registered successfully.
-		log.Warn("parse sink URI failed", zap.Error(err))
-		return
-	}
-	scheme := strings.ToLower(uri.Scheme)
-	protocol := uri.Query().Get(config.ProtocolKey)
-	info.Config.AdjustEnableOldValue(scheme, protocol)
-}
-
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
@@ -561,11 +543,11 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 }
 
 func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProtocol string, newQuery url.Values) {
-	oldRawQuery := uri.RawQuery
 	newRawQuery := newQuery.Encode()
+	maskedURI, _ := util.MaskSinkURI(uri.String())
 	log.Info("handle incompatible protocol from sink URI",
-		zap.String("oldUriQuery", oldRawQuery),
-		zap.String("fixedUriQuery", newQuery.Encode()))
+		zap.String("oldURI", maskedURI),
+		zap.String("newProtocol", newProtocol))
 
 	uri.RawQuery = newRawQuery
 	fixedSinkURI := uri.String()

@@ -14,6 +14,7 @@
 package partition
 
 import (
+	"strconv"
 	"sync"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -35,15 +36,12 @@ func NewIndexValueDispatcher() *IndexValueDispatcher {
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
+func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.hasher.Reset()
 	r.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	// FIXME(leoppro): if the row events includes both pre-cols and cols
-	// the dispatch logic here is wrong
 
-	// distribute partition by rowid or unique column value
 	dispatchCols := row.Columns
 	if len(row.Columns) == 0 {
 		dispatchCols = row.PreColumns
@@ -56,5 +54,6 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 			r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
 		}
 	}
-	return int32(r.hasher.Sum32() % uint32(partitionNum))
+	sum32 := r.hasher.Sum32()
+	return int32(sum32 % uint32(partitionNum)), strconv.FormatInt(int64(sum32), 10)
 }

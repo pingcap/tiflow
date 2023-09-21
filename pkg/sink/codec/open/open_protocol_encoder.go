@@ -35,6 +35,8 @@ type BatchEncoder struct {
 	callbackBuff []func()
 	curBatchSize int
 
+	claimCheck *claimcheck.ClaimCheck
+
 	config *common.Config
 }
 
@@ -77,7 +79,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 
 // AppendRowChangedEvent implements the RowEventEncoder interface
 func (d *BatchEncoder) AppendRowChangedEvent(
-	_ context.Context,
+	ctx context.Context,
 	_ string,
 	e *model.RowChangedEvent,
 	callback func(),
@@ -119,7 +121,9 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
 			// build previous batched messages
 			d.tryBuildCallback()
-			d.appendSingleLargeMessage4ClaimCheck(key, value, e, callback)
+			if err := d.appendSingleLargeMessage4ClaimCheck(ctx, key, value, e, callback); err != nil {
+				return errors.Trace(err)
+			}
 			return nil
 		}
 
@@ -257,14 +261,16 @@ func (d *BatchEncoder) tryBuildCallback() {
 }
 
 // NewClaimCheckLocationMessage implement the ClaimCheckLocationEncoder interface.
-func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
-	keyMsg, valueMsg, err := rowChangeToMsg(origin.Event, d.config, true)
+func (d *BatchEncoder) newClaimCheckLocationMessage(
+	event *model.RowChangedEvent, callback func(), fileName string,
+) (*common.Message, error) {
+	keyMsg, valueMsg, err := rowChangeToMsg(event, d.config, true)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
 	keyMsg.OnlyHandleKey = false
-	claimCheckLocation := claimcheck.FileNameWithPrefix(d.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
+	claimCheckLocation := d.claimCheck.FileNameWithPrefix(fileName)
 	keyMsg.ClaimCheckLocation = claimCheckLocation
 	key, err := keyMsg.Encode()
 	if err != nil {
@@ -296,29 +302,37 @@ func (d *BatchEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*co
 	}
 
 	message := newMessage(key, value)
-	message.Ts = origin.Ts
-	message.Schema = origin.Schema
-	message.Table = origin.Table
-	message.IncRowsCount()
-	if origin.Callback != nil {
-		message.Callback = origin.Callback
-	}
-	return message, nil
-}
-
-func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(key, value []byte, e *model.RowChangedEvent, callback func()) {
-	message := newMessage(key, value)
-	message.Ts = e.CommitTs
-	message.Schema = &e.Table.Schema
-	message.Table = &e.Table.Table
-	// ClaimCheckFileName must be set to indicate this message should be sent to the external storage.
-	message.ClaimCheckFileName = claimcheck.NewFileName()
-	message.Event = e
+	message.Ts = event.CommitTs
+	message.Schema = &event.Table.Schema
+	message.Table = &event.Table.Table
 	message.IncRowsCount()
 	if callback != nil {
 		message.Callback = callback
 	}
+	return message, nil
+}
+
+func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(
+	ctx context.Context, key, value []byte, e *model.RowChangedEvent, callback func(),
+) error {
+	message := newMessage(key, value)
+	message.Ts = e.CommitTs
+	message.Schema = &e.Table.Schema
+	message.Table = &e.Table.Table
+	message.IncRowsCount()
+
+	claimCheckFileName := claimcheck.NewFileName()
+	if err := d.claimCheck.WriteMessage(ctx, message, claimCheckFileName); err != nil {
+		return errors.Trace(err)
+	}
+
+	message, err := d.newClaimCheckLocationMessage(e, callback, claimCheckFileName)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	d.messageBuf = append(d.messageBuf, message)
+
+	return nil
 }
 
 func newMessage(key, value []byte) *common.Message {
@@ -342,22 +356,45 @@ func newMessage(key, value []byte) *common.Message {
 }
 
 type batchEncoderBuilder struct {
-	config *common.Config
+	claimCheck *claimcheck.ClaimCheck
+	config     *common.Config
 }
 
 // Build a BatchEncoder
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
-	return NewBatchEncoder(b.config)
+	return NewBatchEncoder(b.config, b.claimCheck)
+}
+
+func (b *batchEncoderBuilder) CleanMetrics() {
+	if b.claimCheck != nil {
+		b.claimCheck.CleanMetrics()
+	}
 }
 
 // NewBatchEncoderBuilder creates an open-protocol batchEncoderBuilder.
-func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
-	return &batchEncoderBuilder{config: config}
+func NewBatchEncoderBuilder(
+	ctx context.Context, config *common.Config,
+) (codec.RowEventEncoderBuilder, error) {
+	var (
+		claimCheck *claimcheck.ClaimCheck
+		err        error
+	)
+	if config.LargeMessageHandle.EnableClaimCheck() {
+		claimCheck, err = claimcheck.New(ctx, config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	return &batchEncoderBuilder{
+		config:     config,
+		claimCheck: claimCheck,
+	}, nil
 }
 
 // NewBatchEncoder creates a new BatchEncoder.
-func NewBatchEncoder(config *common.Config) codec.RowEventEncoder {
+func NewBatchEncoder(config *common.Config, claimCheck *claimcheck.ClaimCheck) codec.RowEventEncoder {
 	return &BatchEncoder{
-		config: config,
+		config:     config,
+		claimCheck: claimCheck,
 	}
 }

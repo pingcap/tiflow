@@ -17,6 +17,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -40,6 +41,11 @@ func (s *DMLSink) WriteEvents(rows ...*dmlsink.CallbackableEvent[*model.RowChang
 	}
 
 	return nil
+}
+
+// Scheme return the scheme of the sink.
+func (s *DMLSink) Scheme() string {
+	return sink.BlackHoleScheme
 }
 
 // Close do nothing.

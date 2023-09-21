@@ -248,7 +248,6 @@ func TestVerifyAndComplete(t *testing.T) {
 		Config: &config.ReplicaConfig{
 			MemoryQuota:        1073741824,
 			CaseSensitive:      true,
-			EnableOldValue:     true,
 			CheckGCSafePoint:   true,
 			SyncPointInterval:  util.AddressOf(time.Minute * 10),
 			SyncPointRetention: util.AddressOf(time.Hour * 24),
@@ -923,7 +922,6 @@ func TestChangeFeedInfoClone(t *testing.T) {
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			CaseSensitive:    true,
-			EnableOldValue:   true,
 			CheckGCSafePoint: true,
 		},
 	}
@@ -932,11 +930,8 @@ func TestChangeFeedInfoClone(t *testing.T) {
 	require.Nil(t, err)
 	sinkURI := "mysql://unix:/var/run/tidb.sock"
 	cloned.SinkURI = sinkURI
-	cloned.Config.EnableOldValue = false
 	require.Equal(t, sinkURI, cloned.SinkURI)
-	require.False(t, cloned.Config.EnableOldValue)
 	require.Equal(t, "blackhole://", info.SinkURI)
-	require.True(t, info.Config.EnableOldValue)
 }
 
 func TestChangefeedInfoStringer(t *testing.T) {

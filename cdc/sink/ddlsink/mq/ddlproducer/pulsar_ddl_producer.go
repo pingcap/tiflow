@@ -44,6 +44,7 @@ type pulsarProducers struct {
 }
 
 // SyncBroadcastMessage pulsar consume all partitions
+// totalPartitionsNum is not used
 func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string,
 	totalPartitionsNum int32, message *common.Message,
 ) error {
@@ -53,7 +54,7 @@ func (p *pulsarProducers) SyncBroadcastMessage(ctx context.Context, topic string
 }
 
 // SyncSendMessage sends a message
-// partitionNum is not used,pulsar consume all partitions
+// partitionNum is not used, pulsar consume all partitions
 func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 	partitionNum int32, message *common.Message,
 ) error {
@@ -77,6 +78,12 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 		return err
 	}
 
+	if message.Type == model.MessageTypeDDL {
+		log.Info("pulsarProducers SyncSendMessage success",
+			zap.Any("mID", mID), zap.String("topic", topic),
+			zap.String("ddl", string(message.Value)))
+	}
+
 	log.Debug("pulsarProducers SyncSendMessage success",
 		zap.Any("mID", mID), zap.String("topic", topic))
 
@@ -96,7 +103,7 @@ func NewPulsarProducer(
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID))
 
-	topicName, err := util.GetTopic(pConfig.GetSinkURI())
+	topicName, err := util.GetTopic(pConfig.SinkURI)
 	if err != nil {
 		return nil, err
 	}

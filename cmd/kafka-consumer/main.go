@@ -486,7 +486,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	}
 
 	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.topic, "kafka")
+		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -662,7 +662,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				if c.eventRouter != nil {
-					target := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
+					target, _ := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
 					if partition != target {
 						log.Panic("RowChangedEvent dispatched to wrong partition",
 							zap.Int32("obtained", partition),
@@ -946,7 +946,7 @@ func (g *fakeTableIDGenerator) generateFakeTableID(schema, table string, partiti
 func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.Error("open db failed", zap.String("dsn", dsn), zap.Error(err))
+		log.Error("open db failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
@@ -957,7 +957,7 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
-		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
+		log.Error("ping db failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 	log.Info("open db success", zap.String("dsn", dsn))

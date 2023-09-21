@@ -30,6 +30,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultTimeout = 5 * time.Minute
+)
+
 // ClaimCheck manage send message to the claim-check external storage.
 type ClaimCheck struct {
 	storage storage.ExternalStorage
@@ -44,15 +48,28 @@ type ClaimCheck struct {
 
 // New return a new ClaimCheck.
 func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
-	externalStorage, err := util.GetExternalStorageFromURI(ctx, storageURI)
+	log.Info("claim check enabled, start create the external storage",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)))
+
+	start := time.Now()
+	externalStorage, err := util.GetExternalStorageWithTimeout(ctx, storageURI, defaultTimeout)
 	if err != nil {
+		log.Error("create external storage failed",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
-	log.Info("claim-check enabled",
+	log.Info("claim-check create the external storage success",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.String("storageURI", storageURI))
+		zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)),
+		zap.Duration("duration", time.Since(start)))
 
 	return &ClaimCheck{
 		changefeedID:              changefeedID,
@@ -63,7 +80,7 @@ func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID
 }
 
 // WriteMessage write message to the claim check external storage.
-func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) error {
+func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message, fileName string) error {
 	m := common.ClaimCheckMessage{
 		Key:   message.Key,
 		Value: message.Value,
@@ -74,7 +91,7 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	}
 
 	start := time.Now()
-	err = c.storage.WriteFile(ctx, message.ClaimCheckFileName, data)
+	err = c.storage.WriteFile(ctx, fileName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -83,8 +100,13 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	return nil
 }
 
-// Close the claim check by clean up the metrics.
-func (c *ClaimCheck) Close() {
+// FileNameWithPrefix returns the file name with prefix, the full path.
+func (c *ClaimCheck) FileNameWithPrefix(fileName string) string {
+	return filepath.Join(c.storage.URI(), fileName)
+}
+
+// CleanMetrics the claim check by clean up the metrics.
+func (c *ClaimCheck) CleanMetrics() {
 	claimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
 	claimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
 }
@@ -95,9 +117,4 @@ func (c *ClaimCheck) Close() {
 // ref https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
 func NewFileName() string {
 	return uuid.NewString() + ".json"
-}
-
-// FileNameWithPrefix returns the file name with prefix, the full path.
-func FileNameWithPrefix(prefix, fileName string) string {
-	return filepath.Join(prefix, fileName)
 }

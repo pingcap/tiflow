@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1692166839167,
+  "iteration": 1693471596912,
   "links": [],
   "panels": [
     {
@@ -3900,7 +3900,7 @@
         },
         {
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
+          "description": "The status of each changefeed.\n\n0: Normal\n\n1 and 6: Warning\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3939,7 +3939,7 @@
                 {
                   "from": "",
                   "id": 2,
-                  "text": "Error",
+                  "text": "Warning",
                   "to": "",
                   "type": 1,
                   "value": "1"
@@ -8415,6 +8415,14 @@
               "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-P999",
               "queryType": "randomWalk",
               "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "rate(ticdc_sink_mq_claim_check_send_message_duration_sum[30s]) / rate(ticdc_sink_mq_claim_check_send_message_duration_count[30s])",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-avg",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -10940,7 +10948,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 11
+            "y": 121
           },
           "hiddenSeries": false,
           "id": 271,
@@ -11034,7 +11042,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 11
+            "y": 121
           },
           "hiddenSeries": false,
           "id": 273,
@@ -11142,7 +11150,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 11
+            "y": 121
           },
           "hiddenSeries": false,
           "id": 272,
@@ -11246,7 +11254,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 17
+            "y": 127
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11322,7 +11330,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 17
+            "y": 127
           },
           "hiddenSeries": false,
           "id": 288,
@@ -11450,7 +11458,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 17
+            "y": 127
           },
           "hiddenSeries": false,
           "id": 286,
@@ -11562,7 +11570,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 23
+            "y": 133
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11638,7 +11646,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 23
+            "y": 133
           },
           "hiddenSeries": false,
           "id": 279,
@@ -11741,7 +11749,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 23
+            "y": 133
           },
           "hiddenSeries": false,
           "id": 275,
@@ -11864,7 +11872,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 29
+            "y": 139
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11948,7 +11956,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 29
+            "y": 139
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -12032,7 +12040,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 29
+            "y": 139
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -12108,7 +12116,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 35
+            "y": 145
           },
           "hiddenSeries": false,
           "id": 280,
@@ -12208,7 +12216,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 35
+            "y": 145
           },
           "hiddenSeries": false,
           "id": 283,
@@ -12308,7 +12316,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 35
+            "y": 145
           },
           "hiddenSeries": false,
           "id": 287,
@@ -12416,7 +12424,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 41
+            "y": 151
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -20053,5 +20061,5 @@
   "timezone": "browser",
   "title": "${DS_TEST-CLUSTER}-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 54
+  "version": 55
 }

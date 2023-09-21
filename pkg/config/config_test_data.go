@@ -17,7 +17,6 @@ const (
 	testCfgTestReplicaConfigOutDated = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -35,7 +34,7 @@ const (
     "worker-num": 3
   },
   "sink": {
-    "encoder-concurrency": 16,
+    "encoder-concurrency": 32,
     "terminator": "\r\n",
 	"date-separator": "day",
     "dispatch-rules": [
@@ -106,7 +105,7 @@ const (
   "sorter": {
     "sort-dir": "/tmp/sorter",
     "cache-size-in-mb": 128,
-    "max-memory-percentage": 10,
+    "max-memory-percentage": 0,
     "max-memory-consumption": 0,
     "num-workerpool-goroutine": 0,
     "num-concurrent-worker": 0,
@@ -131,17 +130,12 @@ const (
   "debug": {
     "db": {
       "count": 8,
-      "concurrency": 128,
       "max-open-files": 10000,
       "block-size": 65536,
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "write-l0-pause-trigger": 2147483647,
-      "compaction-l0-trigger": 160,
-      "compaction-deletion-threshold": 10485760,
-      "compaction-period": 1800,
-      "iterator-max-alive-duration": 10000,
-      "iterator-slow-read-duration": 256
+      "compaction-l0-trigger": 160
     },
     "messages": {
       "client-max-batch-interval": 10000000,
@@ -170,7 +164,6 @@ const (
 	testCfgTestReplicaConfigMarshal1 = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -189,7 +182,7 @@ const (
     "worker-num": 3
   },
   "sink": {
-  	"encoder-concurrency": 16,
+  	"encoder-concurrency": 32,
     "protocol": "open-protocol",
     "column-selectors": [
       {
@@ -253,16 +246,11 @@ const (
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
-        "claim-check-storage-uri": "",
-        "claim-check-compression": ""
-      },
-      "large-message-handle": {
-        "large-message-handle-option": "handle-key-only",
         "large-message-handle-compression": "",
         "claim-check-storage-uri": ""
       },
       "glue-schema-registry-config": {
-        "region":"region", 
+        "region":"region",
         "registry-name":"registry"
       }
     },
@@ -322,7 +310,6 @@ const (
 	testCfgTestReplicaConfigMarshal2 = `{
   "memory-quota": 1073741824,
   "case-sensitive": false,
-  "enable-old-value": true,
   "force-replicate": true,
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
@@ -340,7 +327,7 @@ const (
     "worker-num": 3
   },
   "sink": {
-    "encoder-concurrency": 16,
+    "encoder-concurrency": 32,
     "dispatchers": null,
     "protocol": "open-protocol",
     "column-selectors": [
@@ -409,7 +396,7 @@ const (
         "claim-check-compression": ""
       },
       "glue-schema-registry-config": {
-        "region":"region", 
+        "region":"region",
         "registry-name":"registry"
       }
     },

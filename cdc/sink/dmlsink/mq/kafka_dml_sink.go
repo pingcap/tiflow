@@ -25,10 +25,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	tiflowutil "github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -91,7 +91,8 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, topic, sinkURI.Scheme)
+	scheme := sink.GetScheme(sinkURI)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, topic, scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -103,26 +104,7 @@ func NewKafkaDMLSink(
 
 	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-	}
-
-	var (
-		claimCheckStorage *claimcheck.ClaimCheck
-		claimCheckEncoder codec.ClaimCheckLocationEncoder
-		ok                bool
-	)
-
-	if encoderConfig.LargeMessageHandle.EnableClaimCheck() {
-		claimCheckEncoder, ok = encoderBuilder.Build().(codec.ClaimCheckLocationEncoder)
-		if !ok {
-			return nil, cerror.ErrKafkaInvalidConfig.
-				GenWithStack("claim-check enabled but the encoding protocol %s does not support", protocol.String())
-		}
-
-		claimCheckStorage, err = claimcheck.New(ctx, encoderConfig.LargeMessageHandle.ClaimCheckStorageURI, changefeedID)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
+		return nil, cerror.WrapError(cerror.ErrKafkaNewProducer, err)
 	}
 
 	failpointCh := make(chan error, 1)
@@ -136,12 +118,10 @@ func NewKafkaDMLSink(
 	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
 	encoderGroup := codec.NewEncoderGroup(encoderBuilder, concurrency, changefeedID)
 	s := newDMLSink(ctx, changefeedID, dmlProducer, adminClient, topicManager,
-		eventRouter, encoderGroup, protocol, claimCheckStorage, claimCheckEncoder, errCh,
-	)
+		eventRouter, encoderGroup, protocol, scheme, errCh)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),
-		zap.String("changefeedID", changefeedID.ID),
-		zap.Any("options", options))
+		zap.String("changefeedID", changefeedID.ID))
 
 	return s, nil
 }
