@@ -208,21 +208,21 @@ func (s *server) prepare(ctx context.Context) error {
 
 func (s *server) setMemoryLimit() error {
 	conf := config.GetGlobalServerConfig()
-	if conf.MaxMemory > maxGcTunerMemory {
+	if conf.GcTunerMemoryThreshold > maxGcTunerMemory {
 		// If total memory is larger than 512GB, we will not set memory limit.
 		// Because the memory limit is not accurate, and it is not necessary to set memory limit.
 		log.Info("total memory is larger than 512GB, skip setting memory limit",
-			zap.Uint64("bytes", conf.MaxMemory),
-			zap.String("memory", humanize.IBytes(conf.MaxMemory)),
+			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
+			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
 		)
 		return nil
 	}
-	if conf.MaxMemory > 0 {
+	if conf.GcTunerMemoryThreshold > 0 {
 		gctuner.EnableGOGCTuner.Store(true)
-		gctuner.Tuning(conf.MaxMemory)
+		gctuner.Tuning(conf.GcTunerMemoryThreshold)
 		log.Info("enable gctuner, set memory limit",
-			zap.Uint64("bytes", conf.MaxMemory),
-			zap.String("memory", humanize.IBytes(conf.MaxMemory)),
+			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
+			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
 		)
 	}
 	return nil
