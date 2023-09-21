@@ -2,7 +2,7 @@
   "__inputs": [
     {
       "name": "DS_TEST-CLUSTER",
-      "label": "test-cluster",
+      "label": "${DS_TEST-CLUSTER}",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
@@ -3900,7 +3900,7 @@
         },
         {
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
+          "description": "The status of each changefeed.\n\n0: Normal\n\n1 and 6: Warning\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3939,7 +3939,7 @@
                 {
                   "from": "",
                   "id": 2,
-                  "text": "Error",
+                  "text": "Warning",
                   "to": "",
                   "type": 1,
                   "value": "1"
@@ -18582,7 +18582,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "test-cluster",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The latency distributions of fsync called by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -18656,7 +18656,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "test-cluster",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The latency distributions of flushall called by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -18730,7 +18730,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "test-cluster",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The latency distributions of writeLog called by redoManager",
           "fieldConfig": {
             "defaults": {},
@@ -18804,7 +18804,7 @@
             "mode": "spectrum"
           },
           "dataFormat": "tsbuckets",
-          "datasource": "test-cluster",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The latency distributions of flushLog called by redoManager",
           "fieldConfig": {
             "defaults": {},
@@ -18869,7 +18869,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "test-cluster",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "The total count of rows that are processed by redo writer",
           "fieldConfig": {
             "defaults": {},
@@ -18979,7 +18979,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "test-cluster",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Total number of bytes redo log written",
           "fieldConfig": {
             "defaults": {},
@@ -19075,7 +19075,7 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "test-cluster",
+          "datasource": "${DS_TEST-CLUSTER}",
           "description": "Redo bgUpdateLog worker busy ratio",
           "fieldConfig": {
             "defaults": {},
@@ -20059,7 +20059,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "test-cluster-TiCDC",
+  "title": "${DS_TEST-CLUSTER}-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 59
+  "version": 56
 }
