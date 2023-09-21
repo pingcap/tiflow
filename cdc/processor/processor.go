@@ -470,7 +470,8 @@ func isProcessorIgnorableError(err error) bool {
 // maintain table components, error handling, etc.
 //
 // It can be called in etcd ticks, so it should never be blocked.
-func (p *processor) Tick(ctx cdcContext.Context,
+func (p *processor) Tick(
+    ctx cdcContext.Context,
 	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
 ) (error, error) {
 	p.latestInfo = info
