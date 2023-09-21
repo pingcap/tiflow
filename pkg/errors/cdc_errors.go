@@ -962,8 +962,8 @@ var (
 		"not controller",
 		errors.RFCCodeText("CDC:ErrNotController"),
 	)
-	ErrMetaOpIgnored = errors.Normalize(
-		"meta operation %s is ignored",
+	ErrMetaRowsAffectedNotMatch = errors.Normalize(
+		"rows affected by the operation %s is unexpected: expected %d, got %d",
 		errors.RFCCodeText("CDC:ErrMetaOpIgnored"),
 	)
 	ErrMetaOpFailed = errors.Normalize(

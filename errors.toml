@@ -531,6 +531,11 @@ error = '''
 meta not exists in region
 '''
 
+["CDC:ErrMetaOpIgnored"]
+error = '''
+rows affected by the operation %s is unexpected: expected %d, got %d
+'''
+
 ["CDC:ErrMultipleCDCClustersExist"]
 error = '''
 multiple TiCDC clusters exist while using --pd
@@ -574,6 +579,11 @@ new store failed
 ["CDC:ErrNoPendingRegion"]
 error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
+'''
+
+["CDC:ErrNotController"]
+error = '''
+not controller
 '''
 
 ["CDC:ErrNotLeader"]

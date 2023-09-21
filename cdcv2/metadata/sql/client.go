@@ -22,11 +22,13 @@ import (
 	"gorm.io/gorm"
 )
 
-var _ upstreamClient = &meatStorageClient{}
-var _ changefeedInfoClient = &meatStorageClient{}
-var _ changefeedStateClient = &meatStorageClient{}
-var _ scheduleClient = &meatStorageClient{}
-var _ progressClient = &meatStorageClient{}
+var (
+	_ upstreamClient        = &ormClient{}
+	_ changefeedInfoClient  = &ormClient{}
+	_ changefeedStateClient = &ormClient{}
+	_ scheduleClient        = &ormClient{}
+	_ progressClient        = &ormClient{}
+)
 
 type upstreamClient interface {
 	createUpstream(tx *gorm.DB, up *UpstreamDO) error
@@ -75,14 +77,10 @@ type progressClient interface {
 	queryProgressByCaptureID(tx *gorm.DB, id string) (*ProgressDO, error)
 }
 
-type meatStorageClient struct {
-	db *gorm.DB
-}
-
 // ================================ Upstream Client =================================
 
 // createUpstream implements the upstreamClient interface.
-func (s *meatStorageClient) createUpstream(tx *gorm.DB, up *UpstreamDO) error {
+func (s *ormClient) createUpstream(tx *gorm.DB, up *UpstreamDO) error {
 	ret := tx.Create(up)
 	if err := handleSingleOpErr(ret, 1, "CreateUpstream"); err != nil {
 		return errors.Trace(err)
@@ -91,7 +89,7 @@ func (s *meatStorageClient) createUpstream(tx *gorm.DB, up *UpstreamDO) error {
 }
 
 // deleteUpstream implements the upstreamClient interface.
-func (s *meatStorageClient) deleteUpstream(tx *gorm.DB, up *UpstreamDO) error {
+func (s *ormClient) deleteUpstream(tx *gorm.DB, up *UpstreamDO) error {
 	ret := tx.Delete(up)
 	if err := handleSingleOpErr(ret, 1, "DeleteUpstream"); err != nil {
 		return errors.Trace(err)
@@ -100,7 +98,7 @@ func (s *meatStorageClient) deleteUpstream(tx *gorm.DB, up *UpstreamDO) error {
 }
 
 // updateUpstream implements the upstreamClient interface.
-func (s *meatStorageClient) updateUpstream(tx *gorm.DB, up *UpstreamDO) error {
+func (s *ormClient) updateUpstream(tx *gorm.DB, up *UpstreamDO) error {
 	ret := tx.Where("id = ? and version = ?", up.ID, up.Version).
 		Updates(UpstreamDO{
 			Endpoints: up.Endpoints,
@@ -114,7 +112,7 @@ func (s *meatStorageClient) updateUpstream(tx *gorm.DB, up *UpstreamDO) error {
 }
 
 // queryUpstreams implements the upstreamClient interface.
-func (s *meatStorageClient) queryUpstreams(tx *gorm.DB) ([]*UpstreamDO, error) {
+func (s *ormClient) queryUpstreams(tx *gorm.DB) ([]*UpstreamDO, error) {
 	var ups []*UpstreamDO
 	ret := tx.Find(&ups)
 	if err := handleSingleOpErr(ret, -1, "QueryUpstreams"); err != nil {
@@ -124,7 +122,7 @@ func (s *meatStorageClient) queryUpstreams(tx *gorm.DB) ([]*UpstreamDO, error) {
 }
 
 // queryUpstreamsByUpdateAt implements the upstreamClient interface.
-func (s *meatStorageClient) queryUpstreamsByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*UpstreamDO, error) {
+func (s *ormClient) queryUpstreamsByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*UpstreamDO, error) {
 	var ups []*UpstreamDO
 	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&ups)
 	if err := handleSingleOpErr(ret, -1, "QueryUpstreamsByUpdateAt"); err != nil {
@@ -134,7 +132,7 @@ func (s *meatStorageClient) queryUpstreamsByUpdateAt(tx *gorm.DB, lastUpdateAt t
 }
 
 // queryUpstreamByID implements the upstreamClient interface.
-func (s *meatStorageClient) queryUpstreamByID(tx *gorm.DB, id uint64) (*UpstreamDO, error) {
+func (s *ormClient) queryUpstreamByID(tx *gorm.DB, id uint64) (*UpstreamDO, error) {
 	var up *UpstreamDO
 	ret := tx.Where("id = ?", id).First(up)
 	if err := handleSingleOpErr(ret, 1, "QueryUpstreamsByUpdateAt"); err != nil {
@@ -146,7 +144,7 @@ func (s *meatStorageClient) queryUpstreamByID(tx *gorm.DB, id uint64) (*Upstream
 // ================================ ChangefeedInfo Client =================================
 
 // createChangefeedInfo implements the changefeedInfoClient interface.
-func (s *meatStorageClient) createChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
+func (s *ormClient) createChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
 	ret := tx.Create(info)
 	if err := handleSingleOpErr(ret, 1, "CreateChangefeedInfo"); err != nil {
 		return errors.Trace(err)
@@ -155,7 +153,7 @@ func (s *meatStorageClient) createChangefeedInfo(tx *gorm.DB, info *ChangefeedIn
 }
 
 // deleteChangefeedInfo implements the changefeedInfoClient interface.
-func (s *meatStorageClient) deleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
+func (s *ormClient) deleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
 	ret := tx.Delete(info)
 	if err := handleSingleOpErr(ret, 1, "DeleteChangefeedInfo"); err != nil {
 		return errors.Trace(err)
@@ -164,7 +162,7 @@ func (s *meatStorageClient) deleteChangefeedInfo(tx *gorm.DB, info *ChangefeedIn
 }
 
 // softDeleteChangefeedInfo implements the changefeedInfoClient interface.
-func (s *meatStorageClient) softDeleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
+func (s *ormClient) softDeleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
 	removeTime := time.Now()
 	ret := tx.Where("uuid = ? and version = ?", info.UUID, info.Version).
 		Updates(ChangefeedInfoDO{
@@ -178,7 +176,7 @@ func (s *meatStorageClient) softDeleteChangefeedInfo(tx *gorm.DB, info *Changefe
 }
 
 // updateChangefeedInfo implements the changefeedInfoClient interface.
-func (s *meatStorageClient) updateChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
+func (s *ormClient) updateChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
 	ret := tx.Where("uuid = ? and version = ?", info.UUID, info.Version).
 		Updates(ChangefeedInfoDO{
 			SinkURI:  info.SinkURI,
@@ -194,7 +192,7 @@ func (s *meatStorageClient) updateChangefeedInfo(tx *gorm.DB, info *ChangefeedIn
 }
 
 // queryChangefeedInfos implements the changefeedInfoClient interface.
-func (s *meatStorageClient) queryChangefeedInfos(tx *gorm.DB) ([]*ChangefeedInfoDO, error) {
+func (s *ormClient) queryChangefeedInfos(tx *gorm.DB) ([]*ChangefeedInfoDO, error) {
 	var infos []*ChangefeedInfoDO
 	ret := tx.Find(&infos)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedInfos"); err != nil {
@@ -205,7 +203,7 @@ func (s *meatStorageClient) queryChangefeedInfos(tx *gorm.DB) ([]*ChangefeedInfo
 
 // queryChangefeedInfosByUpdateAt implements the changefeedInfoClient interface.
 // TODO(CharlesCheung): query data before lastUpdateAt to avoid data loss.
-func (s *meatStorageClient) queryChangefeedInfosByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedInfoDO, error) {
+func (s *ormClient) queryChangefeedInfosByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedInfoDO, error) {
 	var infos []*ChangefeedInfoDO
 	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&infos)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedInfosByUpdateAt"); err != nil {
@@ -215,7 +213,7 @@ func (s *meatStorageClient) queryChangefeedInfosByUpdateAt(tx *gorm.DB, lastUpda
 }
 
 // queryChangefeedInfoByUUID implements the changefeedInfoClient interface.
-func (s *meatStorageClient) queryChangefeedInfoByUUID(tx *gorm.DB, uuid uint64) (*ChangefeedInfoDO, error) {
+func (s *ormClient) queryChangefeedInfoByUUID(tx *gorm.DB, uuid uint64) (*ChangefeedInfoDO, error) {
 	var info *ChangefeedInfoDO
 	ret := tx.Where("uuid = ?", uuid).First(info)
 
@@ -229,7 +227,7 @@ func (s *meatStorageClient) queryChangefeedInfoByUUID(tx *gorm.DB, uuid uint64) 
 // ================================ ChangefeedState Client =================================
 
 // createChangefeedState implements the changefeedStateClient interface.
-func (s *meatStorageClient) createChangefeedState(tx *gorm.DB, state *ChangefeedStateDO) error {
+func (s *ormClient) createChangefeedState(tx *gorm.DB, state *ChangefeedStateDO) error {
 	ret := tx.Create(state)
 	if err := handleSingleOpErr(ret, 1, "CreateChangefeedState"); err != nil {
 		return errors.Trace(err)
@@ -238,7 +236,7 @@ func (s *meatStorageClient) createChangefeedState(tx *gorm.DB, state *Changefeed
 }
 
 // deleteChangefeedState implements the changefeedStateClient interface.
-func (s *meatStorageClient) deleteChangefeedState(tx *gorm.DB, state *ChangefeedStateDO) error {
+func (s *ormClient) deleteChangefeedState(tx *gorm.DB, state *ChangefeedStateDO) error {
 	ret := tx.Delete(state)
 	if err := handleSingleOpErr(ret, 1, "DeleteChangefeedState"); err != nil {
 		return errors.Trace(err)
@@ -247,7 +245,7 @@ func (s *meatStorageClient) deleteChangefeedState(tx *gorm.DB, state *Changefeed
 }
 
 // updateChangeFeedState implements the changefeedStateClient interface.
-func (s *meatStorageClient) updateChangeFeedState(tx *gorm.DB, state *ChangefeedStateDO) error {
+func (s *ormClient) updateChangeFeedState(tx *gorm.DB, state *ChangefeedStateDO) error {
 	ret := tx.Where("changefeed_uuid = ? and version = ?", state.ChangefeedUUID, state.Version).
 		Updates(ChangefeedStateDO{
 			State:   state.State,
@@ -262,7 +260,7 @@ func (s *meatStorageClient) updateChangeFeedState(tx *gorm.DB, state *Changefeed
 }
 
 // queryChangefeedStates implements the changefeedStateClient interface.
-func (s *meatStorageClient) queryChangefeedStates(tx *gorm.DB) ([]*ChangefeedStateDO, error) {
+func (s *ormClient) queryChangefeedStates(tx *gorm.DB) ([]*ChangefeedStateDO, error) {
 	var states []*ChangefeedStateDO
 	ret := tx.Find(&states)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedStates"); err != nil {
@@ -272,7 +270,7 @@ func (s *meatStorageClient) queryChangefeedStates(tx *gorm.DB) ([]*ChangefeedSta
 }
 
 // queryChangefeedStatesByUpdateAt implements the changefeedStateClient interface.
-func (s *meatStorageClient) queryChangefeedStatesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedStateDO, error) {
+func (s *ormClient) queryChangefeedStatesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedStateDO, error) {
 	var states []*ChangefeedStateDO
 	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&states)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedStatesByUpdateAt"); err != nil {
@@ -282,7 +280,7 @@ func (s *meatStorageClient) queryChangefeedStatesByUpdateAt(tx *gorm.DB, lastUpd
 }
 
 // queryChangefeedStateByUUID implements the changefeedStateClient interface.
-func (s *meatStorageClient) queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64) (*ChangefeedStateDO, error) {
+func (s *ormClient) queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64) (*ChangefeedStateDO, error) {
 	var state *ChangefeedStateDO
 	ret := tx.Where("changefeed_uuid = ?", uuid).First(state)
 	if err := handleSingleOpErr(ret, 1, "QueryChangefeedStateByUUID"); err != nil {
@@ -294,7 +292,7 @@ func (s *meatStorageClient) queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64)
 // ================================ Schedule Client =================================
 
 // createSchedule implements the scheduleClient interface.
-func (s *meatStorageClient) createSchedule(tx *gorm.DB, sc *ScheduleDO) error {
+func (s *ormClient) createSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 	ret := tx.Create(sc)
 	if err := handleSingleOpErr(ret, 1, "CreateSchedule"); err != nil {
 		return errors.Trace(err)
@@ -303,7 +301,7 @@ func (s *meatStorageClient) createSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 }
 
 // deleteSchedule implements the scheduleClient interface.
-func (s *meatStorageClient) deleteSchedule(tx *gorm.DB, sc *ScheduleDO) error {
+func (s *ormClient) deleteSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 	ret := tx.Delete(sc)
 	if err := handleSingleOpErr(ret, 1, "DeleteSchedule"); err != nil {
 		return errors.Trace(err)
@@ -312,7 +310,7 @@ func (s *meatStorageClient) deleteSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 }
 
 // updateSchedule implements the scheduleClient interface.
-func (s *meatStorageClient) updateSchedule(tx *gorm.DB, sc *ScheduleDO) error {
+func (s *ormClient) updateSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 	ret := tx.Where("changefeed_uuid = ? and version = ?", sc.ChangefeedUUID, sc.Version).
 		Updates(ScheduleDO{
 			Owner:        sc.Owner,
@@ -328,7 +326,7 @@ func (s *meatStorageClient) updateSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 }
 
 // querySchedules implements the scheduleClient interface.
-func (s *meatStorageClient) querySchedules(tx *gorm.DB) ([]*ScheduleDO, error) {
+func (s *ormClient) querySchedules(tx *gorm.DB) ([]*ScheduleDO, error) {
 	var schedules []*ScheduleDO
 	ret := tx.Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedules"); err != nil {
@@ -338,7 +336,7 @@ func (s *meatStorageClient) querySchedules(tx *gorm.DB) ([]*ScheduleDO, error) {
 }
 
 // querySchedulesByUpdateAt implements the scheduleClient interface.
-func (s *meatStorageClient) querySchedulesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
+func (s *ormClient) querySchedulesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
 	var schedules []*ScheduleDO
 	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesByUpdateAt"); err != nil {
@@ -348,7 +346,7 @@ func (s *meatStorageClient) querySchedulesByUpdateAt(tx *gorm.DB, lastUpdateAt t
 }
 
 // querySchedulesByOwnerIDAndUpdateAt implements the scheduleClient interface.
-func (s *meatStorageClient) querySchedulesByOwnerIDAndUpdateAt(tx *gorm.DB, captureID string, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
+func (s *ormClient) querySchedulesByOwnerIDAndUpdateAt(tx *gorm.DB, captureID string, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
 	var schedules []*ScheduleDO
 	ret := tx.Where("owner = ? and updated_at > ?", captureID, lastUpdateAt).Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesByOwnerIDAndUpdateAt"); err != nil {
@@ -358,7 +356,7 @@ func (s *meatStorageClient) querySchedulesByOwnerIDAndUpdateAt(tx *gorm.DB, capt
 }
 
 // queryScheduleByUUID implements the scheduleClient interface.
-func (s *meatStorageClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, error) {
+func (s *ormClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, error) {
 	var schedule *ScheduleDO
 	ret := tx.Where("changefeed_uuid = ?", uuid).First(schedule)
 	if err := handleSingleOpErr(ret, 1, "QueryScheduleByUUID"); err != nil {
@@ -370,7 +368,7 @@ func (s *meatStorageClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*Sche
 // ================================ Progress Client =================================
 
 // createProgress implements the progressClient interface.
-func (s *meatStorageClient) createProgress(tx *gorm.DB, pr *ProgressDO) error {
+func (s *ormClient) createProgress(tx *gorm.DB, pr *ProgressDO) error {
 	ret := tx.Create(pr)
 	if err := handleSingleOpErr(ret, 1, "CreateProgress"); err != nil {
 		return errors.Trace(err)
@@ -379,7 +377,7 @@ func (s *meatStorageClient) createProgress(tx *gorm.DB, pr *ProgressDO) error {
 }
 
 // deleteProgress implements the progressClient interface.
-func (s *meatStorageClient) deleteProgress(tx *gorm.DB, pr *ProgressDO) error {
+func (s *ormClient) deleteProgress(tx *gorm.DB, pr *ProgressDO) error {
 	ret := tx.Delete(pr)
 	if err := handleSingleOpErr(ret, 1, "DeleteProgress"); err != nil {
 		return errors.Trace(err)
@@ -388,7 +386,7 @@ func (s *meatStorageClient) deleteProgress(tx *gorm.DB, pr *ProgressDO) error {
 }
 
 // updateProgress implements the progressClient interface.
-func (s *meatStorageClient) updateProgress(tx *gorm.DB, pr *ProgressDO) error {
+func (s *ormClient) updateProgress(tx *gorm.DB, pr *ProgressDO) error {
 	ret := tx.Where("capture_id = ? and version = ?", pr.CaptureID, pr.Version).
 		Updates(ProgressDO{
 			Progress: pr.Progress,
@@ -401,7 +399,7 @@ func (s *meatStorageClient) updateProgress(tx *gorm.DB, pr *ProgressDO) error {
 }
 
 // queryProgresss implements the progressClient interface.
-func (s *meatStorageClient) queryProgresss(tx *gorm.DB) ([]*ProgressDO, error) {
+func (s *ormClient) queryProgresss(tx *gorm.DB) ([]*ProgressDO, error) {
 	var progresses []*ProgressDO
 	ret := tx.Find(&progresses)
 	if err := handleSingleOpErr(ret, -1, "QueryProgresss"); err != nil {
@@ -411,7 +409,7 @@ func (s *meatStorageClient) queryProgresss(tx *gorm.DB) ([]*ProgressDO, error) {
 }
 
 // queryProgresssByUpdateAt implements the progressClient interface.
-func (s *meatStorageClient) queryProgresssByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ProgressDO, error) {
+func (s *ormClient) queryProgresssByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ProgressDO, error) {
 	var progresses []*ProgressDO
 	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&progresses)
 	if err := handleSingleOpErr(ret, -1, "QueryProgresssByUpdateAt"); err != nil {
@@ -421,7 +419,7 @@ func (s *meatStorageClient) queryProgresssByUpdateAt(tx *gorm.DB, lastUpdateAt t
 }
 
 // queryProgressByCaptureID implements the progressClient interface.
-func (s *meatStorageClient) queryProgressByCaptureID(tx *gorm.DB, id string) (*ProgressDO, error) {
+func (s *ormClient) queryProgressByCaptureID(tx *gorm.DB, id string) (*ProgressDO, error) {
 	var progress *ProgressDO
 	ret := tx.Where("capture_id = ?", id).First(progress)
 	if err := handleSingleOpErr(ret, 1, "QueryProgressByCaptureID"); err != nil {
@@ -441,7 +439,7 @@ func handleSingleOpErr(ret *gorm.DB, targetRows int64, opName string) (err error
 		return errors.WrapError(errors.ErrMetaOpFailed, ret.Error, opName)
 	}
 	if targetRows >= 0 && ret.RowsAffected != targetRows {
-		return errors.ErrMetaOpIgnored.GenWithStackByArgs(opName)
+		return errors.ErrMetaRowsAffectedNotMatch.GenWithStackByArgs(opName, targetRows, ret.RowsAffected)
 	}
 	return nil
 }
