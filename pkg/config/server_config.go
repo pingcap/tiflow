@@ -45,9 +45,9 @@ const (
 	// DefaultChangefeedMemoryQuota is the default memory quota for each changefeed.
 	DefaultChangefeedMemoryQuota = 1024 * 1024 * 1024 // 1GB.
 
-	// DefaultMaxMemoryPercentage is the default max memory percentage
-	// cdc server use 70% of total memory limit as soft limit by default.
-	DefaultMaxMemoryPercentage = 70
+	// DisableMemoryLimit is the default max memory percentage for TiCDC server.
+	// 0 means no memory limit.
+	DisableMemoryLimit = 0
 )
 
 var (
@@ -138,7 +138,7 @@ var defaultServerConfig = &ServerConfig{
 		Scheduler: NewDefaultSchedulerConfig(),
 	},
 	ClusterID:           "default",
-	MaxMemoryPercentage: DefaultMaxMemoryPercentage,
+	MaxMemoryPercentage: DisableMemoryLimit,
 }
 
 // ServerConfig represents a config for server
@@ -280,7 +280,7 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	}
 	if c.MaxMemoryPercentage >= 100 {
 		log.Warn("server max-memory-percentage must be less than 100, set to default value")
-		c.MaxMemoryPercentage = DefaultMaxMemoryPercentage
+		c.MaxMemoryPercentage = DisableMemoryLimit
 	}
 
 	return nil
