@@ -412,7 +412,7 @@ func TestProcessorError(t *testing.T) {
 	p.sinkManager.errors <- cerror.ErrSinkURIInvalid
 	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Error(t, err)
-	handleProcessorErr(p, err, changefeed)
+	patchProcessorErr(p.captureInfo, changefeed, err)
 	tester.MustApplyPatches()
 	require.Equal(t, changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: &model.RunningError{
@@ -435,7 +435,7 @@ func TestProcessorError(t *testing.T) {
 	// send a normal error
 	p.sinkManager.errors <- context.Canceled
 	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
-	handleProcessorErr(p, err, changefeed)
+	patchProcessorErr(p.captureInfo, changefeed, err)
 	tester.MustApplyPatches()
 	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
 	require.Equal(t, changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
@@ -538,7 +538,7 @@ func TestProcessorClose(t *testing.T) {
 	p.sinkManager.errors <- cerror.ErrSinkURIInvalid
 	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Error(t, err)
-	handleProcessorErr(p, err, changefeed)
+	patchProcessorErr(p.captureInfo, changefeed, err)
 	tester.MustApplyPatches()
 
 	require.Nil(t, p.Close())

@@ -478,6 +478,7 @@ func (p *processor) Tick(ctx cdcContext.Context,
 
 	// check upstream error first
 	if err := p.upstream.Error(); err != nil {
+		p.metricProcessorErrorCounter.Inc()
 		return err, nil
 	}
 	if p.upstream.IsClosed() {
@@ -513,8 +514,9 @@ func (p *processor) Tick(ctx cdcContext.Context,
 	// otherwise the function called below may panic.
 	if err == nil {
 		p.refreshMetrics()
+	} else {
+		p.metricProcessorErrorCounter.Inc()
 	}
-
 	return err, warning
 }
 

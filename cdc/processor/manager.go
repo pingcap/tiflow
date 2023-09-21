@@ -143,7 +143,8 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		}
 		// check if the changefeed is normal before tick
 		if !checkChangefeedNormal(changefeedState) {
-			handleProcessorErr(p, cerror.ErrAdminStopProcessor.GenWithStackByArgs(), changefeedState)
+			patchProcessorErr(p.captureInfo, changefeedState,
+				cerror.ErrAdminStopProcessor.GenWithStackByArgs())
 			m.closeProcessor(changefeedID)
 			continue
 		}
@@ -155,11 +156,11 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		}
 		err, warning := p.Tick(ctx, changefeedState.Info, changefeedState.Status)
 		if warning != nil {
-			patchWarning(warning, p.captureInfo, changefeedState)
+			patchProcessorWarning(p.captureInfo, changefeedState, warning)
 		}
 		if err != nil {
-			handleProcessorErr(p, err, changefeedState)
-			// processor have already patched its error to tell the owner
+			patchProcessorErr(p.captureInfo, changefeedState, err)
+			// patchProcessorErr have already patched its error to tell the owner
 			// manager can just close the processor and continue to tick other processors
 			m.closeProcessor(changefeedID)
 		}
@@ -208,18 +209,18 @@ func createTaskPosition(changefeed *orchestrator.ChangefeedReactorState,
 	return true
 }
 
-func handleProcessorErr(p *processor, err error,
+func patchProcessorErr(captureInfo *model.CaptureInfo,
 	changefeed *orchestrator.ChangefeedReactorState,
+	err error,
 ) {
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited",
-			zap.String("capture", p.captureInfo.ID),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("capture", captureInfo.ID),
+			zap.String("namespace", changefeed.ID.Namespace),
+			zap.String("changefeed", changefeed.ID.ID),
 			zap.Error(err))
 		return
 	}
-	p.metricProcessorErrorCounter.Inc()
 	// record error information in etcd
 	var code string
 	if rfcCode, ok := cerror.RFCCode(err); ok {
@@ -227,30 +228,32 @@ func handleProcessorErr(p *processor, err error,
 	} else {
 		code = string(cerror.ErrProcessorUnknown.RFCCode())
 	}
-	changefeed.PatchTaskPosition(p.captureInfo.ID,
+	changefeed.PatchTaskPosition(captureInfo.ID,
 		func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			if position == nil {
 				position = &model.TaskPosition{}
 			}
 			position.Error = &model.RunningError{
 				Time:    time.Now(),
-				Addr:    p.captureInfo.AdvertiseAddr,
+				Addr:    captureInfo.AdvertiseAddr,
 				Code:    code,
 				Message: err.Error(),
 			}
 			return position, true, nil
 		})
 	log.Error("run processor failed",
-		zap.String("capture", p.captureInfo.ID),
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID),
+		zap.String("capture", captureInfo.ID),
+		zap.String("namespace", changefeed.ID.Namespace),
+		zap.String("changefeed", changefeed.ID.ID),
 		zap.Error(err))
 }
 
-func patchWarning(err error,
-	captureInfo *model.CaptureInfo,
-	changefeed *orchestrator.ChangefeedReactorState,
+func patchProcessorWarning(captureInfo *model.CaptureInfo,
+	changefeed *orchestrator.ChangefeedReactorState, err error,
 ) {
+	if err == nil {
+		return
+	}
 	var code string
 	if rfcCode, ok := cerror.RFCCode(err); ok {
 		code = string(rfcCode)
