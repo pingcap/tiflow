@@ -67,35 +67,35 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 
 	// invalid changefeed id or namespace id
 	cfg.ID = "abdc/sss"
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 	cfg.ID = ""
 	cfg.Namespace = "abdc/sss"
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 	cfg.ID = ""
 	cfg.Namespace = ""
 	// changefeed already exists
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(true, nil)
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, cerror.ErrChangeFeedNotExists.GenWithStackByArgs("aaa"))
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.Nil(t, err)
 	require.Equal(t, uint64(123), cfInfo.UpstreamID)
 	cfg.TargetTs = 3
 	cfg.StartTs = 4
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 	cfg.TargetTs = 6
 	cfg.SinkURI = "aaab://"
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 	cfg.SinkURI = string([]byte{0x7f, ' '})
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NotNil(t, err)
 
 	cfg.StartTs = 0
@@ -103,7 +103,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	cfg.SinkURI = "blackhole://127.0.0.1:9092/test?protocol=avro"
 	cfg.ReplicaConfig.ForceReplicate = false
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.NoError(t, err)
 
 	cfg.ReplicaConfig.ForceReplicate = true

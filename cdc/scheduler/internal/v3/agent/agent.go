@@ -206,10 +206,7 @@ func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 		return nil, errors.Trace(err)
 	}
 
-	outboundMessages, barrier, err := a.handleMessage(inboundMessages)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	outboundMessages, barrier := a.handleMessage(inboundMessages)
 
 	responses, err := a.tableM.poll(ctx)
 	if err != nil {
@@ -237,9 +234,7 @@ func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 	}
 }
 
-func (a *agent) handleMessage(msg []*schedulepb.Message) (
-	result []*schedulepb.Message, barrier *schedulepb.Barrier, err error,
-) {
+func (a *agent) handleMessage(msg []*schedulepb.Message) (result []*schedulepb.Message, barrier *schedulepb.Barrier) {
 	for _, message := range msg {
 		ownerCaptureID := message.GetFrom()
 		header := message.GetHeader()
@@ -254,10 +249,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 		switch message.GetMsgType() {
 		case schedulepb.MsgHeartbeat:
 			var reMsg *schedulepb.Message
-			reMsg, barrier, err = a.handleMessageHeartbeat(message.GetHeartbeat())
-			if err != nil {
-				return
-			}
+			reMsg, barrier = a.handleMessageHeartbeat(message.GetHeartbeat())
 			result = append(result, reMsg)
 		case schedulepb.MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
@@ -272,28 +264,24 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 	return
 }
 
-func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (
-	*schedulepb.Message, *schedulepb.Barrier, error,
-) {
+func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedulepb.Message, *schedulepb.Barrier) {
 	allTables := a.tableM.getAllTableSpans()
 	result := make([]tablepb.TableStatus, 0, allTables.Len())
 
-	isValidCheckpointTs := true
 	allTables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
 		status := table.getTableSpanStatus(request.CollectStats)
-		isValidCheckpointTs = status.Checkpoint.CheckpointTs <= status.Checkpoint.ResolvedTs
+		if status.Checkpoint.CheckpointTs > status.Checkpoint.ResolvedTs {
+			log.Warn("schedulerv3: CheckpointTs is greater than ResolvedTs",
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
+				zap.String("span", span.String()))
+		}
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
 		result = append(result, status)
-		return isValidCheckpointTs
+		return true
 	})
-	if !isValidCheckpointTs {
-		status := result[len(result)-1]
-		checkpointTs := status.Checkpoint.CheckpointTs
-		resolvedTs := status.Checkpoint.ResolvedTs
-		return nil, nil, errors.ErrInvalidCheckpointTs.GenWithStackByArgs(checkpointTs, resolvedTs)
-	}
 	for _, span := range request.GetSpans() {
 		if _, ok := allTables.Get(span); !ok {
 			status := a.tableM.getTableSpanStatus(span, request.CollectStats)
@@ -320,7 +308,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (
 		zap.String("changefeed", a.ChangeFeedID.ID),
 		zap.Any("message", message))
 
-	return message, request.GetBarrier(), nil
+	return message, request.GetBarrier()
 }
 
 type dispatchTableTaskStatus int32

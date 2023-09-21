@@ -50,7 +50,7 @@ function run() {
 
 # kafka is not supported yet.
 # ref to issue: https://github.com/pingcap/tiflow/issues/3421
-# TODO: enable this test for kafka and storage sink.
+# TODO: enable this test for kafka, storage and pulsar sink.
 if [ "$SINK_TYPE" != "mysql" ]; then
 	echo "[$(date)] <<<<<< skip test case $TEST_NAME for $SINK_TYPE! >>>>>>"
 	exit 0

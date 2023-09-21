@@ -371,6 +371,11 @@ func (s *server) run(ctx context.Context) (err error) {
 // Drain removes tables in the current TiCDC instance.
 // It's part of graceful shutdown, should be called before Close.
 func (s *server) Drain() <-chan struct{} {
+	if s.capture == nil {
+		done := make(chan struct{})
+		close(done)
+		return done
+	}
 	return s.capture.Drain()
 }
 
