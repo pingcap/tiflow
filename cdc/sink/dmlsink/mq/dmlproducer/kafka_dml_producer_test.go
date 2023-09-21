@@ -211,3 +211,24 @@ func TestProducerDoubleClose(t *testing.T) {
 	producer.Close()
 	producer.Close()
 }
+
+func TestDebugLargeMessage(t *testing.T) {
+	option := getOptions()
+	changefeed := model.DefaultChangeFeedID("changefeed-test")
+
+	factory, err := kafka.NewSaramaFactory(option, changefeed)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	failpointCh := make(chan error, 1)
+	asyncProducer, err := factory.AsyncProducer(ctx, failpointCh)
+	require.NoError(t, err)
+
+	go func() {
+		asyncProducer.AsyncRunCallback(ctx)
+	}()
+
+	key := make([]byte, 979)
+	value := make([]byte, 1047561)
+	asyncProducer.AsyncSend(ctx, "test", 0, key, value, func() {})
+}
