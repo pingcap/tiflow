@@ -82,7 +82,8 @@ type feedStateManager struct {
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
 func newFeedStateManager(up *upstream.Upstream,
-	state *orchestrator.ChangefeedReactorState) *feedStateManager {
+	state *orchestrator.ChangefeedReactorState,
+) *feedStateManager {
 	f := new(feedStateManager)
 	f.upstream = up
 	f.state = state

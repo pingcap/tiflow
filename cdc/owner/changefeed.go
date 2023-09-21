@@ -229,7 +229,8 @@ func newChangefeed4Test(
 func (c *changefeed) Tick(ctx cdcContext.Context,
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,
-	captures map[model.CaptureID]*model.CaptureInfo) (model.Ts, model.Ts) {
+	captures map[model.CaptureID]*model.CaptureInfo,
+) (model.Ts, model.Ts) {
 	startTime := time.Now()
 	c.latestInfo = cfInfo
 	c.latestStatus = cfStatus
@@ -281,7 +282,8 @@ func (c *changefeed) Tick(ctx cdcContext.Context,
 
 func (c *changefeed) handleErr(ctx cdcContext.Context,
 	cfInfo *model.ChangeFeedInfo,
-	err error) {
+	err error,
+) {
 	log.Error("an error occurred in Owner",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID), zap.Error(err))
@@ -321,7 +323,8 @@ func (c *changefeed) handleWarning(err error) {
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context,
 	cfInfo *model.ChangeFeedInfo,
-	checkpointTs uint64) error {
+	checkpointTs uint64,
+) error {
 	if cfInfo.NeedBlockGC() {
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrStartTsBeforeGC.FastGen("InjectChangefeedFastFailError")
@@ -336,7 +339,8 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context,
 func (c *changefeed) tick(ctx cdcContext.Context,
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,
-	captures map[model.CaptureID]*model.CaptureInfo) (model.Ts, model.Ts, error) {
+	captures map[model.CaptureID]*model.CaptureInfo,
+) (model.Ts, model.Ts, error) {
 	adminJobPending := c.feedStateManager.Tick(c.resolvedTs)
 	preCheckpointTs := cfInfo.GetCheckpointTs(cfStatus)
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
@@ -448,7 +452,8 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 
 func (c *changefeed) initialize(ctx cdcContext.Context,
 	cfInfo *model.ChangeFeedInfo,
-	cfStatus *model.ChangeFeedStatus) (err error) {
+	cfStatus *model.ChangeFeedStatus,
+) (err error) {
 	if c.initialized || cfStatus == nil {
 		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
@@ -845,7 +850,8 @@ func (c *changefeed) cleanupChangefeedServiceGCSafePoints(ctx cdcContext.Context
 func (c *changefeed) handleBarrier(ctx cdcContext.Context,
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,
-	barrier *schedulepb.BarrierWithMinTs) error {
+	barrier *schedulepb.BarrierWithMinTs,
+) error {
 	barrierTp, barrierTs := c.barriers.Min()
 	c.metricsChangefeedBarrierTsGauge.Set(float64(oracle.ExtractPhysical(barrierTs)))
 

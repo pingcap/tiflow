@@ -222,7 +222,8 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 // If the metadata is not complete, such as when the ChangeFeedStatus is nil,
 // this function will reconstruct the lost metadata and skip this tick.
 func preflightCheck(changefeed *orchestrator.ChangefeedReactorState,
-	captures map[model.CaptureID]*model.CaptureInfo) (ok bool) {
+	captures map[model.CaptureID]*model.CaptureInfo,
+) (ok bool) {
 	ok = true
 	if changefeed.Status == nil {
 		// complete the changefeed status when it is just created.
@@ -277,7 +278,8 @@ func preflightCheck(changefeed *orchestrator.ChangefeedReactorState,
 }
 
 func updateStatus(changefeed *orchestrator.ChangefeedReactorState,
-	checkpointTs, minTableBarrierTs model.Ts) {
+	checkpointTs, minTableBarrierTs model.Ts,
+) {
 	if checkpointTs == 0 || minTableBarrierTs == 0 {
 		return
 	}
