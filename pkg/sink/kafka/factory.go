@@ -15,7 +15,6 @@ package kafka
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -253,7 +252,7 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 			if err == nil {
 				return nil
 			}
-			
+
 			key, _ := err.Msg.Key.Encode()
 			value, _ := err.Msg.Value.Encode()
 			log.Info("send message to kafka failed",
