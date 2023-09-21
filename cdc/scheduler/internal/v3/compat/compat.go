@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"github.com/pingcap/tiflow/pkg/version"
 )
 
 var (
@@ -88,11 +87,11 @@ func (c *Compat) CheckSpanReplicationEnabled() bool {
 			c.spanReplicationEnabled = false
 			break
 		}
-		captureVer := semver.New(version.SanitizeVersion(capture.Version))
-		if captureVer.Compare(*SpanReplicationMinVersion) < 0 {
-			c.spanReplicationEnabled = false
-			break
-		}
+		//captureVer := semver.New(version.SanitizeVersion(capture.Version))
+		//if captureVer.Compare(*SpanReplicationMinVersion) < 0 {
+		//	c.spanReplicationEnabled = false
+		//	break
+		//}
 	}
 
 	return c.spanReplicationEnabled
@@ -110,8 +109,8 @@ func (c *Compat) CheckChangefeedEpochEnabled(captureID model.CaptureID) bool {
 		return false
 	}
 	if len(captureInfo.Version) != 0 {
-		captureVer := semver.New(version.SanitizeVersion(captureInfo.Version))
-		isEnabled = captureVer.Compare(*ChangefeedEpochMinVersion) >= 0
+		// captureVer := semver.New(version.SanitizeVersion(captureInfo.Version))
+		// isEnabled = captureVer.Compare(*ChangefeedEpochMinVersion) >= 0
 	} else {
 		isEnabled = false
 	}

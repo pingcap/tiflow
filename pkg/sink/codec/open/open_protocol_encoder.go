@@ -119,7 +119,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 
 		// single message too large, claim check enabled, encode it to a new individual message.
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
-			key, value, err = d.sendClaimCheckMessage(ctx, key, value, e, callback)
+			key, value, err = d.sendClaimCheckMessage(ctx, key, value, e)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -304,7 +304,7 @@ func (d *BatchEncoder) newClaimCheckLocationMessage(
 }
 
 func (d *BatchEncoder) sendClaimCheckMessage(
-	ctx context.Context, key, value []byte, e *model.RowChangedEvent, callback func(),
+	ctx context.Context, key, value []byte, e *model.RowChangedEvent,
 ) ([]byte, []byte, error) {
 	claimCheckFileName := claimcheck.NewFileName()
 	if err := d.claimCheck.WriteMessage(ctx, key, value, claimCheckFileName); err != nil {

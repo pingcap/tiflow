@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
