@@ -376,3 +376,5 @@ replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675f
 replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-0.20230421065457-369a3bab1117
 
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
+
+replace github.com/IBM/sarama => github.com/3AceShowHand/sarama v0.0.0-20230921114242-4f1cc801d287
