@@ -119,16 +119,18 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 
 		// single message too large, claim check enabled, encode it to a new individual message.
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
-			if err := d.appendSingleLargeMessage4ClaimCheck(ctx, key, value, e, callback); err != nil {
+			key, value, err = d.sendClaimCheckMessage(ctx, key, value, e, callback)
+			if err != nil {
 				return errors.Trace(err)
 			}
-			return nil
 		}
 
-		// it's must that `LargeMessageHandle == LargeMessageHandleOnlyHandleKeyColumns` here.
-		key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
-		if err != nil {
-			return errors.Trace(err)
+		if d.config.LargeMessageHandle.HandleKeyOnly() {
+			// it's must that `LargeMessageHandle == LargeMessageHandleOnlyHandleKeyColumns` here.
+			key, value, err = d.buildMessageOnlyHandleKeyColumns(e)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 
@@ -261,29 +263,29 @@ func (d *BatchEncoder) tryBuildCallback() {
 // NewClaimCheckLocationMessage implement the ClaimCheckLocationEncoder interface.
 func (d *BatchEncoder) newClaimCheckLocationMessage(
 	event *model.RowChangedEvent, fileName string,
-) (*common.Message, error) {
+) ([]byte, []byte, error) {
 	keyMsg, valueMsg, err := rowChangeToMsg(event, d.config, true)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	keyMsg.OnlyHandleKey = false
 	keyMsg.ClaimCheckLocation = d.claimCheck.FileNameWithPrefix(fileName)
 	key, err := keyMsg.Encode()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	value, err := valueMsg.encode()
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	value, err = common.Compress(
 		d.config.ChangefeedID, d.config.LargeMessageHandle.LargeMessageHandleCompression, value,
 	)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
 
 	// for single message that is longer than max-message-bytes
@@ -295,63 +297,26 @@ func (d *BatchEncoder) newClaimCheckLocationMessage(
 			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("key", key))
-		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
-	message := newMessage(key, value)
-	message.Ts = event.CommitTs
-	message.Schema = &event.Table.Schema
-	message.Table = &event.Table.Table
-	message.IncRowsCount()
-
-	return message, nil
+	return key, value, nil
 }
 
-func (d *BatchEncoder) appendSingleLargeMessage4ClaimCheck(
+func (d *BatchEncoder) sendClaimCheckMessage(
 	ctx context.Context, key, value []byte, e *model.RowChangedEvent, callback func(),
-) error {
-	message := newMessage(key, value)
-	message.Ts = e.CommitTs
-	message.Schema = &e.Table.Schema
-	message.Table = &e.Table.Table
-	message.IncRowsCount()
-
+) ([]byte, []byte, error) {
 	claimCheckFileName := claimcheck.NewFileName()
-	if err := d.claimCheck.WriteMessage(ctx, message, claimCheckFileName); err != nil {
-		return errors.Trace(err)
+	if err := d.claimCheck.WriteMessage(ctx, key, value, claimCheckFileName); err != nil {
+		return nil, nil, errors.Trace(err)
 	}
 
-	message, err := d.newClaimCheckLocationMessage(e, claimCheckFileName)
+	key, value, err := d.newClaimCheckLocationMessage(e, claimCheckFileName)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, nil, errors.Trace(err)
 	}
-	d.messageBuf = append(d.messageBuf, message)
-	if callback != nil {
-		d.callbackBuff = append(d.callbackBuff, callback)
-	}
-	d.curBatchSize++
 
-	return nil
-}
-
-func newMessage(key, value []byte) *common.Message {
-	versionHead := make([]byte, 8)
-	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
-	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
-
-	var (
-		keyLenByte   [8]byte
-		valueLenByte [8]byte
-	)
-	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
-	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
-
-	message.Key = append(message.Key, keyLenByte[:]...)
-	message.Key = append(message.Key, key...)
-	message.Value = append(message.Value, valueLenByte[:]...)
-	message.Value = append(message.Value, value...)
-
-	return message
+	return key, value, nil
 }
 
 type batchEncoderBuilder struct {

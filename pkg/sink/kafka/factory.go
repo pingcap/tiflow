@@ -252,7 +252,6 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 			if err == nil {
 				return nil
 			}
-
 			messageSize := err.Msg.ByteSize(2)
 			log.Info("async end message failed", zap.Int("messageSize", messageSize))
 

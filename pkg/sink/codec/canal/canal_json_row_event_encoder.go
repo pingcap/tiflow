@@ -441,7 +441,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
 			claimCheckFileName := claimcheck.NewFileName()
-			if err := c.claimCheck.WriteMessage(ctx, m, claimCheckFileName); err != nil {
+			if err := c.claimCheck.WriteMessage(ctx, m.Key, m.Value, claimCheckFileName); err != nil {
 				return errors.Trace(err)
 			}
 
