@@ -40,7 +40,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
-	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -209,26 +208,21 @@ func (s *server) prepare(ctx context.Context) error {
 
 func (s *server) setMemoryLimit() error {
 	conf := config.GetGlobalServerConfig()
-	totalMemory, err := util.GetMemoryLimit()
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if totalMemory > maxGcTunerMemory {
+	if conf.MaxMemory > maxGcTunerMemory {
 		// If total memory is larger than 512GB, we will not set memory limit.
 		// Because the memory limit is not accurate, and it is not necessary to set memory limit.
 		log.Info("total memory is larger than 512GB, skip setting memory limit",
-			zap.Uint64("bytes", totalMemory),
-			zap.String("memory", humanize.IBytes(totalMemory)),
+			zap.Uint64("bytes", conf.MaxMemory),
+			zap.String("memory", humanize.IBytes(conf.MaxMemory)),
 		)
 		return nil
 	}
-	if conf.MaxMemoryPercentage > 0 {
-		goMemLimit := totalMemory * uint64(conf.MaxMemoryPercentage) / 100
+	if conf.MaxMemory > 0 {
 		gctuner.EnableGOGCTuner.Store(true)
-		gctuner.Tuning(goMemLimit)
+		gctuner.Tuning(conf.MaxMemory)
 		log.Info("enable gctuner, set memory limit",
-			zap.Uint64("bytes", goMemLimit),
-			zap.String("memory", humanize.IBytes(goMemLimit)),
+			zap.Uint64("bytes", conf.MaxMemory),
+			zap.String("memory", humanize.IBytes(conf.MaxMemory)),
 		)
 	}
 	return nil

@@ -150,7 +150,8 @@ const (
     }
   },
   "cluster-id": "default",
-  "max-memory-percentage": 0
+  "max-memory-percentage": 0,
+  "max-memory": 0
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
