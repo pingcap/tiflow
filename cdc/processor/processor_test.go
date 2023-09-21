@@ -422,6 +422,8 @@ func TestProcessorError(t *testing.T) {
 			Message: "[CDC:ErrSinkURIInvalid]sink uri invalid '%s'",
 		},
 	})
+	require.Nil(t, p.Close())
+	tester.MustApplyPatches()
 
 	p, tester, changefeed = initProcessor4Test(ctx, t, &liveness, false)
 	// init tick
@@ -439,6 +441,8 @@ func TestProcessorError(t *testing.T) {
 	require.Equal(t, changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: nil,
 	})
+	require.Nil(t, p.Close())
+	tester.MustApplyPatches()
 }
 
 func TestProcessorExit(t *testing.T) {
@@ -462,6 +466,8 @@ func TestProcessorExit(t *testing.T) {
 	require.Equal(t, changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: nil,
 	})
+	require.Nil(t, p.Close())
+	tester.MustApplyPatches()
 }
 
 func TestProcessorClose(t *testing.T) {
