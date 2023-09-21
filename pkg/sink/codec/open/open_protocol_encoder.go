@@ -268,8 +268,7 @@ func (d *BatchEncoder) newClaimCheckLocationMessage(
 	}
 
 	keyMsg.OnlyHandleKey = false
-	claimCheckLocation := d.claimCheck.FileNameWithPrefix(fileName)
-	keyMsg.ClaimCheckLocation = claimCheckLocation
+	keyMsg.ClaimCheckLocation = d.claimCheck.FileNameWithPrefix(fileName)
 	key, err := keyMsg.Encode()
 	if err != nil {
 		return nil, errors.Trace(err)
