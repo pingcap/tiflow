@@ -265,7 +265,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 	}
 	limit, _ := c.rateLimiterMap.LoadOrStore(addr, rate.NewLimiter(rate.Limit(5), 1))
 	if !limit.(*rate.Limiter).Allow() {
-		newStreamErr = errors.Errorf("rate limit exceed, addr: %s", addr)
+		newStreamErr = errors.Errorf("rate limit exceed 5 operations per second, addr: %s", addr)
 		return
 	}
 	newStreamErr = streamFunc()
