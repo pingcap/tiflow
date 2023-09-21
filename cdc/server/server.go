@@ -58,6 +58,8 @@ const (
 	maxHTTPConnection = 1000
 	// httpConnectionTimeout is used to limit a connection max alive time of http server.
 	httpConnectionTimeout = 10 * time.Minute
+	// maxGcTunerMemory is used to limit the max memory usage of cdc server. if the memory is larger than it, gc tuner will be disabled
+	maxGcTunerMemory = 512 * 1024 * 1024 * 1024
 )
 
 // Server is the interface for the TiCDC server
@@ -210,6 +212,15 @@ func (s *server) setMemoryLimit() error {
 	totalMemory, err := util.GetMemoryLimit()
 	if err != nil {
 		return errors.Trace(err)
+	}
+	if totalMemory > maxGcTunerMemory {
+		// If total memory is larger than 512GB, we will not set memory limit.
+		// Because the memory limit is not accurate, and it is not necessary to set memory limit.
+		log.Info("total memory is larger than 512GB, skip setting memory limit",
+			zap.Uint64("bytes", totalMemory),
+			zap.String("memory", humanize.IBytes(totalMemory)),
+		)
+		return nil
 	}
 	if conf.MaxMemoryPercentage > 0 {
 		goMemLimit := totalMemory * uint64(conf.MaxMemoryPercentage) / 100
