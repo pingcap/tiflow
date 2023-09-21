@@ -137,8 +137,8 @@ var defaultServerConfig = &ServerConfig{
 
 		Scheduler: NewDefaultSchedulerConfig(),
 	},
-	ClusterID: "default",
-	MaxMemory: DisableMemoryLimit,
+	ClusterID:              "default",
+	GcTunerMemoryThreshold: DisableMemoryLimit,
 }
 
 // ServerConfig represents a config for server
@@ -168,8 +168,8 @@ type ServerConfig struct {
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
 	ClusterID           string          `toml:"cluster-id" json:"cluster-id"`
 	// Deprecated: we don't use this field anymore.
-	MaxMemoryPercentage int    `toml:"max-memory-percentage" json:"max-memory-percentage"`
-	MaxMemory           uint64 `toml:"max-memory" json:"max-memory"`
+	MaxMemoryPercentage    int    `toml:"max-memory-percentage" json:"max-memory-percentage"`
+	GcTunerMemoryThreshold uint64 `toml:"gc-tuner-memory-threshold" json:"gc-tuner-memory-threshold"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
