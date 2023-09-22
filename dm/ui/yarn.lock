@@ -5116,10 +5116,8 @@ vinyl@^2.0.0, vinyl@^2.2.0:
     remove-trailing-separator "^1.0.1"
     replace-ext "^1.0.0"
 
-vite-plugin-i18next-scanner@^0.4.0:
+"vite-plugin-i18next-scanner@file:./plugins/vite-plugin-i18next-scanner":
   version "0.4.0"
-  resolved "https://registry.yarnpkg.com/vite-plugin-i18next-scanner/-/vite-plugin-i18next-scanner-0.4.0.tgz#3684101c7a89afffa22c2bb9e108e5b40ff4d087"
-  integrity sha512-2GBfXypPpH4oZfE0/gpDs6Bl4lUO/oxJqde0Sivn1g4ei5AMOmayDWOyISdmoyuEtZAV0Zz8VExlOS13JGauog==
   dependencies:
     debug "^4.3.3"
     i18next-scanner "^3.1.0"
@@ -5140,13 +5138,12 @@ vite-plugin-imp@^2.1.3:
     param-case "^3.0.4"
     pascal-case "^3.1.2"
 
-vite-plugin-next-react-router@^0.6.1:
-  version "0.6.1"
-  resolved "https://registry.yarnpkg.com/vite-plugin-next-react-router/-/vite-plugin-next-react-router-0.6.1.tgz#5aa5a7e82261a12e36a675cb46a93886daf395e7"
-  integrity sha512-Ha/G6SQWajAj3fm2WVpNBD+z6ZQv9NHw8EcOYJbCbLkdLBbkwh1EI73jewG+LetCggk8om+zEqGh8hA+fHrpXg==
+"vite-plugin-next-react-router@file:./plugins/vite-plugin-next-react-router":
+  version "0.6.2"
   dependencies:
     consola "^2.15.3"
     fast-glob "^3.2.7"
+    lodash "^4.17.21"
 
 vite-plugin-windicss@^1.5.4:
   version "1.5.4"
