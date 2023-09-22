@@ -56,7 +56,7 @@ function run() {
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
 	pulsar) run_pulsar_consumer $WORK_DIR $SINK_URI ;;
 	esac
-	
+
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "failed" "[CDC:ErrStartTsBeforeGC]" ""
 	run_cdc_cli changefeed resume -c $changefeedid
 

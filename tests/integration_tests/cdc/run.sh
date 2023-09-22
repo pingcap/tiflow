@@ -41,7 +41,7 @@ if [ "$SINK_TYPE" != "storage" ]; then
 	if [ "$SINK_TYPE" == "pulsar" ]; then
 		return
 	fi
-	
+
 	prepare $*
 	cd "$(dirname "$0")"
 	set -o pipefail

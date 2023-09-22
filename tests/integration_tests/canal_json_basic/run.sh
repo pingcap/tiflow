@@ -20,7 +20,6 @@ function run() {
 	# start tidb cluster
 	start_tidb_cluster --workdir $WORK_DIR
 
-	
 	cd $WORK_DIR
 
 	TOPIC_NAME="ticdc-canal-json-test"
@@ -40,7 +39,6 @@ function run() {
 	fi
 
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
-
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 

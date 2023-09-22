@@ -13,7 +13,7 @@ function run() {
 	if [ "$SINK_TYPE" == "storage" ]; then
 		return
 	fi
-	
+
 	# TODO(dongmen): enable pulsar in the future.
 	if [ "$SINK_TYPE" == "pulsar" ]; then
 		return

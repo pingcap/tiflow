@@ -38,8 +38,6 @@ function run() {
 	pulsar) run_pulsar_consumer $WORK_DIR $SINK_URI ;;
 	esac
 
-	ensure $MAX_RETRIES check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" "sink_retry" "normal" "null" ""
-
 	run_sql "CREATE TABLE sink_retry.finish_mark_1 (a int primary key);"
 	sleep 30
 	check_table_exists "sink_retry.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60

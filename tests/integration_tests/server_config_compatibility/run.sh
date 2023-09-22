@@ -28,7 +28,7 @@ function prepare() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --config $CUR/conf/server.toml
 
-	SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/" ;;
+	SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
 }
 
