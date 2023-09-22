@@ -9,11 +9,6 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function prepare() {
-	# No need to test different sink type.
-	# Because we only test the compatibility of the server config file.
-	if [ "$SINK_TYPE" != "mysql" ]; then
-		return
-	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR
@@ -96,7 +91,11 @@ function sql_test() {
 }
 
 trap stop_tidb_cluster EXIT
-prepare $*
-sql_test $*
-check_logs $WORK_DIR
+# No need to test different sink type.
+# Because we only test the compatibility of the server config file.
+if [ "$SINK_TYPE" == "mysql" ]; then
+	prepare $*
+	ql_test $*
+	check_logs $WORK_DIR
+fi
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
