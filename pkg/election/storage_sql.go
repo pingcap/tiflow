@@ -23,6 +23,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
+var _ Storage = &SQLStorage{}
+
 const (
 	sqlRecordID     = 1
 	sqlCreateTable  = "CREATE TABLE IF NOT EXISTS %s (id int NOT NULL, version bigint NOT NULL, record text NOT NULL, PRIMARY KEY (id))"
@@ -83,7 +85,7 @@ func (s *SQLStorage) Get(ctx context.Context) (*Record, error) {
 }
 
 // Update implements Storage.Update.
-func (s *SQLStorage) Update(ctx context.Context, record *Record) error {
+func (s *SQLStorage) Update(ctx context.Context, record *Record, _ bool) error {
 	recordBytes, err := json.Marshal(&record)
 	if err != nil {
 		return errors.Trace(err)
