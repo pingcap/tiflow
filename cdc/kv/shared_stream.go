@@ -39,7 +39,7 @@ type requestedStream struct {
 
 	requestedRegions struct {
 		sync.RWMutex
-		// map[subscriptionID]map[regionID]*regionFeedState
+		// map[SubscriptionID]map[RegionID]*regionFeedState
 		m map[SubscriptionID]map[uint64]*regionFeedState
 	}
 
@@ -48,8 +48,8 @@ type requestedStream struct {
 
 	// tableExclusives means one GRPC stream is exclusive by one table.
 	tableExclusives struct {
-		m         map[SubscriptionID]*sharedconn.ConnAndClient
-		receivers chan *sharedconn.ConnAndClient
+		m         sync.Map // map[SubscriptionID]*sharedconn.ConnAndClient
+		receivers chan SubscriptionID
 	}
 }
 
@@ -144,10 +144,11 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		if s.multiplexing != nil {
 			s.multiplexing.Release()
 		} else {
-			for _, cc := range s.tableExclusives.m {
-				cc.Release()
-			}
-			s.tableExclusives.m = nil
+			s.tableExclusives.m.Range(func(_, value any) bool {
+				value.(*sharedconn.ConnAndClient).Release()
+				return true
+			})
+			s.tableExclusives.m = sync.Map{}
 			close(s.tableExclusives.receivers)
 		}
 	}()
@@ -167,7 +168,7 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 	g, ctx := errgroup.WithContext(ctx)
 	if cc.Multiplexing() {
 		s.multiplexing = cc
-		g.Go(func() error { return s.receive(ctx, c, rs, s.multiplexing) })
+		g.Go(func() error { return s.receive(ctx, c, rs, s.multiplexing, invalidSubscriptionID) })
 	} else {
 		log.Info("event feed stream multiplexing is not supported, will fallback",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -177,15 +178,17 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Uint64("streamID", s.streamID))
 		cc.Release()
 
-		s.tableExclusives.m = make(map[SubscriptionID]*sharedconn.ConnAndClient)
-		s.tableExclusives.receivers = make(chan *sharedconn.ConnAndClient, 8)
+		s.tableExclusives.receivers = make(chan SubscriptionID, 8)
 		g.Go(func() error {
 			for {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case cc := <-s.tableExclusives.receivers:
-					g.Go(func() error { return s.receive(ctx, c, rs, cc) })
+				case subscriptionID := <-s.tableExclusives.receivers:
+					if value, ok := s.tableExclusives.m.Load(subscriptionID); ok {
+						cc := value.(*sharedconn.ConnAndClient)
+						g.Go(func() error { return s.receive(ctx, c, rs, cc, subscriptionID) })
+					}
 				}
 			}
 		})
@@ -200,6 +203,7 @@ func (s *requestedStream) receive(
 	c *SharedClient,
 	rs *requestedStore,
 	cc *sharedconn.ConnAndClient,
+	subscriptionID SubscriptionID,
 ) error {
 	client := cc.Client()
 	for {
@@ -219,13 +223,13 @@ func (s *requestedStream) receive(
 			return errors.Trace(err)
 		}
 		if len(cevent.Events) > 0 {
-			if err := c.sendRegionChangeEvents(ctx, cevent.Events, s); err != nil {
+			if err := s.sendRegionChangeEvents(ctx, c, cevent.Events, subscriptionID); err != nil {
 				return err
 			}
 		}
 		if cevent.ResolvedTs != nil {
 			c.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			if err := c.sendResolvedTs(ctx, cevent.ResolvedTs, s); err != nil {
+			if err := s.sendResolvedTs(ctx, c, cevent.ResolvedTs, subscriptionID); err != nil {
 				return err
 			}
 		}
@@ -276,8 +280,8 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 	}
 
 	getTableExclusiveConn := func(subscriptionID SubscriptionID) (cc *sharedconn.ConnAndClient, err error) {
-		cc = s.tableExclusives.m[subscriptionID]
-		if cc == nil {
+		value, ok := s.tableExclusives.m.Load(subscriptionID)
+		if !ok {
 			if cc, err = c.grpcPool.Connect(ctx, rs.storeAddr); err != nil {
 				return
 			}
@@ -286,11 +290,13 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				cc, err = nil, errors.New("multiplexing is enabled, will re-establish the stream")
 				return
 			}
-			s.tableExclusives.m[subscriptionID] = cc
+			s.tableExclusives.m.Store(subscriptionID, cc)
 			select {
 			case <-ctx.Done():
-			case s.tableExclusives.receivers <- cc:
+			case s.tableExclusives.receivers <- subscriptionID:
 			}
+		} else {
+			cc = value.(*sharedconn.ConnAndClient)
 		}
 		return
 	}
@@ -310,10 +316,8 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 					return err
 				}
 			} else {
-				cc := s.tableExclusives.m[subscriptionID]
-				if cc != nil {
-					cc.Release()
-					delete(s.tableExclusives.m, subscriptionID)
+				if value, ok := s.tableExclusives.m.LoadAndDelete(subscriptionID); ok {
+					value.(*sharedconn.ConnAndClient).Release()
 				}
 			}
 			// NOTE: some principles to help understand deregistering a table:
@@ -427,4 +431,63 @@ func (r *requestedStream) clearPendingRegions() []singleRegionInfo {
 		regions = append(regions, <-r.requests.Out())
 	}
 	return regions
+}
+
+func (s *requestedStream) sendRegionChangeEvents(
+	ctx context.Context, c *SharedClient, events []*cdcpb.Event,
+	tableSubID SubscriptionID,
+) error {
+	for _, event := range events {
+		regionID := event.RegionId
+		subscriptionID := tableSubID
+		if subscriptionID == invalidSubscriptionID {
+			subscriptionID = SubscriptionID(event.RequestId)
+		}
+		if state := s.getState(subscriptionID, regionID); state != nil {
+			sfEvent := newEventItem(event, state, s)
+			slot := hashRegionID(regionID, len(c.workers))
+			if err := c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *requestedStream) sendResolvedTs(
+	ctx context.Context, c *SharedClient, resolvedTs *cdcpb.ResolvedTs,
+	tableSubID SubscriptionID,
+) error {
+	subscriptionID := tableSubID
+	if subscriptionID == invalidSubscriptionID {
+		subscriptionID = SubscriptionID(resolvedTs.RequestId)
+	}
+	sfEvents := make([]statefulEvent, len(c.workers))
+	log.Debug("event feed get a ResolvedTs",
+		zap.String("namespace", c.changefeed.Namespace),
+		zap.String("changefeed", c.changefeed.ID),
+		zap.Any("subscriptionID", subscriptionID),
+		zap.Uint64("ResolvedTs", resolvedTs.Ts),
+		zap.Int("regionCount", len(resolvedTs.Regions)))
+
+	for _, regionID := range resolvedTs.Regions {
+		slot := hashRegionID(regionID, len(c.workers))
+		if sfEvents[slot].stream == nil {
+			sfEvents[slot] = newResolvedTsBatch(resolvedTs.Ts, s)
+		}
+		x := &sfEvents[slot].resolvedTsBatch
+		if state := s.getState(subscriptionID, regionID); state != nil {
+			x.regions = append(x.regions, state)
+		}
+	}
+
+	for i, sfEvent := range sfEvents {
+		if len(sfEvent.resolvedTsBatch.regions) > 0 {
+			sfEvent.stream = s
+			if err := c.workers[i].sendEvent(ctx, sfEvent); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

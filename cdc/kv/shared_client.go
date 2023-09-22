@@ -16,7 +16,6 @@ package kv
 import (
 	"context"
 	"encoding/binary"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,7 +44,6 @@ import (
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	grpcmeta "google.golang.org/grpc/metadata"
 )
 
 // SubscriptionID comes from `SharedClient.AllocSubscriptionID`.
@@ -415,53 +413,6 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 	}
 }
 
-func (s *SharedClient) sendRegionChangeEvents(ctx context.Context, events []*cdcpb.Event, rs *requestedStream) error {
-	for _, event := range events {
-		regionID := event.RegionId
-		subscriptionID := SubscriptionID(event.RequestId)
-		if state := rs.getState(subscriptionID, regionID); state != nil {
-			sfEvent := newEventItem(event, state, rs)
-			slot := hashRegionID(regionID, len(s.workers))
-			if err := s.workers[slot].sendEvent(ctx, sfEvent); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	}
-	return nil
-}
-
-func (s *SharedClient) sendResolvedTs(ctx context.Context, resolvedTs *cdcpb.ResolvedTs, rs *requestedStream) error {
-	subscriptionID := SubscriptionID(resolvedTs.RequestId)
-	sfEvents := make([]statefulEvent, len(s.workers))
-	log.Debug("event feed get a ResolvedTs",
-		zap.String("namespace", s.changefeed.Namespace),
-		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", subscriptionID),
-		zap.Uint64("ResolvedTs", resolvedTs.Ts),
-		zap.Int("regionCount", len(resolvedTs.Regions)))
-
-	for _, regionID := range resolvedTs.Regions {
-		slot := hashRegionID(regionID, len(s.workers))
-		if sfEvents[slot].stream == nil {
-			sfEvents[slot] = newResolvedTsBatch(resolvedTs.Ts, rs)
-		}
-		x := &sfEvents[slot].resolvedTsBatch
-		if state := rs.getState(subscriptionID, regionID); state != nil {
-			x.regions = append(x.regions, state)
-		}
-	}
-
-	for i, sfEvent := range sfEvents {
-		if len(sfEvent.resolvedTsBatch.regions) > 0 {
-			sfEvent.stream = rs
-			if err := s.workers[i].sendEvent(ctx, sfEvent); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func (r *requestedStore) appendRequest(sri singleRegionInfo) {
 	offset := r.nextStream.Add(1) % uint32(len(r.streams))
 	r.streams[offset].requests.In() <- sri
@@ -470,15 +421,6 @@ func (r *requestedStore) appendRequest(sri singleRegionInfo) {
 func (r *requestedStore) broadcastRequest(sri singleRegionInfo) {
 	for _, stream := range r.streams {
 		stream.requests.In() <- sri
-	}
-}
-
-func (s *SharedClient) clearStream(r *requestedStore, stream *requestedStream) {
-	if stream.multiplexing != nil {
-		stream.multiplexing.Release()
-	}
-	for _, cc := range stream.tableExclusives.m {
-		cc.Release()
 	}
 }
 
@@ -855,26 +797,6 @@ var (
 )
 
 const (
-	rpcMetaFeaturesKey string = "features"
-	rpcMetaFeaturesSep string = ","
-
-	// this feature supports these interactions with TiKV sides:
-	// 1. in one GRPC stream, TiKV will merge resolved timestamps into several buckets based on
-	//    `RequestId`s. For example, region 100 and 101 have been subscribed twice with `RequestId`
-	//    1 and 2, TiKV will sends a ResolvedTs message
-	//    [{"RequestId": 1, "regions": [100, 101]}, {"RequestId": 2, "regions": [100, 101]}]
-	//    to the TiCDC client.
-	// 2. TiCDC can deregister all regions with a same request ID by specifying the `RequestId`.
-	rpcMetaFeatureStreamMultiplexing string = "stream-multiplexing"
-
-	resolveLockMinInterval time.Duration = 10 * time.Second
+	resolveLockMinInterval time.Duration  = 10 * time.Second
+	invalidSubscriptionID  SubscriptionID = SubscriptionID(0)
 )
-
-func getContextFromFeatures(ctx context.Context, features []string) context.Context {
-	return grpcmeta.NewOutgoingContext(
-		ctx,
-		grpcmeta.New(map[string]string{
-			rpcMetaFeaturesKey: strings.Join(features, rpcMetaFeaturesSep),
-		}),
-	)
-}
