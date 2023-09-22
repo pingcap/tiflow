@@ -253,9 +253,7 @@ const (
 	rpcMetaFeatureStreamMultiplexing string = "stream-multiplexing"
 )
 
-var (
-	grpcMetrics = grpc_prometheus.NewClientMetrics()
-)
+var grpcMetrics = grpc_prometheus.NewClientMetrics()
 
 func getContextFromFeatures(ctx context.Context, features []string) context.Context {
 	return metadata.NewOutgoingContext(
