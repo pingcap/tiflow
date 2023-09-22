@@ -46,7 +46,7 @@ function run() {
 	fi
 	# TODO(dongmen): enable pulsar in the future.
 	if [ "$SINK_TYPE" == "pulsar" ]; then
-		return
+		exit 0
 	fi
 
 	start_tidb_cluster --workdir $WORK_DIR

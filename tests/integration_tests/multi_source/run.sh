@@ -41,7 +41,7 @@ trap stop_tidb_cluster EXIT
 if [ "$SINK_TYPE" != "storage" ]; then
 	# TODO(dongmen): enable pulsar in the future.
 	if [ "$SINK_TYPE" == "pulsar" ]; then
-		return
+		exit 0
 	fi
 	prepare $*
 	cd "$(dirname "$0")"

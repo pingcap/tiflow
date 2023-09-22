@@ -11,7 +11,7 @@ SINK_TYPE=$1
 function run() {
 	# TODO(dongmen): enable pulsar in the future.
 	if [ "$SINK_TYPE" == "pulsar" ]; then
-		return
+		exit 0
 	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
