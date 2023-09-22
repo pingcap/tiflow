@@ -34,7 +34,6 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
@@ -194,7 +193,10 @@ func NewChangefeed(
 }
 
 func newChangefeed4Test(
-	id model.ChangeFeedID, state *orchestrator.ChangefeedReactorState, up *upstream.Upstream,
+	id model.ChangeFeedID,
+	cfInfo *model.ChangeFeedInfo,
+	cfStatus *model.ChangeFeedStatus,
+	cfstateManager FeedStateManager, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
 		replicaConfig *config.ReplicaConfig,
 		up *upstream.Upstream,
@@ -218,7 +220,7 @@ func newChangefeed4Test(
 	) (observer.Observer, error),
 ) *changefeed {
 	cfg := config.NewDefaultSchedulerConfig()
-	c := NewChangefeed(id, state.Info, state.Status, newFeedStateManager(up, state), up, cfg)
+	c := NewChangefeed(id, cfInfo, cfStatus, cfstateManager, up, cfg)
 	c.newDDLPuller = newDDLPuller
 	c.newSink = newSink
 	c.newScheduler = newScheduler
