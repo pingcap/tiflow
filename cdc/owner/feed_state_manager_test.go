@@ -160,6 +160,7 @@ func TestResumeChangefeedWithCheckpointTs(t *testing.T) {
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
@@ -238,6 +239,7 @@ func TestMarkFinished(t *testing.T) {
 		return &model.ChangeFeedStatus{}, true, nil
 	})
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
@@ -272,6 +274,7 @@ func TestCleanUpInfos(t *testing.T) {
 		})
 	tester.MustApplyPatches()
 	require.Contains(t, state.TaskPositions, ctx.GlobalVars().CaptureInfo.ID)
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 	require.True(t, manager.ShouldRunning())
@@ -304,6 +307,7 @@ func TestHandleError(t *testing.T) {
 	})
 
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 
@@ -383,6 +387,7 @@ func TestHandleFastFailError(t *testing.T) {
 			}}, true, nil
 		})
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	// test handling fast failed error with non-nil ChangeFeedInfo
 	tester.MustApplyPatches()
@@ -471,6 +476,7 @@ func TestChangefeedStatusNotExist(t *testing.T) {
 			etcd.DefaultClusterAndMetaPrefix,
 		): "d563bfc0-f406-4f34-bc7d-6dc2e35a44e5",
 	})
+	manager.state = state
 	manager.Tick(0)
 	require.False(t, manager.ShouldRunning())
 	require.False(t, manager.ShouldRemoved())
@@ -501,6 +507,7 @@ func TestChangefeedNotRetry(t *testing.T) {
 		return &model.ChangeFeedInfo{SinkURI: "123", Config: &config.ReplicaConfig{}, State: model.StateNormal}, true, nil
 	})
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	require.True(t, manager.ShouldRunning())
 
@@ -591,6 +598,7 @@ func TestBackoffStopsUnexpectedly(t *testing.T) {
 	})
 
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 
@@ -653,6 +661,7 @@ func TestBackoffNeverStops(t *testing.T) {
 	})
 
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 
@@ -703,6 +712,7 @@ func TestUpdateChangefeedEpoch(t *testing.T) {
 	})
 
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 	require.Equal(t, state.Info.State, model.StateNormal)
@@ -758,6 +768,7 @@ func TestHandleWarning(t *testing.T) {
 	})
 
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 	require.Equal(t, model.StateNormal, state.Info.State)
@@ -870,6 +881,7 @@ func TestErrorAfterWarning(t *testing.T) {
 	})
 
 	tester.MustApplyPatches()
+	manager.state = state
 	manager.Tick(0)
 	tester.MustApplyPatches()
 	require.Equal(t, model.StateNormal, state.Info.State)

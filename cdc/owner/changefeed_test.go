@@ -251,8 +251,9 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 
 func TestPreCheck(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
-	cf, captures, tester, state := createChangefeed4Test(ctx, t)
-	cf.Tick(ctx, state.Info, state.Status, captures)
+	_, captures, tester, state := createChangefeed4Test(ctx, t)
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	preflightCheck(state, captures)
 	tester.MustApplyPatches()
 	require.NotNil(t, state.Status)
 
@@ -263,7 +264,8 @@ func TestPreCheck(t *testing.T) {
 	})
 	tester.MustApplyPatches()
 
-	cf.Tick(ctx, state.Info, state.Status, captures)
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
 	tester.MustApplyPatches()
 	require.NotNil(t, state.Status)
 	require.NotContains(t, state.TaskPositions, offlineCaputreID)
@@ -274,7 +276,8 @@ func TestInitialize(t *testing.T) {
 	cf, captures, tester, state := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
-	cf.Tick(ctx, state.Info, state.Status, captures)
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
 	tester.MustApplyPatches()
 
 	// initialize
@@ -289,7 +292,8 @@ func TestChangefeedHandleError(t *testing.T) {
 	cf, captures, tester, state := createChangefeed4Test(ctx, t)
 	defer cf.Close(ctx)
 	// pre check
-	cf.Tick(ctx, state.Info, state.Status, captures)
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
 	tester.MustApplyPatches()
 
 	// initialize
@@ -320,12 +324,14 @@ func TestExecDDL(t *testing.T) {
 	cf.upstream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
-		cf.Tick(ctx, state.Info, state.Status, captures)
+		state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+		require.False(t, preflightCheck(state, captures))
 		tester.MustApplyPatches()
-		cf.Tick(ctx, state.Info, state.Status, captures)
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
-		cf.Tick(ctx, state.Info, state.Status, captures)
-		tester.MustApplyPatches()
+		checkpointTs, minTableBarrierTs = cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 	}
 	// pre check and initialize
 	tickThreeTime()
@@ -403,11 +409,14 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
-		cf.Tick(ctx, state.Info, state.Status, captures)
+		state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+		require.False(t, preflightCheck(state, captures))
 		tester.MustApplyPatches()
-		cf.Tick(ctx, state.Info, state.Status, captures)
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
-		cf.Tick(ctx, state.Info, state.Status, captures)
+		checkpointTs, minTableBarrierTs = cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 	}
 	// pre check and initialize
@@ -462,7 +471,8 @@ func TestSyncPoint(t *testing.T) {
 	defer cf.Close(ctx)
 
 	// pre check
-	cf.Tick(ctx, state.Info, state.Status, captures)
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
 	tester.MustApplyPatches()
 
 	// initialize
@@ -475,7 +485,8 @@ func TestSyncPoint(t *testing.T) {
 	mockDDLPuller.resolvedTs = oracle.GoTimeToTS(oracle.GetTimeFromTS(mockDDLPuller.resolvedTs).Add(5 * time.Second))
 	// tick 20 times
 	for i := 0; i <= 20; i++ {
-		cf.Tick(ctx, state.Info, state.Status, captures)
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 	}
 	for i := 1; i < len(mockDDLSink.syncPointHis); i++ {
@@ -492,7 +503,8 @@ func TestFinished(t *testing.T) {
 	defer cf.Close(ctx)
 
 	// pre check
-	cf.Tick(ctx, state.Info, state.Status, captures)
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
 	tester.MustApplyPatches()
 
 	// initialize
@@ -503,7 +515,8 @@ func TestFinished(t *testing.T) {
 	mockDDLPuller.resolvedTs += 2000
 	// tick many times to make sure the change feed is stopped
 	for i := 0; i <= 10; i++ {
-		cf.Tick(ctx, state.Info, state.Status, captures)
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 	}
 	fmt.Println("checkpoint ts", state.Status.CheckpointTs)
@@ -562,7 +575,8 @@ func testChangefeedReleaseResource(
 	cf, captures, tester, state := createChangefeed4Test(ctx, t)
 
 	// pre check
-	cf.Tick(ctx, state.Info, state.Status, captures)
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
 	tester.MustApplyPatches()
 
 	// initialize

@@ -122,7 +122,9 @@ func (m *feedStateManager) Tick(resolvedTs model.Ts) (adminJobPending bool) {
 		}
 	}
 
-	m.checkAndInitLastRetryCheckpointTs(m.state.Status)
+	if m.state != nil {
+		m.checkAndInitLastRetryCheckpointTs(m.state.Status)
+	}
 
 	m.resolvedTs = resolvedTs
 	m.shouldBeRunning = true
