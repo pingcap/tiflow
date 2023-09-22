@@ -1,5 +1,5 @@
 drop database if exists `partition_table`;
-set @@global.tidb_enable_exchange_partition=on;
+drop database if exists `partition_table2`;
 create database `partition_table`;
 use `partition_table`;
 
@@ -20,6 +20,12 @@ alter table t1 truncate partition p0;
 alter table t1 drop partition p1;
 insert into t1 values (7),(8),(9);
 update t1 set a=a+10 where a=9;
+
+/* Remove partitioning + add partitioning back again */
+alter table t remove partitioning;
+insert into t values (20),(21),(22),(23),(24),(25);
+alter table t partition by hash (a) partitions 5;
+insert into t values (30),(31),(32),(33),(34),(35);
 
 /* exchange partition case 1: source table and target table in same database */
 create table t2 (a int primary key);
@@ -42,5 +48,10 @@ ALTER TABLE t1 REORGANIZE PARTITION p2,p3,p4 INTO (PARTITION p2 VALUES LESS THAN
 insert into t1 values (-3),(5),(14),(22),(30),(100);
 update t1 set a=a-16 where a=12;
 delete from t1 where a = 29;
+
+/* Change partitioning to key based and then back to range */
+alter table t1 partition by key(a) partitions 7;
+insert into t1 values (-2001),(2001),(2002),(-2002),(-2003),(2003),(-2004),(2004),(-2005),(2005),(2006),(-2006),(2007),(-2007);
+ALTER TABLE t1 partition by range(a) (partition p0 values less than (5), PARTITION p2 VALUES LESS THAN (20), PARTITION p3 VALUES LESS THAN (26), PARTITION p4 VALUES LESS THAN (35), PARTITION pMax VALUES LESS THAN (MAXVALUE));
 
 create table finish_mark (a int primary key);
