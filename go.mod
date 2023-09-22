@@ -103,6 +103,7 @@ require (
 	go.uber.org/atomic v1.11.0
 	go.uber.org/dig v1.13.0
 	go.uber.org/goleak v1.2.1
+	go.uber.org/mock v0.2.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.25.0
@@ -148,7 +149,6 @@ require (
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
-	go.uber.org/mock v0.2.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.27.2 // indirect
 	k8s.io/apimachinery v0.27.2 // indirect
