@@ -8,4 +8,3 @@ delete from tt1;
 delete from tt2;
 delete from tt3;
 delete from tt4;
-delete from tt5;

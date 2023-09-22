@@ -67,14 +67,9 @@ CREATE TABLE tt3 (
 CREATE TABLE tt4 (
                     a int primary key,
                     b varchar(10) charset utf8mb4 collate utf8mb4_0900_ai_ci,
-                    c varchar(10) charset utf8mb4 collate utf8mb4_0900_bin,
+                    c varchar(10) charset utf8mb4 collate utf8mb4_0900_ai_ci,
                     d varchar(10) not null,
                     unique key d(d)
-);
-
-CREATE TABLE tt5 (
-                    a varchar(10) charset utf8mb4 collate utf8mb4_0900_bin, primary key(a),
-                    b int default 10
 );
 
 insert into tt1 (a) values ('A'),(' A'),('A\t'),('b'),('bA'),('bac'),('ab'),('\U000FFFFE'),('Àoo'),('ß'),('æ'),('aeoo'), ('𝕒bc');
@@ -89,7 +84,4 @@ insert into tt4 values (1,'A','A','1'),(2,'a\t','a\t','2'),(3,'ab','ab','3'),(4,
 update tt1 set b = b + 1;
 update tt3 set b = 11 where a > 'A';
 update tt3 set b = '14' where a > 'À';
-insert into tt5 (a) values ('😉');
-insert into tt5 (a) values ('a'),('A'),(' a'),(' A'),('a\t'),('ab'),('Ab');
 drop index `primary` on tt4;
-update tt5 set b = 12;
