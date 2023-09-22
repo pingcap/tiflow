@@ -39,7 +39,6 @@ function run() {
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
 	pulsar) run_pulsar_consumer $WORK_DIR $SINK_URI ;;
 	esac
-	esac
 
 	run_sql "CREATE DATABASE processor_delay;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	for i in {1..50}; do
