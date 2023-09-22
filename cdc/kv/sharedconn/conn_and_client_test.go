@@ -104,18 +104,19 @@ func TestConnAndClientPoolForV2(t *testing.T) {
 }
 
 func TestConnectToUnavailable(t *testing.T) {
-	targets := []string{"127.0.0.1:9999", "9.9.9.9:9999"}
+	targets := []string{"127.0.0.1:9999", "2.2.2.2:9999"}
 	for _, target := range targets {
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(3*time.Second))
+		ctx := context.Background()
 
+        start := time.Now()
 		conn, err := connect(ctx, &security.Credential{}, target)
 		require.NotNil(t, conn)
 		require.Nil(t, err)
 
+        start = time.Now()
 		rpc := cdcpb.NewChangeDataClient(conn)
 		_, err = rpc.EventFeedV2(ctx)
 		require.NotNil(t, err)
-		cancel()
 	}
 
 	service := make(chan *grpc.Server, 1)

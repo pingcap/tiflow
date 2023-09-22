@@ -35,7 +35,9 @@ import (
 )
 
 func StatusIsEOF(status *grpcstatus.Status) bool {
-	return status == nil || (status.Code() == grpccodes.Unknown && status.Message() == io.EOF.Error())
+	return status == nil ||
+		status.Code() == grpccodes.Canceled ||
+		(status.Code() == grpccodes.Unknown && status.Message() == io.EOF.Error())
 }
 
 type ConnAndClientPool struct {
@@ -232,8 +234,6 @@ func connect(ctx context.Context, credential *security.Credential, target string
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
-	defer cancel()
 
 	return grpc.DialContext(
 		ctx,
@@ -262,8 +262,6 @@ func connect(ctx context.Context, credential *security.Credential, target string
 }
 
 const (
-	dialTimeout = 10 * time.Second
-
 	grpcInitialWindowSize     = (1 << 16) - 1
 	grpcInitialConnWindowSize = 1 << 23
 	grpcMaxCallRecvMsgSize    = 1 << 28

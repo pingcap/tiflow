@@ -143,13 +143,13 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Bool("canceled", canceled))
 		if s.multiplexing != nil {
 			s.multiplexing.Release()
-		} else {
+		} else if s.tableExclusives.receivers != nil {
+			close(s.tableExclusives.receivers)
 			s.tableExclusives.m.Range(func(_, value any) bool {
 				value.(*sharedconn.ConnAndClient).Release()
 				return true
 			})
 			s.tableExclusives.m = sync.Map{}
-			close(s.tableExclusives.receivers)
 		}
 	}()
 
@@ -165,10 +165,10 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		return isCanceled()
 	}
 
-	g, ctx := errgroup.WithContext(ctx)
+	g, gctx := errgroup.WithContext(ctx)
 	if cc.Multiplexing() {
 		s.multiplexing = cc
-		g.Go(func() error { return s.receive(ctx, c, rs, s.multiplexing, invalidSubscriptionID) })
+		g.Go(func() error { return s.receive(gctx, c, rs, s.multiplexing, invalidSubscriptionID) })
 	} else {
 		log.Info("event feed stream multiplexing is not supported, will fallback",
 			zap.String("namespace", c.changefeed.Namespace),
@@ -182,18 +182,18 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 		g.Go(func() error {
 			for {
 				select {
-				case <-ctx.Done():
-					return ctx.Err()
+				case <-gctx.Done():
+					return gctx.Err()
 				case subscriptionID := <-s.tableExclusives.receivers:
 					if value, ok := s.tableExclusives.m.Load(subscriptionID); ok {
 						cc := value.(*sharedconn.ConnAndClient)
-						g.Go(func() error { return s.receive(ctx, c, rs, cc, subscriptionID) })
+						g.Go(func() error { return s.receive(gctx, c, rs, cc, subscriptionID) })
 					}
 				}
 			}
 		})
 	}
-	g.Go(func() error { return s.send(ctx, c, rs) })
+	g.Go(func() error { return s.send(gctx, c, rs) })
 	_ = g.Wait()
 	return isCanceled()
 }
