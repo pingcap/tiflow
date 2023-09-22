@@ -161,6 +161,7 @@ type changefeed struct {
 	latestStatus *model.ChangeFeedStatus
 }
 
+// NewChangefeed creates a new changefeed.
 func NewChangefeed(
 	id model.ChangeFeedID,
 	cfInfo *model.ChangeFeedInfo,
@@ -249,7 +250,7 @@ func (c *changefeed) Tick(ctx cdcContext.Context,
 
 	if skip, err := c.checkUpstream(); skip {
 		if err != nil {
-			c.handleErr(ctx, cfInfo, err)
+			c.handleErr(ctx, err)
 		}
 		return 0, 0
 	}
@@ -277,15 +278,12 @@ func (c *changefeed) Tick(ctx cdcContext.Context,
 
 	if err != nil {
 		log.Error("changefeed tick failed", zap.Error(err))
-		c.handleErr(ctx, cfInfo, err)
+		c.handleErr(ctx, err)
 	}
 	return checkpointTs, minTableBarrierTs
 }
 
-func (c *changefeed) handleErr(ctx cdcContext.Context,
-	cfInfo *model.ChangeFeedInfo,
-	err error,
-) {
+func (c *changefeed) handleErr(ctx cdcContext.Context, err error) {
 	log.Error("an error occurred in Owner",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID), zap.Error(err))

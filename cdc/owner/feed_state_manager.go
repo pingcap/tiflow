@@ -41,14 +41,28 @@ const (
 	defaultBackoffMultiplier          = 2.0
 )
 
+// FeedStateManager manages the life cycle of a changefeed, currently it is responsible for:
+// 1. Handle admin jobs
+// 2. Handle errors
+// 3. Handle warnings
+// 4. Control the status of a changefeed
 type FeedStateManager interface {
-	Tick(resolvedTs model.Ts) (adminJobPending bool)
-	HandleError(errs ...*model.RunningError)
-	HandleWarning(warnings ...*model.RunningError)
-	ShouldRunning() bool
-	ShouldRemoved() bool
-	MarkFinished()
+	// PushAdminJob pushed an admin job to the admin job queue
 	PushAdminJob(job *model.AdminJob)
+	// Tick is the main logic of the FeedStateManager, it will be called periodically
+	// resolvedTs is the resolvedTs of the changefeed
+	// returns true if there is a pending admin job, if so changefeed should not run the tick logic
+	Tick(resolvedTs model.Ts) (adminJobPending bool)
+	// HandleError is called an error occurs in Changefeed.Tick
+	HandleError(errs ...*model.RunningError)
+	// HandleWarning is called a warning occurs in Changefeed.Tick
+	HandleWarning(warnings ...*model.RunningError)
+	// ShouldRunning returns if the changefeed should be running
+	ShouldRunning() bool
+	// ShouldRemoved returns if the changefeed should be removed
+	ShouldRemoved() bool
+	// MarkFinished is call when a changefeed is finished
+	MarkFinished()
 }
 
 // feedStateManager manages the ReactorState of a changefeed

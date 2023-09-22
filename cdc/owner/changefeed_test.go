@@ -323,18 +323,19 @@ func TestExecDDL(t *testing.T) {
 	cf, captures, tester, state := createChangefeed4Test(ctx, t)
 	cf.upstream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
-	tickThreeTime := func() {
-		state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
-		require.False(t, preflightCheck(state, captures))
-		tester.MustApplyPatches()
+	tickTwoTime := func() {
 		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
 		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 		checkpointTs, minTableBarrierTs = cf.Tick(ctx, state.Info, state.Status, captures)
 		updateStatus(state, checkpointTs, minTableBarrierTs)
+		tester.MustApplyPatches()
 	}
 	// pre check and initialize
-	tickThreeTime()
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
+	tester.MustApplyPatches()
+	tickTwoTime()
 	tableIDs, err := cf.schema.AllPhysicalTables(ctx, startTs-1)
 	require.Nil(t, err)
 	require.Len(t, tableIDs, 1)
@@ -347,7 +348,7 @@ func TestExecDDL(t *testing.T) {
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
 	// three tick to make sure all barrier set in initialize is handled
-	tickThreeTime()
+	tickTwoTime()
 	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	// The ephemeral table should have left no trace in the schema cache
 	tableIDs, err = cf.schema.AllPhysicalTables(ctx, mockDDLPuller.resolvedTs)
@@ -357,7 +358,7 @@ func TestExecDDL(t *testing.T) {
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
-	tickThreeTime()
+	tickTwoTime()
 	require.Equal(t, mockDDLPuller.resolvedTs, state.Status.CheckpointTs)
 
 	// handle create database
@@ -365,14 +366,14 @@ func TestExecDDL(t *testing.T) {
 	mockDDLPuller.resolvedTs += 1000
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
-	tickThreeTime()
+	tickTwoTime()
 	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	require.Equal(t, "create database test1", mockDDLSink.ddlExecuting.Query)
 
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
-	tickThreeTime()
+	tickTwoTime()
 	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 
 	// handle create table
@@ -380,7 +381,7 @@ func TestExecDDL(t *testing.T) {
 	mockDDLPuller.resolvedTs += 1000
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
-	tickThreeTime()
+	tickTwoTime()
 
 	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 	require.Equal(t, "create table test1.test1(id int primary key)", mockDDLSink.ddlExecuting.Query)
@@ -388,7 +389,7 @@ func TestExecDDL(t *testing.T) {
 	// executing the ddl finished
 	mockDDLSink.ddlDone = true
 	mockDDLPuller.resolvedTs += 1000
-	tickThreeTime()
+	tickTwoTime()
 	require.Contains(t, cf.scheduler.(*mockScheduler).currentTables, job.TableID)
 }
 
@@ -409,10 +410,10 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
-		state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
-		require.False(t, preflightCheck(state, captures))
-		tester.MustApplyPatches()
 		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
+		tester.MustApplyPatches()
+		checkpointTs, minTableBarrierTs = cf.Tick(ctx, state.Info, state.Status, captures)
 		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()
 		checkpointTs, minTableBarrierTs = cf.Tick(ctx, state.Info, state.Status, captures)
@@ -420,6 +421,9 @@ func TestEmitCheckpointTs(t *testing.T) {
 		tester.MustApplyPatches()
 	}
 	// pre check and initialize
+	state.CheckCaptureAlive(ctx.GlobalVars().CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
+	tester.MustApplyPatches()
 	tickThreeTime()
 	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
 
