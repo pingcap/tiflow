@@ -15,6 +15,7 @@ package sharedconn
 
 import (
 	"context"
+	"io"
 	"sort"
 	"strings"
 	"sync"
@@ -33,8 +34,13 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
+func StatusIsEOF(status *grpcstatus.Status) bool {
+	return status == nil || (status.Code() == grpccodes.Unknown && status.Message() == io.EOF.Error())
+}
+
 type ConnAndClientPool struct {
-	credential *security.Credential
+	credential        *security.Credential
+	maxStreamsPerConn int
 
 	sync.Mutex
 	stores map[string]*connArray
@@ -53,6 +59,7 @@ type Conn struct {
 }
 
 type connArray struct {
+	pool         *ConnAndClientPool
 	addr         string
 	inConnecting atomic.Bool
 
@@ -60,32 +67,46 @@ type connArray struct {
 	conns []*Conn
 }
 
-func NewConnAndClientPool(credential *security.Credential) *ConnAndClientPool {
+func NewConnAndClientPool(credential *security.Credential, maxStreamsPerConn ...int) *ConnAndClientPool {
+	return newConnAndClientPool(credential, 1000)
+}
+
+func newConnAndClientPool(credential *security.Credential, maxStreamsPerConn int) *ConnAndClientPool {
 	stores := make(map[string]*connArray, 64)
-	return &ConnAndClientPool{credential: credential, stores: stores}
+	return &ConnAndClientPool{
+		credential:        credential,
+		maxStreamsPerConn: maxStreamsPerConn,
+		stores:            stores,
+	}
 }
 
 func (c *ConnAndClientPool) Connect(ctx context.Context, addr string) (cc *ConnAndClient, err error) {
 	var conns *connArray
 	c.Lock()
 	if conns = c.stores[addr]; conns == nil {
-		conns = &connArray{addr: addr}
+		conns = &connArray{pool: c, addr: addr}
+		c.stores[addr] = conns
 	}
 	c.Unlock()
 
-	conns.Lock()
-	for len(conns.conns) == 0 || conns.conns[0].streams >= grpcConnCapacity {
-		conns.Unlock()
-		var conn *Conn
-		if conn, err = conns.connect(ctx, c.credential); conn != nil {
-			conns.Lock()
-			conns.push(conn, true)
+	for {
+		conns.Lock()
+		if len(conns.conns) > 0 && conns.conns[0].streams < c.maxStreamsPerConn {
 			break
 		}
-		if err == nil {
-			err = util.Hang(ctx, time.Second)
+
+		conns.Unlock()
+		var conn *Conn
+		if conn, err = conns.connect(ctx, c.credential); err != nil {
+			return
 		}
-		if err != nil {
+		if conn != nil {
+			conns.Lock()
+			conns.push(conn, true)
+			conns.sort(true)
+			break
+		}
+		if err = util.Hang(ctx, time.Second); err != nil {
 			return
 		}
 	}
@@ -145,14 +166,18 @@ func (c *connArray) connect(ctx context.Context, credential *security.Credential
 			_ = client.CloseSend()
 			_, err = client.Recv()
 		}
-		if err == nil {
+
+		status := grpcstatus.Convert(err)
+		if StatusIsEOF(status) {
 			conn = new(Conn)
 			conn.ClientConn = clientConn
 			conn.multiplexing = true
-		} else if grpcstatus.Code(err) == grpccodes.Unimplemented {
+			err = nil
+		} else if status.Code() == grpccodes.Unimplemented {
 			conn = new(Conn)
 			conn.ClientConn = clientConn
 			conn.multiplexing = false
+			err = nil
 		}
 	}
 	return
@@ -180,6 +205,11 @@ func (c *connArray) release(conn *Conn, locked bool) {
 				c.conns = c.conns[:len(c.conns)-1]
 				break
 			}
+		}
+		if len(c.conns) == 0 {
+			c.pool.Lock()
+			delete(c.pool.stores, c.addr)
+			c.pool.Unlock()
 		}
 		_ = conn.ClientConn.Close()
 	}
@@ -237,8 +267,6 @@ const (
 	grpcInitialWindowSize     = (1 << 16) - 1
 	grpcInitialConnWindowSize = 1 << 23
 	grpcMaxCallRecvMsgSize    = 1 << 28
-
-	grpcConnCapacity = 1000
 
 	rpcMetaFeaturesKey string = "features"
 	rpcMetaFeaturesSep string = ","

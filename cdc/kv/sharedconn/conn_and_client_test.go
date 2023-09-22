@@ -25,9 +25,83 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
+	grpcstatus "google.golang.org/grpc/status"
 )
+
+func TestConnAndClientPool(t *testing.T) {
+	service := make(chan *grpc.Server, 1)
+	var addr string
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Nil(t, runGrpcService(&srv{}, &addr, service))
+	}()
+
+	svc := <-service
+	require.NotNil(t, svc)
+	defer svc.Stop()
+
+	pool := newConnAndClientPool(&security.Credential{}, 2)
+	cc1, err := pool.Connect(context.Background(), addr)
+	require.Nil(t, err)
+	require.NotNil(t, cc1)
+	require.Equal(t, 1, len(cc1.array.conns))
+	require.Equal(t, 1, cc1.conn.streams)
+	require.False(t, cc1.Multiplexing())
+
+	cc2, err := pool.Connect(context.Background(), addr)
+	require.Nil(t, err)
+	require.NotNil(t, cc2)
+	require.Equal(t, 1, len(cc2.array.conns))
+	require.Equal(t, 2, cc2.conn.streams)
+	require.False(t, cc2.Multiplexing())
+
+	cc3, err := pool.Connect(context.Background(), addr)
+	require.Nil(t, err)
+	require.NotNil(t, cc3)
+	require.Equal(t, 2, len(cc3.array.conns))
+	require.Equal(t, 1, cc3.conn.streams)
+	require.False(t, cc3.Multiplexing())
+
+	cc1.Release()
+	cc1.Release()
+	cc2.Release()
+	require.Equal(t, 1, len(cc3.array.conns))
+	require.Equal(t, 1, cc3.conn.streams)
+
+	cc3.Release()
+	require.Equal(t, 0, len(pool.stores))
+}
+
+func TestConnAndClientPoolForV2(t *testing.T) {
+	service := make(chan *grpc.Server, 1)
+	var addr string
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Nil(t, runGrpcService(&srv{v2: true}, &addr, service))
+	}()
+
+	svc := <-service
+	require.NotNil(t, svc)
+	defer svc.Stop()
+
+	pool := newConnAndClientPool(&security.Credential{}, 2)
+	cc1, err := pool.Connect(context.Background(), addr)
+	require.Nil(t, err)
+	require.NotNil(t, cc1)
+	require.True(t, cc1.Multiplexing())
+	cc1.Release()
+}
 
 func TestConnectToUnavailable(t *testing.T) {
 	targets := []string{"127.0.0.1:9999", "9.9.9.9:9999"}
@@ -45,33 +119,34 @@ func TestConnectToUnavailable(t *testing.T) {
 	}
 
 	service := make(chan *grpc.Server, 1)
-	var wg sync.WaitGroup
 	var addr string
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.Nil(t, runGrpcService(&addr, service))
+		require.Nil(t, runGrpcService(&srv{}, &addr, service))
 	}()
 
-	if svc := <-service; svc != nil {
-		time.Sleep(100 * time.Millisecond)
-		conn, err := connect(context.Background(), &security.Credential{}, addr)
-		require.NotNil(t, conn)
-		require.Nil(t, err)
+	svc := <-service
+	require.NotNil(t, svc)
+	defer svc.Stop()
 
-		rpc := cdcpb.NewChangeDataClient(conn)
-		client, err := rpc.EventFeedV2(context.Background())
-		require.Nil(t, err)
-		_ = client.CloseSend()
+	conn, err := connect(context.Background(), &security.Credential{}, addr)
+	require.NotNil(t, conn)
+	require.Nil(t, err)
 
-		_, err = client.Recv()
-		require.Equal(t, codes.Unimplemented, status.Code(err))
-		svc.Stop()
-	}
-	wg.Wait()
+	rpc := cdcpb.NewChangeDataClient(conn)
+	client, err := rpc.EventFeedV2(context.Background())
+	require.Nil(t, err)
+	_ = client.CloseSend()
+
+	_, err = client.Recv()
+	require.Equal(t, codes.Unimplemented, status.Code(err))
 }
 
-func runGrpcService(addr *string, service chan<- *grpc.Server) error {
+func runGrpcService(srv cdcpb.ChangeDataServer, addr *string, service chan<- *grpc.Server) error {
 	defer close(service)
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -90,7 +165,33 @@ func runGrpcService(addr *string, service chan<- *grpc.Server) error {
 		Timeout:               1 * time.Second,
 	}
 	grpcServer := grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
+	cdcpb.RegisterChangeDataServer(grpcServer, srv)
 	service <- grpcServer
 	*addr = lis.Addr().String()
 	return grpcServer.Serve(lis)
+}
+
+type srv struct {
+	v2 bool
+}
+
+func (s *srv) EventFeed(server cdcpb.ChangeData_EventFeedServer) error {
+	for {
+		if _, err := server.Recv(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *srv) EventFeedV2(server cdcpb.ChangeData_EventFeedV2Server) error {
+	if !s.v2 {
+		return grpcstatus.Error(grpccodes.Unimplemented, "srv")
+	}
+	for {
+		if _, err := server.Recv(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

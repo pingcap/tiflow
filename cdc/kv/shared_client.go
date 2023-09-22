@@ -46,7 +46,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	grpcmeta "google.golang.org/grpc/metadata"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 // SubscriptionID comes from `SharedClient.AllocSubscriptionID`.
@@ -112,27 +111,6 @@ type requestedStore struct {
 	storeAddr  string
 	nextStream atomic.Uint32
 	streams    []*requestedStream
-}
-
-type requestedStream struct {
-	streamID uint64
-
-	// To trigger a connect action lazily.
-	preFetchForConnecting *singleRegionInfo
-	requests              *chann.DrainableChann[singleRegionInfo]
-
-	multiplexing *sharedconn.ConnAndClient
-
-	requestedRegions struct {
-		sync.RWMutex
-		// map[subscriptionID]map[regionID]*regionFeedState
-		m map[SubscriptionID]map[uint64]*regionFeedState
-	}
-
-	tableExclusives struct {
-		m         map[SubscriptionID]*sharedconn.ConnAndClient
-		receivers chan *sharedconn.ConnAndClient
-	}
 }
 
 type requestedTable struct {
@@ -416,7 +394,7 @@ func (s *SharedClient) requestStore(
 	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
 	s.requestedStores[storeAddr] = rs
 	for i := uint(0); i < s.config.GrpcStreamConcurrent; i++ {
-		stream := s.newStream(ctx, g, rs)
+		stream := newStream(ctx, s, g, rs)
 		rs.streams = append(rs.streams, stream)
 	}
 
@@ -434,171 +412,6 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 		EndKey:       sri.span.EndKey,
 		ExtraOp:      kvrpcpb.ExtraOp_ReadOldValue,
 		FilterLoop:   s.filterLoop,
-	}
-}
-
-func (s *SharedClient) sendToStream(ctx context.Context, rs *requestedStore, stream *requestedStream) (err error) {
-	defer func() {
-		if stream.multiplexing != nil {
-			_ = stream.multiplexing.Client().CloseSend()
-			log.Info("event feed close send for grpc stream",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("storeID", rs.storeID),
-				zap.String("addr", rs.storeAddr),
-				zap.Uint64("streamID", stream.streamID),
-				zap.String("reason", err.Error()))
-		}
-	}()
-
-	doSend := func(cc *sharedconn.ConnAndClient, req *cdcpb.ChangeDataRequest) error {
-		if err := cc.Client().Send(req); err != nil {
-			log.Warn("event feed send request to grpc stream failed",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Any("subscriptionID", SubscriptionID(req.RequestId)),
-				zap.Uint64("regionID", req.RegionId),
-				zap.Uint64("storeID", rs.storeID),
-				zap.String("addr", rs.storeAddr),
-				zap.Uint64("streamID", stream.streamID),
-				zap.Error(err))
-			return errors.Trace(err)
-		}
-		log.Debug("event feed send request to grpc stream success",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Any("subscriptionID", SubscriptionID(req.RequestId)),
-			zap.Uint64("regionID", req.RegionId),
-			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr),
-			zap.Uint64("streamID", stream.streamID))
-		return nil
-	}
-
-	fetchMoreReq := func() (sri singleRegionInfo, _ error) {
-		waitReqTicker := time.NewTicker(60 * time.Second)
-		defer waitReqTicker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return sri, ctx.Err()
-			case sri = <-stream.requests.Out():
-				return sri, nil
-			case <-waitReqTicker.C:
-				// The stream is idle now, will be re-established when necessary.
-				if stream.countStates() == 0 {
-					return sri, errors.New("closed as idle")
-				}
-			}
-		}
-	}
-
-	sri := *stream.preFetchForConnecting
-	stream.preFetchForConnecting = nil
-	for {
-		// It means it's a special task from stopping the table.
-		if sri.lockedRange == nil {
-			if stream.multiplexing != nil {
-				req := &cdcpb.ChangeDataRequest{
-					RequestId: uint64(sri.requestedTable.subscriptionID),
-					Request:   &cdcpb.ChangeDataRequest_Deregister_{},
-				}
-				if err = doSend(stream.multiplexing, req); err != nil {
-					return err
-				}
-			} else {
-				cc := stream.tableExclusives.m[sri.requestedTable.subscriptionID]
-				if cc != nil {
-					cc.Release()
-					delete(stream.tableExclusives.m, sri.requestedTable.subscriptionID)
-				}
-			}
-			// NOTE: some principles to help understand deregistering a table:
-			// 1. after a Deregister(requestID) message is sent out, no more region requests
-			//    with the same requestID will be sent out in the same GRPC stream;
-			// 2. so it's OK to clear all pending states in the GRPC stream;
-			// 3. is it possible that TiKV is keeping to send events belong to a removed state?
-			//    I guess no because internal errors will cause the changefeed or table stopped,
-			//    and then those regions from the bad requestID will be unsubscribed finally.
-			for _, state := range stream.takeStates(sri.requestedTable.subscriptionID) {
-				state.markStopped(&sendRequestToStoreErr{})
-				slot := hashRegionID(state.sri.verID.GetID(), len(s.workers))
-				sfEvent := statefulEvent{eventItem: eventItem{state: state}}
-				if err = s.workers[slot].sendEvent(ctx, sfEvent); err != nil {
-					return errors.Trace(err)
-				}
-			}
-		} else if sri.requestedTable.stopped.Load() {
-			// It can be skipped directly because there must be no pending states from
-			// the stopped requestedTable, or the special singleRegionInfo for stopping
-			// the table will be handled later.
-			s.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
-		} else {
-			connectTime := time.Since(sri.lockedRange.Created).Milliseconds()
-			s.metrics.regionConnectDuration.Observe(float64(connectTime))
-
-			subscriptionID := sri.requestedTable.subscriptionID
-			state := newRegionFeedState(sri, uint64(subscriptionID))
-			state.start()
-			stream.setState(subscriptionID, sri.verID.GetID(), state)
-
-			req := s.createRegionRequest(sri)
-			cc := stream.tableExclusives.m[sri.requestedTable.subscriptionID]
-			if cc == nil {
-				cc, err = s.grpcPool.Connect(ctx, rs.storeAddr)
-				if err == nil {
-					return err
-				}
-				if cc.Multiplexing() {
-					cc.Release()
-					return errors.New("multiplexing is enabled, will re-establish the stream")
-				}
-				stream.tableExclusives.m[sri.requestedTable.subscriptionID] = cc
-				select {
-				case <-ctx.Done():
-				case stream.tableExclusives.receivers <- cc:
-				}
-			}
-			if err = doSend(cc, req); err != nil {
-				return err
-			}
-		}
-
-		if sri, err = fetchMoreReq(); err != nil {
-			return err
-		}
-	}
-}
-
-func (s *SharedClient) receiveFromStream(
-	ctx context.Context, rs *requestedStore, stream *requestedStream,
-	cc *sharedconn.ConnAndClient,
-) (err error) {
-	client := cc.Client()
-	for {
-		cevent, err := client.Recv()
-		if err != nil {
-			log.Info("event feed receive from grpc stream failed",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("storeID", rs.storeID),
-				zap.String("addr", rs.storeAddr),
-				zap.String("code", grpcstatus.Code(err).String()),
-				zap.Error(err))
-			return errors.Trace(err)
-		}
-
-		if len(cevent.Events) > 0 {
-			if err = s.sendRegionChangeEvents(ctx, cevent.Events, stream); err != nil {
-				return err
-			}
-		}
-		if cevent.ResolvedTs != nil {
-			s.metrics.batchResolvedSize.Observe(float64(len(cevent.ResolvedTs.Regions)))
-			if err = s.sendResolvedTs(ctx, cevent.ResolvedTs, stream); err != nil {
-				return err
-			}
-		}
 	}
 }
 
@@ -660,53 +473,6 @@ func (r *requestedStore) broadcastRequest(sri singleRegionInfo) {
 	}
 }
 
-func (s *SharedClient) newStream(ctx context.Context, g *errgroup.Group, r *requestedStore) *requestedStream {
-	stream := &requestedStream{
-		streamID: streamIDGen.Add(1),
-		requests: chann.NewAutoDrainChann[singleRegionInfo](),
-	}
-	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
-
-	g.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case sri := <-stream.requests.Out():
-				stream.preFetchForConnecting = new(singleRegionInfo)
-				*stream.preFetchForConnecting = sri
-			}
-			if stream.preFetchForConnecting.lockedRange == nil {
-				stream.preFetchForConnecting = nil
-				continue
-			}
-
-			if canceled := s.runStream(ctx, r, stream); canceled {
-				return nil
-			}
-			for _, m := range stream.clearStates() {
-				for _, state := range m {
-					state.markStopped(&sendRequestToStoreErr{})
-					slot := hashRegionID(state.sri.verID.GetID(), len(s.workers))
-					sfEvent := statefulEvent{eventItem: eventItem{state: state}}
-					_ = s.workers[slot].sendEvent(ctx, sfEvent)
-				}
-			}
-			// Why we need to re-schedule pending regions? This because the store can
-			// fail forever, and all regions are scheduled to other stores.
-			for _, sri := range stream.clearPendingRegions() {
-				s.onRegionFail(newRegionErrorInfo(sri, &sendRequestToStoreErr{}))
-			}
-			if err := util.Hang(ctx, time.Second); err != nil {
-				// TODO(qupeng): handle the case that TiKV closes the connection.
-				return err
-			}
-		}
-	})
-
-	return stream
-}
-
 func (s *SharedClient) clearStream(r *requestedStore, stream *requestedStream) {
 	if stream.multiplexing != nil {
 		stream.multiplexing.Release()
@@ -714,147 +480,6 @@ func (s *SharedClient) clearStream(r *requestedStore, stream *requestedStream) {
 	for _, cc := range stream.tableExclusives.m {
 		cc.Release()
 	}
-}
-
-func (s *SharedClient) runStream(ctx context.Context, rs *requestedStore, stream *requestedStream) (canceled bool) {
-	ctx, cancel := context.WithCancel(ctx)
-	if err := version.CheckStoreVersion(ctx, s.pd, rs.storeID); err != nil {
-		log.Info("event feed check store version fails",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr),
-			zap.Uint64("streamID", stream.streamID),
-			zap.Error(err))
-		return false
-	}
-
-	defer func() {
-		log.Info("event feed grpc stream exits",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr),
-			zap.Uint64("streamID", stream.streamID))
-		// To cancel grpc client stream explicitly.
-		cancel()
-		s.clearStream(rs, stream)
-	}()
-
-	log.Info("event feed going to create grpc stream",
-		zap.String("namespace", s.changefeed.Namespace),
-		zap.String("changefeed", s.changefeed.ID),
-		zap.Uint64("storeID", rs.storeID),
-		zap.String("addr", rs.storeAddr),
-		zap.Uint64("streamID", stream.streamID))
-
-	cc, err := s.grpcPool.Connect(ctx, rs.storeAddr)
-	if err != nil {
-		log.Warn("event feed create grpc stream failed",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Uint64("storeID", rs.storeID),
-			zap.String("addr", rs.storeAddr),
-			zap.Uint64("streamID", stream.streamID),
-			zap.Bool("multiplexing", true),
-			zap.Error(err))
-	} else {
-		g, ctx := errgroup.WithContext(ctx)
-		if cc.Multiplexing() {
-			stream.multiplexing = cc
-			g.Go(func() error { return s.receiveFromStream(ctx, rs, stream, stream.multiplexing) })
-		} else {
-			cc.Release()
-			g.Go(func() error {
-				for {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case cc := <-stream.tableExclusives.receivers:
-						g.Go(func() error { return s.receiveFromStream(ctx, rs, stream, cc) })
-					}
-				}
-			})
-		}
-		// sendToStream and receiveFromStream print logs by selves.
-		g.Go(func() error { return s.sendToStream(ctx, rs, stream) })
-		_ = g.Wait()
-	}
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
-}
-
-func (r *requestedStream) countStates() (sum int) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	for _, mm := range r.requestedRegions.m {
-		sum += len(mm)
-	}
-	return
-}
-
-func (r *requestedStream) setState(subscriptionID SubscriptionID, regionID uint64, state *regionFeedState) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	var m map[uint64]*regionFeedState
-	if m = r.requestedRegions.m[subscriptionID]; m == nil {
-		m = make(map[uint64]*regionFeedState)
-		r.requestedRegions.m[subscriptionID] = m
-	}
-	m[regionID] = state
-}
-
-func (r *requestedStream) getState(subscriptionID SubscriptionID, regionID uint64) (state *regionFeedState) {
-	r.requestedRegions.RLock()
-	defer r.requestedRegions.RUnlock()
-	if m, ok := r.requestedRegions.m[subscriptionID]; ok {
-		state = m[regionID]
-	}
-	return state
-}
-
-// NOTE: SharedClient.onRegionFail can only be called with the state.
-func (r *requestedStream) takeState(subscriptionID SubscriptionID, regionID uint64) (state *regionFeedState) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	if m, ok := r.requestedRegions.m[subscriptionID]; ok {
-		state = m[regionID]
-		delete(m, regionID)
-	}
-	return
-}
-
-func (r *requestedStream) takeStates(subscriptionID SubscriptionID) (v map[uint64]*regionFeedState) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	v = r.requestedRegions.m[subscriptionID]
-	delete(r.requestedRegions.m, subscriptionID)
-	return
-}
-
-func (r *requestedStream) clearStates() (v map[SubscriptionID]map[uint64]*regionFeedState) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	v = r.requestedRegions.m
-	r.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
-	return
-}
-
-func (r *requestedStream) clearPendingRegions() []singleRegionInfo {
-	regions := make([]singleRegionInfo, 0, r.requests.Len()+1)
-	if r.preFetchForConnecting != nil {
-		sri := *r.preFetchForConnecting
-		r.preFetchForConnecting = nil
-		regions = append(regions, sri)
-	}
-	for i := 1; i < cap(regions); i++ {
-		regions = append(regions, <-r.requests.Out())
-	}
-	return regions
 }
 
 func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Group) error {
