@@ -26,19 +26,26 @@ function run() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	# determine the sink uri and run corresponding consumer
-	# currently only kafka and pulsar are supported
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&kafka-version=${KAFKA_VERSION}"
-		run_kafka_consumer $WORK_DIR $SINK_URI
 	fi
 
 	if [ "$SINK_TYPE" == "pulsar" ]; then
 		SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
-		run_pulsar_consumer $WORK_DIR $SINK_URI
 	fi
 
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
+	sleep 5 # wait for changefeed to start
+	# determine the sink uri and run corresponding consumer
+	# currently only kafka and pulsar are supported
+	if [ "$SINK_TYPE" == "kafka" ]; then
+		run_kafka_consumer $WORK_DIR $SINK_URI
+	fi
+
+	if [ "$SINK_TYPE" == "pulsar" ]; then
+		run_pulsar_consumer $WORK_DIR $SINK_URI
+	fi
+
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
