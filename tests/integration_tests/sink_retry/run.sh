@@ -39,7 +39,6 @@ function run() {
 	esac
 
 	ensure $MAX_RETRIES check_changefeed_state "http://${UP_PD_HOST_1}:${UP_PD_PORT_1}" "sink_retry" "normal" "null" ""
-	esac
 
 	run_sql "CREATE TABLE sink_retry.finish_mark_1 (a int primary key);"
 	sleep 30
