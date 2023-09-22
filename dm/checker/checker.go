@@ -490,6 +490,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			dbMetas,
 			newLightningPrecheckAdaptor(targetInfoGetter, info),
 			cpdb,
+			pdClient,
 		)
 
 		if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok {

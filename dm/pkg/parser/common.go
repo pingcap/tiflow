@@ -46,7 +46,7 @@ func init() {
 		Maxlen:           2,
 	}
 	charset.AddCharset(c)
-	for _, coll := range charset.GetCollations() {
+	for _, coll := range charset.GetSupportedCollations() {
 		if strings.EqualFold(coll.CharsetName, c.Name) {
 			charset.AddCollation(coll)
 		}
