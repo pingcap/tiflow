@@ -95,7 +95,7 @@ trap stop_tidb_cluster EXIT
 # Because we only test the compatibility of the server config file.
 if [ "$SINK_TYPE" == "mysql" ]; then
 	prepare $*
-	ql_test $*
+	sql_test $*
 	check_logs $WORK_DIR
 fi
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
