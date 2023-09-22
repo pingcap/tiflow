@@ -52,7 +52,7 @@ type changefeedInfoClient interface {
 type changefeedStateClient interface {
 	createChangefeedState(tx *gorm.DB, state *ChangefeedStateDO) error
 	deleteChangefeedState(tx *gorm.DB, state *ChangefeedStateDO) error
-	updateChangeFeedState(tx *gorm.DB, state *ChangefeedStateDO) error
+	updateChangefeedState(tx *gorm.DB, state *ChangefeedStateDO) error
 	queryChangefeedStates(tx *gorm.DB) ([]*ChangefeedStateDO, error)
 	queryChangefeedStatesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedStateDO, error)
 	queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64) (*ChangefeedStateDO, error)
@@ -244,8 +244,8 @@ func (s *ormClient) deleteChangefeedState(tx *gorm.DB, state *ChangefeedStateDO)
 	return nil
 }
 
-// updateChangeFeedState implements the changefeedStateClient interface.
-func (s *ormClient) updateChangeFeedState(tx *gorm.DB, state *ChangefeedStateDO) error {
+// updateChangefeedState implements the changefeedStateClient interface.
+func (s *ormClient) updateChangefeedState(tx *gorm.DB, state *ChangefeedStateDO) error {
 	ret := tx.Where("changefeed_uuid = ? and version = ?", state.ChangefeedUUID, state.Version).
 		Updates(ChangefeedStateDO{
 			State:   state.State,
@@ -253,7 +253,7 @@ func (s *ormClient) updateChangeFeedState(tx *gorm.DB, state *ChangefeedStateDO)
 			Error:   state.Error,
 			Version: state.Version + 1,
 		})
-	if err := handleSingleOpErr(ret, 1, "UpdateChangeFeedState"); err != nil {
+	if err := handleSingleOpErr(ret, 1, "updateChangefeedState"); err != nil {
 		return errors.Trace(err)
 	}
 	return nil

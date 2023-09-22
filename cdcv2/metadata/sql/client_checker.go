@@ -55,6 +55,13 @@ type ormClient struct {
 	db     *gorm.DB
 }
 
+func NewORMClient(selfID model.CaptureID, db *gorm.DB) *ormClient {
+	return &ormClient{
+		selfID: selfID,
+		db:     db,
+	}
+}
+
 // Txn executes the given transaction action in a transaction.
 func (c *ormClient) Txn(ctx context.Context, fn ormTxnAction) error {
 	return c.db.WithContext(ctx).Transaction(fn)
