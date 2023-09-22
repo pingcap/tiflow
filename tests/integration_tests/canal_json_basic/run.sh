@@ -46,7 +46,6 @@ function run() {
 		run_pulsar_consumer $WORK_DIR $SINK_URI
 	fi
 
-
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	# sync_diff can't check non-exist table, so we check expected tables are created in downstream first
