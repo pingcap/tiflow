@@ -117,9 +117,16 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 
-		// single message too large, claim check enabled, encode it to a new individual message.
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
-			key, value, err = d.sendClaimCheckMessage(ctx, key, value, e)
+			// send the large message to the external storage first, then
+			// create a new message contains the reference of the large message.
+			claimCheckFileName := claimcheck.NewFileName()
+			err = d.claimCheck.WriteMessage(ctx, key, value, claimCheckFileName)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			key, value, err = d.newClaimCheckLocationMessage(e, claimCheckFileName)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -298,22 +305,6 @@ func (d *BatchEncoder) newClaimCheckLocationMessage(
 			zap.Int("length", length),
 			zap.Any("key", key))
 		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
-	}
-
-	return key, value, nil
-}
-
-func (d *BatchEncoder) sendClaimCheckMessage(
-	ctx context.Context, key, value []byte, e *model.RowChangedEvent,
-) ([]byte, []byte, error) {
-	claimCheckFileName := claimcheck.NewFileName()
-	if err := d.claimCheck.WriteMessage(ctx, key, value, claimCheckFileName); err != nil {
-		return nil, nil, errors.Trace(err)
-	}
-
-	key, value, err := d.newClaimCheckLocationMessage(e, claimCheckFileName)
-	if err != nil {
-		return nil, nil, errors.Trace(err)
 	}
 
 	return key, value, nil
