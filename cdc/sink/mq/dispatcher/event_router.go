@@ -257,7 +257,12 @@ func getTopicDispatcher(
 		return topic.NewStaticTopicDispatcher(defaultTopic), nil
 	}
 
+	if topic.IsHardCode(rule) {
+		return topic.NewStaticTopicDispatcher(rule), nil
+	}
+
 	// check if this rule is a valid topic expression
+<<<<<<< HEAD:cdc/sink/mq/dispatcher/event_router.go
 	topicExpr := topic.Expression(ruleConfig.TopicRule)
 
 	if protocol != "" {
@@ -277,6 +282,26 @@ func getTopicDispatcher(
 				return nil, err
 			}
 		}
+=======
+	topicExpr := topic.Expression(rule)
+	err := validateTopicExpression(topicExpr, schema, protocol)
+	if err != nil {
+		return nil, err
+>>>>>>> ef7a972df8 (kafka(ticdc): event router allow hard code topics and set the schema optional in the topic expression (#9755)):cdc/sink/dmlsink/mq/dispatcher/event_router.go
 	}
 	return topic.NewDynamicTopicDispatcher(topicExpr), nil
+}
+
+func validateTopicExpression(expr topic.Expression, scheme string, protocol config.Protocol) error {
+	if sink.IsPulsarScheme(scheme) {
+		return expr.PulsarValidate()
+	}
+
+	switch protocol {
+	case config.ProtocolAvro:
+		return expr.ValidateForAvro()
+	default:
+	}
+
+	return expr.Validate()
 }
