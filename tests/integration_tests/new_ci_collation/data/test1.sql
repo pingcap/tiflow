@@ -55,7 +55,7 @@ CREATE TABLE tt1 (
 
 CREATE TABLE tt2 (
                      a varchar(20) charset utf8mb4 collate utf8mb4_0900_ai_ci,
-                     b int default 10
+                     b int default 10, primary key(b)
 );
 
 CREATE TABLE tt3 (
@@ -74,8 +74,8 @@ CREATE TABLE tt4 (
 
 insert into tt1 (a) values ('A'),(' A'),('A\t'),('b'),('bA'),('bac'),('ab'),('\U000FFFFE'),('Àoo'),('ß'),('æ'),('aeoo'), ('𝕒bc');
 insert into tt1 (a) values ('😉');
-insert into tt2 (a) values ('A'),(' A'),('A\t'),('b'),('bA'),('bac'),('ab'),('\U000FFFFE'),('À'),('ß'),('æ'),('ae'), ('𝕒bc');
-insert into tt2 (a) values ('😉');
+insert into tt2 (a, b) values ('A', 1),(' A', 2),('A\t', 3),('b', 4),('bA', 5),('bac', 6),('ab', 7),('\U000FFFFE', 8),('À', 9),('ß', 10),('æ', 11),('ae', 12), ('𝕒bc', 13);
+insert into tt2 (a, b) values ('😉', 14);
 insert into tt3 (a) values ('A'),('A '),('A   '),(' A'),('A\t'),('A\t '),('\U000FFFFE'),('À'),('ß'),('æ'),('ae'), ('𝕒bc');
 insert into tt3 (a) values ('a'),('a '),('a   '),(' a'),('a\t'),('a\t '),('\U000FFFFE'),('À'),('ß'),('æ'),('ae'), ('𝕒bc');
 insert into tt3 (a) values ('B'),('B '),('B   '),(' B'),('B\t'),('B\t '),('\U000FFFFE'),('À'),('ß'),('æ'),('ae'), ('𝕒bc');
