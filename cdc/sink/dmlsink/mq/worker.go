@@ -15,6 +15,7 @@ package mq
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -285,6 +287,31 @@ func (w *worker) sendMessages(ctx context.Context) error {
 	}()
 
 	var err error
+
+	var (
+		topic           = "canal-json-test"
+		partition int32 = 0
+	)
+
+	value := make([]byte, 1048540)
+	var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	for i := range value {
+		value[i] = letters[rand.Intn(len(letters))]
+	}
+	value[0] = 'f'
+	value[1] = 'a'
+	value[2] = 'k'
+	value[3] = 'e'
+
+	message := &common.Message{
+		Value: value,
+	}
+
+	err = w.producer.AsyncSendMessage(ctx, topic, partition, message)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	inputCh := w.encoderGroup.Output()
 	for {
 		select {
