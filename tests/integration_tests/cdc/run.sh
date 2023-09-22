@@ -36,7 +36,12 @@ function prepare() {
 trap stop_tidb_cluster EXIT
 # storage and pulsar is not supported yet.
 # TODO(dongmen): enable pulsar in the future.
-if [ "$SINK_TYPE" != "storage" ] || [ "$SINK_TYPE" != "pulsar" ]; then
+if [ "$SINK_TYPE" != "storage" ]; then
+	# TODO(dongmen): enable pulsar in the future.
+	if [ "$SINK_TYPE" == "pulsar" ]; then
+		return
+	fi
+	
 	prepare $*
 	cd "$(dirname "$0")"
 	set -o pipefail

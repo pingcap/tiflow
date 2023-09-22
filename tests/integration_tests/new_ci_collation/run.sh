@@ -13,7 +13,11 @@ function run() {
 	if [ "$SINK_TYPE" == "storage" ]; then
 		return
 	fi
-
+	
+	# TODO(dongmen): enable pulsar in the future.
+	if [ "$SINK_TYPE" == "pulsar" ]; then
+		return
+	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR --tidb-config $CUR/conf/tidb_config.toml

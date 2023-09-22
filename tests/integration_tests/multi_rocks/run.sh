@@ -9,6 +9,10 @@ CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
 function run() {
+	# TODO(dongmen): enable pulsar in the future.
+	if [ "$SINK_TYPE" == "pulsar" ]; then
+		return
+	fi
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
 
 	start_tidb_cluster --workdir $WORK_DIR --tikv-config $CUR/conf/tikv_config.toml
