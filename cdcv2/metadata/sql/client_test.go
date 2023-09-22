@@ -19,6 +19,7 @@ import (
 
 func TestUpstreamClient(t *testing.T) {
 	t.Parallel()
+
 }
 
 func TestChangefeedInfoClient(t *testing.T) {
