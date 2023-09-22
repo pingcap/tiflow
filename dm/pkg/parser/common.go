@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	_ "github.com/pingcap/tidb/types/parser_driver" // for import parser driver
+	"github.com/pingcap/tidb/util/collate"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -46,7 +47,7 @@ func init() {
 		Maxlen:           2,
 	}
 	charset.AddCharset(c)
-	for _, coll := range charset.GetSupportedCollations() {
+	for _, coll := range collate.GetSupportedCollations() {
 		if strings.EqualFold(coll.CharsetName, c.Name) {
 			charset.AddCollation(coll)
 		}
