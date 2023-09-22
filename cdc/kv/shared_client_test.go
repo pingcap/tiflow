@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/tidb/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
+	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/chann"
@@ -106,8 +107,7 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 	defer pdClient.Close()
 
-	grpcPool := NewGrpcPoolImpl(ctx, &security.Credential{})
-	defer grpcPool.Close()
+	grpcPool := sharedconn.NewConnAndClientPool(&security.Credential{})
 
 	regionCache := tikv.NewRegionCache(pdClient)
 	defer regionCache.Close()
@@ -184,12 +184,6 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		require.True(t, false, "reconnection not succeed in 5 second")
 	}
-
-	// check gRPC connection active counter is updated correctly.
-	bucket, ok := grpcPool.bucketConns[invalidStore]
-	require.True(t, ok)
-	empty := bucket.recycle()
-	require.True(t, empty)
 
 	server2.Stop()
 	close(events1)

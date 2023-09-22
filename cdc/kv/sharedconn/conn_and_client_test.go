@@ -108,12 +108,10 @@ func TestConnectToUnavailable(t *testing.T) {
 	for _, target := range targets {
 		ctx := context.Background()
 
-        start := time.Now()
 		conn, err := connect(ctx, &security.Credential{}, target)
 		require.NotNil(t, conn)
 		require.Nil(t, err)
 
-        start = time.Now()
 		rpc := cdcpb.NewChangeDataClient(conn)
 		_, err = rpc.EventFeedV2(ctx)
 		require.NotNil(t, err)
@@ -182,7 +180,6 @@ func (s *srv) EventFeed(server cdcpb.ChangeData_EventFeedServer) error {
 			return err
 		}
 	}
-	return nil
 }
 
 func (s *srv) EventFeedV2(server cdcpb.ChangeData_EventFeedV2Server) error {
@@ -194,5 +191,4 @@ func (s *srv) EventFeedV2(server cdcpb.ChangeData_EventFeedV2Server) error {
 			return err
 		}
 	}
-	return nil
 }

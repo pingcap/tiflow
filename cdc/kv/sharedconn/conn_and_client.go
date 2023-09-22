@@ -34,12 +34,14 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
+// StatusIsEOF checks whether status is caused by client send closing.
 func StatusIsEOF(status *grpcstatus.Status) bool {
 	return status == nil ||
 		status.Code() == grpccodes.Canceled ||
 		(status.Code() == grpccodes.Unknown && status.Message() == io.EOF.Error())
 }
 
+// ConnAndClientPool is a pool of ConnAndClient.
 type ConnAndClientPool struct {
 	credential        *security.Credential
 	maxStreamsPerConn int
@@ -48,12 +50,14 @@ type ConnAndClientPool struct {
 	stores map[string]*connArray
 }
 
+// ConnAndClient indicates a connection and a EventFeedV2 client.
 type ConnAndClient struct {
 	conn   *Conn
 	array  *connArray
 	client cdcpb.ChangeData_EventFeedV2Client
 }
 
+// Conn is a connection.
 type Conn struct {
 	*grpc.ClientConn
 	multiplexing bool
@@ -69,6 +73,7 @@ type connArray struct {
 	conns []*Conn
 }
 
+// NewConnAndClientPool creates a new ConnAndClientPool.
 func NewConnAndClientPool(credential *security.Credential, maxStreamsPerConn ...int) *ConnAndClientPool {
 	return newConnAndClientPool(credential, 1000)
 }
@@ -82,6 +87,7 @@ func newConnAndClientPool(credential *security.Credential, maxStreamsPerConn int
 	}
 }
 
+// Connect connects to addr.
 func (c *ConnAndClientPool) Connect(ctx context.Context, addr string) (cc *ConnAndClient, err error) {
 	var conns *connArray
 	c.Lock()
@@ -133,14 +139,17 @@ func (c *ConnAndClientPool) Connect(ctx context.Context, addr string) (cc *ConnA
 	return
 }
 
+// Client gets an EventFeedV2 client.
 func (c *ConnAndClient) Client() cdcpb.ChangeData_EventFeedV2Client {
 	return c.client
 }
 
+// Multiplexing indicates whether the client can be used for multiplexing or not.
 func (c *ConnAndClient) Multiplexing() bool {
 	return c.conn.multiplexing
 }
 
+// Release releases a ConnAndClient object.
 func (c *ConnAndClient) Release() {
 	if c.client != nil {
 		_ = c.client.CloseSend()

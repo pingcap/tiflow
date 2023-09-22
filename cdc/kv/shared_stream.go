@@ -365,70 +365,70 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 	}
 }
 
-func (r *requestedStream) countStates() (sum int) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	for _, mm := range r.requestedRegions.m {
+func (s *requestedStream) countStates() (sum int) {
+	s.requestedRegions.Lock()
+	defer s.requestedRegions.Unlock()
+	for _, mm := range s.requestedRegions.m {
 		sum += len(mm)
 	}
 	return
 }
 
-func (r *requestedStream) setState(subscriptionID SubscriptionID, regionID uint64, state *regionFeedState) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
+func (s *requestedStream) setState(subscriptionID SubscriptionID, regionID uint64, state *regionFeedState) {
+	s.requestedRegions.Lock()
+	defer s.requestedRegions.Unlock()
 	var m map[uint64]*regionFeedState
-	if m = r.requestedRegions.m[subscriptionID]; m == nil {
+	if m = s.requestedRegions.m[subscriptionID]; m == nil {
 		m = make(map[uint64]*regionFeedState)
-		r.requestedRegions.m[subscriptionID] = m
+		s.requestedRegions.m[subscriptionID] = m
 	}
 	m[regionID] = state
 }
 
-func (r *requestedStream) getState(subscriptionID SubscriptionID, regionID uint64) (state *regionFeedState) {
-	r.requestedRegions.RLock()
-	defer r.requestedRegions.RUnlock()
-	if m, ok := r.requestedRegions.m[subscriptionID]; ok {
+func (s *requestedStream) getState(subscriptionID SubscriptionID, regionID uint64) (state *regionFeedState) {
+	s.requestedRegions.RLock()
+	defer s.requestedRegions.RUnlock()
+	if m, ok := s.requestedRegions.m[subscriptionID]; ok {
 		state = m[regionID]
 	}
 	return state
 }
 
-func (r *requestedStream) takeState(subscriptionID SubscriptionID, regionID uint64) (state *regionFeedState) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	if m, ok := r.requestedRegions.m[subscriptionID]; ok {
+func (s *requestedStream) takeState(subscriptionID SubscriptionID, regionID uint64) (state *regionFeedState) {
+	s.requestedRegions.Lock()
+	defer s.requestedRegions.Unlock()
+	if m, ok := s.requestedRegions.m[subscriptionID]; ok {
 		state = m[regionID]
 		delete(m, regionID)
 	}
 	return
 }
 
-func (r *requestedStream) takeStates(subscriptionID SubscriptionID) (v map[uint64]*regionFeedState) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	v = r.requestedRegions.m[subscriptionID]
-	delete(r.requestedRegions.m, subscriptionID)
+func (s *requestedStream) takeStates(subscriptionID SubscriptionID) (v map[uint64]*regionFeedState) {
+	s.requestedRegions.Lock()
+	defer s.requestedRegions.Unlock()
+	v = s.requestedRegions.m[subscriptionID]
+	delete(s.requestedRegions.m, subscriptionID)
 	return
 }
 
-func (r *requestedStream) clearStates() (v map[SubscriptionID]map[uint64]*regionFeedState) {
-	r.requestedRegions.Lock()
-	defer r.requestedRegions.Unlock()
-	v = r.requestedRegions.m
-	r.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
+func (s *requestedStream) clearStates() (v map[SubscriptionID]map[uint64]*regionFeedState) {
+	s.requestedRegions.Lock()
+	defer s.requestedRegions.Unlock()
+	v = s.requestedRegions.m
+	s.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
 	return
 }
 
-func (r *requestedStream) clearPendingRegions() []singleRegionInfo {
-	regions := make([]singleRegionInfo, 0, r.requests.Len()+1)
-	if r.preFetchForConnecting != nil {
-		sri := *r.preFetchForConnecting
-		r.preFetchForConnecting = nil
+func (s *requestedStream) clearPendingRegions() []singleRegionInfo {
+	regions := make([]singleRegionInfo, 0, s.requests.Len()+1)
+	if s.preFetchForConnecting != nil {
+		sri := *s.preFetchForConnecting
+		s.preFetchForConnecting = nil
 		regions = append(regions, sri)
 	}
 	for i := 1; i < cap(regions); i++ {
-		regions = append(regions, <-r.requests.Out())
+		regions = append(regions, <-s.requests.Out())
 	}
 	return regions
 }
