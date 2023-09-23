@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/security"
 )
 
 type ChangefeedProgress struct {
@@ -68,6 +70,40 @@ func (c ReplicaConfig) Value() (driver.Value, error) {
 
 // Scan implements the sql.Scanner interface
 func (c *ReplicaConfig) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return json.Unmarshal(b, c)
+}
+
+type RunningError model.RunningError
+
+// Value implements the driver.Valuer interface
+func (e RunningError) Value() (driver.Value, error) {
+	return json.Marshal(e)
+}
+
+// Scan implements the sql.Scanner interface
+func (e *RunningError) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return json.Unmarshal(b, e)
+}
+
+type Credential security.Credential
+
+// Value implements the driver.Valuer interface
+func (c Credential) Value() (driver.Value, error) {
+	return json.Marshal(c)
+}
+
+// Scan implements the sql.Scanner interface
+func (c *Credential) Scan(value interface{}) error {
 	b, ok := value.([]byte)
 	if !ok {
 		return errors.New("type assertion to []byte failed")

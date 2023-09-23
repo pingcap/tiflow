@@ -29,11 +29,11 @@ const (
 
 // UpstreamDO mapped from table <upstream>
 type UpstreamDO struct {
-	ID        uint64    `gorm:"column:id;type:bigint(20) unsigned;primaryKey" json:"id"`
-	Endpoints string    `gorm:"column:endpoints;type:text;not null" json:"endpoints"`
-	Config    *string   `gorm:"column:config;type:text" json:"config"`
-	Version   uint64    `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
-	UpdateAt  time.Time `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
+	ID        uint64      `gorm:"column:id;type:bigint(20) unsigned;primaryKey" json:"id"`
+	Endpoints string      `gorm:"column:endpoints;type:text;not null" json:"endpoints"`
+	Config    *Credential `gorm:"column:config;type:text" json:"config"`
+	Version   uint64      `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
+	UpdateAt  time.Time   `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
 // TableName Upstream's table name
@@ -65,12 +65,12 @@ func (*ChangefeedInfoDO) TableName() string {
 
 // ChangefeedStateDO mapped from table <changefeed_state>
 type ChangefeedStateDO struct {
-	ChangefeedUUID uint64    `gorm:"column:changefeed_uuid;type:bigint(20) unsigned;primaryKey" json:"changefeed_uuid"`
-	State          string    `gorm:"column:state;type:text;not null" json:"state"`
-	Warning        *string   `gorm:"column:warning;type:text" json:"warning"`
-	Error          *string   `gorm:"column:error;type:text" json:"error"`
-	Version        uint64    `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
-	UpdateAt       time.Time `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
+	ChangefeedUUID uint64        `gorm:"column:changefeed_uuid;type:bigint(20) unsigned;primaryKey" json:"changefeed_uuid"`
+	State          string        `gorm:"column:state;type:text;not null" json:"state"`
+	Warning        *RunningError `gorm:"column:warning;type:text" json:"warning"`
+	Error          *RunningError `gorm:"column:error;type:text" json:"error"`
+	Version        uint64        `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
+	UpdateAt       time.Time     `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
 // TableName ChangefeedState's table name
@@ -80,13 +80,13 @@ func (*ChangefeedStateDO) TableName() string {
 
 // ScheduleDO mapped from table <schedule>
 type ScheduleDO struct {
-	ChangefeedUUID uint64              `gorm:"column:changefeed_uuid;type:bigint(20) unsigned;primaryKey" json:"changefeed_uuid"`
-	Owner          *string             `gorm:"column:owner;type:varchar(128)" json:"owner"`
-	OwnerState     string              `gorm:"column:owner_state;type:text;not null" json:"owner_state"`
-	Processors     *string             `gorm:"column:processors;type:text" json:"processors"`
-	TaskPosition   *ChangefeedProgress `gorm:"column:task_position;type:text" json:"task_position"`
-	Version        uint64              `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
-	UpdateAt       time.Time           `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
+	ChangefeedUUID uint64             `gorm:"column:changefeed_uuid;type:bigint(20) unsigned;primaryKey" json:"changefeed_uuid"`
+	Owner          *string            `gorm:"column:owner;type:varchar(128)" json:"owner"`
+	OwnerState     string             `gorm:"column:owner_state;type:text;not null" json:"owner_state"`
+	Processors     *string            `gorm:"column:processors;type:text" json:"processors"`
+	TaskPosition   ChangefeedProgress `gorm:"column:task_position;type:text;not null" json:"task_position"`
+	Version        uint64             `gorm:"column:version;type:bigint(20) unsigned;not null" json:"version"`
+	UpdateAt       time.Time          `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
 // TableName Schedule's table name

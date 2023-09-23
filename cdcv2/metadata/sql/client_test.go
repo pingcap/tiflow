@@ -16,6 +16,7 @@ package sql
 import (
 	"database/sql/driver"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -23,6 +24,7 @@ import (
 )
 
 // Note that updateAt is not included in the test because it is automatically updated by gorm.
+// TODO(CharlesCheung): add test to verify the correctness of updateAt.
 
 func runMockExecTest(t *testing.T, mock sqlmock.Sqlmock, expectedSQL string, args []driver.Value, fn func() error) {
 	testErr := errors.New("test error")
@@ -51,13 +53,16 @@ func TestUpstreamClientExecSQL(t *testing.T) {
 	defer backendDB.Close()
 	cient := NewORMClient("test-upstream-client", db)
 
-	config := "config"
 	up := &UpstreamDO{
 		ID:        1,
 		Endpoints: "endpoints",
-		Config:    &config,
-		Version:   1,
+		Config: &Credential{
+			CAPath: "ca-path",
+		},
+		Version: 1,
 	}
+	config, err := up.Config.Value()
+	require.NoError(t, err)
 
 	// Test createUpstream
 	runMockExecTest(
@@ -85,7 +90,7 @@ func TestUpstreamClientExecSQL(t *testing.T) {
 	runMockExecTest(
 		t, mock,
 		"UPDATE `upstream` SET `endpoints`=?,`config`=?,`version`=?,`update_at`=? WHERE id = ? and version = ?",
-		[]driver.Value{up.Endpoints, up.Config, up.Version + 1, sqlmock.AnyArg(), up.ID, up.Version},
+		[]driver.Value{up.Endpoints, config, up.Version + 1, sqlmock.AnyArg(), up.ID, up.Version},
 		func() error {
 			return cient.updateUpstream(db, up)
 		},
@@ -117,8 +122,15 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 	// Test createChangefeedInfo
 	runMockExecTest(
 		t, mock,
-		"INSERT INTO `changefeed_info` (`uuid`,`namespace`,`id`,`removed_at`,`upstream_id`,`sink_uri`,`start_ts`,`target_ts`,`config`,`version`,`update_at`) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-		[]driver.Value{info.UUID, info.Namespace, info.ID, info.RemovedAt, info.UpstreamID, info.SinkURI, info.StartTs, info.TargetTs, configValue, info.Version, sqlmock.AnyArg()},
+		"INSERT INTO `changefeed_info` ("+
+			"`namespace`,`id`,`removed_at`,`upstream_id`,"+
+			"`sink_uri`,`start_ts`,`target_ts`,`config`,"+
+			"`version`,`update_at`,`uuid`) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+		[]driver.Value{
+			info.Namespace, info.ID, info.RemovedAt, info.UpstreamID,
+			info.SinkURI, info.StartTs, info.TargetTs, configValue,
+			info.Version, sqlmock.AnyArg(), info.UUID,
+		},
 		func() error {
 			return cient.createChangefeedInfo(db, info)
 		},
@@ -137,8 +149,8 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 	// Test updateChangefeedInfo
 	runMockExecTest(
 		t, mock,
-		"UPDATE `changefeed_info` SET `namespace`=?,`id`=?,`removed_at`=?,`upstream_id`=?,`sink_uri`=?,`start_ts`=?,`target_ts`=?,`config`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
-		[]driver.Value{info.Namespace, info.ID, info.RemovedAt, info.UpstreamID, info.SinkURI, info.StartTs, info.TargetTs, info.Config, info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
+		"UPDATE `changefeed_info` SET `sink_uri`=?,`start_ts`=?,`target_ts`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
+		[]driver.Value{info.SinkURI, info.StartTs, info.TargetTs, info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
 		func() error {
 			return cient.updateChangefeedInfo(db, info)
 		},
@@ -155,16 +167,24 @@ func TestChangefeedStateClientExecSQL(t *testing.T) {
 	state := &ChangefeedStateDO{
 		ChangefeedUUID: 1,
 		State:          "state",
-		Warning:        nil,
-		Error:          nil,
-		Version:        1,
+		// Note that warning and error could be nil.
+		Warning: nil,
+		Error: &RunningError{
+			Time: time.Now(),
+			Addr: "addr",
+			Code: "code",
+		},
+		Version: 1,
 	}
+
+	errVal, err := state.Error.Value()
+	require.NoError(t, err)
 
 	// Test createChangefeedState
 	runMockExecTest(
 		t, mock,
-		"INSERT INTO `changefeed_state` (`changefeed_uuid`,`state`,`warning`,`error`,`version`,`update_at`) VALUES (?,?,?,?,?,?)",
-		[]driver.Value{state.ChangefeedUUID, state.State, state.Warning, state.Error, state.Version, sqlmock.AnyArg()},
+		"INSERT INTO `changefeed_state` (`state`,`warning`,`error`,`version`,`update_at`,`changefeed_uuid`) VALUES (?,?,?,?,?,?)",
+		[]driver.Value{state.State, state.Warning, errVal, state.Version, sqlmock.AnyArg(), state.ChangefeedUUID},
 		func() error {
 			return cient.createChangefeedState(db, state)
 		},
@@ -184,7 +204,7 @@ func TestChangefeedStateClientExecSQL(t *testing.T) {
 	runMockExecTest(
 		t, mock,
 		"UPDATE `changefeed_state` SET `state`=?,`warning`=?,`error`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
-		[]driver.Value{state.State, state.Warning, state.Error, state.Version + 1, sqlmock.AnyArg(), state.ChangefeedUUID, state.Version},
+		[]driver.Value{state.State, state.Warning, errVal, state.Version + 1, sqlmock.AnyArg(), state.ChangefeedUUID, state.Version},
 		func() error {
 			return cient.updateChangefeedState(db, state)
 		},
@@ -204,15 +224,15 @@ func TestScheduleClientExecSQL(t *testing.T) {
 		Owner:          &ownerCapture,
 		OwnerState:     "ownerState",
 		Processors:     nil,
-		TaskPosition:   nil,
-		Version:        1,
+		// TaskPosition:   nil,
+		Version: 1,
 	}
 
 	// Test createSchedule
 	runMockExecTest(
 		t, mock,
-		"INSERT INTO `schedule` (`changefeed_uuid`,`owner`,`owner_state`,`processors`,`task_position`,`version`,`update_at`) VALUES (?,?,?,?,?,?,?)",
-		[]driver.Value{schedule.ChangefeedUUID, schedule.Owner, schedule.OwnerState, schedule.Processors, schedule.TaskPosition, schedule.Version, sqlmock.AnyArg()},
+		"INSERT INTO `schedule` (`owner`,`owner_state`,`processors`,`task_position`,`version`,`update_at`,`changefeed_uuid`) VALUES (?,?,?,?,?,?,?)",
+		[]driver.Value{schedule.Owner, schedule.OwnerState, schedule.Processors, schedule.TaskPosition, schedule.Version, sqlmock.AnyArg(), schedule.ChangefeedUUID},
 		func() error {
 			return cient.createSchedule(db, schedule)
 		},
