@@ -183,10 +183,7 @@ func (a *agent) Tick(ctx context.Context) (*schedulepb.Barrier, error) {
 		return nil, errors.Trace(err)
 	}
 
-	outboundMessages, barrier, err := a.handleMessage(inboundMessages)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
+	outboundMessages, barrier := a.handleMessage(inboundMessages)
 
 	responses, err := a.tableM.poll(ctx)
 	if err != nil {
@@ -214,9 +211,7 @@ func (a *agent) handleLivenessUpdate(liveness model.Liveness) {
 	}
 }
 
-func (a *agent) handleMessage(msg []*schedulepb.Message) (
-	result []*schedulepb.Message, barrier *schedulepb.Barrier, err error,
-) {
+func (a *agent) handleMessage(msg []*schedulepb.Message) (result []*schedulepb.Message, barrier *schedulepb.Barrier) {
 	for _, message := range msg {
 		ownerCaptureID := message.GetFrom()
 		header := message.GetHeader()
@@ -231,7 +226,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 		switch message.GetMsgType() {
 		case schedulepb.MsgHeartbeat:
 			var reMsg *schedulepb.Message
-			reMsg, barrier, err = a.handleMessageHeartbeat(message.GetHeartbeat())
+			reMsg, barrier = a.handleMessageHeartbeat(message.GetHeartbeat())
 			result = append(result, reMsg)
 		case schedulepb.MsgDispatchTableRequest:
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
@@ -246,25 +241,22 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (
 	return
 }
 
-func (a *agent) handleMessageHeartbeat(
-	request *schedulepb.Heartbeat,
-) (*schedulepb.Message, *schedulepb.Barrier, error) {
+func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedulepb.Message, *schedulepb.Barrier) {
 	allTables := a.tableM.getAllTables()
 	result := make([]tablepb.TableStatus, 0, len(allTables))
 
-	for _, table := range allTables {
+	for tableID, table := range allTables {
 		status := table.getTableStatus(request.CollectStats)
+		if status.Checkpoint.CheckpointTs > status.Checkpoint.ResolvedTs {
+			log.Warn("schedulerv3: CheckpointTs is greater than ResolvedTs",
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
+				zap.Int64("tableID", tableID))
+		}
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
 		}
 		result = append(result, status)
-
-		isValidCheckpointTs := status.Checkpoint.CheckpointTs <= status.Checkpoint.ResolvedTs
-		if !isValidCheckpointTs {
-			status := result[len(result)-1]
-			return nil, nil, errors.ErrInvalidCheckpointTs.
-				GenWithStackByArgs(status.Checkpoint.CheckpointTs, status.Checkpoint.ResolvedTs)
-		}
 	}
 	for _, tableID := range request.GetTableIDs() {
 		if _, ok := allTables[tableID]; !ok {
@@ -292,7 +284,7 @@ func (a *agent) handleMessageHeartbeat(
 		zap.String("changefeed", a.ChangeFeedID.ID),
 		zap.Any("message", message))
 
-	return message, request.GetBarrier(), nil
+	return message, request.GetBarrier()
 }
 
 type dispatchTableTaskStatus int32

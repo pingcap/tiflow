@@ -777,30 +777,14 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(tableID model.TableID, ts m
 }
 
 // UpdateBarrierTs update all tableSink's barrierTs in the SinkManager
-func (m *SinkManager) UpdateBarrierTs(
-	globalBarrierTs model.Ts,
-	tableBarrier map[model.TableID]model.Ts,
-) {
-	m.tableSinks.Range(func(tableID, value interface{}) bool {
-		tableSink := value.(*tableSinkWrapper)
-		lastBarrierTs := tableSink.barrierTs.Load()
-		// It is safe to do not use compare and swap here.
-		// Only the processor will update the barrier ts.
-		// Other goroutines will only read the barrier ts.
-		// So it is safe to do not use compare and swap here, just Load and Store.
-		if tableBarrierTs, ok := tableBarrier[tableSink.tableID]; ok {
-			barrierTs := tableBarrierTs
-			if barrierTs > globalBarrierTs {
-				barrierTs = globalBarrierTs
-			}
-			if barrierTs > lastBarrierTs {
-				tableSink.barrierTs.Store(barrierTs)
-			}
-		} else {
-			if globalBarrierTs > lastBarrierTs {
-				tableSink.barrierTs.Store(globalBarrierTs)
-			}
+func (m *SinkManager) UpdateBarrierTs(globalBarrierTs model.Ts, tableBarrier map[model.TableID]model.Ts) {
+	m.tableSinks.Range(func(key, value interface{}) bool {
+		tableID := key.(model.TableID)
+		barrierTs := globalBarrierTs
+		if tableBarrierTs, ok := tableBarrier[tableID]; ok && tableBarrierTs < globalBarrierTs {
+			barrierTs = tableBarrierTs
 		}
+		value.(*tableSinkWrapper).updateBarrierTs(barrierTs)
 		return true
 	})
 }
@@ -1016,12 +1000,13 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 		resolvedTs = tableSink.getReceivedSorterResolvedTs()
 	}
 
-	if resolvedTs < checkpointTs.ResolvedMark() {
-		log.Error("sinkManager: resolved ts should not less than checkpoint ts",
+	sinkUpperBound := tableSink.getUpperBoundTs()
+	if sinkUpperBound < checkpointTs.ResolvedMark() {
+		log.Panic("sinkManager: sink upperbound should not less than checkpoint ts",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID),
-			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Uint64("upperbound", sinkUpperBound),
 			zap.Any("checkpointTs", checkpointTs))
 	}
 	return TableStats{

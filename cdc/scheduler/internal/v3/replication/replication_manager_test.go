@@ -714,6 +714,48 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(9), barrier.GetGlobalBarrierTs())
 }
 
+func TestReplicationManagerAdvanceCheckpointWithRedoEnabled(t *testing.T) {
+	t.Parallel()
+	r := NewReplicationManager(1, model.ChangeFeedID{})
+	rs, err := NewReplicationSet(1, model.Ts(10),
+		map[model.CaptureID]*tablepb.TableStatus{
+			"1": {
+				TableID: 1,
+				State:   tablepb.TableStateReplicating,
+				Checkpoint: tablepb.Checkpoint{
+					CheckpointTs: model.Ts(10),
+					ResolvedTs:   model.Ts(20),
+				},
+			},
+		}, model.ChangeFeedID{})
+	require.NoError(t, err)
+	r.tables[1] = rs
+
+	rs, err = NewReplicationSet(2, model.Ts(15),
+		map[model.CaptureID]*tablepb.TableStatus{
+			"2": {
+				TableID: 2,
+				State:   tablepb.TableStateReplicating,
+				Checkpoint: tablepb.Checkpoint{
+					CheckpointTs: model.Ts(15),
+					ResolvedTs:   model.Ts(30),
+				},
+			},
+		}, model.ChangeFeedID{})
+	require.NoError(t, err)
+	r.tables[2] = rs
+
+	redoMetaManager := &mockRedoMetaManager{enable: true, resolvedTs: 25}
+
+	// some table not exist yet with redo is enabled.
+	currentTables := []model.TableID{1, 2, 3}
+	barrier := schedulepb.NewBarrierWithMinTs(30)
+	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now(), barrier, redoMetaManager)
+	require.Equal(t, checkpointCannotProceed, checkpoint)
+	require.Equal(t, checkpointCannotProceed, resolved)
+	require.Equal(t, uint64(25), barrier.Barrier.GetGlobalBarrierTs())
+}
+
 func TestReplicationManagerHandleCaptureChanges(t *testing.T) {
 	t.Parallel()
 
