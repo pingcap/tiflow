@@ -320,7 +320,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 		},
 	}
 
-	response, _, _ := a.handleMessage([]*schedulepb.Message{heartbeat})
+	response, _ := a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
 	require.Equal(t, model.LivenessCaptureAlive, response[0].GetHeartbeatResponse().Liveness)
 
@@ -340,7 +340,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	}
 
 	a.tableM.tables[model.TableID(1)].task = &dispatchTableTask{IsRemove: true}
-	response, _, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
+	response, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
 	result = response[0].GetHeartbeatResponse().Tables
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].TableID < result[j].TableID
@@ -348,13 +348,13 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	require.Equal(t, tablepb.TableStateStopping, result[1].State)
 
 	a.handleLivenessUpdate(model.LivenessCaptureStopping)
-	response, _, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
+	response, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
 	require.Equal(t, model.LivenessCaptureStopping, response[0].GetHeartbeatResponse().Liveness)
 
 	a.handleLivenessUpdate(model.LivenessCaptureAlive)
 	heartbeat.Heartbeat.IsStopping = true
-	response, _, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
+	response, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Equal(t, model.LivenessCaptureStopping, response[0].GetHeartbeatResponse().Liveness)
 	require.Equal(t, model.LivenessCaptureStopping, a.liveness.Load())
 }
@@ -536,7 +536,7 @@ func TestAgentHandleMessage(t *testing.T) {
 	}
 
 	// handle the first heartbeat, from the known owner.
-	response, _, _ := a.handleMessage([]*schedulepb.Message{heartbeat})
+	response, _ := a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
 
 	addTableRequest := &schedulepb.Message{
@@ -559,17 +559,17 @@ func TestAgentHandleMessage(t *testing.T) {
 		},
 	}
 	// wrong epoch, ignored
-	responses, _, _ := a.handleMessage([]*schedulepb.Message{addTableRequest})
+	responses, _ := a.handleMessage([]*schedulepb.Message{addTableRequest})
 	require.NotContains(t, tableM.tables, model.TableID(1))
 	require.Len(t, responses, 0)
 
 	// correct epoch, processing.
 	addTableRequest.Header.ProcessorEpoch = a.Epoch
-	_, _, _ = a.handleMessage([]*schedulepb.Message{addTableRequest})
+	_, _ = a.handleMessage([]*schedulepb.Message{addTableRequest})
 	require.Contains(t, tableM.tables, model.TableID(1))
 
 	heartbeat.Header.OwnerRevision.Revision = 2
-	response, _, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
+	response, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 1)
 
 	// this should never happen in real world
@@ -583,12 +583,12 @@ func TestAgentHandleMessage(t *testing.T) {
 		From:    a.ownerInfo.CaptureID,
 	}
 
-	response, _, _ = a.handleMessage([]*schedulepb.Message{unknownMessage})
+	response, _ = a.handleMessage([]*schedulepb.Message{unknownMessage})
 	require.Len(t, response, 0)
 
 	// staled message
 	heartbeat.Header.OwnerRevision.Revision = 1
-	response, _, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
+	response, _ = a.handleMessage([]*schedulepb.Message{heartbeat})
 	require.Len(t, response, 0)
 }
 
