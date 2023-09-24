@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 )
 
+// ChangefeedProgress is for changefeed progress.
 type ChangefeedProgress struct {
 	CheckpointTs      uint64
 	MinTableBarrierTs uint64
@@ -61,6 +62,7 @@ func (cp *CaptureProgress) Scan(value interface{}) error {
 	return json.Unmarshal(b, cp)
 }
 
+// ReplicaConfig stores the configuration for a replica.
 type ReplicaConfig config.ReplicaConfig
 
 // Value implements the driver.Valuer interface
@@ -78,6 +80,7 @@ func (c *ReplicaConfig) Scan(value interface{}) error {
 	return json.Unmarshal(b, c)
 }
 
+// RunningError stores the error information for running changefeed.
 type RunningError model.RunningError
 
 // Value implements the driver.Valuer interface
@@ -95,6 +98,7 @@ func (e *RunningError) Scan(value interface{}) error {
 	return json.Unmarshal(b, e)
 }
 
+// Credential stores the credential information for TLS connection.
 type Credential security.Credential
 
 // Value implements the driver.Valuer interface

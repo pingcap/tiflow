@@ -40,7 +40,7 @@ func TestAutoMigrateTables(t *testing.T) {
 	backendDB, db, mock := newMockDB(t)
 	defer backendDB.Close()
 
-	mockSchmaFn := func(tableName string) {
+	mockSchmaFn := func(_ string) {
 		mock.ExpectQuery("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
 			"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1").WillReturnRows(
 			sqlmock.NewRows([]string{"SCHEMA_NAME"}))

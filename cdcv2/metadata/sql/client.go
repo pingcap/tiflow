@@ -43,7 +43,7 @@ type LeaderChecker[T any] interface {
 	TxnWithLeaderLock(ctx context.Context, leaderID string, fn TxnAction[T]) error
 }
 
-type Checker[T any] interface {
+type checker[T any] interface {
 	Txn(ctx context.Context, fn TxnAction[T]) error
 	TxnWithOwnerLock(ctx context.Context, uuid uint64, fn TxnAction[T]) error
 }

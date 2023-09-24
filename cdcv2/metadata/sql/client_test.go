@@ -77,7 +77,7 @@ func TestUpstreamClientExecSQL(t *testing.T) {
 	// Test deleteUpstream
 	runMockExecTest(
 		t, mock,
-		// TODO(CharlesCheung): delete statment should be optimized, such as remove duplicated fields.
+		// TODO(CharlesCheung): delete statement should be optimized, such as remove duplicated fields.
 		// Note: should the version be checked?
 		"DELETE FROM `upstream` WHERE `upstream`.`id` = ?",
 		[]driver.Value{up.ID},
@@ -91,6 +91,17 @@ func TestUpstreamClientExecSQL(t *testing.T) {
 		t, mock,
 		"UPDATE `upstream` SET `endpoints`=?,`config`=?,`version`=?,`update_at`=? WHERE id = ? and version = ?",
 		[]driver.Value{up.Endpoints, config, up.Version + 1, sqlmock.AnyArg(), up.ID, up.Version},
+		func() error {
+			return cient.updateUpstream(db, up)
+		},
+	)
+
+	// Test updateUpstream with nil config
+	up.Config = nil
+	runMockExecTest(
+		t, mock,
+		"UPDATE `upstream` SET `endpoints`=?,`version`=?,`update_at`=? WHERE id = ? and version = ?",
+		[]driver.Value{up.Endpoints, up.Version + 1, sqlmock.AnyArg(), up.ID, up.Version},
 		func() error {
 			return cient.updateUpstream(db, up)
 		},
@@ -113,7 +124,7 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 		SinkURI:    "sinkURI",
 		StartTs:    1,
 		TargetTs:   1,
-		Config:     ReplicaConfig{},
+		Config:     &ReplicaConfig{},
 		Version:    1,
 	}
 	configValue, err := info.Config.Value()
@@ -147,6 +158,17 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 	)
 
 	// Test updateChangefeedInfo
+	runMockExecTest(
+		t, mock,
+		"UPDATE `changefeed_info` SET `sink_uri`=?,`start_ts`=?,`target_ts`=?,`config`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
+		[]driver.Value{info.SinkURI, info.StartTs, info.TargetTs, configValue, info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
+		func() error {
+			return cient.updateChangefeedInfo(db, info)
+		},
+	)
+
+	// Test updateChangefeedInfo with nil config
+	info.Config = nil
 	runMockExecTest(
 		t, mock,
 		"UPDATE `changefeed_info` SET `sink_uri`=?,`start_ts`=?,`target_ts`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
@@ -201,6 +223,7 @@ func TestChangefeedStateClientExecSQL(t *testing.T) {
 	)
 
 	// Test updateChangefeedState
+	// Note that a nil error or warning will also be updated.
 	runMockExecTest(
 		t, mock,
 		"UPDATE `changefeed_state` SET `state`=?,`warning`=?,`error`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
@@ -224,7 +247,9 @@ func TestScheduleClientExecSQL(t *testing.T) {
 		Owner:          &ownerCapture,
 		OwnerState:     "ownerState",
 		Processors:     nil,
-		// TaskPosition:   nil,
+		TaskPosition: ChangefeedProgress{
+			CheckpointTs: 1,
+		},
 		Version: 1,
 	}
 
@@ -248,7 +273,18 @@ func TestScheduleClientExecSQL(t *testing.T) {
 		},
 	)
 
-	// Test updateSchedule
+	// Test updateSchedule with non-empty task position.
+	runMockExecTest(
+		t, mock,
+		"UPDATE `schedule` SET `owner`=?,`owner_state`=?,`task_position`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
+		[]driver.Value{schedule.Owner, schedule.OwnerState, schedule.TaskPosition, schedule.Version + 1, sqlmock.AnyArg(), schedule.ChangefeedUUID, schedule.Version},
+		func() error {
+			return cient.updateSchedule(db, schedule)
+		},
+	)
+
+	// Test updateSchedule with empty task position.
+	schedule.TaskPosition = ChangefeedProgress{}
 	runMockExecTest(
 		t, mock,
 		"UPDATE `schedule` SET `owner`=?,`owner_state`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
