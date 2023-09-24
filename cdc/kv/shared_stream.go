@@ -61,6 +61,14 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
 
 	waitForPreFetching := func() error {
+		if stream.preFetchForConnecting != nil {
+			log.Panic("preFetchForConnecting should be nil",
+				zap.String("namespace", c.changefeed.Namespace),
+				zap.String("changefeed", c.changefeed.ID),
+				zap.Uint64("storeID", r.storeID),
+				zap.String("addr", r.storeAddr),
+				zap.Uint64("streamID", stream.streamID))
+		}
 		for {
 			select {
 			case <-ctx.Done():

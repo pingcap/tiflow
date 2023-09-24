@@ -48,7 +48,9 @@ import (
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 )
 
 func Test(t *testing.T) {
@@ -229,7 +231,7 @@ loop:
 }
 
 func (s *mockChangeDataService) EventFeedV2(server cdcpb.ChangeData_EventFeedV2Server) error {
-	return s.EventFeed(server)
+	return status.Error(codes.Unimplemented, "")
 }
 
 func newMockService(

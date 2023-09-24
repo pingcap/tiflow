@@ -99,24 +99,21 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 
 	events1 := make(chan *cdcpb.ChangeDataEvent, 10)
 	events2 := make(chan *cdcpb.ChangeDataEvent, 10)
-	server1, addr1 := newMockService(ctx, t, newMockChangeDataService(t, events1), wg)
-	server2, addr2 := newMockService(ctx, t, newMockChangeDataService(t, events2), wg)
+	server1, addr1 := newMockService(ctx, t, newMockChangeDataServer(events1), wg)
+	server2, addr2 := newMockService(ctx, t, newMockChangeDataServer(events2), wg)
 
 	rpcClient, cluster, pdClient, _ := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
 
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
-	defer pdClient.Close()
 
 	grpcPool := sharedconn.NewConnAndClientPool(&security.Credential{})
 
 	regionCache := tikv.NewRegionCache(pdClient)
-	defer regionCache.Close()
 
 	pdClock := pdutil.NewClock4Test()
 
 	kvStorage, err := tikv.NewTestTiKVStore(rpcClient, pdClient, nil, nil, 0)
 	require.Nil(t, err)
-	defer kvStorage.Close() //nolint:errcheck
 	lockResolver := txnutil.NewLockerResolver(kvStorage, model.ChangeFeedID{})
 
 	invalidStore := "localhost:1"
@@ -128,7 +125,17 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	client := NewSharedClient(model.ChangeFeedID{ID: "test"},
 		&config.KVClientConfig{WorkerConcurrent: 1, GrpcStreamConcurrent: 1},
 		false, pdClient, grpcPool, regionCache, pdClock, lockResolver)
-	defer client.Close()
+
+	defer func() {
+		cancel()
+		client.Close()
+		_ = kvStorage.Close()
+		regionCache.Close()
+		pdClient.Close()
+		server1.Stop()
+		server2.Stop()
+		wg.Wait()
+	}()
 
 	wg.Add(1)
 	go func() {
@@ -184,10 +191,44 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		require.True(t, false, "reconnection not succeed in 5 second")
 	}
+}
 
-	server2.Stop()
-	close(events1)
-	close(events2)
-	cancel()
-	wg.Wait()
+type mockChangeDataServer struct {
+	ch chan *cdcpb.ChangeDataEvent
+}
+
+func newMockChangeDataServer(ch chan *cdcpb.ChangeDataEvent) cdcpb.ChangeDataServer {
+	return &mockChangeDataServer{ch: ch}
+}
+
+func (m *mockChangeDataServer) EventFeed(s cdcpb.ChangeData_EventFeedServer) error {
+	closed := make(chan struct{})
+	go func() {
+		defer close(closed)
+		for {
+			if _, err := s.Recv(); err != nil {
+				return
+			}
+		}
+	}()
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-closed:
+			return nil
+		case <-ticker.C:
+		}
+		select {
+		case event := <-m.ch:
+			if err := s.Send(event); err != nil {
+				return err
+			}
+		default:
+		}
+	}
+}
+
+func (m *mockChangeDataServer) EventFeedV2(s cdcpb.ChangeData_EventFeedV2Server) error {
+	return m.EventFeed(s)
 }
