@@ -45,7 +45,7 @@ func TestConnAndClientPool(t *testing.T) {
 
 	svc := <-service
 	require.NotNil(t, svc)
-	defer svc.Stop()
+	defer svc.GracefulStop()
 
 	pool := newConnAndClientPool(&security.Credential{}, 2)
 	cc1, err := pool.Connect(context.Background(), addr)
@@ -93,7 +93,7 @@ func TestConnAndClientPoolForV2(t *testing.T) {
 
 	svc := <-service
 	require.NotNil(t, svc)
-	defer svc.Stop()
+	defer svc.GracefulStop()
 
 	pool := newConnAndClientPool(&security.Credential{}, 2)
 	cc1, err := pool.Connect(context.Background(), addr)
@@ -130,7 +130,7 @@ func TestConnectToUnavailable(t *testing.T) {
 
 	svc := <-service
 	require.NotNil(t, svc)
-	defer svc.Stop()
+	defer svc.GracefulStop()
 
 	conn, err := connect(context.Background(), &security.Credential{}, addr)
 	require.NotNil(t, conn)
