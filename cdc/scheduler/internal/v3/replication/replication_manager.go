@@ -495,6 +495,38 @@ func (r *Manager) AdvanceCheckpoint(
 	barrier *schedulepb.BarrierWithMinTs,
 	redoMetaManager redo.MetaManager,
 ) (newCheckpointTs, newResolvedTs model.Ts) {
+	var redoFlushedResolvedTs model.Ts
+	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs uint64) (uint64, uint64) {
+		flushedMeta := redoMetaManager.GetFlushedMeta()
+		redoFlushedResolvedTs = flushedMeta.ResolvedTs
+		log.Debug("owner gets flushed redo meta",
+			zap.String("namespace", r.changefeedID.Namespace),
+			zap.String("changefeed", r.changefeedID.ID),
+			zap.Uint64("flushedCheckpointTs", flushedMeta.CheckpointTs),
+			zap.Uint64("flushedResolvedTs", flushedMeta.ResolvedTs))
+		if flushedMeta.ResolvedTs < newResolvedTs {
+			newResolvedTs = flushedMeta.ResolvedTs
+		}
+
+		if newCheckpointTs > newResolvedTs {
+			newCheckpointTs = newResolvedTs
+		}
+
+		if barrier.GlobalBarrierTs > newResolvedTs {
+			barrier.GlobalBarrierTs = newResolvedTs
+		}
+		return newCheckpointTs, newResolvedTs
+	}
+	defer func() {
+		if redoFlushedResolvedTs != 0 && barrier.GlobalBarrierTs > redoFlushedResolvedTs {
+			log.Panic("barrierTs should never greater than redo flushed",
+				zap.String("namespace", r.changefeedID.Namespace),
+				zap.String("changefeed", r.changefeedID.ID),
+				zap.Uint64("barrierTs", barrier.GlobalBarrierTs),
+				zap.Uint64("redoFlushedResolvedTs", redoFlushedResolvedTs))
+		}
+	}()
+
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
 	slowestTableID := int64(0)
 	for _, tableID := range currentTables {
@@ -508,6 +540,11 @@ func (r *Manager) AdvanceCheckpoint(
 					zap.String("changefeed", r.changefeedID.ID),
 					zap.Int64("tableID", tableID))
 				r.lastLogMissTime = now
+			}
+			if redoMetaManager.Enabled() {
+				// If redo is enabled, GlobalBarrierTs should be limited by redo flushed meta.
+				newResolvedTs = barrier.RedoBarrierTs
+				limitBarrierWithRedo(newCheckpointTs, newResolvedTs)
 			}
 			return checkpointCannotProceed, checkpointCannotProceed
 		}
@@ -564,26 +601,12 @@ func (r *Manager) AdvanceCheckpoint(
 			newResolvedTs = barrier.RedoBarrierTs
 		}
 		redoMetaManager.UpdateMeta(newCheckpointTs, newResolvedTs)
-		flushedMeta := redoMetaManager.GetFlushedMeta()
-		flushedCheckpointTs, flushedResolvedTs := flushedMeta.CheckpointTs, flushedMeta.ResolvedTs
-		log.Debug("owner gets flushed meta",
-			zap.Uint64("flushedResolvedTs", flushedResolvedTs),
-			zap.Uint64("flushedCheckpointTs", flushedCheckpointTs),
-			zap.Uint64("newResolvedTs", newResolvedTs),
-			zap.Uint64("newCheckpointTs", newCheckpointTs),
+		log.Debug("owner updates redo meta",
 			zap.String("namespace", r.changefeedID.Namespace),
-			zap.String("changefeed", r.changefeedID.ID))
-		if flushedResolvedTs != 0 && flushedResolvedTs < newResolvedTs {
-			newResolvedTs = flushedResolvedTs
-		}
-
-		if newCheckpointTs > newResolvedTs {
-			newCheckpointTs = newResolvedTs
-		}
-
-		if barrier.GlobalBarrierTs > newResolvedTs {
-			barrier.GlobalBarrierTs = newResolvedTs
-		}
+			zap.String("changefeed", r.changefeedID.ID),
+			zap.Uint64("newCheckpointTs", newCheckpointTs),
+			zap.Uint64("newResolvedTs", newResolvedTs))
+		return limitBarrierWithRedo(newCheckpointTs, newResolvedTs)
 	}
 
 	return newCheckpointTs, newResolvedTs
