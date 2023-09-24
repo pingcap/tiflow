@@ -15,17 +15,21 @@ package sql
 
 import (
 	"database/sql/driver"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdcv2/metadata"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
 // Note that updateAt is not included in the test because it is automatically updated by gorm.
 // TODO(CharlesCheung): add test to verify the correctness of updateAt.
-
 func runMockExecTest(t *testing.T, mock sqlmock.Sqlmock, expectedSQL string, args []driver.Value, fn func() error) {
 	testErr := errors.New("test error")
 
@@ -55,8 +59,8 @@ func TestUpstreamClientExecSQL(t *testing.T) {
 
 	up := &UpstreamDO{
 		ID:        1,
-		Endpoints: "endpoints",
-		Config: &Credential{
+		Endpoints: strings.Join([]string{"endpoint1", "endpoint2"}, ","),
+		Config: &security.Credential{
 			CAPath: "ca-path",
 		},
 		Version: 1,
@@ -116,16 +120,20 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 	cient := NewORMClient("test-changefeed-info-client", db)
 
 	info := &ChangefeedInfoDO{
-		UUID:       1,
-		Namespace:  "namespace",
-		ID:         "id",
-		RemovedAt:  nil,
-		UpstreamID: 1,
-		SinkURI:    "sinkURI",
-		StartTs:    1,
-		TargetTs:   1,
-		Config:     &ReplicaConfig{},
-		Version:    1,
+		ChangefeedInfo: metadata.ChangefeedInfo{
+			ChangefeedIdent: metadata.ChangefeedIdent{
+				UUID:      1,
+				Namespace: "namespace",
+				ID:        "id",
+			},
+			UpstreamID: 1,
+			SinkURI:    "sinkURI",
+			StartTs:    1,
+			TargetTs:   1,
+			Config:     &config.ReplicaConfig{},
+		},
+		RemovedAt: nil,
+		Version:   1,
 	}
 	configValue, err := info.Config.Value()
 	require.NoError(t, err)
@@ -134,12 +142,12 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 	runMockExecTest(
 		t, mock,
 		"INSERT INTO `changefeed_info` ("+
-			"`namespace`,`id`,`removed_at`,`upstream_id`,"+
-			"`sink_uri`,`start_ts`,`target_ts`,`config`,"+
+			"`namespace`,`id`,`upstream_id`,`sink_uri`,"+
+			"`start_ts`,`target_ts`,`config`,`removed_at`,"+
 			"`version`,`update_at`,`uuid`) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
 		[]driver.Value{
-			info.Namespace, info.ID, info.RemovedAt, info.UpstreamID,
-			info.SinkURI, info.StartTs, info.TargetTs, configValue,
+			info.Namespace, info.ID, info.UpstreamID, info.SinkURI,
+			info.StartTs, info.TargetTs, configValue, info.RemovedAt,
 			info.Version, sqlmock.AnyArg(), info.UUID,
 		},
 		func() error {
@@ -187,14 +195,16 @@ func TestChangefeedStateClientExecSQL(t *testing.T) {
 	cient := NewORMClient("test-changefeed-state-client", db)
 
 	state := &ChangefeedStateDO{
-		ChangefeedUUID: 1,
-		State:          "state",
-		// Note that warning and error could be nil.
-		Warning: nil,
-		Error: &RunningError{
-			Time: time.Now(),
-			Addr: "addr",
-			Code: "code",
+		ChangefeedState: metadata.ChangefeedState{
+			ChangefeedUUID: 1,
+			State:          "state",
+			// Note that warning and error could be nil.
+			Warning: nil,
+			Error: &model.RunningError{
+				Time: time.Now(),
+				Addr: "addr",
+				Code: "code",
+			},
 		},
 		Version: 1,
 	}
@@ -243,12 +253,14 @@ func TestScheduleClientExecSQL(t *testing.T) {
 
 	ownerCapture := "test-owner"
 	schedule := &ScheduleDO{
-		ChangefeedUUID: 1,
-		Owner:          &ownerCapture,
-		OwnerState:     "ownerState",
-		Processors:     nil,
-		TaskPosition: ChangefeedProgress{
-			CheckpointTs: 1,
+		ScheduledChangefeed: metadata.ScheduledChangefeed{
+			ChangefeedUUID: 1,
+			Owner:          &ownerCapture,
+			OwnerState:     metadata.SchedRemoved,
+			Processors:     nil,
+			TaskPosition: metadata.ChangefeedProgress{
+				CheckpointTs: 1,
+			},
 		},
 		Version: 1,
 	}
@@ -284,13 +296,23 @@ func TestScheduleClientExecSQL(t *testing.T) {
 	)
 
 	// Test updateSchedule with empty task position.
-	schedule.TaskPosition = ChangefeedProgress{}
+	schedule.TaskPosition = metadata.ChangefeedProgress{}
 	runMockExecTest(
 		t, mock,
 		"UPDATE `schedule` SET `owner`=?,`owner_state`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
 		[]driver.Value{schedule.Owner, schedule.OwnerState, schedule.Version + 1, sqlmock.AnyArg(), schedule.ChangefeedUUID, schedule.Version},
 		func() error {
 			return cient.updateSchedule(db, schedule)
+		},
+	)
+
+	// Test updateScheduleOwnerState
+	runMockExecTest(
+		t, mock,
+		"UPDATE `schedule` SET `owner_state`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
+		[]driver.Value{schedule.OwnerState, schedule.Version + 1, sqlmock.AnyArg(), schedule.ChangefeedUUID, schedule.Version},
+		func() error {
+			return cient.updateScheduleOwnerState(db, schedule)
 		},
 	)
 }
@@ -329,7 +351,7 @@ func TestProgressClientExecSQL(t *testing.T) {
 	)
 
 	// Test updateProgress
-	progress.Progress = &CaptureProgress{}
+	progress.Progress = &metadata.CaptureProgress{}
 	runMockExecTest(
 		t, mock,
 		"UPDATE `progress` SET `progress`=?,`version`=?,`update_at`=? WHERE capture_id = ? and version = ?",

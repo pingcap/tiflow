@@ -46,41 +46,41 @@ type Storage struct {
 	entities struct {
 		sync.RWMutex
 		cfs   map[model.ChangeFeedID]*metadata.ChangefeedInfo
-		cfids map[model.ChangeFeedID]metadata.ChangefeedIDWithEpoch
+		cfids map[model.ChangeFeedID]metadata.ChangefeedIdent
 		ups   map[uint64]*model.UpstreamInfo
 
 		// 0: normal; 1: paused; 2: finished;
-		cfstates map[metadata.ChangefeedIDWithEpoch]int
+		cfstates map[metadata.ChangefeedIdent]int
 	}
 
 	sync.RWMutex
 	schedule struct {
 		// owners by ChangefeedID.
-		owners map[metadata.ChangefeedIDWithEpoch]metadata.ScheduledChangefeed
+		owners map[metadata.ChangefeedIdent]metadata.ScheduledChangefeed
 		// processors by ChangefeedID, watched by owner.
-		processors map[metadata.ChangefeedIDWithEpoch]sortedScheduledChangefeeds
+		processors map[metadata.ChangefeedIdent]sortedScheduledChangefeeds
 		// owners by CaptureID, watched by captures.
 		ownersByCapture map[string]sortedScheduledChangefeeds
 		// processors by CaptureID, watched by captures.
 		processorsByCapture map[string]sortedScheduledChangefeeds
 	}
-	progresses map[metadata.ChangefeedIDWithEpoch]metadata.ChangefeedProgress
+	progresses map[metadata.ChangefeedIdent]metadata.ChangefeedProgress
 }
 
 func newStorage() *Storage {
 	s := &Storage{}
 	s.entities.cfs = make(map[model.ChangeFeedID]*metadata.ChangefeedInfo)
-	s.entities.cfids = make(map[model.ChangeFeedID]metadata.ChangefeedIDWithEpoch)
+	s.entities.cfids = make(map[model.ChangeFeedID]metadata.ChangefeedIdent)
 	s.entities.ups = make(map[uint64]*model.UpstreamInfo)
-	s.schedule.owners = make(map[metadata.ChangefeedIDWithEpoch]metadata.ScheduledChangefeed)
-	s.schedule.processors = make(map[metadata.ChangefeedIDWithEpoch]sortedScheduledChangefeeds)
+	s.schedule.owners = make(map[metadata.ChangefeedIdent]metadata.ScheduledChangefeed)
+	s.schedule.processors = make(map[metadata.ChangefeedIdent]sortedScheduledChangefeeds)
 	s.schedule.ownersByCapture = make(map[string]sortedScheduledChangefeeds)
 	s.schedule.processorsByCapture = make(map[string]sortedScheduledChangefeeds)
-	s.progresses = make(map[metadata.ChangefeedIDWithEpoch]metadata.ChangefeedProgress)
+	s.progresses = make(map[metadata.ChangefeedIdent]metadata.ChangefeedProgress)
 	return s
 }
 
-func (s *Storage) setOwner(cf metadata.ChangefeedIDWithEpoch, target metadata.ScheduledChangefeed) error {
+func (s *Storage) setOwner(cf metadata.ChangefeedIdent, target metadata.ScheduledChangefeed) error {
 	target.TaskPosition = s.progresses[cf]
 
 	origin := s.schedule.owners[cf]
@@ -99,7 +99,7 @@ func (s *Storage) setOwner(cf metadata.ChangefeedIDWithEpoch, target metadata.Sc
 	return nil
 }
 
-func (s *Storage) setProcessors(cf metadata.ChangefeedIDWithEpoch, workers []metadata.ScheduledChangefeed) error {
+func (s *Storage) setProcessors(cf metadata.ChangefeedIdent, workers []metadata.ScheduledChangefeed) error {
 	origin := s.schedule.processors[cf]
 	target := sortedScheduledChangefeeds{version: origin.version + 1, v: workers, compare: compareByCaptureID}
 	target.sort()
@@ -257,7 +257,7 @@ func (c *CaptureOb) handleTaskChanges(ctx context.Context, isOwner bool) error {
 	return nil
 }
 
-func (c *CaptureOb) Advance(cfs []metadata.ChangefeedIDWithEpoch, progresses []metadata.ChangefeedProgress) error {
+func (c *CaptureOb) Advance(cfs []metadata.ChangefeedIdent, progresses []metadata.ChangefeedProgress) error {
 	c.storage.Lock()
 	defer c.storage.Unlock()
 	for i, cf := range cfs {
@@ -272,7 +272,7 @@ func (c *CaptureOb) OwnerChanges() <-chan metadata.ScheduledChangefeed {
 	return c.ownerChanges.Out()
 }
 
-func (c *CaptureOb) PostOwnerRemoved(cf metadata.ChangefeedIDWithEpoch) error {
+func (c *CaptureOb) PostOwnerRemoved(cf metadata.ChangefeedIdent) error {
 	c.storage.Lock()
 	defer c.storage.Unlock()
 	if _, ok := c.storage.schedule.owners[cf]; ok {
@@ -285,7 +285,7 @@ func (c *CaptureOb) ProcessorChanges() <-chan metadata.ScheduledChangefeed {
 	return c.processorChanges.Out()
 }
 
-func (c *CaptureOb) PostProcessorRemoved(cf metadata.ChangefeedIDWithEpoch) error {
+func (c *CaptureOb) PostProcessorRemoved(cf metadata.ChangefeedIdent) error {
 	c.storage.Lock()
 	defer c.storage.Unlock()
 	if processors, ok := c.storage.schedule.processors[cf]; ok {
@@ -301,14 +301,14 @@ func (c *CaptureOb) PostProcessorRemoved(cf metadata.ChangefeedIDWithEpoch) erro
 	return nil
 }
 
-func (c *CaptureOb) GetChangefeeds(cfs ...model.ChangeFeedID) ([]*metadata.ChangefeedInfo, []metadata.ChangefeedIDWithEpoch, error) {
+func (c *CaptureOb) GetChangefeeds(cfs ...model.ChangeFeedID) ([]*metadata.ChangefeedInfo, []metadata.ChangefeedIdent, error) {
 	c.storage.entities.RLock()
 	defer c.storage.entities.RUnlock()
 
 	length := len(cfs)
 	if length > 0 {
 		infos := make([]*metadata.ChangefeedInfo, 0, length)
-		ids := make([]metadata.ChangefeedIDWithEpoch, 0, length)
+		ids := make([]metadata.ChangefeedIdent, 0, length)
 		for _, id := range cfs {
 			infos = append(infos, c.storage.entities.cfs[id])
 			ids = append(ids, c.storage.entities.cfids[id])
@@ -318,7 +318,7 @@ func (c *CaptureOb) GetChangefeeds(cfs ...model.ChangeFeedID) ([]*metadata.Chang
 
 	length = len(c.storage.entities.cfs)
 	infos := make([]*metadata.ChangefeedInfo, 0, length)
-	ids := make([]metadata.ChangefeedIDWithEpoch, 0, length)
+	ids := make([]metadata.ChangefeedIdent, 0, length)
 	for id, info := range c.storage.entities.cfs {
 		infos = append(infos, info)
 		ids = append(ids, c.storage.entities.cfids[id])
@@ -389,30 +389,30 @@ func (c *ControllerOb) handleAliveCaptures(ctx context.Context) error {
 	return nil
 }
 
-func (c *ControllerOb) CreateChangefeed(cf *metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIDWithEpoch, error) {
+func (c *ControllerOb) CreateChangefeed(cf *metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIdent, error) {
 	c.storage.entities.Lock()
 	defer c.storage.entities.Unlock()
 
-	if _, ok := c.storage.entities.cfs[cf.ID]; ok {
-		return metadata.ChangefeedIDWithEpoch{}, errors.ErrChangeFeedAlreadyExists.GenWithStackByArgs(cf.ID)
+	if _, ok := c.storage.entities.cfs[cf.ToChangefeedID()]; ok {
+		return metadata.ChangefeedIdent{}, errors.ErrChangeFeedAlreadyExists.GenWithStackByArgs(cf.ToChangefeedID())
 	}
 
-	c.storage.entities.cfs[cf.ID] = cf
+	c.storage.entities.cfs[cf.ToChangefeedID()] = cf
 	c.storage.entities.ups[up.ID] = up
 
-	id := metadata.ChangefeedIDWithEpoch{ID: cf.ID, Epoch: c.storage.epoch.Add(1)}
-	c.storage.entities.cfids[cf.ID] = id
+	id := metadata.ChangefeedIdent{ID: cf.ID, UUID: c.storage.epoch.Add(1)}
+	c.storage.entities.cfids[cf.ToChangefeedID()] = id
 	return id, nil
 }
 
-func (c *ControllerOb) RemoveChangefeed(cf metadata.ChangefeedIDWithEpoch) error {
+func (c *ControllerOb) RemoveChangefeed(cf metadata.ChangefeedIdent) error {
 	c.storage.entities.Lock()
 	defer c.storage.entities.Unlock()
 	c.storage.Lock()
 	defer c.storage.Unlock()
 
-	delete(c.storage.entities.cfids, cf.ID)
-	delete(c.storage.entities.cfs, cf.ID)
+	delete(c.storage.entities.cfids, cf.ToChangefeedID())
+	delete(c.storage.entities.cfs, cf.ToChangefeedID())
 
 	// TODO: we need to rollback partial changes on fails.
 	if owner, ok := c.storage.schedule.owners[cf]; ok {
@@ -442,19 +442,19 @@ func (c *ControllerOb) RefreshCaptures() (captures []*model.CaptureInfo, changed
 	return
 }
 
-func (c *ControllerOb) SetOwner(cf metadata.ChangefeedIDWithEpoch, target metadata.ScheduledChangefeed) error {
+func (c *ControllerOb) SetOwner(cf metadata.ChangefeedIdent, target metadata.ScheduledChangefeed) error {
 	c.storage.Lock()
 	defer c.storage.Unlock()
 	return c.storage.setOwner(cf, target)
 }
 
-func (c *ControllerOb) SetProcessors(cf metadata.ChangefeedIDWithEpoch, workers []metadata.ScheduledChangefeed) error {
+func (c *ControllerOb) SetProcessors(cf metadata.ChangefeedIdent, workers []metadata.ScheduledChangefeed) error {
 	c.storage.Lock()
 	defer c.storage.Unlock()
 	return c.storage.setProcessors(cf, workers)
 }
 
-func (c *ControllerOb) GetChangefeedSchedule(cf metadata.ChangefeedIDWithEpoch) (s metadata.ChangefeedSchedule, err error) {
+func (c *ControllerOb) GetChangefeedSchedule(cf metadata.ChangefeedIdent) (s metadata.ChangefeedSchedule, err error) {
 	c.storage.RLock()
 	defer c.storage.RUnlock()
 	s.Owner = c.storage.schedule.owners[cf]
@@ -486,7 +486,7 @@ func (c *ControllerOb) ScheduleSnapshot() (ss []metadata.ChangefeedSchedule, cs 
 type ownerOb struct {
 	s  *Storage
 	c  *metadata.ChangefeedInfo
-	id metadata.ChangefeedIDWithEpoch
+	id metadata.ChangefeedIdent
 
 	processors struct {
 		sync.Mutex
@@ -495,7 +495,7 @@ type ownerOb struct {
 	}
 }
 
-func (o *ownerOb) Self() (*metadata.ChangefeedInfo, metadata.ChangefeedIDWithEpoch) {
+func (o *ownerOb) Self() (*metadata.ChangefeedInfo, metadata.ChangefeedIdent) {
 	return o.c, o.id
 }
 
@@ -524,7 +524,7 @@ func (o *ownerOb) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 	copied := new(metadata.ChangefeedInfo)
 	*copied = *info
 	copied.Config = info.Config.Clone()
-	o.s.entities.cfs[info.ID] = copied
+	o.s.entities.cfs[info.ToChangefeedID()] = copied
 	return nil
 }
 

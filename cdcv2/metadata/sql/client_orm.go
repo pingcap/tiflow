@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdcv2/metadata"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -26,8 +27,9 @@ import (
 )
 
 var (
-	_ checker[*gorm.DB] = &ormClient{}
+	_ client[*gorm.DB] = &ormClient{}
 
+	_ checker[*gorm.DB]               = &ormClient{}
 	_ upstreamClient[*gorm.DB]        = &ormClient{}
 	_ changefeedInfoClient[*gorm.DB]  = &ormClient{}
 	_ changefeedStateClient[*gorm.DB] = &ormClient{}
@@ -180,12 +182,14 @@ func (c *ormClient) softDeleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO
 // updateChangefeedInfo implements the changefeedInfoClient interface.
 func (c *ormClient) updateChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
 	ret := tx.Where("uuid = ? and version = ?", info.UUID, info.Version).
-		Updates(ChangefeedInfoDO{
-			SinkURI:  info.SinkURI,
-			StartTs:  info.StartTs,
-			TargetTs: info.TargetTs,
-			Config:   info.Config,
-			Version:  info.Version + 1,
+		Updates(&ChangefeedInfoDO{
+			ChangefeedInfo: metadata.ChangefeedInfo{
+				SinkURI:  info.SinkURI,
+				StartTs:  info.StartTs,
+				TargetTs: info.TargetTs,
+				Config:   info.Config,
+			},
+			Version: info.Version + 1,
 		})
 	if err := handleSingleOpErr(ret, 1, "UpdateChangefeedInfo"); err != nil {
 		return errors.Trace(err)
@@ -261,9 +265,11 @@ func (c *ormClient) updateChangefeedState(tx *gorm.DB, state *ChangefeedStateDO)
 	ret := tx.Model(changefeedStateModel).Select("state", "warning", "error", "version").
 		Where("changefeed_uuid = ? and version = ?", state.ChangefeedUUID, state.Version).
 		Updates(ChangefeedStateDO{
-			State:   state.State,
-			Warning: state.Warning,
-			Error:   state.Error,
+			ChangefeedState: metadata.ChangefeedState{
+				State:   state.State,
+				Warning: state.Warning,
+				Error:   state.Error,
+			},
 			Version: state.Version + 1,
 		})
 	if err := handleSingleOpErr(ret, 1, "updateChangefeedState"); err != nil {
@@ -332,13 +338,31 @@ func (c *ormClient) deleteSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 func (c *ormClient) updateSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 	ret := tx.Where("changefeed_uuid = ? and version = ?", sc.ChangefeedUUID, sc.Version).
 		Updates(ScheduleDO{
-			Owner:        sc.Owner,
-			OwnerState:   sc.OwnerState,
-			Processors:   sc.Processors,
-			TaskPosition: sc.TaskPosition,
-			Version:      sc.Version + 1,
+			ScheduledChangefeed: metadata.ScheduledChangefeed{
+				Owner:        sc.Owner,
+				OwnerState:   sc.OwnerState,
+				Processors:   sc.Processors,
+				TaskPosition: sc.TaskPosition,
+			},
+			Version: sc.Version + 1,
 		})
 	if err := handleSingleOpErr(ret, 1, "UpdateSchedule"); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// updateScheduleOwnerState implements the scheduleClient interface.
+// TODO(CharlesCheung): check if the version needs to be checked.
+func (s *ormClient) updateScheduleOwnerState(tx *gorm.DB, sc *ScheduleDO) error {
+	ret := tx.Where("changefeed_uuid = ? and version = ?", sc.ChangefeedUUID, sc.Version).
+		Updates(ScheduleDO{
+			ScheduledChangefeed: metadata.ScheduledChangefeed{
+				OwnerState: sc.OwnerState,
+			},
+			Version: sc.Version + 1,
+		})
+	if err := handleSingleOpErr(ret, 1, "UpdateScheduleOwnerState"); err != nil {
 		return errors.Trace(err)
 	}
 	return nil

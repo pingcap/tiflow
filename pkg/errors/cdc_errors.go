@@ -970,4 +970,8 @@ var (
 		"meta operation %s is failed",
 		errors.RFCCodeText("DFLOW:ErrMetaOpFail"),
 	)
+	ErrInconsistentMetaCache = errors.Normalize(
+		"meta cache is inconsistent: %s",
+		errors.RFCCodeText("DFLOW:ErrInconsistentMetaCache"),
+	)
 )

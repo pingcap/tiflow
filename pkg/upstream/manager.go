@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -112,7 +111,7 @@ func (m *Manager) GetDefaultUpstream() (*Upstream, error) {
 }
 
 func (m *Manager) add(upstreamID uint64,
-	pdEndpoints []string, conf *config.SecurityConfig,
+	pdEndpoints []string, conf *security.Credential,
 ) *Upstream {
 	m.mu.Lock()
 	defer m.mu.Unlock()
