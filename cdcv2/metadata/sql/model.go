@@ -29,7 +29,7 @@ type ChangefeedProgress struct {
 }
 
 // Value implements the driver.Valuer interface
-func (cp *ChangefeedProgress) Value() (driver.Value, error) {
+func (cp ChangefeedProgress) Value() (driver.Value, error) {
 	return json.Marshal(cp)
 }
 
@@ -47,7 +47,7 @@ func (cp *ChangefeedProgress) Scan(value interface{}) error {
 type CaptureProgress map[uint64]ChangefeedProgress
 
 // Value implements the driver.Valuer interface
-func (cp *CaptureProgress) Value() (driver.Value, error) {
+func (cp CaptureProgress) Value() (driver.Value, error) {
 	return json.Marshal(cp)
 }
 

@@ -251,8 +251,8 @@ func TestScheduleClientExecSQL(t *testing.T) {
 	// Test updateSchedule
 	runMockExecTest(
 		t, mock,
-		"UPDATE `schedule` SET `owner`=?,`owner_state`=?,`processors`=?,`task_position`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
-		[]driver.Value{schedule.Owner, schedule.OwnerState, schedule.Processors, schedule.TaskPosition, schedule.Version + 1, sqlmock.AnyArg(), schedule.ChangefeedUUID, schedule.Version},
+		"UPDATE `schedule` SET `owner`=?,`owner_state`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
+		[]driver.Value{schedule.Owner, schedule.OwnerState, schedule.Version + 1, sqlmock.AnyArg(), schedule.ChangefeedUUID, schedule.Version},
 		func() error {
 			return cient.updateSchedule(db, schedule)
 		},
@@ -293,6 +293,7 @@ func TestProgressClientExecSQL(t *testing.T) {
 	)
 
 	// Test updateProgress
+	progress.Progress = &CaptureProgress{}
 	runMockExecTest(
 		t, mock,
 		"UPDATE `progress` SET `progress`=?,`version`=?,`update_at`=? WHERE capture_id = ? and version = ?",
