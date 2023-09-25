@@ -100,7 +100,9 @@ func TestConnAndClientPoolForV2(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, cc1)
 	require.True(t, cc1.Multiplexing())
+
 	cc1.Release()
+	require.Equal(t, 0, len(pool.stores))
 }
 
 func TestConnectToUnavailable(t *testing.T) {
@@ -115,6 +117,8 @@ func TestConnectToUnavailable(t *testing.T) {
 		rpc := cdcpb.NewChangeDataClient(conn)
 		_, err = rpc.EventFeedV2(ctx)
 		require.NotNil(t, err)
+
+		require.Nil(t, conn.Close())
 	}
 
 	service := make(chan *grpc.Server, 1)
@@ -143,6 +147,8 @@ func TestConnectToUnavailable(t *testing.T) {
 
 	_, err = client.Recv()
 	require.Equal(t, codes.Unimplemented, status.Code(err))
+
+	require.Nil(t, conn.Close())
 }
 
 func runGrpcService(srv cdcpb.ChangeDataServer, addr *string, service chan<- *grpc.Server) error {
@@ -151,6 +157,7 @@ func runGrpcService(srv cdcpb.ChangeDataServer, addr *string, service chan<- *gr
 	if err != nil {
 		return err
 	}
+	defer lis.Close()
 
 	kaep := keepalive.EnforcementPolicy{
 		MinTime:             3 * time.Second,
