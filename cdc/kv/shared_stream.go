@@ -449,11 +449,17 @@ func (s *requestedStream) sendRegionChangeEvents(
 ) error {
 	for _, event := range events {
 		regionID := event.RegionId
-		subscriptionID := tableSubID
-		if subscriptionID == invalidSubscriptionID {
+		var subscriptionID SubscriptionID
+		if tableSubID == invalidSubscriptionID {
 			subscriptionID = SubscriptionID(event.RequestId)
+		} else {
+			subscriptionID = tableSubID
 		}
 		if state := s.getState(subscriptionID, regionID); state != nil {
+			log.Debug("event feed get an Event",
+				zap.String("namespace", c.changefeed.Namespace),
+				zap.String("changefeed", c.changefeed.ID),
+				zap.Any("subscriptionID", subscriptionID))
 			sfEvent := newEventItem(event, state, s)
 			slot := hashRegionID(regionID, len(c.workers))
 			if err := c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
@@ -468,9 +474,11 @@ func (s *requestedStream) sendResolvedTs(
 	ctx context.Context, c *SharedClient, resolvedTs *cdcpb.ResolvedTs,
 	tableSubID SubscriptionID,
 ) error {
-	subscriptionID := tableSubID
-	if subscriptionID == invalidSubscriptionID {
+	var subscriptionID SubscriptionID
+	if tableSubID == invalidSubscriptionID {
 		subscriptionID = SubscriptionID(resolvedTs.RequestId)
+	} else {
+		subscriptionID = tableSubID
 	}
 	sfEvents := make([]statefulEvent, len(c.workers))
 	log.Debug("event feed get a ResolvedTs",
