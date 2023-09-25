@@ -17,4 +17,8 @@ UPDATE test_update SET uk = 'new_uk' WHERE id = 2;
 UPDATE test_update SET other = 'new_other' WHERE id = 3;
 
 -- update pk and uk
+<<<<<<< HEAD
 UPDATE test_update SET id = 200, uk = 'new_uk4' WHERE id = 4;
+=======
+UPDATE test_update SET id = 200, uk = 'new_uk4' WHERE id = 4;
+>>>>>>> 5cbeb04e83 (test(ticdc): add csv update test (#9729))

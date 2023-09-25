@@ -1,11 +1,19 @@
 USE `test`;
 
 CREATE TABLE `test_update` (
+<<<<<<< HEAD
                                `id` int(11) NOT NULL,
                                `uk` varchar(50) DEFAULT NULL,
                                `other` varchar(100) DEFAULT NULL,
                                PRIMARY KEY (`id`),
                                UNIQUE KEY `uk` (`uk`)
+=======
+  `id` int(11) NOT NULL,
+  `uk` varchar(50) DEFAULT NULL,
+  `other` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk` (`uk`)
+>>>>>>> 5cbeb04e83 (test(ticdc): add csv update test (#9729))
 );
 
 CREATE TABLE multi_data_type
@@ -50,6 +58,7 @@ CREATE TABLE multi_data_type
 );
 
 CREATE TABLE multi_charset (
+<<<<<<< HEAD
                                id INT,
                                name varchar(128) CHARACTER SET gbk,
                                country char(32) CHARACTER SET gbk,
@@ -57,6 +66,15 @@ CREATE TABLE multi_charset (
                                description text CHARACTER SET gbk,
                                image tinyblob,
                                PRIMARY KEY (id)
+=======
+	id INT,
+	name varchar(128) CHARACTER SET gbk,
+	country char(32) CHARACTER SET gbk,
+	city varchar(64),
+	description text CHARACTER SET gbk,
+	image tinyblob,
+	PRIMARY KEY (id)
+>>>>>>> 5cbeb04e83 (test(ticdc): add csv update test (#9729))
 ) ENGINE = InnoDB CHARSET = utf8mb4;
 
 CREATE TABLE binary_columns
@@ -69,4 +87,8 @@ CREATE TABLE binary_columns
     t_mediumblob         MEDIUMBLOB,
     t_longblob           LONGBLOB,
     PRIMARY KEY (id)
+<<<<<<< HEAD
 );
+=======
+);
+>>>>>>> 5cbeb04e83 (test(ticdc): add csv update test (#9729))

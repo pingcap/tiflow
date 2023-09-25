@@ -13,4 +13,8 @@ quote = '"'
 # Representation of null values in CSV files, the default value is '\N'
 null = '\N'
 # Include commit-ts in the row data. The default value is false.
+<<<<<<< HEAD
 include-commit-ts = true
+=======
+include-commit-ts = true
+>>>>>>> 5cbeb04e83 (test(ticdc): add csv update test (#9729))
