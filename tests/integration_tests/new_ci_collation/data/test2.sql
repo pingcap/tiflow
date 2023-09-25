@@ -4,3 +4,7 @@ delete from t2;
 delete from t3;
 delete from t4;
 delete from t5;
+delete from tt1;
+delete from tt2;
+delete from tt3;
+delete from tt4;

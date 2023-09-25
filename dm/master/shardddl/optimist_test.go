@@ -760,7 +760,7 @@ func (t *testOptimistSuite) TestOptimistLockConflict() {
 	case <-time.After(watchTimeout):
 		t.T().Fatal("timeout")
 	case op3 := <-opCh:
-		require.Equal(t.T(), []string{}, op3.DDLs)
+		require.Equal(t.T(), DDLs1, op3.DDLs)
 		require.Equal(t.T(), optimism.ConflictNone, op3.ConflictStage)
 	}
 	cancel2()
