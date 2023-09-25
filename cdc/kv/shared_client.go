@@ -358,15 +358,16 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 			continue
 		}
 
+		storeID := sri.rpcCtx.Peer.StoreId
+		storeAddr := sri.rpcCtx.Addr
 		log.Debug("event feed will request a region",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("table", sri.requestedTable.span),
 			zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
-			zap.Uint64("regionID", sri.verID.GetID()))
-
-		storeID := sri.rpcCtx.Peer.StoreId
-		storeAddr := sri.rpcCtx.Addr
+			zap.Uint64("regionID", sri.verID.GetID()),
+			zap.Uint64("storeID", storeID),
+			zap.String("addr", storeAddr))
 		s.requestStore(ctx, g, storeID, storeAddr).appendRequest(sri)
 	}
 }

@@ -272,9 +272,9 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 	}
 
 	fetchMoreReq := func() (sri singleRegionInfo, _ error) {
-		waitReqTicker := time.NewTicker(60 * time.Second)
-		defer waitReqTicker.Stop()
 		for {
+			waitReqTicker := time.NewTicker(60 * time.Second)
+			defer waitReqTicker.Stop()
 			select {
 			case <-ctx.Done():
 				return sri, ctx.Err()
@@ -315,6 +315,14 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 	s.preFetchForConnecting = nil
 	for {
 		subscriptionID := sri.requestedTable.subscriptionID
+		log.Debug("event feed gets a singleRegionInfo",
+			zap.String("namespace", c.changefeed.Namespace),
+			zap.String("changefeed", c.changefeed.ID),
+			zap.Any("subscriptionID", subscriptionID),
+			zap.Uint64("regionID", sri.verID.GetID()),
+			zap.Uint64("storeID", rs.storeID),
+			zap.String("addr", rs.storeAddr),
+			zap.Uint64("streamID", s.streamID))
 		// It means it's a special task for stopping the table.
 		if sri.lockedRange == nil {
 			if s.multiplexing != nil {
