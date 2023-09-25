@@ -479,11 +479,8 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	err = encoder.AppendRowChangedEvent(ctx, topic, largeTestEvent, func() {})
 	require.NoError(t, err)
 
-	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, func() {})
-	require.NoError(t, err)
-
 	messages := encoder.Build()
-	require.Len(t, messages, 3)
+	require.Len(t, messages, 2)
 
 	claimCheckLocationMessage := messages[1]
 	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)

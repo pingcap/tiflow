@@ -121,7 +121,8 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 			// send the large message to the external storage first, then
 			// create a new message contains the reference of the large message.
 			claimCheckFileName := claimcheck.NewFileName()
-			err = d.claimCheck.WriteMessage(ctx, key, value, claimCheckFileName)
+			m := newMessage(key, value)
+			err = d.claimCheck.WriteMessage(ctx, m.Key, m.Value, claimCheckFileName)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -177,6 +178,26 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 
 	d.curBatchSize++
 	return nil
+}
+
+func newMessage(key, value []byte) *common.Message {
+	versionHead := make([]byte, 8)
+	binary.BigEndian.PutUint64(versionHead, codec.BatchVersion1)
+	message := common.NewMsg(config.ProtocolOpen, versionHead, nil, 0, model.MessageTypeRow, nil, nil)
+
+	var (
+		keyLenByte   [8]byte
+		valueLenByte [8]byte
+	)
+	binary.BigEndian.PutUint64(keyLenByte[:], uint64(len(key)))
+	binary.BigEndian.PutUint64(valueLenByte[:], uint64(len(value)))
+
+	message.Key = append(message.Key, keyLenByte[:]...)
+	message.Key = append(message.Key, key...)
+	message.Value = append(message.Value, valueLenByte[:]...)
+	message.Value = append(message.Value, value...)
+
+	return message
 }
 
 // EncodeDDLEvent implements the RowEventEncoder interface
