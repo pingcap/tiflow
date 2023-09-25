@@ -19,7 +19,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/IBM/sarama"
+	"github.com/Shopify/sarama"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/pkg/config"

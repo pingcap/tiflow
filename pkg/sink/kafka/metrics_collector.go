@@ -39,7 +39,7 @@ const (
 	refreshClusterMetaInterval = 30 * time.Minute
 )
 
-// Sarama metrics names, see https://pkg.go.dev/github.com/IBM/sarama#pkg-overview.
+// Sarama metrics names, see https://pkg.go.dev/github.com/Shopify/sarama#pkg-overview.
 const (
 	// Producer level.
 	compressionRatioMetricName  = "compression-ratio"

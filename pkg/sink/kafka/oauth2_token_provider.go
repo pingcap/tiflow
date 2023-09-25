@@ -17,7 +17,7 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/IBM/sarama"
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"

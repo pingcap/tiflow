@@ -16,7 +16,6 @@ package open
 import (
 	"context"
 	"database/sql"
-	"os"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -514,44 +513,4 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 		require.Equal(t, column.Type, decodedColumn.Type)
 		require.Equal(t, column.Value, decodedColumn.Value)
 	}
-}
-
-func TestDebugLargeMessage(t *testing.T) {
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolOpen)
-	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
-	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/debug"
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	rawBytes, err := os.ReadFile("/tmp/debug/large.json")
-	require.NoError(t, err)
-	keyValue, err := common.UnmarshalClaimCheckMessage(rawBytes)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(keyValue.Key, keyValue.Value)
-	require.NoError(t, err)
-
-	_, ok, err := decoder.HasNext()
-	require.True(t, ok)
-	_, _ = decoder.NextRowChangedEvent()
-
-	_, ok, err = decoder.HasNext()
-	require.True(t, ok)
-	event, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.NotNil(t, event)
-
-	_, ok, err = decoder.HasNext()
-	require.True(t, ok)
-	event, err = decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.NotNil(t, event)
-
-	_, ok, err = decoder.HasNext()
-	require.True(t, ok)
-	event, err = decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.NotNil(t, event)
 }

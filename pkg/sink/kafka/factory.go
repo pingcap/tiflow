@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/IBM/sarama"
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -252,23 +252,6 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 			if err == nil {
 				return nil
 			}
-			messageSize := err.Msg.ByteSize(2)
-			log.Info("async end message failed", zap.Int("messageSize", messageSize))
-
-			//key, _ := err.Msg.Key.Encode()
-			//value, _ := err.Msg.Value.Encode()
-			//
-			//large := &struct {
-			//	Key   []byte `json:"key"`
-			//	Value []byte `json:"value"`
-			//}{
-			//	Key:   key,
-			//	Value: value,
-			//}
-			//
-			//data, _ := json.Marshal(large)
-			//storage, _ := util.GetExternalStorageWithTimeout(ctx, "file:///tmp/large-message-debug", 5*time.Second)
-			//_ = storage.WriteFile(ctx, fmt.Sprintf("large-message-%d", time.Now().UnixNano()), data)
 			return cerror.WrapError(cerror.ErrKafkaAsyncSendMessage, err)
 		}
 	}

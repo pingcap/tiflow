@@ -16,7 +16,7 @@ package security
 import (
 	"strings"
 
-	"github.com/IBM/sarama"
+	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 )
 

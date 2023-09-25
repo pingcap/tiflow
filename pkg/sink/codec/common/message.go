@@ -24,7 +24,7 @@ import (
 )
 
 // MaxRecordOverhead is used to calculate message size by sarama kafka client.
-// reference: https://github.com/IBM/sarama/blob/
+// reference: https://github.com/Shopify/sarama/blob/
 // 66521126c71c522c15a36663ae9cddc2b024c799/async_producer.go#L233
 // For TiCDC, minimum supported kafka version is `0.11.0.2`,
 // which will be treated as `version = 2` by sarama producer.
