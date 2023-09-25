@@ -199,13 +199,13 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, cerror.ErrOpenProtocolCodecInvalidData.GenWithStack("not found row event message")
 	}
 
-	event := b.nextEvent
 	ctx := context.Background()
 	// claim-check message found
 	if b.nextKey.ClaimCheckLocation != "" {
 		return b.assembleEventFromClaimCheckStorage(ctx)
 	}
 
+	event := b.nextEvent
 	if b.nextKey.OnlyHandleKey {
 		var err error
 		event, err = b.assembleHandleKeyOnlyEvent(ctx, event)
@@ -310,6 +310,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 
 func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (*model.RowChangedEvent, error) {
 	_, claimCheckFileName := filepath.Split(b.nextKey.ClaimCheckLocation)
+	b.nextKey = nil
 	data, err := b.storage.ReadFile(ctx, claimCheckFileName)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -346,7 +347,6 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (
 	}
 
 	event := msgToRowChange(msgKey, rowMsg)
-	b.nextKey = nil
 
 	return event, nil
 }

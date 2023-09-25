@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/pingcap/errors"
@@ -138,9 +137,6 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 }
 
 func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, claimCheckLocation string) (*model.RowChangedEvent, error) {
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
 	_, claimCheckFileName := filepath.Split(claimCheckLocation)
 	data, err := b.storage.ReadFile(ctx, claimCheckFileName)
 	if err != nil {
