@@ -210,15 +210,20 @@ func (c *CSVConfig) validateAndAdjust() error {
 	}
 
 	// validate delimiter
-	if len(c.Delimiter) == 0 {
+	switch len(c.Delimiter) {
+	case 0:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config delimiter cannot be empty"))
-	}
-	if strings.ContainsRune(c.Delimiter, CR) ||
-		strings.ContainsRune(c.Delimiter, LF) {
+	case 1:
+		if strings.ContainsRune(c.Delimiter, CR) || strings.ContainsRune(c.Delimiter, LF) {
+			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+				errors.New("csv config delimiter contains line break characters"))
+		}
+	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains line break characters"))
+			errors.New("csv config delimiter contains more than one character"))
 	}
+
 	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config quote and delimiter cannot be the same"))
