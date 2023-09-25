@@ -720,18 +720,9 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 
 	kvCfg := config.GetGlobalServerConfig().KVClient
 	ddlPuller, err := puller.NewDDLJobPuller(
-		ctx,
-		p.upstream.PDClient,
-		p.upstream.GrpcPool,
-		p.upstream.RegionCache,
-		p.upstream.KVStorage,
-		p.upstream.PDClock,
-		ddlStartTs,
-		kvCfg,
-		p.changefeedID,
-		schemaStorage,
-		f,
-		false, /* isOwner */
+		ctx, p.upstream, ddlStartTs,
+		kvCfg, p.changefeedID, schemaStorage,
+		f, false, /* isOwner */
 	)
 	if err != nil {
 		return errors.Trace(err)

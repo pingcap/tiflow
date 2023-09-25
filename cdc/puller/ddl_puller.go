@@ -28,19 +28,18 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/memorysorter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/tikv"
-	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -560,11 +559,7 @@ func findColumnByName(cols []*timodel.ColumnInfo, name string) (*timodel.ColumnI
 // which fetches ddl events starting from checkpointTs.
 func NewDDLJobPuller(
 	ctx context.Context,
-	pdCli pd.Client,
-	grpcPool kv.GrpcPool,
-	regionCache *tikv.RegionCache,
-	kvStorage tidbkv.Storage,
-	pdClock pdutil.Clock,
+	up *upstream.Upstream,
 	checkpointTs uint64,
 	cfg *config.KVClientConfig,
 	changefeed model.ChangeFeedID,
@@ -572,6 +567,11 @@ func NewDDLJobPuller(
 	filter filter.Filter,
 	isOwner bool,
 ) (DDLJobPuller, error) {
+	pdCli := up.PDClient
+	regionCache := up.RegionCache
+	kvStorage := up.KVStorage
+	pdClock := up.PDClock
+
 	if isOwner {
 		changefeed.ID += "_owner_ddl_puller"
 	} else {
@@ -597,6 +597,7 @@ func NewDDLJobPuller(
 
 		rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)
 		mp.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
+		grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig)
 
 		client := kv.NewSharedClient(
 			changefeed, cfg, ddlPullerFilterLoop,
@@ -617,7 +618,7 @@ func NewDDLJobPuller(
 		mp.Subscribe(spans, checkpointTs, memorysorter.DDLPullerTableName)
 	} else {
 		jobPuller.puller.Puller = New(
-			ctx, pdCli, grpcPool, regionCache, kvStorage, pdClock,
+			ctx, pdCli, up.GrpcPool, regionCache, kvStorage, pdClock,
 			checkpointTs, spans, cfg, changefeed, -1, memorysorter.DDLPullerTableName,
 			ddlPullerFilterLoop,
 		)
@@ -668,8 +669,7 @@ func NewDDLPuller(ctx context.Context,
 	// storage can be nil only in the test
 	if up.KVStorage != nil {
 		puller, err = NewDDLJobPuller(
-			ctx, up.PDClient, up.GrpcPool, up.RegionCache, up.KVStorage, up.PDClock,
-			startTs, config.GetGlobalServerConfig().KVClient,
+			ctx, up, startTs, config.GetGlobalServerConfig().KVClient,
 			changefeed, schemaStorage, filter,
 			true, /* isOwner */
 		)
