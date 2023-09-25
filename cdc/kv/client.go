@@ -46,7 +46,6 @@ import (
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -178,10 +177,6 @@ type CDCClient struct {
 	// filterLoop is used in BDR mode, when it is true, tikv cdc component
 	// will filter data that are written by another TiCDC.
 	filterLoop bool
-
-	// rateLimiterMap is used to limit the rate of create new stream to connect to TiKV store
-	// return an error directly if the rate is limited, then kv client will try this region later.
-	rateLimiterMap sync.Map
 }
 
 type tableStoreStat struct {
@@ -213,11 +208,10 @@ func NewCDCClient(
 		regionCache: regionCache,
 		pdClock:     pdClock,
 
-		changefeed:     changefeed,
-		tableID:        tableID,
-		tableName:      tableName,
-		filterLoop:     filterLoop,
-		rateLimiterMap: sync.Map{},
+		changefeed: changefeed,
+		tableID:    tableID,
+		tableName:  tableName,
+		filterLoop: filterLoop,
 	}
 	c.tableStoreStats.v = make(map[string]*tableStoreStat)
 	return c
@@ -261,11 +255,6 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			retry.WithMaxTries(2),
 			retry.WithIsRetryableErr(cerror.IsRetryableError),
 		)
-		return
-	}
-	limit, _ := c.rateLimiterMap.LoadOrStore(addr, rate.NewLimiter(rate.Limit(5), 1))
-	if !limit.(*rate.Limiter).Allow() {
-		newStreamErr = errors.Errorf("rate limit exceed 5 operations per second, addr: %s", addr)
 		return
 	}
 	newStreamErr = streamFunc()
