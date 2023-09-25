@@ -17,8 +17,6 @@ function run() {
 
 	run_sql_file $CUR/data/prepare.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql_file $CUR/data/prepare.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	# record tso before we create tables to skip the system table DDLs
-	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
@@ -26,12 +24,14 @@ function run() {
 	case $SINK_TYPE in
 	kafka) SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) SINK_URI="file://$WORK_DIR/storage_test/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
+	pulsar) SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
 	*) SINK_URI="mysql://normal:123456@127.0.0.1:3306/" ;;
 	esac
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
+	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
 	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
+	pulsar) run_pulsar_consumer $WORK_DIR $SINK_URI ;;
 	esac
 
 	run_sql_file $CUR/data/test.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}

@@ -619,7 +619,6 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 			SinkURI: sinkURI,
 		}
 	}
-
 	if s.PulsarConfig != nil {
 		if err := s.PulsarConfig.validate(); err != nil {
 			return err

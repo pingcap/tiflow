@@ -255,6 +255,9 @@ integration_test_kafka: check_third_party_binary
 integration_test_storage:
 	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
 
+integration_test_pulsar:
+	tests/integration_tests/run.sh pulsar "$(CASE)" "$(START_AT)"
+
 kafka_docker_integration_test: ## Run TiCDC Kafka all integration tests in Docker.
 kafka_docker_integration_test: clean_integration_test_containers
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml up
