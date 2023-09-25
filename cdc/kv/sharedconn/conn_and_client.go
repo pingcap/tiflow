@@ -189,6 +189,8 @@ func (c *connArray) connect(ctx context.Context, credential *security.Credential
 			conn.ClientConn = clientConn
 			conn.multiplexing = false
 			err = nil
+		} else {
+			_ = clientConn.Close()
 		}
 	}
 	return

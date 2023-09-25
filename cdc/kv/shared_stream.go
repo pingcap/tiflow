@@ -151,8 +151,10 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Bool("canceled", canceled))
 		if s.multiplexing != nil {
 			s.multiplexing.Release()
+			s.multiplexing = nil
 		} else if s.tableExclusives.receivers != nil {
 			close(s.tableExclusives.receivers)
+			s.tableExclusives.receivers = nil
 			s.tableExclusives.m.Range(func(_, value any) bool {
 				value.(*sharedconn.ConnAndClient).Release()
 				return true

@@ -99,8 +99,10 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 
 	events1 := make(chan *cdcpb.ChangeDataEvent, 10)
 	events2 := make(chan *cdcpb.ChangeDataEvent, 10)
-	server1, addr1 := newMockService(ctx, t, newMockChangeDataServer(events1), wg)
-	server2, addr2 := newMockService(ctx, t, newMockChangeDataServer(events2), wg)
+	srv1 := newMockChangeDataServer(events1)
+	server1, addr1 := newMockService(ctx, t, srv1, wg)
+	srv2 := newMockChangeDataServer(events2)
+	server2, addr2 := newMockService(ctx, t, srv2, wg)
 
 	rpcClient, cluster, pdClient, _ := testutils.NewMockTiKV("", mockcopr.NewCoprRPCHandler())
 
@@ -132,6 +134,8 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 		_ = kvStorage.Close()
 		regionCache.Close()
 		pdClient.Close()
+		srv1.wg.Wait()
+		srv2.wg.Wait()
 		server1.Stop()
 		server2.Stop()
 		wg.Wait()
@@ -195,15 +199,18 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 
 type mockChangeDataServer struct {
 	ch chan *cdcpb.ChangeDataEvent
+	wg sync.WaitGroup
 }
 
-func newMockChangeDataServer(ch chan *cdcpb.ChangeDataEvent) cdcpb.ChangeDataServer {
+func newMockChangeDataServer(ch chan *cdcpb.ChangeDataEvent) *mockChangeDataServer {
 	return &mockChangeDataServer{ch: ch}
 }
 
 func (m *mockChangeDataServer) EventFeed(s cdcpb.ChangeData_EventFeedServer) error {
 	closed := make(chan struct{})
+	m.wg.Add(1)
 	go func() {
+		defer m.wg.Done()
 		defer close(closed)
 		for {
 			if _, err := s.Recv(); err != nil {
@@ -211,6 +218,8 @@ func (m *mockChangeDataServer) EventFeed(s cdcpb.ChangeData_EventFeedServer) err
 			}
 		}
 	}()
+	m.wg.Add(1)
+	defer m.wg.Done()
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
 	for {
