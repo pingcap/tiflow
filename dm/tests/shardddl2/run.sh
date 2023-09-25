@@ -515,7 +515,10 @@ function DM_ADD_DROP_PARTITIONS_CASE() {
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(4);"
 
 	run_sql_source1 "ALTER TABLE ${shardddl1}.${tb1} ADD PARTITION (partition p1 VALUES LESS THAN (10000))"
-	run_sql_tidb_with_retry "show create table ${shardddl}.${tb}" "PARTITION \`p1\`"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.partitions WHERE TABLE_SCHEMA='${shardddl}' AND TABLE_NAME = '${tb}' AND PARTITION_NAME IS NOT NULL;" "count(1): 2"
+
+	run_sql_source1 "ALTER TABLE ${shardddl1}.${tb1} DROP PARTITION p1;"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.partitions WHERE TABLE_SCHEMA='${shardddl}' AND TABLE_NAME = '${tb}' AND PARTITION_NAME IS NOT NULL;" "count(1): 1"
 }
 
 function DM_ADD_DROP_PARTITIONS() {
