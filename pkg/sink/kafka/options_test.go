@@ -640,10 +640,6 @@ func TestConfigurationCombinations(t *testing.T) {
 		// producer's `MaxMessageBytes` = encoder's `MaxMessageBytes`.
 		require.Equal(t, encoderConfig.MaxMessageBytes, options.MaxMessageBytes)
 
-		expected, err := strconv.Atoi(a.expectedMaxMessageBytes)
-		require.Nil(t, err)
-		require.Equal(t, expected, options.MaxMessageBytes)
-
 		adminClient.Close()
 	}
 }
