@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
+	"github.com/Shopify/sarama/mocks"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

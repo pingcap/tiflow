@@ -321,7 +321,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			}
 		}
 	}
-
 }
 
 func (w *worker) close() {

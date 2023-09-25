@@ -52,7 +52,7 @@ require (
 	github.com/imdario/mergo v0.3.11
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.2.0
-	github.com/jcmturner/gokrb5/v8 v8.4.4
+	github.com/jcmturner/gokrb5/v8 v8.4.3
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
 	github.com/klauspost/compress v1.16.7
@@ -62,7 +62,7 @@ require (
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/pierrec/lz4/v4 v4.1.18
+	github.com/pierrec/lz4/v4 v4.1.17
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20221009092201-b66cddb77c32
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
@@ -107,11 +107,11 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.25.0
 	golang.org/x/exp v0.0.0-20230711005742-c3f37128e5a4
-	golang.org/x/net v0.15.0
+	golang.org/x/net v0.14.0
 	golang.org/x/oauth2 v0.8.0
 	golang.org/x/sync v0.3.0
-	golang.org/x/sys v0.12.0
-	golang.org/x/text v0.13.0
+	golang.org/x/sys v0.11.0
+	golang.org/x/text v0.12.0
 	golang.org/x/time v0.3.0
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/grpc v1.54.0
@@ -139,8 +139,6 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.4 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/google/gofuzz v1.1.0 // indirect
-	github.com/hashicorp/errwrap v1.0.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/influxdata/tdigest v0.0.1 // indirect
 	github.com/jellydator/ttlcache/v3 v3.0.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -205,8 +203,8 @@ require (
 	github.com/dgryski/go-spooky v0.0.0-20170606183049-ed3d087f40e2 // indirect
 	github.com/dgryski/go-stadtx v0.0.0-20181220175827-101ddca05f0b // indirect
 	github.com/dvsekhvalnov/jose2go v1.5.0 // indirect
-	github.com/eapache/go-resiliency v1.4.0 // indirect
-	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
+	github.com/eapache/go-resiliency v1.3.0 // indirect
+	github.com/eapache/go-xerial-snappy v0.0.0-20230111030713-bf00bc1b83b6 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
@@ -232,6 +230,8 @@ require (
 	github.com/gorilla/mux v1.8.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
+	github.com/hashicorp/errwrap v1.0.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/huichen/murmur v0.0.0-20130808212358-e0489551cf51 // indirect
 	github.com/iancoleman/strcase v0.2.0 // indirect
@@ -344,9 +344,9 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v0.20.0 // indirect
 	go.opentelemetry.io/otel/trace v0.20.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.7.0 // indirect
-	golang.org/x/crypto v0.13.0 // indirect
+	golang.org/x/crypto v0.12.0 // indirect
 	golang.org/x/mod v0.11.0 // indirect
-	golang.org/x/term v0.12.0 // indirect
+	golang.org/x/term v0.11.0 // indirect
 	golang.org/x/tools v0.10.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/api v0.114.0 // indirect
