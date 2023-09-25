@@ -38,6 +38,13 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
+
+	// the `max-message-bytes` is set equal to topic's `max.message.bytes`, and is used to check
+	// whether the message is larger than the max size limit. It's found some message pass the message
+	// size limit check at the client side and failed at the broker side since message enlarged during
+	// the network transmission. so we set the `max-message-bytes` to a smaller value to avoid this problem.
+	// maxMessageBytesOverhead is used to reduce the `max-message-bytes`.
+	maxMessageBytesOverhead = 128
 )
 
 const (
@@ -597,11 +604,13 @@ func AdjustOptions(
 		}
 
 		if topicMaxMessageBytes < options.MaxMessageBytes {
+			maxMessageBytes := topicMaxMessageBytes - maxMessageBytesOverhead
 			log.Warn("topic's `max.message.bytes` less than the `max-message-bytes`,"+
 				"use topic's `max.message.bytes` to initialize the Kafka producer",
 				zap.Int("max.message.bytes", topicMaxMessageBytes),
-				zap.Int("max-message-bytes", options.MaxMessageBytes))
-			options.MaxMessageBytes = topicMaxMessageBytes
+				zap.Int("max-message-bytes", options.MaxMessageBytes),
+				zap.Int("real-max-message-bytes", maxMessageBytes))
+			options.MaxMessageBytes = maxMessageBytes
 		}
 
 		// no need to create the topic,
@@ -636,11 +645,13 @@ func AdjustOptions(
 	// TiCDC need to make sure that the producer's `MaxMessageBytes` won't larger than
 	// broker's `message.max.bytes`.
 	if brokerMessageMaxBytes < options.MaxMessageBytes {
+		maxMessageBytes := brokerMessageMaxBytes - maxMessageBytesOverhead
 		log.Warn("broker's `message.max.bytes` less than the `max-message-bytes`,"+
 			"use broker's `message.max.bytes` to initialize the Kafka producer",
 			zap.Int("message.max.bytes", brokerMessageMaxBytes),
-			zap.Int("max-message-bytes", options.MaxMessageBytes))
-		options.MaxMessageBytes = brokerMessageMaxBytes
+			zap.Int("max-message-bytes", options.MaxMessageBytes),
+			zap.Int("real-max-message-bytes", maxMessageBytes))
+		options.MaxMessageBytes = maxMessageBytes
 	}
 
 	// topic not exists yet, and user does not specify the `partition-num` in the sink uri.
