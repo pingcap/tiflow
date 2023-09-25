@@ -172,8 +172,8 @@ func runGrpcService(srv cdcpb.ChangeDataServer, addr *string, service chan<- *gr
 	}
 	grpcServer := grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
 	cdcpb.RegisterChangeDataServer(grpcServer, srv)
-	service <- grpcServer
 	*addr = lis.Addr().String()
+	service <- grpcServer
 	return grpcServer.Serve(lis)
 }
 
