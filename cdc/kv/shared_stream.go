@@ -47,10 +47,12 @@ type requestedStream struct {
 	multiplexing *sharedconn.ConnAndClient
 
 	// tableExclusives means one GRPC stream is exclusive by one table.
-	tableExclusives struct {
-		m         sync.Map // map[SubscriptionID]*sharedconn.ConnAndClient
-		receivers chan SubscriptionID
-	}
+	tableExclusives chan tableExclusive
+}
+
+type tableExclusive struct {
+	subscriptionID SubscriptionID
+	cc             *sharedconn.ConnAndClient
 }
 
 func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *requestedStore) *requestedStream {
@@ -150,16 +152,10 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Uint64("streamID", s.streamID),
 			zap.Bool("canceled", canceled))
 		if s.multiplexing != nil {
-			s.multiplexing.Release()
 			s.multiplexing = nil
-		} else if s.tableExclusives.receivers != nil {
-			close(s.tableExclusives.receivers)
-			s.tableExclusives.receivers = nil
-			s.tableExclusives.m.Range(func(_, value any) bool {
-				value.(*sharedconn.ConnAndClient).Release()
-				return true
-			})
-			s.tableExclusives.m = sync.Map{}
+		} else if s.tableExclusives != nil {
+			close(s.tableExclusives)
+			s.tableExclusives = nil
 		}
 	}()
 
@@ -188,17 +184,16 @@ func (s *requestedStream) run(ctx context.Context, c *SharedClient, rs *requeste
 			zap.Uint64("streamID", s.streamID))
 		cc.Release()
 
-		s.tableExclusives.receivers = make(chan SubscriptionID, 8)
+		s.tableExclusives = make(chan tableExclusive, 8)
 		g.Go(func() error {
 			for {
 				select {
 				case <-gctx.Done():
 					return gctx.Err()
-				case subscriptionID := <-s.tableExclusives.receivers:
-					if value, ok := s.tableExclusives.m.Load(subscriptionID); ok {
-						cc := value.(*sharedconn.ConnAndClient)
-						g.Go(func() error { return s.receive(gctx, c, rs, cc, subscriptionID) })
-					}
+				case tableExclusive := <-s.tableExclusives:
+					subscriptionID := tableExclusive.subscriptionID
+					cc := tableExclusive.cc
+					g.Go(func() error { return s.receive(gctx, c, rs, cc, subscriptionID) })
 				}
 			}
 		})
@@ -271,10 +266,11 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		return nil
 	}
 
-	fetchMoreReq := func() (sri singleRegionInfo, _ error) {
+	fetchMoreReq := func() (singleRegionInfo, error) {
+		waitReqTicker := time.NewTicker(60 * time.Second)
+		defer waitReqTicker.Stop()
+		var sri singleRegionInfo
 		for {
-			waitReqTicker := time.NewTicker(60 * time.Second)
-			defer waitReqTicker.Stop()
 			select {
 			case <-ctx.Done():
 				return sri, ctx.Err()
@@ -289,9 +285,9 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 		}
 	}
 
+	tableExclusives := make(map[SubscriptionID]*sharedconn.ConnAndClient)
 	getTableExclusiveConn := func(subscriptionID SubscriptionID) (cc *sharedconn.ConnAndClient, err error) {
-		value, ok := s.tableExclusives.m.Load(subscriptionID)
-		if !ok {
+		if cc = tableExclusives[subscriptionID]; cc == nil {
 			if cc, err = c.grpcPool.Connect(ctx, rs.storeAddr); err != nil {
 				return
 			}
@@ -300,16 +296,22 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				cc, err = nil, errors.New("multiplexing is enabled, will re-establish the stream")
 				return
 			}
-			s.tableExclusives.m.Store(subscriptionID, cc)
+			tableExclusives[subscriptionID] = cc
 			select {
 			case <-ctx.Done():
-			case s.tableExclusives.receivers <- subscriptionID:
+			case s.tableExclusives <- tableExclusive{subscriptionID, cc}:
 			}
-		} else {
-			cc = value.(*sharedconn.ConnAndClient)
 		}
 		return
 	}
+	defer func() {
+		if s.multiplexing != nil {
+			s.multiplexing.Release()
+		}
+		for _, cc := range tableExclusives {
+			cc.Release()
+		}
+	}()
 
 	sri := *s.preFetchForConnecting
 	s.preFetchForConnecting = nil
@@ -333,10 +335,9 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 				if err = doSend(s.multiplexing, req); err != nil {
 					return err
 				}
-			} else {
-				if value, ok := s.tableExclusives.m.LoadAndDelete(subscriptionID); ok {
-					value.(*sharedconn.ConnAndClient).Release()
-				}
+			} else if cc := tableExclusives[subscriptionID]; cc != nil {
+				delete(tableExclusives, subscriptionID)
+				cc.Release()
 			}
 			// NOTE: some principles to help understand deregistering a table:
 			// 1. after a Deregister(requestID) message is sent out, no more region requests
