@@ -382,7 +382,7 @@ func TestTableSinkWrapperSinkVersion(t *testing.T) {
 
 	require.False(t, wrapper.initTableSink())
 
-	wrapper.tableSinkCreator = func() (tablesink.TableSink, uint64) {
+	wrapper.tableSinkCreater = func() (tablesink.TableSink, uint64) {
 		*version += 1
 		return innerTableSink, *version
 	}
