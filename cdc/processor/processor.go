@@ -718,10 +718,10 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	kvCfg := config.GetGlobalServerConfig().KVClient
+	serverCfg := config.GetGlobalServerConfig()
 	ddlPuller, err := puller.NewDDLJobPuller(
 		ctx, p.upstream, ddlStartTs,
-		kvCfg, p.changefeedID, schemaStorage,
+		serverCfg, p.changefeedID, schemaStorage,
 		f, false, /* isOwner */
 	)
 	if err != nil {
