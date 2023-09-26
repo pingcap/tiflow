@@ -120,8 +120,50 @@ func (m *SourceManager) GetTablePullerStats(tableID model.TableID) puller.Stats 
 }
 
 // GetTableSorterStats returns the sorter stats of the table.
+<<<<<<< HEAD
 func (m *SourceManager) GetTableSorterStats(tableID model.TableID) engine.TableStats {
 	return m.engine.GetStatsByTable(tableID)
+=======
+func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats {
+	return m.engine.GetStatsByTable(span)
+}
+
+// Run implements util.Runnable.
+func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
+	if m.multiplexing {
+		serverConfig := config.GetGlobalServerConfig()
+		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig)
+		client := kv.NewSharedClient(
+			m.changefeedID, serverConfig, m.bdrMode,
+			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
+			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
+		)
+		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
+			m.changefeedID, client, m.engine,
+			int(serverConfig.KVClient.FrontierConcurrent),
+		)
+
+		close(m.ready)
+		return m.multiplexingPuller.puller.Run(ctx)
+	}
+
+	m.tablePullers.ctx = ctx
+	close(m.ready)
+	select {
+	case err := <-m.tablePullers.errChan:
+		return err
+	case <-m.tablePullers.ctx.Done():
+		return m.tablePullers.ctx.Err()
+	}
+}
+
+// WaitForReady implements util.Runnable.
+func (m *SourceManager) WaitForReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+	case <-m.ready:
+	}
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 }
 
 // Close closes the source manager. Stop all pullers and close the engine.

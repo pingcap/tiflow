@@ -45,10 +45,13 @@ type DebugConfig struct {
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 
+<<<<<<< HEAD
 	// EnableNewSink enables the new sink.
 	// The default value is true.
 	EnableNewSink bool `toml:"enable-new-sink" json:"enable-new-sink"`
 
+=======
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 	// EnableKVConnectBackOff enables the backoff for kv connect.
 	EnableKVConnectBackOff bool `toml:"enable-kv-connect-backoff" json:"enable-kv-connect-backoff"`
 }

@@ -976,6 +976,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		return nil, errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	ddlPuller, err := puller.NewDDLJobPuller(
 		stdCtx,
 		p.upstream.PDClient,
@@ -988,6 +989,13 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.changefeedID,
 		schemaStorage,
 		f,
+=======
+	serverCfg := config.GetGlobalServerConfig()
+	ddlPuller, err := puller.NewDDLJobPuller(
+		ctx, p.upstream, ddlStartTs,
+		serverCfg, p.changefeedID, schemaStorage,
+		f, false, /* isOwner */
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 	)
 	if err != nil {
 		return nil, errors.Trace(err)

@@ -248,7 +248,12 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		return nil
 	}
 	if c.config.Debug.EnableKVConnectBackOff {
+<<<<<<< HEAD
 		newStreamErr = retry.Do(ctx, streamFunc, retry.WithBackoffBaseDelay(500),
+=======
+		newStreamErr = retry.Do(ctx, streamFunc,
+			retry.WithBackoffBaseDelay(100),
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 			retry.WithMaxTries(2),
 			retry.WithIsRetryableErr(cerror.IsRetryableError),
 		)

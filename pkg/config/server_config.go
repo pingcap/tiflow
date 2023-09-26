@@ -156,8 +156,11 @@ var defaultServerConfig = &ServerConfig{
 		Messages: defaultMessageConfig.Clone(),
 
 		Scheduler:              NewDefaultSchedulerConfig(),
+<<<<<<< HEAD
 		EnableNewSink:          true,
 		EnablePullBasedSink:    true,
+=======
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 		EnableKVConnectBackOff: false,
 	},
 	ClusterID:           "default",

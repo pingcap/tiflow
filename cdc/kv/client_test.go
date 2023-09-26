@@ -3535,7 +3535,11 @@ func TestPrewriteNotMatchError(t *testing.T) {
 func createFakeEventFeedSession() *eventFeedSession {
 	return newEventFeedSession(
 		&CDCClient{config: config.GetDefaultServerConfig()},
+<<<<<<< HEAD
 		regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
+=======
+		tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")},
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 		nil, /*lockResolver*/
 		100, /*startTs*/
 		nil, /*eventCh*/

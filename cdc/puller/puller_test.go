@@ -131,7 +131,12 @@ func newPullerForTest(
 	plr := New(
 		ctx, pdCli, grpcPool, regionCache, store, pdutil.NewClock4Test(),
 		checkpointTs, spans, config.GetDefaultServerConfig(),
+<<<<<<< HEAD
 		model.DefaultChangeFeedID("changefeed-id-test"), 0, "table-test", false)
+=======
+		model.DefaultChangeFeedID("changefeed-id-test"), 0,
+		"table-test", false)
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

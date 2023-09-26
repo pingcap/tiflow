@@ -96,8 +96,13 @@ func (n *Wrapper) Start(
 		up.KVStorage,
 		up.PDClock,
 		n.startTs,
+<<<<<<< HEAD
 		n.tableSpan(),
 		serverConfig,
+=======
+		[]tablepb.Span{n.span},
+		config.GetGlobalServerConfig(),
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 		n.changefeed,
 		n.tableID,
 		n.tableName,

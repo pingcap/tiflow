@@ -146,7 +146,10 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
+<<<<<<< HEAD
     "enable-new-sink": true,
+=======
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
     "enable-kv-connect-backoff": false
   },
   "cluster-id": "default",

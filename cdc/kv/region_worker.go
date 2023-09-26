@@ -147,8 +147,13 @@ func newRegionWorker(
 		rtsManager:    newRegionTsManager(),
 		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
 		storeAddr:     addr,
+<<<<<<< HEAD
 		concurrency:   s.client.config.KVClient.WorkerConcurrent,
 		metrics:       metrics,
+=======
+		concurrency:   int(s.client.config.KVClient.WorkerConcurrent),
+		metrics:       newRegionWorkerMetrics(changefeedID),
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 		inputPending:  0,
 	}
 }

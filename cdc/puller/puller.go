@@ -83,7 +83,11 @@ func New(ctx context.Context,
 	kvStorage tidbkv.Storage,
 	pdClock pdutil.Clock,
 	checkpointTs uint64,
+<<<<<<< HEAD
 	spans []regionspan.Span,
+=======
+	spans []tablepb.Span,
+>>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 	cfg *config.ServerConfig,
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
