@@ -281,8 +281,7 @@ func (s *SharedClient) setTableStopped(rt *requestedTable) {
 	log.Info("event feed starts to stop table",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", rt.subscriptionID),
-		zap.String("span", rt.span.String()))
+		zap.Any("subscriptionID", rt.subscriptionID))
 
 	// Set stopped to true so we can stop handling region events from the table.
 	// Then send a special singleRegionInfo to regionRouter to deregister the table
@@ -299,8 +298,7 @@ func (s *SharedClient) onTableDrained(rt *requestedTable) {
 	log.Info("event feed stop table is finished",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
-		zap.Any("subscriptionID", rt.subscriptionID),
-		zap.String("span", rt.span.String()))
+		zap.Any("subscriptionID", rt.subscriptionID))
 
 	s.totalSpans.Lock()
 	defer s.totalSpans.Unlock()
@@ -360,14 +358,6 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 
 		storeID := sri.rpcCtx.Peer.StoreId
 		storeAddr := sri.rpcCtx.Addr
-		log.Debug("event feed will request a region",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Any("table", sri.requestedTable.span),
-			zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
-			zap.Uint64("regionID", sri.verID.GetID()),
-			zap.Uint64("storeID", storeID),
-			zap.String("addr", storeAddr))
 		s.requestStore(ctx, g, storeID, storeAddr).appendRequest(sri)
 	}
 }
@@ -416,6 +406,14 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 
 func (r *requestedStore) appendRequest(sri singleRegionInfo) {
 	offset := r.nextStream.Add(1) % uint32(len(r.streams))
+	log.Debug("event feed will request a region",
+		zap.String("namespace", s.changefeed.Namespace),
+		zap.String("changefeed", s.changefeed.ID),
+		zap.Uint64("streamID", r.streams[offset].streamID),
+		zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
+		zap.Uint64("regionID", sri.verID.GetID()),
+		zap.Uint64("storeID", r.storeID),
+		zap.String("addr", r.storeAddr))
 	r.streams[offset].requests.In() <- sri
 }
 
@@ -632,7 +630,6 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
-			zap.String("span", errInfo.requestedTable.span.String()),
 			zap.Error(err))
 		return err
 	}
@@ -741,7 +738,6 @@ func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", r.subscriptionID),
-		zap.String("span", r.span.String()),
 		zap.Any("ranges", res))
 }
 
