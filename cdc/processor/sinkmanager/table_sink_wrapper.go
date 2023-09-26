@@ -179,6 +179,15 @@ func (t *tableSinkWrapper) appendRowChangedEvents(events ...*model.RowChangedEve
 	return nil
 }
 
+func (t *tableSinkWrapper) updateBarrierTs(ts model.Ts) {
+	for {
+		old := t.barrierTs.Load()
+		if ts <= old || t.barrierTs.CompareAndSwap(old, ts) {
+			break
+		}
+	}
+}
+
 func (t *tableSinkWrapper) updateReceivedSorterResolvedTs(ts model.Ts) {
 	for {
 		old := t.receivedSorterResolvedTs.Load()
