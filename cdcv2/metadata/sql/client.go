@@ -25,8 +25,7 @@ import (
 // generic type T represents the transaction context.
 //
 // Note that in the current implementation the metadata operation and leader check are
-// always in the same transaction context. In the future, cross-database transactions
-// could also be supported with different implementations.
+// always in the same transaction context.
 type TxnAction[T any] func(T) error
 
 // ormTxnAction represents a transaction action that uses gorm.DB as the transaction context.
