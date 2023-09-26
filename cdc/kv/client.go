@@ -156,7 +156,7 @@ var NewCDCKVClient = NewCDCClient
 type CDCClient struct {
 	pd pd.Client
 
-	config    *config.KVClientConfig
+	config    *config.ServerConfig
 	clusterID uint64
 
 	grpcPool GrpcPool
@@ -192,7 +192,7 @@ func NewCDCClient(
 	grpcPool GrpcPool,
 	regionCache *tikv.RegionCache,
 	pdClock pdutil.Clock,
-	cfg *config.KVClientConfig,
+	cfg *config.ServerConfig,
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
 	tableName string,
@@ -218,7 +218,7 @@ func NewCDCClient(
 }
 
 func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) (stream *eventFeedStream, newStreamErr error) {
-	newStreamErr = retry.Do(ctx, func() (err error) {
+	streamFunc := func() (err error) {
 		var conn *sharedConn
 		defer func() {
 			if err != nil && conn != nil {
@@ -248,10 +248,16 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			zap.String("changefeed", c.changefeed.ID),
 			zap.String("addr", addr))
 		return nil
-	}, retry.WithBackoffBaseDelay(500),
-		retry.WithMaxTries(2),
-		retry.WithIsRetryableErr(cerror.IsRetryableError),
-	)
+	}
+	if c.config.Debug.EnableKVConnectBackOff {
+		newStreamErr = retry.Do(ctx, streamFunc,
+			retry.WithBackoffBaseDelay(100),
+			retry.WithMaxTries(2),
+			retry.WithIsRetryableErr(cerror.IsRetryableError),
+		)
+		return
+	}
+	newStreamErr = streamFunc()
 	return
 }
 
@@ -843,7 +849,7 @@ func (s *eventFeedSession) divideAndSendEventFeedToRegions(
 			}
 			return nil
 		}, retry.WithBackoffMaxDelay(500),
-			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.RegionRetryDuration)))
+			retry.WithTotalRetryDuratoin(time.Duration(s.client.config.KVClient.RegionRetryDuration)))
 		if retryErr != nil {
 			log.Warn("load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),
