@@ -351,14 +351,14 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 		// If lockedRange is nil it means it's a special task from stopping the table.
 		if sri.lockedRange == nil {
 			for _, rs := range s.requestedStores {
-				rs.broadcastRequest(sri)
+				s.broadcastRequest(rs, sri)
 			}
 			continue
 		}
 
 		storeID := sri.rpcCtx.Peer.StoreId
 		storeAddr := sri.rpcCtx.Addr
-		s.requestStore(ctx, g, storeID, storeAddr).appendRequest(sri)
+		s.appendRequest(s.requestStore(ctx, g, storeID, storeAddr), sri)
 	}
 }
 
@@ -404,7 +404,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 	}
 }
 
-func (r *requestedStore) appendRequest(sri singleRegionInfo) {
+func (s *SharedClient) appendRequest(r *requestedStore, sri singleRegionInfo) {
 	offset := r.nextStream.Add(1) % uint32(len(r.streams))
 	log.Debug("event feed will request a region",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -417,7 +417,7 @@ func (r *requestedStore) appendRequest(sri singleRegionInfo) {
 	r.streams[offset].requests.In() <- sri
 }
 
-func (r *requestedStore) broadcastRequest(sri singleRegionInfo) {
+func (s *SharedClient) broadcastRequest(r *requestedStore, sri singleRegionInfo) {
 	for _, stream := range r.streams {
 		stream.requests.In() <- sri
 	}
