@@ -129,7 +129,6 @@ func rowChangeToMsg(
 		if config.OnlyOutputUpdatedColumns {
 			value.dropNotUpdatedColumns()
 		}
-
 	} else {
 		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
 		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {

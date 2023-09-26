@@ -507,6 +507,27 @@ function DM_DropAddColumn() {
 	done
 }
 
+function DM_ADD_DROP_PARTITIONS_CASE() {
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(2);"
+	run_sql_source1 "alter table ${shardddl1}.${tb1} add column new_col1 int;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(3,3);"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(4);"
+
+	run_sql_source1 "ALTER TABLE ${shardddl1}.${tb1} ADD PARTITION (partition p1 VALUES LESS THAN (10000))"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.partitions WHERE TABLE_SCHEMA='${shardddl}' AND TABLE_NAME = '${tb}' AND PARTITION_NAME IS NOT NULL;" "count(1): 2"
+
+	run_sql_source1 "ALTER TABLE ${shardddl1}.${tb1} DROP PARTITION p1;"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.partitions WHERE TABLE_SCHEMA='${shardddl}' AND TABLE_NAME = '${tb}' AND PARTITION_NAME IS NOT NULL;" "count(1): 1"
+}
+
+function DM_ADD_DROP_PARTITIONS() {
+	run_case ADD_DROP_PARTITIONS "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (a int) PARTITION BY RANGE (a) (PARTITION p0 VALUES LESS THAN (100));\"; \
+     run_sql_source2 \"create table ${shardddl1}.${tb1} (a int) PARTITION BY RANGE (a) (PARTITION p0 VALUES LESS THAN (100));\";" \
+		"clean_table" "optimistic"
+}
+
 function run() {
 	init_cluster
 	init_database
@@ -515,6 +536,7 @@ function run() {
 	DM_DROP_COLUMN_ALL_DONE
 	DM_RECOVER_LOCK
 	DM_DropAddColumn
+	DM_ADD_DROP_PARTITIONS
 	start=36
 	end=45
 	except=(042 044 045)

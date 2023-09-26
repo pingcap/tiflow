@@ -350,6 +350,14 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 			wantErr: "csv config delimiter contains line break characters",
 		},
 		{
+			name: "delimiter contains more than one character",
+			config: &CSVConfig{
+				Quote:     "'",
+				Delimiter: "\r\t",
+			},
+			wantErr: "csv config delimiter contains more than one character",
+		},
+		{
 			name: "delimiter and quote are same",
 			config: &CSVConfig{
 				Quote:     "'",

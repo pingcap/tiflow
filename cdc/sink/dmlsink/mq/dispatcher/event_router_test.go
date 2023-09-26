@@ -63,6 +63,12 @@ func newReplicaConfig4DispatcherTest() *config.ReplicaConfig {
 					PartitionRule: "ts",
 					TopicRule:     "{schema}_{table}",
 				},
+				// rule-6: hard code the topic
+				{
+					Matcher:       []string{"hard_code_schema.*"},
+					PartitionRule: "default",
+					TopicRule:     "hard_code_topic",
+				},
 			},
 		},
 	}
@@ -75,6 +81,7 @@ func TestEventRouter(t *testing.T) {
 	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
 	require.NoError(t, err)
 	require.Equal(t, "test", d.GetDefaultTopic())
+
 	topicDispatcher, partitionDispatcher := d.matchDispatcher("test", "test")
 	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
@@ -120,6 +127,11 @@ func TestEventRouter(t *testing.T) {
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("sbs", "table2")
 	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.TsDispatcher{}, partitionDispatcher)
+
+	// match rule-6
+	topicDispatcher, partitionDispatcher = d.matchDispatcher("hard_code_schema", "test")
+	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
+	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
 }
 
 func TestGetActiveTopics(t *testing.T) {

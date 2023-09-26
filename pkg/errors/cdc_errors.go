@@ -952,4 +952,9 @@ var (
 		"invalid glue schema registry config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidGlueSchemaRegistryConfig"),
 	)
+
+	ErrElectorNotLeader = errors.Normalize(
+		"%s is not leader",
+		errors.RFCCodeText("CDC:ErrNotLeader"),
+	)
 )

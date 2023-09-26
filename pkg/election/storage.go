@@ -27,7 +27,7 @@ type Storage interface {
 	// Update updates the record in the storage if the stored record version matches the given
 	// record version. It returns ErrRecordConflict if the stored record version does not match
 	// or any other error encountered.
-	Update(ctx context.Context, record *Record) error
+	Update(ctx context.Context, record *Record, isLeaderChanged bool) error
 }
 
 // Record holds the information of a leader election.

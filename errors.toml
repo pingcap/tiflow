@@ -576,6 +576,11 @@ error = '''
 received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
+["CDC:ErrNotLeader"]
+error = '''
+%s is not leader
+'''
+
 ["CDC:ErrNotOwner"]
 error = '''
 this capture is not a owner

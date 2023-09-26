@@ -1107,7 +1107,7 @@ func (s *eventFeedSession) receiveFromStream(
 			}
 
 			if len(cevent.Events) != 0 {
-				if entries, ok := cevent.Events[0].Event.(*cdcpb.Event_Entries_); ok {
+				if entries, ok := cevent.Events[0].Event.(*cdcpb.Event_Entries_); ok && len(entries.Entries.Entries) > 0 {
 					commitTs := entries.Entries.Entries[0].CommitTs
 					if maxCommitTs < commitTs {
 						maxCommitTs = commitTs
