@@ -460,7 +460,7 @@ func NewDDLJobPuller(
 	kvStorage tidbkv.Storage,
 	pdClock pdutil.Clock,
 	checkpointTs uint64,
-	cfg *config.KVClientConfig,
+	cfg *config.ServerConfig,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
@@ -544,11 +544,8 @@ func NewDDLPuller(ctx context.Context,
 			up.RegionCache,
 			storage,
 			up.PDClock,
-			startTs,
-			config.GetGlobalServerConfig().KVClient,
-			changefeed,
-			schemaStorage,
-			filter,
+			startTs, config.GetGlobalServerConfig(),
+			changefeed, schemaStorage, filter,
 		)
 		if err != nil {
 			return nil, errors.Trace(err)

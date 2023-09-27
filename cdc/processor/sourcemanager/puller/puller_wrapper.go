@@ -103,7 +103,7 @@ func (n *WrapperImpl) Start(
 		up.PDClock,
 		n.startTs,
 		[]tablepb.Span{n.span},
-		config.GetGlobalServerConfig().KVClient,
+		config.GetGlobalServerConfig(),
 		n.changefeed,
 		n.span.TableID,
 		n.tableName,
