@@ -57,6 +57,8 @@ var allowDDLList = []timodel.ActionType{
 	timodel.ActionReorganizePartition,
 	timodel.ActionAlterTTLInfo,
 	timodel.ActionAlterTTLRemove,
+	timodel.ActionAlterTablePartitioning,
+	timodel.ActionRemovePartitioning,
 }
 
 // Filter are safe for concurrent use.

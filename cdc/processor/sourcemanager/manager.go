@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
+	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
@@ -198,15 +199,16 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.multiplexing {
-		clientConfig := config.GetGlobalServerConfig().KVClient
+		serverConfig := config.GetGlobalServerConfig()
+		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig)
 		client := kv.NewSharedClient(
-			m.changefeedID, clientConfig, m.bdrMode,
-			m.up.PDClient, m.up.GrpcPool, m.up.RegionCache, m.up.PDClock,
+			m.changefeedID, serverConfig, m.bdrMode,
+			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
 			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
 		)
 		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
 			m.changefeedID, client, m.engine,
-			int(clientConfig.FrontierConcurrent),
+			int(serverConfig.KVClient.FrontierConcurrent),
 		)
 
 		close(m.ready)

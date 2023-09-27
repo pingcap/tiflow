@@ -51,15 +51,15 @@ func (mr *MockStorageMockRecorder) Get(arg0 interface{}) *gomock.Call {
 }
 
 // Update mocks base method.
-func (m *MockStorage) Update(arg0 context.Context, arg1 *election.Record) error {
+func (m *MockStorage) Update(arg0 context.Context, arg1 *election.Record, arg2 bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", arg0, arg1)
+	ret := m.ctrl.Call(m, "Update", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockStorageMockRecorder) Update(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockStorageMockRecorder) Update(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockStorage)(nil).Update), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockStorage)(nil).Update), arg0, arg1, arg2)
 }

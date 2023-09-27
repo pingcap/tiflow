@@ -952,4 +952,22 @@ var (
 		"invalid glue schema registry config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidGlueSchemaRegistryConfig"),
 	)
+
+	// cdc v2
+	ErrElectorNotLeader = errors.Normalize(
+		"%s is not leader",
+		errors.RFCCodeText("CDC:ErrNotLeader"),
+	)
+	ErrNotController = errors.Normalize(
+		"not controller",
+		errors.RFCCodeText("CDC:ErrNotController"),
+	)
+	ErrMetaRowsAffectedNotMatch = errors.Normalize(
+		"rows affected by the operation %s is unexpected: expected %d, got %d",
+		errors.RFCCodeText("CDC:ErrMetaOpIgnored"),
+	)
+	ErrMetaOpFailed = errors.Normalize(
+		"meta operation %s is failed",
+		errors.RFCCodeText("DFLOW:ErrMetaOpFail"),
+	)
 )

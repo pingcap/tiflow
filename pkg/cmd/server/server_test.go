@@ -200,7 +200,7 @@ func TestParseCfg(t *testing.T) {
 			},
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MaxMemoryPercentage: config.DisableMemoryLimit,
 	}, o.serverConfig)
 }
 
@@ -339,7 +339,7 @@ check-balance-interval = "10s"
 			},
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MaxMemoryPercentage: config.DisableMemoryLimit,
 	}, o.serverConfig)
 }
 
@@ -470,7 +470,7 @@ cert-allowed-cn = ["dd","ee"]
 			},
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MaxMemoryPercentage: config.DisableMemoryLimit,
 	}, o.serverConfig)
 }
 
