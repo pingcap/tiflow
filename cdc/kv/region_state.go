@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -59,10 +58,9 @@ func (s singleRegionInfo) resolvedTs() uint64 {
 }
 
 type regionFeedState struct {
-	sri           singleRegionInfo
-	requestID     uint64
-	matcher       *matcher
-	startFeedTime time.Time
+	sri       singleRegionInfo
+	requestID uint64
+	matcher   *matcher
 
 	// Transform: normal -> stopped -> removed.
 	// normal: the region is in replicating.
@@ -87,7 +85,6 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 }
 
 func (s *regionFeedState) start() {
-	s.startFeedTime = time.Now()
 	s.matcher = newMatcher()
 }
 
@@ -157,8 +154,8 @@ func (s *regionFeedState) getRegionInfo() singleRegionInfo {
 	return s.sri
 }
 
-func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, time.Time, string) {
-	return s.sri.verID.GetID(), s.sri.span, s.startFeedTime, s.sri.rpcCtx.Addr
+func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, string) {
+	return s.sri.verID.GetID(), s.sri.span, s.sri.rpcCtx.Addr
 }
 
 type syncRegionFeedStateMap struct {
