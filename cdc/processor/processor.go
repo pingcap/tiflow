@@ -787,8 +787,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-<<<<<<< HEAD
-	kvCfg := config.GetGlobalServerConfig().KVClient
+	serverCfg := config.GetGlobalServerConfig()
 	ctx = contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	ddlPuller, err := puller.NewDDLJobPuller(
 		ctx,
@@ -798,17 +797,10 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		p.upstream.KVStorage,
 		p.upstream.PDClock,
 		ddlStartTs,
-		kvCfg,
+		serverCfg,
 		p.changefeedID,
 		schemaStorage,
 		f,
-=======
-	serverCfg := config.GetGlobalServerConfig()
-	ddlPuller, err := puller.NewDDLJobPuller(
-		ctx, p.upstream, ddlStartTs,
-		serverCfg, p.changefeedID, schemaStorage,
-		f, false, /* isOwner */
->>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 	)
 	if err != nil {
 		return errors.Trace(err)

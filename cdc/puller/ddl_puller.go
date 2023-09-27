@@ -540,12 +540,6 @@ func NewDDLJobPuller(
 	}
 	return &ddlJobPullerImpl{
 		changefeedID:  changefeed,
-<<<<<<< HEAD
-=======
-		multiplexing:  cfg.KVClient.EnableMultiplexing,
-		schemaStorage: schemaStorage,
-		kvStorage:     kvStorage,
->>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 		filter:        filter,
 		schemaStorage: schemaStorage,
 		puller: New(
@@ -613,23 +607,14 @@ func NewDDLPuller(ctx context.Context,
 	// storage can be nil only in the test
 	if storage != nil {
 		puller, err = NewDDLJobPuller(
-<<<<<<< HEAD
 			ctx,
 			up.PDClient,
 			up.GrpcPool,
 			up.RegionCache,
 			storage,
 			up.PDClock,
-			startTs,
-			config.GetGlobalServerConfig().KVClient,
-			changefeed,
-			schemaStorage,
-			filter,
-=======
-			ctx, up, startTs, config.GetGlobalServerConfig(),
+			startTs, config.GetGlobalServerConfig(),
 			changefeed, schemaStorage, filter,
-			true, /* isOwner */
->>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 		)
 		if err != nil {
 			return nil, errors.Trace(err)

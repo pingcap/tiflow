@@ -159,28 +159,7 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 
 // Run implements util.Runnable.
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
-<<<<<<< HEAD
 	m.ctx = ctx
-=======
-	if m.multiplexing {
-		serverConfig := config.GetGlobalServerConfig()
-		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig)
-		client := kv.NewSharedClient(
-			m.changefeedID, serverConfig, m.bdrMode,
-			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
-			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
-		)
-		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
-			m.changefeedID, client, m.engine,
-			int(serverConfig.KVClient.FrontierConcurrent),
-		)
-
-		close(m.ready)
-		return m.multiplexingPuller.puller.Run(ctx)
-	}
-
-	m.tablePullers.ctx = ctx
->>>>>>> 43848f2fb5 (kv(ticdc): remove backoff from newStream func (#9771))
 	close(m.ready)
 	select {
 	case err := <-m.errChan:
