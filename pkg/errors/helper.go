@@ -34,11 +34,11 @@ func WrapError(rfcError *errors.Error, err error, args ...interface{}) error {
 	return rfcError.Wrap(err).GenWithStackByArgs(args...)
 }
 
-// changeFeedGCFastFailError is read only.
+// ChangeFeedGCFastFailError is read only.
 // If this type of error occurs in a changefeed, it means that the data it
 // wants to replicate has been or will be GC. So it makes no sense to try to
 // resume the changefeed, and the changefeed should immediately be failed.
-var changeFeedGCFastFailError = []*errors.Error{
+var ChangeFeedGCFastFailError = []*errors.Error{
 	ErrGCTTLExceeded, ErrSnapshotLostByGC, ErrStartTsBeforeGC,
 }
 
@@ -47,7 +47,7 @@ func IsChangefeedGCFastFailError(err error) bool {
 	if err == nil {
 		return false
 	}
-	for _, e := range changeFeedGCFastFailError {
+	for _, e := range ChangeFeedGCFastFailError {
 		if e.Equal(err) {
 			return true
 		}
@@ -62,7 +62,7 @@ func IsChangefeedGCFastFailError(err error) bool {
 // IsChangefeedGCFastFailErrorCode checks the error code, returns true if it is a
 // ChangefeedFastFailError code
 func IsChangefeedGCFastFailErrorCode(errCode errors.RFCErrorCode) bool {
-	for _, e := range changeFeedGCFastFailError {
+	for _, e := range ChangeFeedGCFastFailError {
 		if errCode == e.RFCCode() {
 			return true
 		}
@@ -75,6 +75,7 @@ var changefeedUnRetryableErrors = []*errors.Error{
 	ErrExpressionParseFailed,
 	ErrSchemaSnapshotNotFound,
 	ErrSyncRenameTableFailed,
+	ErrHandleDDLFailed,
 	ErrChangefeedUnretryable,
 	ErrCorruptedDataMutation,
 

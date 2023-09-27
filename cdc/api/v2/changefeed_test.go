@@ -538,6 +538,9 @@ func TestListChangeFeeds(t *testing.T) {
 			},
 			model.DefaultChangeFeedID("cf2"): {
 				State: model.StateWarning,
+				Warning: &model.RunningError{
+					Code: "warning",
+				},
 			},
 			model.DefaultChangeFeedID("cf3"): {
 				State: model.StateStopped,
