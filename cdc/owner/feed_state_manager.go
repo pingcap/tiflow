@@ -494,8 +494,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// if there are a fastFail error in errs, we can just fastFail the changefeed
 	// and no need to patch other error to the changefeed info
 	for _, err := range errs {
-		if cerrors.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(err.Code)) ||
-			err.ShouldFailChangefeed() {
+		if cerrors.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(err.Code)) {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 				if info == nil {
 					return nil, false, nil

@@ -709,7 +709,7 @@
         },
         {
           "datasource": "${DS_TEST-CLUSTER}",
-          "description": "The status of each changefeed.\n\n0: Normal\n\n1: Error\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
+          "description": "The status of each changefeed.\n\n0: Normal\n\n1 and 6: Warning\n\n2: Failed\n\n3: Stopped\n\n4: Finished\n\n-1: Unknown",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -748,7 +748,7 @@
                 {
                   "from": "",
                   "id": 2,
-                  "text": "Error",
+                  "text": "Warning",
                   "to": "",
                   "type": 1,
                   "value": "1"
@@ -780,22 +780,30 @@
                 {
                   "from": "",
                   "id": 6,
+                  "text": "Warning",
+                  "to": "",
+                  "type": 1,
+                  "value": "6"
+                },
+                {
+                  "from": "",
+                  "id": 7,
                   "text": "Unknown",
                   "to": "",
                   "type": 1,
                   "value": "-1"
                 },
                 {
-                  "from": "5",
-                  "id": 7,
+                  "from": "7",
+                  "id": 8,
                   "text": "Other",
                   "to": "10000",
                   "type": 1,
-                  "value": "5"
+                  "value": "7"
                 },
                 {
-                  "from": "6",
-                  "id": 8,
+                  "from": "7",
+                  "id": 9,
                   "text": "-",
                   "to": "1000",
                   "type": 2

@@ -237,6 +237,9 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string"
+      },
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
       }
     },
     "mysql-config": {
@@ -327,6 +330,11 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
+    "kafka-config": {
+      "large-message-handle": {
+        "large-message-handle-option": "handle-key-only"
+      }
+    },
     "only-output-updated-columns": false,
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,

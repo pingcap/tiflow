@@ -66,20 +66,13 @@ func (a *admin) GetAllBrokers(ctx context.Context) ([]pkafka.Broker, error) {
 	return result, nil
 }
 
-func (a *admin) GetCoordinator(ctx context.Context) (int, error) {
+func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
 	response, err := a.clusterMetadata(ctx)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return "", errors.Trace(err)
 	}
 
-	return response.Controller.ID, nil
-}
-
-func (a *admin) GetBrokerConfig(ctx context.Context, configName string) (string, error) {
-	controllerID, err := a.GetCoordinator(ctx)
-	if err != nil {
-		return "", err
-	}
+	controllerID := response.Controller.ID
 	request := &kafka.DescribeConfigsRequest{
 		Resources: []kafka.DescribeConfigRequestResource{
 			{
@@ -186,6 +179,23 @@ func (a *admin) GetTopicsMeta(
 			Name:          topic.Name,
 			NumPartitions: int32(len(topic.Partitions)),
 		}
+	}
+	return result, nil
+}
+
+func (a *admin) GetTopicsPartitionsNum(
+	ctx context.Context, topics []string,
+) (map[string]int32, error) {
+	resp, err := a.client.Metadata(ctx, &kafka.MetadataRequest{
+		Topics: topics,
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	result := make(map[string]int32, len(topics))
+	for _, topic := range resp.Topics {
+		result[topic.Name] = int32(len(topic.Partitions))
 	}
 	return result, nil
 }

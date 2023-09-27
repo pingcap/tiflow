@@ -89,7 +89,7 @@ function run() {
 
 	run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
 	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeedid_1 warning last_warning ErrExecDDLFailed
-	
+
 	run_cdc_cli changefeed remove -c $changefeedid_1
 	cleanup_process $CDC_BINARY
 	ensure $MAX_RETRIES "check_etcd_meta_not_exist '/tidb/cdc/default/__cdc_meta__/owner' 'owner'"

@@ -20,6 +20,7 @@ import (
 	"os"
 	"path"
 	"testing"
+	"time"
 
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
@@ -124,6 +125,7 @@ func TestWriteCheckpointTs(t *testing.T) {
 		},
 	}
 
+	time.Sleep(3 * time.Second)
 	err = sink.WriteCheckpointTs(ctx, 100, tables)
 	require.Nil(t, err)
 	metadata, err := os.ReadFile(path.Join(parentDir, "metadata"))

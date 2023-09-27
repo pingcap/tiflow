@@ -46,6 +46,11 @@ type ChangeFeedID struct {
 	ID        string
 }
 
+// String implements fmt.Stringer interface
+func (c ChangeFeedID) String() string {
+	return c.Namespace + "/" + c.ID
+}
+
 // DefaultChangeFeedID returns `ChangeFeedID` with default namespace
 func DefaultChangeFeedID(id string) ChangeFeedID {
 	return ChangeFeedID{
@@ -198,6 +203,28 @@ func ValidateNamespace(namespace string) error {
 	return nil
 }
 
+// NeedBlockGC returns true if the changefeed need to block the GC safepoint.
+// Note: if the changefeed is failed by GC, it should not block the GC safepoint.
+func (info *ChangeFeedInfo) NeedBlockGC() bool {
+	switch info.State {
+	case StateNormal, StateStopped, StateWarning, StatePending:
+		return true
+	case StateFailed:
+		return !info.isFailedByGC()
+	case StateFinished, StateRemoved:
+	default:
+	}
+	return false
+}
+
+func (info *ChangeFeedInfo) isFailedByGC() bool {
+	if info.Error == nil {
+		log.Panic("changefeed info is not consistent",
+			zap.Any("state", info.State), zap.Any("error", info.Error))
+	}
+	return cerror.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
+}
+
 // String implements fmt.Stringer interface, but hide some sensitive information
 func (info *ChangeFeedInfo) String() (str string) {
 	var err error
@@ -213,9 +240,9 @@ func (info *ChangeFeedInfo) String() (str string) {
 		return
 	}
 
-	clone.SinkURI, err = util.MaskSinkURI(clone.SinkURI)
-	if err != nil {
-		log.Error("failed to marshal changefeed info", zap.Error(err))
+	clone.SinkURI = util.MaskSensitiveDataInURI(clone.SinkURI)
+	if clone.Config != nil {
+		clone.Config.MaskSensitiveData()
 	}
 
 	str, err = clone.Marshal()
@@ -468,11 +495,11 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 }
 
 func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProtocol string, newQuery url.Values) {
-	oldRawQuery := uri.RawQuery
 	newRawQuery := newQuery.Encode()
+	maskedURI, _ := util.MaskSinkURI(uri.String())
 	log.Info("handle incompatible protocol from sink URI",
-		zap.String("oldUriQuery", oldRawQuery),
-		zap.String("fixedUriQuery", newQuery.Encode()))
+		zap.String("oldURI", maskedURI),
+		zap.String("newProtocol", newProtocol))
 
 	uri.RawQuery = newRawQuery
 	fixedSinkURI := uri.String()

@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.etcd.io/etcd/server/v3/mvcc"
 	"go.uber.org/zap"
@@ -79,6 +80,7 @@ type captureImpl struct {
 	liveness         model.Liveness
 	config           *config.ServerConfig
 
+	pdClient        pd.Client
 	pdEndpoints     []string
 	ownerMu         sync.Mutex
 	owner           owner.Owner
@@ -124,6 +126,7 @@ func NewCapture(pdEndpoints []string,
 	etcdClient etcd.CDCEtcdClient,
 	grpcService *p2p.ServerWrapper,
 	sortEngineMangerFactory *factory.SortEngineFactory,
+	pdClient pd.Client,
 ) Capture {
 	conf := config.GetGlobalServerConfig()
 	return &captureImpl{
@@ -137,8 +140,8 @@ func NewCapture(pdEndpoints []string,
 		newOwner:            owner.NewOwner,
 		info:                &model.CaptureInfo{},
 		sortEngineFactory:   sortEngineMangerFactory,
-
-		migrator: migrate.NewMigrator(etcdClient, pdEndpoints, conf),
+		migrator:            migrate.NewMigrator(etcdClient, pdEndpoints, conf),
+		pdClient:            pdClient,
 	}
 }
 
@@ -204,7 +207,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 		c.upstreamManager.Close()
 	}
 	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
-	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security)
+	_, err = c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security, c.pdClient)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -350,7 +353,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		}()
 		processorFlushInterval := time.Duration(c.config.ProcessorFlushInterval)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -463,7 +466,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)
 
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID())
+		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
 
 		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
 			c.MessageRouter.AddPeer(captureID, addr)
@@ -481,9 +484,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			}
 		})
 
-		err = c.runEtcdWorker(ownerCtx, owner,
-			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID()),
-			ownerFlushInterval, util.RoleOwner.String())
+		err = c.runEtcdWorker(ownerCtx, owner, globalState, ownerFlushInterval, util.RoleOwner.String())
 		c.owner.AsyncStop()
 		c.setOwner(nil)
 

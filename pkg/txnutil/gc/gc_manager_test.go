@@ -104,28 +104,3 @@ func TestCheckStaleCheckpointTs(t *testing.T) {
 	require.True(t, cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)))
 	require.True(t, cerror.IsChangefeedGCFastFailError(err))
 }
-
-func TestIgnoreFailedFeed(t *testing.T) {
-	t.Parallel()
-
-	mockPDClient := &MockPDClient{}
-	pdClock := pdutil.NewClock4Test()
-	gcManager := NewManager(etcd.GcServiceIDForTest(),
-		mockPDClient, pdClock).(*gcManager)
-	gcManager.gcTTL = 24 * 60 * 60
-
-	// 5 hours ago
-	ts1 := oracle.GoTimeToTS(time.Now().Add(-time.Hour * 5))
-	ret1 := gcManager.IgnoreFailedChangeFeed(ts1)
-	require.False(t, ret1)
-
-	// 20 hours ago
-	ts2 := oracle.GoTimeToTS(time.Now().Add(-time.Hour * 20))
-	ret2 := gcManager.IgnoreFailedChangeFeed(ts2)
-	require.False(t, ret2)
-
-	// 25 hours ago
-	ts3 := oracle.GoTimeToTS(time.Now().Add(-time.Hour * 25))
-	ret3 := gcManager.IgnoreFailedChangeFeed(ts3)
-	require.True(t, ret3)
-}

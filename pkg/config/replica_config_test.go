@@ -100,6 +100,9 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			AvroDecimalHandlingMode:        aws.String("string"),
 			AvroBigintUnsignedHandlingMode: aws.String("string"),
 		},
+		LargeMessageHandle: &LargeMessageHandleConfig{
+			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
+		},
 	}
 	conf.Sink.MySQLConfig = &MySQLConfig{
 		WorkerCount:                  aws.Int(8),
@@ -126,7 +129,8 @@ func TestReplicaConfigMarshal(t *testing.T) {
 
 	b, err := conf.Marshal()
 	require.Nil(t, err)
-	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, mustIndentJSON(t, b))
+	b = mustIndentJSON(t, b)
+	require.JSONEq(t, testCfgTestReplicaConfigMarshal1, b)
 	conf2 := new(ReplicaConfig)
 	err = conf2.UnmarshalJSON([]byte(testCfgTestReplicaConfigMarshal2))
 	require.Nil(t, err)
@@ -218,6 +222,13 @@ func TestReplicaConfigValidate(t *testing.T) {
 	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
+
+	conf.Scheduler = &ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: true,
+		RegionThreshold:        -1,
+	}
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.Error(t, err)
 }
 
 func TestValidateAndAdjust(t *testing.T) {
@@ -382,4 +393,51 @@ func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {
 	err = config.AdjustEnableOldValueAndVerifyForceReplicate(sinkURI)
 	require.NoError(t, err)
 	require.False(t, config.EnableOldValue)
+}
+
+func TestMaskSensitiveData(t *testing.T) {
+	config := ReplicaConfig{
+		Sink:       nil,
+		Consistent: nil,
+	}
+	config.MaskSensitiveData()
+	require.Nil(t, config.Sink)
+	require.Nil(t, config.Consistent)
+	config.Sink = &SinkConfig{}
+	config.Sink.KafkaConfig = &KafkaConfig{
+		SASLOAuthTokenURL:     aws.String("http://abc.com?password=bacd"),
+		SASLOAuthClientSecret: aws.String("bacd"),
+		SASLPassword:          aws.String("bacd"),
+		SASLGssAPIPassword:    aws.String("bacd"),
+		Key:                   aws.String("bacd"),
+	}
+	config.Sink.SchemaRegistry = "http://abc.com?password=bacd"
+	config.Consistent = &ConsistentConfig{
+		Storage: "http://abc.com?password=bacd",
+	}
+	config.MaskSensitiveData()
+	require.Equal(t, "http://abc.com?password=xxxxx", config.Sink.SchemaRegistry)
+	require.Equal(t, "http://abc.com?password=xxxxx", config.Consistent.Storage)
+	require.Equal(t, "http://abc.com?password=xxxxx", *config.Sink.KafkaConfig.SASLOAuthTokenURL)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLOAuthClientSecret)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.Key)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLPassword)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLGssAPIPassword)
+}
+
+func TestValidateAndAdjustLargeMessageHandle(t *testing.T) {
+	cfg := GetDefaultReplicaConfig()
+	cfg.Sink.KafkaConfig = &KafkaConfig{
+		LargeMessageHandle: NewDefaultLargeMessageHandleConfig(),
+	}
+	cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = ""
+
+	rawURL := "kafka://127.0.0.1:9092/canal-json-test?protocol=canal-json&enable-tidb-extension=true"
+	sinkURL, err := url.Parse(rawURL)
+	require.NoError(t, err)
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.NoError(t, err)
+
+	require.Equal(t, LargeMessageHandleOptionNone, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption)
 }

@@ -16,8 +16,10 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -29,6 +31,8 @@ import (
 const (
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
+	// DefaultAdvanceTimeoutInSec sets the default value for advance-timeout-in-sec.
+	DefaultAdvanceTimeoutInSec = uint(150)
 
 	// TxnAtomicityKey specifies the key of the transaction-atomicity in the SinkURI.
 	TxnAtomicityKey = "transaction-atomicity"
@@ -145,6 +149,16 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+}
+
+// MaskSensitiveData masks sensitive data in SinkConfig
+func (s *SinkConfig) MaskSensitiveData() {
+	if s.SchemaRegistry != "" {
+		s.SchemaRegistry = util.MaskSensitiveDataInURI(s.SchemaRegistry)
+	}
+	if s.KafkaConfig != nil {
+		s.KafkaConfig.MaskSensitiveData()
+	}
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -311,6 +325,19 @@ type KafkaConfig struct {
 	Key                          *string      `toml:"key" json:"key,omitempty"`
 	InsecureSkipVerify           *bool        `toml:"insecure-skip-verify" json:"insecure-skip-verify,omitempty"`
 	CodecConfig                  *CodecConfig `toml:"codec-config" json:"codec-config,omitempty"`
+
+	LargeMessageHandle *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
+}
+
+// MaskSensitiveData masks sensitive data in KafkaConfig
+func (k *KafkaConfig) MaskSensitiveData() {
+	k.SASLPassword = aws.String("******")
+	k.SASLGssAPIPassword = aws.String("******")
+	k.SASLOAuthClientSecret = aws.String("******")
+	k.Key = aws.String("******")
+	if k.SASLOAuthTokenURL != nil {
+		k.SASLOAuthTokenURL = aws.String(util.MaskSensitiveDataInURI(*k.SASLOAuthTokenURL))
+	}
 }
 
 // MySQLConfig represents a MySQL sink configuration
@@ -342,6 +369,24 @@ type CloudStorageConfig struct {
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 	if err := s.validateAndAdjustSinkURI(sinkURI); err != nil {
 		return err
+	}
+
+	protocol, _ := ParseSinkProtocolFromString(s.Protocol)
+	if s.KafkaConfig != nil && s.KafkaConfig.LargeMessageHandle != nil {
+		var (
+			enableTiDBExtension bool
+			err                 error
+		)
+		if s := sinkURI.Query().Get("enable-tidb-extension"); s != "" {
+			enableTiDBExtension, err = strconv.ParseBool(s)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		err = s.KafkaConfig.LargeMessageHandle.AdjustAndValidate(protocol, enableTiDBExtension)
+		if err != nil {
+			return err
+		}
 	}
 
 	for _, rule := range s.DispatchRules {
@@ -393,8 +438,9 @@ func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
 		}
 	}
 
-	if s.AdvanceTimeoutInSec != nil && *s.AdvanceTimeoutInSec == 0 {
-		s.AdvanceTimeoutInSec = util.AddressOf(uint(150))
+	if util.GetOrZero(s.AdvanceTimeoutInSec) == 0 {
+		log.Warn(fmt.Sprintf("advance-timeout-in-sec is not set, use default value: %d seconds", DefaultAdvanceTimeoutInSec))
+		s.AdvanceTimeoutInSec = util.AddressOf(DefaultAdvanceTimeoutInSec)
 	}
 
 	return nil

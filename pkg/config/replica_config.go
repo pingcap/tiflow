@@ -65,7 +65,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnablePartitionSeparator: true,
 		EnableKafkaSinkV2:        false,
 		TiDBSourceID:             1,
-		AdvanceTimeoutInSec:      util.AddressOf(uint(150)),
+		AdvanceTimeoutInSec:      util.AddressOf(DefaultAdvanceTimeoutInSec),
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
@@ -225,6 +225,11 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 	}
 	if c.Scheduler == nil {
 		c.FixScheduler(false)
+	} else {
+		err := c.Scheduler.Validate()
+		if err != nil {
+			return err
+		}
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
@@ -321,4 +326,14 @@ func (c *ReplicaConfig) AdjustEnableOldValueAndVerifyForceReplicate(sinkURI *url
 	}
 
 	return nil
+}
+
+// MaskSensitiveData masks sensitive data in ReplicaConfig
+func (c *ReplicaConfig) MaskSensitiveData() {
+	if c.Sink != nil {
+		c.Sink.MaskSensitiveData()
+	}
+	if c.Consistent != nil {
+		c.Consistent.MaskSensitiveData()
+	}
 }
