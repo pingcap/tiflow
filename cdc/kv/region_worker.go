@@ -637,7 +637,7 @@ func handleEventEntry(
 	metrics *regionWorkerMetrics,
 	emit func(assembled model.RegionFeedEvent) bool,
 ) error {
-	regionID, regionSpan, startTime, _ := state.getRegionMeta()
+	regionID, regionSpan, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
 		// NOTE: from TiKV 7.0.0, entries are already filtered out in TiKV side.
 		// We can remove the check in future.
@@ -649,14 +649,6 @@ func handleEventEntry(
 		}
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
-			if time.Since(startTime) > 20*time.Second {
-				log.Warn("The time cost of initializing is too much",
-					zap.String("namespace", changefeed.Namespace),
-					zap.String("changefeed", changefeed.ID),
-					zap.Uint64("regionID", regionID),
-					zap.Duration("duration", time.Since(startTime)))
-			}
-
 			metrics.metricPullEventInitializedCounter.Inc()
 			state.setInitialized()
 			for _, cachedEvent := range state.matcher.matchCachedRow(true) {
