@@ -208,7 +208,7 @@ func (s *server) setMemoryLimit() {
 	if conf.GcTunerMemoryThreshold > maxGcTunerMemory {
 		// If total memory is larger than 512GB, we will not set memory limit.
 		// Because the memory limit is not accurate, and it is not necessary to set memory limit.
-		log.Info("total memory is larger than 512GB, skip setting memory limit",
+		log.Warn("total memory is larger than 512GB, skip setting memory limit",
 			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
 			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
 		)
