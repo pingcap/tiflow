@@ -161,7 +161,7 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 		zap.String("changefeed", w.changefeed.ID),
 		zap.Any("subscriptionID", state.sri.requestedTable.subscriptionID),
 		zap.Int("rows", len(x.Entries.GetEntries())))
-	return handleEventEntry(w.changefeed, x, startTs, state, w.metrics, emit)
+	return handleEventEntry(x, startTs, state, w.metrics, emit)
 }
 
 func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolvedTsBatch) {
