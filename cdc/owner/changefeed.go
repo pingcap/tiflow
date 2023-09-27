@@ -452,7 +452,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 
 func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
 	if c.initialized || c.latestStatus == nil {
-		// If `c.state.Status` is nil it means the changefeed struct is just created, it needs to
+		// If `c.latestStatus` is nil it means the changefeed struct is just created, it needs to
 		//  1. use startTs as checkpointTs and resolvedTs, if it's a new created changefeed; or
 		//  2. load checkpointTs and resolvedTs from etcd, if it's an existing changefeed.
 		// And then it can continue to initialize.
