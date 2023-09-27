@@ -787,7 +787,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-	kvCfg := config.GetGlobalServerConfig().KVClient
+	serverCfg := config.GetGlobalServerConfig()
 	ctx = contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	ddlPuller, err := puller.NewDDLJobPuller(
 		ctx,
@@ -797,7 +797,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		p.upstream.KVStorage,
 		p.upstream.PDClock,
 		ddlStartTs,
-		kvCfg,
+		serverCfg,
 		p.changefeedID,
 		schemaStorage,
 		f,

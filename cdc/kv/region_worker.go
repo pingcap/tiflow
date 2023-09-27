@@ -147,7 +147,7 @@ func newRegionWorker(
 		rtsManager:    newRegionTsManager(),
 		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
 		storeAddr:     addr,
-		concurrency:   s.client.config.WorkerConcurrent,
+		concurrency:   s.client.config.KVClient.WorkerConcurrent,
 		metrics:       metrics,
 		inputPending:  0,
 	}

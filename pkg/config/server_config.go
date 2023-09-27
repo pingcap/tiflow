@@ -138,7 +138,8 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler: NewDefaultSchedulerConfig(),
+		Scheduler:              NewDefaultSchedulerConfig(),
+		EnableKVConnectBackOff: false,
 	},
 	ClusterID:           "default",
 	MaxMemoryPercentage: DefaultMaxMemoryPercentage,
