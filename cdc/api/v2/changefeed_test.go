@@ -532,16 +532,24 @@ func TestListChangeFeeds(t *testing.T) {
 				State: model.StateNormal,
 			},
 			model.DefaultChangeFeedID("cf2"): {
-				State: model.StateError,
+				State: model.StateWarning,
 			},
 			model.DefaultChangeFeedID("cf3"): {
 				State: model.StateStopped,
+			},
+			model.DefaultChangeFeedID("cf4"): {
+				State: model.StatePending,
+			},
+			model.DefaultChangeFeedID("cf5"): {
+				State: model.StateFinished,
 			},
 		},
 		changefeedStatuses: map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI{
 			model.DefaultChangeFeedID("cf1"): {},
 			model.DefaultChangeFeedID("cf2"): {},
 			model.DefaultChangeFeedID("cf3"): {},
+			model.DefaultChangeFeedID("cf4"): {},
+			model.DefaultChangeFeedID("cf5"): {},
 		},
 	}
 	cp.EXPECT().StatusProvider().Return(provider1).AnyTimes()
@@ -560,11 +568,11 @@ func TestListChangeFeeds(t *testing.T) {
 	resp := ListResponse[model.ChangefeedCommonInfo]{}
 	err := json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
-	require.Equal(t, 3, resp.Total)
+	require.Equal(t, 5, resp.Total)
 	// changefeed info must be sorted by ID
 	require.Equal(t, true, sorted(resp.Items))
 
-	// case 2: only list changefeed with state 'normal', 'stopped' and 'failed'
+	// case 2: only list changefeed with state 'normal', 'stopped' and 'failed', "pending", "warning"
 	metaInfo2 := testCase{
 		url:    "/api/v2/changefeeds",
 		method: "GET",
@@ -579,7 +587,7 @@ func TestListChangeFeeds(t *testing.T) {
 	resp2 := ListResponse[model.ChangefeedCommonInfo]{}
 	err = json.NewDecoder(w.Body).Decode(&resp2)
 	require.Nil(t, err)
-	require.Equal(t, 2, resp2.Total)
+	require.Equal(t, 4, resp2.Total)
 	// changefeed info must be sorted by ID
 	require.Equal(t, true, sorted(resp2.Items))
 }

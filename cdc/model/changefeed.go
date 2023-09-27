@@ -76,13 +76,19 @@ const (
 type FeedState string
 
 // All FeedStates
+// Only `StateNormal` and `StatePending` changefeed is running,
+// others are stopped.
 const (
 	StateNormal   FeedState = "normal"
-	StateError    FeedState = "error"
+	StatePending  FeedState = "pending"
 	StateFailed   FeedState = "failed"
 	StateStopped  FeedState = "stopped"
 	StateRemoved  FeedState = "removed"
 	StateFinished FeedState = "finished"
+	StateWarning  FeedState = "warning"
+	// StateUnInitialized is used for the changefeed that has not been initialized
+	// it only exists in memory for a short time and will not be persisted to storage
+	StateUnInitialized FeedState = ""
 )
 
 // ToInt return an int for each `FeedState`, only use this for metrics.
@@ -90,7 +96,7 @@ func (s FeedState) ToInt() int {
 	switch s {
 	case StateNormal:
 		return 0
-	case StateError:
+	case StatePending:
 		return 1
 	case StateFailed:
 		return 2
@@ -100,6 +106,10 @@ func (s FeedState) ToInt() int {
 		return 4
 	case StateRemoved:
 		return 5
+	case StateWarning:
+		return 6
+	case StateUnInitialized:
+		return 7
 	}
 	// -1 for unknown feed state
 	return -1
@@ -118,9 +128,18 @@ func (s FeedState) IsNeeded(need string) bool {
 			return true
 		case StateFailed:
 			return true
+		case StateWarning:
+			return true
+		case StatePending:
+			return true
 		}
 	}
 	return need == string(s)
+}
+
+// IsRunning return true if the feedState represents a running state.
+func (s FeedState) IsRunning() bool {
+	return s == StateNormal || s == StateWarning
 }
 
 // ChangeFeedInfo describes the detail of a ChangeFeed
@@ -343,10 +362,10 @@ func (info *ChangeFeedInfo) fixState() {
 		// This corresponds to the case of failure or error.
 		case AdminNone, AdminResume:
 			if info.Error != nil {
-				if cerror.IsChangefeedFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
+				if cerror.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(info.Error.Code)) {
 					state = StateFailed
 				} else {
-					state = StateError
+					state = StateWarning
 				}
 			}
 		case AdminStop:

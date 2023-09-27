@@ -102,7 +102,7 @@ func TestCheckStaleCheckpointTs(t *testing.T) {
 	gcManager.lastSafePointTs = 20
 	err = gcManager.CheckStaleCheckpointTs(ctx, cfID, 10)
 	require.True(t, cerror.ErrSnapshotLostByGC.Equal(errors.Cause(err)))
-	require.True(t, cerror.IsChangefeedFastFailError(err))
+	require.True(t, cerror.IsChangefeedGCFastFailError(err))
 }
 
 func TestIgnoreFailedFeed(t *testing.T) {

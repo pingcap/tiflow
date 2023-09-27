@@ -102,6 +102,27 @@ type ChangefeedCommonInfo struct {
 	RunningError   *model.RunningError `json:"error"`
 }
 
+// MarshalJSON marshal changefeed common info to json
+// we need to set feed state to normal if it is uninitialized and pending to warning
+// to hide the detail of uninitialized and pending state from user
+func (c ChangefeedCommonInfo) MarshalJSON() ([]byte, error) {
+	// alias the original type to prevent recursive call of MarshalJSON
+	type Alias ChangefeedCommonInfo
+
+	if c.FeedState == model.StateUnInitialized {
+		c.FeedState = model.StateNormal
+	}
+	if c.FeedState == model.StatePending {
+		c.FeedState = model.StateWarning
+	}
+
+	return json.Marshal(struct {
+		Alias
+	}{
+		Alias: Alias(c),
+	})
+}
+
 // ChangefeedConfig use by create changefeed api
 type ChangefeedConfig struct {
 	Namespace     string         `json:"namespace"`
