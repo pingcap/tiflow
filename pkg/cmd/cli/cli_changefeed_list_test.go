@@ -40,10 +40,10 @@ func TestChangefeedListCli(t *testing.T) {
 		{
 			UpstreamID:     1,
 			Namespace:      "default",
-			ID:             "error-1",
+			ID:             "pending-1",
 			CheckpointTime: model.JSONTime{},
 			RunningError:   nil,
-			FeedState:      model.StateError,
+			FeedState:      model.StateWarning,
 		},
 		{
 			UpstreamID:     1,
@@ -85,28 +85,38 @@ func TestChangefeedListCli(t *testing.T) {
 			RunningError:   nil,
 			FeedState:      model.StateStopped,
 		},
+		{
+			UpstreamID:     1,
+			Namespace:      "default",
+			ID:             "warning-7",
+			CheckpointTime: model.JSONTime{},
+			RunningError:   nil,
+			FeedState:      model.StateStopped,
+		},
 	}, nil).Times(2)
 	// when --all=false, should contains StateNormal, StateError, StateFailed, StateStopped changefeed
 	os.Args = []string{"list", "--all=false"}
 	require.Nil(t, cmd.Execute())
 	out, err := io.ReadAll(b)
 	require.Nil(t, err)
-	require.Contains(t, string(out), "error-1")
+	require.Contains(t, string(out), "pending-1")
 	require.Contains(t, string(out), "normal-2")
 	require.Contains(t, string(out), "stopped-6")
 	require.Contains(t, string(out), "failed-3")
+	require.Contains(t, string(out), "warning-7")
 
 	// when --all=true, should contains all changefeed
 	os.Args = []string{"list", "--all=true"}
 	require.Nil(t, cmd.Execute())
 	out, err = io.ReadAll(b)
 	require.Nil(t, err)
-	require.Contains(t, string(out), "error-1")
+	require.Contains(t, string(out), "pending-1")
 	require.Contains(t, string(out), "normal-2")
 	require.Contains(t, string(out), "failed-3")
 	require.Contains(t, string(out), "removed-4")
 	require.Contains(t, string(out), "finished-5")
 	require.Contains(t, string(out), "stopped-6")
+	require.Contains(t, string(out), "warning-7")
 
 	cf.EXPECT().List(gomock.Any(), gomock.Any()).Return(nil, errors.New("changefeed list test error"))
 	o := newListChangefeedOptions()

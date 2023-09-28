@@ -72,7 +72,7 @@ function run() {
 	ensure $MAX_RETRIES "check_etcd_meta_not_exist '/tidb/cdc/default/__cdc_meta__/owner' 'owner'"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
-	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "error" "failpoint injected retriable error" ""
+	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid} "warning" "failpoint injected retriable error" ""
 
 	run_cdc_cli changefeed remove -c $changefeedid
 	ensure $MAX_RETRIES check_no_changefeed ${UP_PD_HOST_1}:${UP_PD_PORT_1}
@@ -88,7 +88,7 @@ function run() {
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c $changefeedid_1
 
 	run_sql "CREATE table changefeed_error.DDLERROR(id int primary key, val int);"
-	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeedid_1 normal last_warning ErrExecDDLFailed
+	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeedid_1 warning last_warning ErrExecDDLFailed
 
 	run_cdc_cli changefeed remove -c $changefeedid_1
 	cleanup_process $CDC_BINARY

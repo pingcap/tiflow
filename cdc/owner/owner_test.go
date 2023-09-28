@@ -697,7 +697,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	o.upstreamManager = upstream.NewManager4Test(nil)
 
 	stateMap := []model.FeedState{
-		model.StateNormal, model.StateStopped, model.StateError,
+		model.StateNormal, model.StateStopped, model.StateWarning, model.StatePending,
 		model.StateFailed, /* failed changefeed with normal error should not be ignored */
 	}
 	for i := 0; i < 100; i++ {

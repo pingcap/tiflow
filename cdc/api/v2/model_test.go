@@ -21,6 +21,7 @@ import (
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	filter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -226,4 +227,27 @@ func TestEventFilterRuleConvert(t *testing.T) {
 		require.Equal(t, c.apiRule, ToAPIEventFilterRule(c.inRule))
 		require.Equal(t, c.inRule, c.apiRule.ToInternalEventFilterRule())
 	}
+}
+
+func TestMarshalChangefeedCommonInfo(t *testing.T) {
+	t.Parallel()
+
+	cfInfo := &ChangefeedCommonInfo{
+		ID:        "test-id",
+		FeedState: model.StatePending,
+	}
+
+	cfInfoJSON, err := json.Marshal(cfInfo)
+	require.Nil(t, err)
+	require.False(t, strings.Contains(string(cfInfoJSON), "pending"))
+	require.True(t, strings.Contains(string(cfInfoJSON), "warning"))
+
+	cfInfo = &ChangefeedCommonInfo{
+		ID:        "test-id",
+		FeedState: model.StateUnInitialized,
+	}
+
+	cfInfoJSON, err = json.Marshal(cfInfo)
+	require.Nil(t, err)
+	require.True(t, strings.Contains(string(cfInfoJSON), "normal"))
 }
