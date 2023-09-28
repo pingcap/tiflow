@@ -39,7 +39,7 @@ func TestKeyDispatcher_DispatchRowChangedEvent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewKeyDispatcher(tt.partitionKey)
-			gotPartition, gotKey := d.DispatchRowChangedEvent(tt.rowChangedEvt, 0)
+			gotPartition, gotKey, _ := d.DispatchRowChangedEvent(tt.rowChangedEvt, 0)
 			if gotPartition != tt.wantPartition {
 				t.Errorf("DispatchRowChangedEvent() gotPartition = %v, want %v", gotPartition, tt.wantPartition)
 			}

@@ -32,6 +32,6 @@ func NewKeyDispatcher(partitionKey string) *KeyDispatcher {
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (t *KeyDispatcher) DispatchRowChangedEvent(*model.RowChangedEvent, int32) (int32, string) {
-	return 0, t.partitionKey
+func (t *KeyDispatcher) DispatchRowChangedEvent(*model.RowChangedEvent, int32) (int32, string, error) {
+	return 0, t.partitionKey, nil
 }

@@ -22,5 +22,5 @@ type Dispatcher interface {
 	// DispatchRowChangedEvent returns an index of partitions or a partition key
 	//  according to RowChangedEvent.
 	// Concurrency Note: This method is thread-safe.
-	DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string)
+	DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string, error)
 }
