@@ -941,8 +941,6 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 			zap.Any("replicationSet", r),
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
-		return errors.ErrInvalidCheckpointTs.GenWithStackByArgs(r.Checkpoint.CheckpointTs,
-			r.Checkpoint.ResolvedTs)
 	}
 	r.Stats = stats
 	return nil
