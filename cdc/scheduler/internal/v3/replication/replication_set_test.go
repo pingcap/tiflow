@@ -1449,7 +1449,6 @@ func TestUpdateCheckpointAndStats(t *testing.T) {
 	}
 	r := &ReplicationSet{}
 	for _, c := range cases {
-		err := r.updateCheckpointAndStats(c.checkpoint, c.stats)
-		require.Nil(t, err)
+		r.updateCheckpointAndStats(c.checkpoint, c.stats)
 	}
 }
