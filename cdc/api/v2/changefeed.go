@@ -343,7 +343,7 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	}
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	ineligibleTables, eligibleTables, err := h.helpers.
-		getVerfiedTables(replicaCfg, kvStore, cfg.StartTs)
+		getVerifiedTables(replicaCfg, kvStore, cfg.StartTs)
 	if err != nil {
 		_ = c.Error(err)
 		return

@@ -88,9 +88,9 @@ func (mr *MockAPIV2HelpersMockRecorder) getPDClient(ctx, pdAddrs, credential int
 }
 
 // getVerfiedTables mocks base method.
-func (m *MockAPIV2Helpers) getVerfiedTables(replicaConfig *config.ReplicaConfig, storage kv.Storage, startTs uint64) ([]model.TableName, []model.TableName, error) {
+func (m *MockAPIV2Helpers) getVerifiedTables(replicaConfig *config.ReplicaConfig, storage kv.Storage, startTs uint64) ([]model.TableName, []model.TableName, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getVerfiedTables", replicaConfig, storage, startTs)
+	ret := m.ctrl.Call(m, "getVerifiedTables", replicaConfig, storage, startTs)
 	ret0, _ := ret[0].([]model.TableName)
 	ret1, _ := ret[1].([]model.TableName)
 	ret2, _ := ret[2].(error)
@@ -100,7 +100,7 @@ func (m *MockAPIV2Helpers) getVerfiedTables(replicaConfig *config.ReplicaConfig,
 // getVerfiedTables indicates an expected call of getVerfiedTables.
 func (mr *MockAPIV2HelpersMockRecorder) getVerfiedTables(replicaConfig, storage, startTs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getVerfiedTables", reflect.TypeOf((*MockAPIV2Helpers)(nil).getVerfiedTables), replicaConfig, storage, startTs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getVerifiedTables", reflect.TypeOf((*MockAPIV2Helpers)(nil).getVerifiedTables), replicaConfig, storage, startTs)
 }
 
 // verifyCreateChangefeedConfig mocks base method.

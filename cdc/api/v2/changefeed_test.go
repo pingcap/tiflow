@@ -662,7 +662,7 @@ func TestVerifyTable(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrNewStore")
 
-	// case 3: getVerfiedTables failed
+	// case 3: getVerifiedTables failed
 	helpers.EXPECT().
 		createTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).

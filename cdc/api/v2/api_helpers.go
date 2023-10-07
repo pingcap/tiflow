@@ -112,8 +112,8 @@ type APIV2Helpers interface {
 		credential *security.Credential,
 	) (tidbkv.Storage, error)
 
-	// getVerfiedTables wraps entry.VerifyTables to increase testability
-	getVerfiedTables(replicaConfig *config.ReplicaConfig,
+	// getVerifiedTables wraps entry.VerifyTables to increase testability
+	getVerifiedTables(replicaConfig *config.ReplicaConfig,
 		storage tidbkv.Storage, startTs uint64) (ineligibleTables,
 		eligibleTables []model.TableName, err error,
 	)
@@ -491,7 +491,7 @@ func (h APIV2HelpersImpl) createTiStore(pdAddrs []string,
 	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
 }
 
-func (h APIV2HelpersImpl) getVerfiedTables(replicaConfig *config.ReplicaConfig,
+func (h APIV2HelpersImpl) getVerifiedTables(replicaConfig *config.ReplicaConfig,
 	storage tidbkv.Storage, startTs uint64) (ineligibleTables,
 	eligibleTables []model.TableName, err error,
 ) {
