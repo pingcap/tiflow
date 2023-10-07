@@ -1428,6 +1428,9 @@ var doc = `{
                     "description": "Deprecated, please use PartitionRule.",
                     "type": "string"
                 },
+                "index-name": {
+                    "type": "string"
+                },
                 "matcher": {
                     "type": "array",
                     "items": {
