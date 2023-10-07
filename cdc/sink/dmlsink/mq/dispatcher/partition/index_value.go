@@ -17,9 +17,11 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
+	"go.uber.org/zap"
 )
 
 // IndexValueDispatcher is a partition dispatcher which dispatches events based on the index value.
@@ -64,6 +66,9 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 	} else {
 		names, offsets, ok := row.IndexByName(r.indexName)
 		if !ok {
+			log.Error("index not found",
+				zap.Any("tableName", row.Table),
+				zap.String("indexName", r.indexName))
 			return 0, "", errors.ErrDispatcherRuntime.GenWithStack("index not found: %s", r.indexName)
 		}
 		for idx := 0; idx < len(names); idx++ {

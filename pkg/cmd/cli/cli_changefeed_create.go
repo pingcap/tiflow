@@ -278,6 +278,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		},
 		ReplicaConfig: createChangefeedCfg.ReplicaConfig,
 		StartTs:       createChangefeedCfg.StartTs,
+		SinkURI:       createChangefeedCfg.SinkURI,
 	}
 
 	tables, err := o.apiClient.Changefeeds().VerifyTable(ctx, verifyTableConfig)

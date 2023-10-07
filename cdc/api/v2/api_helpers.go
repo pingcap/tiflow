@@ -116,7 +116,9 @@ type APIV2Helpers interface {
 
 	// getVerifiedTables wraps entry.VerifyTables to increase testability
 	getVerifiedTables(replicaConfig *config.ReplicaConfig,
-		storage tidbkv.Storage, startTs uint64) (ineligibleTables,
+		storage tidbkv.Storage, startTs uint64,
+		scheme string, topic string, protocol config.Protocol,
+	) (ineligibleTables,
 		eligibleTables []model.TableName, err error,
 	)
 }

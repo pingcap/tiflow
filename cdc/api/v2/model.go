@@ -68,6 +68,7 @@ type VerifyTableConfig struct {
 	PDConfig
 	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	StartTs       uint64         `json:"start_ts"`
+	SinkURI       string         `json:"sink_uri"`
 }
 
 func getDefaultVerifyTableConfig() *VerifyTableConfig {
