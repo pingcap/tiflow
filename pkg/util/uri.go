@@ -85,12 +85,21 @@ var sensitiveQueryParameterNames = []string{
 	"password",
 	"sasl-password",
 	"access-key",
+	"access_key",
 	"secret-access-key",
+	"secret_access_key",
 	"access_token",
+	"access-token",
 	"token",
 	"secret",
 	"passwd",
 	"pwd",
+	"key",
+	"signature",
+	"credentials",
+	"private-key",
+	"client_secret",
+	"client_id",
 }
 
 // MaskSensitiveDataInURI returns an uri that sensitive infos has been masked.
