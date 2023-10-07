@@ -83,23 +83,16 @@ func MaskSinkURI(uri string) (string, error) {
 
 var sensitiveQueryParameterNames = []string{
 	"password",
-	"sasl-password",
-	"access-key",
-	"access_key",
-	"secret-access-key",
-	"secret_access_key",
-	"access_token",
-	"access-token",
-	"token",
-	"secret",
 	"passwd",
 	"pwd",
+	"access",
+	"token",
+	"secret",
 	"key",
 	"signature",
-	"credentials",
-	"private-key",
-	"client_secret",
-	"client_id",
+	"credential",
+	"private",
+	"client",
 }
 
 // MaskSensitiveDataInURI returns an uri that sensitive infos has been masked.
@@ -110,9 +103,12 @@ func MaskSensitiveDataInURI(uri string) string {
 		return ""
 	}
 	queries := uriParsed.Query()
-	for _, secretKey := range sensitiveQueryParameterNames {
-		if queries.Has(secretKey) {
-			queries.Set(secretKey, "xxxxx")
+	for key, _ := range queries {
+		lower := strings.ToLower(key)
+		for _, secretKey := range sensitiveQueryParameterNames {
+			if strings.Contains(lower, secretKey) {
+				queries.Set(key, "xxxxx")
+			}
 		}
 	}
 	uriParsed.RawQuery = queries.Encode()
