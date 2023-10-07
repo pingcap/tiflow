@@ -178,7 +178,8 @@ func TestCreateChangefeed(t *testing.T) {
 	helpers.EXPECT().
 		getEtcdClient(gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
 	helpers.EXPECT().
@@ -667,7 +668,8 @@ func TestVerifyTable(t *testing.T) {
 		createTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, cerrors.ErrFilterRuleInvalid).
 		Times(1)
 
@@ -688,7 +690,8 @@ func TestVerifyTable(t *testing.T) {
 	ineligible := []model.TableName{
 		{Schema: "test", Table: "invalidTable"},
 	}
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(eligible, ineligible, nil)
 
 	w = httptest.NewRecorder()
