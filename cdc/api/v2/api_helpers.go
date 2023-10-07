@@ -29,11 +29,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/security"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
@@ -491,15 +493,42 @@ func (h APIV2HelpersImpl) createTiStore(pdAddrs []string,
 	return kv.CreateTiStore(strings.Join(pdAddrs, ","), credential)
 }
 
-func (h APIV2HelpersImpl) getVerifiedTables(replicaConfig *config.ReplicaConfig,
-	storage tidbkv.Storage, startTs uint64) (ineligibleTables,
-	eligibleTables []model.TableName, err error,
-) {
+func (h APIV2HelpersImpl) getVerifiedTables(
+	replicaConfig *config.ReplicaConfig,
+	storage tidbkv.Storage, startTs uint64,
+	scheme string, topic string, protocol config.Protocol,
+) ([]model.TableName, []model.TableName, error) {
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {
-		return
+		return nil, nil, err
 	}
-	_, ineligibleTables, eligibleTables, err = entry.
+	tableInfos, ineligibleTables, eligibleTables, err := entry.
 		VerifyTables(f, storage, startTs)
-	return
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if !sink.IsMQScheme(scheme) {
+		return ineligibleTables, eligibleTables, nil
+	}
+
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, topic, scheme)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, table := range tableInfos {
+		dummyEvent := &model.RowChangedEvent{
+			Table: &model.TableName{
+				Schema: table.TableName.Schema,
+				Table:  table.TableName.Table,
+			},
+			TableInfo: table,
+		}
+		_, _, err := eventRouter.GetPartitionForRowChange(dummyEvent, 1)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return ineligibleTables, eligibleTables, nil
 }
