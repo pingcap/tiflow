@@ -99,6 +99,18 @@ func TestMaskSensitiveDataInURI(t *testing.T) {
 			"mysql://root:xxxxx@127.0.0.1:3306/?time-zone=c",
 		},
 		{
+			"mysql://root:123456@127.0.0.1:3306/?access_key=c",
+			"mysql://root:xxxxx@127.0.0.1:3306/?access_key=xxxxx",
+		},
+		{
+			"mysql://root:123456@127.0.0.1:3306/?secret_access_key=c",
+			"mysql://root:xxxxx@127.0.0.1:3306/?secret_access_key=xxxxx",
+		},
+		{
+			"mysql://root:123456@127.0.0.1:3306/?client_secret=c",
+			"mysql://root:xxxxx@127.0.0.1:3306/?client_secret=xxxxx",
+		},
+		{
 			"",
 			"",
 		},
