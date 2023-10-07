@@ -103,7 +103,7 @@ func MaskSensitiveDataInURI(uri string) string {
 		return ""
 	}
 	queries := uriParsed.Query()
-	for key, _ := range queries {
+	for key := range queries {
 		lower := strings.ToLower(key)
 		for _, secretKey := range sensitiveQueryParameterNames {
 			if strings.Contains(lower, secretKey) {
