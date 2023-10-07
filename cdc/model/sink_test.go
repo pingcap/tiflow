@@ -609,3 +609,36 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, txn.Rows, 1)
 }
+
+func TestIndexByName(t *testing.T) {
+	event := &RowChangedEvent{
+		TableInfo: &TableInfo{
+			TableInfo: &timodel.TableInfo{
+				Indices: []*timodel.IndexInfo{
+					{
+						Name: timodel.CIStr{
+							O: "idx1",
+						},
+						Columns: []*timodel.IndexColumn{
+							{
+								Name: timodel.CIStr{
+									O: "col1",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	names, offsets, ok := event.IndexByName("idx2")
+	require.False(t, ok)
+	require.Nil(t, names)
+	require.Nil(t, offsets)
+
+	names, offsets, ok = event.IndexByName("idx1")
+	require.True(t, ok)
+	require.Equal(t, []string{"col1"}, names)
+	require.Equal(t, []int{0}, offsets)
+}

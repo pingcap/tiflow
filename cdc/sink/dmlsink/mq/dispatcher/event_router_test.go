@@ -203,8 +203,8 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		},
 		IndexColumns: [][]int{{0}},
 	}, 16)
-	require.Equal(t, int32(14), p)
 	require.NoError(t, err)
+	require.Equal(t, int32(14), p)
 
 	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_default2", Table: "table"},
@@ -217,15 +217,15 @@ func TestGetPartitionForRowChange(t *testing.T) {
 		},
 		IndexColumns: [][]int{{0}},
 	}, 16)
-	require.Equal(t, int32(0), p)
 	require.NoError(t, err)
+	require.Equal(t, int32(0), p)
 
 	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table:    &model.TableName{Schema: "test_table", Table: "table"},
 		CommitTs: 1,
 	}, 16)
-	require.Equal(t, int32(15), p)
 	require.NoError(t, err)
+	require.Equal(t, int32(15), p)
 
 	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table: &model.TableName{Schema: "test_index_value", Table: "table"},
@@ -241,15 +241,15 @@ func TestGetPartitionForRowChange(t *testing.T) {
 			},
 		},
 	}, 10)
-	require.Equal(t, int32(1), p)
 	require.NoError(t, err)
+	require.Equal(t, int32(1), p)
 
 	p, _, err = d.GetPartitionForRowChange(&model.RowChangedEvent{
 		Table:    &model.TableName{Schema: "a", Table: "table"},
 		CommitTs: 1,
 	}, 2)
-	require.Equal(t, int32(1), p)
 	require.NoError(t, err)
+	require.Equal(t, int32(1), p)
 }
 
 func TestGetTopicForDDL(t *testing.T) {

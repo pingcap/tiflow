@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/stretchr/testify/require"
 )
 
 func TestKeyDispatcher_DispatchRowChangedEvent(t *testing.T) {
@@ -39,7 +40,8 @@ func TestKeyDispatcher_DispatchRowChangedEvent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewKeyDispatcher(tt.partitionKey)
-			gotPartition, gotKey, _ := d.DispatchRowChangedEvent(tt.rowChangedEvt, 0)
+			gotPartition, gotKey, err := d.DispatchRowChangedEvent(tt.rowChangedEvt, 0)
+			require.NoError(t, err)
 			if gotPartition != tt.wantPartition {
 				t.Errorf("DispatchRowChangedEvent() gotPartition = %v, want %v", gotPartition, tt.wantPartition)
 			}

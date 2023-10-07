@@ -51,24 +51,8 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 		dispatchCols = row.PreColumns
 	}
 
-	if r.indexName != "" {
-		indexColumns := make(map[string]int)
-		for _, index := range row.TableInfo.Indices {
-			if index.Name.O == r.indexName {
-				for _, col := range index.Columns {
-					indexColumns[col.Name.O] = col.Offset
-				}
-				break
-			}
-		}
-		if len(indexColumns) == 0 {
-			return 0, "", errors.New("cannot found the target index columns")
-		}
-
-		for colName, offset := range indexColumns {
-			r.hasher.Write([]byte(colName), []byte(model.ColumnValueString(dispatchCols[offset].Value)))
-		}
-	} else {
+	// the most normal case, index-name is not set, use the handle key columns.
+	if r.indexName == "" {
 		for _, col := range dispatchCols {
 			if col == nil {
 				continue
@@ -76,6 +60,14 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 			if col.Flag.IsHandleKey() {
 				r.hasher.Write([]byte(col.Name), []byte(model.ColumnValueString(col.Value)))
 			}
+		}
+	} else {
+		names, offsets, ok := row.IndexByName(r.indexName)
+		if !ok {
+			return 0, "", errors.ErrDispatcherRuntime.GenWithStack("index not found: %s", r.indexName)
+		}
+		for idx := 0; idx < len(names); idx++ {
+			r.hasher.Write([]byte(names[idx]), []byte(model.ColumnValueString(dispatchCols[offsets[idx]].Value)))
 		}
 	}
 

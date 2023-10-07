@@ -231,6 +231,11 @@ error = '''
 failed to preallocate file because disk is full
 '''
 
+["CDC:ErrDispatcherRuntime"]
+error = '''
+dispatcher runtime error
+'''
+
 ["CDC:ErrEncodeFailed"]
 error = '''
 encode failed: %s
@@ -306,11 +311,6 @@ error = '''
 filter rule is invalid %v
 '''
 
-["CDC:ErrFlowControllerAborted"]
-error = '''
-flow controller is aborted
-'''
-
 ["CDC:ErrGCTTLExceeded"]
 error = '''
 the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded the GC TTL and the changefeed is blocking global GC progression
@@ -344,11 +344,6 @@ handle ddl failed, job: %s, query: %s, startTs: %d. If you want to skip this DDL
 ["CDC:ErrIllegalSorterParameter"]
 error = '''
 illegal parameter for sorter: %s
-'''
-
-["CDC:ErrIncompatibleConfig"]
-error = '''
-incompatible configuration
 '''
 
 ["CDC:ErrIncompatibleSinkConfig"]
@@ -419,11 +414,6 @@ invalid record key - %q
 ["CDC:ErrInvalidReplicaConfig"]
 error = '''
 invalid replica config, %s
-'''
-
-["CDC:ErrInvalidS3URI"]
-error = '''
-invalid s3 uri: %s
 '''
 
 ["CDC:ErrInvalidServerOption"]
@@ -574,11 +564,6 @@ create sem version
 ["CDC:ErrNewStore"]
 error = '''
 new store failed
-'''
-
-["CDC:ErrNoPendingRegion"]
-error = '''
-received event regionID %v, requestID %v from %v, but neither pending region nor running region was found
 '''
 
 ["CDC:ErrNotController"]

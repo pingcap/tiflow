@@ -16,7 +16,9 @@ package partition
 import (
 	"testing"
 
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -153,4 +155,48 @@ func TestIndexValueDispatcher(t *testing.T) {
 		require.Equal(t, tc.expectPartition, index)
 		require.NoError(t, err)
 	}
+}
+
+func TestIndexValueDispatcherWithIndexName(t *testing.T) {
+	t.Parallel()
+
+	event := &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test",
+			Table:  "t1",
+		},
+		TableInfo: &model.TableInfo{
+			TableInfo: &timodel.TableInfo{
+				Indices: []*timodel.IndexInfo{
+					{
+						Name: timodel.CIStr{
+							O: "index1",
+						},
+						Columns: []*timodel.IndexColumn{
+							{
+								Name: timodel.CIStr{
+									O: "a",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "a",
+				Value: 11,
+			},
+		},
+	}
+
+	p := NewIndexValueDispatcher("index2")
+	_, _, err := p.DispatchRowChangedEvent(event, 16)
+	require.ErrorIs(t, err, errors.ErrDispatcherRuntime)
+
+	p = NewIndexValueDispatcher("index1")
+	index, _, err := p.DispatchRowChangedEvent(event, 16)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), index)
 }

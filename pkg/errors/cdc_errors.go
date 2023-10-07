@@ -90,11 +90,6 @@ var (
 		"unknown kv optype: %s, entry: %v",
 		errors.RFCCodeText("CDC:ErrUnknownKVEventType"),
 	)
-	ErrNoPendingRegion = errors.Normalize(
-		"received event regionID %v, requestID %v from %v, "+
-			"but neither pending region nor running region was found",
-		errors.RFCCodeText("CDC:ErrNoPendingRegion"),
-	)
 	ErrPrewriteNotMatch = errors.Normalize(
 		"prewrite not match, key: %s, start-ts: %d, commit-ts: %d, type: %s, optype: %s",
 		errors.RFCCodeText("CDC:ErrPrewriteNotMatch"),
@@ -116,7 +111,7 @@ var (
 		errors.RFCCodeText("CDC:ErrRegionWorkerExit"),
 	)
 
-	// rule related errors
+	// codec related errors
 	ErrEncodeFailed = errors.Normalize(
 		"encode failed: %s",
 		errors.RFCCodeText("CDC:ErrEncodeFailed"),
@@ -128,6 +123,10 @@ var (
 	ErrFilterRuleInvalid = errors.Normalize(
 		"filter rule is invalid %v",
 		errors.RFCCodeText("CDC:ErrFilterRuleInvalid"),
+	)
+	ErrDispatcherRuntime = errors.Normalize(
+		"dispatcher runtime error",
+		errors.RFCCodeText("CDC:ErrDispatcherRuntime"),
 	)
 
 	// internal errors
@@ -386,10 +385,6 @@ var (
 	ErrOldValueNotEnabled = errors.Normalize(
 		"old value is not enabled",
 		errors.RFCCodeText("CDC:ErrOldValueNotEnabled"),
-	)
-	ErrIncompatibleConfig = errors.Normalize(
-		"incompatible configuration",
-		errors.RFCCodeText("CDC:ErrIncompatibleConfig"),
 	)
 	ErrSinkInvalidConfig = errors.Normalize(
 		"sink config invalid",
@@ -742,11 +737,6 @@ var (
 		"consistent storage (%s) not support",
 		errors.RFCCodeText("CDC:ErrConsistentStorage"),
 	)
-	ErrInvalidS3URI = errors.Normalize(
-		"invalid s3 uri: %s",
-		errors.RFCCodeText("CDC:ErrInvalidS3URI"),
-	)
-
 	// sorter errors
 	ErrIllegalSorterParameter = errors.Normalize(
 		"illegal parameter for sorter: %s",
@@ -755,12 +745,6 @@ var (
 	ErrConflictingFileLocks = errors.Normalize(
 		"file lock conflict: %s",
 		errors.RFCCodeText("ErrConflictingFileLocks"),
-	)
-
-	// miscellaneous internal errors
-	ErrFlowControllerAborted = errors.Normalize(
-		"flow controller is aborted",
-		errors.RFCCodeText("CDC:ErrFlowControllerAborted"),
 	)
 
 	// retry error
