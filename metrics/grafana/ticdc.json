@@ -131,7 +131,7 @@
   "gnetId": null,
   "graphTooltip": 1,
   "id": null,
-  "iteration": 1693471596912,
+  "iteration": 1694492203479,
   "links": [],
   "panels": [
     {
@@ -6754,7 +6754,7 @@
           "id": 653,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
             "max": true,
             "min": false,
@@ -6865,7 +6865,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -6968,7 +6968,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7071,7 +7071,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7174,7 +7174,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7277,7 +7277,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7378,7 +7378,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7484,7 +7484,7 @@
           "id": 709,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
             "max": true,
             "min": false,
@@ -7582,7 +7582,7 @@
           "id": 710,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
             "max": true,
             "min": false,
@@ -7683,7 +7683,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7789,7 +7789,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7896,7 +7896,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -7994,7 +7994,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -8092,7 +8092,7 @@
             "avg": true,
             "current": true,
             "max": true,
-            "min": true,
+            "min": false,
             "rightSide": false,
             "show": true,
             "total": false,
@@ -8383,7 +8383,7 @@
           "id": 740,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
             "max": true,
             "min": false,
@@ -8489,9 +8489,9 @@
           "id": 741,
           "legend": {
             "alignAsTable": true,
-            "avg": false,
+            "avg": true,
             "current": true,
-            "max": false,
+            "max": true,
             "min": false,
             "rightSide": false,
             "show": true,
@@ -8566,6 +8566,1347 @@
         }
       ],
       "title": "Sink - MQ Sink",
+      "type": "row"
+    },
+    {
+      "id": 10000,
+      "collapsed": true,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 1
+          },
+          "hiddenSeries": false,
+          "id": 10001,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "increase(ticdc_pulsar_published_DDL_schema_table_count{changefeed=~\"$changefeed\",schema=~\"$schema\", topic=~\"$topic\", type=\"count\"}[30s])/2",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "ticdc_pulsar_published_DDL_schema_table_count{changefeed=~\"$changefeed\",schema=~\"$schema\", topic=~\"$topic\", type=\"count\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar published DDL schema count",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 1
+          },
+          "hiddenSeries": false,
+          "id": 10002,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "increase(ticdc_pulsar_published_DDL_schema_table_count{changefeed=~\"$changefeed\",schema=~\"$schema\", topic=~\"$topic\", type=\"success\"}[30s])/2",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "ticdc_pulsar_published_DDL_schema_table_count{changefeed=~\"$changefeed\",schema=~\"$schema\", topic=~\"$topic\", type=\"success\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar published DDL schema success",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 10
+          },
+          "hiddenSeries": false,
+
+          "id": 10003,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "increase(ticdc_pulsar_published_DDL_schema_table_count{changefeed=~\"$changefeed\", schema=~\"$schema\", topic=~\"$topic\", type=\"fail\"}[30s])/2\r",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "ticdc_pulsar_published_DDL_schema_table_count{changefeed=~\"$changefeed\", schema=~\"$schema\", topic=~\"$topic\", type=\"fail\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar published DDL schema fail",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 10
+          },
+          "hiddenSeries": false,
+
+          "id": 10004,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "increase(ticdc_pulsar_published_DML_schema_table_count{changefeed=~\"$changefeed\",\r\nschema=~\"$schema\", topic=~\"$topic\", type=\"count\"}[30s])/2",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar published DML schema count",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 19
+          },
+          "hiddenSeries": false,
+
+          "id": 10005,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "\r\nincrease(ticdc_pulsar_published_DML_schema_table_count{changefeed=~\"$changefeed\",schema=~\"$schema\", topic=~\"$topic\", type=\"success\"}[30s])/2",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar published DML schema success",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 19
+          },
+          "hiddenSeries": false,
+
+          "id": 10006,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "\r\nincrease(ticdc_pulsar_published_DML_schema_table_count{changefeed=~\"$changefeed\",schema=~\"$schema\", topic=~\"$topic\", type=\"fail\"}[30s])/2",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar published DML schema fail",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 28
+          },
+          "hiddenSeries": false,
+
+          "id": 10007,
+          "legend": {
+            "alignAsTable": true,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(pulsar_client_bytes_published{changefeed=~\"$changefeed\"})  by (changefeed, instance)",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{changefeed}}-{{instance}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar client bytes published ",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 28
+          },
+          "hiddenSeries": false,
+
+          "id": 10008,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(pulsar_client_connections_opened{changefeed=~\"$changefeed\"})  by (changefeed, instance)",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{instance}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar client connections opened",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 37
+          },
+          "hiddenSeries": false,
+
+          "id": 10009,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(pulsar_client_rpc_count{changefeed=~\"$changefeed\"})  by (changefeed, instance)",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{instance}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar client rpc count",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:97",
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:98",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "graph": false,
+                  "legend": false,
+                  "tooltip": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 37
+          },
+          "id": 10010,
+          "options": {
+            "graph": {},
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltipOptions": {
+              "mode": "single"
+            }
+          },
+          "pluginVersion": "7.5.11",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(pulsar_client_producer_latency_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,changefeed,instance))\r",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{instance}}-P999",
+              "queryType": "randomWalk",
+              "refId": "A"
+            },
+            {
+              "exemplar": true,
+              "expr": "sum(rate(pulsar_client_producer_latency_seconds_bucket{changefeed=\"$changefeed\"}[1m])) by (changefeed,instance) / \r\nsum(rate(pulsar_client_producer_latency_seconds_bucket{changefeed=\"$changefeed\"}[1m])) by (changefeed,instance)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "",
+              "refId": "B"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Pulsar client producer latency ",
+          "type": "timeseries"
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 46
+          },
+          "hiddenSeries": false,
+
+          "id": 10011,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "histogram_quantile(0.999, sum(rate(pulsar_client_producer_rpc_latency_seconds_bucket{changefeed=~\"$changefeed\"}[1m])) by (le,changefeed,instance))\r",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{instance}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar client producer rpc latency",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:809",
+              "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:810",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 46
+          },
+          "hiddenSeries": false,
+
+          "id": 10012,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(pulsar_client_producer_pending_messages{changefeed=~\"$changefeed\"})  by (changefeed, instance)\r",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{instance}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar client producer pending messages",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:809",
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:810",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "${DS_TEST-CLUSTER}",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 46
+          },
+          "hiddenSeries": false,
+
+          "id": 10013,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null as zero",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.11",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(published_message_type_resolved_count{changefeed=~\"$changefeed\",schema=~\"$schema\", topic=~\"$topic\"})  by (changefeed)",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{changefeed}}-{{topic}}",
+              "queryType": "randomWalk",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Pulsar client producer pending messages",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:809",
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:810",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "Pulsar Sink",
       "type": "row"
     },
     {
@@ -10948,7 +12289,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 121
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 271,
@@ -11042,7 +12383,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 121
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 273,
@@ -11150,7 +12491,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 121
+            "y": 11
           },
           "hiddenSeries": false,
           "id": 272,
@@ -11254,7 +12595,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 127
+            "y": 17
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11330,7 +12671,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 127
+            "y": 17
           },
           "hiddenSeries": false,
           "id": 288,
@@ -11458,7 +12799,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 127
+            "y": 17
           },
           "hiddenSeries": false,
           "id": 286,
@@ -11570,7 +12911,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 133
+            "y": 23
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11646,7 +12987,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 133
+            "y": 23
           },
           "hiddenSeries": false,
           "id": 279,
@@ -11749,7 +13090,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 133
+            "y": 23
           },
           "hiddenSeries": false,
           "id": 275,
@@ -11872,7 +13213,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 139
+            "y": 29
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -11956,7 +13297,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 139
+            "y": 29
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -12040,7 +13381,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 139
+            "y": 29
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -12116,7 +13457,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 145
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 280,
@@ -12216,7 +13557,7 @@
             "h": 6,
             "w": 8,
             "x": 8,
-            "y": 145
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 283,
@@ -12316,7 +13657,7 @@
             "h": 6,
             "w": 8,
             "x": 16,
-            "y": 145
+            "y": 35
           },
           "hiddenSeries": false,
           "id": 287,
@@ -12424,7 +13765,7 @@
             "h": 6,
             "w": 8,
             "x": 0,
-            "y": 151
+            "y": 41
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -15704,7 +17045,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 14
+            "y": 166
           },
           "hiddenSeries": false,
           "id": 60,
@@ -15840,7 +17181,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 14
+            "y": 166
           },
           "hiddenSeries": false,
           "id": 74,
@@ -15958,7 +17299,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 21
+            "y": 173
           },
           "hiddenSeries": false,
           "id": 147,
@@ -16067,7 +17408,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 21
+            "y": 173
           },
           "hiddenSeries": false,
           "id": 194,
@@ -16241,7 +17582,7 @@
             "h": 7,
             "w": 7,
             "x": 0,
-            "y": 28
+            "y": 180
           },
           "hiddenSeries": false,
           "id": 152,
@@ -16382,7 +17723,7 @@
             "h": 7,
             "w": 5,
             "x": 7,
-            "y": 28
+            "y": 180
           },
           "hiddenSeries": false,
           "id": 153,
@@ -16490,7 +17831,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 28
+            "y": 180
           },
           "hiddenSeries": false,
           "id": 70,
@@ -16601,7 +17942,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 35
+            "y": 187
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -16678,7 +18019,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 35
+            "y": 187
           },
           "hiddenSeries": false,
           "id": 72,
@@ -16783,7 +18124,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 35
+            "y": 187
           },
           "hiddenSeries": false,
           "id": 140,
@@ -16905,7 +18246,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 194
           },
           "hiddenSeries": false,
           "id": 78,
@@ -17023,7 +18364,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 42
+            "y": 194
           },
           "hiddenSeries": false,
           "id": 76,
@@ -17134,7 +18475,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 42
+            "y": 194
           },
           "hiddenSeries": false,
           "id": 139,
@@ -17242,7 +18583,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 49
+            "y": 201
           },
           "hiddenSeries": false,
           "id": 143,
@@ -17379,7 +18720,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 49
+            "y": 201
           },
           "hiddenSeries": false,
           "id": 145,
@@ -17510,7 +18851,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 56
+            "y": 208
           },
           "hiddenSeries": false,
           "id": 141,
@@ -17624,7 +18965,7 @@
             "h": 7,
             "w": 6,
             "x": 12,
-            "y": 56
+            "y": 208
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -17700,7 +19041,7 @@
             "h": 7,
             "w": 6,
             "x": 18,
-            "y": 56
+            "y": 208
           },
           "hiddenSeries": false,
           "id": 142,
@@ -20061,5 +21402,5 @@
   "timezone": "browser",
   "title": "${DS_TEST-CLUSTER}-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 55
+  "version": 56
 }

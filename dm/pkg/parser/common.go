@@ -15,11 +15,9 @@ package parser
 
 import (
 	"bytes"
-	"strings"
 
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/charset"
 	"github.com/pingcap/tidb/parser/format"
 	"github.com/pingcap/tidb/parser/model"
 	_ "github.com/pingcap/tidb/types/parser_driver" // for import parser driver
@@ -36,22 +34,6 @@ const (
 	// https://github.com/pingcap/parser/pull/1021
 	SingleRenameTableNameNum = 2
 )
-
-func init() {
-	c := &charset.Charset{
-		Name:             charset.CharsetGBK,
-		DefaultCollation: "gbk_chinese_ci",
-		Collations:       make(map[string]*charset.Collation),
-		Desc:             "Chinese Internal Code Specification",
-		Maxlen:           2,
-	}
-	charset.AddCharset(c)
-	for _, coll := range charset.GetCollations() {
-		if strings.EqualFold(coll.CharsetName, c.Name) {
-			charset.AddCollation(coll)
-		}
-	}
-}
 
 // Parse wraps parser.Parse(), makes `parser` suitable for dm.
 func Parse(p *parser.Parser, sql, charset, collation string) (stmt []ast.StmtNode, err error) {

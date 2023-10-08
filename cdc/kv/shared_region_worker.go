@@ -156,8 +156,12 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 			return false
 		}
 	}
-
-	return handleEventEntry(w.changefeed, x, startTs, state, w.metrics, emit)
+	log.Debug("region worker get an Event",
+		zap.String("namespace", w.changefeed.Namespace),
+		zap.String("changefeed", w.changefeed.ID),
+		zap.Any("subscriptionID", state.sri.requestedTable.subscriptionID),
+		zap.Int("rows", len(x.Entries.GetEntries())))
+	return handleEventEntry(x, startTs, state, w.metrics, emit)
 }
 
 func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolvedTsBatch) {
@@ -202,8 +206,8 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolve
 		log.Debug("region worker get a ResolvedTs",
 			zap.String("namespace", w.changefeed.Namespace),
 			zap.String("changefeed", w.changefeed.ID),
-			zap.Uint64("ResolvedTs", batch.ts),
 			zap.Any("subscriptionID", subscriptionID),
+			zap.Uint64("ResolvedTs", batch.ts),
 			zap.Int("spanCount", len(spansAndChan.spans)))
 		if len(spansAndChan.spans) > 0 {
 			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{

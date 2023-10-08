@@ -35,6 +35,10 @@ import (
 const (
 	resolveLockFence        time.Duration = 20 * time.Second
 	resolveLockTickInterval time.Duration = 10 * time.Second
+
+	// Suppose there are 50K tables, total size of `resolvedEventsCache`s will be
+	// unsafe.SizeOf(kv.MultiplexingEvent) * 50K * 256 = 800M.
+	tableResolvedTsBufferSize int = 256
 )
 
 type tableProgress struct {
@@ -150,7 +154,7 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		startTs:    startTs,
 		tableName:  tableName,
 
-		resolvedEventsCache: make(chan kv.MultiplexingEvent, 16),
+		resolvedEventsCache: make(chan kv.MultiplexingEvent, tableResolvedTsBufferSize),
 		tsTracker:           frontier.NewFrontier(0, spans...),
 	}
 	progress.initialized.Store(false)
