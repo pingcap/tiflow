@@ -116,7 +116,7 @@ func (b *basicScheduler) Schedule(
 	// Fast path for check whether two sets are identical:
 	// If the length of currentTables and replications are equal,
 	// and for all tables in currentTables have a record in replications.
-	if !tablesLenEqual || !tablesAllFind {
+	if !(tablesLenEqual && tablesAllFind) {
 		// The two sets are not identical. We need to find removed tables.
 		intersectionTable := spanz.NewBtreeMap[struct{}]()
 		for _, span := range currentSpans {
@@ -138,7 +138,7 @@ func (b *basicScheduler) Schedule(
 			log.Info("schedulerv3: burst remove table",
 				zap.String("namespace", b.changefeedID.Namespace),
 				zap.String("changefeed", b.changefeedID.ID),
-				zap.Int("tableCount", len(newSpans)))
+				zap.Int("tableCount", len(rmSpans)))
 			tasks = append(tasks,
 				newBurstRemoveTables(rmSpans, replications, b.changefeedID))
 		}
