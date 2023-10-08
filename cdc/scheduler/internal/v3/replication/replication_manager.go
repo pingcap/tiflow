@@ -351,7 +351,7 @@ func (r *Manager) HandleTasks(
 	tasks []*ScheduleTask,
 ) ([]*schedulepb.Message, error) {
 	// Check if a running task is finished.
-	toBeDeleted := []tablepb.Span{}
+	var toBeDeleted []tablepb.Span
 	r.runningTasks.Ascend(func(span tablepb.Span, task *ScheduleTask) bool {
 		if table, ok := r.spans.Get(span); ok {
 			// If table is back to Replicating or Removed,
