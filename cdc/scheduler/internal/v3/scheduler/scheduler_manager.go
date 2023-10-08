@@ -92,7 +92,7 @@ func (sm *Manager) Schedule(
 				zap.String("namespace", sm.changefeedID.Namespace),
 				zap.String("changefeed", sm.changefeedID.ID),
 				zap.Int("taskNumber", len(tasks)),
-				zap.Any("task", tasks),
+				zap.Stringer("task", replication.ScheduleTasks(tasks)),
 				zap.String("scheduler", scheduler.Name()))
 			return tasks
 		}
