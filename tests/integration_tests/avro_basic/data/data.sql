@@ -116,6 +116,8 @@ insert into t values (
      '部署', "美国", "纽约", "世界,你好", 0xCAC0BDE7C4E3BAC3
 );
 
+delete from t where id = 2;
+
 update t set c_float = 3.1415, c_double = 2.7182, c_decimal = 8000, c_decimal_2 = 179394.233 where id = 3;
 
 
