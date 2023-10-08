@@ -184,8 +184,10 @@ func getPartitionDispatcher(rule string, scheme string, indexName string) partit
 		return partition.NewTsDispatcher()
 	case "table":
 		return partition.NewTableDispatcher()
-	case "index-value", "rowid":
-		log.Warn("rowid is deprecated, please use index-value instead.")
+	case "index-value":
+		return partition.NewIndexValueDispatcher(indexName)
+	case "rowid":
+		log.Warn("rowid is deprecated, index-value is used as the partition dispatcher.")
 		return partition.NewIndexValueDispatcher(indexName)
 	default:
 	}

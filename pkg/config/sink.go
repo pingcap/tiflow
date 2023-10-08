@@ -292,7 +292,7 @@ type DispatchRule struct {
 	// PartitionRule is an alias added for DispatcherRule to mitigate confusions.
 	// In the future release, the DispatcherRule is expected to be removed .
 	PartitionRule string `toml:"partition" json:"partition"`
-	IndexName     string `toml:"index-name" json:"index-name"`
+	IndexName     string `toml:"index" json:"index"`
 
 	TopicRule string `toml:"topic" json:"topic"`
 }
