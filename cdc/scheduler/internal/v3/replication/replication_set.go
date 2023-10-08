@@ -394,7 +394,7 @@ func (r *ReplicationSet) poll(
 		var msg *schedulepb.Message
 		switch r.State {
 		case ReplicationSetStateAbsent:
-			msg, stateChanged, err = r.pollOnAbsent(input, captureID)
+			stateChanged, err = r.pollOnAbsent(input, captureID)
 		case ReplicationSetStatePrepare:
 			msg, stateChanged, err = r.pollOnPrepare(input, captureID)
 		case ReplicationSetStateCommit:
@@ -430,16 +430,16 @@ func (r *ReplicationSet) poll(
 //nolint:unparam
 func (r *ReplicationSet) pollOnAbsent(
 	input *tablepb.TableStatus, captureID model.CaptureID,
-) (*schedulepb.Message, bool, error) {
+) (bool, error) {
 	switch input.State {
 	case tablepb.TableStateAbsent:
 		r.State = ReplicationSetStatePrepare
 		err := r.setCapture(captureID, RoleSecondary)
-		return nil, true, errors.Trace(err)
+		return true, errors.Trace(err)
 
 	case tablepb.TableStateStopped:
 		// Ignore stopped table state as a capture may shutdown unexpectedly.
-		return nil, false, nil
+		return false, nil
 	case tablepb.TableStatePreparing,
 		tablepb.TableStatePrepared,
 		tablepb.TableStateReplicating,
@@ -449,7 +449,7 @@ func (r *ReplicationSet) pollOnAbsent(
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
-	return nil, false, nil
+	return false, nil
 }
 
 func (r *ReplicationSet) pollOnPrepare(
@@ -772,21 +772,26 @@ func (r *ReplicationSet) pollOnRemoving(
 			},
 		}, false, nil
 	case tablepb.TableStateAbsent, tablepb.TableStateStopped:
-		errField := zap.Skip()
+		var err error
 		if r.Primary == captureID {
 			r.clearPrimary()
 		} else if r.isInRole(captureID, RoleSecondary) {
-			err := r.clearCapture(captureID, RoleSecondary)
-			errField = zap.Error(err)
+			err = r.clearCapture(captureID, RoleSecondary)
 		} else {
-			err := r.clearCapture(captureID, RoleUndetermined)
-			errField = zap.Error(err)
+			err = r.clearCapture(captureID, RoleUndetermined)
 		}
-		log.Info("schedulerv3: replication state remove capture",
-			zap.Any("replicationSet", r),
-			zap.Stringer("tableState", input),
-			zap.String("captureID", captureID),
-			errField)
+		if err != nil {
+			log.Warn("schedulerv3: replication state remove capture with error",
+				zap.Any("replicationSet", r),
+				zap.Stringer("tableState", input),
+				zap.String("captureID", captureID),
+				zap.Error(err))
+		} else {
+			log.Info("schedulerv3: replication state remove capture",
+				zap.Any("replicationSet", r),
+				zap.Stringer("tableState", input),
+				zap.String("captureID", captureID))
+		}
 		return nil, false, nil
 	case tablepb.TableStateStopping:
 		return nil, false, nil
@@ -919,7 +924,11 @@ func (r *ReplicationSet) handleCaptureShutdown(
 		Span:  r.Span,
 		State: tablepb.TableStateStopped,
 	}
+	oldState := r.State
 	msgs, err := r.poll(&status, captureID)
+	log.Info("schedulerv3: replication state transition, capture shutdown",
+		zap.Any("replicationSet", r),
+		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	return msgs, true, errors.Trace(err)
 }
 

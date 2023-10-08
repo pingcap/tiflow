@@ -101,13 +101,8 @@ func (b *basicScheduler) Schedule(
 				zap.Any("allCaptureStatus", captures))
 			return tasks
 		}
-		log.Info("schedulerv3: burst add table",
-			zap.String("namespace", b.changefeedID.Namespace),
-			zap.String("changefeed", b.changefeedID.ID),
-			zap.Strings("captureIDs", captureIDs),
-			zap.Int("tableCount", len(newSpans)))
 		tasks = append(
-			tasks, newBurstAddTables(checkpointTs, newSpans, captureIDs))
+			tasks, newBurstAddTables(b.changefeedID, checkpointTs, newSpans, captureIDs))
 	}
 
 	// Build remove table tasks.
@@ -121,10 +116,9 @@ func (b *basicScheduler) Schedule(
 		intersectionTable := spanz.NewBtreeMap[struct{}]()
 		for _, span := range currentSpans {
 			_, ok := replications.Get(span)
-			if !ok {
-				continue
+			if ok {
+				intersectionTable.ReplaceOrInsert(span, struct{}{})
 			}
-			intersectionTable.ReplaceOrInsert(span, struct{}{})
 		}
 		rmSpans := make([]tablepb.Span, 0)
 		replications.Ascend(func(span tablepb.Span, value *replication.ReplicationSet) bool {
@@ -135,10 +129,6 @@ func (b *basicScheduler) Schedule(
 			return true
 		})
 		if len(rmSpans) > 0 {
-			log.Info("schedulerv3: burst remove table",
-				zap.String("namespace", b.changefeedID.Namespace),
-				zap.String("changefeed", b.changefeedID.ID),
-				zap.Int("tableCount", len(rmSpans)))
 			tasks = append(tasks,
 				newBurstRemoveTables(rmSpans, replications, b.changefeedID))
 		}
@@ -148,24 +138,34 @@ func (b *basicScheduler) Schedule(
 
 // newBurstAddTables add each new table to captures in a round-robin way.
 func newBurstAddTables(
+	changefeedID model.ChangeFeedID,
 	checkpointTs model.Ts, newSpans []tablepb.Span, captureIDs []model.CaptureID,
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newSpans))
 	for _, span := range newSpans {
+		targetCapture := captureIDs[idx]
 		tables = append(tables, replication.AddTable{
 			Span:         span,
-			CaptureID:    captureIDs[idx],
+			CaptureID:    targetCapture,
 			CheckpointTs: checkpointTs,
 		})
+		log.Info("schedulerv3: burst add table",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("captureID", targetCapture),
+			zap.Any("tableID", span.TableID))
+
 		idx++
 		if idx >= len(captureIDs) {
 			idx = 0
 		}
 	}
-	return &replication.ScheduleTask{BurstBalance: &replication.BurstBalance{
-		AddTables: tables,
-	}}
+	return &replication.ScheduleTask{
+		BurstBalance: &replication.BurstBalance{
+			AddTables: tables,
+		},
+	}
 }
 
 func newBurstRemoveTables(
@@ -191,6 +191,11 @@ func newBurstRemoveTables(
 			Span:      span,
 			CaptureID: captureID,
 		})
+		log.Info("schedulerv3: burst remove table",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("captureID", captureID),
+			zap.Any("tableID", span.TableID))
 	}
 	return &replication.ScheduleTask{BurstBalance: &replication.BurstBalance{
 		RemoveTables: tables,
