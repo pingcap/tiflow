@@ -128,9 +128,10 @@ func (b *basicScheduler) Schedule(
 			}
 			return true
 		})
-		if len(rmSpans) > 0 {
-			tasks = append(tasks,
-				newBurstRemoveTables(rmSpans, replications, b.changefeedID))
+
+		removeTableTasks := newBurstRemoveTables(rmSpans, replications, b.changefeedID)
+		if removeTableTasks != nil {
+			tasks = append(tasks, removeTableTasks)
 		}
 	}
 	return tasks
@@ -181,7 +182,8 @@ func newBurstRemoveTables(
 			break
 		}
 		if captureID == "" {
-			log.Warn("schedulerv3: primary or secondary not found for removed table",
+			log.Warn("schedulerv3: primary or secondary not found for removed table,"+
+				"this may happen if the capture shutdown",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
 				zap.Any("table", rep))
@@ -197,7 +199,14 @@ func newBurstRemoveTables(
 			zap.String("captureID", captureID),
 			zap.Any("tableID", span.TableID))
 	}
-	return &replication.ScheduleTask{BurstBalance: &replication.BurstBalance{
-		RemoveTables: tables,
-	}}
+
+	if len(tables) == 0 {
+		return nil
+	}
+
+	return &replication.ScheduleTask{
+		BurstBalance: &replication.BurstBalance{
+			RemoveTables: tables,
+		},
+	}
 }
