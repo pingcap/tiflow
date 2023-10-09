@@ -115,7 +115,7 @@ type ControllerObservation interface {
 //
 // All intrefaces are thread-safe and shares one same Context.
 type OwnerObservation interface {
-	Self() (*ChangefeedInfo, ChangefeedIdent)
+	Self() *ChangefeedInfo
 
 	// PauseChangefeed pauses a changefeed.
 	PauseChangefeed() error

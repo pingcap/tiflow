@@ -188,29 +188,28 @@ func (c *CaptureOb[T]) ProcessorChanges() <-chan metadata.ScheduledChangefeed {
 	return c.processorChanges.Out()
 }
 
-func (c *CaptureOb[T]) GetChangefeeds(cfs ...model.ChangeFeedID) ([]*metadata.ChangefeedInfo, []metadata.ChangefeedIdent, error) {
-	c.storage.entities.RLock()
-	defer c.storage.entities.RUnlock()
+func (c *CaptureOb[T]) GetChangefeeds(cfs ...metadata.ChangefeedUUID) (infos []*metadata.ChangefeedInfo, err error) {
+	var cfDOs []*ChangefeedInfoDO
+	err = c.client.Txn(c.egCtx, func(tx T) error {
+		cfDOs, err = c.client.queryChangefeedInfos(tx)
+		return err
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
-	length := len(cfs)
-	if length > 0 {
-		infos := make([]*metadata.ChangefeedInfo, 0, length)
-		ids := make([]metadata.ChangefeedIdent, 0, length)
-		for _, id := range cfs {
-			infos = append(infos, c.storage.entities.cfs[id])
-			ids = append(ids, c.storage.entities.cfids[id])
+	var ret []*metadata.ChangefeedInfo
+	m := make(map[metadata.ChangefeedUUID]struct{}, len(cfs))
+	for _, cf := range cfs {
+		m[cf] = struct{}{}
+	}
+
+	for _, cfDO := range cfDOs {
+		if _, ok := m[cfDO.UUID]; ok {
+			ret = append(ret, &cfDO.ChangefeedInfo)
 		}
-		return infos, ids, nil
 	}
-
-	length = len(c.storage.entities.cfs)
-	infos := make([]*metadata.ChangefeedInfo, 0, length)
-	ids := make([]metadata.ChangefeedIdent, 0, length)
-	for id, info := range c.storage.entities.cfs {
-		infos = append(infos, info)
-		ids = append(ids, c.storage.entities.cfids[id])
-	}
-	return infos, ids, nil
+	return
 }
 
 func (c *CaptureOb[T]) getAllCaptures() []*model.CaptureInfo {
@@ -220,9 +219,9 @@ func (c *CaptureOb[T]) getAllCaptures() []*model.CaptureInfo {
 
 // ControllerOb is an implement for metadata.ControllerObservation.
 type ControllerOb[T TxnContext] struct {
-	selfInfo *model.CaptureInfo
-	checker  LeaderChecker[T]
-	client   client[T]
+	selfInfo      *model.CaptureInfo
+	leaderChecker LeaderChecker[T]
+	client        client[T]
 
 	// TODO(CharlesCheung): handle ctx properly.
 	// egCtx is the inner ctx of elector.
@@ -241,13 +240,13 @@ type ControllerOb[T TxnContext] struct {
 }
 
 func newControllerObservation[T TxnContext](
-	checker LeaderChecker[T],
+	leaderChecker LeaderChecker[T],
 	client client[T],
 	selfInfo *model.CaptureInfo,
 	getAllCaptures func() []*model.CaptureInfo,
 ) *ControllerOb[T] {
 	return &ControllerOb[T]{
-		checker:        checker,
+		leaderChecker:  leaderChecker,
 		client:         client,
 		selfInfo:       selfInfo,
 		getAllCaptures: getAllCaptures,
@@ -288,10 +287,10 @@ func (c *ControllerOb[T]) handleAliveCaptures(ctx context.Context) error {
 
 // CreateChangefeed initializes the changefeed info, schedule info and state info of the given changefeed. It also
 // updates or creates the upstream info depending on whether the upstream info exists.
-func (c *ControllerOb[T]) CreateChangefeed(cf metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIdent, error) {
+func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIdent, error) {
 	cf.ChangefeedIdent.UUID = c.uuidGenerator.GenChangefeedUUID()
 
-	err := c.checker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+	err := c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
 		newUp := &UpstreamDO{
 			ID:        up.ID,
 			Endpoints: up.PDEndpoints,
@@ -317,7 +316,7 @@ func (c *ControllerOb[T]) CreateChangefeed(cf metadata.ChangefeedInfo, up *model
 		}
 
 		err = c.client.createChangefeedInfo(tx, &ChangefeedInfoDO{
-			ChangefeedInfo: cf,
+			ChangefeedInfo: *cf,
 			Version:        1,
 		})
 		if err != nil {
@@ -355,7 +354,7 @@ func (c *ControllerOb[T]) CreateChangefeed(cf metadata.ChangefeedInfo, up *model
 }
 
 func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
-	return c.checker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
 		oldInfo, err := c.client.queryChangefeedInfoByUUID(tx, cf)
 		if err != nil {
 			return errors.Trace(err)
@@ -392,6 +391,43 @@ func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
 	})
 }
 
+// CleanupChangefeed removes the changefeed info, schedule info and state info of the given changefeed.
+// Note that this function should only be called when the owner is removed and changefeed is marked as removed.
+func (c *ControllerOb[T]) CleanupChangefeed(cf metadata.ChangefeedUUID) error {
+	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+		err := c.client.deleteChangefeedInfo(tx, &ChangefeedInfoDO{
+			ChangefeedInfo: metadata.ChangefeedInfo{
+				ChangefeedIdent: metadata.ChangefeedIdent{
+					UUID: cf,
+				},
+			},
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		err = c.client.deleteChangefeedState(tx, &ChangefeedStateDO{
+			ChangefeedState: metadata.ChangefeedState{
+				ChangefeedUUID: cf,
+			},
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		err = c.client.deleteSchedule(tx, &ScheduleDO{
+			ScheduledChangefeed: metadata.ScheduledChangefeed{
+				ChangefeedUUID: cf,
+			},
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		return nil
+	})
+}
+
 func (c *ControllerOb[T]) RefreshCaptures() (captures []*model.CaptureInfo, changed bool) {
 	c.aliveCaptures.Lock()
 	defer c.aliveCaptures.Unlock()
@@ -405,7 +441,7 @@ func (c *ControllerOb[T]) RefreshCaptures() (captures []*model.CaptureInfo, chan
 }
 
 func (c *ControllerOb[T]) SetOwner(target metadata.ScheduledChangefeed) error {
-	return c.checker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
 		old, err := c.client.queryScheduleByUUID(tx, target.ChangefeedUUID)
 		if err != nil {
 			return errors.Trace(err)
@@ -455,101 +491,83 @@ func (c *ControllerOb[T]) ScheduleSnapshot() (ss []metadata.ScheduledChangefeed,
 }
 
 type ownerOb[T TxnContext] struct {
-	checker checker[T]
-	client  client[T]
-	c       *metadata.ChangefeedInfo
-	id      metadata.ChangefeedIdent
-
-	processors struct {
-		sync.Mutex
-		outgoing []metadata.ScheduledChangefeed
-		incoming []metadata.ScheduledChangefeed
-	}
+	egCtx    context.Context
+	client   client[T]
+	selfInfo *model.CaptureInfo
+	cf       *metadata.ChangefeedInfo
 }
 
-func (o *ownerOb[T]) Self() (*metadata.ChangefeedInfo, metadata.ChangefeedIdent) {
-	return o.c, o.id
+func (o *ownerOb[T]) Self() *metadata.ChangefeedInfo {
+	return o.cf
 }
 
-func (o *ownerOb[T]) PauseChangefeed() error {
-	o.s.entities.Lock()
-	defer o.s.entities.Unlock()
-	o.s.Lock()
-	defer o.s.Unlock()
-
-	o.s.entities.cfstates[o.id] = 1
-	return o.clearSchedule()
-}
-
-func (o *ownerOb[T]) ResumeChangefeed() error {
-	o.s.entities.Lock()
-	defer o.s.entities.Unlock()
-
-	o.s.entities.cfstates[o.id] = 0
-	return nil
+func (o *ownerOb[T]) updateChangefeedState(state model.FeedState) error {
+	return o.client.TxnWithOwnerLock(o.egCtx, o.cf.UUID, func(tx T) error {
+		oldState, err := o.client.queryChangefeedStateByUUID(tx, o.cf.UUID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return o.client.updateChangefeedState(tx, &ChangefeedStateDO{
+			ChangefeedState: metadata.ChangefeedState{
+				ChangefeedUUID: o.cf.UUID,
+				State:          state,
+				Error:          oldState.Error,
+				Warning:        oldState.Warning,
+			},
+			Version: oldState.Version,
+		})
+	})
 }
 
 func (o *ownerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
-	o.s.entities.Lock()
-	defer o.s.entities.Unlock()
+	return o.client.TxnWithOwnerLock(o.egCtx, o.cf.UUID, func(tx T) error {
+		state, err := o.client.queryChangefeedStateByUUID(tx, o.cf.UUID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if state.State != model.StateStopped && state.State != model.StateFailed {
+			return errors.ErrChangefeedUpdateRefused.GenWithStackByArgs(
+				"can only update changefeed config when it is stopped or failed",
+			)
+		}
 
-	copied := new(metadata.ChangefeedInfo)
-	*copied = *info
-	copied.Config = info.Config.Clone()
-	o.s.entities.cfs[info.ToChangefeedID()] = copied
-	return nil
+		oldInfo, err := o.client.queryChangefeedInfoByUUID(tx, o.cf.UUID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		return o.client.updateChangefeedInfo(tx, &ChangefeedInfoDO{
+			ChangefeedInfo: *info,
+			Version:        oldInfo.Version,
+		})
+	})
 }
 
-func (o *ownerOb[T]) SetChangefeedFinished() error {
-	o.s.entities.Lock()
-	defer o.s.entities.Unlock()
-	o.s.Lock()
-	defer o.s.Unlock()
-
-	o.s.entities.cfstates[o.id] = 2
-	return o.clearSchedule()
-}
-
-func (o *ownerOb[T]) SetChangefeedFailed(err model.RunningError) error {
-	return nil
-}
-
-func (o *ownerOb[T]) SetChangefeedWarning(warn model.RunningError) error {
-	return nil
+func (o *ownerOb[T]) ResumeChangefeed() error {
+	return o.updateChangefeedState(model.StateNormal)
 }
 
 func (o *ownerOb[T]) SetChangefeedPending() error {
-	return nil
+	return o.updateChangefeedState(model.StatePending)
 }
 
-func (o *ownerOb[T]) clearSchedule() error {
-	cf := o.id
-	if owner, ok := o.s.schedule.owners[cf]; ok {
-		owner.State = metadata.SchedRemoving
-		if err := o.s.setOwner(cf, owner); err != nil {
-			return err
-		}
-	}
-	if processors, ok := o.s.schedule.processors[cf]; ok {
-		if err := o.s.setProcessors(cf, processors.v); err != nil {
-			return err
-		}
-	}
-	return nil
+func (o *ownerOb[T]) SetChangefeedFailed(err model.RunningError) error {
+	return o.updateChangefeedState(model.StateFailed)
 }
 
-func (o *ownerOb[T]) RefreshProcessors() (captures []metadata.ScheduledChangefeed, changed bool) {
-	o.processors.Lock()
-	defer o.processors.Unlock()
-	return o.processors.outgoing, true
+func (o *ownerOb[T]) PauseChangefeed() error {
+	return o.updateChangefeedState(model.StateStopped)
 }
 
-func compareByChangefeed(a, b metadata.ScheduledChangefeed) int {
-	return a.ChangefeedID.Compare(b.ChangefeedID)
+func (o *ownerOb[T]) SetChangefeedRemoved() error {
+	return o.updateChangefeedState(model.StateRemoved)
 }
 
-func compareByCaptureID(a, b metadata.ScheduledChangefeed) int {
-	return strings.Compare(a.CaptureID, b.CaptureID)
+func (o *ownerOb[T]) SetChangefeedFinished() error {
+	return o.updateChangefeedState(model.StateFinished)
+}
+
+func (o *ownerOb[T]) SetChangefeedWarning(warn model.RunningError) error {
+	return o.updateChangefeedState(model.StateWarning)
 }
 
 // sorted `ScheduledChangefeed`s, with a version to simplify diff check.
