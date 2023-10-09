@@ -44,6 +44,8 @@ type decoder struct {
 
 	key   []byte
 	value []byte
+
+	lastCheckpoint uint64
 }
 
 // NewDecoder return an avro decoder
@@ -129,6 +131,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	// Delete event only has Primary Key Columns, but the checksum is calculated based on the whole row columns,
 	// checksum verification cannot be done here, so skip it.
 	if isDelete {
+		event.CommitTs = d.lastCheckpoint + 1
 		return event, nil
 	}
 
@@ -340,6 +343,11 @@ func (d *decoder) NextResolvedEvent() (uint64, error) {
 	}
 	ts := binary.BigEndian.Uint64(d.value[1:])
 	d.value = nil
+
+	if ts > d.lastCheckpoint {
+		d.lastCheckpoint = ts
+	}
+
 	return ts, nil
 }
 
@@ -369,6 +377,10 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 	result.Type = baseDDLEvent.Type
 	result.Query = baseDDLEvent.Query
+
+	if result.CommitTs > d.lastCheckpoint {
+		d.lastCheckpoint = result.CommitTs
+	}
 
 	return result, nil
 }
