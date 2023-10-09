@@ -70,7 +70,7 @@ type upstreamClient[T TxnContext] interface {
 type changefeedInfoClient[T TxnContext] interface {
 	createChangefeedInfo(tx T, info *ChangefeedInfoDO) error
 	deleteChangefeedInfo(tx T, info *ChangefeedInfoDO) error
-	softDeleteChangefeedInfo(tx T, info *ChangefeedInfoDO) error
+	MarkChangefeedRemoved(tx T, info *ChangefeedInfoDO) error
 	updateChangefeedInfo(tx T, info *ChangefeedInfoDO) error
 	queryChangefeedInfos(tx T) ([]*ChangefeedInfoDO, error)
 	queryChangefeedInfosByUpdateAt(tx T, lastUpdateAt time.Time) ([]*ChangefeedInfoDO, error)
@@ -116,19 +116,21 @@ type client[T TxnContext] interface {
 	progressClient[T]
 }
 
+const defaultMaxExecTime = 5 * time.Second
+
 // TODO(CharlesCheung): implement a cache layer to reduce the pressure on io and database.
 type clientWithCache[T TxnContext] struct {
 	c     client[T]
 	cache *storage
 }
 
-type versionController[K uint64 | string] interface {
+type versionedRecord[K uint64 | string] interface {
 	GetKey() K
 	GetVersion() uint64
 	GetUpdateAt() time.Time
 }
 
-type entity[K uint64 | string, V versionController[K]] struct {
+type entity[K uint64 | string, V versionedRecord[K]] struct {
 	sync.RWMutex
 	// maxExecTime is the maximum insert/update time of the entity. Then, it can be
 	// determined that all data before `lastUpdateAt-maxExecTime` has been pulled locally.
@@ -137,6 +139,14 @@ type entity[K uint64 | string, V versionController[K]] struct {
 
 	// the data already cached locally.
 	m map[K]V
+}
+
+func newEntity[K uint64 | string, V versionedRecord[K]](maxExecTime time.Duration) *entity[K, V] {
+	return &entity[K, V]{
+		maxExecTime:  maxExecTime,
+		lastUpdateAt: time.Time{},
+		m:            make(map[K]V),
+	}
 }
 
 // getSafePoint returns the most recent safe timestamp, before which all data has
@@ -202,13 +212,13 @@ func (e *entity[K, V]) upsert(inComming ...V) {
 
 type storage struct {
 	// the key is the upstream id.
-	upsteram entity[uint64, *UpstreamDO]
+	upsteram *entity[uint64, *UpstreamDO]
 	// the key is the changefeed uuid.
-	info entity[metadata.ChangefeedUUID, *ChangefeedInfoDO]
+	info *entity[metadata.ChangefeedUUID, *ChangefeedInfoDO]
 	// the key is the changefeed uuid.
-	state entity[metadata.ChangefeedUUID, *ChangefeedStateDO]
+	state *entity[metadata.ChangefeedUUID, *ChangefeedStateDO]
 	// the key is the changefeed uuid.
-	schedule entity[metadata.ChangefeedUUID, *ScheduleDO]
+	schedule *entity[metadata.ChangefeedUUID, *ScheduleDO]
 	// the key is the capture id.
-	progress entity[model.CaptureID, *ProgressDO]
+	progress *entity[model.CaptureID, *ProgressDO]
 }

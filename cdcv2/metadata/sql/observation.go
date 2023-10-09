@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/election"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
@@ -45,7 +46,7 @@ type CaptureOb[T TxnContext] struct {
 
 	client client[T]
 
-	tasks entity[metadata.ChangefeedUUID, *ScheduleDO]
+	tasks *entity[metadata.ChangefeedUUID, *ScheduleDO]
 
 	// TODO: remove processorChanges.
 	ownerChanges     *chann.DrainableChann[metadata.ScheduledChangefeed]
@@ -67,6 +68,7 @@ func NewCaptureObservation(
 	return &CaptureOb[*gorm.DB]{
 		selfInfo:         selfInfo,
 		client:           NewORMClient(selfInfo.ID, db),
+		tasks:            newEntity[metadata.ChangefeedUUID, *ScheduleDO](defaultMaxExecTime),
 		Elector:          metadata.NewElector(selfInfo, electionStorage),
 		ownerChanges:     chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
 		processorChanges: chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
@@ -133,7 +135,8 @@ func (c *CaptureOb[T]) handleTaskChanges(ctx context.Context) error {
 	var schedItems []*ScheduleDO
 
 	err = c.client.Txn(ctx, func(tx T) error {
-		schedItems, err = c.client.querySchedulesByOwnerIDAndUpdateAt(tx, c.Self().ID, time.Time{})
+		lastSafePoint := c.tasks.getSafePoint()
+		schedItems, err = c.client.querySchedulesByOwnerIDAndUpdateAt(tx, c.Self().ID, lastSafePoint)
 		return err
 	})
 	if err != nil {
@@ -185,22 +188,6 @@ func (c *CaptureOb[T]) ProcessorChanges() <-chan metadata.ScheduledChangefeed {
 	return c.processorChanges.Out()
 }
 
-func (c *CaptureOb[T]) PostProcessorRemoved(cf metadata.ChangefeedIdent) error {
-	c.storage.Lock()
-	defer c.storage.Unlock()
-	if processors, ok := c.storage.schedule.processors[cf]; ok {
-		processors.version += 1
-		// processors.v = postProcessorRemoved(processors.v, c.Self().ID)
-		c.storage.schedule.processors[cf] = processors
-	}
-	if processors, ok := c.storage.schedule.processorsByCapture[c.Self().ID]; ok {
-		processors.version += 1
-		// processors.v = postProcessorRemoved(processors.v, c.Self().ID)
-		c.storage.schedule.processorsByCapture[c.Self().ID] = processors
-	}
-	return nil
-}
-
 func (c *CaptureOb[T]) GetChangefeeds(cfs ...model.ChangeFeedID) ([]*metadata.ChangefeedInfo, []metadata.ChangefeedIdent, error) {
 	c.storage.entities.RLock()
 	defer c.storage.entities.RUnlock()
@@ -237,6 +224,11 @@ type ControllerOb[T TxnContext] struct {
 	checker  LeaderChecker[T]
 	client   client[T]
 
+	// TODO(CharlesCheung): handle ctx properly.
+	// egCtx is the inner ctx of elector.
+	egCtx         context.Context
+	uuidGenerator uuidGenerator
+
 	aliveCaptures struct {
 		sync.Mutex
 		outgoing     []*model.CaptureInfo
@@ -259,10 +251,12 @@ func newControllerObservation[T TxnContext](
 		client:         client,
 		selfInfo:       selfInfo,
 		getAllCaptures: getAllCaptures,
+		uuidGenerator:  NewUUIDGenerator(),
 	}
 }
 
 func (c *ControllerOb[T]) run(ctx context.Context) error {
+	c.egCtx = ctx
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -292,13 +286,110 @@ func (c *ControllerOb[T]) handleAliveCaptures(ctx context.Context) error {
 	return nil
 }
 
-func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIdent, error) {
-	id := metadata.ChangefeedIdent{ID: cf.ID, UUID: c.storage.epoch.Add(1)}
-	return id, nil
+// CreateChangefeed initializes the changefeed info, schedule info and state info of the given changefeed. It also
+// updates or creates the upstream info depending on whether the upstream info exists.
+func (c *ControllerOb[T]) CreateChangefeed(cf metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIdent, error) {
+	cf.ChangefeedIdent.UUID = c.uuidGenerator.GenChangefeedUUID()
+
+	err := c.checker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+		newUp := &UpstreamDO{
+			ID:        up.ID,
+			Endpoints: up.PDEndpoints,
+			Config: &security.Credential{
+				CAPath:        up.CAPath,
+				CertPath:      up.CertPath,
+				KeyPath:       up.KeyPath,
+				CertAllowedCN: up.CertAllowedCN,
+			},
+			Version: 1,
+		}
+
+		oldUp, err := c.client.queryUpstreamByID(tx, up.ID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.client.createUpstream(tx, newUp)
+		} else if err != nil {
+			return errors.Trace(err)
+		}
+
+		if !oldUp.equal(newUp) {
+			newUp.Version = oldUp.Version
+			c.client.updateUpstream(tx, newUp)
+		}
+
+		err = c.client.createChangefeedInfo(tx, &ChangefeedInfoDO{
+			ChangefeedInfo: cf,
+			Version:        1,
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		err = c.client.createSchedule(tx, &ScheduleDO{
+			ScheduledChangefeed: metadata.ScheduledChangefeed{
+				ChangefeedUUID: cf.UUID,
+				Owner:          nil,
+				OwnerState:     metadata.SchedRemoved,
+				Processors:     nil,
+				TaskPosition: metadata.ChangefeedProgress{
+					CheckpointTs:      cf.StartTs,
+					MinTableBarrierTs: cf.StartTs,
+				},
+			},
+			Version: 1,
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		return c.client.createChangefeedState(tx, &ChangefeedStateDO{
+			ChangefeedState: metadata.ChangefeedState{
+				ChangefeedUUID: cf.UUID,
+				State:          model.StateUnInitialized,
+				Error:          nil,
+				Warning:        nil,
+			},
+			Version: 1,
+		})
+	})
+	return cf.ChangefeedIdent, err
 }
 
-func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedIdent) error {
-	return nil
+func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
+	return c.checker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+		oldInfo, err := c.client.queryChangefeedInfoByUUID(tx, cf)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err = c.client.MarkChangefeedRemoved(tx, &ChangefeedInfoDO{
+			ChangefeedInfo: metadata.ChangefeedInfo{
+				ChangefeedIdent: metadata.ChangefeedIdent{
+					UUID: cf,
+				},
+			},
+			Version: oldInfo.Version,
+		})
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		sc, err := c.client.queryScheduleByUUID(tx, cf)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if sc.OwnerState == metadata.SchedLaunched {
+			err = c.client.updateScheduleOwnerState(tx, &ScheduleDO{
+				ScheduledChangefeed: metadata.ScheduledChangefeed{
+					ChangefeedUUID: cf,
+					OwnerState:     metadata.SchedRemoving,
+				},
+				Version: sc.Version,
+			})
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+		return nil
+	})
 }
 
 func (c *ControllerOb[T]) RefreshCaptures() (captures []*model.CaptureInfo, changed bool) {
@@ -313,34 +404,49 @@ func (c *ControllerOb[T]) RefreshCaptures() (captures []*model.CaptureInfo, chan
 	return
 }
 
-func (c *ControllerOb[T]) SetOwner(cf metadata.ChangefeedIdent, target metadata.ScheduledChangefeed) error {
+func (c *ControllerOb[T]) SetOwner(target metadata.ScheduledChangefeed) error {
+	return c.checker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+		old, err := c.client.queryScheduleByUUID(tx, target.ChangefeedUUID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if err := metadata.CheckScheduleState(old.ScheduledChangefeed, target); err != nil {
+			return errors.Trace(err)
+		}
+		return c.client.updateScheduleOwnerState(tx, &ScheduleDO{
+			ScheduledChangefeed: target,
+			Version:             old.Version,
+		})
+	})
 }
 
-func (c *ControllerOb[T]) SetProcessors(cf metadata.ChangefeedIdent, workers []metadata.ScheduledChangefeed) error {
+func (c *ControllerOb[T]) GetChangefeedSchedule(cf metadata.ChangefeedUUID) (metadata.ScheduledChangefeed, error) {
+	var ret metadata.ScheduledChangefeed
+	err := c.client.Txn(c.egCtx, func(tx T) error {
+		sc, inErr := c.client.queryScheduleByUUID(tx, cf)
+		if inErr != nil {
+			return errors.Trace(inErr)
+		}
+		ret = sc.ScheduledChangefeed
+		return nil
+	})
+	return ret, err
 }
 
-func (c *ControllerOb[T]) GetChangefeedSchedule(cf metadata.ChangefeedIdent) (s metadata.ChangefeedSchedule, err error) {
-	c.storage.RLock()
-	defer c.storage.RUnlock()
-	s.Owner = c.storage.schedule.owners[cf]
-	s.Processors = c.storage.schedule.processors[cf].v
-	return
-}
+func (c *ControllerOb[T]) ScheduleSnapshot() (ss []metadata.ScheduledChangefeed, cs []*model.CaptureInfo, err error) {
+	err = c.client.Txn(c.egCtx, func(tx T) error {
+		scs, inErr := c.client.querySchedules(tx)
+		if inErr != nil {
+			return errors.Trace(inErr)
+		}
+		for _, sc := range scs {
+			ss = append(ss, sc.ScheduledChangefeed)
+		}
+		return err
+	})
 
-func (c *ControllerOb[T]) ScheduleSnapshot() (ss []metadata.ChangefeedSchedule, cs []*model.CaptureInfo, err error) {
-	c.storage.RLock()
-	ss = make([]metadata.ChangefeedSchedule, 0, len(c.storage.entities.cfids))
-	for _, cf := range c.storage.entities.cfids {
-		var s metadata.ChangefeedSchedule
-		s.Owner = c.storage.schedule.owners[cf]
-		s.Processors = c.storage.schedule.processors[cf].v
-		ss = append(ss, s)
-	}
-	c.storage.RUnlock()
 	cs = c.getAllCaptures()
-
 	hash := sortAndHashCaptureList(cs)
-
 	c.aliveCaptures.Lock()
 	defer c.aliveCaptures.Unlock()
 	c.aliveCaptures.outgoingHash = hash

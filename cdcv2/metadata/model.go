@@ -190,6 +190,7 @@ type ScheduledChangefeed struct {
 	TaskPosition ChangefeedProgress `gorm:"column:task_position;type:text;not null" json:"task_position"`
 }
 
+// CheckScheduleState checks whether the origin and target schedule state is valid.
 func CheckScheduleState(origin ScheduledChangefeed, target ScheduledChangefeed) error {
 	if origin.ChangefeedUUID != target.ChangefeedUUID {
 		log.Panic("bad schedule: changefeed id not match",

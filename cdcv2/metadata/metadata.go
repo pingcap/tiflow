@@ -89,8 +89,11 @@ type ControllerObservation interface {
 	// CreateChangefeed creates a changefeed, UUID will be filled into the input ChangefeedInfo.
 	CreateChangefeed(cf *ChangefeedInfo, up *model.UpstreamInfo) (ChangefeedIdent, error)
 
-	// RemoveChangefeed removes a changefeed, will auto stop owner and processors.
+	// RemoveChangefeed removes a changefeed, will mark it as removed and stop the owner and processors asynchronizely.
 	RemoveChangefeed(cf ChangefeedUUID) error
+
+	// CleanupChangefeed cleans up a changefeed, will delete info, schdule and state metadata.
+	CleanupChangefeed(cf ChangefeedUUID) error
 
 	// Fetch the latest capture list in the TiCDC cluster.
 	RefreshCaptures() (captures []*model.CaptureInfo, changed bool)
@@ -99,7 +102,7 @@ type ControllerObservation interface {
 	// Notes:
 	//   * the target capture can fetch the event by `OwnerChanges`.
 	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetOwner(cf ChangefeedUUID, target ScheduledChangefeed) error
+	SetOwner(target ScheduledChangefeed) error
 
 	// Get current schedule of the given changefeed.
 	GetChangefeedSchedule(cf ChangefeedUUID) (ScheduledChangefeed, error)

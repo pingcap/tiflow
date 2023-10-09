@@ -39,6 +39,45 @@ type UpstreamDO struct {
 	UpdateAt  time.Time            `gorm:"column:update_at;type:datetime(6);not null;autoUpdateTime" json:"update_at"`
 }
 
+// equal checks whether two UpstreamDO are equal.
+func (u *UpstreamDO) equal(other *UpstreamDO) bool {
+	if u != other && (u == nil || other == nil) {
+		return false
+	}
+
+	if u.ID != other.ID {
+		return false
+	}
+	if u.Endpoints != other.Endpoints {
+		return false
+	}
+
+	if u.Config == other.Config {
+		return true
+	}
+
+	if u.Config == nil && other.Config != nil {
+		return false
+	}
+	if u.Config != nil && other.Config == nil {
+		return false
+	}
+
+	if u.Config.CAPath != other.Config.CAPath ||
+		u.Config.CertPath != other.Config.CertPath ||
+		u.Config.KeyPath != other.Config.KeyPath ||
+		len(u.Config.CertAllowedCN) != len(other.Config.CertAllowedCN) {
+		return false
+	}
+	for i := range u.Config.CertAllowedCN {
+		if u.Config.CertAllowedCN[i] != other.Config.CertAllowedCN[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
 // GetKey returns the key of the upstream.
 func (u *UpstreamDO) GetKey() uint64 {
 	return u.ID

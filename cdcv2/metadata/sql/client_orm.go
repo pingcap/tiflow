@@ -163,17 +163,18 @@ func (c *ormClient) deleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) er
 	return nil
 }
 
-// softDeleteChangefeedInfo implements the changefeedInfoClient interface.
+// MarkChangefeedRemoved implements the changefeedInfoClient interface.
 //
 //nolint:unused
-func (c *ormClient) softDeleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
+func (c *ormClient) MarkChangefeedRemoved(tx *gorm.DB, info *ChangefeedInfoDO) error {
+	// TODO: maybe we should usethe mysql function `now(6)` to get the current time.
 	removeTime := time.Now()
 	ret := tx.Where("uuid = ? and version = ?", info.UUID, info.Version).
 		Updates(ChangefeedInfoDO{
 			RemovedAt: &removeTime,
 			Version:   info.Version + 1,
 		})
-	if err := handleSingleOpErr(ret, 1, "SoftDeleteChangefeedInfo"); err != nil {
+	if err := handleSingleOpErr(ret, 1, "MarkChangefeedRemoved"); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
