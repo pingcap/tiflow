@@ -98,6 +98,7 @@ type scheduleClient[T TxnContext] interface {
 	querySchedulesByUpdateAt(tx T, lastUpdateAt time.Time) ([]*ScheduleDO, error)
 	querySchedulesByOwnerIDAndUpdateAt(tx T, captureID model.CaptureID, lastUpdateAt time.Time) ([]*ScheduleDO, error)
 	queryScheduleByUUID(tx T, uuid uint64) (*ScheduleDO, error)
+	querySchedulesUinqueOwnerIDs(tx T) ([]model.CaptureID, error)
 }
 
 type progressClient[T TxnContext] interface {

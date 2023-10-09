@@ -457,6 +457,16 @@ func (c *ormClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, 
 	return schedule, nil
 }
 
+// querySchedulesUinqueOwnerIDs implements the scheduleClient interface.
+func (c *ormClient) querySchedulesUinqueOwnerIDs(tx *gorm.DB) ([]model.CaptureID, error) {
+	var captureIDs []model.CaptureID
+	ret := tx.Model(&ScheduleDO{}).Select("owner").Distinct().Find(&captureIDs)
+	if err := handleSingleOpErr(ret, -1, "QuerySchedulesUinqueOwnerIDs"); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return captureIDs, nil
+}
+
 // ================================ Progress Client =================================
 
 // createProgress implements the progressClient interface.

@@ -250,6 +250,10 @@ func newControllerObservation[T TxnContext](
 
 func (c *ControllerOb[T]) run(ctx context.Context) error {
 	c.egCtx = ctx
+	if err := c.init(); err != nil {
+		return errors.Trace(err)
+	}
+
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -266,6 +270,34 @@ func (c *ControllerOb[T]) run(ctx context.Context) error {
 			return err
 		}
 	}
+}
+
+func (c *ControllerOb[T]) init() error {
+	var (
+		captureOfflined   []model.CaptureID
+		captureOnline     = make(map[model.CaptureID]struct{})
+		capturesScheduled []model.CaptureID
+		err               error
+	)
+	err = c.client.Txn(c.egCtx, func(tx T) error {
+		capturesScheduled, err = c.client.querySchedulesUinqueOwnerIDs(tx)
+		return err
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	currentCaptures := c.getAllCaptures()
+	for _, capture := range currentCaptures {
+		captureOnline[capture.ID] = struct{}{}
+	}
+
+	for _, captureID := range capturesScheduled {
+		if _, ok := captureOnline[captureID]; !ok {
+			captureOfflined = append(captureOfflined, captureID)
+		}
+	}
+	return c.onCaptureOffline(captureOfflined...)
 }
 
 func (c *ControllerOb[T]) handleAliveCaptures(ctx context.Context) error {
