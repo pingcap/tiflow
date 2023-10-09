@@ -202,8 +202,10 @@ func NewReplicationSet(
 			// We need to wait its state becomes Stopped or Absent before
 			// proceeding further scheduling.
 			log.Warn("schedulerv3: found a stopping capture during initializing",
-				zap.Any("replicationSet", r),
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Int64("tableID", table.Span.TableID),
+				zap.Any("replicationSet", r),
 				zap.Any("status", tableStatus))
 			err := r.setCapture(captureID, RoleUndetermined)
 			if err != nil {
@@ -215,8 +217,10 @@ func NewReplicationSet(
 			// Ignore stop state.
 		default:
 			log.Warn("schedulerv3: unknown table state",
-				zap.Any("replicationSet", r),
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Int64("tableID", table.Span.TableID),
+				zap.Any("replicationSet", r),
 				zap.Any("status", tableStatus))
 		}
 	}
@@ -240,6 +244,8 @@ func NewReplicationSet(
 		r.State = ReplicationSetStateRemoving
 	}
 	log.Info("schedulerv3: initialize replication set",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.Any("replicationSet", r))
 
 	return r, nil
@@ -291,7 +297,10 @@ func (r *ReplicationSet) clearCapture(captureID model.CaptureID, role Role) erro
 
 func (r *ReplicationSet) promoteSecondary(captureID model.CaptureID) error {
 	if r.Primary == captureID {
-		log.Warn("schedulerv3: capture is already promoted",
+		log.Warn("schedulerv3: capture is already promoted as the primary",
+			zap.String("namespace", r.Changefeed.Namespace),
+			zap.String("changefeed", r.Changefeed.ID),
+			zap.String("captureID", captureID),
 			zap.Any("replicationSet", r))
 		return nil
 	}
@@ -319,6 +328,8 @@ func (r *ReplicationSet) inconsistentError(
 	input *tablepb.TableStatus, captureID model.CaptureID, msg string, fields ...zap.Field,
 ) error {
 	fields = append(fields, []zap.Field{
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.String("captureID", captureID),
 		zap.Stringer("tableState", input),
 		zap.Any("replicationSet", r),
@@ -332,6 +343,8 @@ func (r *ReplicationSet) multiplePrimaryError(
 	input *tablepb.TableStatus, captureID model.CaptureID, msg string, fields ...zap.Field,
 ) error {
 	fields = append(fields, []zap.Field{
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.String("captureID", captureID),
 		zap.Stringer("tableState", input),
 		zap.Any("replicationSet", r),
@@ -415,12 +428,12 @@ func (r *ReplicationSet) poll(
 		}
 		if stateChanged {
 			log.Info("schedulerv3: replication state transition, poll",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Stringer("old", oldState),
-				zap.Stringer("new", r.State),
-				zap.String("namespace", r.Changefeed.Namespace),
-				zap.String("changefeed", r.Changefeed.ID))
+				zap.Stringer("new", r.State))
 		}
 	}
 
@@ -446,6 +459,8 @@ func (r *ReplicationSet) pollOnAbsent(
 		tablepb.TableStateStopping:
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -493,6 +508,8 @@ func (r *ReplicationSet) pollOnPrepare(
 			// Primary is stopped, but we may still has secondary.
 			// Clear primary and promote secondary when it's prepared.
 			log.Info("schedulerv3: primary is stopped during Prepare",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -501,6 +518,8 @@ func (r *ReplicationSet) pollOnPrepare(
 		}
 		if r.isInRole(captureID, RoleSecondary) {
 			log.Info("schedulerv3: capture is stopped during Prepare",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -521,6 +540,8 @@ func (r *ReplicationSet) pollOnPrepare(
 		}
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -554,6 +575,8 @@ func (r *ReplicationSet) pollOnCommit(
 				// before promoting the secondary, otherwise there may be two
 				// primary that write data and lead to data inconsistency.
 				log.Info("schedulerv3: there are unknown captures during commit",
+					zap.String("namespace", r.Changefeed.Namespace),
+					zap.String("changefeed", r.Changefeed.ID),
 					zap.Any("replicationSet", r),
 					zap.Stringer("tableState", input),
 					zap.String("captureID", captureID))
@@ -566,6 +589,8 @@ func (r *ReplicationSet) pollOnCommit(
 			}
 
 			log.Info("schedulerv3: promote secondary, no primary",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID))
@@ -597,6 +622,8 @@ func (r *ReplicationSet) pollOnCommit(
 			if !r.hasRole(RoleSecondary) {
 				// If there is no secondary, transit to Absent.
 				log.Info("schedulerv3: primary is stopped during Commit",
+					zap.String("namespace", r.Changefeed.Namespace),
+					zap.String("changefeed", r.Changefeed.ID),
 					zap.Stringer("tableState", input),
 					zap.String("captureID", captureID),
 					zap.Any("replicationSet", r))
@@ -610,6 +637,8 @@ func (r *ReplicationSet) pollOnCommit(
 				return nil, false, errors.Trace(err)
 			}
 			log.Info("schedulerv3: replication state promote secondary",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("original", original),
@@ -632,6 +661,8 @@ func (r *ReplicationSet) pollOnCommit(
 			// upon entering Commit state. Do not change state and wait
 			// the original primary reports its table.
 			log.Info("schedulerv3: secondary is stopped during Commit",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -646,6 +677,8 @@ func (r *ReplicationSet) pollOnCommit(
 			return nil, true, nil
 		} else if r.isInRole(captureID, RoleUndetermined) {
 			log.Info("schedulerv3: capture is stopped during Commit",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -696,6 +729,8 @@ func (r *ReplicationSet) pollOnCommit(
 			return nil, false, err
 		} else if r.isInRole(captureID, RoleUndetermined) {
 			log.Info("schedulerv3: capture is stopping during Commit",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -705,6 +740,8 @@ func (r *ReplicationSet) pollOnCommit(
 	case tablepb.TableStatePreparing:
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -737,6 +774,8 @@ func (r *ReplicationSet) pollOnReplicating(
 			// Primary is stopped, but we still has secondary.
 			// Clear primary and promote secondary when it's prepared.
 			log.Info("schedulerv3: primary is stopped during Replicating",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Any("replicationSet", r))
@@ -746,6 +785,8 @@ func (r *ReplicationSet) pollOnReplicating(
 		}
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -782,12 +823,16 @@ func (r *ReplicationSet) pollOnRemoving(
 		}
 		if err != nil {
 			log.Warn("schedulerv3: replication state remove capture with error",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Error(err))
 		} else {
 			log.Info("schedulerv3: replication state remove capture",
+				zap.String("namespace", r.Changefeed.Namespace),
+				zap.String("changefeed", r.Changefeed.ID),
 				zap.Any("replicationSet", r),
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID))
@@ -797,6 +842,8 @@ func (r *ReplicationSet) pollOnRemoving(
 		return nil, false, nil
 	}
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.Stringer("tableState", input),
 		zap.String("captureID", captureID),
 		zap.Any("replicationSet", r))
@@ -815,7 +862,10 @@ func (r *ReplicationSet) handleAddTable(
 	// Ignore add table if it's not in Absent state.
 	if r.State != ReplicationSetStateAbsent {
 		log.Warn("schedulerv3: add table is ignored",
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.Span.TableID))
+			zap.String("namespace", r.Changefeed.Namespace),
+			zap.String("changefeed", r.Changefeed.ID),
+			zap.Int64("tableID", r.Span.TableID),
+			zap.Any("replicationSet", r))
 		return nil, nil
 	}
 	err := r.setCapture(captureID, RoleSecondary)
@@ -834,6 +884,8 @@ func (r *ReplicationSet) handleAddTable(
 	}
 
 	log.Info("schedulerv3: replication state transition, add table",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	return msgs, nil
@@ -845,7 +897,10 @@ func (r *ReplicationSet) handleMoveTable(
 	// Ignore move table if it has been removed already.
 	if r.hasRemoved() {
 		log.Warn("schedulerv3: move table is ignored",
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.Span.TableID))
+			zap.String("namespace", r.Changefeed.Namespace),
+			zap.String("changefeed", r.Changefeed.ID),
+			zap.Int64("tableID", r.Span.TableID),
+			zap.Any("replicationSet", r))
 		return nil, nil
 	}
 	// Ignore move table if
@@ -853,7 +908,10 @@ func (r *ReplicationSet) handleMoveTable(
 	// 2) the dest capture is the primary.
 	if r.State != ReplicationSetStateReplicating || r.Primary == dest {
 		log.Warn("schedulerv3: move table is ignored",
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.Span.TableID))
+			zap.String("namespace", r.Changefeed.Namespace),
+			zap.String("changefeed", r.Changefeed.ID),
+			zap.Int64("tableID", r.Span.TableID),
+			zap.Any("replicationSet", r))
 		return nil, nil
 	}
 	oldState := r.State
@@ -863,8 +921,11 @@ func (r *ReplicationSet) handleMoveTable(
 		return nil, errors.Trace(err)
 	}
 	log.Info("schedulerv3: replication state transition, move table",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
+		zap.Stringer("new", r.State),
 		zap.Any("replicationSet", r),
-		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
+		zap.Stringer("old", oldState))
 	status := tablepb.TableStatus{
 		Span:       r.Span,
 		State:      tablepb.TableStateAbsent,
@@ -877,20 +938,29 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 	// Ignore remove table if it has been removed already.
 	if r.hasRemoved() {
 		log.Warn("schedulerv3: remove table is ignored",
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.Span.TableID))
+			zap.String("namespace", r.Changefeed.Namespace),
+			zap.String("changefeed", r.Changefeed.ID),
+			zap.Int64("tableID", r.Span.TableID),
+			zap.Any("replicationSet", r))
 		return nil, nil
 	}
 	// Ignore remove table if it's not in Replicating state.
 	if r.State != ReplicationSetStateReplicating {
 		log.Warn("schedulerv3: remove table is ignored",
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.Span.TableID))
+			zap.String("namespace", r.Changefeed.Namespace),
+			zap.String("changefeed", r.Changefeed.ID),
+			zap.Int64("tableID", r.Span.TableID),
+			zap.Any("replicationSet", r))
 		return nil, nil
 	}
 	oldState := r.State
 	r.State = ReplicationSetStateRemoving
 	log.Info("schedulerv3: replication state transition, remove table",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
+		zap.Int64("tableID", r.Span.TableID),
 		zap.Any("replicationSet", r),
-		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
+		zap.Stringer("old", oldState))
 	status := tablepb.TableStatus{
 		Span:  r.Span,
 		State: tablepb.TableStateReplicating,
@@ -927,6 +997,9 @@ func (r *ReplicationSet) handleCaptureShutdown(
 	oldState := r.State
 	msgs, err := r.poll(&status, captureID)
 	log.Info("schedulerv3: replication state transition, capture shutdown",
+		zap.String("namespace", r.Changefeed.Namespace),
+		zap.String("changefeed", r.Changefeed.ID),
+		zap.Int64("tableID", r.Span.TableID),
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	return msgs, true, errors.Trace(err)
@@ -937,6 +1010,9 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 ) error {
 	if checkpoint.ResolvedTs < checkpoint.CheckpointTs {
 		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+			zap.String("namespace", r.Changefeed.Namespace),
+			zap.String("changefeed", r.Changefeed.ID),
+			zap.Int64("tableID", r.Span.TableID),
 			zap.Any("replicationSet", r),
 			zap.Any("checkpoint", checkpoint))
 
@@ -953,6 +1029,10 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 	}
 	if r.Checkpoint.ResolvedTs < r.Checkpoint.CheckpointTs {
 		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+			zap.String("namespace", r.Changefeed.Namespace),
+			zap.String("changefeed", r.Changefeed.ID),
+			zap.Int64("tableID", r.Span.TableID),
+			
 			zap.Any("replicationSet", r),
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
