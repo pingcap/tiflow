@@ -149,8 +149,14 @@ func TestIsIneligibleTableID(t *testing.T) {
 	tableIDT2 := job.BinlogInfo.TableInfo.ID
 
 	require.Nil(t, schema.HandleDDLJob(job))
-	require.False(t, schema.IsIneligibleTableID(tableIDT1))
-	require.True(t, schema.IsIneligibleTableID(tableIDT2))
+	ctx := context.Background()
+	ignore, err := schema.IsIneligibleTableID(ctx, tableIDT1, job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.False(t, ignore)
+
+	ignore, err = schema.IsIneligibleTableID(ctx, tableIDT2, job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.True(t, ignore)
 }
 
 func compareEvents(t *testing.T, e1, e2 *model.DDLEvent) {

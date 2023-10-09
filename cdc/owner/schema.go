@@ -126,8 +126,16 @@ func (s *schemaWrap4Owner) AllTables(
 	return tables, nil
 }
 
-func (s *schemaWrap4Owner) IsIneligibleTableID(tableID model.TableID) bool {
-	return s.GetLastSnapshot().IsIneligibleTableID(tableID)
+func (s *schemaWrap4Owner) IsIneligibleTableID(
+	ctx context.Context,
+	tableID model.TableID,
+	ts model.Ts,
+) (bool, error) {
+	snap, err := s.GetSnapshot(ctx, ts)
+	if err != nil {
+		return false, err
+	}
+	return snap.IsIneligibleTableID(tableID), nil
 }
 
 // TODO: find a better way to refactor this function.
