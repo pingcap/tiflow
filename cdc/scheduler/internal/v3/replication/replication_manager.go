@@ -139,17 +139,6 @@ func (s *ScheduleTask) String() string {
 	return ""
 }
 
-type ScheduleTasks []*ScheduleTask
-
-func (s ScheduleTasks) String() string {
-	var buf bytes.Buffer
-	for _, task := range s {
-		buf.WriteString(task.String())
-		buf.WriteString(";")
-	}
-	return buf.String()
-}
-
 // Manager manages replications and running scheduling tasks.
 type Manager struct { //nolint:revive
 	spans *spanz.BtreeMap[*ReplicationSet]
