@@ -830,9 +830,6 @@ func (r *ReplicationSet) pollOnRemoving(
 				zap.String("captureID", captureID),
 				zap.Error(err))
 		}
-		if len(r.Captures) == 0 {
-			r.State = ReplicationSetStateAbsent
-		}
 		return nil, false, nil
 	case tablepb.TableStateStopping:
 		return nil, false, nil
