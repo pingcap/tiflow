@@ -160,7 +160,7 @@ func TestParseCfg(t *testing.T) {
 			CertAllowedCN: []string{"dd", "ee"},
 		},
 		KVClient: &config.KVClientConfig{
-			EnableMultiplexing:   true,
+			EnableMultiplexing:   false,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
 			FrontierConcurrent:   8,
@@ -300,7 +300,7 @@ check-balance-interval = "10s"
 		},
 		Security: &config.SecurityConfig{},
 		KVClient: &config.KVClientConfig{
-			EnableMultiplexing:   true,
+			EnableMultiplexing:   false,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
 			FrontierConcurrent:   8,
@@ -430,7 +430,7 @@ cert-allowed-cn = ["dd","ee"]
 			CertAllowedCN: []string{"dd", "ee"},
 		},
 		KVClient: &config.KVClientConfig{
-			EnableMultiplexing:   true,
+			EnableMultiplexing:   false,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
 			FrontierConcurrent:   8,
