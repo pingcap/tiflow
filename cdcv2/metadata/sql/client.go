@@ -190,7 +190,7 @@ func (e *entity[K, V]) doUpsert(
 			}
 		}
 
-		if !ok || oldV.GetVersion() < oldV.GetVersion() {
+		if !ok || oldV.GetVersion() < newV.GetVersion() {
 			if onchange != nil && onchange(newV) {
 				log.Debug("skip update or insert", zap.Any("old", oldV), zap.Any("new", newV))
 				continue
