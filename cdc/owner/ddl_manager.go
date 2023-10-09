@@ -232,11 +232,17 @@ func (m *ddlManager) tick(
 					continue
 				}
 
-				if event.TableInfo != nil &&
-					m.schema.IsIneligibleTableID(event.TableInfo.TableName.TableID) {
-					log.Warn("ignore the DDL event of ineligible table",
-						zap.String("changefeed", m.changfeedID.ID), zap.Any("ddl", event))
-					continue
+				if event.TableInfo != nil {
+					ignore, err := m.schema.
+						IsIneligibleTableID(ctx, event.TableInfo.TableName.TableID, event.CommitTs)
+					if err != nil {
+						return nil, nil, errors.Trace(err)
+					}
+					if ignore {
+						log.Warn("ignore the DDL event of ineligible table",
+							zap.String("changefeed", m.changfeedID.ID), zap.Any("ddl", event))
+						continue
+					}
 				}
 				tableName := event.TableInfo.TableName
 				// Add all valid DDL events to the pendingDDLs.
