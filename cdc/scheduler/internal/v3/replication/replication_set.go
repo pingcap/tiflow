@@ -829,13 +829,9 @@ func (r *ReplicationSet) pollOnRemoving(
 				zap.Stringer("tableState", input),
 				zap.String("captureID", captureID),
 				zap.Error(err))
-		} else {
-			log.Info("schedulerv3: replication state remove capture",
-				zap.String("namespace", r.Changefeed.Namespace),
-				zap.String("changefeed", r.Changefeed.ID),
-				zap.Any("replicationSet", r),
-				zap.Stringer("tableState", input),
-				zap.String("captureID", captureID))
+		}
+		if len(r.Captures) == 0 {
+			r.State = ReplicationSetStateAbsent
 		}
 		return nil, false, nil
 	case tablepb.TableStateStopping:
@@ -1032,7 +1028,6 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.Int64("tableID", r.Span.TableID),
-			
 			zap.Any("replicationSet", r),
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
