@@ -15,6 +15,7 @@ package replication
 
 import (
 	"container/heap"
+	"fmt"
 	"math"
 	"time"
 
@@ -49,10 +50,28 @@ type BurstBalance struct {
 	MoveTables   []MoveTable
 }
 
+func (b BurstBalance) String() string {
+	if len(b.AddTables) != 0 {
+		return fmt.Sprintf("BurstBalance, add tables: %v", b.AddTables)
+	}
+	if len(b.RemoveTables) != 0 {
+		return fmt.Sprintf("BurstBalance, remove tables: %v", b.RemoveTables)
+	}
+	if len(b.MoveTables) != 0 {
+		return fmt.Sprintf("BurstBalance, move tables: %v", b.MoveTables)
+	}
+	return "BurstBalance, no tables"
+}
+
 // MoveTable is a schedule task for moving a table.
 type MoveTable struct {
 	TableID     model.TableID
 	DestCapture model.CaptureID
+}
+
+func (t MoveTable) String() string {
+	return fmt.Sprintf("MoveTable, span: %s, dest: %s",
+		t.Span.String(), t.DestCapture)
 }
 
 // AddTable is a schedule task for adding a table.
@@ -62,10 +81,20 @@ type AddTable struct {
 	CheckpointTs model.Ts
 }
 
+func (t AddTable) String() string {
+	return fmt.Sprintf("AddTable, span: %s, capture: %s, checkpointTs: %d",
+		t.Span.String(), t.CaptureID, t.CheckpointTs)
+}
+
 // RemoveTable is a schedule task for removing a table.
 type RemoveTable struct {
 	TableID   model.TableID
 	CaptureID model.CaptureID
+}
+
+func (t RemoveTable) String() string {
+	return fmt.Sprintf("RemoveTable, span: %s, capture: %s",
+		t.Span.String(), t.CaptureID)
 }
 
 // ScheduleTask is a schedule task that wraps add/move/remove table tasks.
@@ -90,6 +119,22 @@ func (s *ScheduleTask) Name() string {
 		return "burstBalance"
 	}
 	return "unknown"
+}
+
+func (s *ScheduleTask) String() string {
+	if s.MoveTable != nil {
+		return s.MoveTable.String()
+	}
+	if s.AddTable != nil {
+		return s.AddTable.String()
+	}
+	if s.RemoveTable != nil {
+		return s.RemoveTable.String()
+	}
+	if s.BurstBalance != nil {
+		return s.BurstBalance.String()
+	}
+	return ""
 }
 
 // Manager manages replications and running scheduling tasks.
@@ -282,8 +327,14 @@ func (r *Manager) HandleTasks(
 	tasks []*ScheduleTask,
 ) ([]*schedulepb.Message, error) {
 	// Check if a running task is finished.
+<<<<<<< HEAD
 	for tableID := range r.runningTasks {
 		if table, ok := r.tables[tableID]; ok {
+=======
+	var toBeDeleted []tablepb.Span
+	r.runningTasks.Ascend(func(span tablepb.Span, task *ScheduleTask) bool {
+		if table, ok := r.spans.Get(span); ok {
+>>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 			// If table is back to Replicating or Removed,
 			// the running task is finished.
 			if table.State == ReplicationSetStateReplicating || table.hasRemoved() {
@@ -635,8 +686,13 @@ func (r *Manager) logSlowTableInfo(currentTables []model.TableID, currentTime ti
 		log.Info("schedulerv3: slow table",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
+<<<<<<< HEAD
 			zap.Int64("tableID", table.TableID),
 			zap.String("tableStatus", table.Stats.String()),
+=======
+			zap.Int64("tableID", table.Span.TableID),
+			zap.String("tableStatus", table.State.String()),
+>>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 			zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
 			zap.Duration("checkpointLag", currentTime.
