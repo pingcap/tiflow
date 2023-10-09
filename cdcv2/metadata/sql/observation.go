@@ -173,14 +173,16 @@ func (c *CaptureOb[T]) OwnerChanges() <-chan metadata.ScheduledChangefeed {
 	return c.ownerChanges.Out()
 }
 
-func (c *CaptureOb[T]) PostOwnerRemoved(cf metadata.ChangefeedUUID) error {
+func (c *CaptureOb[T]) PostOwnerRemoved(cf metadata.ChangefeedUUID, taskPosition metadata.ChangefeedProgress) error {
 	sc := c.tasks.get(cf)
 	if sc == nil {
 		errMsg := fmt.Sprintf("remove owner for a changefeed %d that is not owned by the capture", cf)
 		return errors.ErrInconsistentMetaCache.GenWithStackByArgs(errMsg)
 	}
+
+	sc.TaskPosition = taskPosition
 	return c.client.TxnWithOwnerLock(c.egCtx, cf, func(tx T) error {
-		return c.client.updateScheduleOwnerState(tx, sc)
+		return c.client.updateSchedule(tx, sc)
 	})
 }
 
@@ -191,23 +193,15 @@ func (c *CaptureOb[T]) ProcessorChanges() <-chan metadata.ScheduledChangefeed {
 func (c *CaptureOb[T]) GetChangefeeds(cfs ...metadata.ChangefeedUUID) (infos []*metadata.ChangefeedInfo, err error) {
 	var cfDOs []*ChangefeedInfoDO
 	err = c.client.Txn(c.egCtx, func(tx T) error {
-		cfDOs, err = c.client.queryChangefeedInfos(tx)
+		cfDOs, err = c.client.queryChangefeedInfosByUUIDs(tx, cfs...)
 		return err
 	})
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	var ret []*metadata.ChangefeedInfo
-	m := make(map[metadata.ChangefeedUUID]struct{}, len(cfs))
-	for _, cf := range cfs {
-		m[cf] = struct{}{}
-	}
-
 	for _, cfDO := range cfDOs {
-		if _, ok := m[cfDO.UUID]; ok {
-			ret = append(ret, &cfDO.ChangefeedInfo)
-		}
+		infos = append(infos, &cfDO.ChangefeedInfo)
 	}
 	return
 }
@@ -359,7 +353,7 @@ func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = c.client.MarkChangefeedRemoved(tx, &ChangefeedInfoDO{
+		err = c.client.markChangefeedRemoved(tx, &ChangefeedInfoDO{
 			ChangefeedInfo: metadata.ChangefeedInfo{
 				ChangefeedIdent: metadata.ChangefeedIdent{
 					UUID: cf,
@@ -440,6 +434,57 @@ func (c *ControllerOb[T]) RefreshCaptures() (captures []*model.CaptureInfo, chan
 	return
 }
 
+// onCaptureOffline is called when a capture is offline.
+func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
+	// TODO(CharlesCheung): use multiple statements to reduce the number of round trips.
+	// Note currently we only handle single capture offline, so it is not a big deal.
+	for _, id := range ids {
+		err := c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+			prs, err := c.client.queryProgressByCaptureIDsWithLock(tx, []model.CaptureID{id})
+			if err != nil {
+				return errors.Trace(err)
+			}
+			prMap := prs[0]
+			for cf, taskPosition := range *prMap.Progress {
+				// TODO(CharlesCheung): maybe such operation should be done in background.
+				oldSc, err := c.client.queryScheduleByUUID(tx, cf)
+				if err != nil {
+					return errors.Trace(err)
+				}
+				if *oldSc.Owner != id || oldSc.OwnerState == metadata.SchedRemoved {
+					continue
+				}
+				newSc := &ScheduleDO{
+					ScheduledChangefeed: metadata.ScheduledChangefeed{
+						ChangefeedUUID: oldSc.ChangefeedUUID,
+						Owner:          nil,
+						OwnerState:     metadata.SchedRemoved,
+						Processors:     nil,
+						TaskPosition:   taskPosition,
+					},
+				}
+				// TODO: use Model to prevent nil value from being ignored.
+				err = c.client.updateSchedule(tx, newSc)
+				if err != nil {
+					return errors.Trace(err)
+				}
+			}
+
+			err = c.client.updateScheduleOwnerStateByOwnerID(tx, metadata.SchedRemoved, id)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
+			return c.client.deleteProgress(tx, prMap)
+		})
+
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 func (c *ControllerOb[T]) SetOwner(target metadata.ScheduledChangefeed) error {
 	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
 		old, err := c.client.queryScheduleByUUID(tx, target.ChangefeedUUID)
@@ -501,13 +546,18 @@ func (o *ownerOb[T]) Self() *metadata.ChangefeedInfo {
 	return o.cf
 }
 
-func (o *ownerOb[T]) updateChangefeedState(state model.FeedState) error {
+func (o *ownerOb[T]) updateChangefeedState(
+	state model.FeedState,
+	cfErr *model.RunningError,
+	cfWarn *model.RunningError,
+) error {
 	return o.client.TxnWithOwnerLock(o.egCtx, o.cf.UUID, func(tx T) error {
 		oldState, err := o.client.queryChangefeedStateByUUID(tx, o.cf.UUID)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		return o.client.updateChangefeedState(tx, &ChangefeedStateDO{
+
+		newState := &ChangefeedStateDO{
 			ChangefeedState: metadata.ChangefeedState{
 				ChangefeedUUID: o.cf.UUID,
 				State:          state,
@@ -515,13 +565,21 @@ func (o *ownerOb[T]) updateChangefeedState(state model.FeedState) error {
 				Warning:        oldState.Warning,
 			},
 			Version: oldState.Version,
-		})
+		}
+		if cfErr != nil {
+			newState.Error = cfErr
+		}
+		if cfWarn != nil {
+			newState.Warning = cfWarn
+		}
+
+		return o.client.updateChangefeedState(tx, newState)
 	})
 }
 
 func (o *ownerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 	return o.client.TxnWithOwnerLock(o.egCtx, o.cf.UUID, func(tx T) error {
-		state, err := o.client.queryChangefeedStateByUUID(tx, o.cf.UUID)
+		state, err := o.client.queryChangefeedStateByUUIDWithLock(tx, o.cf.UUID)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -543,69 +601,31 @@ func (o *ownerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 }
 
 func (o *ownerOb[T]) ResumeChangefeed() error {
-	return o.updateChangefeedState(model.StateNormal)
+	return o.updateChangefeedState(model.StateNormal, nil, nil)
 }
 
-func (o *ownerOb[T]) SetChangefeedPending() error {
-	return o.updateChangefeedState(model.StatePending)
+func (o *ownerOb[T]) SetChangefeedPending(err *model.RunningError) error {
+	return o.updateChangefeedState(model.StatePending, err, nil)
 }
 
-func (o *ownerOb[T]) SetChangefeedFailed(err model.RunningError) error {
-	return o.updateChangefeedState(model.StateFailed)
+func (o *ownerOb[T]) SetChangefeedFailed(err *model.RunningError) error {
+	return o.updateChangefeedState(model.StateFailed, err, nil)
 }
 
 func (o *ownerOb[T]) PauseChangefeed() error {
-	return o.updateChangefeedState(model.StateStopped)
+	return o.updateChangefeedState(model.StateStopped, nil, nil)
 }
 
 func (o *ownerOb[T]) SetChangefeedRemoved() error {
-	return o.updateChangefeedState(model.StateRemoved)
+	return o.updateChangefeedState(model.StateRemoved, nil, nil)
 }
 
 func (o *ownerOb[T]) SetChangefeedFinished() error {
-	return o.updateChangefeedState(model.StateFinished)
+	return o.updateChangefeedState(model.StateFinished, nil, nil)
 }
 
-func (o *ownerOb[T]) SetChangefeedWarning(warn model.RunningError) error {
-	return o.updateChangefeedState(model.StateWarning)
-}
-
-// sorted `ScheduledChangefeed`s, with a version to simplify diff check.
-type sortedScheduledChangefeeds struct {
-	version int
-	v       []metadata.ScheduledChangefeed
-	compare func(a, b metadata.ScheduledChangefeed) int
-}
-
-func (s *sortedScheduledChangefeeds) sort() {
-	sort.Slice(s.v, func(i, j int) bool { return s.compare(s.v[i], s.v[j]) < 0 })
-}
-
-func (s *sortedScheduledChangefeeds) upsert(target metadata.ScheduledChangefeed) {
-	i := sort.Search(len(s.v), func(i int) bool { return s.compare(s.v[i], target) >= 0 })
-	if i > 0 && i < len(s.v) && s.compare(s.v[i], target) == 0 {
-		s.v[i] = target
-	} else {
-		s.v = append(s.v, target)
-		s.sort()
-	}
-	s.version += 1
-}
-
-func (s *sortedScheduledChangefeeds) remove(target metadata.ScheduledChangefeed) {
-	i := sort.Search(len(s.v), func(i int) bool { return s.compare(s.v[i], target) >= 0 })
-	if i > 0 && i < len(s.v) && s.compare(s.v[i], target) == 0 {
-		s.v = append(s.v[:i-1], s.v[i:]...)
-		s.version += 1
-	}
-}
-
-func (s *sortedScheduledChangefeeds) update(target metadata.ScheduledChangefeed) {
-	i := sort.Search(len(s.v), func(i int) bool { return s.compare(s.v[i], target) >= 0 })
-	if i > 0 && i < len(s.v) && s.compare(s.v[i], target) == 0 {
-		s.v[i] = target
-		s.version += 1
-	}
+func (o *ownerOb[T]) SetChangefeedWarning(warn *model.RunningError) error {
+	return o.updateChangefeedState(model.StateWarning, nil, warn)
 }
 
 func sortAndHashCaptureList(cs []*model.CaptureInfo) uint64 {

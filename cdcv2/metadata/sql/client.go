@@ -70,10 +70,11 @@ type upstreamClient[T TxnContext] interface {
 type changefeedInfoClient[T TxnContext] interface {
 	createChangefeedInfo(tx T, info *ChangefeedInfoDO) error
 	deleteChangefeedInfo(tx T, info *ChangefeedInfoDO) error
-	MarkChangefeedRemoved(tx T, info *ChangefeedInfoDO) error
+	markChangefeedRemoved(tx T, info *ChangefeedInfoDO) error
 	updateChangefeedInfo(tx T, info *ChangefeedInfoDO) error
 	queryChangefeedInfos(tx T) ([]*ChangefeedInfoDO, error)
 	queryChangefeedInfosByUpdateAt(tx T, lastUpdateAt time.Time) ([]*ChangefeedInfoDO, error)
+	queryChangefeedInfosByUUIDs(tx T, uuids ...uint64) ([]*ChangefeedInfoDO, error)
 	queryChangefeedInfoByUUID(tx T, uuid uint64) (*ChangefeedInfoDO, error)
 }
 
@@ -84,6 +85,7 @@ type changefeedStateClient[T TxnContext] interface {
 	queryChangefeedStates(tx T) ([]*ChangefeedStateDO, error)
 	queryChangefeedStatesByUpdateAt(tx T, lastUpdateAt time.Time) ([]*ChangefeedStateDO, error)
 	queryChangefeedStateByUUID(tx T, uuid uint64) (*ChangefeedStateDO, error)
+	queryChangefeedStateByUUIDWithLock(tx T, uuid uint64) (*ChangefeedStateDO, error)
 }
 
 type scheduleClient[T TxnContext] interface {
@@ -91,6 +93,7 @@ type scheduleClient[T TxnContext] interface {
 	deleteSchedule(tx T, sc *ScheduleDO) error
 	updateSchedule(tx T, sc *ScheduleDO) error
 	updateScheduleOwnerState(tx T, sc *ScheduleDO) error
+	updateScheduleOwnerStateByOwnerID(tx T, state metadata.SchedState, ownerID model.CaptureID) error
 	querySchedules(tx T) ([]*ScheduleDO, error)
 	querySchedulesByUpdateAt(tx T, lastUpdateAt time.Time) ([]*ScheduleDO, error)
 	querySchedulesByOwnerIDAndUpdateAt(tx T, captureID model.CaptureID, lastUpdateAt time.Time) ([]*ScheduleDO, error)

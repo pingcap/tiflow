@@ -96,7 +96,7 @@ func (cp *ChangefeedProgress) Scan(value interface{}) error {
 }
 
 // CaptureProgress stores the progress of all ChangeFeeds on single capture.
-type CaptureProgress map[uint64]ChangefeedProgress
+type CaptureProgress map[ChangefeedUUID]ChangefeedProgress
 
 // Value implements the driver.Valuer interface.
 func (cp CaptureProgress) Value() (driver.Value, error) {

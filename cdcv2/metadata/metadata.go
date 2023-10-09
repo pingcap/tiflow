@@ -117,26 +117,29 @@ type ControllerObservation interface {
 type OwnerObservation interface {
 	Self() *ChangefeedInfo
 
+	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
+	UpdateChangefeed(*ChangefeedInfo) error
+
 	// PauseChangefeed pauses a changefeed.
 	PauseChangefeed() error
 
 	// ResumeChangefeed resumes a changefeed.
 	ResumeChangefeed() error
 
-	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
-	UpdateChangefeed(*ChangefeedInfo) error
-
-	// set the changefeed to state finished.
+	// SetChangefeedFinished set the changefeed to state finished.
 	SetChangefeedFinished() error
 
-	// Set the changefeed to state failed.
-	SetChangefeedFailed(err model.RunningError) error
+	// SetChangefeedRemoved set the changefeed to state removed.
+	SetChangefeedRemoved() error
 
-	// Set the changefeed to state warning.
-	SetChangefeedWarning(warn model.RunningError) error
+	// SetChangefeedFailed set the changefeed to state failed.
+	SetChangefeedFailed(err *model.RunningError) error
 
-	// Set the changefeed to state pending.
-	SetChangefeedPending() error
+	// SetChangefeedWarning set the changefeed to state warning.
+	SetChangefeedWarning(warn *model.RunningError) error
+
+	// SetChangefeedPending sets the changefeed to state pending.
+	SetChangefeedPending(err *model.RunningError) error
 }
 
 // Elector is used to campaign for capture controller.
