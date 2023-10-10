@@ -126,6 +126,21 @@ func (s *EventRouter) GetPartitionForRowChange(
 	)
 }
 
+// VerifyTables return error if any one table route rule is invalid.
+func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
+	for _, table := range infos {
+		_, partitionDispatcher := s.matchDispatcher(table.TableName.Schema, table.TableName.Table)
+		if v, ok := partitionDispatcher.(*partition.IndexValueDispatcher); ok {
+			_, _, ok = table.IndexByName(v.IndexName)
+			if !ok {
+				return cerror.ErrDispatcherFailed.GenWithStack(
+					"index not found when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+			}
+		}
+	}
+	return nil
+}
+
 // GetActiveTopics returns a list of the corresponding topics
 // for the tables that are actively synchronized.
 func (s *EventRouter) GetActiveTopics(activeTables []model.TableName) []string {

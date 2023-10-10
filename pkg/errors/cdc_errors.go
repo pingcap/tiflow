@@ -124,9 +124,10 @@ var (
 		"filter rule is invalid %v",
 		errors.RFCCodeText("CDC:ErrFilterRuleInvalid"),
 	)
-	ErrDispatcherRuntime = errors.Normalize(
-		"dispatcher runtime error",
-		errors.RFCCodeText("CDC:ErrDispatcherRuntime"),
+
+	ErrDispatcherFailed = errors.Normalize(
+		"dispatcher failed",
+		errors.RFCCodeText("CDC:ErrDispatcherFailed"),
 	)
 
 	// internal errors

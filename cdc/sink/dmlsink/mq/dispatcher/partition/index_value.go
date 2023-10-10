@@ -29,14 +29,14 @@ type IndexValueDispatcher struct {
 	hasher *hash.PositionInertia
 	lock   sync.Mutex
 
-	indexName string
+	IndexName string
 }
 
 // NewIndexValueDispatcher creates a IndexValueDispatcher.
 func NewIndexValueDispatcher(indexName string) *IndexValueDispatcher {
 	return &IndexValueDispatcher{
 		hasher:    hash.NewPositionInertia(),
-		indexName: indexName,
+		IndexName: indexName,
 	}
 }
 
@@ -54,7 +54,7 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 	}
 
 	// the most normal case, index-name is not set, use the handle key columns.
-	if r.indexName == "" {
+	if r.IndexName == "" {
 		for _, col := range dispatchCols {
 			if col == nil {
 				continue
@@ -64,12 +64,13 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 			}
 		}
 	} else {
-		names, offsets, ok := row.IndexByName(r.indexName)
+		names, offsets, ok := row.TableInfo.IndexByName(r.IndexName)
 		if !ok {
 			log.Error("index not found when dispatch event",
 				zap.Any("tableName", row.Table),
-				zap.String("indexName", r.indexName))
-			return 0, "", errors.ErrDispatcherRuntime.GenWithStack("index not found when dispatch event: %s", r.indexName)
+				zap.String("indexName", r.IndexName))
+			return 0, "", errors.ErrDispatcherFailed.GenWithStack(
+				"index not found when dispatch event, table: %v, index: %s", row.Table, r.IndexName)
 		}
 		for idx := 0; idx < len(names); idx++ {
 			r.hasher.Write([]byte(names[idx]), []byte(model.ColumnValueString(dispatchCols[offsets[idx]].Value)))

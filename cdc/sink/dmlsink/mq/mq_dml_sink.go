@@ -64,6 +64,8 @@ type dmlSink struct {
 	wg   sync.WaitGroup
 	dead chan struct{}
 
+	errCh chan error
+
 	scheme string
 }
 
@@ -90,7 +92,9 @@ func newDMLSink(
 		ctx:         ctx,
 		cancel:      cancel,
 		dead:        make(chan struct{}),
-		scheme:      scheme,
+		errCh:       errCh,
+
+		scheme: scheme,
 	}
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
@@ -108,15 +112,19 @@ func newDMLSink(
 		s.alive.Unlock()
 		close(s.dead)
 
-		if err != nil && errors.Cause(err) != context.Canceled {
-			select {
-			case <-ctx.Done():
-			case errCh <- err:
-			}
-		}
+		s.handleError(err)
 	}()
 
 	return s
+}
+
+func (s *dmlSink) handleError(err error) {
+	if err != nil && errors.Cause(err) != context.Canceled {
+		select {
+		case <-s.ctx.Done():
+		case s.errCh <- err:
+		}
+	}
 }
 
 // WriteEvents writes events to the sink.
@@ -148,10 +156,12 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
 			if err != nil {
+				s.handleError(err)
 				return err
 			}
 			index, key, err := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
 			if err != nil {
+				s.handleError(err)
 				return err
 			}
 			// This never be blocked because this is an unbounded channel.

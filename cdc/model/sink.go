@@ -507,22 +507,6 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 	return size
 }
 
-// IndexByName returns the index columns and offsets of the corresponding index by name
-func (r *RowChangedEvent) IndexByName(name string) ([]string, []int, bool) {
-	for _, index := range r.TableInfo.Indices {
-		if index.Name.O == name {
-			names := make([]string, 0, len(index.Columns))
-			offset := make([]int, 0, len(index.Columns))
-			for _, col := range index.Columns {
-				names = append(names, col.Name.O)
-				offset = append(offset, col.Offset)
-			}
-			return names, offset, true
-		}
-	}
-	return nil, nil, false
-}
-
 // Column represents a column value in row changed event
 type Column struct {
 	Name      string         `json:"name" msg:"name"`

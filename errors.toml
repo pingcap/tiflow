@@ -231,9 +231,9 @@ error = '''
 failed to preallocate file because disk is full
 '''
 
-["CDC:ErrDispatcherRuntime"]
+["CDC:ErrDispatcherFailed"]
 error = '''
-dispatcher runtime error
+dispatcher failed
 '''
 
 ["CDC:ErrEncodeFailed"]

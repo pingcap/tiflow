@@ -519,18 +519,10 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 		return nil, nil, err
 	}
 
-	for _, table := range tableInfos {
-		dummyEvent := &model.RowChangedEvent{
-			Table: &model.TableName{
-				Schema: table.TableName.Schema,
-				Table:  table.TableName.Table,
-			},
-			TableInfo: table,
-		}
-		_, _, err := eventRouter.GetPartitionForRowChange(dummyEvent, 1)
-		if err != nil {
-			return nil, nil, err
-		}
+	err = eventRouter.VerifyTables(tableInfos)
+	if err != nil {
+		return nil, nil, err
 	}
+
 	return ineligibleTables, eligibleTables, nil
 }

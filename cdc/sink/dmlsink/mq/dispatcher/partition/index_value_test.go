@@ -193,7 +193,7 @@ func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 
 	p := NewIndexValueDispatcher("index2")
 	_, _, err := p.DispatchRowChangedEvent(event, 16)
-	require.ErrorIs(t, err, errors.ErrDispatcherRuntime)
+	require.ErrorIs(t, err, errors.ErrDispatcherFailed)
 
 	p = NewIndexValueDispatcher("index1")
 	index, _, err := p.DispatchRowChangedEvent(event, 16)
