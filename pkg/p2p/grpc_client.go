@@ -91,11 +91,6 @@ func (c *grpcMessageClient) Run(
 	defer func() {
 		c.isClosed.Store(true)
 		close(c.closeCh)
-
-		log.Info("peer message client exited",
-			zap.String("addr", addr),
-			zap.String("captureID", receiverID),
-			zap.Error(ret))
 	}()
 
 	metricsClientCount := clientCount.With(prometheus.Labels{
