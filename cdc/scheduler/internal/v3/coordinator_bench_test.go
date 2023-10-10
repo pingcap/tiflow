@@ -149,7 +149,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			captureID := fmt.Sprint(i % captureCount)
 			span := tablepb.Span{TableID: tableID}
 			rep, err := replication.NewReplicationSet(
-				span, tablepb.Checkpoint{0, 0}, map[string]*tablepb.TableStatus{
+				span, tablepb.Checkpoint{}, map[string]*tablepb.TableStatus{
 					captureID: {
 						Span:  tablepb.Span{TableID: tableID},
 						State: tablepb.TableStateReplicating,
