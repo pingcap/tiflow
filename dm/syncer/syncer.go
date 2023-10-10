@@ -789,6 +789,9 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 // getTableInfo returns a table info for sourceTable, it should not be modified by caller.
 func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error) {
+	if s.schemaTracker == nil {
+		return nil, terror.ErrSchemaTrackerIsClosed.New("schema tracker not init")
+	}
 	ti, err := s.schemaTracker.GetTableInfo(sourceTable)
 	if err == nil {
 		return ti, nil
