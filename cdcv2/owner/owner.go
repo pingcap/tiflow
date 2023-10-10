@@ -159,7 +159,9 @@ func (o *OwnerImpl) Run(ctx context.Context) error {
 					MinTableBarrierTs: bt,
 				}
 			}
-			_ = o.captureObservation.Advance(progress)
+			if len(progress) > 0 {
+				_ = o.captureObservation.Advance(progress)
+			}
 		case cf := <-o.captureObservation.OwnerChanges():
 			switch cf.OwnerState {
 			case metadata.SchedRemoving:
