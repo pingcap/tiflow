@@ -176,11 +176,11 @@ func (s *extStorageWithTimeout) DeleteFile(ctx context.Context, name string) err
 
 // Open a Reader by file path. path is relative path to storage base path
 func (s *extStorageWithTimeout) Open(
-	ctx context.Context, path string,
+	ctx context.Context, path string, _ *storage.ReaderOption,
 ) (storage.ExternalFileReader, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.Open(ctx, path)
+	return s.ExternalStorage.Open(ctx, path, nil)
 }
 
 // WalkDir traverse all the files in a dir.

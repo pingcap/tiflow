@@ -359,7 +359,7 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 	}
 
 	if lastFileExists {
-		fileReader, err := f.storage.Open(ctx, lastFilePath)
+		fileReader, err := f.storage.Open(ctx, lastFilePath, nil)
 		if err != nil {
 			return 0, err
 		}

@@ -21,10 +21,16 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/table"
+	"github.com/pingcap/tidb/table/tables"
+	"github.com/pingcap/tidb/types"
 	tablefilter "github.com/pingcap/tidb/util/filter"
+	tidbmock "github.com/pingcap/tidb/util/mock"
 	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/dm/config"
@@ -75,10 +81,12 @@ type DDLWorker struct {
 	idAndCollationMap          map[int]string
 	baList                     *tablefilter.Filter
 
-	recordSkipSQLsLocation func(ec *eventContext) error
-	trackDDL               func(usedSchema string, trackInfo *ddlInfo, ec *eventContext) error
-	saveTablePoint         func(table *filter.Table, location binlog.Location)
-	flushJobs              func() error
+	getTableInfo            func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
+	getDBInfoFromDownstream func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error)
+	recordSkipSQLsLocation  func(ec *eventContext) error
+	trackDDL                func(usedSchema string, trackInfo *ddlInfo, ec *eventContext) error
+	saveTablePoint          func(table *filter.Table, location binlog.Location)
+	flushJobs               func() error
 }
 
 // NewDDLWorker creates a new DDLWorker instance.
@@ -105,6 +113,8 @@ func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 		trackDDL:                   syncer.trackDDL,
 		saveTablePoint:             syncer.saveTablePoint,
 		flushJobs:                  syncer.flushJobs,
+		getTableInfo:               syncer.getTableInfo,
+		getDBInfoFromDownstream:    syncer.getDBInfoFromDownstream,
 	}
 	switch syncer.cfg.ShardMode {
 	case config.ShardPessimistic:
@@ -955,6 +965,219 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 	return stmts[0], nil
 }
 
+// copy from https://github.com/pingcap/tidb/blob/fc4f8a1d8f5342cd01f78eb460e47d78d177ed20/ddl/column.go#L366
+func (ddl *DDLWorker) needChangedColumnData(oldCol, newCol *table.Column, spec *ast.AlterTableSpec) bf.EventType {
+	toUnsigned := mysql.HasUnsignedFlag(newCol.GetFlag())
+	originUnsigned := mysql.HasUnsignedFlag(oldCol.GetFlag())
+	needTruncationOrToggleSign := func() bool {
+		return (newCol.GetFlen() > 0 && (newCol.GetFlen() < oldCol.GetFlen() || newCol.GetDecimal() < oldCol.GetDecimal())) ||
+			(toUnsigned != originUnsigned)
+	}
+	// Ignore the potential max display length represented by integer's flen, use default flen instead.
+	defaultOldColFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(oldCol.GetType())
+	defaultNewColFlen, _ := mysql.GetDefaultFieldLengthAndDecimal(newCol.GetType())
+	needTruncationOrToggleSignForInteger := func() bool {
+		return (defaultNewColFlen > 0 && defaultNewColFlen < defaultOldColFlen) || (toUnsigned != originUnsigned)
+	}
+
+	// Deal with the same type.
+	if oldCol.GetType() == newCol.GetType() {
+		switch oldCol.GetType() {
+		case mysql.TypeNewDecimal:
+			// Since type decimal will encode the precision, frac, negative(signed) and wordBuf into storage together, there is no short
+			// cut to eliminate data reorg change for column type change between decimal.
+			if oldCol.GetFlen() != newCol.GetFlen() || oldCol.GetDecimal() != newCol.GetDecimal() || toUnsigned != originUnsigned {
+				return bf.PrecisionDecrease
+			}
+			return bf.AlterTable
+		case mysql.TypeEnum, mysql.TypeSet:
+			if tidbddl.IsElemsChangedToModifyColumn(oldCol.GetElems(), newCol.GetElems()) {
+				return bf.ValueRangeDecrease
+			}
+			return bf.AlterTable
+		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong:
+			if toUnsigned != originUnsigned {
+				return bf.PrecisionDecrease
+			}
+			return bf.AlterTable
+		case mysql.TypeString:
+			// Due to the behavior of padding \x00 at binary type, always change column data when binary length changed
+			if types.IsBinaryStr(&oldCol.FieldType) {
+				if newCol.GetFlen() != oldCol.GetFlen() {
+					return bf.PrecisionDecrease
+				}
+			}
+			return bf.AlterTable
+		}
+
+		if needTruncationOrToggleSign() {
+			return bf.ValueRangeDecrease
+		}
+		return bf.AlterTable
+	}
+
+	if tidbddl.ConvertBetweenCharAndVarchar(oldCol.GetType(), newCol.GetType()) {
+		return bf.ModifyColumn
+	}
+
+	// Deal with the different type.
+	switch oldCol.GetType() {
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
+		switch newCol.GetType() {
+		case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeBlob, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob:
+			if needTruncationOrToggleSign() {
+				return bf.ModifyColumn
+			}
+			return bf.AlterTable
+		}
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong:
+		switch newCol.GetType() {
+		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong:
+			if needTruncationOrToggleSignForInteger() {
+				return bf.ValueRangeDecrease
+			}
+			return bf.AlterTable
+		}
+	}
+
+	//  The rest is considered as ModifyColumn.
+	return bf.ModifyColumn
+}
+
+func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, spec *ast.AlterTableSpec) (bf.EventType, error) {
+	if len(info.sourceTables) == 0 || len(info.targetTables) == 0 {
+		return bf.AlterTable, nil
+	}
+	if len(spec.NewColumns) == 0 || spec.NewColumns[0].Tp == nil {
+		return bf.AlterTable, nil
+	}
+
+	// get table info and db info
+	ti, err := ddl.getTableInfo(qec.tctx, info.sourceTables[0], info.targetTables[0])
+	if err != nil || ti == nil {
+		return bf.AlterTable, err
+	}
+	tbl := tables.MockTableFromMeta(ti)
+	di, err := ddl.getDBInfoFromDownstream(qec.tctx, info.sourceTables[0], info.targetTables[0])
+	if err != nil || di == nil {
+		return bf.AlterTable, err
+	}
+
+	// get old and new column
+	oldColumnName := spec.OldColumnName
+	if spec.Tp == ast.AlterTableModifyColumn {
+		oldColumnName = spec.NewColumns[0].Name
+	}
+	oldCol := table.FindCol(tbl.Cols(), oldColumnName.Name.L)
+	if oldCol == nil {
+		return bf.AlterTable, nil
+	}
+	newCol := table.ToColumn(&model.ColumnInfo{
+		ID:                    oldCol.ID,
+		Offset:                oldCol.Offset,
+		State:                 oldCol.State,
+		OriginDefaultValue:    oldCol.OriginDefaultValue,
+		OriginDefaultValueBit: oldCol.OriginDefaultValueBit,
+		FieldType:             *spec.NewColumns[0].Tp,
+		Name:                  spec.NewColumns[0].Name.Name,
+		Version:               oldCol.Version,
+	})
+
+	// handle charset and collation
+	if err := tidbddl.ProcessColumnCharsetAndCollation(tidbmock.NewContext(), oldCol, newCol, ti, spec.NewColumns[0], di); err != nil {
+		ddl.logger.Warn("process column charset and collation failed", zap.Error(err))
+		return bf.AlterTable, err
+	}
+	// handle column options
+	if err := tidbddl.ProcessColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
+		ddl.logger.Warn("process column options failed", zap.Error(err))
+		return bf.AlterTable, err
+	}
+
+	if et := ddl.needChangedColumnData(oldCol, newCol, spec); et != bf.AlterTable {
+		return et, nil
+	}
+	switch {
+	case mysql.HasAutoIncrementFlag(oldCol.GetFlag()) && !mysql.HasAutoIncrementFlag(newCol.GetFlag()):
+		return bf.RemoveAutoIncrement, nil
+	case mysql.HasPriKeyFlag(oldCol.GetFlag()) != mysql.HasPriKeyFlag(newCol.GetFlag()):
+		return bf.ModifyPK, nil
+	case mysql.HasUniKeyFlag(oldCol.GetFlag()) != mysql.HasUniKeyFlag(newCol.GetFlag()):
+		return bf.ModifyUK, nil
+	case oldCol.GetDefaultValue() != newCol.GetDefaultValue():
+		return bf.ModifyDefaultValue, nil
+	case oldCol.GetCharset() != newCol.GetCharset():
+		return bf.ModifyCharset, nil
+	case oldCol.GetCollate() != newCol.GetCollate():
+		return bf.ModifyCollation, nil
+	case spec.Position != nil && spec.Position.Tp != ast.ColumnPositionNone:
+		return bf.ModifyColumnsOrder, nil
+	case oldCol.Name.L != newCol.Name.L:
+		return bf.Rename, nil
+	default:
+		return bf.AlterTable, nil
+	}
+}
+
+// AstToDDLEvent returns filter.DDLEvent
+func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et bf.EventType) {
+	defer func() {
+		ddl.logger.Info("get ddl event type", zap.String("event_type", string(et)))
+	}()
+	node := info.stmtCache
+	switch n := node.(type) {
+	case *ast.AlterTableStmt:
+		validSpecs, err := tidbddl.ResolveAlterTableSpec(tidbmock.NewContext(), n.Specs)
+		if err != nil {
+			break
+		}
+
+		for _, spec := range validSpecs {
+			switch spec.Tp {
+			case ast.AlterTableModifyColumn, ast.AlterTableChangeColumn:
+				et, err := ddl.handleModifyColumn(qec, info, spec)
+				if err != nil {
+					ddl.logger.Warn("handle modify column failed", zap.Error(err))
+				}
+				return et
+			case ast.AlterTableRenameColumn, ast.AlterTableRenameIndex, ast.AlterTableRenameTable:
+				return bf.Rename
+			case ast.AlterTableDropColumn, ast.AlterTableDropIndex, ast.AlterTableDropPartition:
+				return bf.Drop
+			case ast.AlterTableDropPrimaryKey:
+				return bf.ModifyPK
+			case ast.AlterTableTruncatePartition:
+				return bf.Truncate
+			case ast.AlterTableAlterColumn:
+				return bf.ModifyDefaultValue
+			case ast.AlterTableAddConstraint:
+				return bf.ModifyConstraint
+			case ast.AlterTableOption:
+				for _, opt := range spec.Options {
+					switch opt.Tp {
+					case ast.TableOptionCharset:
+						return bf.ModifyCharset
+					case ast.TableOptionCollate:
+						return bf.ModifyCollation
+					case ast.TableOptionEngine:
+						return bf.ModifyStorageEngine
+					}
+				}
+			case ast.AlterTableReorganizePartition:
+				return bf.ReorganizePartion
+			case ast.AlterTableRebuildPartition:
+				return bf.RebuildPartition
+			case ast.AlterTableCoalescePartitions:
+				return bf.CoalescePartition
+			case ast.AlterTableExchangePartition:
+				return bf.ExchangePartition
+			}
+		}
+	default:
+	}
+	return bf.AstToDDLEvent(node)
+}
+
 // skipQueryEvent if skip by binlog-filter:
 // * track the ddlInfo;
 // * changes ddlInfo.originDDL to empty string.
@@ -962,7 +1185,7 @@ func (ddl *DDLWorker) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (
 	if utils.IsBuildInSkipDDL(qec.originSQL) {
 		return true, nil
 	}
-	et := bf.AstToDDLEvent(ddlInfo.stmtCache)
+	et := ddl.AstToDDLEvent(qec, ddlInfo)
 	// get real tables before apply block-allow list
 	realTables := make([]*filter.Table, 0, len(ddlInfo.sourceTables))
 	for _, table := range ddlInfo.sourceTables {

@@ -167,7 +167,7 @@ func OpenFile(ctx context.Context, dir, fileName string, storage bstorage.Extern
 			return nil, err
 		}
 	}
-	return storage.Open(ctx, fileName)
+	return storage.Open(ctx, fileName, nil)
 }
 
 func IsNotExistError(err error) bool {
