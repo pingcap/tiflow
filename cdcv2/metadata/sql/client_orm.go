@@ -135,12 +135,12 @@ func (c *ormClient) queryUpstreamsByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time
 //
 //nolint:unused
 func (c *ormClient) queryUpstreamByID(tx *gorm.DB, id uint64) (*UpstreamDO, error) {
-	var up *UpstreamDO
-	ret := tx.Where("id = ?", id).First(up)
+	var up UpstreamDO
+	ret := tx.Where("id = ?", id).First(&up)
 	if err := handleSingleOpErr(ret, 1, "QueryUpstreamsByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return up, nil
+	return &up, nil
 }
 
 // ================================ ChangefeedInfo Client =================================
@@ -460,7 +460,7 @@ func (c *ormClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, 
 // querySchedulesUinqueOwnerIDs implements the scheduleClient interface.
 func (c *ormClient) querySchedulesUinqueOwnerIDs(tx *gorm.DB) ([]model.CaptureID, error) {
 	var captureIDs []model.CaptureID
-	ret := tx.Model(&ScheduleDO{}).Select("owner").Distinct().Find(&captureIDs)
+	ret := tx.Model(&ScheduleDO{}).Select("owner").Where("owner !=null ").Distinct().Find(&captureIDs)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesUinqueOwnerIDs"); err != nil {
 		return nil, errors.Trace(err)
 	}
