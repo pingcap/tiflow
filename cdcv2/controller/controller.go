@@ -108,6 +108,7 @@ func NewController(
 	return &controllerImpl{
 		upstreamManager:       upstreamManager,
 		changefeeds:           make(map[model.ChangeFeedID]metadata.ScheduledChangefeed),
+		captures:              map[model.CaptureID]*model.CaptureInfo{},
 		lastTickTime:          time.Now(),
 		logLimiter:            rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 		captureInfo:           captureInfo,
