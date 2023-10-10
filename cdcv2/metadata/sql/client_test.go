@@ -28,9 +28,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// ================================ Test Create/Update/Delete =================================
+
 // Note that updateAt is not included in the test because it is automatically updated by gorm.
 // TODO(CharlesCheung): add test to verify the correctness of updateAt.
-func runMockExecTest(t *testing.T, mock sqlmock.Sqlmock, expectedSQL string, args []driver.Value, fn func() error) {
+func runMockExecTest(
+	t *testing.T, mock sqlmock.Sqlmock,
+	expectedSQL string, args []driver.Value,
+	fn func() error,
+	skipCheck ...bool, /* 0: test ErrMetaRowsAffectedNotMatch, 1: test ErrMetaOpFailed */
+) {
 	testErr := errors.New("test error")
 
 	// Test normal execution
@@ -41,13 +48,17 @@ func runMockExecTest(t *testing.T, mock sqlmock.Sqlmock, expectedSQL string, arg
 	// Test rows affected not match
 	mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnResult(sqlmock.NewResult(1, 0))
 	err = fn()
-	require.ErrorIs(t, err, errors.ErrMetaRowsAffectedNotMatch)
+	if len(skipCheck) < 1 || !skipCheck[0] {
+		require.ErrorIs(t, err, errors.ErrMetaRowsAffectedNotMatch)
+	}
 
 	// Test op failed
 	mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnError(testErr)
 	err = fn()
-	require.ErrorIs(t, err, errors.ErrMetaOpFailed)
-	require.ErrorContains(t, err, testErr.Error())
+	if len(skipCheck) < 2 || !skipCheck[1] {
+		require.ErrorIs(t, err, errors.ErrMetaOpFailed)
+		require.ErrorContains(t, err, testErr.Error())
+	}
 }
 
 func TestUpstreamClientExecSQL(t *testing.T) {
@@ -117,7 +128,7 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 
 	backendDB, db, mock := newMockDB(t)
 	defer backendDB.Close()
-	cient := NewORMClient("test-changefeed-info-client", db)
+	client := NewORMClient("test-changefeed-info-client", db)
 
 	info := &ChangefeedInfoDO{
 		ChangefeedInfo: metadata.ChangefeedInfo{
@@ -151,7 +162,7 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 			info.Version, sqlmock.AnyArg(), info.UUID,
 		},
 		func() error {
-			return cient.createChangefeedInfo(db, info)
+			return client.createChangefeedInfo(db, info)
 		},
 	)
 
@@ -161,7 +172,7 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 		"DELETE FROM `changefeed_info` WHERE `changefeed_info`.`uuid` = ?",
 		[]driver.Value{info.UUID},
 		func() error {
-			return cient.deleteChangefeedInfo(db, info)
+			return client.deleteChangefeedInfo(db, info)
 		},
 	)
 
@@ -171,7 +182,7 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 		"UPDATE `changefeed_info` SET `sink_uri`=?,`start_ts`=?,`target_ts`=?,`config`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
 		[]driver.Value{info.SinkURI, info.StartTs, info.TargetTs, configValue, info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
 		func() error {
-			return cient.updateChangefeedInfo(db, info)
+			return client.updateChangefeedInfo(db, info)
 		},
 	)
 
@@ -182,7 +193,17 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 		"UPDATE `changefeed_info` SET `sink_uri`=?,`start_ts`=?,`target_ts`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
 		[]driver.Value{info.SinkURI, info.StartTs, info.TargetTs, info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
 		func() error {
-			return cient.updateChangefeedInfo(db, info)
+			return client.updateChangefeedInfo(db, info)
+		},
+	)
+
+	// Test markChangefeedRemoved
+	runMockExecTest(
+		t, mock,
+		"UPDATE `changefeed_info` SET `removed_at`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
+		[]driver.Value{sqlmock.AnyArg(), info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
+		func() error {
+			return client.markChangefeedRemoved(db, info)
 		},
 	)
 }
@@ -315,6 +336,17 @@ func TestScheduleClientExecSQL(t *testing.T) {
 			return cient.updateScheduleOwnerState(db, schedule)
 		},
 	)
+
+	// Test updateScheduleOwnerStateByOwnerID
+	runMockExecTest(
+		t, mock,
+		"UPDATE `schedule` SET `owner`=?,`owner_state`=?,`processors`=?,`version`=version + ?,`update_at`=? WHERE owner = ?",
+		[]driver.Value{nil, metadata.SchedRemoved, nil, 1, sqlmock.AnyArg(), *schedule.Owner},
+		func() error {
+			return cient.updateScheduleOwnerStateByOwnerID(db, metadata.SchedRemoved, *schedule.Owner)
+		},
+		true, // skip check ErrMetaRowsAffectedNotMatch since multiple rows would be affected.
+	)
 }
 
 func TestProgressClientExecSQL(t *testing.T) {
@@ -360,4 +392,58 @@ func TestProgressClientExecSQL(t *testing.T) {
 			return cient.updateProgress(db, progress)
 		},
 	)
+}
+
+// ================================ Test Query =================================
+
+// runMockQueryTest is used to test query functions.
+func runMockQueryTest(
+	t *testing.T, mock sqlmock.Sqlmock,
+	expectedSQL string, args []driver.Value,
+	fn func() error,
+	skipCheck ...bool, /* 0: test ErrMetaRowsAffectedNotMatch, 1: test ErrMetaOpFailed */
+) {
+	testErr := errors.New("test error")
+
+	// Test normal execution
+	mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnResult(sqlmock.NewResult(1, 1))
+	err := fn()
+	require.NoError(t, err)
+
+	// Test rows affected not match
+	mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnResult(sqlmock.NewResult(1, 0))
+	err = fn()
+	if len(skipCheck) < 1 || !skipCheck[0] {
+		require.ErrorIs(t, err, errors.ErrMetaRowsAffectedNotMatch)
+	}
+
+	// Test op failed
+	mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnError(testErr)
+	err = fn()
+	if len(skipCheck) < 2 || !skipCheck[1] {
+		require.ErrorIs(t, err, errors.ErrMetaOpFailed)
+		require.ErrorContains(t, err, testErr.Error())
+	}
+}
+
+func TestUpstreamClientQuerySQL(t *testing.T) {
+	t.Parallel()
+
+	backendDB, db, mock := newMockDB(t)
+	defer backendDB.Close()
+	client := NewORMClient("test-upstream-client-query", db)
+
+	// Test queryUpstreams
+	expectedSQL := "SELECT * FROM `upstream`"
+	mock.ExpectQuery(expectedSQL).WillReturnRows(
+		sqlmock.NewRows([]string{"id", "endpoints", "config", "version", "update_at"}).
+			AddRow(1, "endpoint1,endpoint2", "config", 1, time.Now()),
+	)
+	upstreams, err := client.queryUpstreams(db)
+	require.NoError(t, err)
+	require.Len(t, upstreams, 1)
+	require.Equal(t, 1, upstreams[0].ID)
+	require.Equal(t, "endpoint1,endpoint2", upstreams[0].Endpoints)
+	require.Equal(t, "config", upstreams[0].Config)
+	require.Equal(t, uint64(1), upstreams[0].Version)
 }
