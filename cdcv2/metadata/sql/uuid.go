@@ -11,14 +11,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package memory
+package sql
 
 import (
-	"testing"
+	"sync/atomic"
 
-	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/pingcap/tiflow/cdcv2/metadata"
 )
 
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+type uuidGenerator interface {
+	GenChangefeedUUID() metadata.ChangefeedUUID
 }
+
+func NewUUIDGenerator() uuidGenerator {
+	return &mockUUIDGenerator{}
+}
+
+type mockUUIDGenerator struct {
+	epoch atomic.Uint64
+}
+
+func (g *mockUUIDGenerator) GenChangefeedUUID() metadata.ChangefeedUUID {
+	return g.epoch.Add(1)
+}
+
+// TODO: implement sql based UUID generator.

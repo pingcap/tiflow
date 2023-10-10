@@ -54,9 +54,9 @@ func TestAutoMigrateTables(t *testing.T) {
 
 	mockSchmaFn("changefeed_info")
 	mock.ExpectExec("CREATE TABLE `changefeed_info` (`uuid` bigint(20) unsigned,`namespace` varchar(128) NOT NULL," +
-		"`id` varchar(128) NOT NULL,`removed_at` datetime(6),`upstream_id` bigint(20) unsigned NOT NULL," +
-		"`sink_uri` text NOT NULL,`start_ts` bigint(20) unsigned NOT NULL,`target_ts` bigint(20) unsigned NOT NULL," +
-		"`config` longtext NOT NULL,`version` bigint(20) unsigned NOT NULL,`update_at` datetime(6) NOT NULL," +
+		"`id` varchar(128) NOT NULL,`upstream_id` bigint(20) unsigned NOT NULL,`sink_uri` text NOT NULL," +
+		"`start_ts` bigint(20) unsigned NOT NULL,`target_ts` bigint(20) unsigned NOT NULL,`config` longtext NOT NULL," +
+		"`removed_at` datetime(6),`version` bigint(20) unsigned NOT NULL,`update_at` datetime(6) NOT NULL," +
 		"PRIMARY KEY (`uuid`),UNIQUE INDEX `namespace` (`namespace`,`id`),INDEX `upstream_id` (`upstream_id`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 

@@ -24,8 +24,39 @@ import (
 // Querier is used to query informations from metadata storage.
 type Querier interface {
 	// GetChangefeed queries some or all changefeeds.
-	GetChangefeeds(...model.ChangeFeedID) ([]*ChangefeedInfo, []ChangefeedIDWithEpoch, error)
+	GetChangefeeds(...ChangefeedUUID) ([]*ChangefeedInfo, error)
 }
+
+// -------------------- About owner schedule -------------------- //
+// 1. ControllerObservation.SetOwner puts an owner on a given capture;
+// 2. ControllerObservation.SetOwner can also stop an owner;
+// 3. Capture fetches owner launch/stop events with CaptureObservation.OwnerChanges;
+// 4. Capture calls Capture.PostOwnerRemoved when the owner exits;
+// 5. After controller confirms the old owner exits, it can re-reschedule it.
+// -------------------------------------------------------------- //
+
+// ---------- About changefeed processor captures schedule ---------- //
+// 1. ControllerObservation.SetProcessors attaches some captures to a changefeed;
+// 2. ControllerObservation.SetProcessors can also detach captures from a changefeed;
+// 3. Owner calls OwnerObservation.ProcessorChanges to know processors are created;
+// 4. Capture fetches processor launch/stop events with CaptureObservation.ProcessorChanges;
+// 5. How to rolling-update a changefeed with only one worker capture:
+//    * controller needs only to attach more captures to the changefeed;
+//    * it's owner's responsibility to evict tables between captures.
+// 5. What if owner knows processors are created before captures?
+//    * table schedule should be robust enough.
+// ------------------------------------------------------------------ //
+
+// ---------------- About keep-alive and heartbeat ---------------- //
+// 1. Capture updates heartbeats to metadata by calling CaptureObservation.Heartbeat,
+//    with a given timeout, for example, 1s;
+// 2. On a capture, controller, owners and processors share one same Context, which is
+//    associated with deadline 10s. CaptureObservation.Heartbeat will refresh the deadline.
+// 3. Controller is binded with a lease (10+1+1)s, for deadline, heartbeat time-elapsed
+//    and network clock skew.
+// 4. Controller needs to consider re-schedule owners and processors from a capture,
+//    if the capture has been partitioned with metadata storage more than lease+5s;
+// ---------------------------------------------------------------- //
 
 // CaptureObservation is for observing and updating metadata on a CAPTURE instance.
 //
@@ -42,30 +73,27 @@ type CaptureObservation interface {
 	) error
 
 	// Advance advances some changefeed progresses that are collected from processors.
-	Advance(cfs []ChangefeedIDWithEpoch, progresses []ChangefeedProgress) error
+	Advance(cp CaptureProgress) error
 
 	// Fetch owner modifications.
 	OwnerChanges() <-chan ScheduledChangefeed
 
 	// When an owner exits, inform the metadata storage.
-	PostOwnerRemoved(cf ChangefeedIDWithEpoch) error
-
-	// Fetch processor list modifications.
-	ProcessorChanges() <-chan ScheduledChangefeed
-
-	// When a processor exits, inform the metadata storage.
-	PostProcessorRemoved(cf ChangefeedIDWithEpoch) error
+	PostOwnerRemoved(cf ChangefeedUUID) error
 }
 
 // ControllerObservation is for observing and updating meta by Controller.
 //
 // All intrefaces are thread-safe and shares one same Context.
 type ControllerObservation interface {
-	// CreateChangefeed creates a changefeed, Epoch will be filled into the input ChangefeedInfo.
-	CreateChangefeed(cf *ChangefeedInfo, up *model.UpstreamInfo) (ChangefeedIDWithEpoch, error)
+	// CreateChangefeed creates a changefeed, UUID will be filled into the input ChangefeedInfo.
+	CreateChangefeed(cf *ChangefeedInfo, up *model.UpstreamInfo) (ChangefeedIdent, error)
 
-	// RemoveChangefeed removes a changefeed, will auto stop owner and processors.
-	RemoveChangefeed(cf ChangefeedIDWithEpoch) error
+	// RemoveChangefeed removes a changefeed, will mark it as removed and stop the owner and processors asynchronizely.
+	RemoveChangefeed(cf ChangefeedUUID) error
+
+	// CleanupChangefeed cleans up a changefeed, will delete info, schdule and state metadata.
+	CleanupChangefeed(cf ChangefeedUUID) error
 
 	// Fetch the latest capture list in the TiCDC cluster.
 	RefreshCaptures() (captures []*model.CaptureInfo, changed bool)
@@ -74,26 +102,23 @@ type ControllerObservation interface {
 	// Notes:
 	//   * the target capture can fetch the event by `OwnerChanges`.
 	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetOwner(cf ChangefeedIDWithEpoch, target ScheduledChangefeed) error
-
-	// Schedule some captures as workers to a given changefeed.
-	// Notes:
-	//   * target captures can fetch the event by `ProcessorChanges`.
-	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
-	SetProcessors(cf ChangefeedIDWithEpoch, workers []ScheduledChangefeed) error
+	SetOwner(target ScheduledChangefeed) error
 
 	// Get current schedule of the given changefeed.
-	GetChangefeedSchedule(cf ChangefeedIDWithEpoch) (ChangefeedSchedule, error)
+	GetChangefeedSchedule(cf ChangefeedUUID) (ScheduledChangefeed, error)
 
 	// Get a snapshot of all changefeeds current schedule.
-	ScheduleSnapshot() ([]ChangefeedSchedule, []*model.CaptureInfo, error)
+	ScheduleSnapshot() ([]ScheduledChangefeed, []*model.CaptureInfo, error)
 }
 
 // OwnerObservation is for observing and updating running status of a changefeed.
 //
 // All intrefaces are thread-safe and shares one same Context.
 type OwnerObservation interface {
-	Self() (*ChangefeedInfo, ChangefeedIDWithEpoch)
+	Self() *ChangefeedInfo
+
+	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
+	UpdateChangefeed(*ChangefeedInfo) error
 
 	// PauseChangefeed pauses a changefeed.
 	PauseChangefeed() error
@@ -101,23 +126,20 @@ type OwnerObservation interface {
 	// ResumeChangefeed resumes a changefeed.
 	ResumeChangefeed() error
 
-	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
-	UpdateChangefeed(*ChangefeedInfo) error
-
-	// set the changefeed to state finished.
+	// SetChangefeedFinished set the changefeed to state finished.
 	SetChangefeedFinished() error
 
-	// Set the changefeed to state failed.
-	SetChangefeedFailed(err model.RunningError) error
+	// SetChangefeedRemoved set the changefeed to state removed.
+	SetChangefeedRemoved() error
 
-	// Set the changefeed to state warning.
-	SetChangefeedWarning(warn model.RunningError) error
+	// SetChangefeedFailed set the changefeed to state failed.
+	SetChangefeedFailed(err *model.RunningError) error
 
-	// Set the changefeed to state pending.
-	SetChangefeedPending() error
+	// SetChangefeedWarning set the changefeed to state warning.
+	SetChangefeedWarning(warn *model.RunningError) error
 
-	// Fetch the latest capture list to launch processors.
-	RefreshProcessors() (captures []ScheduledChangefeed, changed bool)
+	// SetChangefeedPending sets the changefeed to state pending.
+	SetChangefeedPending(err *model.RunningError) error
 }
 
 // Elector is used to campaign for capture controller.
