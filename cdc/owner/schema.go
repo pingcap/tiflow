@@ -126,7 +126,9 @@ func (s *schemaWrap4Owner) AllTables(
 	return tables, nil
 }
 
-func (s *schemaWrap4Owner) IsIneligibleTableID(
+// IsIneligibleTable returns whether the table is ineligible.
+// It uses the snapshot of the given ts to check the table.
+func (s *schemaWrap4Owner) IsIneligibleTable(
 	ctx context.Context,
 	tableID model.TableID,
 	ts model.Ts,
