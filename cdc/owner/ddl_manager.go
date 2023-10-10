@@ -232,7 +232,7 @@ func (m *ddlManager) tick(
 				// TODO: find a better place to do this check
 				// check if the ddl event is belong to an ineligible table.
 				// If so, we should ignore it.
-				if filter.IsSchemaDDL(event.Type) {
+				if !filter.IsSchemaDDL(event.Type) {
 					ignore, err := m.schema.
 						IsIneligibleTable(ctx, event.TableInfo.TableName.TableID, event.CommitTs)
 					if err != nil {
