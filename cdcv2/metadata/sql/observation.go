@@ -44,7 +44,8 @@ type CaptureOb[T TxnContext] struct {
 	// TODO(CharlesCheung): handle ctx properly.
 	egCtx context.Context
 
-	client client[T]
+	client        client[T]
+	leaderChecker LeaderChecker[T]
 
 	tasks *entity[metadata.ChangefeedUUID, *ScheduleDO]
 
@@ -65,12 +66,14 @@ func NewCaptureObservation(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+
 	if err := AutoMigrate(db); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &CaptureOb[*gorm.DB]{
 		selfInfo:         selfInfo,
 		client:           NewORMClient(selfInfo.ID, db),
+		leaderChecker:    electionStorage,
 		tasks:            newEntity[metadata.ChangefeedUUID, *ScheduleDO](defaultMaxExecTime),
 		Elector:          metadata.NewElector(selfInfo, electionStorage),
 		ownerChanges:     chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
@@ -127,11 +130,7 @@ func (c *CaptureOb[T]) onTakeControl(
 	controllerCallback func(context.Context, metadata.ControllerObservation) error,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
-		checker, ok := c.Elector.(LeaderChecker[T])
-		if !ok {
-			return errors.New("capture elector is not a leader checker")
-		}
-		controllerOb := newControllerObservation(checker, c.client, c.selfInfo, c.getAllCaptures)
+		controllerOb := newControllerObservation(c.leaderChecker, c.client, c.selfInfo, c.getAllCaptures)
 
 		eg, egCtx := errgroup.WithContext(ctx)
 		eg.Go(func() error {
