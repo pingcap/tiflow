@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -27,6 +28,7 @@ import (
 func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	t.Parallel()
 
+	var checkpoint tablepb.Checkpoint
 	sched := newBalanceScheduler(time.Duration(0), 3)
 	sched.random = nil
 
@@ -37,14 +39,14 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	})
-	tasks := sched.Schedule(0, currentTables, captures, replications)
+	tasks := sched.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.NotNil(t, tasks[0].MoveTable)
 	require.Equal(t, tasks[0].MoveTable.Span.TableID, model.TableID(1))
 
 	// New capture "b" online, but this time has capture is stopping
 	captures["a"].State = member.CaptureStateStopping
-	tasks = sched.Schedule(0, currentTables, captures, replications)
+	tasks = sched.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// New capture "b" online, it keeps balancing, even though it has not pass
@@ -56,7 +58,7 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	})
-	tasks = sched.Schedule(0, currentTables, captures, replications)
+	tasks = sched.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 
 	// New capture "b" online, but this time it not pass check balance interval.
@@ -68,13 +70,14 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	})
-	tasks = sched.Schedule(0, currentTables, captures, replications)
+	tasks = sched.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 }
 
 func TestSchedulerBalanceTaskLimit(t *testing.T) {
 	t.Parallel()
 
+	var checkpoint tablepb.Checkpoint
 	sched := newBalanceScheduler(time.Duration(0), 2)
 	sched.random = nil
 
@@ -87,10 +90,10 @@ func TestSchedulerBalanceTaskLimit(t *testing.T) {
 		3: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		4: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	})
-	tasks := sched.Schedule(0, currentTables, captures, replications)
+	tasks := sched.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
 
 	sched = newBalanceScheduler(time.Duration(0), 1)
-	tasks = sched.Schedule(0, currentTables, captures, replications)
+	tasks = sched.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 }
