@@ -48,7 +48,7 @@ func TestHandleKeyPriority(t *testing.T) {
 				State:     timodel.StatePublic,
 			},
 			{
-				Name:      timodel.CIStr{O: "d"},
+				Name: timodel.CIStr{O: "d"},
 				FieldType: parser_types.FieldType{
 					// test not null unique index
 					// Flag: mysql.NotNullFlag,
@@ -269,4 +269,36 @@ func TestTableInfoClone(t *testing.T) {
 	require.Equal(t, cloned.SchemaID, info.SchemaID)
 	cloned.SchemaID = 100
 	require.Equal(t, int64(10), info.SchemaID)
+}
+
+func TestIndexByName(t *testing.T) {
+	
+	tableInfo := &TableInfo{
+		TableInfo: &timodel.TableInfo{
+			Indices: []*timodel.IndexInfo{
+				{
+					Name: timodel.CIStr{
+						O: "idx1",
+					},
+					Columns: []*timodel.IndexColumn{
+						{
+							Name: timodel.CIStr{
+								O: "col1",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	names, offsets, ok := tableInfo.IndexByName("idx2")
+	require.False(t, ok)
+	require.Nil(t, names)
+	require.Nil(t, offsets)
+
+	names, offsets, ok = tableInfo.IndexByName("idx1")
+	require.True(t, ok)
+	require.Equal(t, []string{"col1"}, names)
+	require.Equal(t, []int{0}, offsets)
 }
