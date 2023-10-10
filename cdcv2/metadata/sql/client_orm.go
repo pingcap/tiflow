@@ -401,7 +401,7 @@ func (c *ormClient) updateScheduleOwnerStateByOwnerID(tx *gorm.DB, state metadat
 			"owner":       nil,
 			"owner_state": state,
 			"processors":  nil,
-			"version":     gorm.Expr("version * ?", 1),
+			"version":     gorm.Expr("version + ?", 1),
 		})
 	if err := handleSingleOpErr(ret, -1, "UpdateScheduleOwnerStateByOwnerID"); err != nil {
 		return errors.Trace(err)
