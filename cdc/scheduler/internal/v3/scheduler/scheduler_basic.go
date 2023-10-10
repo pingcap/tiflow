@@ -49,7 +49,7 @@ func (b *basicScheduler) Name() string {
 }
 
 func (b *basicScheduler) Schedule(
-	checkpointTs model.Ts,
+	checkpointTs tablepb.Checkpoint,
 	currentSpans []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications *spanz.BtreeMap[*replication.ReplicationSet],
@@ -140,16 +140,16 @@ func (b *basicScheduler) Schedule(
 // newBurstAddTables add each new table to captures in a round-robin way.
 func newBurstAddTables(
 	changefeedID model.ChangeFeedID,
-	checkpointTs model.Ts, newSpans []tablepb.Span, captureIDs []model.CaptureID,
+	checkpointTs tablepb.Checkpoint, newSpans []tablepb.Span, captureIDs []model.CaptureID,
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newSpans))
 	for _, span := range newSpans {
 		targetCapture := captureIDs[idx]
 		tables = append(tables, replication.AddTable{
-			Span:         span,
-			CaptureID:    targetCapture,
-			CheckpointTs: checkpointTs,
+			Span:       span,
+			CaptureID:  targetCapture,
+			Checkpoint: checkpointTs,
 		})
 		log.Info("schedulerv3: burst add table",
 			zap.String("namespace", changefeedID.Namespace),
