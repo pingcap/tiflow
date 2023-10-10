@@ -88,12 +88,6 @@ func (sm *Manager) Schedule(
 			sm.tasksCounter[name]++
 		}
 		if len(tasks) != 0 {
-			log.Info("schedulerv3: new schedule task",
-				zap.String("namespace", sm.changefeedID.Namespace),
-				zap.String("changefeed", sm.changefeedID.ID),
-				zap.Int("taskNumber", len(tasks)),
-				zap.Any("task", tasks),
-				zap.String("scheduler", scheduler.Name()))
 			return tasks
 		}
 	}
