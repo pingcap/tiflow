@@ -86,6 +86,17 @@ func (c *CaptureOb[T]) Run(
 	eg, egCtx := errgroup.WithContext(egCtx)
 	c.egCtx = egCtx
 
+	err = c.client.Txn(egCtx, func(tx T) error {
+		return c.client.createProgress(tx, &ProgressDO{
+			CaptureID: c.selfInfo.ID,
+			Progress:  nil,
+			Version:   1,
+		})
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	eg.Go(func() error {
 		return c.Elector.RunElection(egCtx, c.onTakeControl(controllerCallback))
 	})
