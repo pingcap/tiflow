@@ -59,7 +59,7 @@ type dmlSink struct {
 	adminClient kafka.ClusterAdminClient
 
 	ctx    context.Context
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 
 	wg   sync.WaitGroup
 	dead chan struct{}
@@ -79,7 +79,7 @@ func newDMLSink(
 	scheme string,
 	errCh chan error,
 ) *dmlSink {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
 	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
 
@@ -144,10 +144,16 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			continue
 		}
 		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
+
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
+			failpoint.Inject("MQSinkGetPartitionError", func() {
+				log.Info("failpoint MQSinkGetPartitionError injected", zap.String("changefeedID", s.id.ID))
+				err = errors.New("MQSinkGetPartitionError")
+			})
 			if err != nil {
+				s.cancel(err)
 				return errors.Trace(err)
 			}
 			index, key := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
@@ -170,7 +176,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 // Close closes the sink.
 func (s *dmlSink) Close() {
 	if s.cancel != nil {
-		s.cancel()
+		s.cancel(nil)
 	}
 	s.wg.Wait()
 
