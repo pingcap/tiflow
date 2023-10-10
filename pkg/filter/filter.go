@@ -160,13 +160,12 @@ func (f *filter) ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, sc
 		return
 	}
 
-	switch ddlType {
-	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
-		timodel.ActionModifySchemaCharsetAndCollate:
+	if IsSchemaDDL(ddlType) {
 		discard = !f.tableFilter.MatchSchema(schema)
-	default:
+	} else {
 		discard = f.ShouldIgnoreTable(schema, table)
 	}
+
 	if discard {
 		return
 	}
@@ -208,4 +207,15 @@ func isAllowedDDL(actionType timodel.ActionType) bool {
 		}
 	}
 	return false
+}
+
+// IsSchemaDDL returns true if the action type is a schema DDL.
+func IsSchemaDDL(actionType timodel.ActionType) bool {
+	switch actionType {
+	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
+		timodel.ActionModifySchemaCharsetAndCollate:
+		return true
+	default:
+		return false
+	}
 }
