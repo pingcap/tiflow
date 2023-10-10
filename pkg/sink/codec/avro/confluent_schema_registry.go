@@ -138,7 +138,6 @@ func (m *confluentSchemaManager) Register(
 		return id, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(schemaName) + "/versions"
-	log.Info("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
 	if err != nil {
@@ -192,11 +191,6 @@ func (m *confluentSchemaManager) Register(
 		)
 	}
 
-	log.Info("Registered schema successfully",
-		zap.Int("schemaID", jsonResp.SchemaID),
-		zap.String("uri", uri),
-		zap.ByteString("body", body))
-
 	id.confluentSchemaID = jsonResp.SchemaID
 	return id, nil
 }
@@ -218,12 +212,7 @@ func (m *confluentSchemaManager) Lookup(
 	}
 	m.cacheRWLock.RUnlock()
 
-	log.Info("Avro schema lookup cache miss",
-		zap.String("key", schemaName),
-		zap.Int("schemaID", schemaID.confluentSchemaID))
-
 	uri := m.registryURL + "/schemas/ids/" + strconv.Itoa(schemaID.confluentSchemaID)
-	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
 	if err != nil {
@@ -290,10 +279,6 @@ func (m *confluentSchemaManager) Lookup(
 	m.cache[schemaName] = cacheEntry
 	m.cacheRWLock.Unlock()
 
-	log.Info("Avro schema lookup successful with cache miss",
-		zap.Int("schemaID", cacheEntry.schemaID.confluentSchemaID),
-		zap.String("schema", cacheEntry.codec.Schema()))
-
 	return cacheEntry.codec, nil
 }
 
@@ -317,10 +302,6 @@ func (m *confluentSchemaManager) GetCachedOrRegister(
 		return entry.codec, entry.header, nil
 	}
 	m.cacheRWLock.RUnlock()
-
-	log.Info("Avro schema lookup cache miss",
-		zap.String("key", schemaSubject),
-		zap.Uint64("tableVersion", tableVersion))
 
 	schema, err := schemaGen()
 	if err != nil {
@@ -352,11 +333,6 @@ func (m *confluentSchemaManager) GetCachedOrRegister(
 	m.cacheRWLock.Lock()
 	m.cache[schemaSubject] = cacheEntry
 	m.cacheRWLock.Unlock()
-
-	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
-		zap.Uint64("tableVersion", cacheEntry.tableVersion),
-		zap.Int("schemaID", cacheEntry.schemaID.confluentSchemaID),
-		zap.String("schema", cacheEntry.codec.Schema()))
 
 	return codec, cacheEntry.header, nil
 }
