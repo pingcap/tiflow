@@ -18,43 +18,56 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/scheduler"
-	"github.com/pingcap/tiflow/cdcv2/metadata"
-	"github.com/pingcap/tiflow/cdcv2/metadata/memory"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"go.uber.org/zap"
 )
 
 type changefeedImpl struct {
-	scheduler scheduler.Scheduler
+	uuid uint64
+	ID   model.ChangeFeedID
 
-	Info      *model.ChangeFeedInfo
-	Status    *model.ChangeFeedStatus
-	owner     metadata.OwnerObservation
-	storage   *memory.Storage
-	processor processor.Manager
+	Info       *model.ChangeFeedInfo
+	Status     *model.ChangeFeedStatus
+	processor  processor.Processor
+	changefeed owner.Changefeed
 }
 
-func newChangefeed(storage *memory.Storage,
-	c *metadata.ChangefeedInfo,
-	id metadata.ChangefeedIDWithEpoch) *changefeedImpl {
-	memory.NewOwnerDB(storage, c, id)
-	return &changefeedImpl{}
+func newChangefeed(changefeed owner.Changefeed,
+	info *model.ChangeFeedInfo,
+	status *model.ChangeFeedStatus,
+	processor processor.Processor) *changefeedImpl {
+	return &changefeedImpl{
+		changefeed: changefeed,
+		Status:     status,
+		Info:       info,
+		processor:  processor,
+	}
 }
 
 // GetInfoProvider returns an InfoProvider if one is available.
 func (c *changefeedImpl) GetInfoProvider() scheduler.InfoProvider {
-	if provider, ok := c.scheduler.(scheduler.InfoProvider); ok {
+	if provider, ok := c.changefeed.GetScheduler().(scheduler.InfoProvider); ok {
 		return provider
 	}
 	return nil
 }
 
-func (c *changefeedImpl) tick(ctx context.Context, captures map[model.CaptureID]*model.CaptureInfo) error {
-	return nil
+func (c *changefeedImpl) Tick(ctx cdcContext.Context, info *model.ChangeFeedInfo,
+	status *model.ChangeFeedStatus, captures map[model.CaptureID]*model.CaptureInfo) (model.Ts, model.Ts) {
+	err, warning := c.processor.Tick(ctx, info, status)
+	if err != nil {
+
+	}
+	if warning != nil {
+
+	}
+	return c.changefeed.Tick(ctx, info, status, captures)
 }
 
-func (c *changefeedImpl) Close(ctx context.Context) {
+func (c *changefeedImpl) Close(ctx cdcContext.Context) {
 	c.releaseResources(ctx)
 }
 

@@ -79,7 +79,7 @@ type CaptureObservation interface {
 	OwnerChanges() <-chan ScheduledChangefeed
 
 	// When an owner exits, inform the metadata storage.
-	PostOwnerRemoved(cf ChangefeedUUID) error
+	PostOwnerRemoved(cf ChangefeedUUID, taskPosition ChangefeedProgress) error
 }
 
 // ControllerObservation is for observing and updating meta by Controller.

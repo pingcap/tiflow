@@ -122,7 +122,7 @@ type captureImpl struct {
 		cfg *config.SchedulerConfig,
 	) processor.Manager
 	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
-	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo) controller.Controller
+	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo, etcdClient etcd.CDCEtcdClient) controller.Controller
 }
 
 // NewCapture returns a new Capture instance
@@ -485,7 +485,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.String("captureID", c.info.ID),
 			zap.Int64("ownerRev", ownerRev))
 
-		controller := c.newController(c.upstreamManager, c.info)
+		controller := c.newController(c.upstreamManager, c.info, c.EtcdClient)
 
 		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
 		c.setOwner(owner)

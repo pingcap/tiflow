@@ -59,7 +59,7 @@ type Controller interface {
 }
 
 type controllerImpl struct {
-	changefeeds     map[model.ChangeFeedID]metadata.ChangefeedSchedule
+	changefeeds     map[model.ChangeFeedID]metadata.ScheduledChangefeed
 	captures        map[model.CaptureID]*model.CaptureInfo
 	upstreamManager *upstream.Manager
 
@@ -84,15 +84,30 @@ type controllerImpl struct {
 	controllerObservation metadata.ControllerObservation
 }
 
+func (o *controllerImpl) CreateChangefeedInfo(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo, cfInfo *model.ChangeFeedInfo, id model.ChangeFeedID) error {
+	_, err := o.controllerObservation.CreateChangefeed(&metadata.ChangefeedInfo{
+		Config:   cfInfo.Config,
+		TargetTs: cfInfo.TargetTs,
+		SinkURI:  cfInfo.SinkURI,
+		StartTs:  cfInfo.StartTs,
+		ChangefeedIdent: metadata.ChangefeedIdent{
+			ID:        id.ID,
+			Namespace: id.Namespace,
+		},
+	}, upstreamInfo)
+	return err
+}
+
 // NewController creates a new Controller
 func NewController(
 	upstreamManager *upstream.Manager,
 	captureInfo *model.CaptureInfo,
 	controllerObservation metadata.ControllerObservation,
-) Controller {
+) *controllerImpl {
 	return &controllerImpl{
 		upstreamManager:       upstreamManager,
-		changefeeds:           make(map[model.ChangeFeedID]metadata.ChangefeedSchedule),
+		changefeeds:           make(map[model.ChangeFeedID]metadata.ScheduledChangefeed),
 		lastTickTime:          time.Now(),
 		logLimiter:            rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 		captureInfo:           captureInfo,
@@ -151,8 +166,8 @@ func (o *controllerImpl) Run(stdCtx context.Context) error {
 
 			newMap := make(map[model.ChangeFeedID]struct{})
 			for _, changefeed := range changefeeds {
-				o.changefeeds[changefeed.Owner.ChangefeedID.ID] = changefeed
-				newMap[changefeed.Owner.ChangefeedID.ID] = struct{}{}
+				o.changefeeds[model.ChangeFeedID{}] = changefeed
+				newMap[model.ChangeFeedID{}] = struct{}{}
 			}
 
 			// Cleanup changefeeds that are not in the state.
@@ -283,6 +298,24 @@ func (o *controllerImpl) AsyncStop() {
 func (o *controllerImpl) GetChangefeedOwnerCaptureInfo(id model.ChangeFeedID) *model.CaptureInfo {
 	// todo: schedule changefeed owner to other capture
 	return o.captureInfo
+}
+
+func (o *controllerImpl) CreateChangefeed(cf *model.ChangeFeedInfo, up *model.UpstreamInfo) error {
+	_, err := o.controllerObservation.CreateChangefeed(&metadata.ChangefeedInfo{
+		StartTs:    cf.StartTs,
+		UpstreamID: cf.UpstreamID,
+		Config:     cf.Config,
+		TargetTs:   cf.TargetTs,
+	}, up)
+	return err
+}
+
+func (o *controllerImpl) RemoveChangefeed(cfID model.ChangeFeedID) error {
+	c, ok := o.changefeeds[cfID]
+	if !ok {
+		return nil
+	}
+	return o.controllerObservation.RemoveChangefeed(c.ChangefeedUUID)
 }
 
 // Export field names for pretty printing.

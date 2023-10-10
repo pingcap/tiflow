@@ -160,7 +160,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
+	err = ctrl.CreateChangefeedInfo(ctx,
 		upstreamInfo,
 		info,
 		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})

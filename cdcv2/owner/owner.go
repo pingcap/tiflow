@@ -15,6 +15,7 @@ package owner
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -24,21 +25,29 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
-	"github.com/pingcap/tiflow/cdcv2/metadata/memory"
 	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
 
 type OwnerImpl struct {
+	upstreamManager    *upstream.Manager
 	captureObservation metadata.CaptureObservation
 	cfg                *config.SchedulerConfig
-	storage            *memory.Storage
-	changefeeds        map[model.ChangeFeedID]*changefeedImpl
-	ownerJobQueue      struct {
+	storage            *sql.DB
+	//todo: make a struct
+	changefeeds       map[model.ChangeFeedID]*changefeedImpl
+	changefeedUUIDMap map[metadata.ChangefeedUUID]*changefeedImpl
+
+	liveness *model.Liveness
+
+	ownerJobQueue struct {
 		sync.Mutex
 		queue []*ownerJob
 	}
@@ -94,15 +103,19 @@ func (o *OwnerImpl) AsyncStop() {
 }
 
 func NewOwner(
+	liveness *model.Liveness,
+	upstreamManager *upstream.Manager,
 	cfg *config.SchedulerConfig,
 	captureObservation metadata.CaptureObservation,
 	querier metadata.Querier,
-	storage *memory.Storage) *OwnerImpl {
+	storage *sql.DB) *OwnerImpl {
 	return &OwnerImpl{
+		upstreamManager:    upstreamManager,
 		captureObservation: captureObservation,
 		cfg:                cfg,
 		querier:            querier,
 		storage:            storage,
+		liveness:           liveness,
 	}
 }
 
@@ -119,33 +132,80 @@ func (o *OwnerImpl) Run(ctx context.Context) error {
 			// admin job, which will cause all http api unavailable.
 			o.handleJobs(ctx)
 			self := o.captureObservation.Self()
+			var progress metadata.CaptureProgress = make(map[metadata.ChangefeedUUID]metadata.ChangefeedProgress)
 			for _, cf := range o.changefeeds {
-				//only one capture
-				cf.tick(ctx, map[model.CaptureID]*model.CaptureInfo{
-					self.ID: self})
-			}
-			_ = o.captureObservation.Advance(nil, nil)
-		case cf := <-o.captureObservation.OwnerChanges():
-			switch cf.State {
-			case metadata.SchedRemoving:
-				//stop owner
-				changefeed, exist := o.changefeeds[cf.ChangefeedID.ID]
-				if !exist {
-					log.Warn("changefeed not found when handle a job", zap.Any("job", cf))
-					continue
-				}
-				changefeed.Close(ctx)
-				delete(o.changefeeds, cf.ChangefeedID.ID)
-				o.captureObservation.PostOwnerRemoved(cf.ChangefeedID)
-			case metadata.SchedLaunched:
 				// start owner
-				info, _, err := o.querier.GetChangefeeds(cf.ChangefeedID.ID)
+				info, err := o.querier.GetChangefeeds(cf.uuid)
 				if err != nil {
 					log.Warn("changefeed not found when handle a job", zap.Any("job", cf))
 					continue
 				}
-				changefeed := newChangefeed(o.storage, info[0], cf.ChangefeedID)
-				o.changefeeds[cf.ChangefeedID.ID] = changefeed
+				nInfo := &model.ChangeFeedInfo{
+					Config: info[0].Config,
+				}
+				//only one capture
+				cp, bt := cf.Tick(cdcContext.NewContext(ctx, nil),
+					nInfo,
+					//todo: get changefeed status
+					cf.Status,
+					map[model.CaptureID]*model.CaptureInfo{self.ID: self},
+				)
+				cf.Status = &model.ChangeFeedStatus{
+					CheckpointTs:      cp,
+					MinTableBarrierTs: bt,
+				}
+				progress[cf.uuid] = metadata.ChangefeedProgress{
+					CheckpointTs:      cp,
+					MinTableBarrierTs: bt,
+				}
+			}
+			_ = o.captureObservation.Advance(progress)
+		case cf := <-o.captureObservation.OwnerChanges():
+			switch cf.OwnerState {
+			case metadata.SchedRemoving:
+				//stop owner
+				changefeed, exist := o.changefeedUUIDMap[cf.ChangefeedUUID]
+				if !exist {
+					log.Warn("changefeed not found when handle a job", zap.Any("job", cf))
+					continue
+				}
+				changefeed.Close(cdcContext.NewContext(ctx, nil))
+				delete(o.changefeedUUIDMap, cf.ChangefeedUUID)
+				delete(o.changefeeds, changefeed.ID)
+				_ = o.captureObservation.PostOwnerRemoved(cf.ChangefeedUUID, cf.TaskPosition)
+			case metadata.SchedLaunched:
+				// start owner
+				info, err := o.querier.GetChangefeeds(cf.ChangefeedUUID)
+				if err != nil {
+					log.Warn("changefeed not found when handle a job", zap.Any("job", cf))
+					continue
+				}
+				cfInfo := info[0]
+				//todo: add upstream
+				up, _ := o.upstreamManager.Get(cfInfo.UpstreamID)
+				minfo := &model.ChangeFeedInfo{
+					SinkURI:   cfInfo.SinkURI,
+					Config:    cfInfo.Config,
+					Namespace: cfInfo.Namespace,
+					ID:        cfInfo.ID,
+				}
+				mstatus := &model.ChangeFeedStatus{
+					CheckpointTs:      cf.TaskPosition.CheckpointTs,
+					MinTableBarrierTs: cf.TaskPosition.MinTableBarrierTs,
+					AdminJobType:      cf.TaskPosition.AdminJobType,
+				}
+				cfID := model.ChangeFeedID{
+					Namespace: cfInfo.Namespace,
+					ID:        cfInfo.ID,
+				}
+				p := processor.NewProcessor(minfo, mstatus, nil, cfID, up, o.liveness, 0, o.cfg)
+				o.changefeedUUIDMap[cf.ChangefeedUUID] = newChangefeed(owner.NewChangefeed(
+					cfID,
+					minfo,
+					mstatus, newFeedStateManager(),
+					up, o.cfg,
+				), minfo, mstatus, p)
+				o.changefeeds[o.changefeedUUIDMap[cf.ChangefeedUUID].ID] = o.changefeedUUIDMap[cf.ChangefeedUUID]
 			}
 		}
 	}
@@ -168,8 +228,8 @@ func (o *OwnerImpl) handleJobs(ctx context.Context) {
 			//cfReactor.feedStateManager.PushAdminJob(job.AdminJob)
 		case ownerJobTypeScheduleTable:
 			// Scheduler is created lazily, it is nil before initialization.
-			if cfReactor.scheduler != nil {
-				cfReactor.scheduler.MoveTable(job.TableID, job.TargetCaptureID)
+			if cfReactor.changefeed.GetScheduler() != nil {
+				cfReactor.changefeed.GetScheduler().MoveTable(job.TableID, job.TargetCaptureID)
 			}
 		case ownerJobTypeDrainCapture:
 			// todo: drain capture
@@ -177,8 +237,8 @@ func (o *OwnerImpl) handleJobs(ctx context.Context) {
 			continue // continue here to prevent close the done channel twice
 		case ownerJobTypeRebalance:
 			// Scheduler is created lazily, it is nil before initialization.
-			if cfReactor.scheduler != nil {
-				cfReactor.scheduler.Rebalance()
+			if cfReactor.changefeed.GetScheduler() != nil {
+				cfReactor.changefeed.GetScheduler().Rebalance()
 			}
 		case ownerJobTypeQuery:
 			job.done <- o.handleQueries(job.query)

@@ -57,6 +57,10 @@ type Changefeed interface {
 	Tick(cdcContext.Context, *model.ChangeFeedInfo,
 		*model.ChangeFeedStatus,
 		map[model.CaptureID]*model.CaptureInfo) (model.Ts, model.Ts)
+
+	Close(ctx cdcContext.Context)
+
+	GetScheduler() scheduler.Scheduler
 }
 
 var _ Changefeed = (*changefeed)(nil)
@@ -319,6 +323,10 @@ func (c *changefeed) handleWarning(err error) {
 		Code:    code,
 		Message: err.Error(),
 	})
+}
+
+func (c *changefeed) GetScheduler() scheduler.Scheduler {
+	return c.scheduler
 }
 
 func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context,

@@ -15,6 +15,7 @@ package capture
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"sync"
 
@@ -28,13 +29,12 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
 	controllerv2 "github.com/pingcap/tiflow/cdcv2/controller"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
-	"github.com/pingcap/tiflow/cdcv2/metadata/memory"
+	msql "github.com/pingcap/tiflow/cdcv2/metadata/sql"
 	ownerv2 "github.com/pingcap/tiflow/cdcv2/owner"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
-	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -42,6 +42,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
+	"gorm.io/gorm"
 )
 
 // NewCapture returns a new Capture instance
@@ -98,8 +99,8 @@ type captureImpl struct {
 
 	cancel context.CancelFunc
 
-	storage            *memory.Storage
-	captureDB          metadata.CaptureObservation
+	storage            *sql.DB
+	captureDB          *msql.CaptureOb[*gorm.DB]
 	controllerObserver metadata.ControllerObservation
 }
 
@@ -164,7 +165,7 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	}()
 
 	g, stdCtx := errgroup.WithContext(stdCtx)
-	stdCtx, cancel := context.WithCancel(stdCtx)
+	//stdCtx, cancel := context.WithCancel(stdCtx)
 
 	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
 		CaptureInfo:       c.info,
@@ -174,49 +175,51 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		SortEngineFactory: c.sortEngineFactory,
 	})
 
-	g.Go(func() error {
-		// Processor manager should be closed as soon as possible to prevent double write issue.
-		defer func() {
-			if cancel != nil {
-				// Propagate the cancel signal to the owner and other goroutines.
-				cancel()
-			}
-			log.Info("processor manager closed", zap.String("captureID", c.info.ID))
-		}()
-
-		globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
-
-		globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
-			c.MessageRouter.AddPeer(captureID, addr)
-		})
-		globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
-			c.MessageRouter.RemovePeer(captureID)
-		})
-
-		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
-		// (recoverable errors are intercepted in the processor tick)
-		// so we should also stop the processor and let capture restart or exit
-
-		// run processors
-		//err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
-		log.Info("processor routine exited",
-			zap.String("captureID", c.info.ID), zap.Error(err))
-		return err
-	})
+	//g.Go(func() error {
+	//	// Processor manager should be closed as soon as possible to prevent double write issue.
+	//	defer func() {
+	//		if cancel != nil {
+	//			// Propagate the cancel signal to the owner and other goroutines.
+	//			cancel()
+	//		}
+	//		log.Info("processor manager closed", zap.String("captureID", c.info.ID))
+	//	}()
+	//
+	//	globalState := orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL)
+	//
+	//	globalState.SetOnCaptureAdded(func(captureID model.CaptureID, addr string) {
+	//		c.MessageRouter.AddPeer(captureID, addr)
+	//	})
+	//	globalState.SetOnCaptureRemoved(func(captureID model.CaptureID) {
+	//		c.MessageRouter.RemovePeer(captureID)
+	//	})
+	//
+	//	// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
+	//	// (recoverable errors are intercepted in the processor tick)
+	//	// so we should also stop the processor and let capture restart or exit
+	//
+	//	// run processors
+	//	//err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
+	//	log.Info("processor routine exited",
+	//		zap.String("captureID", c.info.ID), zap.Error(err))
+	//	return err
+	//})
 
 	g.Go(func() error {
 		return c.MessageServer.Run(ctx, c.MessageRouter.GetLocalChannel())
 	})
 
 	g.Go(func() error {
-		return c.captureDB.Run(ctx, func(ctx context.Context,
-			controllerObserver metadata.ControllerObservation) error {
-			c.controllerObserver = controllerObserver
-			c.controller = controllerv2.NewController(
-				c.upstreamManager,
-				c.info, controllerObserver)
-			return nil
-		})
+		return c.captureDB.Run(ctx,
+			func(ctx context.Context,
+				controllerObserver metadata.ControllerObservation) error {
+				c.controllerObserver = controllerObserver
+				ctrl := controllerv2.NewController(
+					c.upstreamManager,
+					c.info, controllerObserver)
+				c.controller = ctrl
+				return ctrl.Run(ctx)
+			})
 	})
 	g.Go(func() error {
 		return c.owner.Run(ctx)
@@ -264,13 +267,16 @@ func (c *captureImpl) reset(ctx context.Context) error {
 
 	c.MessageRouter = p2p.NewMessageRouterWithLocalClient(c.info.ID, c.config.Security, messageClientConfig)
 
-	c.storage = memory.NewStorage()
-	captureDB, err := memory.NewCaptureObservation("/tmp/cdc_m", c.storage, c.info)
+	c.storage, err = sql.Open("mysql", "root:@tcp(localhost:3306)/cdc")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	captureDB, err := msql.NewCaptureObservation(c.storage, c.info)
 	c.captureDB = captureDB
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.owner = ownerv2.NewOwner(c.config.Debug.Scheduler, captureDB, captureDB, c.storage)
+	c.owner = ownerv2.NewOwner(&c.liveness, c.upstreamManager, c.config.Debug.Scheduler, captureDB, captureDB, c.storage)
 
 	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
@@ -306,12 +312,13 @@ func (c *captureImpl) Drain() <-chan struct{} {
 
 func (c *captureImpl) Liveness() model.Liveness {
 	//TODO implement me
-	panic("implement me")
+	return c.liveness
 }
 
 func (c *captureImpl) GetOwner() (owner.Owner, error) {
-	//TODO implement me
-	panic("implement me")
+	c.ownerMu.Lock()
+	defer c.ownerMu.Unlock()
+	return c.owner, nil
 }
 
 func (c *captureImpl) GetController() (controller.Controller, error) {
@@ -324,8 +331,7 @@ func (c *captureImpl) GetController() (controller.Controller, error) {
 }
 
 func (c *captureImpl) GetControllerCaptureInfo(ctx context.Context) (*model.CaptureInfo, error) {
-	//TODO implement me
-	panic("implement me")
+	return c.captureDB.Self(), nil
 }
 
 func (c *captureImpl) IsController() bool {
