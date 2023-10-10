@@ -142,7 +142,7 @@ func (o *controllerImpl) Run(stdCtx context.Context) error {
 			if !o.bootstrapped {
 				o.Bootstrap()
 				o.bootstrapped = true
-				return nil
+				continue
 			}
 			// handleJobs() should be called before clusterVersionConsistent(), because
 			// when there are different versions of cdc nodes in the cluster,
@@ -185,8 +185,6 @@ func (o *controllerImpl) Run(stdCtx context.Context) error {
 			if atomic.LoadInt32(&o.closed) != 0 {
 				return cerror.ErrReactorFinished.GenWithStackByArgs()
 			}
-
-			return nil
 		}
 	}
 }
