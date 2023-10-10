@@ -65,6 +65,9 @@ func NewCaptureObservation(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if err := AutoMigrate(db); err != nil {
+		return nil, errors.Trace(err)
+	}
 	return &CaptureOb[*gorm.DB]{
 		selfInfo:         selfInfo,
 		client:           NewORMClient(selfInfo.ID, db),
