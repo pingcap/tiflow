@@ -176,11 +176,16 @@ func (m *messageRouterImpl) GetClient(target NodeID) MessageClient {
 			defer m.wg.Done()
 			defer cancel()
 			err := client.Run(ctx, "tcp", addr, target, m.credentials)
-			log.Warn("p2p client exited with error",
-				zap.String("addr", addr),
-				zap.String("targetCapture", target),
-				zap.Error(err))
-
+			if err != nil {
+				log.Warn("p2p client exited with error",
+					zap.String("addr", addr),
+					zap.String("targetCapture", target),
+					zap.Error(err))
+			} else {
+				log.Info("peer message client exited",
+					zap.String("addr", addr),
+					zap.String("targetCapture", target))
+			}
 			if errors.Cause(err) != context.Canceled {
 				// Send the error to the error channel.
 				select {

@@ -35,12 +35,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	ddlsinkfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
 	eventsinkfactory "github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
-	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	sutil "github.com/pingcap/tiflow/cdc/sink/util"
-	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -64,9 +61,6 @@ type ConsumerOption struct {
 	protocol            config.Protocol
 	enableTiDBExtension bool
 
-	// the replicaConfig of the changefeed which produce data to the pulsar topic
-	replicaConfig *config.ReplicaConfig
-
 	logPath       string
 	logLevel      string
 	timezone      string
@@ -83,7 +77,7 @@ func newConsumerOption() *ConsumerOption {
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
-func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
+func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) {
 	// the default value of partitionNum is 1
 	o.partitionNum = 1
 
@@ -120,26 +114,12 @@ func (o *ConsumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		o.enableTiDBExtension = enableTiDBExtension
 	}
 
-	if configFile != "" {
-		replicaConfig := config.GetDefaultReplicaConfig()
-		replicaConfig.Sink.Protocol = util.AddressOf(o.protocol.String())
-		err := cmdUtil.StrictDecodeFile(configFile, "pulsar consumer", replicaConfig)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
-			return errors.Trace(err)
-		}
-		o.replicaConfig = replicaConfig
-	}
-
 	log.Info("consumer option adjusted",
 		zap.String("configFile", configFile),
 		zap.String("address", strings.Join(o.address, ",")),
 		zap.String("topic", o.topic),
 		zap.Any("protocol", o.protocol),
 		zap.Bool("enableTiDBExtension", o.enableTiDBExtension))
-	return nil
 }
 
 var (
@@ -195,10 +175,7 @@ func run(cmd *cobra.Command, args []string) {
 			zap.String("upstreamURI", upstreamURIStr))
 	}
 
-	err = consumerOption.Adjust(upstreamURI, configFile)
-	if err != nil {
-		log.Panic("adjust consumer option failed", zap.Error(err))
-	}
+	consumerOption.Adjust(upstreamURI, configFile)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	consumer, err := NewConsumer(ctx, consumerOption)
@@ -274,9 +251,10 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 	}
 
 	consumerConfig := pulsar.ConsumerOptions{
-		Topic:            topicName,
-		SubscriptionName: subscriptionName,
-		Type:             pulsar.Exclusive,
+		Topic:                       topicName,
+		SubscriptionName:            subscriptionName,
+		Type:                        pulsar.Exclusive,
+		SubscriptionInitialPosition: pulsar.SubscriptionPositionEarliest,
 	}
 
 	consumer, err := client.Subscribe(consumerConfig)
@@ -311,8 +289,6 @@ type Consumer struct {
 	// initialize to 0 by default
 	globalResolvedTs uint64
 
-	eventRouter *dispatcher.EventRouter
-
 	tz *time.Location
 
 	codecConfig *common.Config
@@ -342,14 +318,6 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
 	if c.codecConfig.Protocol == config.ProtocolAvro {
 		c.codecConfig.AvroEnableWatermark = true
-	}
-
-	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, sink.PulsarScheme)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		c.eventRouter = eventRouter
 	}
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
@@ -473,6 +441,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 					zap.ByteString("value", msg.Payload()),
 					zap.Error(err))
 			}
+			log.Info("DDL event received", zap.Any("DDL", ddl))
 			c.appendDDL(ddl)
 		case model.MessageTypeRow:
 			row, err := decoder.NextRowChangedEvent()
@@ -649,6 +618,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 			// 2. check if there is a DDL event that can be executed
 			//   if there is, execute it and update the minResolvedTs
 			nextDDL := c.getFrontDDL()
+			if nextDDL != nil {
+				log.Info("get nextDDL", zap.Any("DDL", nextDDL))
+			}
 			if nextDDL != nil && minResolvedTs >= nextDDL.CommitTs {
 				// flush DMLs that commitTs <= todoDDL.CommitTs
 				if err := c.forEachSink(func(sink *partitionSinks) error {
@@ -656,7 +628,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 				}); err != nil {
 					return errors.Trace(err)
 				}
-
+				log.Info("begin to execute DDL", zap.Any("DDL", nextDDL))
 				// all DMLs with commitTs <= todoDDL.CommitTs have been flushed to downstream,
 				// so we can execute the DDL now.
 				if err := c.ddlSink.WriteDDLEvent(ctx, nextDDL); err != nil {
@@ -664,6 +636,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 				}
 				ddl := c.popDDL()
 				log.Info("DDL executed", zap.Any("DDL", ddl))
+				minResolvedTs = ddl.CommitTs
 			}
 
 			// 3. Update global resolved ts

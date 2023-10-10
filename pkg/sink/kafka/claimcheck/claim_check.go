@@ -80,10 +80,10 @@ func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID
 }
 
 // WriteMessage write message to the claim check external storage.
-func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message, fileName string) error {
+func (c *ClaimCheck) WriteMessage(ctx context.Context, key, value []byte, fileName string) error {
 	m := common.ClaimCheckMessage{
-		Key:   message.Key,
-		Value: message.Value,
+		Key:   key,
+		Value: value,
 	}
 	data, err := json.Marshal(m)
 	if err != nil {

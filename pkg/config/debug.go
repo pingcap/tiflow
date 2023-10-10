@@ -28,6 +28,9 @@ type DebugConfig struct {
 
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
+
+	// EnableKVConnectBackOff enables the backoff for kv connect.
+	EnableKVConnectBackOff bool `toml:"enable-kv-connect-backoff" json:"enable-kv-connect-backoff"`
 }
 
 type MetaStoreConfig struct {
