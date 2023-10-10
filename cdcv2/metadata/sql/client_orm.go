@@ -460,7 +460,7 @@ func (c *ormClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, 
 // querySchedulesUinqueOwnerIDs implements the scheduleClient interface.
 func (c *ormClient) querySchedulesUinqueOwnerIDs(tx *gorm.DB) ([]model.CaptureID, error) {
 	var captureIDs []model.CaptureID
-	ret := tx.Model(&ScheduleDO{}).Select("owner").Where("owner !=null ").Distinct().Find(&captureIDs)
+	ret := tx.Model(&ScheduleDO{}).Select("owner").Where("owner IS NOT NULL").Distinct().Find(&captureIDs)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesUinqueOwnerIDs"); err != nil {
 		return nil, errors.Trace(err)
 	}
