@@ -349,7 +349,7 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 			return errors.Trace(err)
 		}
 
-		if !oldUp.equal(newUp) {
+		if oldUp != nil && !oldUp.equal(newUp) {
 			newUp.Version = oldUp.Version
 			c.client.updateUpstream(tx, newUp)
 		}
