@@ -48,7 +48,7 @@ func TestHandleKeyPriority(t *testing.T) {
 				State:     timodel.StatePublic,
 			},
 			{
-				Name: timodel.CIStr{O: "d"},
+				Name:      timodel.CIStr{O: "d"},
 				FieldType: parser_types.FieldType{
 					// test not null unique index
 					// Flag: mysql.NotNullFlag,
@@ -272,7 +272,6 @@ func TestTableInfoClone(t *testing.T) {
 }
 
 func TestIndexByName(t *testing.T) {
-	
 	tableInfo := &TableInfo{
 		TableInfo: &timodel.TableInfo{
 			Indices: []*timodel.IndexInfo{
