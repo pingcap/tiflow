@@ -1119,7 +1119,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	}
 }
 
-// AstToDDLEvent returns filter.DDLEvent
+// AstToDDLEvent returns filter.DDLEvent.
 func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et bf.EventType) {
 	defer func() {
 		ddl.logger.Info("get ddl event type", zap.String("event_type", string(et)))
