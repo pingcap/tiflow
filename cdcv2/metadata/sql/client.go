@@ -49,7 +49,7 @@ type sqlTxnAction = TxnAction[*sql.Tx]
 
 // LeaderChecker enables the controller to ensure its leadership during a series of actions.
 type LeaderChecker[T TxnContext] interface {
-	TxnWithLeaderLock(ctx context.Context, leaderID string, fn TxnAction[T]) error
+	TxnWithLeaderLock(ctx context.Context, leaderID string, fn func(T) error) error
 }
 
 type checker[T TxnContext] interface {
