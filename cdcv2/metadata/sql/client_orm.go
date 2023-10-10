@@ -438,7 +438,7 @@ func (c *ormClient) querySchedulesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time
 //nolint:unused
 func (c *ormClient) querySchedulesByOwnerIDAndUpdateAt(tx *gorm.DB, captureID string, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
 	var schedules []*ScheduleDO
-	ret := tx.Where("owner = ? and updated_at > ?", captureID, lastUpdateAt).Find(&schedules)
+	ret := tx.Where("owner = ? and update_at > ?", captureID, lastUpdateAt).Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesByOwnerIDAndUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
