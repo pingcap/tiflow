@@ -21,9 +21,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
-// Querier is used to query informations from metadata storage.
+// Querier is used to query information from metadata storage.
 type Querier interface {
-	// GetChangefeed queries some or all changefeeds.
+	// GetChangefeeds queries some or all changefeeds.
 	GetChangefeeds(...ChangefeedUUID) ([]*ChangefeedInfo, error)
 }
 
@@ -75,10 +75,10 @@ type CaptureObservation interface {
 	// Advance advances some changefeed progresses that are collected from processors.
 	Advance(cp CaptureProgress) error
 
-	// Fetch owner modifications.
+	// OwnerChanges fetch owner modifications.
 	OwnerChanges() <-chan ScheduledChangefeed
 
-	// When an owner exits, inform the metadata storage.
+	// PostOwnerRemoved when an owner exits, inform the metadata storage.
 	PostOwnerRemoved(cf ChangefeedUUID) error
 }
 
@@ -95,19 +95,19 @@ type ControllerObservation interface {
 	// CleanupChangefeed cleans up a changefeed, will delete info, schdule and state metadata.
 	CleanupChangefeed(cf ChangefeedUUID) error
 
-	// Fetch the latest capture list in the TiCDC cluster.
+	// RefreshCaptures Fetch the latest capture list in the TiCDC cluster.
 	RefreshCaptures() (captures []*model.CaptureInfo, changed bool)
 
-	// Schedule a changefeed owner to a given target.
+	// SetOwner Schedule a changefeed owner to a given target.
 	// Notes:
 	//   * the target capture can fetch the event by `OwnerChanges`.
 	//   * target state can only be `SchedLaunched` or `SchedRemoving`.
 	SetOwner(target ScheduledChangefeed) error
 
-	// Get current schedule of the given changefeed.
+	// GetChangefeedSchedule Get current schedule of the given changefeed.
 	GetChangefeedSchedule(cf ChangefeedUUID) (ScheduledChangefeed, error)
 
-	// Get a snapshot of all changefeeds current schedule.
+	// ScheduleSnapshot Get a snapshot of all changefeeds current schedule.
 	ScheduleSnapshot() ([]ScheduledChangefeed, []*model.CaptureInfo, error)
 }
 
@@ -115,6 +115,7 @@ type ControllerObservation interface {
 //
 // All intrefaces are thread-safe and shares one same Context.
 type OwnerObservation interface {
+	// Self returns the changefeed info of the owner.
 	Self() *ChangefeedInfo
 
 	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.

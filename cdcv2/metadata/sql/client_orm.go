@@ -224,6 +224,7 @@ func (c *ormClient) queryChangefeedInfosByUpdateAt(tx *gorm.DB, lastUpdateAt tim
 }
 
 // queryChangefeedInfosByUUIDs implements the changefeedInfoClient interface.
+// nolint:unused
 func (c *ormClient) queryChangefeedInfosByUUIDs(tx *gorm.DB, uuids ...uint64) ([]*ChangefeedInfoDO, error) {
 	var infos []*ChangefeedInfoDO
 	ret := tx.Where("uuid in (?)", uuids).Find(&infos)
@@ -326,6 +327,7 @@ func (c *ormClient) queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64) (*Chang
 }
 
 // queryChangefeedStateByUUIDWithLock implements the changefeedStateClient interface.
+// nolint:unused
 func (c *ormClient) queryChangefeedStateByUUIDWithLock(tx *gorm.DB, uuid uint64) (*ChangefeedStateDO, error) {
 	var state *ChangefeedStateDO
 	ret := tx.Where("changefeed_uuid = ?", uuid).
@@ -379,7 +381,7 @@ func (c *ormClient) updateSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 
 // updateScheduleOwnerState implements the scheduleClient interface.
 // TODO(CharlesCheung): check if the version needs to be checked.
-func (s *ormClient) updateScheduleOwnerState(tx *gorm.DB, sc *ScheduleDO) error {
+func (c *ormClient) updateScheduleOwnerState(tx *gorm.DB, sc *ScheduleDO) error {
 	ret := tx.Where("changefeed_uuid = ? and version = ?", sc.ChangefeedUUID, sc.Version).
 		Updates(ScheduleDO{
 			ScheduledChangefeed: metadata.ScheduledChangefeed{
@@ -458,6 +460,7 @@ func (c *ormClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, 
 }
 
 // querySchedulesUinqueOwnerIDs implements the scheduleClient interface.
+// nolint:unused
 func (c *ormClient) querySchedulesUinqueOwnerIDs(tx *gorm.DB) ([]model.CaptureID, error) {
 	var captureIDs []model.CaptureID
 	ret := tx.Model(&ScheduleDO{}).Select("owner").Where("owner IS NOT NULL").Distinct().Find(&captureIDs)

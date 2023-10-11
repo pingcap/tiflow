@@ -123,6 +123,7 @@ type client[T TxnContext] interface {
 const defaultMaxExecTime = 5 * time.Second
 
 // TODO(CharlesCheung): implement a cache layer to reduce the pressure on io and database.
+// nolint:unused
 type clientWithCache[T TxnContext] struct {
 	c     client[T]
 	cache *storage
@@ -210,10 +211,12 @@ func (e *entity[K, V]) doUpsert(
 }
 
 // upsert inserts or updates the entity with write lock.
+// nolint:unused
 func (e *entity[K, V]) upsert(inComming ...V) {
 	e.doUpsert(inComming, nil)
 }
 
+// nolint:unused
 type storage struct {
 	// the key is the upstream id.
 	upsteram *entity[uint64, *UpstreamDO]

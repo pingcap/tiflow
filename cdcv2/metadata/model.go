@@ -131,26 +131,23 @@ const (
 
 // String implements the fmt.Stringer interface.
 func (s SchedState) String() string {
-	str, err := s.toString()
-	if err != nil {
-		log.Error("failed to convert SchedState to string", zap.Error(err))
-	}
-	return str
+	return s.toString()
 }
 
-func (s SchedState) toString() (string, error) {
+func (s SchedState) toString() string {
 	switch s {
 	case SchedLaunched:
-		return "Launched", nil
+		return "Launched"
 	case SchedRemoving:
-		return "Removing", nil
+		return "Removing"
 	case SchedRemoved:
-		return "Removed", nil
+		return "Removed"
 	default:
-		return "unreachable", nil
+		return "unreachable"
 	}
 }
 
+// nolint
 func (s SchedState) fromString(str string) error {
 	switch str {
 	case "Launched":
@@ -168,7 +165,7 @@ func (s SchedState) fromString(str string) error {
 
 // Value implements the driver.Valuer interface.
 func (s SchedState) Value() (driver.Value, error) {
-	return s.toString()
+	return s.toString(), nil
 }
 
 // Scan implements the sql.Scanner interface.

@@ -318,7 +318,7 @@ func (c *ControllerOb[T]) init() error {
 	return c.onCaptureOffline(captureOfflined...)
 }
 
-func (c *ControllerOb[T]) handleAliveCaptures(ctx context.Context) error {
+func (c *ControllerOb[T]) handleAliveCaptures(_ context.Context) error {
 	alives := c.getAllCaptures()
 	hash := sortAndHashCaptureList(alives)
 
@@ -405,6 +405,7 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 	return cf.ChangefeedIdent, err
 }
 
+// RemoveChangefeed removes the changefeed info
 func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
 	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
 		oldInfo, err := c.client.queryChangefeedInfoByUUID(tx, cf)
@@ -480,6 +481,7 @@ func (c *ControllerOb[T]) CleanupChangefeed(cf metadata.ChangefeedUUID) error {
 	})
 }
 
+// RefreshCaptures Fetch the latest capture list in the TiCDC cluster.
 func (c *ControllerOb[T]) RefreshCaptures() (captures []*model.CaptureInfo, changed bool) {
 	c.aliveCaptures.Lock()
 	defer c.aliveCaptures.Unlock()
@@ -548,6 +550,7 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 	return nil
 }
 
+// SetOwner Schedule a changefeed owner to a given target.
 func (c *ControllerOb[T]) SetOwner(target metadata.ScheduledChangefeed) error {
 	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
 		old, err := c.client.queryScheduleByUUID(tx, target.ChangefeedUUID)
@@ -564,6 +567,7 @@ func (c *ControllerOb[T]) SetOwner(target metadata.ScheduledChangefeed) error {
 	})
 }
 
+// GetChangefeedSchedule Get current schedule of the given changefeed.
 func (c *ControllerOb[T]) GetChangefeedSchedule(cf metadata.ChangefeedUUID) (metadata.ScheduledChangefeed, error) {
 	var ret metadata.ScheduledChangefeed
 	err := c.client.Txn(c.egCtx, func(tx T) error {
@@ -577,6 +581,7 @@ func (c *ControllerOb[T]) GetChangefeedSchedule(cf metadata.ChangefeedUUID) (met
 	return ret, err
 }
 
+// ScheduleSnapshot Get a snapshot of all changefeeds current schedule.
 func (c *ControllerOb[T]) ScheduleSnapshot() (ss []metadata.ScheduledChangefeed, cs []*model.CaptureInfo, err error) {
 	err = c.client.Txn(c.egCtx, func(tx T) error {
 		scs, inErr := c.client.querySchedules(tx)
@@ -598,6 +603,7 @@ func (c *ControllerOb[T]) ScheduleSnapshot() (ss []metadata.ScheduledChangefeed,
 	return
 }
 
+// nolint:unused
 type ownerOb[T TxnContext] struct {
 	egCtx    context.Context
 	client   client[T]
@@ -605,6 +611,7 @@ type ownerOb[T TxnContext] struct {
 	cf       *metadata.ChangefeedInfo
 }
 
+// nolint:unused
 func (o *ownerOb[T]) Self() *metadata.ChangefeedInfo {
 	return o.cf
 }
@@ -663,30 +670,37 @@ func (o *ownerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 	})
 }
 
+// ResumeChangefeed resumes a changefeed.
 func (o *ownerOb[T]) ResumeChangefeed() error {
 	return o.updateChangefeedState(model.StateNormal, nil, nil)
 }
 
+// SetChangefeedPending sets the changefeed to state pending.
 func (o *ownerOb[T]) SetChangefeedPending(err *model.RunningError) error {
 	return o.updateChangefeedState(model.StatePending, err, nil)
 }
 
+// SetChangefeedFailed set the changefeed to state failed.
 func (o *ownerOb[T]) SetChangefeedFailed(err *model.RunningError) error {
 	return o.updateChangefeedState(model.StateFailed, err, nil)
 }
 
+// PauseChangefeed pauses a changefeed.
 func (o *ownerOb[T]) PauseChangefeed() error {
 	return o.updateChangefeedState(model.StateStopped, nil, nil)
 }
 
+// SetChangefeedRemoved set the changefeed to state removed.
 func (o *ownerOb[T]) SetChangefeedRemoved() error {
 	return o.updateChangefeedState(model.StateRemoved, nil, nil)
 }
 
+// SetChangefeedFinished set the changefeed to state finished.
 func (o *ownerOb[T]) SetChangefeedFinished() error {
 	return o.updateChangefeedState(model.StateFinished, nil, nil)
 }
 
+// SetChangefeedWarning set the changefeed to state warning.
 func (o *ownerOb[T]) SetChangefeedWarning(warn *model.RunningError) error {
 	return o.updateChangefeedState(model.StateWarning, nil, warn)
 }

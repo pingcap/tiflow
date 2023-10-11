@@ -397,11 +397,12 @@ func TestProgressClientExecSQL(t *testing.T) {
 // ================================ Test Query =================================
 
 // runMockQueryTest is used to test query functions.
+// nolint:unused
 func runMockQueryTest(
 	t *testing.T, mock sqlmock.Sqlmock,
 	expectedSQL string, args []driver.Value,
 	fn func() error,
-	skipCheck ...bool, /* 0: test ErrMetaRowsAffectedNotMatch, 1: test ErrMetaOpFailed */
+	_ ...bool, /* 0: test ErrMetaRowsAffectedNotMatch, 1: test ErrMetaOpFailed */
 ) {
 	// testErr := errors.New("test error")
 
