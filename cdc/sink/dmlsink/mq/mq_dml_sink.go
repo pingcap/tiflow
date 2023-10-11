@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
