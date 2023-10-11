@@ -549,6 +549,7 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 							Processors:     nil,
 							TaskPosition:   taskPosition,
 						},
+						Version: oldSc.Version,
 					}
 					// TODO: use Model to prevent nil value from being ignored.
 					err = c.client.updateSchedule(tx, newSc)
@@ -560,6 +561,7 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 
 			// If capture fails before a owner progress is updated for the first time, the corresponding
 			// taskPosition will not stored in Progress. In this case, we also need to set owner removed.
+			// Version would not be checked here because multiple rows may be updated.
 			err = c.client.updateScheduleOwnerStateByOwnerID(tx, metadata.SchedRemoved, id)
 			if err != nil {
 				return errors.Trace(err)
