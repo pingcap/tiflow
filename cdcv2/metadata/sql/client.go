@@ -85,6 +85,7 @@ type changefeedStateClient[T TxnContext] interface {
 	queryChangefeedStates(tx T) ([]*ChangefeedStateDO, error)
 	queryChangefeedStatesByUpdateAt(tx T, lastUpdateAt time.Time) ([]*ChangefeedStateDO, error)
 	queryChangefeedStateByUUID(tx T, uuid uint64) (*ChangefeedStateDO, error)
+	queryChangefeedStateByUUIDs(tx T, uuid ...uint64) ([]*ChangefeedStateDO, error)
 	queryChangefeedStateByUUIDWithLock(tx T, uuid uint64) (*ChangefeedStateDO, error)
 }
 

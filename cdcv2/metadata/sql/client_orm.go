@@ -229,7 +229,8 @@ func (c *ormClient) queryChangefeedInfosByUUIDs(tx *gorm.DB, uuids ...uint64) ([
 	infos := []*ChangefeedInfoDO{}
 	ret := tx.Where("uuid in (?)", uuids).Find(&infos)
 	if err := handleSingleOpErr(ret, int64(len(uuids)), "QueryChangefeedInfosByUUIDs"); err != nil {
-		return nil, errors.Trace(err)
+		// TODO: optimize the behavior when some uuids are not found.
+		return infos, errors.Trace(err)
 	}
 	return infos, nil
 }
@@ -324,6 +325,18 @@ func (c *ormClient) queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64) (*Chang
 		return nil, errors.Trace(err)
 	}
 	return state, nil
+}
+
+// queryChangefeedStateByUUIDs implements the changefeedStateClient interface.
+// nolint:unused
+func (c *ormClient) queryChangefeedStateByUUIDs(tx *gorm.DB, uuids ...uint64) ([]*ChangefeedStateDO, error) {
+	states := []*ChangefeedStateDO{}
+	ret := tx.Where("uuid in (?)", uuids).Find(&states)
+	if err := handleSingleOpErr(ret, int64(len(uuids)), "QueryChangefeedInfosByUUIDs"); err != nil {
+		// TODO: optimize the behavior when some uuids are not found.
+		return states, errors.Trace(err)
+	}
+	return states, nil
 }
 
 // queryChangefeedStateByUUIDWithLock implements the changefeedStateClient interface.

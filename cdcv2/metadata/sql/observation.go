@@ -38,6 +38,7 @@ import (
 
 var (
 	_ metadata.CaptureObservation    = &CaptureOb[*gorm.DB]{}
+	_ metadata.Querier               = &CaptureOb[*gorm.DB]{}
 	_ metadata.ControllerObservation = &ControllerOb[*gorm.DB]{}
 	_ metadata.OwnerObservation      = &OwnerOb[*gorm.DB]{}
 )
@@ -222,10 +223,14 @@ func (c *CaptureOb[T]) ProcessorChanges() <-chan metadata.ScheduledChangefeed {
 	return c.processorChanges.Out()
 }
 
-// GetChangefeeds returns the changefeeds with the given UUIDs.
-func (c *CaptureOb[T]) GetChangefeeds(cfs ...metadata.ChangefeedUUID) (infos []*metadata.ChangefeedInfo, err error) {
+// GetChangefeed returns the changefeeds with the given UUIDs.
+func (c *CaptureOb[T]) GetChangefeed(cfs ...metadata.ChangefeedUUID) (infos []*metadata.ChangefeedInfo, err error) {
 	var cfDOs []*ChangefeedInfoDO
 	err = c.client.Txn(c.egCtx, func(tx T) error {
+		if len(cfs) == 0 {
+			cfDOs, err = c.client.queryChangefeedInfos(tx)
+			return err
+		}
 		cfDOs, err = c.client.queryChangefeedInfosByUUIDs(tx, cfs...)
 		return err
 	})
@@ -236,6 +241,77 @@ func (c *CaptureOb[T]) GetChangefeeds(cfs ...metadata.ChangefeedUUID) (infos []*
 	for _, cfDO := range cfDOs {
 		infos = append(infos, &cfDO.ChangefeedInfo)
 	}
+	return
+}
+
+// GetChangefeedState returns the state of the changefeed with the given UUID.
+func (c *CaptureOb[T]) GetChangefeedState(cfs ...metadata.ChangefeedUUID) (states []*metadata.ChangefeedState, err error) {
+	var cfDOs []*ChangefeedStateDO
+	err = c.client.Txn(c.egCtx, func(tx T) error {
+		if len(cfs) == 0 {
+			cfDOs, err = c.client.queryChangefeedStates(tx)
+			return err
+		}
+		cfDOs, err = c.client.queryChangefeedStateByUUIDs(tx, cfs...)
+		return err
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for _, cfDO := range cfDOs {
+		states = append(states, &cfDO.ChangefeedState)
+	}
+	return
+}
+
+// GetChangefeedProgress returns the progress of the changefeed with the given UUID.
+func (c *CaptureOb[T]) GetChangefeedProgress(
+	cfs ...metadata.ChangefeedUUID,
+) (progresses map[metadata.ChangefeedUUID]metadata.ChangefeedProgress, err error) {
+	var prDOs []*ProgressDO
+	var scDOs []*ScheduleDO
+	err = c.client.Txn(c.egCtx, func(tx T) error {
+		prDOs, err = c.client.queryProgresss(tx)
+		if err != nil {
+			return err
+		}
+
+		scDOs, err = c.client.querySchedules(tx)
+		return err
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	cfMap := make(map[metadata.ChangefeedUUID]struct{})
+	for _, cf := range cfs {
+		cfMap[cf] = struct{}{}
+	}
+	queryAll := len(cfMap) == 0
+
+	progresses = make(map[metadata.ChangefeedUUID]metadata.ChangefeedProgress)
+	for _, prDO := range prDOs {
+		if prDO.Progress != nil {
+			for cf, pos := range *prDO.Progress {
+				if _, ok := cfMap[cf]; ok || queryAll {
+					progresses[cf] = pos
+				}
+			}
+		}
+	}
+
+	if queryAll || len(progresses) < len(cfMap) {
+		for _, scDO := range scDOs {
+			if _, alreadyFound := progresses[scDO.ChangefeedUUID]; alreadyFound {
+				continue
+			}
+			if _, ok := cfMap[scDO.ChangefeedUUID]; ok || queryAll {
+				progresses[scDO.ChangefeedUUID] = scDO.TaskPosition
+			}
+		}
+	}
+
 	return
 }
 

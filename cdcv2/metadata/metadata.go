@@ -24,7 +24,11 @@ import (
 // Querier is used to query information from metadata storage.
 type Querier interface {
 	// GetChangefeeds queries some or all changefeeds.
-	GetChangefeeds(...ChangefeedUUID) ([]*ChangefeedInfo, error)
+	GetChangefeed(...ChangefeedUUID) ([]*ChangefeedInfo, error)
+	// GetChangefeedState queries some or all changefeed states.
+	GetChangefeedState(...ChangefeedUUID) ([]*ChangefeedState, error)
+	// GetChangefeedProgress queries some or all changefeed progresses.
+	GetChangefeedProgress(...ChangefeedUUID) (map[ChangefeedUUID]ChangefeedProgress, error)
 }
 
 // -------------------- About owner schedule -------------------- //
