@@ -306,7 +306,7 @@ func (c *ormClient) queryChangefeedStates(tx *gorm.DB) ([]*ChangefeedStateDO, er
 //nolint:unused
 func (c *ormClient) queryChangefeedStatesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedStateDO, error) {
 	var states []*ChangefeedStateDO
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&states)
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&states)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedStatesByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
