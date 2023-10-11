@@ -36,9 +36,11 @@ import (
 	"gorm.io/gorm"
 )
 
-var _ metadata.CaptureObservation = &CaptureOb[*gorm.DB]{}
-var _ metadata.ControllerObservation = &ControllerOb[*gorm.DB]{}
-var _ metadata.OwnerObservation = &OwnerOb[*gorm.DB]{}
+var (
+	_ metadata.CaptureObservation    = &CaptureOb[*gorm.DB]{}
+	_ metadata.ControllerObservation = &ControllerOb[*gorm.DB]{}
+	_ metadata.OwnerObservation      = &OwnerOb[*gorm.DB]{}
+)
 
 // CaptureOb is an implement for metadata.CaptureObservation.
 type CaptureOb[T TxnContext] struct {
