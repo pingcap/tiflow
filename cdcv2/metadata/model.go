@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// ChangefeedUUID is the unique identifier of a changefeed.
 type ChangefeedUUID = uint64
 
 // ChangefeedIdent identifies a changefeed.
@@ -70,6 +71,7 @@ type ChangefeedInfo struct {
 	Config *config.ReplicaConfig `gorm:"column:config;type:longtext;not null" json:"config"`
 }
 
+// ChangefeedState is the status of a changefeed.
 type ChangefeedState struct {
 	ChangefeedUUID ChangefeedUUID      `gorm:"column:changefeed_uuid;type:bigint(20) unsigned;primaryKey" json:"changefeed_uuid"`
 	State          model.FeedState     `gorm:"column:state;type:text;not null" json:"state"`

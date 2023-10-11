@@ -37,18 +37,18 @@ type Credential struct {
 }
 
 // Value implements the driver.Valuer interface
-func (c Credential) Value() (driver.Value, error) {
-	return json.Marshal(c)
+func (s Credential) Value() (driver.Value, error) {
+	return json.Marshal(s)
 }
 
 // Scan implements the sql.Scanner interface
-func (c *Credential) Scan(value interface{}) error {
+func (s *Credential) Scan(value interface{}) error {
 	b, ok := value.([]byte)
 	if !ok {
 		return errors.New("type assertion to []byte failed")
 	}
 
-	return json.Unmarshal(b, c)
+	return json.Unmarshal(b, s)
 }
 
 // IsTLSEnabled checks whether TLS is enabled or not.

@@ -31,8 +31,8 @@ type RunningError struct {
 }
 
 // ShouldFailChangefeed return true if a running error contains a changefeed not retry error.
-func (r RunningError) ShouldFailChangefeed() bool {
-	return cerror.ShouldFailChangefeed(errors.New(r.Message + r.Code))
+func (e RunningError) ShouldFailChangefeed() bool {
+	return cerror.ShouldFailChangefeed(errors.New(e.Message + e.Code))
 }
 
 // Value implements the driver.Valuer interface

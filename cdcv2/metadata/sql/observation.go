@@ -173,6 +173,7 @@ func (c *CaptureOb[T]) handleTaskChanges(ctx context.Context) error {
 	return nil
 }
 
+// Advance updates the progress of the capture.
 func (c *CaptureOb[T]) Advance(cp metadata.CaptureProgress) error {
 	return c.client.Txn(c.egCtx, func(tx T) error {
 		return c.client.updateProgress(tx, &ProgressDO{
@@ -182,10 +183,12 @@ func (c *CaptureOb[T]) Advance(cp metadata.CaptureProgress) error {
 	})
 }
 
+// OwnerChanges returns a channel that receives changefeeds when the owner of the changefeed changes.
 func (c *CaptureOb[T]) OwnerChanges() <-chan metadata.ScheduledChangefeed {
 	return c.ownerChanges.Out()
 }
 
+// PostOwnerRemoved is called when the owner of a changefeed is removed.
 func (c *CaptureOb[T]) PostOwnerRemoved(cf metadata.ChangefeedUUID, taskPosition metadata.ChangefeedProgress) error {
 	sc := c.tasks.get(cf)
 	if sc == nil {
@@ -199,10 +202,12 @@ func (c *CaptureOb[T]) PostOwnerRemoved(cf metadata.ChangefeedUUID, taskPosition
 	})
 }
 
+// ProcessorChanges returns a channel that receives changefeeds when the changefeed changes.
 func (c *CaptureOb[T]) ProcessorChanges() <-chan metadata.ScheduledChangefeed {
 	return c.processorChanges.Out()
 }
 
+// GetChangefeeds returns the changefeeds with the given UUIDs.
 func (c *CaptureOb[T]) GetChangefeeds(cfs ...metadata.ChangefeedUUID) (infos []*metadata.ChangefeedInfo, err error) {
 	var cfDOs []*ChangefeedInfoDO
 	err = c.client.Txn(c.egCtx, func(tx T) error {
@@ -345,7 +350,9 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 		// Create or update the upstream info.
 		oldUp, err := c.client.queryUpstreamByID(tx, up.ID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.client.createUpstream(tx, newUp)
+			if err := c.client.createUpstream(tx, newUp); err != nil {
+				return errors.Trace(err)
+			}
 		} else if err != nil {
 			return errors.Trace(err)
 		}
@@ -355,7 +362,9 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 		}
 		if !oldUp.equal(newUp) {
 			newUp.Version = oldUp.Version
-			c.client.updateUpstream(tx, newUp)
+			if err := c.client.updateUpstream(tx, newUp); err != nil {
+				return errors.Trace(err)
+			}
 		}
 
 		err = c.client.createChangefeedInfo(tx, &ChangefeedInfoDO{
@@ -532,7 +541,6 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 
 			return c.client.deleteProgress(tx, prMap)
 		})
-
 		if err != nil {
 			return errors.Trace(err)
 		}

@@ -23,6 +23,7 @@ type uuidGenerator interface {
 	GenChangefeedUUID() metadata.ChangefeedUUID
 }
 
+// NewUUIDGenerator creates a new UUID generator.
 func NewUUIDGenerator() uuidGenerator {
 	return &mockUUIDGenerator{}
 }

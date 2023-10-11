@@ -30,6 +30,7 @@ func NewScheduleError(msg string) ScheduleError {
 	return ScheduleError{Msg: msg}
 }
 
+// NewBadScheduleError creates a schedule error with detail information.
 func NewBadScheduleError(origin ScheduledChangefeed, target ScheduledChangefeed) ScheduleError {
 	msg := fmt.Sprintf("bad schedule for %d: A.%s->B.%s",
 		origin.ChangefeedUUID, origin.OwnerState.String(), target.OwnerState.String())
