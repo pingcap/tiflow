@@ -20,7 +20,12 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 	"github.com/pingcap/tiflow/cdc/contextutil"
+=======
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
+>>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
@@ -35,6 +40,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -61,7 +67,7 @@ type dmlSink struct {
 	}
 
 	ctx    context.Context
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 
 	wg   sync.WaitGroup
 	dead chan struct{}
@@ -75,6 +81,7 @@ func newSink(ctx context.Context,
 	encoderConfig *common.Config,
 	encoderConcurrency int,
 	errCh chan error,
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 
@@ -87,6 +94,12 @@ func newSink(ctx context.Context,
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
+=======
+) *dmlSink {
+	ctx, cancel := context.WithCancelCause(ctx)
+	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
+	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
+>>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 
 	s := &dmlSink{
 		id:       changefeedID,
@@ -149,10 +162,20 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 			continue
 		}
 		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
+
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(topic)
+=======
+			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
+			failpoint.Inject("MQSinkGetPartitionError", func() {
+				log.Info("failpoint MQSinkGetPartitionError injected", zap.String("changefeedID", s.id.ID))
+				err = errors.New("MQSinkGetPartitionError")
+			})
+>>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 			if err != nil {
+				s.cancel(err)
 				return errors.Trace(err)
 			}
 			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
@@ -180,7 +203,7 @@ func (s *dmlSink) Scheme() string {
 // Close closes the sink.
 func (s *dmlSink) Close() {
 	if s.cancel != nil {
-		s.cancel()
+		s.cancel(nil)
 	}
 	s.wg.Wait()
 
