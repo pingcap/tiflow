@@ -966,7 +966,7 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 }
 
 // copy from https://github.com/pingcap/tidb/blob/fc4f8a1d8f5342cd01f78eb460e47d78d177ed20/ddl/column.go#L366
-func (ddl *DDLWorker) needChangedColumnData(oldCol, newCol *table.Column, spec *ast.AlterTableSpec) bf.EventType {
+func (ddl *DDLWorker) needChangedColumnData(oldCol, newCol *table.Column) bf.EventType {
 	toUnsigned := mysql.HasUnsignedFlag(newCol.GetFlag())
 	originUnsigned := mysql.HasUnsignedFlag(oldCol.GetFlag())
 	needTruncationOrToggleSign := func() bool {
@@ -1094,7 +1094,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 		return bf.AlterTable, err
 	}
 
-	if et := ddl.needChangedColumnData(oldCol, newCol, spec); et != bf.AlterTable {
+	if et := ddl.needChangedColumnData(oldCol, newCol); et != bf.AlterTable {
 		return et, nil
 	}
 	switch {
