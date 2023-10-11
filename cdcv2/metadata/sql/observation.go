@@ -182,9 +182,18 @@ func (c *CaptureOb[T]) handleTaskChanges(ctx context.Context) error {
 // Advance updates the progress of the capture.
 func (c *CaptureOb[T]) Advance(cp metadata.CaptureProgress) error {
 	return c.client.Txn(c.egCtx, func(tx T) error {
+		pr, err := c.client.queryProgressByCaptureID(tx, c.selfInfo.ID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		if pr == nil {
+			erMsg := fmt.Sprintf("expect non-empty progress for capture %s", c.selfInfo.ID)
+			return errors.ErrMetaInvalidState.GenWithStackByArgs(erMsg)
+		}
 		return c.client.updateProgress(tx, &ProgressDO{
 			CaptureID: c.selfInfo.ID,
 			Progress:  &cp,
+			Version:   pr.Version,
 		})
 	})
 }
