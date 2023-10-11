@@ -335,53 +335,60 @@ func (c *ControllerOb[T]) handleAliveCaptures(_ context.Context) error {
 	return nil
 }
 
+func (c *ControllerOb[T]) upsertUpstream(tx T, up *model.UpstreamInfo) error {
+	newUp := &UpstreamDO{
+		ID:        up.ID,
+		Endpoints: up.PDEndpoints,
+		Config: &security.Credential{
+			CAPath:        up.CAPath,
+			CertPath:      up.CertPath,
+			KeyPath:       up.KeyPath,
+			CertAllowedCN: up.CertAllowedCN,
+		},
+		Version: 1,
+	}
+
+	// Create or update the upstream info.
+	oldUp, err := c.client.queryUpstreamByID(tx, up.ID)
+	if errors.Is(errors.Cause(err), gorm.ErrRecordNotFound) {
+		if err := c.client.createUpstream(tx, newUp); err != nil {
+			return errors.Trace(err)
+		}
+	} else if err != nil {
+		return errors.Trace(err)
+	}
+
+	if oldUp == nil {
+		errMsg := fmt.Sprintf("expect non-empty upstream info for id %d", up.ID)
+		return errors.Trace(errors.ErrMetaInvalidState.GenWithStackByArgs(errMsg))
+	}
+	if !oldUp.equal(newUp) {
+		newUp.Version = oldUp.Version
+		if err := c.client.updateUpstream(tx, newUp); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
 // CreateChangefeed initializes the changefeed info, schedule info and state info of the given changefeed. It also
 // updates or creates the upstream info depending on whether the upstream info exists.
 func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIdent, error) {
 	cf.ChangefeedIdent.UUID = c.uuidGenerator.GenChangefeedUUID()
 
 	err := c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
-		newUp := &UpstreamDO{
-			ID:        up.ID,
-			Endpoints: up.PDEndpoints,
-			Config: &security.Credential{
-				CAPath:        up.CAPath,
-				CertPath:      up.CertPath,
-				KeyPath:       up.KeyPath,
-				CertAllowedCN: up.CertAllowedCN,
-			},
-			Version: 1,
-		}
-
-		// Create or update the upstream info.
-		oldUp, err := c.client.queryUpstreamByID(tx, up.ID)
-		if errors.Is(errors.Cause(err), gorm.ErrRecordNotFound) {
-			if err := c.client.createUpstream(tx, newUp); err != nil {
-				return errors.Trace(err)
-			}
-		} else if err != nil {
+		if err := c.upsertUpstream(tx, up); err != nil {
 			return errors.Trace(err)
 		}
-		if oldUp == nil {
-			errMsg := fmt.Sprintf("expect non-empty upstream info for id %d", up.ID)
-			return errors.Trace(errors.ErrMetaInvalidState.GenWithStackByArgs(errMsg))
-		}
-		if !oldUp.equal(newUp) {
-			newUp.Version = oldUp.Version
-			if err := c.client.updateUpstream(tx, newUp); err != nil {
-				return errors.Trace(err)
-			}
-		}
 
-		err = c.client.createChangefeedInfo(tx, &ChangefeedInfoDO{
+		if err := c.client.createChangefeedInfo(tx, &ChangefeedInfoDO{
 			ChangefeedInfo: *cf,
 			Version:        1,
-		})
-		if err != nil {
+		}); err != nil {
 			return errors.Trace(err)
 		}
 
-		err = c.client.createSchedule(tx, &ScheduleDO{
+		if err := c.client.createSchedule(tx, &ScheduleDO{
 			ScheduledChangefeed: metadata.ScheduledChangefeed{
 				ChangefeedUUID: cf.UUID,
 				Owner:          nil,
@@ -393,8 +400,7 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 				},
 			},
 			Version: 1,
-		})
-		if err != nil {
+		}); err != nil {
 			return errors.Trace(err)
 		}
 
