@@ -114,17 +114,17 @@ func (cp *CaptureProgress) Scan(value interface{}) error {
 }
 
 // SchedState is the type of state to schedule owners and processors.
-type SchedState int
+type SchedState string
 
 const (
 	// SchedInvalid should never be used.
-	SchedInvalid SchedState = SchedState(0)
+	SchedInvalid SchedState = SchedState("unreachable")
 	// SchedRemoved means the owner or processor is removed.
-	SchedRemoved SchedState = SchedState(1)
+	SchedRemoved SchedState = SchedState("Removed")
 	// SchedLaunched means the owner or processor is launched.
-	SchedLaunched SchedState = SchedState(2)
+	SchedLaunched SchedState = SchedState("Launched")
 	// SchedRemoving means the owner or processor is in removing.
-	SchedRemoving SchedState = SchedState(3)
+	SchedRemoving SchedState = SchedState("Removing")
 )
 
 // String implements the fmt.Stringer interface.
@@ -165,19 +165,19 @@ func (s SchedState) fromString(str string) error {
 }
 
 // Value implements the driver.Valuer interface.
-func (s SchedState) Value() (driver.Value, error) {
-	return s.toString()
-}
-
-// Scan implements the sql.Scanner interface.
-func (s *SchedState) Scan(value interface{}) error {
-	b, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
-	}
-
-	return s.fromString(string(b))
-}
+//func (s *SchedState) Value() (driver.Value, error) {
+//	return s.toString()
+//}
+//
+//// Scan implements the sql.Scanner interface.
+//func (s *SchedState) Scan(value interface{}) error {
+//	b, ok := value.([]byte)
+//	if !ok {
+//		return errors.New("type assertion to []byte failed")
+//	}
+//
+//	return s.fromString(string(b))
+//}
 
 // ScheduledChangefeed is for owner and processor schedule.
 type ScheduledChangefeed struct {

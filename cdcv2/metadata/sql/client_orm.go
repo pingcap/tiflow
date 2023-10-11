@@ -327,16 +327,16 @@ func (c *ormClient) queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64) (*Chang
 
 // queryChangefeedStateByUUIDWithLock implements the changefeedStateClient interface.
 func (c *ormClient) queryChangefeedStateByUUIDWithLock(tx *gorm.DB, uuid uint64) (*ChangefeedStateDO, error) {
-	var state *ChangefeedStateDO
+	var state ChangefeedStateDO
 	ret := tx.Where("changefeed_uuid = ?", uuid).
 		Clauses(clause.Locking{
 			Strength: "SHARE",
 			Table:    clause.Table{Name: clause.CurrentTable},
-		}).First(state)
+		}).First(&state)
 	if err := handleSingleOpErr(ret, 1, "QueryChangefeedStateByUUIDWithLock"); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return state, nil
+	return &state, nil
 }
 
 // ================================ Schedule Client =================================
@@ -449,12 +449,12 @@ func (c *ormClient) querySchedulesByOwnerIDAndUpdateAt(tx *gorm.DB, captureID st
 //
 //nolint:unused
 func (c *ormClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, error) {
-	var schedule *ScheduleDO
-	ret := tx.Where("changefeed_uuid = ?", uuid).First(schedule)
+	var schedule ScheduleDO
+	ret := tx.Where("changefeed_uuid = ?", uuid).First(&schedule)
 	if err := handleSingleOpErr(ret, 1, "QueryScheduleByUUID"); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return schedule, nil
+	return &schedule, nil
 }
 
 // querySchedulesUinqueOwnerIDs implements the scheduleClient interface.

@@ -15,6 +15,7 @@ package controller
 
 import (
 	"context"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -132,9 +133,12 @@ func (o *controllerImpl) Run(stdCtx context.Context) error {
 				log.Error("failed to get snapshot", zap.Error(err))
 			}
 
+			o.captures = map[model.CaptureID]*model.CaptureInfo{}
 			captures, _ = o.controllerObservation.RefreshCaptures()
+			captureChangefeedSize := make(map[*model.CaptureID]int)
 			for _, capture := range captures {
 				o.captures[capture.ID] = capture
+				captureChangefeedSize[&capture.ID] = 0
 			}
 
 			// At the first Tick, we need to do a bootstrap operation.
@@ -165,10 +169,41 @@ func (o *controllerImpl) Run(stdCtx context.Context) error {
 			// Tick all changefeeds.
 			// ctx := stdCtx.(cdcContext.Context)
 
+			var unssignedChangefeeds []metadata.ScheduledChangefeed
 			newMap := make(map[model.ChangeFeedID]struct{})
 			for _, changefeed := range changefeeds {
 				o.changefeeds[model.ChangeFeedID{}] = changefeed
 				newMap[model.ChangeFeedID{}] = struct{}{}
+				if changefeed.Owner == nil || o.captures[*changefeed.Owner] == nil {
+					unssignedChangefeeds = append(unssignedChangefeeds, changefeed)
+					continue
+				}
+				captureChangefeedSize[changefeed.Owner]++
+			}
+
+			for _, changefeed := range unssignedChangefeeds {
+				var captureID *model.CaptureID
+				var maxChangefeedNumPerCapture = math.MaxInt
+				for id, size := range captureChangefeedSize {
+					if size < maxChangefeedNumPerCapture {
+						captureID = id
+						maxChangefeedNumPerCapture = size
+					}
+				}
+				if captureID == nil {
+					log.Warn("no capture available to assign changefeed",
+						zap.Any("changefeed", changefeed))
+					continue
+				}
+				changefeed.Owner = captureID
+				changefeed.OwnerState = metadata.SchedLaunched
+				if err := o.controllerObservation.SetOwner(changefeed); err != nil {
+					changefeed.Owner = nil
+					changefeed.OwnerState = metadata.SchedRemoved
+					log.Warn("assign changefeed owner failed", zap.Error(err))
+				} else {
+					captureChangefeedSize[captureID]++
+				}
 			}
 
 			// Cleanup changefeeds that are not in the state.
