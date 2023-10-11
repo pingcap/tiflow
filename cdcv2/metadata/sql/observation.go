@@ -277,7 +277,7 @@ func newControllerObservation[T TxnContext](
 		client:         client,
 		selfInfo:       selfInfo,
 		getAllCaptures: getAllCaptures,
-		uuidGenerator:  NewUUIDGenerator(),
+		uuidGenerator:  NewUUIDGenerator("random-crc64"),
 	}
 }
 

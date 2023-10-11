@@ -14,9 +14,13 @@
 package sql
 
 import (
+	"hash"
+	"hash/crc64"
+	"hash/fnv"
 	"sync/atomic"
 
 	"github.com/pingcap/tiflow/cdcv2/metadata"
+	"github.com/pingcap/tiflow/pkg/uuid"
 )
 
 type uuidGenerator interface {
@@ -24,16 +28,50 @@ type uuidGenerator interface {
 }
 
 // NewUUIDGenerator creates a new UUID generator.
-func NewUUIDGenerator() uuidGenerator {
-	return &mockUUIDGenerator{}
+func NewUUIDGenerator(config string) uuidGenerator {
+	switch config {
+	case "mock":
+		return newMockUUIDGenerator()
+	case "random-crc64":
+		hasher := crc64.New(crc64.MakeTable(crc64.ISO))
+		return newRandomUUIDGenerator(hasher)
+	case "random-fnv64":
+		return newRandomUUIDGenerator(fnv.New64())
+	}
+	return nil
 }
 
 type mockUUIDGenerator struct {
 	epoch atomic.Uint64
 }
 
+func newMockUUIDGenerator() uuidGenerator {
+	return &mockUUIDGenerator{}
+}
+
+// GenChangefeedUUID implements uuidGenerator interface.
 func (g *mockUUIDGenerator) GenChangefeedUUID() metadata.ChangefeedUUID {
 	return g.epoch.Add(1)
+}
+
+type randomUUIDGenerator struct {
+	uuidGen uuid.Generator
+	hasher  hash.Hash64
+}
+
+func newRandomUUIDGenerator(hasher hash.Hash64) uuidGenerator {
+	return &randomUUIDGenerator{
+		uuidGen: uuid.NewGenerator(),
+		hasher:  hasher,
+	}
+}
+
+// GenChangefeedUUID implements uuidGenerator interface.
+func (g *randomUUIDGenerator) GenChangefeedUUID() metadata.ChangefeedUUID {
+	g.hasher = crc64.New(crc64.MakeTable(crc64.ISO))
+	g.hasher.Reset()
+	g.hasher.Write([]byte(g.uuidGen.NewString()))
+	return g.hasher.Sum64()
 }
 
 // TODO: implement sql based UUID generator.
