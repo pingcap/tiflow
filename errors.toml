@@ -1186,6 +1186,11 @@ error = '''
 incompatible scheduler request: %s
 '''
 
+["DFLOW:ErrInconsistentMetaCache"]
+error = '''
+meta cache is inconsistent: %s
+'''
+
 ["DFLOW:ErrInvalidArgument"]
 error = '''
 invalid argument: %s
@@ -1324,6 +1329,11 @@ meta empty key
 ["DFLOW:ErrMetaEntryNotFound"]
 error = '''
 meta entry not found
+'''
+
+["DFLOW:ErrMetaInvalidState"]
+error = '''
+meta state is invalid: %s
 '''
 
 ["DFLOW:ErrMetaNestedTxn"]
