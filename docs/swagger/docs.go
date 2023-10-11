@@ -1428,7 +1428,7 @@ var doc = `{
                     "description": "Deprecated, please use PartitionRule.",
                     "type": "string"
                 },
-                "index-name": {
+                "index": {
                     "type": "string"
                 },
                 "matcher": {
@@ -2380,6 +2380,9 @@ var doc = `{
         "v2.DispatchRule": {
             "type": "object",
             "properties": {
+                "index": {
+                    "type": "string"
+                },
                 "matcher": {
                     "type": "array",
                     "items": {
