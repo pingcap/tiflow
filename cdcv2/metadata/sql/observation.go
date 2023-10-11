@@ -616,6 +616,7 @@ func (o *ownerOb[T]) Self() *metadata.ChangefeedInfo {
 	return o.cf
 }
 
+// nolint:unused
 func (o *ownerOb[T]) updateChangefeedState(
 	state model.FeedState,
 	cfErr *model.RunningError,
@@ -647,6 +648,8 @@ func (o *ownerOb[T]) updateChangefeedState(
 	})
 }
 
+// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
+// nolint:unused
 func (o *ownerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 	return o.client.TxnWithOwnerLock(o.egCtx, o.cf.UUID, func(tx T) error {
 		state, err := o.client.queryChangefeedStateByUUIDWithLock(tx, o.cf.UUID)
@@ -671,36 +674,43 @@ func (o *ownerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 }
 
 // ResumeChangefeed resumes a changefeed.
+// nolint:unused
 func (o *ownerOb[T]) ResumeChangefeed() error {
 	return o.updateChangefeedState(model.StateNormal, nil, nil)
 }
 
 // SetChangefeedPending sets the changefeed to state pending.
+// nolint:unused
 func (o *ownerOb[T]) SetChangefeedPending(err *model.RunningError) error {
 	return o.updateChangefeedState(model.StatePending, err, nil)
 }
 
 // SetChangefeedFailed set the changefeed to state failed.
+// nolint:unused
 func (o *ownerOb[T]) SetChangefeedFailed(err *model.RunningError) error {
 	return o.updateChangefeedState(model.StateFailed, err, nil)
 }
 
 // PauseChangefeed pauses a changefeed.
+// nolint:unused
 func (o *ownerOb[T]) PauseChangefeed() error {
 	return o.updateChangefeedState(model.StateStopped, nil, nil)
 }
 
 // SetChangefeedRemoved set the changefeed to state removed.
+// nolint:unused
 func (o *ownerOb[T]) SetChangefeedRemoved() error {
 	return o.updateChangefeedState(model.StateRemoved, nil, nil)
 }
 
 // SetChangefeedFinished set the changefeed to state finished.
+// nolint:unused
 func (o *ownerOb[T]) SetChangefeedFinished() error {
 	return o.updateChangefeedState(model.StateFinished, nil, nil)
 }
 
 // SetChangefeedWarning set the changefeed to state warning.
+// nolint:unused
 func (o *ownerOb[T]) SetChangefeedWarning(warn *model.RunningError) error {
 	return o.updateChangefeedState(model.StateWarning, nil, warn)
 }
