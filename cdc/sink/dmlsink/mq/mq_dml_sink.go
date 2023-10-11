@@ -159,7 +159,11 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 				s.cancel(err)
 				return errors.Trace(err)
 			}
-			index, key := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
+			index, key, err := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
+			if err != nil {
+				s.cancel(err)
+				return errors.Trace(err)
+			}
 			// This never be blocked because this is an unbounded channel.
 			s.alive.worker.msgChan.In() <- mqEvent{
 				key: TopicPartitionKey{

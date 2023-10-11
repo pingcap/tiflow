@@ -68,6 +68,7 @@ type VerifyTableConfig struct {
 	PDConfig
 	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	StartTs       uint64         `json:"start_ts"`
+	SinkURI       string         `json:"sink_uri"`
 }
 
 func getDefaultVerifyTableConfig() *VerifyTableConfig {
@@ -272,6 +273,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				Matcher:        rule.Matcher,
 				DispatcherRule: "",
 				PartitionRule:  rule.PartitionRule,
+				IndexName:      rule.IndexName,
 				TopicRule:      rule.TopicRule,
 			})
 		}
@@ -547,6 +549,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			dispatchRules = append(dispatchRules, &DispatchRule{
 				Matcher:       rule.Matcher,
 				PartitionRule: rule.PartitionRule,
+				IndexName:     rule.IndexName,
 				TopicRule:     rule.TopicRule,
 			})
 		}
@@ -907,6 +910,7 @@ type LargeMessageHandleConfig struct {
 type DispatchRule struct {
 	Matcher       []string `json:"matcher,omitempty"`
 	PartitionRule string   `json:"partition"`
+	IndexName     string   `json:"index"`
 	TopicRule     string   `json:"topic"`
 }
 
