@@ -374,6 +374,11 @@ func (c *ControllerOb[T]) upsertUpstream(tx T, up *model.UpstreamInfo) error {
 // CreateChangefeed initializes the changefeed info, schedule info and state info of the given changefeed. It also
 // updates or creates the upstream info depending on whether the upstream info exists.
 func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIdent, error) {
+	if cf.UpstreamID != up.ID {
+		errMsg := fmt.Sprintf("changefeed %s has different upstream id %d from the given upstream id %d",
+			cf.ChangefeedIdent, cf.UpstreamID, up.ID)
+		return cf.ChangefeedIdent, errors.ErrMetaInvalidState.GenWithStackByArgs(errMsg)
+	}
 	cf.ChangefeedIdent.UUID = c.uuidGenerator.GenChangefeedUUID()
 
 	err := c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
