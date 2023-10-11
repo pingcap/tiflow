@@ -351,9 +351,7 @@ func (c *ControllerOb[T]) upsertUpstream(tx T, up *model.UpstreamInfo) error {
 	// Create or update the upstream info.
 	oldUp, err := c.client.queryUpstreamByID(tx, up.ID)
 	if errors.Is(errors.Cause(err), gorm.ErrRecordNotFound) {
-		if err := c.client.createUpstream(tx, newUp); err != nil {
-			return errors.Trace(err)
-		}
+		return c.client.createUpstream(tx, newUp)
 	} else if err != nil {
 		return errors.Trace(err)
 	}
