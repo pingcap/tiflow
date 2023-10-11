@@ -126,7 +126,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 100,
+		TableID: 102,
 	}, tableName)
 }
 
