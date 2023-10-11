@@ -201,8 +201,8 @@ func TestCreateChangefeed(t *testing.T) {
 				SinkURI:    cfg.SinkURI,
 			}, nil
 		}).AnyTimes()
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	ctrl.EXPECT().
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrPDEtcdAPIError).Times(1)
 
 	cfConfig.SinkURI = mysqlSink
@@ -222,8 +222,8 @@ func TestCreateChangefeed(t *testing.T) {
 	helpers.EXPECT().
 		getEtcdClient(gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	ctrl.EXPECT().
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 	w = httptest.NewRecorder()
