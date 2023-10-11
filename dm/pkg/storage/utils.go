@@ -174,10 +174,11 @@ func IsNotExistError(err error) bool {
 	if err == nil {
 		return false
 	}
+	err = errors.Cause(err)
 	if os.IsNotExist(err) {
 		return true
 	}
-	if aerr, ok := errors.Cause(err).(awserr.Error); ok {
+	if aerr, ok := err.(awserr.Error); ok {
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
 			return true
