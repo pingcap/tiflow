@@ -124,7 +124,7 @@ func (c *ormClient) queryUpstreams(tx *gorm.DB) ([]*UpstreamDO, error) {
 //nolint:unused
 func (c *ormClient) queryUpstreamsByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*UpstreamDO, error) {
 	ups := []*UpstreamDO{}
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&ups)
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&ups)
 	if err := handleSingleOpErr(ret, -1, "QueryUpstreamsByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -216,7 +216,7 @@ func (c *ormClient) queryChangefeedInfos(tx *gorm.DB) ([]*ChangefeedInfoDO, erro
 //nolint:unused
 func (c *ormClient) queryChangefeedInfosByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedInfoDO, error) {
 	infos := []*ChangefeedInfoDO{}
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&infos)
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&infos)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedInfosByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -428,7 +428,7 @@ func (c *ormClient) querySchedules(tx *gorm.DB) ([]*ScheduleDO, error) {
 //nolint:unused
 func (c *ormClient) querySchedulesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
 	schedules := []*ScheduleDO{}
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&schedules)
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -440,7 +440,7 @@ func (c *ormClient) querySchedulesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time
 //nolint:unused
 func (c *ormClient) querySchedulesByOwnerIDAndUpdateAt(tx *gorm.DB, captureID string, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
 	schedules := []*ScheduleDO{}
-	ret := tx.Where("owner = ? and updated_at > ?", captureID, lastUpdateAt).Find(&schedules)
+	ret := tx.Where("owner = ? and update_at > ?", captureID, lastUpdateAt).Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesByOwnerIDAndUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -520,7 +520,7 @@ func (c *ormClient) queryProgresss(tx *gorm.DB) ([]*ProgressDO, error) {
 //nolint:unused
 func (c *ormClient) queryProgresssByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ProgressDO, error) {
 	progresses := []*ProgressDO{}
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&progresses)
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&progresses)
 	if err := handleSingleOpErr(ret, -1, "QueryProgresssByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
