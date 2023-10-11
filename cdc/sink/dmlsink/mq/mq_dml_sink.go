@@ -67,8 +67,6 @@ type dmlSink struct {
 	wg   sync.WaitGroup
 	dead chan struct{}
 
-	errCh chan error
-
 	scheme string
 }
 
@@ -95,9 +93,7 @@ func newDMLSink(
 		ctx:         ctx,
 		cancel:      cancel,
 		dead:        make(chan struct{}),
-		errCh:       errCh,
-
-		scheme: scheme,
+		scheme:      scheme,
 	}
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
@@ -115,19 +111,15 @@ func newDMLSink(
 		s.alive.Unlock()
 		close(s.dead)
 
-		s.handleError(err)
+		if err != nil && errors.Cause(err) != context.Canceled {
+			select {
+			case <-ctx.Done():
+			case errCh <- err:
+			}
+		}
 	}()
 
 	return s
-}
-
-func (s *dmlSink) handleError(err error) {
-	if err != nil && errors.Cause(err) != context.Canceled {
-		select {
-		case <-s.ctx.Done():
-		case s.errCh <- err:
-		}
-	}
 }
 
 // WriteEvents writes events to the sink.
