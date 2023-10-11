@@ -36,6 +36,10 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ metadata.CaptureObservation = &CaptureOb[*gorm.DB]{}
+var _ metadata.ControllerObservation = &ControllerOb[*gorm.DB]{}
+var _ metadata.OwnerObservation = &OwnerOb[*gorm.DB]{}
+
 // CaptureOb is an implement for metadata.CaptureObservation.
 type CaptureOb[T TxnContext] struct {
 	// election related fields.
@@ -505,10 +509,8 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 				return errors.Trace(err)
 			}
 			prMap := prs[0]
-			if prMap.Progress == nil {
-				log.Info("no changefeed is owned by the capture",
-					zap.String("capture-id", id),
-					zap.Any("capture-id", id))
+			if prMap.Progress == nil || len(*prMap.Progress) == 0 {
+				log.Info("no progress is updated by the capture", zap.String("capture", id))
 			} else {
 				for cf, taskPosition := range *prMap.Progress {
 					// TODO(CharlesCheung): maybe such operation should be done in background.
@@ -536,6 +538,8 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 				}
 			}
 
+			// If capture fails before a owner progress is updated for the first time, the corresponding
+			// taskPosition will not stored in Progress. In this case, we alse need to set owner removed.
 			err = c.client.updateScheduleOwnerStateByOwnerID(tx, metadata.SchedRemoved, id)
 			if err != nil {
 				return errors.Trace(err)
@@ -603,21 +607,19 @@ func (c *ControllerOb[T]) ScheduleSnapshot() (ss []metadata.ScheduledChangefeed,
 	return
 }
 
-// nolint:unused
-type ownerOb[T TxnContext] struct {
-	egCtx    context.Context
-	client   client[T]
-	selfInfo *model.CaptureInfo
-	cf       *metadata.ChangefeedInfo
+type OwnerOb[T TxnContext] struct {
+	egCtx  context.Context
+	client client[T]
+	cf     *metadata.ChangefeedInfo
 }
 
+// Self returns the changefeed info of the owner.
 // nolint:unused
-func (o *ownerOb[T]) Self() *metadata.ChangefeedInfo {
+func (o *OwnerOb[T]) Self() *metadata.ChangefeedInfo {
 	return o.cf
 }
 
-// nolint:unused
-func (o *ownerOb[T]) updateChangefeedState(
+func (o *OwnerOb[T]) updateChangefeedState(
 	state model.FeedState,
 	cfErr *model.RunningError,
 	cfWarn *model.RunningError,
@@ -650,7 +652,7 @@ func (o *ownerOb[T]) updateChangefeedState(
 
 // UpdateChangefeed updates changefeed metadata, must be called on a paused one.
 // nolint:unused
-func (o *ownerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
+func (o *OwnerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 	return o.client.TxnWithOwnerLock(o.egCtx, o.cf.UUID, func(tx T) error {
 		state, err := o.client.queryChangefeedStateByUUIDWithLock(tx, o.cf.UUID)
 		if err != nil {
@@ -675,43 +677,43 @@ func (o *ownerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 
 // ResumeChangefeed resumes a changefeed.
 // nolint:unused
-func (o *ownerOb[T]) ResumeChangefeed() error {
+func (o *OwnerOb[T]) ResumeChangefeed() error {
 	return o.updateChangefeedState(model.StateNormal, nil, nil)
 }
 
 // SetChangefeedPending sets the changefeed to state pending.
 // nolint:unused
-func (o *ownerOb[T]) SetChangefeedPending(err *model.RunningError) error {
+func (o *OwnerOb[T]) SetChangefeedPending(err *model.RunningError) error {
 	return o.updateChangefeedState(model.StatePending, err, nil)
 }
 
 // SetChangefeedFailed set the changefeed to state failed.
 // nolint:unused
-func (o *ownerOb[T]) SetChangefeedFailed(err *model.RunningError) error {
+func (o *OwnerOb[T]) SetChangefeedFailed(err *model.RunningError) error {
 	return o.updateChangefeedState(model.StateFailed, err, nil)
 }
 
 // PauseChangefeed pauses a changefeed.
 // nolint:unused
-func (o *ownerOb[T]) PauseChangefeed() error {
+func (o *OwnerOb[T]) PauseChangefeed() error {
 	return o.updateChangefeedState(model.StateStopped, nil, nil)
 }
 
 // SetChangefeedRemoved set the changefeed to state removed.
 // nolint:unused
-func (o *ownerOb[T]) SetChangefeedRemoved() error {
+func (o *OwnerOb[T]) SetChangefeedRemoved() error {
 	return o.updateChangefeedState(model.StateRemoved, nil, nil)
 }
 
 // SetChangefeedFinished set the changefeed to state finished.
 // nolint:unused
-func (o *ownerOb[T]) SetChangefeedFinished() error {
+func (o *OwnerOb[T]) SetChangefeedFinished() error {
 	return o.updateChangefeedState(model.StateFinished, nil, nil)
 }
 
 // SetChangefeedWarning set the changefeed to state warning.
 // nolint:unused
-func (o *ownerOb[T]) SetChangefeedWarning(warn *model.RunningError) error {
+func (o *OwnerOb[T]) SetChangefeedWarning(warn *model.RunningError) error {
 	return o.updateChangefeedState(model.StateWarning, nil, warn)
 }
 

@@ -396,37 +396,6 @@ func TestProgressClientExecSQL(t *testing.T) {
 
 // ================================ Test Query =================================
 
-// runMockQueryTest is used to test query functions.
-// nolint:unused
-func runMockQueryTest(
-	t *testing.T, mock sqlmock.Sqlmock,
-	expectedSQL string, args []driver.Value,
-	fn func() error,
-	_ ...bool, /* 0: test ErrMetaRowsAffectedNotMatch, 1: test ErrMetaOpFailed */
-) {
-	// testErr := errors.New("test error")
-
-	// Test normal execution
-	mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnResult(sqlmock.NewResult(1, 1))
-	err := fn()
-	require.NoError(t, err)
-
-	// Test rows affected not match
-	// mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnResult(sqlmock.NewResult(1, 0))
-	// err = fn()
-	// if len(skipCheck) < 1 || !skipCheck[0] {
-	// 	require.ErrorIs(t, err, errors.ErrMetaRowsAffectedNotMatch)
-	// }
-
-	// // Test op failed
-	// mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnError(testErr)
-	// err = fn()
-	// if len(skipCheck) < 2 || !skipCheck[1] {
-	// 	require.ErrorIs(t, err, errors.ErrMetaOpFailed)
-	// 	require.ErrorContains(t, err, testErr.Error())
-	// }
-}
-
 func TestUpstreamClientQuerySQL(t *testing.T) {
 	t.Parallel()
 

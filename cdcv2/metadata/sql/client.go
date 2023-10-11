@@ -54,7 +54,7 @@ type LeaderChecker[T TxnContext] interface {
 
 type checker[T TxnContext] interface {
 	Txn(ctx context.Context, fn TxnAction[T]) error
-	TxnWithOwnerLock(ctx context.Context, uuid uint64, fn TxnAction[T]) error
+	TxnWithOwnerLock(ctx context.Context, uuid metadata.ChangefeedUUID, fn TxnAction[T]) error
 }
 
 // TODO(CharlesCheung): only update changed fields to reduce the pressure on io and database.
