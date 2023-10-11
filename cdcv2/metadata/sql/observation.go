@@ -541,7 +541,7 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 			}
 
 			// If capture fails before a owner progress is updated for the first time, the corresponding
-			// taskPosition will not stored in Progress. In this case, we alse need to set owner removed.
+			// taskPosition will not stored in Progress. In this case, we also need to set owner removed.
 			err = c.client.updateScheduleOwnerStateByOwnerID(tx, metadata.SchedRemoved, id)
 			if err != nil {
 				return errors.Trace(err)
@@ -609,6 +609,7 @@ func (c *ControllerOb[T]) ScheduleSnapshot() (ss []metadata.ScheduledChangefeed,
 	return
 }
 
+// OwnerOb is an implement for metadata.OwnerObservation.
 type OwnerOb[T TxnContext] struct {
 	egCtx  context.Context
 	client client[T]
