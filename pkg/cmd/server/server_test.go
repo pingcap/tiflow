@@ -23,6 +23,7 @@ import (
 
 	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -154,7 +155,7 @@ func TestParseCfg(t *testing.T) {
 			SortDir:       config.DefaultSortDir,
 			CacheSizeInMB: 128,
 		},
-		Security: &config.SecurityConfig{
+		Security: &security.Credential{
 			CertPath:      "bb",
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},
@@ -298,7 +299,7 @@ check-balance-interval = "10s"
 			SortDir:       config.DefaultSortDir,
 			CacheSizeInMB: 8,
 		},
-		Security: &config.SecurityConfig{},
+		Security: &security.Credential{},
 		KVClient: &config.KVClientConfig{
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
@@ -424,7 +425,7 @@ cert-allowed-cn = ["dd","ee"]
 			SortDir:       config.DefaultSortDir,
 			CacheSizeInMB: 8,
 		},
-		Security: &config.SecurityConfig{
+		Security: &security.Credential{
 			CertPath:      "bb",
 			KeyPath:       "cc",
 			CertAllowedCN: []string{"dd", "ee"},

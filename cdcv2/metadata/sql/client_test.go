@@ -15,18 +15,29 @@ package sql
 
 import (
 	"database/sql/driver"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdcv2/metadata"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )
 
+// ================================ Test Create/Update/Delete =================================
+
 // Note that updateAt is not included in the test because it is automatically updated by gorm.
 // TODO(CharlesCheung): add test to verify the correctness of updateAt.
-
-func runMockExecTest(t *testing.T, mock sqlmock.Sqlmock, expectedSQL string, args []driver.Value, fn func() error) {
+func runMockExecTest(
+	t *testing.T, mock sqlmock.Sqlmock,
+	expectedSQL string, args []driver.Value,
+	fn func() error,
+	skipCheck ...bool, /* 0: test ErrMetaRowsAffectedNotMatch, 1: test ErrMetaOpFailed */
+) {
 	testErr := errors.New("test error")
 
 	// Test normal execution
@@ -37,13 +48,17 @@ func runMockExecTest(t *testing.T, mock sqlmock.Sqlmock, expectedSQL string, arg
 	// Test rows affected not match
 	mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnResult(sqlmock.NewResult(1, 0))
 	err = fn()
-	require.ErrorIs(t, err, errors.ErrMetaRowsAffectedNotMatch)
+	if len(skipCheck) < 1 || !skipCheck[0] {
+		require.ErrorIs(t, err, errors.ErrMetaRowsAffectedNotMatch)
+	}
 
 	// Test op failed
 	mock.ExpectExec(expectedSQL).WithArgs(args...).WillReturnError(testErr)
 	err = fn()
-	require.ErrorIs(t, err, errors.ErrMetaOpFailed)
-	require.ErrorContains(t, err, testErr.Error())
+	if len(skipCheck) < 2 || !skipCheck[1] {
+		require.ErrorIs(t, err, errors.ErrMetaOpFailed)
+		require.ErrorContains(t, err, testErr.Error())
+	}
 }
 
 func TestUpstreamClientExecSQL(t *testing.T) {
@@ -55,8 +70,8 @@ func TestUpstreamClientExecSQL(t *testing.T) {
 
 	up := &UpstreamDO{
 		ID:        1,
-		Endpoints: "endpoints",
-		Config: &Credential{
+		Endpoints: strings.Join([]string{"endpoint1", "endpoint2"}, ","),
+		Config: &security.Credential{
 			CAPath: "ca-path",
 		},
 		Version: 1,
@@ -113,19 +128,23 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 
 	backendDB, db, mock := newMockDB(t)
 	defer backendDB.Close()
-	cient := NewORMClient("test-changefeed-info-client", db)
+	client := NewORMClient("test-changefeed-info-client", db)
 
 	info := &ChangefeedInfoDO{
-		UUID:       1,
-		Namespace:  "namespace",
-		ID:         "id",
-		RemovedAt:  nil,
-		UpstreamID: 1,
-		SinkURI:    "sinkURI",
-		StartTs:    1,
-		TargetTs:   1,
-		Config:     &ReplicaConfig{},
-		Version:    1,
+		ChangefeedInfo: metadata.ChangefeedInfo{
+			ChangefeedIdent: metadata.ChangefeedIdent{
+				UUID:      1,
+				Namespace: "namespace",
+				ID:        "id",
+			},
+			UpstreamID: 1,
+			SinkURI:    "sinkURI",
+			StartTs:    1,
+			TargetTs:   1,
+			Config:     &config.ReplicaConfig{},
+		},
+		RemovedAt: nil,
+		Version:   1,
 	}
 	configValue, err := info.Config.Value()
 	require.NoError(t, err)
@@ -134,16 +153,16 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 	runMockExecTest(
 		t, mock,
 		"INSERT INTO `changefeed_info` ("+
-			"`namespace`,`id`,`removed_at`,`upstream_id`,"+
-			"`sink_uri`,`start_ts`,`target_ts`,`config`,"+
+			"`namespace`,`id`,`upstream_id`,`sink_uri`,"+
+			"`start_ts`,`target_ts`,`config`,`removed_at`,"+
 			"`version`,`update_at`,`uuid`) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
 		[]driver.Value{
-			info.Namespace, info.ID, info.RemovedAt, info.UpstreamID,
-			info.SinkURI, info.StartTs, info.TargetTs, configValue,
+			info.Namespace, info.ID, info.UpstreamID, info.SinkURI,
+			info.StartTs, info.TargetTs, configValue, info.RemovedAt,
 			info.Version, sqlmock.AnyArg(), info.UUID,
 		},
 		func() error {
-			return cient.createChangefeedInfo(db, info)
+			return client.createChangefeedInfo(db, info)
 		},
 	)
 
@@ -153,7 +172,7 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 		"DELETE FROM `changefeed_info` WHERE `changefeed_info`.`uuid` = ?",
 		[]driver.Value{info.UUID},
 		func() error {
-			return cient.deleteChangefeedInfo(db, info)
+			return client.deleteChangefeedInfo(db, info)
 		},
 	)
 
@@ -163,7 +182,7 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 		"UPDATE `changefeed_info` SET `sink_uri`=?,`start_ts`=?,`target_ts`=?,`config`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
 		[]driver.Value{info.SinkURI, info.StartTs, info.TargetTs, configValue, info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
 		func() error {
-			return cient.updateChangefeedInfo(db, info)
+			return client.updateChangefeedInfo(db, info)
 		},
 	)
 
@@ -174,7 +193,17 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 		"UPDATE `changefeed_info` SET `sink_uri`=?,`start_ts`=?,`target_ts`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
 		[]driver.Value{info.SinkURI, info.StartTs, info.TargetTs, info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
 		func() error {
-			return cient.updateChangefeedInfo(db, info)
+			return client.updateChangefeedInfo(db, info)
+		},
+	)
+
+	// Test markChangefeedRemoved
+	runMockExecTest(
+		t, mock,
+		"UPDATE `changefeed_info` SET `removed_at`=?,`version`=?,`update_at`=? WHERE uuid = ? and version = ?",
+		[]driver.Value{sqlmock.AnyArg(), info.Version + 1, sqlmock.AnyArg(), info.UUID, info.Version},
+		func() error {
+			return client.markChangefeedRemoved(db, info)
 		},
 	)
 }
@@ -187,14 +216,16 @@ func TestChangefeedStateClientExecSQL(t *testing.T) {
 	cient := NewORMClient("test-changefeed-state-client", db)
 
 	state := &ChangefeedStateDO{
-		ChangefeedUUID: 1,
-		State:          "state",
-		// Note that warning and error could be nil.
-		Warning: nil,
-		Error: &RunningError{
-			Time: time.Now(),
-			Addr: "addr",
-			Code: "code",
+		ChangefeedState: metadata.ChangefeedState{
+			ChangefeedUUID: 1,
+			State:          "state",
+			// Note that warning and error could be nil.
+			Warning: nil,
+			Error: &model.RunningError{
+				Time: time.Now(),
+				Addr: "addr",
+				Code: "code",
+			},
 		},
 		Version: 1,
 	}
@@ -243,12 +274,14 @@ func TestScheduleClientExecSQL(t *testing.T) {
 
 	ownerCapture := "test-owner"
 	schedule := &ScheduleDO{
-		ChangefeedUUID: 1,
-		Owner:          &ownerCapture,
-		OwnerState:     "ownerState",
-		Processors:     nil,
-		TaskPosition: ChangefeedProgress{
-			CheckpointTs: 1,
+		ScheduledChangefeed: metadata.ScheduledChangefeed{
+			ChangefeedUUID: 1,
+			Owner:          &ownerCapture,
+			OwnerState:     metadata.SchedRemoved,
+			Processors:     nil,
+			TaskPosition: metadata.ChangefeedProgress{
+				CheckpointTs: 1,
+			},
 		},
 		Version: 1,
 	}
@@ -284,7 +317,7 @@ func TestScheduleClientExecSQL(t *testing.T) {
 	)
 
 	// Test updateSchedule with empty task position.
-	schedule.TaskPosition = ChangefeedProgress{}
+	schedule.TaskPosition = metadata.ChangefeedProgress{}
 	runMockExecTest(
 		t, mock,
 		"UPDATE `schedule` SET `owner`=?,`owner_state`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
@@ -292,6 +325,27 @@ func TestScheduleClientExecSQL(t *testing.T) {
 		func() error {
 			return cient.updateSchedule(db, schedule)
 		},
+	)
+
+	// Test updateScheduleOwnerState
+	runMockExecTest(
+		t, mock,
+		"UPDATE `schedule` SET `owner_state`=?,`version`=?,`update_at`=? WHERE changefeed_uuid = ? and version = ?",
+		[]driver.Value{schedule.OwnerState, schedule.Version + 1, sqlmock.AnyArg(), schedule.ChangefeedUUID, schedule.Version},
+		func() error {
+			return cient.updateScheduleOwnerState(db, schedule)
+		},
+	)
+
+	// Test updateScheduleOwnerStateByOwnerID
+	runMockExecTest(
+		t, mock,
+		"UPDATE `schedule` SET `owner`=?,`owner_state`=?,`processors`=?,`version`=version + ?,`update_at`=? WHERE owner = ?",
+		[]driver.Value{nil, metadata.SchedRemoved, nil, 1, sqlmock.AnyArg(), *schedule.Owner},
+		func() error {
+			return cient.updateScheduleOwnerStateByOwnerID(db, metadata.SchedRemoved, *schedule.Owner)
+		},
+		true, // skip check ErrMetaRowsAffectedNotMatch since multiple rows would be affected.
 	)
 }
 
@@ -329,7 +383,7 @@ func TestProgressClientExecSQL(t *testing.T) {
 	)
 
 	// Test updateProgress
-	progress.Progress = &CaptureProgress{}
+	progress.Progress = &metadata.CaptureProgress{}
 	runMockExecTest(
 		t, mock,
 		"UPDATE `progress` SET `progress`=?,`version`=?,`update_at`=? WHERE capture_id = ? and version = ?",
@@ -338,4 +392,28 @@ func TestProgressClientExecSQL(t *testing.T) {
 			return cient.updateProgress(db, progress)
 		},
 	)
+}
+
+// ================================ Test Query =================================
+
+func TestUpstreamClientQuerySQL(t *testing.T) {
+	t.Parallel()
+
+	backendDB, db, mock := newMockDB(t)
+	defer backendDB.Close()
+	client := NewORMClient("test-upstream-client-query", db)
+
+	// Test queryUpstreams
+	expectedSQL := "SELECT * FROM `upstream`"
+	mock.ExpectQuery(expectedSQL).WillReturnRows(
+		sqlmock.NewRows([]string{"id", "endpoints", "config", "version", "update_at"}).
+			AddRow(1, []byte("endpoint1,endpoint2"), nil, 1, time.Now()),
+	)
+	upstreams, err := client.queryUpstreams(db)
+	require.NoError(t, err)
+	require.Len(t, upstreams, 1)
+	require.Equal(t, uint64(1), upstreams[0].ID)
+	require.Equal(t, "endpoint1,endpoint2", upstreams[0].Endpoints)
+	require.Nil(t, upstreams[0].Config)
+	require.Equal(t, uint64(1), upstreams[0].Version)
 }

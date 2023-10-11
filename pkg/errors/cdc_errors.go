@@ -939,6 +939,7 @@ var (
 	)
 
 	// cdc v2
+	// TODO(CharlesCheung): refactor this errors
 	ErrElectorNotLeader = errors.Normalize(
 		"%s is not leader",
 		errors.RFCCodeText("CDC:ErrNotLeader"),
@@ -954,5 +955,13 @@ var (
 	ErrMetaOpFailed = errors.Normalize(
 		"meta operation %s is failed",
 		errors.RFCCodeText("DFLOW:ErrMetaOpFail"),
+	)
+	ErrMetaInvalidState = errors.Normalize(
+		"meta state is invalid: %s",
+		errors.RFCCodeText("DFLOW:ErrMetaInvalidState"),
+	)
+	ErrInconsistentMetaCache = errors.Normalize(
+		"meta cache is inconsistent: %s",
+		errors.RFCCodeText("DFLOW:ErrInconsistentMetaCache"),
 	)
 )
