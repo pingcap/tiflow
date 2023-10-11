@@ -386,9 +386,13 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 			cf.ChangefeedIdent, cf.UpstreamID, up.ID)
 		return cf.ChangefeedIdent, errors.ErrMetaInvalidState.GenWithStackByArgs(errMsg)
 	}
-	cf.ChangefeedIdent.UUID = c.uuidGenerator.GenChangefeedUUID()
+	uuid, err := c.uuidGenerator.GenChangefeedUUID(c.egCtx)
+	if err != nil {
+		return cf.ChangefeedIdent, errors.Trace(err)
+	}
 
-	err := c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+	cf.ChangefeedIdent.UUID = uuid
+	err = c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
 		if err := c.upsertUpstream(tx, up); err != nil {
 			return errors.Trace(err)
 		}
