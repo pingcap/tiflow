@@ -67,7 +67,7 @@ func NewEventRouter(
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig.PartitionRule, scheme, ruleConfig.IndexName)
+		d := getPartitionDispatcher(ruleConfig.PartitionRule, scheme, ruleConfig.IndexName, ruleConfig.Columns)
 		t, err := getTopicDispatcher(ruleConfig.TopicRule, defaultTopic, protocol, scheme)
 		if err != nil {
 			return nil, err
@@ -191,7 +191,9 @@ func (s *EventRouter) matchDispatcher(
 }
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
-func getPartitionDispatcher(rule string, scheme string, indexName string) partition.Dispatcher {
+func getPartitionDispatcher(
+	rule string, scheme string, indexName string, columns []string,
+) partition.Dispatcher {
 	switch strings.ToLower(rule) {
 	case "default":
 		return partition.NewDefaultDispatcher()
@@ -204,6 +206,8 @@ func getPartitionDispatcher(rule string, scheme string, indexName string) partit
 	case "rowid":
 		log.Warn("rowid is deprecated, index-value is used as the partition dispatcher.")
 		return partition.NewIndexValueDispatcher(indexName)
+	case "columns":
+		return partition.NewColumnsDispatcher(columns)
 	default:
 	}
 
