@@ -355,14 +355,14 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 
 		// Create or update the upstream info.
 		oldUp, err := c.client.queryUpstreamByID(tx, up.ID)
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(errors.Cause(err), gorm.ErrRecordNotFound) {
 			if err := c.client.createUpstream(tx, newUp); err != nil {
 				return errors.Trace(err)
 			}
 		} else if err != nil {
 			return errors.Trace(err)
 		}
-		if oldUp != nil {
+		if oldUp == nil {
 			errMsg := fmt.Sprintf("expect non-empty upstream info for id %d", up.ID)
 			return errors.Trace(errors.ErrMetaInvalidState.GenWithStackByArgs(errMsg))
 		}
