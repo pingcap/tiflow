@@ -306,7 +306,7 @@ func (c *ormClient) queryChangefeedStates(tx *gorm.DB) ([]*ChangefeedStateDO, er
 //nolint:unused
 func (c *ormClient) queryChangefeedStatesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedStateDO, error) {
 	var states []*ChangefeedStateDO
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&states)
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&states)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedStatesByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -460,7 +460,7 @@ func (c *ormClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, 
 // querySchedulesUinqueOwnerIDs implements the scheduleClient interface.
 func (c *ormClient) querySchedulesUinqueOwnerIDs(tx *gorm.DB) ([]model.CaptureID, error) {
 	var captureIDs []model.CaptureID
-	ret := tx.Model(&ScheduleDO{}).Select("owner").Where("owner !=null ").Distinct().Find(&captureIDs)
+	ret := tx.Model(&ScheduleDO{}).Select("owner").Where("owner IS NOT NULL").Distinct().Find(&captureIDs)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesUinqueOwnerIDs"); err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -112,6 +112,8 @@ func NewOwner(
 	return &OwnerImpl{
 		upstreamManager:    upstreamManager,
 		captureObservation: captureObservation,
+		changefeeds:        make(map[model.ChangeFeedID]*changefeedImpl),
+		changefeedUUIDMap:  make(map[metadata.ChangefeedUUID]*changefeedImpl),
 		cfg:                cfg,
 		querier:            querier,
 		storage:            storage,

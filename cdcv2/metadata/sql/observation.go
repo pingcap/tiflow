@@ -342,14 +342,18 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 			Version: 1,
 		}
 
+		// Create or update the upstream info.
 		oldUp, err := c.client.queryUpstreamByID(tx, up.ID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.client.createUpstream(tx, newUp)
 		} else if err != nil {
 			return errors.Trace(err)
 		}
-
-		if oldUp != nil && !oldUp.equal(newUp) {
+		if oldUp != nil {
+			errMsg := fmt.Sprintf("expect non-empty upstream info for id %d", up.ID)
+			return errors.Trace(errors.ErrMetaInvalidState.GenWithStackByArgs(errMsg))
+		}
+		if !oldUp.equal(newUp) {
 			newUp.Version = oldUp.Version
 			c.client.updateUpstream(tx, newUp)
 		}
@@ -490,28 +494,34 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 				return errors.Trace(err)
 			}
 			prMap := prs[0]
-			for cf, taskPosition := range *prMap.Progress {
-				// TODO(CharlesCheung): maybe such operation should be done in background.
-				oldSc, err := c.client.queryScheduleByUUID(tx, cf)
-				if err != nil {
-					return errors.Trace(err)
-				}
-				if *oldSc.Owner != id || oldSc.OwnerState == metadata.SchedRemoved {
-					continue
-				}
-				newSc := &ScheduleDO{
-					ScheduledChangefeed: metadata.ScheduledChangefeed{
-						ChangefeedUUID: oldSc.ChangefeedUUID,
-						Owner:          nil,
-						OwnerState:     metadata.SchedRemoved,
-						Processors:     nil,
-						TaskPosition:   taskPosition,
-					},
-				}
-				// TODO: use Model to prevent nil value from being ignored.
-				err = c.client.updateSchedule(tx, newSc)
-				if err != nil {
-					return errors.Trace(err)
+			if prMap.Progress == nil {
+				log.Info("no changefeed is owned by the capture",
+					zap.String("capture-id", id),
+					zap.Any("capture-id", id))
+			} else {
+				for cf, taskPosition := range *prMap.Progress {
+					// TODO(CharlesCheung): maybe such operation should be done in background.
+					oldSc, err := c.client.queryScheduleByUUID(tx, cf)
+					if err != nil {
+						return errors.Trace(err)
+					}
+					if *oldSc.Owner != id || oldSc.OwnerState == metadata.SchedRemoved {
+						continue
+					}
+					newSc := &ScheduleDO{
+						ScheduledChangefeed: metadata.ScheduledChangefeed{
+							ChangefeedUUID: oldSc.ChangefeedUUID,
+							Owner:          nil,
+							OwnerState:     metadata.SchedRemoved,
+							Processors:     nil,
+							TaskPosition:   taskPosition,
+						},
+					}
+					// TODO: use Model to prevent nil value from being ignored.
+					err = c.client.updateSchedule(tx, newSc)
+					if err != nil {
+						return errors.Trace(err)
+					}
 				}
 			}
 
@@ -539,7 +549,7 @@ func (c *ControllerOb[T]) SetOwner(target metadata.ScheduledChangefeed) error {
 		if err := metadata.CheckScheduleState(old.ScheduledChangefeed, target); err != nil {
 			return errors.Trace(err)
 		}
-		return c.client.updateScheduleOwnerState(tx, &ScheduleDO{
+		return c.client.updateSchedule(tx, &ScheduleDO{
 			ScheduledChangefeed: target,
 			Version:             old.Version,
 		})
