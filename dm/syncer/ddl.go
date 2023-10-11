@@ -1173,7 +1173,6 @@ func (ddl *DDLWorker) AstToDDLEvent(qec *queryEventContext, info *ddlInfo) (et b
 				return bf.ExchangePartition
 			}
 		}
-	default:
 	}
 	return bf.AstToDDLEvent(node)
 }
