@@ -34,11 +34,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-<<<<<<< HEAD
-=======
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
->>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852))
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -88,16 +85,10 @@ func newDMLSink(
 	protocol config.Protocol,
 	errCh chan error,
 ) *dmlSink {
-<<<<<<< HEAD
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	worker := newWorker(changefeedID, protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
-=======
-	ctx, cancel := context.WithCancelCause(ctx)
-	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
->>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852))
 
 	s := &dmlSink{
 		id:          changefeedID,
