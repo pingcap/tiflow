@@ -14,8 +14,13 @@ mysql_only="bdr_mode capture_suicide_while_balance_table syncpoint hang_sink_sui
 mysql_only_http="http_api http_api_tls api_v2"
 mysql_only_consistent_replicate="consistent_replicate_ddl consistent_replicate_gbk consistent_replicate_nfs consistent_replicate_storage_file consistent_replicate_storage_file_large_value consistent_replicate_storage_s3 consistent_partition_table"
 
+<<<<<<< HEAD
 kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume"
 kafka_only_protocol="canal_json_adapter_compatibility canal_json_basic multi_topics canal_json_handle_key_only open_protocol_handle_key_only"
+=======
+kafka_only="kafka_big_messages kafka_compression kafka_messages kafka_sink_error_resume mq_sink_lost_callback"
+kafka_only_protocol="canal_json_adapter_compatibility canal_json_basic multi_topics avro_basic canal_json_handle_key_only open_protocol_handle_key_only canal_json_claim_check open_protocol_claim_check"
+>>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852))
 kafka_only_v2="kafka_big_txn_v2 kafka_big_messages_v2 multi_tables_ddl_v2 multi_topics_v2"
 
 storage_only_csv="csv_storage_basic csv_storage_multi_tables_ddl csv_storage_partition_table storage_csv_update"

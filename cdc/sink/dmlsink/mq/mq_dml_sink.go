@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
@@ -32,6 +34,11 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
+<<<<<<< HEAD
+=======
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
+>>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852))
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -62,7 +69,7 @@ type dmlSink struct {
 	adminClient kafka.ClusterAdminClient
 
 	ctx    context.Context
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 
 	wg   sync.WaitGroup
 	dead chan struct{}
@@ -81,10 +88,16 @@ func newDMLSink(
 	protocol config.Protocol,
 	errCh chan error,
 ) *dmlSink {
+<<<<<<< HEAD
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
 	worker := newWorker(changefeedID, protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
+=======
+	ctx, cancel := context.WithCancelCause(ctx)
+	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
+	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
+>>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852))
 
 	s := &dmlSink{
 		id:          changefeedID,
@@ -147,10 +160,16 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			continue
 		}
 		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
+
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
+			failpoint.Inject("MQSinkGetPartitionError", func() {
+				log.Info("failpoint MQSinkGetPartitionError injected", zap.String("changefeedID", s.id.ID))
+				err = errors.New("MQSinkGetPartitionError")
+			})
 			if err != nil {
+				s.cancel(err)
 				return errors.Trace(err)
 			}
 			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
@@ -177,7 +196,7 @@ func (s *dmlSink) Scheme() string {
 // Close closes the sink.
 func (s *dmlSink) Close() {
 	if s.cancel != nil {
-		s.cancel()
+		s.cancel(nil)
 	}
 	s.wg.Wait()
 
