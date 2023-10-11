@@ -1045,6 +1045,8 @@ func (ddl *DDLWorker) needChangedColumnData(oldCol, newCol *table.Column) bf.Eve
 }
 
 func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, spec *ast.AlterTableSpec) (bf.EventType, error) {
+	// return AlterTable if any error happened
+	// avoid panic, won't happen
 	if len(info.sourceTables) == 0 || len(info.targetTables) == 0 {
 		return bf.AlterTable, nil
 	}
