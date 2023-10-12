@@ -111,14 +111,21 @@ func newDMLSink(
 		s.alive.Unlock()
 		close(s.dead)
 
-		if err == nil {
-			return
-		}
-
-		if context.Cause(ctx) != nil {
+		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				err = context.Cause(ctx)
+			}
 			select {
-			case <-ctx.Done():
-			case errCh <- ctx.Err():
+			case errCh <- err:
+				log.Info("mq dml sink meet error",
+					zap.String("namespace", s.id.Namespace),
+					zap.String("changefeed", s.id.ID),
+					zap.Error(err))
+			default:
+				log.Info("mq dml sink meet error, ignored",
+					zap.String("namespace", s.id.Namespace),
+					zap.String("changefeed", s.id.ID),
+					zap.Error(err))
 			}
 		}
 	}()
