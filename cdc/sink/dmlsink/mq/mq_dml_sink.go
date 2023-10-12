@@ -111,10 +111,14 @@ func newDMLSink(
 		s.alive.Unlock()
 		close(s.dead)
 
-		if err != nil && errors.Cause(err) != context.Canceled {
+		if err == nil {
+			return
+		}
+
+		if context.Cause(ctx) != nil {
 			select {
 			case <-ctx.Done():
-			case errCh <- err:
+			case errCh <- ctx.Err():
 			}
 		}
 	}()
