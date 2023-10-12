@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
@@ -788,6 +789,9 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 // getTableInfo returns a table info for sourceTable, it should not be modified by caller.
 func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error) {
+	if s.schemaTracker == nil {
+		return nil, terror.ErrSchemaTrackerIsClosed.New("schema tracker not init")
+	}
 	ti, err := s.schemaTracker.GetTableInfo(sourceTable)
 	if err == nil {
 		return ti, nil
@@ -811,6 +815,45 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 		return nil, terror.ErrSchemaTrackerCannotGetTable.Delegate(err, sourceTable)
 	}
 	return ti, nil
+}
+
+// getDBInfoFromDownstream tries to track the db info from the downstream. It will not overwrite existing table.
+func (s *Syncer) getDBInfoFromDownstream(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error) {
+	// TODO: Switch to use the HTTP interface to retrieve the TableInfo directly if HTTP port is available
+	// use parser for downstream.
+	parser2, err := dbconn.GetParserForConn(tctx, s.ddlDBConn)
+	if err != nil {
+		return nil, terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+
+	createSQL, err := dbconn.GetSchemaCreateSQL(tctx, s.ddlDBConn, targetTable.Schema)
+	if err != nil {
+		return nil, terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+
+	createNode, err := parser2.ParseOneStmt(createSQL, "", "")
+	if err != nil {
+		return nil, terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+	stmt := createNode.(*ast.CreateDatabaseStmt)
+
+	// we only consider explicit charset/collate, if not found, fallback to default charset/collate.
+	charsetOpt := ast.CharsetOpt{}
+	for _, val := range stmt.Options {
+		switch val.Tp {
+		case ast.DatabaseOptionCharset:
+			charsetOpt.Chs = val.Value
+		case ast.DatabaseOptionCollate:
+			charsetOpt.Col = val.Value
+		}
+	}
+
+	chs, coll, err := tidbddl.ResolveCharsetCollation(nil, charsetOpt)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &model.DBInfo{Name: stmt.Name, Charset: chs, Collate: coll}, nil
 }
 
 // trackTableInfoFromDownstream tries to track the table info from the downstream. It will not overwrite existing table.

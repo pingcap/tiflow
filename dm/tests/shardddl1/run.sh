@@ -413,6 +413,7 @@ function DM_ADD_DROP_COLUMNS_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(7,now(),7,7,7);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(8,now(),8,8,8);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(9,now(),9,9,9);"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# drop cols
 	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column col1, drop column col2;"
@@ -427,6 +428,7 @@ function DM_ADD_DROP_COLUMNS_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(17,now(),17);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(18,now(),18);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(19,now(),19);"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# add and drop
 	run_sql_source1 "alter table ${shardddl1}.${tb1} add column col4 int, drop column col3;"
@@ -441,6 +443,7 @@ function DM_ADD_DROP_COLUMNS_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb1} values(27,now(),27);"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(28,now(),28);"
 	run_sql_source2 "insert into ${shardddl1}.${tb2} values(29,now(),29);"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# drop and add
 	run_sql_source1 "alter table ${shardddl1}.${tb1} drop column col4, add column col5 int;"

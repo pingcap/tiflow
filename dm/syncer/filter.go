@@ -119,7 +119,13 @@ func skipByFilter(binlogFilter *bf.BinlogEvent, table *filter.Table, et bf.Event
 	if err != nil {
 		return false, terror.Annotatef(terror.ErrSyncerUnitBinlogEventFilter.New(err.Error()), "skip event %s on %v", et, table)
 	}
-	return action == bf.Ignore, nil
+	switch action {
+	case bf.Ignore:
+		return true, nil
+	case bf.Error:
+		return false, terror.ErrSyncerUnitBinlogEventFilter.Generatef("event %s on %v", et, table)
+	}
+	return false, nil
 }
 
 func (s *Syncer) skipByTable(table *filter.Table) bool {
