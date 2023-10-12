@@ -67,7 +67,9 @@ func NewEventRouter(
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig.PartitionRule, scheme, ruleConfig.IndexName, ruleConfig.Columns)
+		d := getPartitionDispatcher(
+			ruleConfig.PartitionRule, scheme, ruleConfig.IndexName, ruleConfig.Columns,
+		)
 		t, err := getTopicDispatcher(ruleConfig.TopicRule, defaultTopic, protocol, scheme)
 		if err != nil {
 			return nil, err
@@ -130,12 +132,20 @@ func (s *EventRouter) GetPartitionForRowChange(
 func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
 	for _, table := range infos {
 		_, partitionDispatcher := s.matchDispatcher(table.TableName.Schema, table.TableName.Table)
-		if v, ok := partitionDispatcher.(*partition.IndexValueDispatcher); ok {
-			_, _, ok = table.IndexByName(v.IndexName)
+		switch v := partitionDispatcher.(type) {
+		case *partition.IndexValueDispatcher:
+			_, _, ok := table.IndexByName(v.IndexName)
 			if !ok {
 				return cerror.ErrDispatcherFailed.GenWithStack(
 					"index not found when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
 			}
+		case *partition.ColumnsDispatcher:
+			_, ok := table.ColumnsByNames(v.Columns)
+			if !ok {
+				return cerror.ErrDispatcherFailed.GenWithStack(
+					"columns not found when verify the table, table: %v, columns: %v", table.TableName, v.Columns)
+			}
+		default:
 		}
 	}
 	return nil
@@ -215,7 +225,7 @@ func getPartitionDispatcher(
 		return partition.NewKeyDispatcher(rule)
 	}
 
-	log.Warn("the partition dispatch rule is not default/ts/table/index-value," +
+	log.Warn("the partition dispatch rule is not default/ts/table/index-value/columns," +
 		" use the default rule instead.")
 	return partition.NewDefaultDispatcher()
 }

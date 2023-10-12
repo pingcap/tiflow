@@ -275,6 +275,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				DispatcherRule: "",
 				PartitionRule:  rule.PartitionRule,
 				IndexName:      rule.IndexName,
+				Columns:        rule.Columns,
 				TopicRule:      rule.TopicRule,
 			})
 		}
@@ -554,6 +555,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Matcher:       rule.Matcher,
 				PartitionRule: rule.PartitionRule,
 				IndexName:     rule.IndexName,
+				Columns:       rule.Columns,
 				TopicRule:     rule.TopicRule,
 			})
 		}
@@ -917,6 +919,7 @@ type DispatchRule struct {
 	Matcher       []string `json:"matcher,omitempty"`
 	PartitionRule string   `json:"partition"`
 	IndexName     string   `json:"index"`
+	Columns       []string `json:"columns"`
 	TopicRule     string   `json:"topic"`
 }
 
