@@ -81,8 +81,10 @@ func (g *randomUUIDGenerator) GenChangefeedUUID(ctx context.Context) (metadata.C
 
 // TODO: implement sql based UUID generator.
 
-const tableNameLogicEpoch = "logic_epoch"
-const taskCDCChangefeedUUID = "cdc-changefeed-uuid"
+const (
+	tableNameLogicEpoch   = "logic_epoch"
+	taskCDCChangefeedUUID = "cdc-changefeed-uuid"
+)
 
 type logicEpochDO struct {
 	TaskID string `gorm:"column:task_id;type:varchar(128);primaryKey json:"task_id""`
