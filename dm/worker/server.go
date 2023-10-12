@@ -1080,3 +1080,26 @@ func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValid
 	//nolint:nilerr
 	return resp, nil
 }
+
+func (s *Server) UpdateValidator(ctx context.Context, req *pb.UpdateValidationWorkerRequest) (*pb.CommonWorkerResponse, error) {
+	log.L().Info("update validation", zap.Stringer("payload", req))
+	w := s.getSourceWorker(true)
+	resp := &pb.CommonWorkerResponse{
+		Result: true,
+	}
+	if w == nil {
+		log.L().Warn("fail to update validator, because no mysql source is being handled in the worker")
+		resp.Result = false
+		resp.Msg = terror.ErrWorkerNoStart.Error()
+		return resp, nil
+	}
+	// err := w.UpdateWorkerValidator(req.TaskName)
+	// if err != nil {
+	// 	resp.Result = false
+	// 	resp.Msg = err.Error()
+	// 	//nolint:nilerr
+	// 	return resp, nil
+	// }
+	//nolint:nilerr
+	return resp, nil
+}
