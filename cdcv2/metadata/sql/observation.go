@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ngaut/log"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
 	ormUtil "github.com/pingcap/tiflow/engine/pkg/orm"
