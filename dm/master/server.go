@@ -3234,7 +3234,7 @@ func (s *Server) UpdateValidation(ctx context.Context, req *pb.UpdateValidationR
 		if len(sources) == 0 {
 			return &pb.UpdateValidationResponse{
 				Result: false,
-				Msg:    fmt.Sprintf("task %s has no source or not exist, please check the task name and status", req.Task),
+				Msg:    fmt.Sprintf("task %s has no source or not exist, please check the task name and status", req.TaskName),
 			}, nil
 		}
 	}
