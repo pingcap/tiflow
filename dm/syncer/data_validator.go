@@ -194,6 +194,7 @@ type DataValidator struct {
 
 	validateInterval time.Duration
 	checkInterval    time.Duration
+	cutOverLocation  *binlog.Location
 	workers          []*validateWorker
 	workerCnt        int
 
@@ -954,7 +955,11 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 
 func (v *DataValidator) checkAndPersistCheckpointAndData(loc binlog.Location) error {
 	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
-	if time.Since(v.lastFlushTime) > metaFlushInterval {
+	needCutOver := v.cutOverLocation != nil && binlog.CompareLocation(*v.cutOverLocation, loc, v.cfg.EnableGTID) <= 0
+	if time.Since(v.lastFlushTime) > metaFlushInterval && needCutOver {
+		if needCutOver {
+			v.cutOverLocation = nil
+		}
 		v.lastFlushTime = time.Now()
 		if err := v.persistCheckpointAndData(loc); err != nil {
 			v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
