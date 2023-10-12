@@ -4,5 +4,3 @@ advertise-addr = "127.0.0.1:8261"
 
 rpc-timeout = "30s"
 auto-compaction-retention = "3s"
-
-data-dir = "/tmp/dm_test/all_mode/master/default.dm-master-ChauncydeMacBook-Pro.local"
