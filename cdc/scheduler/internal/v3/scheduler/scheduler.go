@@ -24,7 +24,7 @@ import (
 type scheduler interface {
 	Name() string
 	Schedule(
-		checkpointTs tablepb.Checkpoint,
+		checkpoint tablepb.Checkpoint,
 		currentSpans []tablepb.Span,
 		aliveCaptures map[model.CaptureID]*member.CaptureStatus,
 		replications *spanz.BtreeMap[*replication.ReplicationSet],
