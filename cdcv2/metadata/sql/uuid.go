@@ -34,7 +34,7 @@ type uuidGenerator interface {
 }
 
 // NewUUIDGenerator creates a new UUID generator.
-func NewUUIDGenerator(config string) uuidGenerator {
+func NewUUIDGenerator(config string, db *gorm.DB) uuidGenerator {
 	switch config {
 	case "mock":
 		return newMockUUIDGenerator()
@@ -43,8 +43,9 @@ func NewUUIDGenerator(config string) uuidGenerator {
 		return newRandomUUIDGenerator(hasher)
 	case "random-fnv64":
 		return newRandomUUIDGenerator(fnv.New64())
+	default:
+		return newORMUUIDGenerator(taskCDCChangefeedUUID, db)
 	}
-	return nil
 }
 
 type mockUUIDGenerator struct {
@@ -87,7 +88,7 @@ const (
 )
 
 type logicEpochDO struct {
-	TaskID string `gorm:"column:task_id;type:varchar(128);primaryKey json:"task_id""`
+	TaskID string `gorm:"column:task_id;type:varchar(128); primaryKey" json:"task_id"`
 	Epoch  uint64 `gorm:"column:epoch;type:bigint(20) unsigned;not null" json:"epoch"`
 
 	CreatedAt time.Time `json:"created-at"`
@@ -113,6 +114,9 @@ func newORMUUIDGenerator(taskID string, db *gorm.DB) uuidGenerator {
 }
 
 func (g *ormUUIDGenerator) initlize(ctx context.Context) error {
+	if err := g.db.AutoMigrate(&logicEpochDO{}); err != nil {
+		return errors.WrapError(errors.ErrMetaOpFailed, err, "ormUUIDGeneratorInitlize")
+	}
 	// Do nothing on conflict
 	if err := g.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).
 		Create(&logicEpochDO{
@@ -133,7 +137,7 @@ func (g *ormUUIDGenerator) GenChangefeedUUID(ctx context.Context) (metadata.Chan
 		return 0, errors.Trace(err)
 	}
 
-	var uuidDO *logicEpochDO
+	uuidDO := &logicEpochDO{}
 	// every job owns its logic epoch
 	err = g.db.WithContext(ctx).
 		Where("task_id = ?", g.taskID).
@@ -144,7 +148,7 @@ func (g *ormUUIDGenerator) GenChangefeedUUID(ctx context.Context) (metadata.Chan
 				return errors.WrapError(errors.ErrMetaOpFailed, err, "GenChangefeedUUID")
 			}
 
-			if err := tx.First(uuidDO).Error; err != nil {
+			if err := tx.Select("epoch").Limit(1).Find(uuidDO).Error; err != nil {
 				return errors.WrapError(errors.ErrMetaOpFailed, err, "GenChangefeedUUID")
 			}
 			return nil

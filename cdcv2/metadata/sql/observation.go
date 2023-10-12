@@ -50,8 +50,9 @@ type CaptureOb[T TxnContext] struct {
 	selfInfo *model.CaptureInfo
 
 	// TODO(CharlesCheung): handle ctx properly.
-	egCtx  context.Context
-	client client[T]
+	egCtx         context.Context
+	client        client[T]
+	uuidGenerator uuidGenerator
 
 	tasks *entity[metadata.ChangefeedUUID, *ScheduleDO]
 
@@ -80,6 +81,7 @@ func NewCaptureObservation(
 	return &CaptureOb[*gorm.DB]{
 		selfInfo:         selfInfo,
 		client:           newClient(electionStorage, ormClient, opts...),
+		uuidGenerator:    NewUUIDGenerator("orm", db),
 		tasks:            newEntity[metadata.ChangefeedUUID, *ScheduleDO](defaultMaxExecTime),
 		Elector:          metadata.NewElector(selfInfo, electionStorage),
 		ownerChanges:     chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
@@ -136,7 +138,7 @@ func (c *CaptureOb[T]) onTakeControl(
 	controllerCallback func(context.Context, metadata.ControllerObservation) error,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
-		controllerOb := newControllerObservation(c.client, c.selfInfo, c.getAllCaptures)
+		controllerOb := newControllerObservation(c.client, c.uuidGenerator, c.selfInfo, c.getAllCaptures)
 
 		eg, egCtx := errgroup.WithContext(ctx)
 		eg.Go(func() error {
@@ -347,6 +349,7 @@ type ControllerOb[T TxnContext] struct {
 
 func newControllerObservation[T TxnContext](
 	client client[T],
+	uuidGenerator uuidGenerator,
 	selfInfo *model.CaptureInfo,
 	getAllCaptures func() []*model.CaptureInfo,
 ) *ControllerOb[T] {
@@ -354,7 +357,7 @@ func newControllerObservation[T TxnContext](
 		client:         client,
 		selfInfo:       selfInfo,
 		getAllCaptures: getAllCaptures,
-		uuidGenerator:  NewUUIDGenerator("random-crc64"),
+		uuidGenerator:  uuidGenerator,
 	}
 }
 

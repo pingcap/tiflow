@@ -181,8 +181,6 @@ type clientOptions struct {
 	maxExecTime time.Duration
 }
 
-type ClientOptionFunc func(*clientOptions)
-
 func setClientOptions(opts ...ClientOptionFunc) *clientOptions {
 	o := &clientOptions{
 		maxExecTime: defaultMaxExecTime,
@@ -193,6 +191,10 @@ func setClientOptions(opts ...ClientOptionFunc) *clientOptions {
 	return o
 }
 
+// ClientOptionFunc is the option function for the client.
+type ClientOptionFunc func(*clientOptions)
+
+// WithMaxExecTime sets the maximum execution time of the client.
 func WithMaxExecTime(d time.Duration) ClientOptionFunc {
 	return func(o *clientOptions) {
 		o.maxExecTime = d
