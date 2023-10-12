@@ -117,7 +117,6 @@ func (m *messageRouterImpl) GetClient(target NodeID) MessageClient {
 		return cliWrapper.MessageClient
 	}
 
-<<<<<<< HEAD
 	addr, ok := m.addressMap[target]
 	if !ok {
 		log.Warn("failed to create client, no peer",
@@ -157,53 +156,6 @@ func (m *messageRouterImpl) GetClient(target NodeID) MessageClient {
 			case m.errCh <- err:
 			default:
 				// We allow an error to be lost in case the channel is full.
-=======
-	var cliWrapper clientWrapper
-	if m.enableLocalClient && target == m.selfID {
-		ctx, cancel := context.WithCancel(context.Background())
-		cliWrapper = clientWrapper{
-			MessageClient: newLocalMessageClient(ctx, m.clientConfig),
-			cancelFn:      cancel,
-		}
-	} else {
-		addr, ok := m.addressMap[target]
-		if !ok {
-			log.Warn("failed to create client, no peer",
-				zap.String("target", target),
-				zap.StackSkip("stack", 1))
-			// There is no address for this target. We are not able to create a client.
-			// The client is expected to retry if the target peer is added later.
-			return nil
-		}
-		ctx, cancel := context.WithCancel(context.Background())
-		client := NewGrpcMessageClient(m.selfID, m.clientConfig)
-		cliWrapper = clientWrapper{
-			MessageClient: client,
-			cancelFn:      cancel,
-		}
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
-			defer cancel()
-			err := client.Run(ctx, "tcp", addr, target, m.credentials)
-			if err != nil {
-				log.Warn("p2p client exited with error",
-					zap.String("addr", addr),
-					zap.String("targetCapture", target),
-					zap.Error(err))
-			} else {
-				log.Info("peer message client exited",
-					zap.String("addr", addr),
-					zap.String("targetCapture", target))
-			}
-			if errors.Cause(err) != context.Canceled {
-				// Send the error to the error channel.
-				select {
-				case m.errCh <- err:
-				default:
-					// We allow an error to be lost in case the channel is full.
-				}
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 			}
 		}
 
