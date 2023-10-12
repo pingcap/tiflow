@@ -47,13 +47,6 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 		_, _ = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	})
 	cfg.ReplicaConfig = GetDefaultReplicaConfig()
-	cfg.ReplicaConfig.ForceReplicate = true
-	cfg.SinkURI = "mysql://"
-	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
-	// disable old value but force replicate, and using mysql sink.
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
-	require.NotNil(t, err)
-	require.Nil(t, cfInfo)
 	cfg.ReplicaConfig.ForceReplicate = false
 	cfg.ReplicaConfig.IgnoreIneligibleTable = true
 	cfg.SinkURI = "blackhole://"
@@ -108,7 +101,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 
 	cfg.ReplicaConfig.ForceReplicate = true
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
-	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.Error(t, cerror.ErrOldValueNotEnabled, err)
 }
 

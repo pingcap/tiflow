@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
@@ -200,6 +201,9 @@ func NewChangefeedReactorState(clusterID string,
 		ClusterID:     clusterID,
 		ID:            id,
 		TaskPositions: make(map[model.CaptureID]*model.TaskPosition),
+		Info: &model.ChangeFeedInfo{
+			Config: config.GetDefaultReplicaConfig(),
+		},
 	}
 }
 
