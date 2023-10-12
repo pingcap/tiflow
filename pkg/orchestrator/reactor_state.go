@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
@@ -201,9 +200,6 @@ func NewChangefeedReactorState(clusterID string,
 		ClusterID:     clusterID,
 		ID:            id,
 		TaskPositions: make(map[model.CaptureID]*model.TaskPosition),
-		Info: &model.ChangeFeedInfo{
-			Config: config.GetDefaultReplicaConfig(),
-		},
 	}
 }
 
@@ -266,6 +262,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		return errors.Trace(err)
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
+		log.Info("update changefeed info", zap.Any("info", s.Info))
 		s.Info.VerifyAndComplete()
 	}
 	return nil
