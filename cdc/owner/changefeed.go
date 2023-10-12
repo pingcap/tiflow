@@ -157,7 +157,7 @@ func newChangefeed(
 		// The scheduler will be created lazily.
 		scheduler:        nil,
 		barriers:         newBarriers(),
-		feedStateManager: newFeedStateManager(up),
+		feedStateManager: newFeedStateManager(up, state.Info.Config),
 		upstream:         up,
 
 		errCh:     make(chan error, defaultErrChSize),

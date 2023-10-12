@@ -186,12 +186,13 @@ type ReplicaConfig struct {
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
 	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`
 
-	Filter     *FilterConfig              `json:"filter"`
-	Mounter    *MounterConfig             `json:"mounter"`
-	Sink       *SinkConfig                `json:"sink"`
-	Consistent *ConsistentConfig          `json:"consistent,omitempty"`
-	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
-	Integrity  *IntegrityConfig           `json:"integrity"`
+	Filter                       *FilterConfig              `json:"filter"`
+	Mounter                      *MounterConfig             `json:"mounter"`
+	Sink                         *SinkConfig                `json:"sink"`
+	Consistent                   *ConsistentConfig          `json:"consistent,omitempty"`
+	Scheduler                    *ChangefeedSchedulerConfig `json:"scheduler"`
+	Integrity                    *IntegrityConfig           `json:"integrity"`
+	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -474,6 +475,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			IntegrityCheckLevel:   c.Integrity.IntegrityCheckLevel,
 			CorruptionHandleLevel: c.Integrity.CorruptionHandleLevel,
 		}
+	}
+	if c.ChangefeedErrorStuckDuration != nil {
+		res.ChangefeedErrorStuckDuration = &c.ChangefeedErrorStuckDuration.duration
 	}
 	return res
 }
@@ -758,7 +762,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			CorruptionHandleLevel: cloned.Integrity.CorruptionHandleLevel,
 		}
 	}
-
+	if cloned.ChangefeedErrorStuckDuration != nil {
+		res.ChangefeedErrorStuckDuration = &JSONDuration{*cloned.ChangefeedErrorStuckDuration}
+	}
 	return res
 }
 
