@@ -203,6 +203,11 @@ func (c *CaptureOb[T]) OwnerChanges() <-chan metadata.ScheduledChangefeed {
 	return c.ownerChanges.Out()
 }
 
+// OnOwnerLaunched is called when the owner of a changefeed is launched.
+func (c *CaptureOb[T]) OnOwnerLaunched(cf metadata.ChangefeedUUID) metadata.OwnerObservation {
+	return newOwnerObservation[T](c, cf)
+}
+
 // PostOwnerRemoved is called when the owner of a changefeed is removed.
 func (c *CaptureOb[T]) PostOwnerRemoved(cf metadata.ChangefeedUUID, taskPosition metadata.ChangefeedProgress) error {
 	sc := c.tasks.get(cf)
@@ -713,21 +718,21 @@ func (c *ControllerOb[T]) ScheduleSnapshot() (ss []metadata.ScheduledChangefeed,
 type OwnerOb[T TxnContext] struct {
 	egCtx  context.Context
 	client client[T]
-	cf     *metadata.ChangefeedInfo
+	cfUUID metadata.ChangefeedUUID
 }
 
-func newOwnerObservation[T TxnContext](c CaptureOb[T], cf *metadata.ChangefeedInfo) *OwnerOb[T] {
+func newOwnerObservation[T TxnContext](c *CaptureOb[T], cf metadata.ChangefeedUUID) *OwnerOb[T] {
 	return &OwnerOb[T]{
 		egCtx:  c.egCtx,
 		client: c.client,
-		cf:     cf,
+		cfUUID: cf,
 	}
 }
 
 // Self returns the changefeed info of the owner.
 // nolint:unused
-func (o *OwnerOb[T]) Self() *metadata.ChangefeedInfo {
-	return o.cf
+func (o *OwnerOb[T]) Self() metadata.ChangefeedUUID {
+	return o.cfUUID
 }
 
 func (o *OwnerOb[T]) updateChangefeedState(
@@ -735,15 +740,15 @@ func (o *OwnerOb[T]) updateChangefeedState(
 	cfErr *model.RunningError,
 	cfWarn *model.RunningError,
 ) error {
-	return o.client.TxnWithOwnerLock(o.egCtx, o.cf.UUID, func(tx T) error {
-		oldState, err := o.client.queryChangefeedStateByUUID(tx, o.cf.UUID)
+	return o.client.TxnWithOwnerLock(o.egCtx, o.cfUUID, func(tx T) error {
+		oldState, err := o.client.queryChangefeedStateByUUID(tx, o.cfUUID)
 		if err != nil {
 			return errors.Trace(err)
 		}
 
 		newState := &ChangefeedStateDO{
 			ChangefeedState: metadata.ChangefeedState{
-				ChangefeedUUID: o.cf.UUID,
+				ChangefeedUUID: o.cfUUID,
 				State:          state,
 				Error:          oldState.Error,
 				Warning:        oldState.Warning,
@@ -764,8 +769,8 @@ func (o *OwnerOb[T]) updateChangefeedState(
 // UpdateChangefeed updates changefeed metadata, must be called on a paused one.
 // nolint:unused
 func (o *OwnerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
-	return o.client.TxnWithOwnerLock(o.egCtx, o.cf.UUID, func(tx T) error {
-		state, err := o.client.queryChangefeedStateByUUIDWithLock(tx, o.cf.UUID)
+	return o.client.TxnWithOwnerLock(o.egCtx, o.cfUUID, func(tx T) error {
+		state, err := o.client.queryChangefeedStateByUUIDWithLock(tx, o.cfUUID)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -775,7 +780,7 @@ func (o *OwnerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 			)
 		}
 
-		oldInfo, err := o.client.queryChangefeedInfoByUUID(tx, o.cf.UUID)
+		oldInfo, err := o.client.queryChangefeedInfoByUUID(tx, o.cfUUID)
 		if err != nil {
 			return errors.Trace(err)
 		}

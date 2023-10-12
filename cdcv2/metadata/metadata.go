@@ -82,7 +82,10 @@ type CaptureObservation interface {
 	// OwnerChanges fetch owner modifications.
 	OwnerChanges() <-chan ScheduledChangefeed
 
-	// PostOwnerRemoved when an owner exits, inform the metadata storage.
+	// OnOwnerLaunched create an owner observation for a changefeed owner.
+	OnOwnerLaunched(cf ChangefeedUUID) OwnerObservation
+
+	// PostOwnerRemoved inform the metadata storage when an owner exits.
 	PostOwnerRemoved(cf ChangefeedUUID, taskPosition ChangefeedProgress) error
 }
 
@@ -120,7 +123,7 @@ type ControllerObservation interface {
 // All intrefaces are thread-safe and shares one same Context.
 type OwnerObservation interface {
 	// Self returns the changefeed info of the owner.
-	Self() *ChangefeedInfo
+	Self() ChangefeedUUID
 
 	// UpdateChangefeed updates changefeed metadata, must be called on a paused one.
 	UpdateChangefeed(*ChangefeedInfo) error
