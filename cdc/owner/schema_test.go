@@ -149,8 +149,31 @@ func TestIsIneligibleTableID(t *testing.T) {
 	tableIDT2 := job.BinlogInfo.TableInfo.ID
 
 	require.Nil(t, schema.HandleDDLJob(job))
-	require.False(t, schema.IsIneligibleTableID(tableIDT1))
-	require.True(t, schema.IsIneligibleTableID(tableIDT2))
+	ctx := context.Background()
+	ignore, err := schema.IsIneligibleTable(ctx, tableIDT1, job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.False(t, ignore)
+
+	ignore, err = schema.IsIneligibleTable(ctx, tableIDT2, job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.True(t, ignore)
+
+	// test we get the right snapshot to check ineligible table
+	job = helper.DDL2Job("create table test.t3(id int)")
+	tableIDT3 := job.BinlogInfo.TableInfo.ID
+	snapshotTsWithoutPK := job.BinlogInfo.FinishedTS
+	require.Nil(t, schema.HandleDDLJob(job))
+	job = helper.DDL2Job("alter table test.t3 add primary key(id)")
+	snapshotTsWithPK := job.BinlogInfo.FinishedTS
+	require.Nil(t, schema.HandleDDLJob(job))
+	// tableIDT3 is ineligible at snapshotTsWithoutPK
+	ignore, err = schema.IsIneligibleTable(ctx, tableIDT3, snapshotTsWithoutPK)
+	require.Nil(t, err)
+	require.True(t, ignore)
+	// tableIDT3 is eligible at snapshotTsWithPK
+	ignore, err = schema.IsIneligibleTable(ctx, tableIDT3, snapshotTsWithPK)
+	require.Nil(t, err)
+	require.False(t, ignore)
 }
 
 func compareEvents(t *testing.T, e1, e2 *model.DDLEvent) {
