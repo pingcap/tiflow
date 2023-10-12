@@ -186,12 +186,6 @@ function incompatible_ddl() {
 
 	# reorganize partition
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 partition by range(id) (partition p0 values less than (100000))"
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
-		"alter table partition is unsupported" 1
-	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"binlog skip test" \
-		"\"result\": true" 2
 	run_sql_source1 "alter table incompatible_ddl_changes.t1 reorganize partition p0 into ( partition n0 values less than (5), partition n1 values less than (100000));"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
