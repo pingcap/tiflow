@@ -37,8 +37,8 @@ import (
 )
 
 var (
-	_ metadata.CaptureObservation    = &CaptureOb[*gorm.DB]{}
 	_ metadata.Querier               = &CaptureOb[*gorm.DB]{}
+	_ metadata.CaptureObservation    = &CaptureOb[*gorm.DB]{}
 	_ metadata.ControllerObservation = &ControllerOb[*gorm.DB]{}
 	_ metadata.OwnerObservation      = &OwnerOb[*gorm.DB]{}
 )
@@ -48,11 +48,10 @@ type CaptureOb[T TxnContext] struct {
 	// election related fields.
 	metadata.Elector
 	selfInfo *model.CaptureInfo
-	// TODO(CharlesCheung): handle ctx properly.
-	egCtx context.Context
 
-	client        client[T]
-	leaderChecker LeaderChecker[T]
+	// TODO(CharlesCheung): handle ctx properly.
+	egCtx  context.Context
+	client client[T]
 
 	tasks *entity[metadata.ChangefeedUUID, *ScheduleDO]
 
@@ -63,7 +62,7 @@ type CaptureOb[T TxnContext] struct {
 
 // NewCaptureObservation creates a capture observation.
 func NewCaptureObservation(
-	backendDB *sql.DB, selfInfo *model.CaptureInfo,
+	backendDB *sql.DB, selfInfo *model.CaptureInfo, opts ...ClientOptionFunc,
 ) (*CaptureOb[*gorm.DB], error) {
 	db, err := ormUtil.NewGormDB(backendDB, "mysql")
 	if err != nil {
@@ -73,14 +72,14 @@ func NewCaptureObservation(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	ormClient := NewORMClient(selfInfo.ID, db)
 
 	if err := AutoMigrate(db); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &CaptureOb[*gorm.DB]{
 		selfInfo:         selfInfo,
-		client:           NewORMClient(selfInfo.ID, db),
-		leaderChecker:    electionStorage,
+		client:           newClient(electionStorage, ormClient, opts...),
 		tasks:            newEntity[metadata.ChangefeedUUID, *ScheduleDO](defaultMaxExecTime),
 		Elector:          metadata.NewElector(selfInfo, electionStorage),
 		ownerChanges:     chann.NewAutoDrainChann[metadata.ScheduledChangefeed](),
@@ -137,7 +136,7 @@ func (c *CaptureOb[T]) onTakeControl(
 	controllerCallback func(context.Context, metadata.ControllerObservation) error,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
-		controllerOb := newControllerObservation(c.leaderChecker, c.client, c.selfInfo, c.getAllCaptures)
+		controllerOb := newControllerObservation(c.client, c.selfInfo, c.getAllCaptures)
 
 		eg, egCtx := errgroup.WithContext(ctx)
 		eg.Go(func() error {
@@ -322,9 +321,8 @@ func (c *CaptureOb[T]) getAllCaptures() []*model.CaptureInfo {
 
 // ControllerOb is an implement for metadata.ControllerObservation.
 type ControllerOb[T TxnContext] struct {
-	selfInfo      *model.CaptureInfo
-	leaderChecker LeaderChecker[T]
-	client        client[T]
+	selfInfo *model.CaptureInfo
+	client   client[T]
 
 	// TODO(CharlesCheung): handle ctx properly.
 	// egCtx is the inner ctx of elector.
@@ -343,13 +341,11 @@ type ControllerOb[T TxnContext] struct {
 }
 
 func newControllerObservation[T TxnContext](
-	leaderChecker LeaderChecker[T],
 	client client[T],
 	selfInfo *model.CaptureInfo,
 	getAllCaptures func() []*model.CaptureInfo,
 ) *ControllerOb[T] {
 	return &ControllerOb[T]{
-		leaderChecker:  leaderChecker,
 		client:         client,
 		selfInfo:       selfInfo,
 		getAllCaptures: getAllCaptures,
@@ -374,7 +370,7 @@ func (c *ControllerOb[T]) run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		if err := c.handleAliveCaptures(ctx); err != nil {
+		if err := c.handleAliveCaptures(); err != nil {
 			log.Warn("controller handle alive captures fail", zap.String("capture", c.selfInfo.ID), zap.Error(err))
 			return err
 		}
@@ -409,7 +405,7 @@ func (c *ControllerOb[T]) init() error {
 	return c.onCaptureOffline(captureOfflined...)
 }
 
-func (c *ControllerOb[T]) handleAliveCaptures(_ context.Context) error {
+func (c *ControllerOb[T]) handleAliveCaptures() error {
 	alives := c.getAllCaptures()
 	hash := sortAndHashCaptureList(alives)
 
@@ -454,6 +450,10 @@ func (c *ControllerOb[T]) upsertUpstream(tx T, up *model.UpstreamInfo) error {
 	return nil
 }
 
+func (c *ControllerOb[T]) txnWithLeaderLock(fn func(T) error) error {
+	return c.client.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, fn)
+}
+
 // CreateChangefeed initializes the changefeed info, schedule info and state info of the given changefeed. It also
 // updates or creates the upstream info depending on whether the upstream info exists.
 func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *model.UpstreamInfo) (metadata.ChangefeedIdent, error) {
@@ -468,7 +468,7 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 	}
 
 	cf.ChangefeedIdent.UUID = uuid
-	err = c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+	err = c.txnWithLeaderLock(func(tx T) error {
 		if err := c.upsertUpstream(tx, up); err != nil {
 			return errors.Trace(err)
 		}
@@ -511,7 +511,7 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 
 // RemoveChangefeed removes the changefeed info
 func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
-	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+	return c.txnWithLeaderLock(func(tx T) error {
 		oldInfo, err := c.client.queryChangefeedInfoByUUID(tx, cf)
 		if err != nil {
 			return errors.Trace(err)
@@ -551,7 +551,7 @@ func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
 // CleanupChangefeed removes the changefeed info, schedule info and state info of the given changefeed.
 // Note that this function should only be called when the owner is removed and changefeed is marked as removed.
 func (c *ControllerOb[T]) CleanupChangefeed(cf metadata.ChangefeedUUID) error {
-	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+	return c.txnWithLeaderLock(func(tx T) error {
 		err := c.client.deleteChangefeedInfo(tx, &ChangefeedInfoDO{
 			ChangefeedInfo: metadata.ChangefeedInfo{
 				ChangefeedIdent: metadata.ChangefeedIdent{
@@ -603,7 +603,7 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 	// TODO(CharlesCheung): use multiple statements to reduce the number of round trips.
 	// Note currently we only handle single capture offline, so it is not a big deal.
 	for _, id := range ids {
-		err := c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+		err := c.txnWithLeaderLock(func(tx T) error {
 			prs, err := c.client.queryProgressByCaptureIDsWithLock(tx, []model.CaptureID{id})
 			if err != nil {
 				return errors.Trace(err)
@@ -658,7 +658,7 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 
 // SetOwner Schedule a changefeed owner to a given target.
 func (c *ControllerOb[T]) SetOwner(target metadata.ScheduledChangefeed) error {
-	return c.leaderChecker.TxnWithLeaderLock(c.egCtx, c.selfInfo.ID, func(tx T) error {
+	return c.txnWithLeaderLock(func(tx T) error {
 		old, err := c.client.queryScheduleByUUID(tx, target.ChangefeedUUID)
 		if err != nil {
 			return errors.Trace(err)
@@ -714,6 +714,14 @@ type OwnerOb[T TxnContext] struct {
 	egCtx  context.Context
 	client client[T]
 	cf     *metadata.ChangefeedInfo
+}
+
+func newOwnerObservation[T TxnContext](c CaptureOb[T], cf *metadata.ChangefeedInfo) *OwnerOb[T] {
+	return &OwnerOb[T]{
+		egCtx:  c.egCtx,
+		client: c.client,
+		cf:     cf,
+	}
 }
 
 // Self returns the changefeed info of the owner.

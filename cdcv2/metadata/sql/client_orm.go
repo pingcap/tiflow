@@ -27,9 +27,8 @@ import (
 )
 
 var (
-	_ client[*gorm.DB] = &ormClient{}
+	_ checker[*gorm.DB] = &ormClient{}
 
-	_ checker[*gorm.DB]               = &ormClient{}
 	_ upstreamClient[*gorm.DB]        = &ormClient{}
 	_ changefeedInfoClient[*gorm.DB]  = &ormClient{}
 	_ changefeedStateClient[*gorm.DB] = &ormClient{}

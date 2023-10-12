@@ -26,6 +26,65 @@ import (
 	"gorm.io/gorm"
 )
 
+const defaultMaxExecTime = 5 * time.Second
+
+type client[T TxnContext] interface {
+	LeaderChecker[T]
+	checker[T]
+}
+
+type clientImpl[T TxnContext] struct {
+	LeaderChecker[T]
+	checker[T]
+
+	options *clientOptions
+}
+
+func newClient[T TxnContext](
+	leaderChecker LeaderChecker[T],
+	checker checker[T],
+	opts ...ClientOptionFunc,
+) client[T] {
+	options := setClientOptions(opts...)
+
+	return &clientImpl[T]{
+		LeaderChecker: leaderChecker,
+		checker:       checker,
+		options:       options,
+	}
+}
+
+func (c *clientImpl[T]) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if c.options.maxExecTime <= 0 {
+		return ctx, nil
+	}
+	return context.WithTimeout(ctx, c.options.maxExecTime)
+}
+
+func (c *clientImpl[T]) Txn(ctx context.Context, fn TxnAction[T]) error {
+	ctx, cancel := c.withTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+	return c.checker.Txn(ctx, fn)
+}
+
+func (c *clientImpl[T]) TxnWithOwnerLock(ctx context.Context, uuid metadata.ChangefeedUUID, fn TxnAction[T]) error {
+	ctx, cancel := c.withTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+	return c.checker.TxnWithOwnerLock(ctx, uuid, fn)
+}
+
+func (c *clientImpl[T]) TxnWithLeaderLock(ctx context.Context, leaderID string, fn func(T) error) error {
+	ctx, cancel := c.withTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+	return c.LeaderChecker.TxnWithLeaderLock(ctx, leaderID, fn)
+}
+
 // TxnContext is a type set that can be used as the transaction context.
 type TxnContext interface {
 	*gorm.DB | *sql.Tx
@@ -55,6 +114,12 @@ type LeaderChecker[T TxnContext] interface {
 type checker[T TxnContext] interface {
 	Txn(ctx context.Context, fn TxnAction[T]) error
 	TxnWithOwnerLock(ctx context.Context, uuid metadata.ChangefeedUUID, fn TxnAction[T]) error
+
+	upstreamClient[T]
+	changefeedInfoClient[T]
+	changefeedStateClient[T]
+	scheduleClient[T]
+	progressClient[T]
 }
 
 // TODO(CharlesCheung): only update changed fields to reduce the pressure on io and database.
@@ -112,16 +177,27 @@ type progressClient[T TxnContext] interface {
 	queryProgressByCaptureIDsWithLock(tx T, ids []string) ([]*ProgressDO, error)
 }
 
-type client[T TxnContext] interface {
-	checker[T]
-	upstreamClient[T]
-	changefeedInfoClient[T]
-	changefeedStateClient[T]
-	scheduleClient[T]
-	progressClient[T]
+type clientOptions struct {
+	maxExecTime time.Duration
 }
 
-const defaultMaxExecTime = 5 * time.Second
+type ClientOptionFunc func(*clientOptions)
+
+func setClientOptions(opts ...ClientOptionFunc) *clientOptions {
+	o := &clientOptions{
+		maxExecTime: defaultMaxExecTime,
+	}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o
+}
+
+func WithMaxExecTime(d time.Duration) ClientOptionFunc {
+	return func(o *clientOptions) {
+		o.maxExecTime = d
+	}
+}
 
 // TODO(CharlesCheung): implement a cache layer to reduce the pressure on io and database.
 // nolint:unused
