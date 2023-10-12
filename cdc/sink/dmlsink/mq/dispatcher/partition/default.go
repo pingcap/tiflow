@@ -31,6 +31,6 @@ func NewDefaultDispatcher() *DefaultDispatcher {
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (d *DefaultDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string) {
+func (d *DefaultDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string, error) {
 	return d.tbd.DispatchRowChangedEvent(row, partitionNum)
 }

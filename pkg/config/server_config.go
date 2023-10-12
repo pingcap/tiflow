@@ -66,9 +66,6 @@ func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
 
-// SecurityConfig represents security config for server
-type SecurityConfig = security.Credential
-
 // LogFileConfig represents log file config for server
 type LogFileConfig struct {
 	MaxSize    int `toml:"max-size" json:"max-size"`
@@ -109,7 +106,7 @@ var defaultServerConfig = &ServerConfig{
 		SortDir:       DefaultSortDir,
 		CacheSizeInMB: 128, // By default, use 128M memory as sorter cache.
 	},
-	Security: &SecurityConfig{},
+	Security: &security.Credential{},
 	KVClient: &KVClientConfig{
 		EnableMultiplexing:   true,
 		WorkerConcurrent:     8,
@@ -161,8 +158,8 @@ type ServerConfig struct {
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
-	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
-	Security *SecurityConfig `toml:"security" json:"security"`
+	Sorter   *SorterConfig        `toml:"sorter" json:"sorter"`
+	Security *security.Credential `toml:"security" json:"security"`
 	// Deprecated: we don't use this field anymore.
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`

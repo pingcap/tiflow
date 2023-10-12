@@ -14,6 +14,7 @@
 package config
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -138,6 +139,21 @@ type replicaConfig struct {
 	// Integrity is only available when the downstream is MQ.
 	Integrity                    *integrity.Config `toml:"integrity" json:"integrity"`
 	ChangefeedErrorStuckDuration *time.Duration    `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+}
+
+// Value implements the driver.Valuer interface
+func (c ReplicaConfig) Value() (driver.Value, error) {
+	return c.Marshal()
+}
+
+// Scan implements the sql.Scanner interface
+func (c *ReplicaConfig) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return c.UnmarshalJSON(b)
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

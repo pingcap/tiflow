@@ -38,6 +38,7 @@ func TestDefaultDispatcher(t *testing.T) {
 		IndexColumns: [][]int{{0}},
 	}
 
-	targetPartition, _ := NewDefaultDispatcher().DispatchRowChangedEvent(row, 3)
+	targetPartition, _, err := NewDefaultDispatcher().DispatchRowChangedEvent(row, 3)
+	require.NoError(t, err)
 	require.Equal(t, int32(0), targetPartition)
 }

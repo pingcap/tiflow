@@ -13,6 +13,8 @@
 
 package metadata
 
+import "fmt"
+
 // ScheduleError is for role state transformation.
 type ScheduleError struct {
 	Msg string
@@ -26,4 +28,11 @@ func (e ScheduleError) Error() string {
 // NewScheduleError creates an error.
 func NewScheduleError(msg string) ScheduleError {
 	return ScheduleError{Msg: msg}
+}
+
+// NewBadScheduleError creates a schedule error with detail information.
+func NewBadScheduleError(origin ScheduledChangefeed, target ScheduledChangefeed) ScheduleError {
+	msg := fmt.Sprintf("bad schedule for %d: A.%s->B.%s",
+		origin.ChangefeedUUID, origin.OwnerState.String(), target.OwnerState.String())
+	return NewScheduleError(msg)
 }

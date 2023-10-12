@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdcv2/metadata"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -26,8 +27,9 @@ import (
 )
 
 var (
-	_ checker[*gorm.DB] = &ormClient{}
+	_ client[*gorm.DB] = &ormClient{}
 
+	_ checker[*gorm.DB]               = &ormClient{}
 	_ upstreamClient[*gorm.DB]        = &ormClient{}
 	_ changefeedInfoClient[*gorm.DB]  = &ormClient{}
 	_ changefeedStateClient[*gorm.DB] = &ormClient{}
@@ -109,7 +111,7 @@ func (c *ormClient) updateUpstream(tx *gorm.DB, up *UpstreamDO) error {
 //
 //nolint:unused
 func (c *ormClient) queryUpstreams(tx *gorm.DB) ([]*UpstreamDO, error) {
-	var ups []*UpstreamDO
+	ups := []*UpstreamDO{}
 	ret := tx.Find(&ups)
 	if err := handleSingleOpErr(ret, -1, "QueryUpstreams"); err != nil {
 		return nil, errors.Trace(err)
@@ -121,8 +123,8 @@ func (c *ormClient) queryUpstreams(tx *gorm.DB) ([]*UpstreamDO, error) {
 //
 //nolint:unused
 func (c *ormClient) queryUpstreamsByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*UpstreamDO, error) {
-	var ups []*UpstreamDO
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&ups)
+	ups := []*UpstreamDO{}
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&ups)
 	if err := handleSingleOpErr(ret, -1, "QueryUpstreamsByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -133,7 +135,7 @@ func (c *ormClient) queryUpstreamsByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time
 //
 //nolint:unused
 func (c *ormClient) queryUpstreamByID(tx *gorm.DB, id uint64) (*UpstreamDO, error) {
-	var up *UpstreamDO
+	up := &UpstreamDO{}
 	ret := tx.Where("id = ?", id).First(up)
 	if err := handleSingleOpErr(ret, 1, "QueryUpstreamsByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
@@ -161,17 +163,18 @@ func (c *ormClient) deleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) er
 	return nil
 }
 
-// softDeleteChangefeedInfo implements the changefeedInfoClient interface.
+// markChangefeedRemoved implements the changefeedInfoClient interface.
 //
 //nolint:unused
-func (c *ormClient) softDeleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
+func (c *ormClient) markChangefeedRemoved(tx *gorm.DB, info *ChangefeedInfoDO) error {
+	// TODO: maybe we should usethe mysql function `now(6)` to get the current time.
 	removeTime := time.Now()
 	ret := tx.Where("uuid = ? and version = ?", info.UUID, info.Version).
 		Updates(ChangefeedInfoDO{
 			RemovedAt: &removeTime,
 			Version:   info.Version + 1,
 		})
-	if err := handleSingleOpErr(ret, 1, "SoftDeleteChangefeedInfo"); err != nil {
+	if err := handleSingleOpErr(ret, 1, "markChangefeedRemoved"); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -180,12 +183,14 @@ func (c *ormClient) softDeleteChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO
 // updateChangefeedInfo implements the changefeedInfoClient interface.
 func (c *ormClient) updateChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) error {
 	ret := tx.Where("uuid = ? and version = ?", info.UUID, info.Version).
-		Updates(ChangefeedInfoDO{
-			SinkURI:  info.SinkURI,
-			StartTs:  info.StartTs,
-			TargetTs: info.TargetTs,
-			Config:   info.Config,
-			Version:  info.Version + 1,
+		Updates(&ChangefeedInfoDO{
+			ChangefeedInfo: metadata.ChangefeedInfo{
+				SinkURI:  info.SinkURI,
+				StartTs:  info.StartTs,
+				TargetTs: info.TargetTs,
+				Config:   info.Config,
+			},
+			Version: info.Version + 1,
 		})
 	if err := handleSingleOpErr(ret, 1, "UpdateChangefeedInfo"); err != nil {
 		return errors.Trace(err)
@@ -197,7 +202,7 @@ func (c *ormClient) updateChangefeedInfo(tx *gorm.DB, info *ChangefeedInfoDO) er
 //
 //nolint:unused
 func (c *ormClient) queryChangefeedInfos(tx *gorm.DB) ([]*ChangefeedInfoDO, error) {
-	var infos []*ChangefeedInfoDO
+	infos := []*ChangefeedInfoDO{}
 	ret := tx.Find(&infos)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedInfos"); err != nil {
 		return nil, errors.Trace(err)
@@ -210,9 +215,20 @@ func (c *ormClient) queryChangefeedInfos(tx *gorm.DB) ([]*ChangefeedInfoDO, erro
 //
 //nolint:unused
 func (c *ormClient) queryChangefeedInfosByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedInfoDO, error) {
-	var infos []*ChangefeedInfoDO
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&infos)
+	infos := []*ChangefeedInfoDO{}
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&infos)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedInfosByUpdateAt"); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return infos, nil
+}
+
+// queryChangefeedInfosByUUIDs implements the changefeedInfoClient interface.
+// nolint:unused
+func (c *ormClient) queryChangefeedInfosByUUIDs(tx *gorm.DB, uuids ...uint64) ([]*ChangefeedInfoDO, error) {
+	infos := []*ChangefeedInfoDO{}
+	ret := tx.Where("uuid in (?)", uuids).Find(&infos)
+	if err := handleSingleOpErr(ret, int64(len(uuids)), "QueryChangefeedInfosByUUIDs"); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return infos, nil
@@ -222,7 +238,7 @@ func (c *ormClient) queryChangefeedInfosByUpdateAt(tx *gorm.DB, lastUpdateAt tim
 //
 //nolint:unused
 func (c *ormClient) queryChangefeedInfoByUUID(tx *gorm.DB, uuid uint64) (*ChangefeedInfoDO, error) {
-	var info *ChangefeedInfoDO
+	info := &ChangefeedInfoDO{}
 	ret := tx.Where("uuid = ?", uuid).First(info)
 
 	// TODO(CharlesCheung): handle record not found error.
@@ -261,9 +277,11 @@ func (c *ormClient) updateChangefeedState(tx *gorm.DB, state *ChangefeedStateDO)
 	ret := tx.Model(changefeedStateModel).Select("state", "warning", "error", "version").
 		Where("changefeed_uuid = ? and version = ?", state.ChangefeedUUID, state.Version).
 		Updates(ChangefeedStateDO{
-			State:   state.State,
-			Warning: state.Warning,
-			Error:   state.Error,
+			ChangefeedState: metadata.ChangefeedState{
+				State:   state.State,
+				Warning: state.Warning,
+				Error:   state.Error,
+			},
 			Version: state.Version + 1,
 		})
 	if err := handleSingleOpErr(ret, 1, "updateChangefeedState"); err != nil {
@@ -276,7 +294,7 @@ func (c *ormClient) updateChangefeedState(tx *gorm.DB, state *ChangefeedStateDO)
 //
 //nolint:unused
 func (c *ormClient) queryChangefeedStates(tx *gorm.DB) ([]*ChangefeedStateDO, error) {
-	var states []*ChangefeedStateDO
+	states := []*ChangefeedStateDO{}
 	ret := tx.Find(&states)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedStates"); err != nil {
 		return nil, errors.Trace(err)
@@ -288,8 +306,8 @@ func (c *ormClient) queryChangefeedStates(tx *gorm.DB) ([]*ChangefeedStateDO, er
 //
 //nolint:unused
 func (c *ormClient) queryChangefeedStatesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ChangefeedStateDO, error) {
-	var states []*ChangefeedStateDO
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&states)
+	states := []*ChangefeedStateDO{}
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&states)
 	if err := handleSingleOpErr(ret, -1, "QueryChangefeedStatesByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -300,9 +318,24 @@ func (c *ormClient) queryChangefeedStatesByUpdateAt(tx *gorm.DB, lastUpdateAt ti
 //
 //nolint:unused
 func (c *ormClient) queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64) (*ChangefeedStateDO, error) {
-	var state *ChangefeedStateDO
+	state := &ChangefeedStateDO{}
 	ret := tx.Where("changefeed_uuid = ?", uuid).First(state)
 	if err := handleSingleOpErr(ret, 1, "QueryChangefeedStateByUUID"); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return state, nil
+}
+
+// queryChangefeedStateByUUIDWithLock implements the changefeedStateClient interface.
+// nolint:unused
+func (c *ormClient) queryChangefeedStateByUUIDWithLock(tx *gorm.DB, uuid uint64) (*ChangefeedStateDO, error) {
+	state := &ChangefeedStateDO{}
+	ret := tx.Where("changefeed_uuid = ?", uuid).
+		Clauses(clause.Locking{
+			Strength: "SHARE",
+			Table:    clause.Table{Name: clause.CurrentTable},
+		}).First(state)
+	if err := handleSingleOpErr(ret, 1, "QueryChangefeedStateByUUIDWithLock"); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return state, nil
@@ -332,13 +365,47 @@ func (c *ormClient) deleteSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 func (c *ormClient) updateSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 	ret := tx.Where("changefeed_uuid = ? and version = ?", sc.ChangefeedUUID, sc.Version).
 		Updates(ScheduleDO{
-			Owner:        sc.Owner,
-			OwnerState:   sc.OwnerState,
-			Processors:   sc.Processors,
-			TaskPosition: sc.TaskPosition,
-			Version:      sc.Version + 1,
+			ScheduledChangefeed: metadata.ScheduledChangefeed{
+				Owner:        sc.Owner,
+				OwnerState:   sc.OwnerState,
+				Processors:   sc.Processors,
+				TaskPosition: sc.TaskPosition,
+			},
+			Version: sc.Version + 1,
 		})
 	if err := handleSingleOpErr(ret, 1, "UpdateSchedule"); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// updateScheduleOwnerState implements the scheduleClient interface.
+// TODO(CharlesCheung): check if the version needs to be checked.
+func (c *ormClient) updateScheduleOwnerState(tx *gorm.DB, sc *ScheduleDO) error {
+	ret := tx.Where("changefeed_uuid = ? and version = ?", sc.ChangefeedUUID, sc.Version).
+		Updates(ScheduleDO{
+			ScheduledChangefeed: metadata.ScheduledChangefeed{
+				OwnerState: sc.OwnerState,
+			},
+			Version: sc.Version + 1,
+		})
+	if err := handleSingleOpErr(ret, 1, "UpdateScheduleOwnerState"); err != nil {
+		return errors.Trace(err)
+	}
+	return nil
+}
+
+// updateScheduleOwnerStateByOwnerID implements the scheduleClient interface.
+func (c *ormClient) updateScheduleOwnerStateByOwnerID(tx *gorm.DB, state metadata.SchedState, ownerID model.CaptureID) error {
+	ret := tx.Model(&ScheduleDO{}).Select("owner", "owner_state", "processors", "version").
+		Where("owner = ?", ownerID).
+		Updates(map[string]interface{}{
+			"owner":       nil,
+			"owner_state": state,
+			"processors":  nil,
+			"version":     gorm.Expr("version + ?", 1),
+		})
+	if err := handleSingleOpErr(ret, -1, "UpdateScheduleOwnerStateByOwnerID"); err != nil {
 		return errors.Trace(err)
 	}
 	return nil
@@ -348,7 +415,7 @@ func (c *ormClient) updateSchedule(tx *gorm.DB, sc *ScheduleDO) error {
 //
 //nolint:unused
 func (c *ormClient) querySchedules(tx *gorm.DB) ([]*ScheduleDO, error) {
-	var schedules []*ScheduleDO
+	schedules := []*ScheduleDO{}
 	ret := tx.Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedules"); err != nil {
 		return nil, errors.Trace(err)
@@ -360,8 +427,8 @@ func (c *ormClient) querySchedules(tx *gorm.DB) ([]*ScheduleDO, error) {
 //
 //nolint:unused
 func (c *ormClient) querySchedulesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
-	var schedules []*ScheduleDO
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&schedules)
+	schedules := []*ScheduleDO{}
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -372,8 +439,8 @@ func (c *ormClient) querySchedulesByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time
 //
 //nolint:unused
 func (c *ormClient) querySchedulesByOwnerIDAndUpdateAt(tx *gorm.DB, captureID string, lastUpdateAt time.Time) ([]*ScheduleDO, error) {
-	var schedules []*ScheduleDO
-	ret := tx.Where("owner = ? and updated_at > ?", captureID, lastUpdateAt).Find(&schedules)
+	schedules := []*ScheduleDO{}
+	ret := tx.Where("owner = ? and update_at > ?", captureID, lastUpdateAt).Find(&schedules)
 	if err := handleSingleOpErr(ret, -1, "QuerySchedulesByOwnerIDAndUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -384,12 +451,23 @@ func (c *ormClient) querySchedulesByOwnerIDAndUpdateAt(tx *gorm.DB, captureID st
 //
 //nolint:unused
 func (c *ormClient) queryScheduleByUUID(tx *gorm.DB, uuid uint64) (*ScheduleDO, error) {
-	var schedule *ScheduleDO
+	schedule := &ScheduleDO{}
 	ret := tx.Where("changefeed_uuid = ?", uuid).First(schedule)
 	if err := handleSingleOpErr(ret, 1, "QueryScheduleByUUID"); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return schedule, nil
+}
+
+// querySchedulesUinqueOwnerIDs implements the scheduleClient interface.
+// nolint:unused
+func (c *ormClient) querySchedulesUinqueOwnerIDs(tx *gorm.DB) ([]model.CaptureID, error) {
+	captureIDs := []model.CaptureID{}
+	ret := tx.Model(&ScheduleDO{}).Select("owner").Where("owner IS NOT NULL").Distinct().Find(&captureIDs)
+	if err := handleSingleOpErr(ret, -1, "QuerySchedulesUinqueOwnerIDs"); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return captureIDs, nil
 }
 
 // ================================ Progress Client =================================
@@ -429,7 +507,7 @@ func (c *ormClient) updateProgress(tx *gorm.DB, pr *ProgressDO) error {
 //
 //nolint:unused
 func (c *ormClient) queryProgresss(tx *gorm.DB) ([]*ProgressDO, error) {
-	var progresses []*ProgressDO
+	progresses := []*ProgressDO{}
 	ret := tx.Find(&progresses)
 	if err := handleSingleOpErr(ret, -1, "QueryProgresss"); err != nil {
 		return nil, errors.Trace(err)
@@ -441,8 +519,8 @@ func (c *ormClient) queryProgresss(tx *gorm.DB) ([]*ProgressDO, error) {
 //
 //nolint:unused
 func (c *ormClient) queryProgresssByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time) ([]*ProgressDO, error) {
-	var progresses []*ProgressDO
-	ret := tx.Where("updated_at > ?", lastUpdateAt).Find(&progresses)
+	progresses := []*ProgressDO{}
+	ret := tx.Where("update_at > ?", lastUpdateAt).Find(&progresses)
 	if err := handleSingleOpErr(ret, -1, "QueryProgresssByUpdateAt"); err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -453,7 +531,7 @@ func (c *ormClient) queryProgresssByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time
 //
 //nolint:unused
 func (c *ormClient) queryProgressByCaptureID(tx *gorm.DB, id string) (*ProgressDO, error) {
-	var progress *ProgressDO
+	progress := &ProgressDO{}
 	ret := tx.Where("capture_id = ?", id).First(progress)
 	if err := handleSingleOpErr(ret, 1, "QueryProgressByCaptureID"); err != nil {
 		return nil, errors.Trace(err)
@@ -465,7 +543,7 @@ func (c *ormClient) queryProgressByCaptureID(tx *gorm.DB, id string) (*ProgressD
 //
 //nolint:unused
 func (c *ormClient) queryProgressByCaptureIDsWithLock(tx *gorm.DB, ids []string) ([]*ProgressDO, error) {
-	var progresses []*ProgressDO
+	progresses := []*ProgressDO{}
 	ret := tx.Where("capture_id in (?)", ids).Clauses(clause.Locking{
 		Strength: "SHARE",
 		Table:    clause.Table{Name: clause.CurrentTable},
