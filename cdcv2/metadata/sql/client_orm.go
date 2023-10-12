@@ -57,14 +57,12 @@ func (c *ormClient) Txn(ctx context.Context, fn ormTxnAction) error {
 // TxnWithOwnerLock executes the given transaction action in a transaction with owner lock.
 func (c *ormClient) TxnWithOwnerLock(ctx context.Context, uuid uint64, fn ormTxnAction) error {
 	return c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var pr ProgressDO
-		ret := tx.Select("owner").
-			// TODO(charledCheung): use a variable to replace the hard-coded owner state.
-			Where("changefeed_uuid = ? and owner = ? and owner_state != removed", uuid, c.selfID).
+		sc := &ScheduleDO{}
+		ret := tx.Where("changefeed_uuid = ? and owner = ? and owner_state != removed", uuid, c.selfID).
 			Clauses(clause.Locking{
 				Strength: "SHARE",
 				Table:    clause.Table{Name: clause.CurrentTable},
-			}).Limit(1).Find(&pr)
+			}).Limit(1).Find(&sc)
 		if err := handleSingleOpErr(ret, 1, "TxnWithOwnerLock"); err != nil {
 			return errors.Trace(err)
 		}
@@ -330,7 +328,7 @@ func (c *ormClient) queryChangefeedStateByUUID(tx *gorm.DB, uuid uint64) (*Chang
 // nolint:unused
 func (c *ormClient) queryChangefeedStateByUUIDs(tx *gorm.DB, uuids ...uint64) ([]*ChangefeedStateDO, error) {
 	states := []*ChangefeedStateDO{}
-	ret := tx.Where("uuid in (?)", uuids).Find(&states)
+	ret := tx.Where("changefeed_uuid in (?)", uuids).Find(&states)
 	if err := handleSingleOpErr(ret, int64(len(uuids)), "QueryChangefeedInfosByUUIDs"); err != nil {
 		// TODO: optimize the behavior when some uuids are not found.
 		return states, errors.Trace(err)
