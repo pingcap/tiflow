@@ -63,10 +63,18 @@ type feedStateManager struct {
 
 	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
 	// has been advanced or not.
+<<<<<<< HEAD
 	resolvedTs           model.Ts
 	checkpointTs         model.Ts
 	checkpointTsAdvanced time.Time
 
+=======
+	resolvedTs       model.Ts
+	initCheckpointTs model.Ts
+
+	checkpointTsAdvanced         time.Time
+	lastCheckpointTs             model.Ts
+>>>>>>> 797dc6dd3a (config, changefeed (ticdc): add changefeed error stuck duration config (#9872))
 	changefeedErrorStuckDuration time.Duration
 }
 
@@ -85,6 +93,7 @@ func newFeedStateManager(up *upstream.Upstream, cfg *config.ReplicaConfig) *feed
 	m.changefeedErrorStuckDuration = *cfg.ChangefeedErrorStuckDuration
 
 	m.resetErrRetry()
+<<<<<<< HEAD
 	m.isRetrying = false
 	return m
 }
@@ -105,6 +114,9 @@ func (m *feedStateManager) shouldFailWhenRetry() bool {
 
 	m.lastErrorRetryTime = time.Now()
 	return false
+=======
+	return m
+>>>>>>> 797dc6dd3a (config, changefeed (ticdc): add changefeed error stuck duration config (#9872))
 }
 
 // resetErrRetry reset the error retry related fields
@@ -582,9 +594,19 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		currTime := m.upstream.PDClock.CurrentTime()
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
 		m.lastWarningReportCheckpointTs = m.state.Status.CheckpointTs
+<<<<<<< HEAD
 
 		checkpointTsStuck := time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration
 		if checkpointTsStuck {
+=======
+		// Conditions:
+		// 1. checkpoint lag is large enough;
+		// 2. checkpoint hasn't been advanced for a long while;
+		// 3. the changefeed has been initialized.
+		if currTime.Sub(ckptTime) > m.changefeedErrorStuckDuration &&
+			time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration &&
+			m.resolvedTs > m.initCheckpointTs {
+>>>>>>> 797dc6dd3a (config, changefeed (ticdc): add changefeed error stuck duration config (#9872))
 			log.Info("changefeed retry on warning for a very long time and does not resume, "+
 				"it will be failed", zap.String("changefeed", m.state.ID.ID),
 				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
