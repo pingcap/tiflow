@@ -121,6 +121,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
 						},
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -173,6 +175,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						},
 						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -230,6 +234,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						},
 						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -317,12 +323,13 @@ func TestPatchInfo(t *testing.T) {
 		SinkURI: "123",
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
-			Filter:     defaultConfig.Filter,
-			Mounter:    defaultConfig.Mounter,
-			Sink:       defaultConfig.Sink,
-			Consistent: defaultConfig.Consistent,
-			Scheduler:  defaultConfig.Scheduler,
-			Integrity:  defaultConfig.Integrity,
+			Filter:                       defaultConfig.Filter,
+			Mounter:                      defaultConfig.Mounter,
+			Sink:                         defaultConfig.Sink,
+			Consistent:                   defaultConfig.Consistent,
+			Scheduler:                    defaultConfig.Scheduler,
+			Integrity:                    defaultConfig.Integrity,
+			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
 		},
 	}
 	cfInfo.RmUnusedFields()
@@ -338,12 +345,13 @@ func TestPatchInfo(t *testing.T) {
 		StartTs: 6,
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
-			Filter:     defaultConfig.Filter,
-			Mounter:    defaultConfig.Mounter,
-			Sink:       defaultConfig.Sink,
-			Consistent: defaultConfig.Consistent,
-			Scheduler:  defaultConfig.Scheduler,
-			Integrity:  defaultConfig.Integrity,
+			Filter:                       defaultConfig.Filter,
+			Mounter:                      defaultConfig.Mounter,
+			Sink:                         defaultConfig.Sink,
+			Consistent:                   defaultConfig.Consistent,
+			Scheduler:                    defaultConfig.Scheduler,
+			Integrity:                    defaultConfig.Integrity,
+			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
 		},
 	}
 	cfInfo.RmUnusedFields()

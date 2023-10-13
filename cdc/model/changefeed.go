@@ -331,7 +331,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.Integrity == nil {
 		info.Config.Integrity = defaultConfig.Integrity
 	}
-
+	if info.Config.ChangefeedErrorStuckDuration == nil {
+		info.Config.ChangefeedErrorStuckDuration = defaultConfig.ChangefeedErrorStuckDuration
+	}
 	info.RmUnusedFields()
 }
 
@@ -427,6 +429,12 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		log.Info("Start fixing incompatible memory quota", zap.String("changefeed", info.String()))
 		info.fixMemoryQuota()
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
+	}
+
+	if info.Config.ChangefeedErrorStuckDuration == nil {
+		log.Info("Start fixing incompatible error stuck duration", zap.String("changefeed", info.String()))
+		info.Config.ChangefeedErrorStuckDuration = config.GetDefaultReplicaConfig().ChangefeedErrorStuckDuration
+		log.Info("Fix incompatible error stuck duration completed", zap.String("changefeed", info.String()))
 	}
 
 	log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
