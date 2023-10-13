@@ -208,6 +208,7 @@ func (m *metaManager) initMeta(ctx context.Context, startTs model.Ts) error {
 	}
 	var toRemoveMetaFiles []string
 	err := m.extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
+		log.Info("redo: meta manager walk dir", zap.String("path", path), zap.Int64("size", size))
 		// TODO: use prefix to accelerate traverse operation
 		if !strings.HasSuffix(path, redo.MetaEXT) {
 			return nil
@@ -215,13 +216,18 @@ func (m *metaManager) initMeta(ctx context.Context, startTs model.Ts) error {
 		toRemoveMetaFiles = append(toRemoveMetaFiles, path)
 
 		data, err := m.extStorage.ReadFile(ctx, path)
-		if err != nil && !util.IsNotExistInExtStorage(err) {
-			return err
+		if err != nil {
+			log.Warn("redo: read meta file failed", zap.String("path", path), zap.Error(err))
+			if !util.IsNotExistInExtStorage(err) {
+				return err
+			}
+			return nil
 		}
 		if len(data) != 0 {
 			var meta common.LogMeta
 			_, err = meta.UnmarshalMsg(data)
 			if err != nil {
+				log.Error("redo: unmarshal meta data failed", zap.Error(err), zap.ByteString("data", data))
 				return err
 			}
 			metas = append(metas, &meta)
