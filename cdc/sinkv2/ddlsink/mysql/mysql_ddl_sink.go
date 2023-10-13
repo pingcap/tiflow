@@ -85,16 +85,12 @@ func NewMySQLDDLSink(
 		return nil, err
 	}
 
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
-	m := &mysqlDDLSink{
-=======
 	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
 	if err != nil {
 		return nil, err
 	}
 
-	m := &DDLSink{
->>>>>>> bd83f8ddda (ddl(ticdc): async exec add index ddl (#9701)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
+	m := &mysqlDDLSink{
 		id:         changefeedID,
 		db:         db,
 		cfg:        cfg,
@@ -107,15 +103,11 @@ func NewMySQLDDLSink(
 	return m, nil
 }
 
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mysql/mysql_ddl_sink.go
-func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-=======
 // WriteDDLEvent writes a DDL event to the mysql database.
-func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *mysqlDDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
 	if ddl.Type == timodel.ActionAddIndex && m.cfg.IsTiDB {
 		return m.asyncExecAddIndexDDLIfTimeout(ctx, ddl)
 	}
->>>>>>> bd83f8ddda (ddl(ticdc): async exec add index ddl (#9701)):cdc/sink/ddlsink/mysql/mysql_ddl_sink.go
 	return m.execDDLWithMaxRetries(ctx, ddl)
 }
 
@@ -237,7 +229,7 @@ func (m *mysqlDDLSink) Close() error {
 // asyncExecAddIndexDDLIfTimeout executes ddl in async mode.
 // this function only works in TiDB, because TiDB will save ddl jobs
 // and execute them asynchronously even if ticdc crashed.
-func (m *DDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.DDLEvent) error {
+func (m *mysqlDDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.DDLEvent) error {
 	done := make(chan error, 1)
 	// wait for 2 seconds at most
 	tick := time.NewTimer(2 * time.Second)
