@@ -316,6 +316,34 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 				},
 			},
 		},
+		{ // always return false when no rule configured
+			ddl: "create table test.season(id int primary key, name char(50), start char(100), end char(100))",
+			cfg: &config.FilterConfig{},
+			cases: []innerCase{
+				{ // do not ignore any event of test.season table
+					schema: "test",
+					table:  "season",
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{1, "Spring", "January", "March"},
+					ignore: false,
+				},
+				{ // do not ignore any event of test.season table
+					schema: "test",
+					table:  "season",
+					preColumns: []*model.Column{
+						{Name: "none"},
+					},
+					preRow: []interface{}{2, "Summer", "April", "June"},
+					columns: []*model.Column{
+						{Name: "none"},
+					},
+					row:    []interface{}{2, "Summer", "April", "July"},
+					ignore: false,
+				},
+			},
+		},
 	}
 
 	sessCtx := utils.NewSessionCtx(map[string]string{

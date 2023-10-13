@@ -168,6 +168,23 @@ func TestShouldSkipDDL(t *testing.T) {
 				},
 			},
 		},
+		{ // sqlEventFilterRule is nil, always return false
+			cfg: &config.FilterConfig{},
+			cases: []innerCase{
+				{
+					schema: "test",
+					table:  "t1",
+					query:  "ALTER TABLE t1 MODIFY COLUMN age int(11) NOT NULL",
+					skip:   false,
+				},
+				{
+					schema: "test",
+					table:  "t1",
+					query:  "ALTER TABLE t1 DROP COLUMN age",
+					skip:   false,
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {

@@ -126,7 +126,8 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.String("query", job.Query),
-			zap.Stringer("job", job), zap.Bool("skip", skip))
+			zap.Stringer("job", job), zap.Bool("skip", skip),
+			zap.Uint64("jobStartTs", job.StartTS))
 		if skip {
 			return nil
 		}

@@ -63,6 +63,22 @@ func ddlToEventType(p *parser.Parser, query string, jobType timodel.ActionType) 
 		return bf.DropTablePartition, nil
 	case timodel.ActionTruncateTablePartition:
 		return bf.TruncateTablePartition, nil
+	case timodel.ActionCreateTable:
+		return bf.CreateTable, nil
+	case timodel.ActionDropTable:
+		return bf.DropTable, nil
+	case timodel.ActionAddIndex:
+		return bf.CreateIndex, nil
+	case timodel.ActionDropIndex:
+		return bf.DropIndex, nil
+	case timodel.ActionTruncateTable:
+		return bf.TruncateTable, nil
+	case timodel.ActionRenameTable, timodel.ActionRenameTables:
+		return bf.RenameTable, nil
+	case timodel.ActionCreateView:
+		return bf.CreateView, nil
+	case timodel.ActionDropView:
+		return bf.DropView, nil
 	}
 	stmt, err := p.ParseOneStmt(query, "", "")
 	if err != nil {
