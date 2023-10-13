@@ -7,6 +7,7 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
+MAX_RETRIES=10
 
 # use kafka-consumer with canal-json decoder to sync data from kafka to mysql
 function run() {
