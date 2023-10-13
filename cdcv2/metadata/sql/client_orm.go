@@ -55,7 +55,7 @@ func (c *ormClient) Txn(ctx context.Context, fn ormTxnAction) error {
 }
 
 // TxnWithOwnerLock executes the given transaction action in a transaction with owner lock.
-func (c *ormClient) TxnWithOwnerLock(ctx context.Context, uuid uint64, fn ormTxnAction) error {
+func (c *ormClient) TxnWithOwnerLock(ctx context.Context, uuid metadata.ChangefeedUUID, fn ormTxnAction) error {
 	return c.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		sc := &ScheduleDO{}
 		ret := tx.Where("changefeed_uuid = ? and owner = ? and owner_state != ?", uuid, c.selfID, metadata.SchedRemoved).

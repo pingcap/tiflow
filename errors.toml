@@ -1336,6 +1336,11 @@ error = '''
 meta operation fail
 '''
 
+["DFLOW:ErrMetaOpFailed"]
+error = '''
+meta operation %s is failed
+'''
+
 ["DFLOW:ErrMetaOptionConflict"]
 error = '''
 WithRange/WithPrefix/WithFromKey, more than one option are used
