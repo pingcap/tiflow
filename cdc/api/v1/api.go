@@ -425,6 +425,13 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
+
+	owner, err := h.capture.GetOwner()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
@@ -459,7 +466,7 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.GetEtcdClient().SaveChangeFeedInfo(ctx, newInfo, changefeedID)
+	err = owner.UpdateChangefeed(ctx, newInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return

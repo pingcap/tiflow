@@ -72,7 +72,7 @@ type Capture interface {
 	// IsReady returns if the cdc server is ready
 	// currently only check if ettcd data migration is done
 	IsReady() bool
-	GetUpstreamInfo(context.Context, model.UpstreamID, string)
+	GetUpstreamInfo(context.Context, model.UpstreamID, string) (*model.UpstreamInfo, error)
 }
 
 type captureImpl struct {
@@ -122,8 +122,12 @@ type captureImpl struct {
 		liveness *model.Liveness,
 		cfg *config.SchedulerConfig,
 	) processor.Manager
-	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig) owner.Owner
+	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig, etcdClient etcd.CDCEtcdClient) owner.Owner
 	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo, client etcd.CDCEtcdClient) controller.Controller
+}
+
+func (c *captureImpl) GetUpstreamInfo(ctx context.Context, id model.UpstreamID, namespace string) (*model.UpstreamInfo, error) {
+	return c.GetEtcdClient().GetUpstreamInfo(ctx, id, namespace)
 }
 
 // NewCapture returns a new Capture instance
@@ -487,8 +491,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.Int64("ownerRev", ownerRev))
 
 		controller := c.newController(c.upstreamManager, c.info, c.EtcdClient)
-
-		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler)
+		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler, c.EtcdClient)
 		c.setOwner(owner)
 		c.setController(controller)
 

@@ -74,9 +74,10 @@ func newOwner4Test(
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error),
 	pdClient pd.Client,
+	etcdClient etcd.CDCEtcdClient,
 ) Owner {
 	m := upstream.NewManager4Test(pdClient)
-	o := NewOwner(m, config.NewDefaultSchedulerConfig()).(*ownerImpl)
+	o := NewOwner(m, config.NewDefaultSchedulerConfig(), etcdClient).(*ownerImpl)
 	o.newChangefeed = func(
 		id model.ChangeFeedID,
 		state *orchestrator.ChangefeedReactorState,
@@ -128,6 +129,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 			return observer.NewDummyObserver(), nil
 		},
 		pdClient,
+		nil,
 	)
 	o := owner.(*ownerImpl)
 	o.upstreamManager = upstream.NewManager4Test(pdClient)

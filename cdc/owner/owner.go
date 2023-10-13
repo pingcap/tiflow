@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -96,6 +97,8 @@ type Owner interface {
 		changeFeedInfo *model.ChangeFeedInfo,
 		changeFeedID model.ChangeFeedID,
 	) error
+	UpdateChangefeed(ctx context.Context,
+		changeFeedInfo *model.ChangeFeedInfo) error
 }
 
 type ownerImpl struct {
@@ -116,6 +119,8 @@ type ownerImpl struct {
 	//         as it is not a thread-safe value.
 	changefeedTicked bool
 
+	etcdClient etcd.CDCEtcdClient
+
 	newChangefeed func(
 		id model.ChangeFeedID,
 		state *orchestrator.ChangefeedReactorState,
@@ -125,10 +130,13 @@ type ownerImpl struct {
 	cfg *config.SchedulerConfig
 }
 
+var _ Owner = &ownerImpl{}
+
 // NewOwner creates a new Owner
 func NewOwner(
 	upstreamManager *upstream.Manager,
 	cfg *config.SchedulerConfig,
+	etcdClient etcd.CDCEtcdClient,
 ) Owner {
 	return &ownerImpl{
 		upstreamManager: upstreamManager,
@@ -137,6 +145,7 @@ func NewOwner(
 		newChangefeed:   newChangefeed,
 		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 		cfg:             cfg,
+		etcdClient:      etcdClient,
 	}
 }
 
@@ -296,6 +305,23 @@ func (o *ownerImpl) AsyncStop() {
 	// Must be called after setting closed.
 	o.cleanupOwnerJob()
 	o.cleanStaleMetrics()
+}
+
+func (o *ownerImpl) UpdateChangefeedAndUpstream(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo,
+	changeFeedInfo *model.ChangeFeedInfo,
+	changeFeedID model.ChangeFeedID,
+) error {
+	return o.etcdClient.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo, changeFeedID)
+}
+
+func (o *ownerImpl) UpdateChangefeed(ctx context.Context,
+	changeFeedInfo *model.ChangeFeedInfo,
+) error {
+	return o.etcdClient.SaveChangeFeedInfo(ctx, changeFeedInfo, model.ChangeFeedID{
+		Namespace: changeFeedInfo.Namespace,
+		ID:        changeFeedInfo.ID,
+	})
 }
 
 func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
