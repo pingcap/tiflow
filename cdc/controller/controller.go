@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -56,7 +57,13 @@ type Controller interface {
 	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
 	GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error)
 	IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error)
+	CreateChangefeed(context.Context,
+		*model.UpstreamInfo,
+		*model.ChangeFeedInfo,
+	) error
 }
+
+var _ Controller = &controllerImpl{}
 
 type controllerImpl struct {
 	changefeeds     map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState
@@ -78,6 +85,7 @@ type controllerImpl struct {
 		sync.Mutex
 		queue []*controllerJob
 	}
+	etcdClient etcd.CDCEtcdClient
 
 	captureInfo *model.CaptureInfo
 }
@@ -86,6 +94,7 @@ type controllerImpl struct {
 func NewController(
 	upstreamManager *upstream.Manager,
 	captureInfo *model.CaptureInfo,
+	etcdClient etcd.CDCEtcdClient,
 ) Controller {
 	return &controllerImpl{
 		upstreamManager: upstreamManager,
@@ -93,6 +102,7 @@ func NewController(
 		lastTickTime:    time.Now(),
 		logLimiter:      rate.NewLimiter(versionInconsistentLogRate, versionInconsistentLogRate),
 		captureInfo:     captureInfo,
+		etcdClient:      etcdClient,
 	}
 }
 
@@ -279,6 +289,13 @@ func (o *controllerImpl) AsyncStop() {
 func (o *controllerImpl) GetChangefeedOwnerCaptureInfo(id model.ChangeFeedID) *model.CaptureInfo {
 	// todo: schedule changefeed owner to other capture
 	return o.captureInfo
+}
+
+func (o *controllerImpl) CreateChangefeed(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo,
+	cfInfo *model.ChangeFeedInfo,
+) error {
+	return o.etcdClient.CreateChangefeedInfo(ctx, upstreamInfo, cfInfo)
 }
 
 // Export field names for pretty printing.

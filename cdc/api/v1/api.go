@@ -316,9 +316,9 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		CAPath:        up.SecurityConfig.CAPath,
 		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
 	}
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(
+	err = ctrl.CreateChangefeed(
 		ctx, upstreamInfo,
-		info, model.DefaultChangeFeedID(changefeedConfig.ID))
+		info)
 	if err != nil {
 		_ = c.Error(err)
 		return
