@@ -31,8 +31,7 @@ function run() {
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c ${changefeed_id} --config="$CUR/conf/changefeed.toml"
 
-	pd_addr="http://$UP_PD_HOST_1:$UP_PD_PORT_1"
-	ensure $MAX_RETRIES check_changefeed_status --pd=$pd_addr $changefeed_id "normal"
+	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "normal"
 
 	cdc_kafka_consumer --upstream-uri $SINK_URI --downstream-uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" --upstream-tidb-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/?" --config="$CUR/conf/changefeed.toml" 2>&1 &
 
@@ -40,13 +39,13 @@ function run() {
 	run_sql "CREATE DATABASE dispatcher;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE TABLE dispatcher.index (a int primary key, b int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	ensure $MAX_RETRIES check_changefeed_status --pd=$pd_addr $changefeed_id "failed"
+	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "failed"
 
 	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="$SINK_URI" --config="$CUR/conf/new_changefeed.toml" --no-confirm
 
 	run_cdc_cli changefeed resume -c ${changefeed_id}
 
-	ensure $MAX_RETRIES check_changefeed_status --pd=$pd_addr $changefeed_id "normal"
+	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "normal"
 
 	run_sql "INSERT INTO dispatcher.index values (1, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO dispatcher.index values (2, 3);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
