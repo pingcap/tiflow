@@ -178,11 +178,10 @@ func TestAsyncExecAddIndex(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000")
 	require.Nil(t, err)
 	rc := config.GetDefaultReplicaConfig()
-	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID(changefeed), sinkURI, rc)
+	sink, err := NewDDLSink(ctx, sinkURI, rc)
 
 	require.Nil(t, err)
 
