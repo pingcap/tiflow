@@ -48,6 +48,20 @@ func (mr *MockControllerMockRecorder) AsyncStop() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncStop", reflect.TypeOf((*MockController)(nil).AsyncStop))
 }
 
+// CreateChangefeed mocks base method.
+func (m *MockController) CreateChangefeed(arg0 context.Context, arg1 *model.UpstreamInfo, arg2 *model.ChangeFeedInfo) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateChangefeed", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateChangefeed indicates an expected call of CreateChangefeed.
+func (mr *MockControllerMockRecorder) CreateChangefeed(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChangefeed", reflect.TypeOf((*MockController)(nil).CreateChangefeed), arg0, arg1, arg2)
+}
+
 // GetAllChangeFeedCheckpointTs mocks base method.
 func (m *MockController) GetAllChangeFeedCheckpointTs(ctx context.Context) (map[model.ChangeFeedID]uint64, error) {
 	m.ctrl.T.Helper()

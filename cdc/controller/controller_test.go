@@ -46,7 +46,7 @@ func createController4Test(ctx cdcContext.Context,
 	}
 
 	m := upstream.NewManager4Test(pdClient)
-	o := NewController(m, &model.CaptureInfo{}).(*controllerImpl)
+	o := NewController(m, &model.CaptureInfo{}, nil).(*controllerImpl)
 
 	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -66,7 +66,7 @@ func createController4Test(ctx cdcContext.Context,
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
 	m := upstream.NewManager4Test(mockPDClient)
-	o := NewController(m, &model.CaptureInfo{}).(*controllerImpl)
+	o := NewController(m, &model.CaptureInfo{}, nil).(*controllerImpl)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()

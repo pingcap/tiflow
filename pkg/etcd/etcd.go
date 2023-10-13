@@ -140,7 +140,6 @@ type CDCEtcdClient interface {
 	CreateChangefeedInfo(context.Context,
 		*model.UpstreamInfo,
 		*model.ChangeFeedInfo,
-		model.ChangeFeedID,
 	) error
 
 	UpdateChangefeedAndUpstream(ctx context.Context,
@@ -421,8 +420,11 @@ func (c *CDCEtcdClientImpl) RevokeAllLeases(ctx context.Context, leases map[stri
 func (c *CDCEtcdClientImpl) CreateChangefeedInfo(ctx context.Context,
 	upstreamInfo *model.UpstreamInfo,
 	info *model.ChangeFeedInfo,
-	changeFeedID model.ChangeFeedID,
 ) error {
+	changeFeedID := model.ChangeFeedID{
+		Namespace: info.Namespace,
+		ID:        info.ID,
+	}
 	infoKey := GetEtcdKeyChangeFeedInfo(c.ClusterID, changeFeedID)
 	jobKey := GetEtcdKeyJob(c.ClusterID, changeFeedID)
 	upstreamInfoKey := CDCKey{
