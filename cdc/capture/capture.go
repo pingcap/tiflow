@@ -72,6 +72,7 @@ type Capture interface {
 	// IsReady returns if the cdc server is ready
 	// currently only check if ettcd data migration is done
 	IsReady() bool
+	GetUpstreamInfo(context.Context, model.UpstreamID, string)
 }
 
 type captureImpl struct {

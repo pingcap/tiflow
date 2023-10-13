@@ -91,6 +91,11 @@ type Owner interface {
 	WriteDebugInfo(w io.Writer, done chan<- error)
 	Query(query *Query, done chan<- error)
 	AsyncStop()
+	UpdateChangefeedAndUpstream(ctx context.Context,
+		upstreamInfo *model.UpstreamInfo,
+		changeFeedInfo *model.ChangeFeedInfo,
+		changeFeedID model.ChangeFeedID,
+	) error
 }
 
 type ownerImpl struct {
