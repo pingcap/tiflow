@@ -316,7 +316,7 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		CAPath:        up.SecurityConfig.CAPath,
 		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
 	}
-	err = ctrl.CreateChangefeedInfo(
+	err = ctrl.CreateChangefeed(
 		ctx, upstreamInfo,
 		info)
 	if err != nil {

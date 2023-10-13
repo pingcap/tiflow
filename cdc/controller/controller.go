@@ -57,7 +57,7 @@ type Controller interface {
 	GetCaptures(ctx context.Context) ([]*model.CaptureInfo, error)
 	GetProcessors(ctx context.Context) ([]*model.ProcInfoSnap, error)
 	IsChangefeedExists(ctx context.Context, id model.ChangeFeedID) (bool, error)
-	CreateChangefeedInfo(context.Context,
+	CreateChangefeed(context.Context,
 		*model.UpstreamInfo,
 		*model.ChangeFeedInfo,
 	) error
@@ -291,7 +291,7 @@ func (o *controllerImpl) GetChangefeedOwnerCaptureInfo(id model.ChangeFeedID) *m
 	return o.captureInfo
 }
 
-func (o *controllerImpl) CreateChangefeedInfo(ctx context.Context,
+func (o *controllerImpl) CreateChangefeed(ctx context.Context,
 	upstreamInfo *model.UpstreamInfo,
 	cfInfo *model.ChangeFeedInfo,
 ) error {

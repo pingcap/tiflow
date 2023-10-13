@@ -160,7 +160,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = ctrl.CreateChangefeedInfo(ctx,
+	err = ctrl.CreateChangefeed(ctx,
 		upstreamInfo,
 		info)
 	if err != nil {
