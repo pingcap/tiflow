@@ -143,7 +143,13 @@ type replicaConfig struct {
 
 // Value implements the driver.Valuer interface
 func (c ReplicaConfig) Value() (driver.Value, error) {
-	return c.Marshal()
+	cfg, err := c.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: refactor the meaningless type conversion.
+	return []byte(cfg), nil
 }
 
 // Scan implements the sql.Scanner interface
