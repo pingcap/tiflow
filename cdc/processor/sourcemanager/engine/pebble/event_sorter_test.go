@@ -171,7 +171,14 @@ func TestCleanData(t *testing.T) {
 
 	require.True(t, s.IsTableBased())
 
+<<<<<<< HEAD
 	s.AddTable(1)
 	require.Panics(t, func() { s.CleanByTable(2, engine.Position{}) })
 	require.Nil(t, s.CleanByTable(1, engine.Position{}))
+=======
+	span := spanz.TableIDToComparableSpan(1)
+	s.AddTable(span, 0)
+	require.NoError(t, s.CleanByTable(spanz.TableIDToComparableSpan(2), engine.Position{}))
+	require.Nil(t, s.CleanByTable(span, engine.Position{}))
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 }

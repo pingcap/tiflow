@@ -61,10 +61,12 @@ type tableSinkWrapper struct {
 
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
+
 	// startTs is the start ts of the table.
 	startTs model.Ts
 	// targetTs is the upper bound of the table sink.
 	targetTs model.Ts
+
 	// barrierTs is the barrier bound of the table sink.
 	barrierTs atomic.Uint64
 	// receivedSorterResolvedTs is the resolved ts received from the sorter.

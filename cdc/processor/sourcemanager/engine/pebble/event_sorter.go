@@ -61,7 +61,6 @@ type EventSorter struct {
 // EventIter implements sorter.EventIterator.
 type EventIter struct {
 	tableID  model.TableID
-	state    *tableState
 	iter     *pebble.Iterator
 	headItem *model.PolymorphicEvent
 	serde    encoding.MsgPackGenSerde
@@ -144,7 +143,13 @@ func (s *EventSorter) RemoveTable(tableID model.TableID) {
 }
 
 // Add implements engine.SortEngine.
+<<<<<<< HEAD
 func (s *EventSorter) Add(tableID model.TableID, events ...*model.PolymorphicEvent) {
+=======
+//
+// Panics if the table doesn't exist.
+func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
@@ -182,19 +187,33 @@ func (s *EventSorter) OnResolve(action func(model.TableID, model.Ts)) {
 }
 
 // FetchByTable implements engine.SortEngine.
+<<<<<<< HEAD
 func (s *EventSorter) FetchByTable(
 	tableID model.TableID,
 	lowerBound, upperBound engine.Position,
 ) engine.EventIterator {
+=======
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
+	iterReadDur := engine.SorterIterReadDuration()
+	eventIter := &EventIter{
+		tableID:      span.TableID,
+		serde:        s.serde,
+		nextDuration: iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "next"),
+	}
+
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()
-
 	if !exists {
+<<<<<<< HEAD
 		log.Panic("fetch events from an non-existent table",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Int64("tableID", tableID))
+=======
+		return eventIter
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 	}
 
 	sortedResolved := state.sortedResolved.Load()
@@ -208,14 +227,19 @@ func (s *EventSorter) FetchByTable(
 			zap.Uint64("resolved", sortedResolved))
 	}
 
+<<<<<<< HEAD
 	db := s.dbs[getDB(tableID, len(s.dbs))]
 	iterReadDur := metrics.SorterIterReadDuration()
+=======
+	db := s.dbs[getDB(span, len(s.dbs))]
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 
 	seekStart := time.Now()
 	iter := iterTable(db, s.uniqueID, tableID, lowerBound, upperBound)
 	iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "first").
 		Observe(time.Since(seekStart).Seconds())
 
+<<<<<<< HEAD
 	return &EventIter{
 		tableID: tableID,
 		state:   state,
@@ -224,6 +248,10 @@ func (s *EventSorter) FetchByTable(
 
 		nextDuration: iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "next"),
 	}
+=======
+	eventIter.iter = iter
+	return eventIter
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 }
 
 // FetchAllTables implements engine.SortEngine.
@@ -241,10 +269,14 @@ func (s *EventSorter) CleanByTable(tableID model.TableID, upperBound engine.Posi
 	s.mu.RUnlock()
 
 	if !exists {
+<<<<<<< HEAD
 		log.Panic("clean an non-existent table",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Int64("tableID", tableID))
+=======
+		return nil
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 	}
 
 	return s.cleanTable(state, tableID, upperBound)
@@ -259,7 +291,13 @@ func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
 }
 
 // GetStatsByTable implements engine.SortEngine.
+<<<<<<< HEAD
 func (s *EventSorter) GetStatsByTable(tableID model.TableID) engine.TableStats {
+=======
+//
+// Panics if the table doesn't exist.
+func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 	s.mu.RLock()
 	state, exists := s.tables[tableID]
 	s.mu.RUnlock()

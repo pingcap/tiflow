@@ -383,7 +383,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			pendingTxnSize += size
 		}
 
+<<<<<<< HEAD
 		if err := maybeEmitAndAdvance(false, pos.Valid()); err != nil {
+=======
+		if err := advancer.tryAdvanceAndAcquireMem(false, pos.Valid()); err != nil {
+>>>>>>> 8c6e6d951c (sorter(cdc): fix panics of accessing sort engine (#9882))
 			return errors.Trace(err)
 		}
 	}
