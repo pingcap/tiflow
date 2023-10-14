@@ -74,7 +74,9 @@ func TestUpstreamClientExecSQL(t *testing.T) {
 		Config: &security.Credential{
 			CAPath: "ca-path",
 		},
-		Version: 1,
+		VersionFileds: VersionFileds{
+			Version: 1,
+		},
 	}
 	config, err := up.Config.Value()
 	require.NoError(t, err)
@@ -144,7 +146,9 @@ func TestChangefeedInfoClientExecSQL(t *testing.T) {
 			Config:     &config.ReplicaConfig{},
 		},
 		RemovedAt: nil,
-		Version:   1,
+		VersionFileds: VersionFileds{
+			Version: 1,
+		},
 	}
 	configValue, err := info.Config.Value()
 	require.NoError(t, err)
@@ -227,7 +231,10 @@ func TestChangefeedStateClientExecSQL(t *testing.T) {
 				Code: "code",
 			},
 		},
-		Version: 1,
+		VersionFileds: VersionFileds{
+			Version:  1,
+			UpdateAt: time.Now(),
+		},
 	}
 
 	errVal, err := state.Error.Value()
@@ -283,8 +290,9 @@ func TestScheduleClientExecSQL(t *testing.T) {
 				CheckpointTs: 1,
 			},
 		},
-		Version: 1,
-	}
+		VersionFileds: VersionFileds{
+			Version: 1,
+		}}
 
 	// Test createSchedule
 	runMockExecTest(
@@ -359,8 +367,9 @@ func TestProgressClientExecSQL(t *testing.T) {
 	progress := &ProgressDO{
 		CaptureID: "test-captureID",
 		Progress:  nil,
-		Version:   1,
-	}
+		VersionFileds: VersionFileds{
+			Version: 1,
+		}}
 
 	// Test createProgress
 	runMockExecTest(
@@ -446,15 +455,19 @@ func TestUpstreamClientQuerySQL(t *testing.T) {
 			ID:        1,
 			Endpoints: strings.Join([]string{"endpoint1", "endpoint2"}, ","),
 			Config:    nil, /* test nil */
-			Version:   1,
-			UpdateAt:  time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  1,
+				UpdateAt: time.Now(),
+			},
 		},
 		{
 			ID:        2,
 			Endpoints: strings.Join([]string{"endpoint3", "endpoint4"}, ","),
 			Config:    &security.Credential{}, /* test empty */
-			Version:   2,
-			UpdateAt:  time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  2,
+				UpdateAt: time.Now(),
+			},
 		},
 	}
 
@@ -555,8 +568,10 @@ func TestChangefeedInfoClientQuerySQL(t *testing.T) {
 				Config:     nil, /* test nil */
 			},
 			RemovedAt: nil, /* test nil */
-			Version:   1,
-			UpdateAt:  time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  1,
+				UpdateAt: time.Now(),
+			},
 		},
 		{
 			ChangefeedInfo: metadata.ChangefeedInfo{
@@ -572,8 +587,10 @@ func TestChangefeedInfoClientQuerySQL(t *testing.T) {
 				Config:     &config.ReplicaConfig{}, /* test empty */
 			},
 			RemovedAt: &time.Time{}, /* test empty */
-			Version:   2,
-			UpdateAt:  time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  2,
+				UpdateAt: time.Now(),
+			},
 		},
 	}
 
@@ -729,8 +746,10 @@ func TestChangefeedStateClientQuerySQL(t *testing.T) {
 				Warning: nil,                   /* test nil */
 				Error:   &model.RunningError{}, /* test empty*/
 			},
-			Version:  1,
-			UpdateAt: time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  1,
+				UpdateAt: time.Now(),
+			},
 		},
 		{
 			ChangefeedState: metadata.ChangefeedState{
@@ -748,8 +767,10 @@ func TestChangefeedStateClientQuerySQL(t *testing.T) {
 					Code: "error",
 				},
 			},
-			Version:  2,
-			UpdateAt: time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  2,
+				UpdateAt: time.Now(),
+			},
 		},
 	}
 
@@ -877,8 +898,10 @@ func TestScheduleClientQuerySQL(t *testing.T) {
 					CheckpointTs: 1,
 				},
 			},
-			Version:  1,
-			UpdateAt: time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  1,
+				UpdateAt: time.Now(),
+			},
 		},
 		{
 			ScheduledChangefeed: metadata.ScheduledChangefeed{
@@ -890,8 +913,10 @@ func TestScheduleClientQuerySQL(t *testing.T) {
 					CheckpointTs: 2,
 				},
 			},
-			Version:  2,
-			UpdateAt: time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  2,
+				UpdateAt: time.Now(),
+			},
 		},
 	}
 
@@ -1070,14 +1095,18 @@ func TestProgressClientQuerySQL(t *testing.T) {
 					MinTableBarrierTs: 2,
 				},
 			},
-			Version:  1,
-			UpdateAt: time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  1,
+				UpdateAt: time.Now(),
+			},
 		},
 		{
 			CaptureID: "captureID-2",
 			Progress:  &metadata.CaptureProgress{},
-			Version:   2,
-			UpdateAt:  time.Now(),
+			VersionFileds: VersionFileds{
+				Version:  2,
+				UpdateAt: time.Now(),
+			},
 		},
 	}
 

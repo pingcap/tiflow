@@ -19,8 +19,6 @@ import (
 )
 
 // TODO: enable leak test
-//
-//nolint:unused
 func testMain(m *testing.M) {
 	leakutil.SetUpLeakTest(m)
 }

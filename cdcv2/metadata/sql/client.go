@@ -16,13 +16,11 @@ package sql
 import (
 	"context"
 	"database/sql"
-	"sync"
 	"time"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
-	"go.uber.org/zap"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"gorm.io/gorm"
 )
 
@@ -33,56 +31,20 @@ type client[T TxnContext] interface {
 	checker[T]
 }
 
-type clientImpl[T TxnContext] struct {
-	LeaderChecker[T]
-	checker[T]
-
-	options *clientOptions
-}
-
-func newClient[T TxnContext](
+func NewClient[T TxnContext](
 	leaderChecker LeaderChecker[T],
 	checker checker[T],
 	opts ...ClientOptionFunc,
-) client[T] {
+) (client[T], error) {
 	options := setClientOptions(opts...)
-
-	return &clientImpl[T]{
-		LeaderChecker: leaderChecker,
-		checker:       checker,
-		options:       options,
+	if options.cacheFlushInterval < 0 {
+		return nil, errors.ErrMetaClientInvalidConfig.
+			GenWithStackByArgs("cacheFlushInterval must be greater than or equal to 0")
 	}
-}
-
-func (c *clientImpl[T]) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	if c.options.maxExecTime <= 0 {
-		return ctx, nil
+	if options.cacheFlushInterval > 0 {
+		return newClientWithCache[T](leaderChecker, checker, options)
 	}
-	return context.WithTimeout(ctx, c.options.maxExecTime)
-}
-
-func (c *clientImpl[T]) Txn(ctx context.Context, fn TxnAction[T]) error {
-	ctx, cancel := c.withTimeout(ctx)
-	if cancel != nil {
-		defer cancel()
-	}
-	return c.checker.Txn(ctx, fn)
-}
-
-func (c *clientImpl[T]) TxnWithOwnerLock(ctx context.Context, uuid metadata.ChangefeedUUID, fn TxnAction[T]) error {
-	ctx, cancel := c.withTimeout(ctx)
-	if cancel != nil {
-		defer cancel()
-	}
-	return c.checker.TxnWithOwnerLock(ctx, uuid, fn)
-}
-
-func (c *clientImpl[T]) TxnWithLeaderLock(ctx context.Context, leaderID string, fn func(T) error) error {
-	ctx, cancel := c.withTimeout(ctx)
-	if cancel != nil {
-		defer cancel()
-	}
-	return c.LeaderChecker.TxnWithLeaderLock(ctx, leaderID, fn)
+	return newClientWithTimeout[T](leaderChecker, checker, options.timeout), nil
 }
 
 // TxnContext is a type set that can be used as the transaction context.
@@ -102,8 +64,6 @@ type ormTxnAction = TxnAction[*gorm.DB]
 
 // sqlTxnAction represents a transaction action that uses sql.Tx as the transaction context.
 // Note that sqlTxnAction is not implemented yet, it is reserved for future use.
-//
-//nolint:unused
 type sqlTxnAction = TxnAction[*sql.Tx]
 
 // LeaderChecker enables the controller to ensure its leadership during a series of actions.
@@ -178,12 +138,13 @@ type progressClient[T TxnContext] interface {
 }
 
 type clientOptions struct {
-	maxExecTime time.Duration
+	timeout            time.Duration
+	cacheFlushInterval time.Duration
 }
 
 func setClientOptions(opts ...ClientOptionFunc) *clientOptions {
 	o := &clientOptions{
-		maxExecTime: defaultMaxExecTime,
+		timeout: defaultMaxExecTime,
 	}
 	for _, opt := range opts {
 		opt(o)
@@ -194,117 +155,66 @@ func setClientOptions(opts ...ClientOptionFunc) *clientOptions {
 // ClientOptionFunc is the option function for the client.
 type ClientOptionFunc func(*clientOptions)
 
-// WithMaxExecTime sets the maximum execution time of the client.
-func WithMaxExecTime(d time.Duration) ClientOptionFunc {
+// WithTimeout sets the maximum execution time of the client.
+func WithTimeout(d time.Duration) ClientOptionFunc {
 	return func(o *clientOptions) {
-		o.maxExecTime = d
+		o.timeout = d
 	}
 }
 
-// TODO(CharlesCheung): implement a cache layer to reduce the pressure on io and database.
-// nolint:unused
-type clientWithCache[T TxnContext] struct {
-	c     client[T]
-	cache *storage
-}
-
-type versionedRecord[K uint64 | string] interface {
-	GetKey() K
-	GetVersion() uint64
-	GetUpdateAt() time.Time
-}
-
-type entity[K uint64 | string, V versionedRecord[K]] struct {
-	sync.RWMutex
-	// maxExecTime is the maximum insert/update time of the entity. Then, it can be
-	// determined that all data before `lastUpdateAt-maxExecTime` has been pulled locally.
-	maxExecTime  time.Duration
-	lastUpdateAt time.Time
-
-	// the data already cached locally.
-	m map[K]V
-}
-
-func newEntity[K uint64 | string, V versionedRecord[K]](maxExecTime time.Duration) *entity[K, V] {
-	return &entity[K, V]{
-		maxExecTime:  maxExecTime,
-		lastUpdateAt: time.Time{},
-		m:            make(map[K]V),
+// WithCacheFlushInterval sets the query interval of the client.
+func WithCacheFlushInterval(d time.Duration) ClientOptionFunc {
+	return func(o *clientOptions) {
+		o.cacheFlushInterval = d
 	}
 }
 
-// getSafePoint returns the most recent safe timestamp, before which all data has
-// been pulled locally.
-func (e *entity[K, V]) getSafePoint() time.Time {
-	e.RLock()
-	defer e.RUnlock()
+type clientWithTimeout[T TxnContext] struct {
+	LeaderChecker[T]
+	checker[T]
 
-	if len(e.m) == 0 {
-		// if there is no data, it means that the entity has not been initialized.
-		return time.Time{}
-	}
-	return e.lastUpdateAt.Truncate(e.maxExecTime)
+	timeout time.Duration
 }
 
-// get returns the value of the key.
-func (e *entity[K, V]) get(key K) V {
-	e.RLock()
-	defer e.RUnlock()
-
-	return e.m[key]
-}
-
-// doUpsert inserts or updates the entity upon the incoming data, and
-// run the onchange callback if data is changed.
-func (e *entity[K, V]) doUpsert(
-	inComming []V,
-	onchange func(newV V) (skip bool),
-) {
-	e.Lock()
-	defer e.Unlock()
-	for _, newV := range inComming {
-		key := newV.GetKey()
-		oldV, ok := e.m[key]
-		if ok {
-			// check the version and update_at consistency.
-			versionEqual := oldV.GetVersion() == newV.GetVersion()
-			updateAtEqual := oldV.GetUpdateAt() == newV.GetUpdateAt()
-			if versionEqual != updateAtEqual {
-				log.Panic("bad version and update_at", zap.Any("old", oldV), zap.Any("new", newV))
-			}
-		}
-
-		if !ok || oldV.GetVersion() < newV.GetVersion() {
-			if onchange != nil && onchange(newV) {
-				log.Debug("skip update or insert", zap.Any("old", oldV), zap.Any("new", newV))
-				continue
-			}
-
-			e.m[key] = newV
-			newUpdataAt := newV.GetUpdateAt()
-			if newUpdataAt.After(e.lastUpdateAt) {
-				e.lastUpdateAt = newUpdataAt
-			}
-		}
+func newClientWithTimeout[T TxnContext](
+	leaderChecker LeaderChecker[T],
+	checker checker[T],
+	timeout time.Duration,
+) client[T] {
+	return &clientWithTimeout[T]{
+		LeaderChecker: leaderChecker,
+		checker:       checker,
+		timeout:       timeout,
 	}
 }
 
-// upsert inserts or updates the entity with write lock.
-// nolint:unused
-func (e *entity[K, V]) upsert(inComming ...V) {
-	e.doUpsert(inComming, nil)
+func (c *clientWithTimeout[T]) withTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if c.timeout <= 0 {
+		return ctx, nil
+	}
+	return context.WithTimeout(ctx, c.timeout)
 }
 
-// nolint:unused
-type storage struct {
-	// the key is the upstream id.
-	upsteram *entity[uint64, *UpstreamDO]
-	// the key is the changefeed uuid.
-	info *entity[metadata.ChangefeedUUID, *ChangefeedInfoDO]
-	// the key is the changefeed uuid.
-	state *entity[metadata.ChangefeedUUID, *ChangefeedStateDO]
-	// the key is the changefeed uuid.
-	schedule *entity[metadata.ChangefeedUUID, *ScheduleDO]
-	// the key is the capture id.
-	progress *entity[model.CaptureID, *ProgressDO]
+func (c *clientWithTimeout[T]) Txn(ctx context.Context, fn TxnAction[T]) error {
+	ctx, cancel := c.withTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+	return c.checker.Txn(ctx, fn)
+}
+
+func (c *clientWithTimeout[T]) TxnWithOwnerLock(ctx context.Context, uuid metadata.ChangefeedUUID, fn TxnAction[T]) error {
+	ctx, cancel := c.withTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+	return c.checker.TxnWithOwnerLock(ctx, uuid, fn)
+}
+
+func (c *clientWithTimeout[T]) TxnWithLeaderLock(ctx context.Context, leaderID string, fn func(T) error) error {
+	ctx, cancel := c.withTimeout(ctx)
+	if cancel != nil {
+		defer cancel()
+	}
+	return c.LeaderChecker.TxnWithLeaderLock(ctx, leaderID, fn)
 }

@@ -964,4 +964,8 @@ var (
 		"meta cache is inconsistent: %s",
 		errors.RFCCodeText("DFLOW:ErrInconsistentMetaCache"),
 	)
+	ErrMetaClientInvalidConfig = errors.Normalize(
+		"config of metadata client is invalid: %s",
+		errors.RFCCodeText("CDC:ErrMetaClientInvalidConfig"),
+	)
 )

@@ -74,13 +74,17 @@ func NewCaptureObservation(
 		return nil, errors.Trace(err)
 	}
 	ormClient := NewORMClient(selfInfo.ID, db)
+	client, err := NewClient(electionStorage, ormClient, opts...)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	if err := AutoMigrate(db); err != nil {
 		return nil, errors.Trace(err)
 	}
 	return &CaptureOb[*gorm.DB]{
 		selfInfo:         selfInfo,
-		client:           newClient(electionStorage, ormClient, opts...),
+		client:           client,
 		uuidGenerator:    NewUUIDGenerator("orm", db),
 		tasks:            newEntity[metadata.ChangefeedUUID, *ScheduleDO](defaultMaxExecTime),
 		Elector:          metadata.NewElector(selfInfo, electionStorage),
@@ -101,7 +105,9 @@ func (c *CaptureOb[T]) Run(
 		return c.client.createProgress(tx, &ProgressDO{
 			CaptureID: c.selfInfo.ID,
 			Progress:  nil,
-			Version:   1,
+			VersionFileds: VersionFileds{
+				Version: 1,
+			},
 		})
 	})
 	if err != nil {
@@ -169,14 +175,14 @@ func (c *CaptureOb[T]) handleTaskChanges(ctx context.Context) error {
 		return nil
 	}
 
-	c.tasks.doUpsert(schedItems, func(newV *ScheduleDO) (skip bool) {
+	c.tasks.update(func(newV *ScheduleDO) (skip bool) {
 		if newV.OwnerState == metadata.SchedRemoved {
 			return true
 		}
 		c.ownerChanges.In() <- newV.ScheduledChangefeed
 		c.processorChanges.In() <- newV.ScheduledChangefeed
 		return false
-	})
+	}, schedItems...)
 
 	return nil
 }
@@ -195,7 +201,9 @@ func (c *CaptureOb[T]) Advance(cp metadata.CaptureProgress) error {
 		return c.client.updateProgress(tx, &ProgressDO{
 			CaptureID: c.selfInfo.ID,
 			Progress:  &cp,
-			Version:   pr.Version,
+			VersionFileds: VersionFileds{
+				Version: pr.Version,
+			},
 		})
 	})
 }
@@ -434,7 +442,9 @@ func (c *ControllerOb[T]) upsertUpstream(tx T, up *model.UpstreamInfo) error {
 			KeyPath:       up.KeyPath,
 			CertAllowedCN: up.CertAllowedCN,
 		},
-		Version: 1,
+		VersionFileds: VersionFileds{
+			Version: 1,
+		},
 	}
 
 	// Create or update the upstream info.
@@ -483,7 +493,9 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 
 		if err := c.client.createChangefeedInfo(tx, &ChangefeedInfoDO{
 			ChangefeedInfo: *cf,
-			Version:        1,
+			VersionFileds: VersionFileds{
+				Version: 1,
+			},
 		}); err != nil {
 			return errors.Trace(err)
 		}
@@ -499,8 +511,9 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 					MinTableBarrierTs: cf.StartTs,
 				},
 			},
-			Version: 1,
-		}); err != nil {
+			VersionFileds: VersionFileds{
+				Version: 1,
+			}}); err != nil {
 			return errors.Trace(err)
 		}
 
@@ -511,8 +524,9 @@ func (c *ControllerOb[T]) CreateChangefeed(cf *metadata.ChangefeedInfo, up *mode
 				Error:          nil,
 				Warning:        nil,
 			},
-			Version: 1,
-		})
+			VersionFileds: VersionFileds{
+				Version: 1,
+			}})
 	})
 	return cf.ChangefeedIdent, err
 }
@@ -524,14 +538,9 @@ func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-		err = c.client.markChangefeedRemoved(tx, &ChangefeedInfoDO{
-			ChangefeedInfo: metadata.ChangefeedInfo{
-				ChangefeedIdent: metadata.ChangefeedIdent{
-					UUID: cf,
-				},
-			},
-			Version: oldInfo.Version,
-		})
+		removeAt := time.Now()
+		oldInfo.RemovedAt = &removeAt
+		err = c.client.markChangefeedRemoved(tx, oldInfo)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -541,13 +550,8 @@ func (c *ControllerOb[T]) RemoveChangefeed(cf metadata.ChangefeedUUID) error {
 			return errors.Trace(err)
 		}
 		if sc.OwnerState == metadata.SchedLaunched {
-			err = c.client.updateScheduleOwnerState(tx, &ScheduleDO{
-				ScheduledChangefeed: metadata.ScheduledChangefeed{
-					ChangefeedUUID: cf,
-					OwnerState:     metadata.SchedRemoving,
-				},
-				Version: sc.Version,
-			})
+			sc.OwnerState = metadata.SchedRemoving
+			err = c.client.updateScheduleOwnerState(tx, sc)
 			if err != nil {
 				return errors.Trace(err)
 			}
@@ -637,7 +641,9 @@ func (c *ControllerOb[T]) onCaptureOffline(ids ...model.CaptureID) error {
 							Processors:     nil,
 							TaskPosition:   taskPosition,
 						},
-						Version: oldSc.Version,
+						VersionFileds: VersionFileds{
+							Version: oldSc.Version,
+						},
 					}
 					// TODO: use Model to prevent nil value from being ignored.
 					err = c.client.updateSchedule(tx, newSc)
@@ -676,7 +682,9 @@ func (c *ControllerOb[T]) SetOwner(target metadata.ScheduledChangefeed) error {
 		}
 		return c.client.updateSchedule(tx, &ScheduleDO{
 			ScheduledChangefeed: target,
-			Version:             old.Version,
+			VersionFileds: VersionFileds{
+				Version: old.Version,
+			},
 		})
 	})
 }
@@ -756,7 +764,9 @@ func (o *OwnerOb[T]) updateChangefeedState(
 				Error:          oldState.Error,
 				Warning:        oldState.Warning,
 			},
-			Version: oldState.Version,
+			VersionFileds: VersionFileds{
+				Version: oldState.Version,
+			},
 		}
 		if cfErr != nil {
 			newState.Error = cfErr
@@ -789,7 +799,9 @@ func (o *OwnerOb[T]) UpdateChangefeed(info *metadata.ChangefeedInfo) error {
 		}
 		return o.client.updateChangefeedInfo(tx, &ChangefeedInfoDO{
 			ChangefeedInfo: *info,
-			Version:        oldInfo.Version,
+			VersionFileds: VersionFileds{
+				Version: oldInfo.Version,
+			},
 		})
 	})
 }
