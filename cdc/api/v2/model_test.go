@@ -76,6 +76,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		IntegrityCheckLevel:   config.GetDefaultReplicaConfig().Integrity.IntegrityCheckLevel,
 		CorruptionHandleLevel: config.GetDefaultReplicaConfig().Integrity.CorruptionHandleLevel,
 	},
+	ChangefeedErrorStuckDuration: &JSONDuration{*config.
+		GetDefaultReplicaConfig().ChangefeedErrorStuckDuration},
 }
 
 func TestDefaultReplicaConfig(t *testing.T) {

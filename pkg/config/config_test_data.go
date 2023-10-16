@@ -70,7 +70,8 @@ const (
   "integrity": {
     "integrity-check-level": "none",
     "corruption-handle-level": "warn"
- }
+ },
+  "changefeed-error-stuck-duration": 1800000000000
 }`
 
 	testCfgTestServerConfigMarshal = `{
@@ -285,7 +286,8 @@ const (
   "integrity": {
     "integrity-check-level": "none",
     "corruption-handle-level": "warn"
-  }
+  },
+  "changefeed-error-stuck-duration": 1800000000000
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -415,6 +417,7 @@ const (
   "integrity": {
     "integrity-check-level": "none",
     "corruption-handle-level": "warn"
-  }
+  },
+  "changefeed-error-stuck-duration": 1800000000000
 }`
 )
