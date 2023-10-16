@@ -1093,13 +1093,15 @@ func (s *Server) UpdateValidator(ctx context.Context, req *pb.UpdateValidationWo
 		resp.Msg = terror.ErrWorkerNoStart.Error()
 		return resp, nil
 	}
-	// err := w.UpdateWorkerValidator(req.TaskName)
-	// if err != nil {
-	// 	resp.Result = false
-	// 	resp.Msg = err.Error()
-	// 	//nolint:nilerr
-	// 	return resp, nil
-	// }
+	err := w.UpdateWorkerValidator(req)
+	if err != nil {
+		resp.Result = false
+		resp.Msg = err.Error()
+		//nolint:nilerr
+		return resp, nil
+	}
+	resp.Source = w.cfg.SourceID
+	resp.Worker = s.cfg.Name
 	//nolint:nilerr
 	return resp, nil
 }

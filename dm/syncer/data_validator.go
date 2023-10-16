@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -192,11 +194,12 @@ type DataValidator struct {
 	streamerController *binlogstream.StreamerController
 	persistHelper      *validatorPersistHelper
 
-	validateInterval time.Duration
-	checkInterval    time.Duration
-	cutOverLocation  *binlog.Location
-	workers          []*validateWorker
-	workerCnt        int
+	validateInterval      time.Duration
+	checkInterval         time.Duration
+	cutOverLocationAtomic atomic.Pointer[binlog.Location]
+
+	workers   []*validateWorker
+	workerCnt int
 
 	// whether we start to mark failed rows as error rows
 	// if it's false, we don't mark failed row change as error to reduce false-positive
@@ -955,10 +958,11 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 
 func (v *DataValidator) checkAndPersistCheckpointAndData(loc binlog.Location) error {
 	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
-	needCutOver := v.cutOverLocation != nil && binlog.CompareLocation(*v.cutOverLocation, loc, v.cfg.EnableGTID) <= 0
-	if time.Since(v.lastFlushTime) > metaFlushInterval && needCutOver {
+	cutOverLocation := v.cutOverLocationAtomic.Load()
+	needCutOver := cutOverLocation != nil && binlog.CompareLocation(*cutOverLocation, loc, v.cfg.EnableGTID) <= 0
+	if time.Since(v.lastFlushTime) > metaFlushInterval || needCutOver {
 		if needCutOver {
-			v.cutOverLocation = nil
+			v.cutOverLocationAtomic.Store(nil)
 		}
 		v.lastFlushTime = time.Now()
 		if err := v.persistCheckpointAndData(loc); err != nil {
@@ -1312,6 +1316,29 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	}
 	defer dbconn.CloseBaseDB(tctx, toDB)
 	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
+}
+
+func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) error {
+	var (
+		pos *mysql.Position
+		gs  mysql.GTIDSet
+		err error
+	)
+	if len(req.BinlogPos) > 0 {
+		pos, err = binlog.VerifyBinlogPos(req.BinlogGTID)
+		if err != nil {
+			return err
+		}
+	}
+	if len(req.BinlogGTID) > 0 {
+		gs, err = gtid.ParserGTID(v.cfg.Flavor, req.BinlogGTID)
+		if err != nil {
+			return err
+		}
+	}
+	cutOverLocation := binlog.NewLocation(*pos, gs)
+	v.cutOverLocationAtomic.Store(&cutOverLocation)
+	return nil
 }
 
 func (v *DataValidator) getErrorRowCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
