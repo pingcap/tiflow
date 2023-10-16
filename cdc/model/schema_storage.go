@@ -319,7 +319,7 @@ func (ti *TableInfo) Clone() *TableInfo {
 // GetIndex return the corresponding index by the given name.
 func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
 	for _, index := range ti.Indices {
-		if index.Name.O == name {
+		if index != nil && index.Name.O == name {
 			return index
 		}
 	}
@@ -347,7 +347,9 @@ func (ti *TableInfo) ColumnsByNames(names []string) ([]int, bool) {
 	// todo: optimize it
 	columnOffsets := make(map[string]int, len(ti.Columns))
 	for _, col := range ti.Columns {
-		columnOffsets[col.Name.O] = col.Offset
+		if col != nil {
+			columnOffsets[col.Name.O] = col.Offset
+		}
 	}
 
 	result := make([]int, 0, len(names))
