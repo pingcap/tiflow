@@ -72,10 +72,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
             "dispatchers": null,
             "protocol": "open-protocol",
             "advance-timeout-in-sec": 150
-        },
-        "consistent": {
-            "level": "normal",
-            "storage": "local"
         }
     },
     "state": "normal",
@@ -125,11 +121,13 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
+						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 						Sink: &config.SinkConfig{
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
 						},
-						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
@@ -182,8 +180,9 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
 						},
-						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
-						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
+						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
@@ -241,8 +240,9 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
 						},
-						Scheduler: config.GetDefaultReplicaConfig().Scheduler,
-						Integrity: config.GetDefaultReplicaConfig().Integrity,
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
+						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
