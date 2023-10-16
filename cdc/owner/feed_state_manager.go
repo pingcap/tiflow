@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -112,8 +111,8 @@ func newFeedStateManager(up *upstream.Upstream,
 	m.errBackoff.Multiplier = defaultBackoffMultiplier
 	m.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
 	// backoff will stop once the defaultBackoffMaxElapsedTime has elapsed.
-	m.errBackoff.MaxElapsedTime = *cfg.ChangefeedErrorStuckDuration
-	m.changefeedErrorStuckDuration = *cfg.ChangefeedErrorStuckDuration
+	m.errBackoff.MaxElapsedTime = *state.Info.Config.ChangefeedErrorStuckDuration
+	m.changefeedErrorStuckDuration = *state.Info.Config.ChangefeedErrorStuckDuration
 
 	m.resetErrRetry()
 	return m
