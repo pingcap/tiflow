@@ -742,6 +742,7 @@ func TestUpdateChangefeedEpoch(t *testing.T) {
 func TestHandleWarning(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	manager := newFeedStateManager4Test(200, 1600, 0, 2.0)
+	manager.changefeedErrorStuckDuration = 100 * time.Millisecond
 	state := orchestrator.NewChangefeedReactorState(etcd.DefaultCDCClusterID,
 		ctx.ChangefeedVars().ID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)

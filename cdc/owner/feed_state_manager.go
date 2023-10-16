@@ -63,11 +63,11 @@ type feedStateManager struct {
 
 	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
 	// has been advanced or not.
-	resolvedTs                   model.Ts
-	initCheckpointTs             model.Ts
-	resolvedTsAdvanced           time.Time
-	checkpointTs                 model.Ts
-	checkpointTsAdvanced         time.Time
+	resolvedTs           model.Ts
+	resolvedTsAdvanced   time.Time
+	checkpointTs         model.Ts
+	checkpointTsAdvanced time.Time
+
 	changefeedErrorStuckDuration time.Duration
 }
 
@@ -87,6 +87,25 @@ func newFeedStateManager(up *upstream.Upstream, cfg *config.ReplicaConfig) *feed
 
 	m.resetErrRetry()
 	return m
+}
+
+func (m *feedStateManager) shouldRetry() (shouldBeRunning, shouldFailed bool) {
+	if time.Since(m.lastErrorRetryTime) < m.backoffInterval {
+		return
+	}
+
+	// retry the changefeed
+	m.backoffInterval = m.errBackoff.NextBackOff()
+	// NextBackOff() will return -1 once the MaxElapsedTime has elapsed,
+	// set the changefeed to failed state.
+	if m.backoffInterval == m.errBackoff.Stop {
+		shouldFailed = true
+		return
+	}
+
+	m.lastErrorRetryTime = time.Now()
+	shouldBeRunning = true
+	return
 }
 
 // resetErrRetry reset the error retry related fields
@@ -139,16 +158,8 @@ func (m *feedStateManager) Tick(
 		m.shouldBeRunning = false
 		return
 	case model.StatePending:
-		if time.Since(m.lastErrorRetryTime) < m.backoffInterval {
-			m.shouldBeRunning = false
-			return
-		}
-		// retry the changefeed
-		oldBackoffInterval := m.backoffInterval
-		m.backoffInterval = m.errBackoff.NextBackOff()
-		// NextBackOff() will return -1 once the MaxElapsedTime has elapsed,
-		// set the changefeed to failed state.
-		if m.backoffInterval == m.errBackoff.Stop {
+		shouldBeRunning, shouldFailed := m.shouldRetry()
+		if shouldFailed {
 			log.Error("The changefeed won't be restarted as it has been experiencing failures for "+
 				"an extended duration",
 				zap.Duration("maxElapsedTime", m.errBackoff.MaxElapsedTime),
@@ -161,19 +172,22 @@ func (m *feedStateManager) Tick(
 			m.patchState(model.StateFailed)
 			return
 		}
+		if !shouldBeRunning {
+			m.shouldBeRunning = false
+			return
+		}
 
-		m.lastErrorRetryTime = time.Now()
+		// retry the changefeed
+		m.shouldBeRunning = true
 		if m.state.Status != nil {
 			m.lastErrorRetryCheckpointTs = m.state.Status.CheckpointTs
 		}
-		m.shouldBeRunning = true
 		m.patchState(model.StateWarning)
 		log.Info("changefeed retry backoff interval is elapsed,"+
 			"chengefeed will be restarted",
 			zap.String("namespace", m.state.ID.Namespace),
 			zap.String("changefeed", m.state.ID.ID),
 			zap.Time("lastErrorRetryTime", m.lastErrorRetryTime),
-			zap.Duration("lastRetryInterval", oldBackoffInterval),
 			zap.Duration("nextRetryInterval", m.backoffInterval))
 	case model.StateNormal, model.StateWarning:
 		m.checkAndChangeState()
@@ -566,12 +580,12 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
 		m.lastWarningReportCheckpointTs = m.state.Status.CheckpointTs
 		// Conditions:
-		// 1. checkpoint lag is large enough;
+		// 1. resolvedTs can advance normally;
 		// 2. checkpoint hasn't been advanced for a long while;
-		// 3. the changefeed has been initialized.
-		if currTime.Sub(ckptTime) > m.changefeedErrorStuckDuration &&
+		// 3. checkpoint lag is large enough.
+		if time.Since(m.resolvedTsAdvanced) < m.changefeedErrorStuckDuration &&
 			time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration &&
-			m.resolvedTs > m.initCheckpointTs {
+			currTime.Sub(ckptTime) > m.changefeedErrorStuckDuration {
 			log.Info("changefeed retry on warning for a very long time and does not resume, "+
 				"it will be failed", zap.String("changefeed", m.state.ID.ID),
 				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
