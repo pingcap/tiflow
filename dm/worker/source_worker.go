@@ -1362,3 +1362,11 @@ func (w *SourceWorker) GetValidatorTableStatus(taskName string, filterStatus pb.
 	}
 	return st.GetValidatorTableStatus(filterStatus)
 }
+
+func (w *SourceWorker) UpdateWorkerValidator(req *pb.UpdateValidationWorkerRequest) error {
+	st := w.subTaskHolder.findSubTask(req.TaskName)
+	if st == nil {
+		return terror.ErrWorkerSubTaskNotFound.Generate(req.TaskName)
+	}
+	return st.UpdateValidator(req)
+}
