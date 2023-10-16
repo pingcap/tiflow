@@ -178,7 +178,8 @@ func TestCreateChangefeed(t *testing.T) {
 	helpers.EXPECT().
 		getEtcdClient(gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
 	helpers.EXPECT().
@@ -201,8 +202,8 @@ func TestCreateChangefeed(t *testing.T) {
 				SinkURI:    cfg.SinkURI,
 			}, nil
 		}).AnyTimes()
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	ctrl.EXPECT().
+		CreateChangefeed(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrPDEtcdAPIError).Times(1)
 
 	cfConfig.SinkURI = mysqlSink
@@ -222,8 +223,8 @@ func TestCreateChangefeed(t *testing.T) {
 	helpers.EXPECT().
 		getEtcdClient(gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	ctrl.EXPECT().
+		CreateChangefeed(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 	w = httptest.NewRecorder()
@@ -662,12 +663,13 @@ func TestVerifyTable(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrNewStore")
 
-	// case 3: getVerfiedTables failed
+	// case 3: getVerifiedTables failed
 	helpers.EXPECT().
 		createTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, cerrors.ErrFilterRuleInvalid).
 		Times(1)
 
@@ -688,7 +690,8 @@ func TestVerifyTable(t *testing.T) {
 	ineligible := []model.TableName{
 		{Schema: "test", Table: "invalidTable"},
 	}
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(eligible, ineligible, nil)
 
 	w = httptest.NewRecorder()

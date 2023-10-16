@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
@@ -160,10 +162,9 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
+	err = ctrl.CreateChangefeed(ctx,
 		upstreamInfo,
-		info,
-		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
+		info)
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(err)
@@ -341,9 +342,20 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	uri, err := url.Parse(cfg.SinkURI)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	scheme := uri.Scheme
+	topic := strings.TrimFunc(uri.Path, func(r rune) bool {
+		return r == '/'
+	})
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
+	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
+
 	ineligibleTables, eligibleTables, err := h.helpers.
-		getVerfiedTables(replicaCfg, kvStore, cfg.StartTs)
+		getVerifiedTables(replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
 		_ = c.Error(err)
 		return

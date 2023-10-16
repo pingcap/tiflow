@@ -67,7 +67,7 @@ func NewEventRouter(
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig.PartitionRule, scheme)
+		d := getPartitionDispatcher(ruleConfig.PartitionRule, scheme, ruleConfig.IndexName)
 		t, err := getTopicDispatcher(ruleConfig.TopicRule, defaultTopic, protocol, scheme)
 		if err != nil {
 			return nil, err
@@ -116,7 +116,7 @@ func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
 func (s *EventRouter) GetPartitionForRowChange(
 	row *model.RowChangedEvent,
 	partitionNum int32,
-) (int32, string) {
+) (int32, string, error) {
 	_, partitionDispatcher := s.matchDispatcher(
 		row.Table.Schema, row.Table.Table,
 	)
@@ -124,6 +124,21 @@ func (s *EventRouter) GetPartitionForRowChange(
 	return partitionDispatcher.DispatchRowChangedEvent(
 		row, partitionNum,
 	)
+}
+
+// VerifyTables return error if any one table route rule is invalid.
+func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
+	for _, table := range infos {
+		_, partitionDispatcher := s.matchDispatcher(table.TableName.Schema, table.TableName.Table)
+		if v, ok := partitionDispatcher.(*partition.IndexValueDispatcher); ok {
+			_, _, ok = table.IndexByName(v.IndexName)
+			if !ok {
+				return cerror.ErrDispatcherFailed.GenWithStack(
+					"index not found when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+			}
+		}
+	}
+	return nil
 }
 
 // GetActiveTopics returns a list of the corresponding topics
@@ -176,7 +191,7 @@ func (s *EventRouter) matchDispatcher(
 }
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
-func getPartitionDispatcher(rule string, scheme string) partition.Dispatcher {
+func getPartitionDispatcher(rule string, scheme string, indexName string) partition.Dispatcher {
 	switch strings.ToLower(rule) {
 	case "default":
 		return partition.NewDefaultDispatcher()
@@ -184,9 +199,11 @@ func getPartitionDispatcher(rule string, scheme string) partition.Dispatcher {
 		return partition.NewTsDispatcher()
 	case "table":
 		return partition.NewTableDispatcher()
-	case "index-value", "rowid":
-		log.Warn("rowid is deprecated, please use index-value instead.")
-		return partition.NewIndexValueDispatcher()
+	case "index-value":
+		return partition.NewIndexValueDispatcher(indexName)
+	case "rowid":
+		log.Warn("rowid is deprecated, index-value is used as the partition dispatcher.")
+		return partition.NewIndexValueDispatcher(indexName)
 	default:
 	}
 

@@ -14,6 +14,7 @@
 package config
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -35,7 +36,8 @@ const (
 	// minSyncPointInterval is the minimum of SyncPointInterval can be set.
 	minSyncPointInterval = time.Second * 30
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
-	minSyncPointRetention = time.Hour * 1
+	minSyncPointRetention           = time.Hour * 1
+	minChangeFeedErrorStuckDuration = time.Minute * 30
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -85,6 +87,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		IntegrityCheckLevel:   integrity.CheckLevelNone,
 		CorruptionHandleLevel: integrity.CorruptionHandleLevelWarn,
 	},
+	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -134,7 +137,23 @@ type replicaConfig struct {
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
 	// Integrity is only available when the downstream is MQ.
-	Integrity *integrity.Config `toml:"integrity" json:"integrity"`
+	Integrity                    *integrity.Config `toml:"integrity" json:"integrity"`
+	ChangefeedErrorStuckDuration *time.Duration    `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+}
+
+// Value implements the driver.Valuer interface
+func (c ReplicaConfig) Value() (driver.Value, error) {
+	return c.Marshal()
+}
+
+// Scan implements the sql.Scanner interface
+func (c *ReplicaConfig) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return c.UnmarshalJSON(b)
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -256,6 +275,15 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err := c.Integrity.Validate(); err != nil {
 			return err
 		}
+	}
+
+	if c.ChangefeedErrorStuckDuration != nil &&
+		*c.ChangefeedErrorStuckDuration < minChangeFeedErrorStuckDuration {
+		return cerror.ErrInvalidReplicaConfig.
+			FastGenByArgs(
+				fmt.Sprintf("The ChangefeedErrorStuckDuration:%f must be larger than %f Seconds",
+					c.ChangefeedErrorStuckDuration.Seconds(),
+					minChangeFeedErrorStuckDuration.Seconds()))
 	}
 
 	return nil

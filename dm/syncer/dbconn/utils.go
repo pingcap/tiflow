@@ -30,6 +30,31 @@ import (
 	"go.uber.org/zap"
 )
 
+// GetSchemaCreateSQL gets table create sql by 'show create table schema.table'.
+func GetSchemaCreateSQL(tctx *tcontext.Context, conn *DBConn, schemaID string) (sql string, err error) {
+	querySQL := fmt.Sprintf("SHOW CREATE schema %s", schemaID)
+	var schema, createStr string
+
+	rows, err := conn.QuerySQL(tctx, nil, querySQL)
+	if err != nil {
+		return "", terror.DBErrorAdapt(err, conn.Scope(), terror.ErrDBDriverError)
+	}
+
+	defer rows.Close()
+	if rows.Next() {
+		if scanErr := rows.Scan(&schema, &createStr); scanErr != nil {
+			return "", terror.DBErrorAdapt(scanErr, conn.Scope(), terror.ErrDBDriverError)
+		}
+	} else {
+		return "", terror.ErrSyncerDownstreamTableNotFound.Generate(schema)
+	}
+
+	if err = rows.Close(); err != nil {
+		return "", terror.DBErrorAdapt(rows.Err(), conn.Scope(), terror.ErrDBDriverError)
+	}
+	return createStr, nil
+}
+
 // GetTableCreateSQL gets table create sql by 'show create table schema.table'.
 func GetTableCreateSQL(tctx *tcontext.Context, conn *DBConn, tableID string) (sql string, err error) {
 	querySQL := fmt.Sprintf("SHOW CREATE TABLE %s", tableID)

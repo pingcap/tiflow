@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -74,6 +75,7 @@ type managerImpl struct {
 		*model.Liveness,
 		uint64,
 		*config.SchedulerConfig,
+		etcd.OwnerCaptureInfoClient,
 	) *processor
 	cfg *config.SchedulerConfig
 
@@ -129,7 +131,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			p = m.newProcessor(
 				changefeedState.Info, changefeedState.Status,
 				m.captureInfo, changefeedID, up, m.liveness,
-				currentChangefeedEpoch, &cfg)
+				currentChangefeedEpoch, &cfg, ctx.GlobalVars().EtcdClient)
 			m.processors[changefeedID] = p
 		}
 		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{

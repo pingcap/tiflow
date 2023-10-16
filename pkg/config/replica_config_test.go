@@ -267,6 +267,17 @@ func TestValidateAndAdjust(t *testing.T) {
 	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 	require.Equal(t, integrity.CheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
+
+	// changefeed error stuck duration is less than 30 minutes
+	cfg = GetDefaultReplicaConfig()
+	duration := minChangeFeedErrorStuckDuration - time.Second*1
+	cfg.ChangefeedErrorStuckDuration = &duration
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "The ChangefeedErrorStuckDuration")
+	duration = minChangeFeedErrorStuckDuration
+	cfg.ChangefeedErrorStuckDuration = &duration
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {

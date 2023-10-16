@@ -68,6 +68,7 @@ type VerifyTableConfig struct {
 	PDConfig
 	ReplicaConfig *ReplicaConfig `json:"replica_config"`
 	StartTs       uint64         `json:"start_ts"`
+	SinkURI       string         `json:"sink_uri"`
 }
 
 func getDefaultVerifyTableConfig() *VerifyTableConfig {
@@ -186,12 +187,13 @@ type ReplicaConfig struct {
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
 	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`
 
-	Filter     *FilterConfig              `json:"filter"`
-	Mounter    *MounterConfig             `json:"mounter"`
-	Sink       *SinkConfig                `json:"sink"`
-	Consistent *ConsistentConfig          `json:"consistent,omitempty"`
-	Scheduler  *ChangefeedSchedulerConfig `json:"scheduler"`
-	Integrity  *IntegrityConfig           `json:"integrity"`
+	Filter                       *FilterConfig              `json:"filter"`
+	Mounter                      *MounterConfig             `json:"mounter"`
+	Sink                         *SinkConfig                `json:"sink"`
+	Consistent                   *ConsistentConfig          `json:"consistent,omitempty"`
+	Scheduler                    *ChangefeedSchedulerConfig `json:"scheduler"`
+	Integrity                    *IntegrityConfig           `json:"integrity"`
+	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -272,6 +274,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				Matcher:        rule.Matcher,
 				DispatcherRule: "",
 				PartitionRule:  rule.PartitionRule,
+				IndexName:      rule.IndexName,
 				TopicRule:      rule.TopicRule,
 			})
 		}
@@ -475,6 +478,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			CorruptionHandleLevel: c.Integrity.CorruptionHandleLevel,
 		}
 	}
+	if c.ChangefeedErrorStuckDuration != nil {
+		res.ChangefeedErrorStuckDuration = &c.ChangefeedErrorStuckDuration.duration
+	}
 	return res
 }
 
@@ -547,6 +553,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			dispatchRules = append(dispatchRules, &DispatchRule{
 				Matcher:       rule.Matcher,
 				PartitionRule: rule.PartitionRule,
+				IndexName:     rule.IndexName,
 				TopicRule:     rule.TopicRule,
 			})
 		}
@@ -758,7 +765,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			CorruptionHandleLevel: cloned.Integrity.CorruptionHandleLevel,
 		}
 	}
-
+	if cloned.ChangefeedErrorStuckDuration != nil {
+		res.ChangefeedErrorStuckDuration = &JSONDuration{*cloned.ChangefeedErrorStuckDuration}
+	}
 	return res
 }
 
@@ -907,6 +916,7 @@ type LargeMessageHandleConfig struct {
 type DispatchRule struct {
 	Matcher       []string `json:"matcher,omitempty"`
 	PartitionRule string   `json:"partition"`
+	IndexName     string   `json:"index"`
 	TopicRule     string   `json:"topic"`
 }
 

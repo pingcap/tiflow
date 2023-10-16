@@ -315,3 +315,19 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 func (ti *TableInfo) Clone() *TableInfo {
 	return WrapTableInfo(ti.SchemaID, ti.TableName.Schema, ti.Version, ti.TableInfo.Clone())
 }
+
+// IndexByName returns the index columns and offsets of the corresponding index by name
+func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
+	for _, index := range ti.Indices {
+		if index.Name.O == name {
+			names := make([]string, 0, len(index.Columns))
+			offset := make([]int, 0, len(index.Columns))
+			for _, col := range index.Columns {
+				names = append(names, col.Name.O)
+				offset = append(offset, col.Offset)
+			}
+			return names, offset, true
+		}
+	}
+	return nil, nil, false
+}

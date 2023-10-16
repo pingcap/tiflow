@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -92,6 +93,7 @@ type processor struct {
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
 		context.Context, *model.Liveness, uint64, *config.SchedulerConfig,
+		etcd.OwnerCaptureInfoClient,
 	) (scheduler.Agent, error)
 	cfg *config.SchedulerConfig
 
@@ -105,6 +107,8 @@ type processor struct {
 	// we can refactor this step by step.
 	latestInfo   *model.ChangeFeedInfo
 	latestStatus *model.ChangeFeedStatus
+
+	ownerCaptureInfoClient etcd.OwnerCaptureInfoClient
 
 	metricSyncTableNumGauge      prometheus.Gauge
 	metricSchemaStorageGcTsGauge prometheus.Gauge
@@ -414,6 +418,7 @@ func NewProcessor(
 	liveness *model.Liveness,
 	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
+	ownerCaptureInfoClient etcd.OwnerCaptureInfoClient,
 ) *processor {
 	p := &processor{
 		upstream:        up,
@@ -423,6 +428,8 @@ func NewProcessor(
 		changefeedEpoch: changefeedEpoch,
 		latestInfo:      info,
 		latestStatus:    status,
+
+		ownerCaptureInfoClient: ownerCaptureInfoClient,
 
 		metricSyncTableNumGauge: syncTableNumGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -631,8 +638,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	// Bind them so that sourceManager can notify sinkManager.r.
 	p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
-
-	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg)
+	p.agent, err = p.newAgent(prcCtx, p.liveness, p.changefeedEpoch, p.cfg, p.ownerCaptureInfoClient)
 	if err != nil {
 		return err
 	}
@@ -651,14 +657,14 @@ func (p *processor) newAgentImpl(
 	liveness *model.Liveness,
 	changefeedEpoch uint64,
 	cfg *config.SchedulerConfig,
+	client etcd.OwnerCaptureInfoClient,
 ) (ret scheduler.Agent, err error) {
 	messageServer := p.globalVars.MessageServer
 	messageRouter := p.globalVars.MessageRouter
-	etcdClient := p.globalVars.EtcdClient
 	captureID := p.globalVars.CaptureInfo.ID
 	ret, err = scheduler.NewAgent(
 		ctx, captureID, liveness,
-		messageServer, messageRouter, etcdClient, p, p.changefeedID,
+		messageServer, messageRouter, client, p, p.changefeedID,
 		changefeedEpoch, cfg)
 	return ret, errors.Trace(err)
 }
@@ -767,7 +773,7 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 
 	if tableName == nil {
-		log.Warn("failed to get table name for metric")
+		log.Warn("failed to get table name for metric", zap.Any("tableID", tableID))
 		return strconv.Itoa(int(tableID))
 	}
 
