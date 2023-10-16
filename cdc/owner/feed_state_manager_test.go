@@ -64,6 +64,8 @@ func newFeedStateManager4Test(
 
 	f.resetErrRetry()
 
+	f.changefeedErrorStuckDuration = time.Second * 3
+
 	return f
 }
 

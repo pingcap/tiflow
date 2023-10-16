@@ -64,7 +64,6 @@ type feedStateManager struct {
 	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
 	// has been advanced or not.
 	resolvedTs           model.Ts
-	resolvedTsAdvanced   time.Time
 	checkpointTs         model.Ts
 	checkpointTsAdvanced time.Time
 
@@ -86,6 +85,7 @@ func newFeedStateManager(up *upstream.Upstream, cfg *config.ReplicaConfig) *feed
 	m.changefeedErrorStuckDuration = *cfg.ChangefeedErrorStuckDuration
 
 	m.resetErrRetry()
+	m.isRetrying = false
 	return m
 }
 
@@ -127,7 +127,9 @@ func (m *feedStateManager) Tick(
 		}
 		if m.resolvedTs < resolvedTs {
 			m.resolvedTs = resolvedTs
-			m.resolvedTsAdvanced = time.Now()
+		}
+		if m.checkpointTs >= m.resolvedTs {
+			m.checkpointTsAdvanced = time.Now()
 		}
 	}
 	m.state = state
@@ -295,6 +297,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.shouldBeRunning = true
 		// when the changefeed is manually resumed, we must reset the backoff
 		m.resetErrRetry()
+		m.isRetrying = false
 		jobsPending = true
 		m.patchState(model.StateNormal)
 
@@ -436,7 +439,6 @@ func (m *feedStateManager) cleanUp() {
 	m.checkpointTs = 0
 	m.checkpointTsAdvanced = time.Time{}
 	m.resolvedTs = 0
-	m.resolvedTsAdvanced = time.Time{}
 }
 
 func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
@@ -581,13 +583,8 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
 		m.lastWarningReportCheckpointTs = m.state.Status.CheckpointTs
 
-		resolvedTsStuck := time.Since(m.resolvedTsAdvanced) > m.changefeedErrorStuckDuration
 		checkpointTsStuck := time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration
-		// Conditions:
-		// 1. resolvedTs can advance normally;
-		// 2. checkpoint hasn't been advanced for a long while;
-		// 3. checkpoint lag is large enough.
-		if !resolvedTsStuck && checkpointTsStuck {
+		if checkpointTsStuck {
 			log.Info("changefeed retry on warning for a very long time and does not resume, "+
 				"it will be failed", zap.String("changefeed", m.state.ID.ID),
 				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
