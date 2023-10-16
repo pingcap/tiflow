@@ -72,10 +72,6 @@ func TestChangefeedStateUpdate(t *testing.T) {
             "dispatchers": null,
             "protocol": "open-protocol",
             "advance-timeout-in-sec": 150
-        },
-        "consistent": {
-            "level": "normal",
-            "storage": "local"
         }
     },
     "state": "normal",
@@ -125,13 +121,15 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						CheckGCSafePoint: true,
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
+						Scheduler:        config.GetDefaultReplicaConfig().Scheduler,
 						Sink: &config.SinkConfig{
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
 						},
-						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
-						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -182,9 +180,11 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
 						},
-						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
 						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -240,9 +240,11 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: putil.AddressOf(uint(150)),
 						},
-						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
 						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -327,12 +329,13 @@ func TestPatchInfo(t *testing.T) {
 		SinkURI: "123",
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
-			Filter:     defaultConfig.Filter,
-			Mounter:    defaultConfig.Mounter,
-			Sink:       defaultConfig.Sink,
-			Consistent: defaultConfig.Consistent,
-			Scheduler:  defaultConfig.Scheduler,
-			Integrity:  defaultConfig.Integrity,
+			Filter:                       defaultConfig.Filter,
+			Mounter:                      defaultConfig.Mounter,
+			Sink:                         defaultConfig.Sink,
+			Consistent:                   defaultConfig.Consistent,
+			Scheduler:                    defaultConfig.Scheduler,
+			Integrity:                    defaultConfig.Integrity,
+			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -345,12 +348,13 @@ func TestPatchInfo(t *testing.T) {
 		StartTs: 6,
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
-			Filter:     defaultConfig.Filter,
-			Mounter:    defaultConfig.Mounter,
-			Sink:       defaultConfig.Sink,
-			Consistent: defaultConfig.Consistent,
-			Scheduler:  defaultConfig.Scheduler,
-			Integrity:  defaultConfig.Integrity,
+			Filter:                       defaultConfig.Filter,
+			Mounter:                      defaultConfig.Mounter,
+			Sink:                         defaultConfig.Sink,
+			Consistent:                   defaultConfig.Consistent,
+			Scheduler:                    defaultConfig.Scheduler,
+			Integrity:                    defaultConfig.Integrity,
+			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
