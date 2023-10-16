@@ -89,23 +89,22 @@ func newFeedStateManager(up *upstream.Upstream, cfg *config.ReplicaConfig) *feed
 	return m
 }
 
-func (m *feedStateManager) shouldRetry() (shouldBeRunning, shouldFailed bool) {
-	if time.Since(m.lastErrorRetryTime) < m.backoffInterval {
-		return
-	}
+func (m *feedStateManager) shouldRetry() bool {
+	// changefeed should not retry within [m.lastErrorRetryTime, m.lastErrorRetryTime + m.backoffInterval).
+	return time.Since(m.lastErrorRetryTime) >= m.backoffInterval
+}
 
+func (m *feedStateManager) shouldFailWhenRetry() bool {
 	// retry the changefeed
 	m.backoffInterval = m.errBackoff.NextBackOff()
 	// NextBackOff() will return -1 once the MaxElapsedTime has elapsed,
 	// set the changefeed to failed state.
 	if m.backoffInterval == m.errBackoff.Stop {
-		shouldFailed = true
-		return
+		return true
 	}
 
 	m.lastErrorRetryTime = time.Now()
-	shouldBeRunning = true
-	return
+	return false
 }
 
 // resetErrRetry reset the error retry related fields
@@ -158,8 +157,12 @@ func (m *feedStateManager) Tick(
 		m.shouldBeRunning = false
 		return
 	case model.StatePending:
-		shouldBeRunning, shouldFailed := m.shouldRetry()
-		if shouldFailed {
+		if !m.shouldRetry() {
+			m.shouldBeRunning = false
+			return
+		}
+
+		if m.shouldFailWhenRetry() {
 			log.Error("The changefeed won't be restarted as it has been experiencing failures for "+
 				"an extended duration",
 				zap.Duration("maxElapsedTime", m.errBackoff.MaxElapsedTime),
@@ -170,10 +173,6 @@ func (m *feedStateManager) Tick(
 			)
 			m.shouldBeRunning = false
 			m.patchState(model.StateFailed)
-			return
-		}
-		if !shouldBeRunning {
-			m.shouldBeRunning = false
 			return
 		}
 
@@ -435,7 +434,9 @@ func (m *feedStateManager) cleanUp() {
 		})
 	}
 	m.checkpointTs = 0
+	m.checkpointTsAdvanced = time.Time{}
 	m.resolvedTs = 0
+	m.resolvedTsAdvanced = time.Time{}
 }
 
 func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
@@ -579,13 +580,14 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		currTime := m.upstream.PDClock.CurrentTime()
 		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
 		m.lastWarningReportCheckpointTs = m.state.Status.CheckpointTs
+
+		resolvedTsStuck := time.Since(m.resolvedTsAdvanced) > m.changefeedErrorStuckDuration
+		checkpointTsStuck := time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration
 		// Conditions:
 		// 1. resolvedTs can advance normally;
 		// 2. checkpoint hasn't been advanced for a long while;
 		// 3. checkpoint lag is large enough.
-		if time.Since(m.resolvedTsAdvanced) < m.changefeedErrorStuckDuration &&
-			time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration &&
-			currTime.Sub(ckptTime) > m.changefeedErrorStuckDuration {
+		if !resolvedTsStuck && checkpointTsStuck {
 			log.Info("changefeed retry on warning for a very long time and does not resume, "+
 				"it will be failed", zap.String("changefeed", m.state.ID.ID),
 				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
