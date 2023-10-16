@@ -26,7 +26,7 @@ import (
 func TestSchedulerRebalance(t *testing.T) {
 	t.Parallel()
 
-	var checkpointTs model.Ts
+	var checkpoint tablepb.Checkpoint
 	captures := map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2, 3, 4}
 
@@ -55,21 +55,26 @@ func TestSchedulerRebalance(t *testing.T) {
 	scheduler := newRebalanceScheduler(model.ChangeFeedID{})
 	require.Equal(t, "rebalance-scheduler", scheduler.Name())
 	// rebalance is not triggered
-	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks := scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	atomic.StoreInt32(&scheduler.rebalance, 1)
 	// no captures
 	tasks = scheduler.Schedule(
-		checkpointTs, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
+		checkpoint, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
 	// table not in the replication set,
+<<<<<<< HEAD
 	tasks = scheduler.Schedule(checkpointTs, []model.TableID{0}, captures, replications)
+=======
+	tasks = scheduler.Schedule(
+		checkpoint, spanz.ArrayToSpan([]model.TableID{0}), captures, replications)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Len(t, tasks, 0)
 
 	// not all tables are replicating,
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// table distribution is balanced, should have no task.
@@ -78,8 +83,13 @@ func TestSchedulerRebalance(t *testing.T) {
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		3: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
 		4: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
+<<<<<<< HEAD
 	}
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+=======
+	})
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Len(t, tasks, 0)
 
 	// Imbalance.
@@ -94,14 +104,14 @@ func TestSchedulerRebalance(t *testing.T) {
 
 	// capture is stopping, ignore the request
 	captures["a"].State = member.CaptureStateStopping
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 	require.Equal(t, atomic.LoadInt32(&scheduler.rebalance), int32(0))
 
 	captures["a"].State = member.CaptureStateInitialized
 	atomic.StoreInt32(&scheduler.rebalance, 1)
 	scheduler.random = nil // disable random to make test easier.
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Contains(t, tasks[0].BurstBalance.MoveTables, replication.MoveTable{
 		TableID: 1, DestCapture: "b",
@@ -112,6 +122,6 @@ func TestSchedulerRebalance(t *testing.T) {
 	require.EqualValues(t, 0, atomic.LoadInt32(&scheduler.rebalance))
 
 	// pending task is not consumed yet, this turn should have no tasks.
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 }

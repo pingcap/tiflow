@@ -28,18 +28,18 @@ func TestDrainCapture(t *testing.T) {
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	require.Equal(t, "drain-capture-scheduler", scheduler.Name())
 
-	var checkpointTs model.Ts
+	var checkpoint tablepb.Checkpoint
 	captures := make(map[model.CaptureID]*member.CaptureStatus)
 	currentTables := make([]model.TableID, 0)
 	replications := make(map[model.TableID]*replication.ReplicationSet)
 
-	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks := scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	ok := scheduler.setTarget("a")
 	require.True(t, ok)
 
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 	// the target capture has no table at the beginning, so reset the target
 	require.Equal(t, captureIDNotDraining, scheduler.target)
@@ -48,7 +48,7 @@ func TestDrainCapture(t *testing.T) {
 	ok = scheduler.setTarget("b")
 	require.True(t, ok)
 
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 	// the target capture cannot be found in the latest captures
 	require.Equal(t, captureIDNotDraining, scheduler.target)
@@ -103,7 +103,7 @@ func TestDrainCapture(t *testing.T) {
 	ok = scheduler.setTarget("a")
 	require.True(t, ok)
 	// not all table is replicating, skip this tick.
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 0)
 
@@ -116,13 +116,13 @@ func TestDrainCapture(t *testing.T) {
 		7: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
 	}
 
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 3)
 
 	scheduler = newDrainCaptureScheduler(1, model.ChangeFeedID{})
 	require.True(t, scheduler.setTarget("a"))
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Equal(t, "a", scheduler.target)
 	require.Len(t, tasks, 1)
 }
@@ -130,13 +130,13 @@ func TestDrainCapture(t *testing.T) {
 func TestDrainStoppingCapture(t *testing.T) {
 	t.Parallel()
 
-	var checkpointTs model.Ts
+	var checkpoint tablepb.Checkpoint
 	captures := make(map[model.CaptureID]*member.CaptureStatus)
 	currentTables := make([]model.TableID, 0)
 	replications := make(map[model.TableID]*replication.ReplicationSet)
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 
-	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks := scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Empty(t, tasks)
 
 	captures["a"] = &member.CaptureStatus{}
@@ -144,8 +144,13 @@ func TestDrainStoppingCapture(t *testing.T) {
 	replications = map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
+<<<<<<< HEAD
 	}
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+=======
+	})
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Len(t, tasks, 1)
 	require.EqualValues(t, 2, tasks[0].MoveTable.TableID)
 	require.EqualValues(t, "a", tasks[0].MoveTable.DestCapture)
@@ -155,8 +160,13 @@ func TestDrainStoppingCapture(t *testing.T) {
 func TestDrainSkipOwner(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD
 	var checkpointTs model.Ts
 	currentTables := make([]model.TableID, 0)
+=======
+	var checkpoint tablepb.Checkpoint
+	currentTables := make([]tablepb.Span, 0)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {},
 		"b": {IsOwner: true, State: member.CaptureStateStopping},
@@ -166,7 +176,7 @@ func TestDrainSkipOwner(t *testing.T) {
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
 	}
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
-	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks := scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 	require.EqualValues(t, captureIDNotDraining, scheduler.getTarget())
 }
@@ -174,8 +184,13 @@ func TestDrainSkipOwner(t *testing.T) {
 func TestDrainImbalanceCluster(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD
 	var checkpointTs model.Ts
 	currentTables := make([]model.TableID, 0)
+=======
+	var checkpoint tablepb.Checkpoint
+	currentTables := make([]tablepb.Span, 0)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {State: member.CaptureStateInitialized},
 		"b": {IsOwner: true, State: member.CaptureStateInitialized},
@@ -186,7 +201,7 @@ func TestDrainImbalanceCluster(t *testing.T) {
 	}
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	scheduler.setTarget("a")
-	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks := scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
 	require.EqualValues(t, "a", scheduler.getTarget())
 }
@@ -194,8 +209,13 @@ func TestDrainImbalanceCluster(t *testing.T) {
 func TestDrainEvenlyDistributedTables(t *testing.T) {
 	t.Parallel()
 
+<<<<<<< HEAD
 	var checkpointTs model.Ts
 	currentTables := make([]model.TableID, 0)
+=======
+	var checkpoint tablepb.Checkpoint
+	currentTables := make([]tablepb.Span, 0)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {State: member.CaptureStateInitialized},
 		"b": {IsOwner: true, State: member.CaptureStateInitialized},
@@ -209,7 +229,7 @@ func TestDrainEvenlyDistributedTables(t *testing.T) {
 	}
 	scheduler := newDrainCaptureScheduler(10, model.ChangeFeedID{})
 	scheduler.setTarget("a")
-	tasks := scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks := scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 3)
 	taskMap := make(map[model.CaptureID]int)
 	for _, t := range tasks {

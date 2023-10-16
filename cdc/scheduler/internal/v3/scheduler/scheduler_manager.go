@@ -19,6 +19,11 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo"
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -65,9 +70,29 @@ func (sm *Manager) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
+<<<<<<< HEAD
 	replications map[model.TableID]*replication.ReplicationSet,
 	runTasking map[model.TableID]*replication.ScheduleTask,
+=======
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
+	runTasking *spanz.BtreeMap[*replication.ScheduleTask],
+	redoMetaManager redo.MetaManager,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 ) []*replication.ScheduleTask {
+	checkpoint := tablepb.Checkpoint{
+		CheckpointTs: checkpointTs,
+		ResolvedTs:   checkpointTs,
+	}
+	if redoMetaManager != nil && redoMetaManager.Enabled() {
+		flushedMeta := redoMetaManager.GetFlushedMeta()
+		if flushedMeta.ResolvedTs < checkpointTs {
+			log.Panic("schedulerv3: flushed resolved ts is less than checkpoint ts",
+				zap.Uint64("checkpointTs", checkpointTs),
+				zap.Any("flushedMeta", flushedMeta))
+		}
+		checkpoint.ResolvedTs = flushedMeta.ResolvedTs
+	}
+
 	for sid, scheduler := range sm.schedulers {
 		// Basic scheduler bypasses max task check, because it handles the most
 		// critical scheduling, e.g. add table via CREATE TABLE DDL.
@@ -78,7 +103,11 @@ func (sm *Manager) Schedule(
 				return nil
 			}
 		}
+<<<<<<< HEAD
 		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+=======
+		tasks := scheduler.Schedule(checkpoint, currentSpans, aliveCaptures, replications)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		for _, t := range tasks {
 			name := struct {
 				scheduler, task string

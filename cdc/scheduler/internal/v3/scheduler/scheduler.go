@@ -22,8 +22,13 @@ import (
 type scheduler interface {
 	Name() string
 	Schedule(
+<<<<<<< HEAD
 		checkpointTs model.Ts,
 		currentTables []model.TableID,
+=======
+		checkpoint tablepb.Checkpoint,
+		currentSpans []tablepb.Span,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		aliveCaptures map[model.CaptureID]*member.CaptureStatus,
 		replications map[model.TableID]*replication.ReplicationSet) []*replication.ScheduleTask
 }

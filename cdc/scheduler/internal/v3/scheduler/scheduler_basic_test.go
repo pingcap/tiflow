@@ -26,6 +26,7 @@ import (
 func TestSchedulerBasic(t *testing.T) {
 	t.Parallel()
 
+	var checkpoint tablepb.Checkpoint
 	captures := map[model.CaptureID]*member.CaptureStatus{"a": {}, "b": {}}
 	currentTables := []model.TableID{1, 2, 3, 4}
 
@@ -36,7 +37,7 @@ func TestSchedulerBasic(t *testing.T) {
 
 	// one capture stopping, another one is initialized
 	captures["a"].State = member.CaptureStateStopping
-	tasks := b.Schedule(0, currentTables, captures, replications)
+	tasks := b.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].BurstBalance.AddTables, 2)
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].CaptureID, "b")
@@ -44,12 +45,12 @@ func TestSchedulerBasic(t *testing.T) {
 
 	// all capture's stopping, cannot add table
 	captures["b"].State = member.CaptureStateStopping
-	tasks = b.Schedule(0, currentTables, captures, replications)
+	tasks = b.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	captures["a"].State = member.CaptureStateInitialized
 	captures["b"].State = member.CaptureStateInitialized
-	tasks = b.Schedule(0, currentTables, captures, replications)
+	tasks = b.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Len(t, tasks[0].BurstBalance.AddTables, 2)
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(1))
@@ -77,11 +78,20 @@ func TestSchedulerBasic(t *testing.T) {
 			},
 		},
 		4: {State: replication.ReplicationSetStateAbsent},
+<<<<<<< HEAD
 	}
 	tasks = b.Schedule(1, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(4))
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(1))
+=======
+	})
+	checkpoint1 := tablepb.Checkpoint{CheckpointTs: 1, ResolvedTs: 1}
+	tasks = b.Schedule(checkpoint1, currentTables, captures, replications)
+	require.Len(t, tasks, 1)
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].Checkpoint, checkpoint1)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 
 	// DDL CREATE/DROP/TRUNCATE TABLE.
 	// AddTable 4, and RemoveTable 5.
@@ -110,6 +120,7 @@ func TestSchedulerBasic(t *testing.T) {
 				"a": replication.RoleUndetermined, "b": replication.RoleSecondary,
 			},
 		},
+<<<<<<< HEAD
 	}
 	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
@@ -121,6 +132,20 @@ func TestSchedulerBasic(t *testing.T) {
 		require.Equal(t, tasks[1].BurstBalance.AddTables[0].TableID, model.TableID(4))
 		require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(2))
 		require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
+=======
+	})
+	checkpoint2 := tablepb.Checkpoint{CheckpointTs: 2, ResolvedTs: 2}
+	tasks = b.Schedule(checkpoint2, currentTables, captures, replications)
+	require.Len(t, tasks, 2)
+	if tasks[0].BurstBalance.AddTables != nil {
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].Checkpoint, checkpoint2)
+		require.Equal(t, tasks[1].BurstBalance.RemoveTables[0].Span.TableID, model.TableID(5))
+	} else {
+		require.Equal(t, tasks[1].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].Checkpoint, checkpoint2)
+		require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].Span.TableID, model.TableID(5))
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	}
 
 	// RemoveTable only.
@@ -155,8 +180,14 @@ func TestSchedulerBasic(t *testing.T) {
 				"b": replication.RoleUndetermined,
 			},
 		},
+<<<<<<< HEAD
 	}
 	tasks = b.Schedule(3, currentTables, captures, replications)
+=======
+	})
+	checkpoint3 := tablepb.Checkpoint{CheckpointTs: 3, ResolvedTs: 3}
+	tasks = b.Schedule(checkpoint3, currentTables, captures, replications)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Len(t, tasks, 1)
 	require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
 }
@@ -183,12 +214,13 @@ func benchmarkSchedulerBalance(
 	),
 ) {
 	size := 16384
+	var checkpoint tablepb.Checkpoint
 	for total := 1; total <= size; total *= 2 {
 		name, currentTables, captures, replications, sched := factory(total)
 		b.ResetTimer()
 		b.Run(name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				sched.Schedule(0, currentTables, captures, replications)
+				sched.Schedule(checkpoint, currentTables, captures, replications)
 			}
 		})
 		b.StopTimer()

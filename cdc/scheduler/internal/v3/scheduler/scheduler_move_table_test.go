@@ -25,7 +25,7 @@ import (
 func TestSchedulerMoveTable(t *testing.T) {
 	t.Parallel()
 
-	var checkpointTs model.Ts
+	var checkpoint tablepb.Checkpoint
 	captures := map[model.CaptureID]*member.CaptureStatus{"a": {
 		State: member.CaptureStateInitialized,
 	}, "b": {
@@ -41,15 +41,16 @@ func TestSchedulerMoveTable(t *testing.T) {
 	require.Equal(t, "move-table-scheduler", scheduler.Name())
 
 	tasks := scheduler.Schedule(
-		checkpointTs, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
+		checkpoint, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
 	scheduler.addTask(model.TableID(0), "a")
 	tasks = scheduler.Schedule(
-		checkpointTs, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
+		checkpoint, currentTables, map[model.CaptureID]*member.CaptureStatus{}, replications)
 	require.Len(t, tasks, 0)
 
 	// move a not exist table
+<<<<<<< HEAD
 	scheduler.addTask(model.TableID(0), "a")
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
@@ -57,11 +58,21 @@ func TestSchedulerMoveTable(t *testing.T) {
 	// move table to a not exist capture
 	scheduler.addTask(model.TableID(1), "c")
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+=======
+	scheduler.addTask(tablepb.Span{TableID: 0}, "a")
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+
+	// move table to a not exist capture
+	scheduler.addTask(tablepb.Span{TableID: 1}, "c")
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Len(t, tasks, 0)
 
 	// move table not replicating
 	scheduler.addTask(model.TableID(1), "b")
 	tasks = scheduler.Schedule(
+<<<<<<< HEAD
 		checkpointTs, currentTables, captures, map[model.TableID]*replication.ReplicationSet{})
 	require.Len(t, tasks, 0)
 
@@ -73,6 +84,19 @@ func TestSchedulerMoveTable(t *testing.T) {
 	scheduler.addTask(model.TableID(1), "b")
 	replications[model.TableID(1)].State = replication.ReplicationSetStateReplicating
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+=======
+		checkpoint, currentTables, captures, spanz.NewBtreeMap[*replication.ReplicationSet]())
+	require.Len(t, tasks, 0)
+
+	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
+	replications.GetV(tablepb.Span{TableID: 1}).State = replication.ReplicationSetStatePrepare
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+
+	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
+	replications.GetV(tablepb.Span{TableID: 1}).State = replication.ReplicationSetStateReplicating
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Len(t, tasks, 1)
 	require.Equal(t, model.TableID(1), tasks[0].MoveTable.TableID)
 	require.Equal(t, "b", tasks[0].MoveTable.DestCapture)
@@ -81,7 +105,7 @@ func TestSchedulerMoveTable(t *testing.T) {
 	// the target capture is stopping
 	scheduler.addTask(model.TableID(1), "b")
 	captures["b"].State = member.CaptureStateStopping
-	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	tasks = scheduler.Schedule(checkpoint, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 	require.NotContains(t, scheduler.tasks, model.TableID(1))
 }

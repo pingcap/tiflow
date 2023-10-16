@@ -140,8 +140,13 @@ type ReplicationSet struct { //nolint:revive
 
 // NewReplicationSet returns a new replication set.
 func NewReplicationSet(
+<<<<<<< HEAD
 	tableID model.TableID,
 	checkpoint model.Ts,
+=======
+	span tablepb.Span,
+	checkpoint tablepb.Checkpoint,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	tableStatus map[model.CaptureID]*tablepb.TableStatus,
 	changefeed model.ChangeFeedID,
 ) (*ReplicationSet, error) {
@@ -149,10 +154,7 @@ func NewReplicationSet(
 		Changefeed: changefeed,
 		TableID:    tableID,
 		Captures:   make(map[string]Role),
-		Checkpoint: tablepb.Checkpoint{
-			CheckpointTs: checkpoint,
-			ResolvedTs:   checkpoint,
-		},
+		Checkpoint: checkpoint,
 	}
 	// Count of captures that is in Stopping states.
 	stoppingCount := 0

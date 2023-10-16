@@ -148,7 +148,11 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 			currentTables = append(currentTables, tableID)
 			captureID := fmt.Sprint(i % captureCount)
 			rep, err := replication.NewReplicationSet(
+<<<<<<< HEAD
 				tableID, 0, map[string]*tablepb.TableStatus{
+=======
+				span, tablepb.Checkpoint{}, map[string]*tablepb.TableStatus{
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 					captureID: {
 						TableID: tableID,
 						State:   tablepb.TableStateReplicating,

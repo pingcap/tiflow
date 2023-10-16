@@ -54,8 +54,13 @@ func (b *balanceScheduler) Name() string {
 }
 
 func (b *balanceScheduler) Schedule(
+<<<<<<< HEAD
 	_ model.Ts,
 	currentTables []model.TableID,
+=======
+	_ tablepb.Checkpoint,
+	_ []tablepb.Span,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {

@@ -57,11 +57,24 @@ type MoveTable struct {
 
 // AddTable is a schedule task for adding a table.
 type AddTable struct {
+<<<<<<< HEAD
 	TableID      model.TableID
 	CaptureID    model.CaptureID
 	CheckpointTs model.Ts
 }
 
+=======
+	Span       tablepb.Span
+	CaptureID  model.CaptureID
+	Checkpoint tablepb.Checkpoint
+}
+
+func (t AddTable) String() string {
+	return fmt.Sprintf("AddTable, span: %s, capture: %s, checkpointTs: %d, resolvedTs: %d",
+		t.Span.String(), t.CaptureID, t.Checkpoint.CheckpointTs, t.Checkpoint.ResolvedTs)
+}
+
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 // RemoveTable is a schedule task for removing a table.
 type RemoveTable struct {
 	TableID   model.TableID
@@ -151,11 +164,25 @@ func (r *Manager) HandleCaptureChanges(
 				tableStatus[table.TableID][captureID] = &table
 			}
 		}
+<<<<<<< HEAD
 		for tableID, status := range tableStatus {
 			table, err := NewReplicationSet(
 				tableID, checkpointTs, status, r.changefeedID)
 			if err != nil {
 				return nil, errors.Trace(err)
+=======
+		var err error
+		spanStatusMap.Ascend(func(span tablepb.Span, status map[string]*tablepb.TableStatus) bool {
+			checkpoint := tablepb.Checkpoint{
+				CheckpointTs: checkpointTs,
+				// Note that the real resolved ts is stored in the status.
+				ResolvedTs: checkpointTs,
+			}
+			table, err1 := NewReplicationSet(span, checkpoint, status, r.changefeedID)
+			if err1 != nil {
+				err = errors.Trace(err1)
+				return false
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 			}
 			r.tables[tableID] = table
 		}
@@ -372,10 +399,16 @@ func (r *Manager) handleAddTableTask(
 ) ([]*schedulepb.Message, error) {
 	r.acceptAddTableTask++
 	var err error
+<<<<<<< HEAD
 	table := r.tables[task.TableID]
 	if table == nil {
 		table, err = NewReplicationSet(
 			task.TableID, task.CheckpointTs, nil, r.changefeedID)
+=======
+	table, ok := r.spans.Get(task.Span)
+	if !ok {
+		table, err = NewReplicationSet(task.Span, task.Checkpoint, nil, r.changefeedID)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

@@ -32,7 +32,18 @@ func TestReplicationManagerHandleAddTableTask(t *testing.T) {
 	addTableCh := make(chan int, 1)
 	// Absent -> Prepare
 	msgs, err := r.HandleTasks([]*ScheduleTask{{
+<<<<<<< HEAD
 		AddTable: &AddTable{TableID: 1, CaptureID: "1", CheckpointTs: 1},
+=======
+		AddTable: &AddTable{
+			Span:      spanz.TableIDToComparableSpan(1),
+			CaptureID: "1",
+			Checkpoint: tablepb.Checkpoint{
+				CheckpointTs: 1,
+				ResolvedTs:   1,
+			},
+		},
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		Accept: func() {
 			addTableCh <- 1
 			close(addTableCh)
@@ -143,9 +154,22 @@ func TestReplicationManagerRemoveTable(t *testing.T) {
 	require.Len(t, msgs, 0)
 
 	// Add the table.
+<<<<<<< HEAD
 	tbl, err := NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
 		"1": {TableID: 1, State: tablepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
+=======
+	span := spanz.TableIDToComparableSpan(1)
+	tbl, err := NewReplicationSet(span,
+		tablepb.Checkpoint{
+			CheckpointTs: 0,
+			ResolvedTs:   0,
+		},
+		map[string]*tablepb.TableStatus{
+			"1": {Span: span, State: tablepb.TableStateReplicating},
+		},
+		model.ChangeFeedID{})
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
 	r.tables[1] = tbl
@@ -238,9 +262,22 @@ func TestReplicationManagerMoveTable(t *testing.T) {
 	require.Len(t, msgs, 0)
 
 	// Add the table.
+<<<<<<< HEAD
 	tbl, err := NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
 		source: {TableID: 1, State: tablepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
+=======
+	span := spanz.TableIDToComparableSpan(1)
+	tbl, err := NewReplicationSet(span,
+		tablepb.Checkpoint{
+			CheckpointTs: 0,
+			ResolvedTs:   0,
+		},
+		map[string]*tablepb.TableStatus{
+			source: {Span: span, State: tablepb.TableStateReplicating},
+		},
+		model.ChangeFeedID{})
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateReplicating, tbl.State)
 	r.tables[1] = tbl
@@ -368,8 +405,13 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 	r := NewReplicationManager(1, model.ChangeFeedID{})
 	balanceTableCh := make(chan int, 1)
 
+	checkpoint := tablepb.Checkpoint{
+		CheckpointTs: 1,
+		ResolvedTs:   1,
+	}
 	// Burst balance is not limited by maxTaskConcurrency.
 	msgs, err := r.HandleTasks([]*ScheduleTask{{
+<<<<<<< HEAD
 		AddTable: &AddTable{TableID: 1, CaptureID: "0", CheckpointTs: 1},
 	}, {
 		BurstBalance: &BurstBalance{
@@ -379,6 +421,19 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 				TableID: 2, CaptureID: "2", CheckpointTs: 1,
 			}, {
 				TableID: 3, CaptureID: "3", CheckpointTs: 1,
+=======
+		AddTable: &AddTable{
+			Span: spanz.TableIDToComparableSpan(1), CaptureID: "0", Checkpoint: checkpoint,
+		},
+	}, {
+		BurstBalance: &BurstBalance{
+			AddTables: []AddTable{{
+				Span: spanz.TableIDToComparableSpan(1), CaptureID: "1", Checkpoint: checkpoint,
+			}, {
+				Span: spanz.TableIDToComparableSpan(2), CaptureID: "2", Checkpoint: checkpoint,
+			}, {
+				Span: spanz.TableIDToComparableSpan(3), CaptureID: "3", Checkpoint: checkpoint,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 			}},
 		},
 		Accept: func() {
@@ -412,18 +467,37 @@ func TestReplicationManagerBurstBalance(t *testing.T) {
 	}
 
 	// Add a new table.
+<<<<<<< HEAD
 	r.tables[5], err = NewReplicationSet(5, 0, map[string]*tablepb.TableStatus{
 		"5": {TableID: 5, State: tablepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
+=======
+	span := spanz.TableIDToComparableSpan(5)
+	table5, err := NewReplicationSet(span,
+		tablepb.Checkpoint{},
+		map[string]*tablepb.TableStatus{
+			"5": {Span: span, State: tablepb.TableStateReplicating},
+		}, model.ChangeFeedID{})
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	require.Nil(t, err)
 
+	checkpoint = tablepb.Checkpoint{
+		CheckpointTs: 2,
+		ResolvedTs:   2,
+	}
 	// More burst balance is still allowed.
 	msgs, err = r.HandleTasks([]*ScheduleTask{{
 		BurstBalance: &BurstBalance{
 			AddTables: []AddTable{{
+<<<<<<< HEAD
 				TableID: 4, CaptureID: "4", CheckpointTs: 2,
 			}, {
 				TableID: 1, CaptureID: "0", CheckpointTs: 2,
+=======
+				Span: spanz.TableIDToComparableSpan(4), CaptureID: "4", Checkpoint: checkpoint,
+			}, {
+				Span: spanz.TableIDToComparableSpan(1), CaptureID: "0", Checkpoint: checkpoint,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 			}},
 			RemoveTables: []RemoveTable{{
 				TableID: 5, CaptureID: "5",
@@ -475,11 +549,22 @@ func TestReplicationManagerBurstBalanceMoveTables(t *testing.T) {
 
 	var err error
 	// Two tables in "1".
+<<<<<<< HEAD
 	r.tables[1], err = NewReplicationSet(1, 0, map[string]*tablepb.TableStatus{
 		"1": {TableID: 1, State: tablepb.TableStateReplicating},
 	}, model.ChangeFeedID{})
 	require.Nil(t, err)
 	r.tables[2], err = NewReplicationSet(2, 0, map[string]*tablepb.TableStatus{
+=======
+	span := spanz.TableIDToComparableSpan(1)
+	table, err := NewReplicationSet(span, tablepb.Checkpoint{}, map[string]*tablepb.TableStatus{
+		"1": {Span: span, State: tablepb.TableStateReplicating},
+	}, model.ChangeFeedID{})
+	require.Nil(t, err)
+	r.spans.ReplaceOrInsert(span, table)
+	span2 := spanz.TableIDToComparableSpan(2)
+	table2, err := NewReplicationSet(span2, tablepb.Checkpoint{}, map[string]*tablepb.TableStatus{
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		"1": {
 			TableID: 2, State: tablepb.TableStateReplicating,
 			Checkpoint: tablepb.Checkpoint{CheckpointTs: 1, ResolvedTs: 1},
@@ -593,7 +678,16 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
 
 	r := NewReplicationManager(1, model.ChangeFeedID{})
+<<<<<<< HEAD
 	rs, err := NewReplicationSet(model.TableID(1), model.Ts(10),
+=======
+	span := spanz.TableIDToComparableSpan(1)
+	rs, err := NewReplicationSet(span,
+		tablepb.Checkpoint{
+			CheckpointTs: 10,
+			ResolvedTs:   10,
+		},
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(1),
@@ -607,7 +701,16 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	r.tables[model.TableID(1)] = rs
 
+<<<<<<< HEAD
 	rs, err = NewReplicationSet(model.TableID(2), model.Ts(15),
+=======
+	span2 := spanz.TableIDToComparableSpan(2)
+	rs, err = NewReplicationSet(span2,
+		tablepb.Checkpoint{
+			CheckpointTs: 15,
+			ResolvedTs:   15,
+		},
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		map[model.CaptureID]*tablepb.TableStatus{
 			"2": {
 				TableID: model.TableID(2),
@@ -644,7 +747,16 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
 
+<<<<<<< HEAD
 	rs, err = NewReplicationSet(model.TableID(3), model.Ts(5),
+=======
+	span3 := spanz.TableIDToComparableSpan(3)
+	rs, err = NewReplicationSet(span3,
+		tablepb.Checkpoint{
+			CheckpointTs: 5,
+			ResolvedTs:   5,
+		},
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(3),
@@ -670,8 +782,18 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
 
+<<<<<<< HEAD
 	currentTables = append(currentTables, 4)
 	rs, err = NewReplicationSet(model.TableID(4), model.Ts(3),
+=======
+	currentTables.UpdateTables([]model.TableID{1, 2, 3, 4})
+	span4 := spanz.TableIDToComparableSpan(4)
+	rs, err = NewReplicationSet(span4,
+		tablepb.Checkpoint{
+			CheckpointTs: 3,
+			ResolvedTs:   3,
+		},
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(4),
@@ -689,9 +811,62 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 
+<<<<<<< HEAD
 	// redo is enabled
 	currentTables = append(currentTables[:0], 4)
 	rs, err = NewReplicationSet(model.TableID(4), model.Ts(3),
+=======
+	// Split table 5 into 2 spans.
+	currentTables.UpdateTables([]model.TableID{1, 2, 3, 4, 5})
+	span5_1 := spanz.TableIDToComparableSpan(5)
+	span5_1.EndKey = append(span5_1.StartKey, 0)
+	span5_2 := spanz.TableIDToComparableSpan(5)
+	span5_2.StartKey = append(span5_2.StartKey, 0)
+	for _, span := range []tablepb.Span{span5_1, span5_2} {
+		rs, err = NewReplicationSet(span,
+			tablepb.Checkpoint{
+				CheckpointTs: 3,
+				ResolvedTs:   3,
+			},
+			map[model.CaptureID]*tablepb.TableStatus{
+				"1": {
+					Span:  span,
+					State: tablepb.TableStatePrepared,
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: model.Ts(3),
+						ResolvedTs:   model.Ts(10),
+					},
+				},
+			}, model.ChangeFeedID{})
+		require.NoError(t, err)
+		r.spans.ReplaceOrInsert(span, rs)
+	}
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, model.Ts(3), checkpoint)
+	require.Equal(t, model.Ts(10), resolved)
+
+	// The start span is missing
+	rs5_1, _ := r.spans.Delete(span5_1)
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, checkpointCannotProceed, checkpoint)
+	require.Equal(t, checkpointCannotProceed, resolved)
+
+	// The end span is missing
+	r.spans.ReplaceOrInsert(span5_1, rs5_1)
+	r.spans.Delete(span5_2)
+	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, checkpointCannotProceed, checkpoint)
+	require.Equal(t, checkpointCannotProceed, resolved)
+
+	// redo is enabled
+	currentTables.UpdateTables([]model.TableID{4})
+	spanRedo := spanz.TableIDToComparableSpan(4)
+	rs, err = NewReplicationSet(spanRedo,
+		tablepb.Checkpoint{
+			CheckpointTs: 3,
+			ResolvedTs:   3,
+		},
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: model.TableID(4),
@@ -717,7 +892,16 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 func TestReplicationManagerAdvanceCheckpointWithRedoEnabled(t *testing.T) {
 	t.Parallel()
 	r := NewReplicationManager(1, model.ChangeFeedID{})
+<<<<<<< HEAD
 	rs, err := NewReplicationSet(1, model.Ts(10),
+=======
+	span := spanz.TableIDToComparableSpan(1)
+	rs, err := NewReplicationSet(span,
+		tablepb.Checkpoint{
+			CheckpointTs: 10,
+			ResolvedTs:   10,
+		},
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		map[model.CaptureID]*tablepb.TableStatus{
 			"1": {
 				TableID: 1,
@@ -731,7 +915,16 @@ func TestReplicationManagerAdvanceCheckpointWithRedoEnabled(t *testing.T) {
 	require.NoError(t, err)
 	r.tables[1] = rs
 
+<<<<<<< HEAD
 	rs, err = NewReplicationSet(2, model.Ts(15),
+=======
+	span2 := spanz.TableIDToComparableSpan(2)
+	rs, err = NewReplicationSet(span2,
+		tablepb.Checkpoint{
+			CheckpointTs: 15,
+			ResolvedTs:   15,
+		},
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		map[model.CaptureID]*tablepb.TableStatus{
 			"2": {
 				TableID: 2,

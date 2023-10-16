@@ -69,8 +69,13 @@ func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 }
 
 func (d *drainCaptureScheduler) Schedule(
+<<<<<<< HEAD
 	_ model.Ts,
 	_ []model.TableID,
+=======
+	_ tablepb.Checkpoint,
+	_ []tablepb.Span,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {

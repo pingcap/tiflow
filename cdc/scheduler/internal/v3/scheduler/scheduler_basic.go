@@ -47,8 +47,13 @@ func (b *basicScheduler) Name() string {
 }
 
 func (b *basicScheduler) Schedule(
+<<<<<<< HEAD
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
+=======
+	checkpoint tablepb.Checkpoint,
+	currentSpans []tablepb.Span,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {
@@ -105,7 +110,11 @@ func (b *basicScheduler) Schedule(
 			zap.Strings("captureIDs", captureIDs),
 			zap.Int64s("tableIDs", newTables))
 		tasks = append(
+<<<<<<< HEAD
 			tasks, newBurstAddTables(checkpointTs, newTables, captureIDs))
+=======
+			tasks, newBurstAddTables(b.changefeedID, checkpoint, newSpans, captureIDs))
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	}
 
 	// Build remove table tasks.
@@ -141,15 +150,26 @@ func (b *basicScheduler) Schedule(
 
 // newBurstAddTables add each new table to captures in a round-robin way.
 func newBurstAddTables(
+<<<<<<< HEAD
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
+=======
+	changefeedID model.ChangeFeedID,
+	checkpoint tablepb.Checkpoint, newSpans []tablepb.Span, captureIDs []model.CaptureID,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newTables))
 	for _, tableID := range newTables {
 		tables = append(tables, replication.AddTable{
+<<<<<<< HEAD
 			TableID:      tableID,
 			CaptureID:    captureIDs[idx],
 			CheckpointTs: checkpointTs,
+=======
+			Span:       span,
+			CaptureID:  targetCapture,
+			Checkpoint: checkpoint,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 		})
 		idx++
 		if idx >= len(captureIDs) {

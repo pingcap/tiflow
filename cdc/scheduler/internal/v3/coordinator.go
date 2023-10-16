@@ -313,7 +313,11 @@ func (c *coordinator) poll(
 	replications := c.replicationM.ReplicationSets()
 	runningTasks := c.replicationM.RunningTasks()
 	allTasks := c.schedulerM.Schedule(
+<<<<<<< HEAD
 		checkpointTs, currentTables, c.captureM.Captures, replications, runningTasks)
+=======
+		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks, c.redoMetaManager)
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)

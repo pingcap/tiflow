@@ -65,8 +65,13 @@ func (m *moveTableScheduler) addTask(tableID model.TableID, target model.Capture
 }
 
 func (m *moveTableScheduler) Schedule(
+<<<<<<< HEAD
 	_ model.Ts,
 	currentTables []model.TableID,
+=======
+	_ tablepb.Checkpoint,
+	currentSpans []tablepb.Span,
+>>>>>>> 3b8d55b1cd (scheduler(ticdc): fix invlaid checkpoint when redo enabled (#9851))
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications map[model.TableID]*replication.ReplicationSet,
 ) []*replication.ScheduleTask {
