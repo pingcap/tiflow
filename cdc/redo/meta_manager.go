@@ -62,6 +62,8 @@ type metaManager struct {
 	uuidGenerator uuid.Generator
 	preMetaFile   string
 
+	startTs model.Ts
+
 	lastFlushTime          time.Time
 	flushIntervalInMs      int64
 	metricFlushLogDuration prometheus.Observer
@@ -72,40 +74,6 @@ func NewDisabledMetaManager() *metaManager {
 	return &metaManager{
 		enabled: false,
 	}
-}
-
-// NewMetaManagerWithInit creates a new Manager and initializes the meta.
-func NewMetaManagerWithInit(
-	ctx context.Context, changefeedID model.ChangeFeedID,
-	cfg *config.ConsistentConfig, startTs model.Ts,
-) (*metaManager, error) {
-	m, err := NewMetaManager(ctx, changefeedID, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	// There is no need to perform initialize operation if metaMgr is disabled
-	// or the scheme is blackhole.
-	if m.extStorage != nil {
-		m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
-			WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
-		if err = m.preCleanupExtStorage(ctx); err != nil {
-			log.Warn("pre clean redo logs fail",
-				zap.String("namespace", m.changeFeedID.Namespace),
-				zap.String("changefeed", m.changeFeedID.ID),
-				zap.Error(err))
-			return nil, err
-		}
-		if err = m.initMeta(ctx, startTs); err != nil {
-			log.Warn("init redo meta fail",
-				zap.String("namespace", m.changeFeedID.Namespace),
-				zap.String("changefeed", m.changeFeedID.ID),
-				zap.Error(err))
-			return nil, err
-		}
-	}
-
-	return m, nil
 }
 
 // NewMetaManager creates a new meta Manager.
@@ -143,6 +111,11 @@ func NewMetaManager(ctx context.Context, changefeedID model.ChangeFeedID,
 	return m, nil
 }
 
+// SetStartTs sets the startTs of the redo log meta manager.
+func (m *metaManager) SetStartTs(startTs model.Ts) {
+	m.startTs = startTs
+}
+
 // Enabled returns whether this log manager is enabled
 func (m *metaManager) Enabled() bool {
 	return m.enabled
@@ -153,6 +126,23 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.extStorage == nil {
 		log.Warn("extStorage of redo meta manager is nil, skip running")
 		return nil
+	}
+
+	m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
+		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+	if err := m.preCleanupExtStorage(ctx); err != nil {
+		log.Warn("pre clean redo logs fail",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
+			zap.Error(err))
+		return err
+	}
+	if err := m.initMeta(ctx); err != nil {
+		log.Warn("init redo meta fail",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
+			zap.Error(err))
+		return err
 	}
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -196,7 +186,7 @@ func (m *metaManager) GetFlushedMeta() common.LogMeta {
 
 // initMeta will read the meta file from external storage and initialize the meta
 // field of metaManager.
-func (m *metaManager) initMeta(ctx context.Context, startTs model.Ts) error {
+func (m *metaManager) initMeta(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -204,7 +194,7 @@ func (m *metaManager) initMeta(ctx context.Context, startTs model.Ts) error {
 	}
 
 	metas := []*common.LogMeta{
-		{CheckpointTs: startTs, ResolvedTs: startTs},
+		{CheckpointTs: m.startTs, ResolvedTs: m.startTs},
 	}
 	var toRemoveMetaFiles []string
 	err := m.extStorage.WalkDir(ctx, nil, func(path string, size int64) error {

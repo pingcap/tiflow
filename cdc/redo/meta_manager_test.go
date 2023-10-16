@@ -76,8 +76,9 @@ func TestInitAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m, err := NewMetaManagerWithInit(ctx, changefeedID, cfg, startTs)
+	m, err := NewMetaManager(ctx, changefeedID, cfg)
 	require.NoError(t, err)
+	m.SetStartTs(startTs)
 	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
 	require.Equal(t, uint64(11), m.metaResolvedTs.getFlushed())
 	for _, fileName := range toReomoveFiles {
@@ -140,8 +141,9 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m, err := NewMetaManagerWithInit(ctx, changefeedID, cfg, startTs)
+	m, err := NewMetaManager(ctx, changefeedID, cfg)
 	require.NoError(t, err)
+	m.SetStartTs(startTs)
 	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
 	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
 	for _, fileName := range toRemoveFiles {
@@ -265,8 +267,9 @@ func TestGCAndCleanup(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m, err := NewMetaManagerWithInit(ctx, changefeedID, cfg, startTs)
+	m, err := NewMetaManager(ctx, changefeedID, cfg)
 	require.NoError(t, err)
+	m.SetStartTs(startTs)
 	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
 	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
 

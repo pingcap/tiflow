@@ -597,12 +597,13 @@ LOOP2:
 		}()
 	}
 
-	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(cancelCtx,
+	redoMetaManager, err := redo.NewMetaManager(cancelCtx,
 		c.id,
-		c.state.Info.Config.Consistent, checkpointTs)
+		c.state.Info.Config.Consistent)
 	if err != nil {
 		return err
 	}
+	redoMetaManager.SetStartTs(checkpointTs)
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
