@@ -20,15 +20,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
-type encoder struct {
-}
+type encoder struct{}
 
-type builder struct {
-}
+type builder struct{}
 
 // NewBuilder returns a new builder
 func NewBuilder() *builder {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
@@ -36,24 +34,24 @@ func NewBuilder() *builder {
 func (e *encoder) AppendRowChangedEvent(
 	ctx context.Context, s string, event *model.RowChangedEvent, callback func(),
 ) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 // Build implement the RowEventEncoder interface
 func (e *encoder) Build() []*common.Message {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
