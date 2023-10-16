@@ -1007,7 +1007,7 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 	require.Equal(t, model.StateWarning, state.Info.State)
 	require.True(t, manager.ShouldRunning())
 
-	// 3. Test burst advance resolvedTs
+	// 3. Test changefeed remain warning when resolvedTs is progressing after stuck beyond the detection time.
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.NotNil(t, status)
 		return &model.ChangeFeedStatus{
@@ -1028,7 +1028,7 @@ func TestHandleWarningWhileAdvanceResolvedTs(t *testing.T) {
 	require.Equal(t, model.StateWarning, state.Info.State)
 	require.True(t, manager.ShouldRunning())
 
-	// 4. Test changefeed failed
+	// 4. Test changefeed failed when checkpointTs is not progressing for changefeedErrorStuckDuration time.
 	time.Sleep(manager.changefeedErrorStuckDuration + 10)
 	state.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		require.NotNil(t, status)
