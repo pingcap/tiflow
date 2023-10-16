@@ -78,22 +78,23 @@ func (u *UpstreamCfg) adjust() error {
 // It represents a DM subtask with multiple source configs embedded as Upstreams.
 // DISCUSS: support command line args. e.g. --start-time.
 type JobCfg struct {
-	TaskMode            string                                `yaml:"task-mode" toml:"task-mode" json:"task-mode"`
-	ShardMode           string                                `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
-	IgnoreCheckingItems []string                              `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
-	Timezone            string                                `yaml:"timezone" toml:"timezone" json:"timezone"`
-	CollationCompatible string                                `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
-	TargetDB            *dbconfig.DBConfig                    `yaml:"target-database" toml:"target-database" json:"target-database"`
-	ShadowTableRules    []string                              `yaml:"shadow-table-rules" toml:"shadow-table-rules" json:"shadow-table-rules"`
-	TrashTableRules     []string                              `yaml:"trash-table-rules" toml:"trash-table-rules" json:"trash-table-rules"`
-	Filters             map[string]*bf.BinlogEventRule        `yaml:"filters" toml:"filters" json:"filters"`
-	ExprFilter          map[string]*dmconfig.ExpressionFilter `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
-	BAList              map[string]*filter.Rules              `yaml:"block-allow-list" toml:"block-allow-list" json:"block-allow-list"`
-	Mydumpers           map[string]*dmconfig.MydumperConfig   `yaml:"mydumpers" toml:"mydumpers" json:"mydumpers"`
-	Loaders             map[string]*dmconfig.LoaderConfig     `yaml:"loaders" toml:"loaders" json:"loaders"`
-	Syncers             map[string]*dmconfig.SyncerConfig     `yaml:"syncers" toml:"syncers" json:"syncers"`
-	Routes              map[string]*router.TableRule          `yaml:"routes" toml:"routes" json:"routes"`
-	Validators          map[string]*dmconfig.ValidatorConfig  `yaml:"validators" toml:"validators" json:"validators"`
+	TaskMode                  string                                `yaml:"task-mode" toml:"task-mode" json:"task-mode"`
+	ShardMode                 string                                `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
+	StrictOptimisticShardMode bool                                  `yaml:"strict-optimistic-shard-mode" toml:"strict-optimistic-shard-mode" json:"strict-optimistic-shard-mode"`
+	IgnoreCheckingItems       []string                              `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
+	Timezone                  string                                `yaml:"timezone" toml:"timezone" json:"timezone"`
+	CollationCompatible       string                                `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
+	TargetDB                  *dbconfig.DBConfig                    `yaml:"target-database" toml:"target-database" json:"target-database"`
+	ShadowTableRules          []string                              `yaml:"shadow-table-rules" toml:"shadow-table-rules" json:"shadow-table-rules"`
+	TrashTableRules           []string                              `yaml:"trash-table-rules" toml:"trash-table-rules" json:"trash-table-rules"`
+	Filters                   map[string]*bf.BinlogEventRule        `yaml:"filters" toml:"filters" json:"filters"`
+	ExprFilter                map[string]*dmconfig.ExpressionFilter `yaml:"expression-filter" toml:"expression-filter" json:"expression-filter"`
+	BAList                    map[string]*filter.Rules              `yaml:"block-allow-list" toml:"block-allow-list" json:"block-allow-list"`
+	Mydumpers                 map[string]*dmconfig.MydumperConfig   `yaml:"mydumpers" toml:"mydumpers" json:"mydumpers"`
+	Loaders                   map[string]*dmconfig.LoaderConfig     `yaml:"loaders" toml:"loaders" json:"loaders"`
+	Syncers                   map[string]*dmconfig.SyncerConfig     `yaml:"syncers" toml:"syncers" json:"syncers"`
+	Routes                    map[string]*router.TableRule          `yaml:"routes" toml:"routes" json:"routes"`
+	Validators                map[string]*dmconfig.ValidatorConfig  `yaml:"validators" toml:"validators" json:"validators"`
 	// remove source config, use db config instead.
 	Upstreams []*UpstreamCfg `yaml:"upstreams" toml:"upstreams" json:"upstreams"`
 
@@ -280,6 +281,7 @@ func (c *TaskCfg) ToJobCfg() *JobCfg {
 func (c *TaskCfg) ToDMSubTaskCfg(jobID string) *dmconfig.SubTaskConfig {
 	cfg := &dmconfig.SubTaskConfig{}
 	cfg.ShardMode = c.ShardMode
+	cfg.StrictOptimisticShardMode = c.StrictOptimisticShardMode
 	cfg.OnlineDDL = c.OnlineDDL
 	cfg.ShadowTableRules = c.ShadowTableRules
 	cfg.TrashTableRules = c.TrashTableRules

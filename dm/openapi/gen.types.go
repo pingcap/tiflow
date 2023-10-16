@@ -75,7 +75,7 @@ type ClusterWorker struct {
 	// address of the current master node
 	Addr string `json:"addr"`
 
-	// bound source name of this worker node
+	// source name bound to this worker node
 	BoundSourceName string `json:"bound_source_name"`
 
 	// bound stage of this worker node
@@ -500,6 +500,9 @@ type Task struct {
 	// source-related configuration
 	SourceConfig TaskSourceConfig `json:"source_config"`
 	StatusList   *[]SubTaskStatus `json:"status_list,omitempty"`
+
+	// whether to enable strict optimistic shard mode
+	StrictOptimisticShardMode *bool `json:"strict_optimistic_shard_mode,omitempty"`
 
 	// table migrate rule
 	TableMigrateRule []TaskTableMigrateRule `json:"table_migrate_rule"`

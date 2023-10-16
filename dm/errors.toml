@@ -1204,6 +1204,12 @@ description = ""
 workaround = "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty."
 tags = ["internal", "medium"]
 
+[error.DM-config-20066]
+message = "cannot enable `strict-optimistic-shard-mode` while `shard-mode` is not `optimistic`"
+description = ""
+workaround = "Please set `shard-mode` to `optimistic` if you want to enable `strict-optimistic-shard-mode`."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
