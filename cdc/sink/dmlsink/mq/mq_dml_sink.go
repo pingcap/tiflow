@@ -117,7 +117,7 @@ func newDMLSink(
 			}
 			select {
 			case errCh <- err:
-				log.Info("mq dml sink meet error",
+				log.Warn("mq dml sink meet error",
 					zap.String("namespace", s.id.Namespace),
 					zap.String("changefeed", s.id.ID),
 					zap.Error(err))
