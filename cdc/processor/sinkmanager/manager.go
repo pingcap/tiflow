@@ -821,7 +821,11 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 }
 
 // StartTable sets the table(TableSink) state to replicating.
-func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
+func (m *SinkManager) StartTable(
+	span tablepb.Span,
+	startTs model.Ts,
+	redoStartTs model.Ts,
+) error {
 	log.Info("Start table sink",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
@@ -848,7 +852,7 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 	if m.redoDMLMgr != nil {
 		m.redoProgressHeap.push(&progress{
 			span:              span,
-			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
+			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: redoStartTs + 1},
 			version:           tableSink.(*tableSinkWrapper).version,
 		})
 	}
