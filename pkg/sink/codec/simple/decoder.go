@@ -20,6 +20,7 @@ import (
 type decoder struct {
 }
 
+// NewDecoder returns a new decoder
 func NewDecoder() *decoder {
 	//TODO implement me
 	panic("implement me")
