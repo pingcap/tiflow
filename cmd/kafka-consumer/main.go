@@ -486,11 +486,25 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	}
 
 	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
-		if err != nil {
-			return nil, errors.Trace(err)
+		// table info is not synced to the downstream,
+		// cannot check the dispatch rule, so keep the event router as nil.
+		needTableInfo := false
+		if o.replicaConfig.Sink.DispatchRules != nil {
+			for _, rule := range o.replicaConfig.Sink.DispatchRules {
+				if rule.IndexName != "" || len(rule.Columns) != 0 {
+					needTableInfo = true
+					break
+				}
+			}
 		}
-		c.eventRouter = eventRouter
+
+		if !needTableInfo {
+			eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			c.eventRouter = eventRouter
+		}
 	}
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)

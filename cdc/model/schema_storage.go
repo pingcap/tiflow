@@ -16,13 +16,11 @@ package model
 import (
 	"fmt"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/table/tables"
 	"github.com/pingcap/tidb/util/rowcodec"
-	"go.uber.org/zap"
 )
 
 const (
@@ -320,9 +318,6 @@ func (ti *TableInfo) Clone() *TableInfo {
 
 // GetIndex return the corresponding index by the given name.
 func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
-	log.Info("get index by name",
-		zap.String("name", name),
-		zap.Any("indices", ti.Indices))
 	for _, index := range ti.Indices {
 		if index != nil && index.Name.O == name {
 			return index

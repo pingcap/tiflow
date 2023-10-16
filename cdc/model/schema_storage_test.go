@@ -274,6 +274,16 @@ func TestTableInfoClone(t *testing.T) {
 func TestIndexByName(t *testing.T) {
 	tableInfo := &TableInfo{
 		TableInfo: &timodel.TableInfo{
+			Indices: nil,
+		},
+	}
+	names, offsets, ok := tableInfo.IndexByName("idx1")
+	require.False(t, ok)
+	require.Nil(t, names)
+	require.Nil(t, offsets)
+
+	tableInfo = &TableInfo{
+		TableInfo: &timodel.TableInfo{
 			Indices: []*timodel.IndexInfo{
 				{
 					Name: timodel.CIStr{
@@ -291,7 +301,7 @@ func TestIndexByName(t *testing.T) {
 		},
 	}
 
-	names, offsets, ok := tableInfo.IndexByName("idx2")
+	names, offsets, ok = tableInfo.IndexByName("idx2")
 	require.False(t, ok)
 	require.Nil(t, names)
 	require.Nil(t, offsets)
