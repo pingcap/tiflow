@@ -39,6 +39,8 @@ function run() {
 	run_sql "CREATE DATABASE dispatcher;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE TABLE dispatcher.index (a int primary key, b int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
+	run_sql "INSERT INTO dispatcher.index values (1, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
 	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "failed"
 
 	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="$SINK_URI" --config="$CUR/conf/new_changefeed.toml" --no-confirm
@@ -47,7 +49,6 @@ function run() {
 
 	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "normal"
 
-	run_sql "INSERT INTO dispatcher.index values (1, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO dispatcher.index values (2, 3);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO dispatcher.index values (3, 4);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO dispatcher.index values (4, 5);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
