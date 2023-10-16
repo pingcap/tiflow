@@ -50,6 +50,7 @@ func newProcessor4Test(
 	liveness *model.Liveness,
 	cfg *config.SchedulerConfig,
 	enableRedo bool,
+	client etcd.OwnerCaptureInfoClient,
 ) *processor {
 	changefeedID := model.ChangeFeedID4Test("processor-test", "processor-test")
 	up := upstream.NewUpstream4Test(&sinkmanager.MockPD{})
@@ -57,7 +58,7 @@ func newProcessor4Test(
 		info,
 		status,
 		captureInfo,
-		changefeedID, up, liveness, 0, cfg)
+		changefeedID, up, liveness, 0, cfg, client)
 	// Some cases want to send errors to the processor without initializing it.
 	p.sinkManager.errors = make(chan error, 16)
 	p.lazyInit = func(ctx cdcContext.Context) error {
@@ -164,7 +165,7 @@ func initProcessor4Test(
 			etcd.DefaultClusterAndNamespacePrefix,
 			ctx.ChangefeedVars().ID.ID): `{"resolved-ts":0,"checkpoint-ts":0,"admin-job-type":0}`,
 	})
-	p := newProcessor4Test(t, changefeed.Info, changefeed.Status, captureInfo, liveness, cfg, enableRedo)
+	p := newProcessor4Test(t, changefeed.Info, changefeed.Status, captureInfo, liveness, cfg, enableRedo, nil)
 
 	return p, tester, changefeed
 }

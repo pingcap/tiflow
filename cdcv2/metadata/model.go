@@ -148,16 +148,16 @@ func (s SchedState) toString() string {
 }
 
 // nolint
-func (s SchedState) fromString(str string) error {
+func (s *SchedState) fromString(str string) error {
 	switch str {
 	case "Launched":
-		s = SchedLaunched
+		*s = SchedLaunched
 	case "Removing":
-		s = SchedRemoving
+		*s = SchedRemoving
 	case "Removed":
-		s = SchedRemoved
+		*s = SchedRemoved
 	default:
-		s = SchedInvalid
+		*s = SchedInvalid
 		return errors.New("unreachable")
 	}
 	return nil

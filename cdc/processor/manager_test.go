@@ -55,8 +55,9 @@ func NewManager4Test(
 		liveness *model.Liveness,
 		changefeedEpoch uint64,
 		cfg *config.SchedulerConfig,
+		client etcd.OwnerCaptureInfoClient,
 	) *processor {
-		return newProcessor4Test(t, info, status, captureInfo, m.liveness, cfg, false)
+		return newProcessor4Test(t, info, status, captureInfo, m.liveness, cfg, false, client)
 	}
 	return m
 }

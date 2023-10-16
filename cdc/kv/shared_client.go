@@ -444,7 +444,7 @@ func (s *SharedClient) divideAndScheduleRegions(
 	backoffBeforeLoad := false
 	for {
 		if backoffBeforeLoad {
-			if err := util.Hang(ctx, 5*time.Second); err != nil {
+			if err := util.Hang(ctx, loadRegionRetryInterval); err != nil {
 				return err
 			}
 			backoffBeforeLoad = false
@@ -794,6 +794,7 @@ var (
 )
 
 const (
-	resolveLockMinInterval time.Duration  = 10 * time.Second
-	invalidSubscriptionID  SubscriptionID = SubscriptionID(0)
+	loadRegionRetryInterval time.Duration  = 100 * time.Millisecond
+	resolveLockMinInterval  time.Duration  = 10 * time.Second
+	invalidSubscriptionID   SubscriptionID = SubscriptionID(0)
 )
