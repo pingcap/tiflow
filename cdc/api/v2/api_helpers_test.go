@@ -101,12 +101,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	require.False(t, cfInfo.Config.EnableOldValue)
 
 	cfg.ReplicaConfig.ForceReplicate = true
-<<<<<<< HEAD
 	cfInfo, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
-=======
-	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
-	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
->>>>>>> 797dc6dd3a (config, changefeed (ticdc): add changefeed error stuck duration config (#9872))
 	require.Error(t, cerror.ErrOldValueNotEnabled, err)
 }
 
