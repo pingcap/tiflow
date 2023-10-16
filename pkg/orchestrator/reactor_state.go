@@ -262,7 +262,6 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 		return errors.Trace(err)
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
-		log.Info("update changefeed info", zap.Any("info", s.Info))
 		s.Info.VerifyAndComplete()
 	}
 	return nil
