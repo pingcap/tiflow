@@ -187,9 +187,9 @@ func (s *EventSorter) FetchByTable(
 	tableID model.TableID,
 	lowerBound, upperBound engine.Position,
 ) engine.EventIterator {
-	iterReadDur := engine.SorterIterReadDuration()
+	iterReadDur := metrics.SorterIterReadDuration()
 	eventIter := &EventIter{
-		tableID:      span.TableID,
+		tableID:      tableID,
 		serde:        s.serde,
 		nextDuration: iterReadDur.WithLabelValues(s.changefeedID.Namespace, s.changefeedID.ID, "next"),
 	}
