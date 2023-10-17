@@ -57,10 +57,8 @@ func updateValidation(cmd *cobra.Command, _ []string) error {
 		BinlogGTID: args.cutoverBinlogGTID,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	resp := &pb.UpdateValidationResponse{}
-	err := common.SendRequest(ctx, "UpdateValidation", req, &resp)
+	err := common.SendRequest(context.Background(), "UpdateValidation", req, &resp)
 	if err != nil {
 		return err
 	}
