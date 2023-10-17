@@ -274,6 +274,16 @@ func TestTableInfoClone(t *testing.T) {
 func TestIndexByName(t *testing.T) {
 	tableInfo := &TableInfo{
 		TableInfo: &timodel.TableInfo{
+			Indices: nil,
+		},
+	}
+	names, offsets, ok := tableInfo.IndexByName("idx1")
+	require.False(t, ok)
+	require.Nil(t, names)
+	require.Nil(t, offsets)
+
+	tableInfo = &TableInfo{
+		TableInfo: &timodel.TableInfo{
 			Indices: []*timodel.IndexInfo{
 				{
 					Name: timodel.CIStr{
@@ -291,7 +301,7 @@ func TestIndexByName(t *testing.T) {
 		},
 	}
 
-	names, offsets, ok := tableInfo.IndexByName("idx2")
+	names, offsets, ok = tableInfo.IndexByName("idx2")
 	require.False(t, ok)
 	require.Nil(t, names)
 	require.Nil(t, offsets)
@@ -300,4 +310,46 @@ func TestIndexByName(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, []string{"col1"}, names)
 	require.Equal(t, []int{0}, offsets)
+}
+
+func TestColumnsByNames(t *testing.T) {
+	tableInfo := &TableInfo{
+		TableInfo: &timodel.TableInfo{
+			Columns: []*timodel.ColumnInfo{
+				{
+					Name: timodel.CIStr{
+						O: "col2",
+					},
+					Offset: 1,
+				},
+				{
+					Name: timodel.CIStr{
+						O: "col1",
+					},
+					Offset: 0,
+				},
+				{
+					Name: timodel.CIStr{
+						O: "col3",
+					},
+					Offset: 2,
+				},
+			},
+		},
+	}
+
+	names := []string{"col1", "col2", "col3"}
+	offsets, ok := tableInfo.ColumnsByNames(names)
+	require.True(t, ok)
+	require.Equal(t, []int{0, 1, 2}, offsets)
+
+	names = []string{"col2"}
+	offsets, ok = tableInfo.ColumnsByNames(names)
+	require.True(t, ok)
+	require.Equal(t, []int{1}, offsets)
+
+	names = []string{"col1", "col-not-found"}
+	offsets, ok = tableInfo.ColumnsByNames(names)
+	require.False(t, ok)
+	require.Nil(t, offsets)
 }

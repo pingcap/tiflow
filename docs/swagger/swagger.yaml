@@ -54,10 +54,17 @@ definitions:
     type: object
   config.DispatchRule:
     properties:
+      columns:
+        description: Columns are set when using columns dispatcher.
+        items:
+          type: string
+        type: array
       dispatcher:
         description: Deprecated, please use PartitionRule.
         type: string
       index:
+        description: IndexName is set when using index-value dispatcher with specified
+          index.
         type: string
       matcher:
         items:
@@ -734,6 +741,10 @@ definitions:
     type: object
   v2.DispatchRule:
     properties:
+      columns:
+        items:
+          type: string
+        type: array
       index:
         type: string
       matcher:
