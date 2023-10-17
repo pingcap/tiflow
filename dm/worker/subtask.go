@@ -877,6 +877,14 @@ func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, is
 	return terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
 }
 
+func (st *SubTask) UpdateValidator(req *pb.UpdateValidationWorkerRequest) error {
+	if validator := st.getValidator(); validator != nil {
+		return validator.UpdateValidator(req)
+	}
+	cfg := st.getCfg()
+	return terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
+}
+
 func (st *SubTask) getValidator() *syncer.DataValidator {
 	st.RLock()
 	defer st.RUnlock()

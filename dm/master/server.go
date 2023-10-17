@@ -3218,3 +3218,72 @@ func genValidationWorkerErrorResp(req *workerrpc.Request, err error, logMsg, wor
 		return nil
 	}
 }
+
+func (s *Server) UpdateValidation(ctx context.Context, req *pb.UpdateValidationRequest) (*pb.UpdateValidationResponse, error) {
+	var (
+		resp2 *pb.UpdateValidationResponse
+		err   error
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
+	if shouldRet {
+		return resp2, err
+	}
+	sources := req.Sources
+	if len(sources) == 0 {
+		sources = s.getTaskSourceNameList(req.TaskName)
+		if len(sources) == 0 {
+			return &pb.UpdateValidationResponse{
+				Result: false,
+				Msg:    fmt.Sprintf("task %s has no source or not exist, please check the task name and status", req.TaskName),
+			}, nil
+		}
+	}
+
+	workerReq := workerrpc.Request{
+		Type: workerrpc.CmdUpdateValidation,
+		UpdateValidation: &pb.UpdateValidationWorkerRequest{
+			TaskName:   req.TaskName,
+			BinlogPos:  req.BinlogPos,
+			BinlogGTID: req.BinlogGTID,
+		},
+	}
+
+	workerRespCh := make(chan *pb.CommonWorkerResponse, len(sources))
+	var wg sync.WaitGroup
+	for _, source := range sources {
+		wg.Add(1)
+		go func(source string) {
+			defer wg.Done()
+			worker := s.scheduler.GetWorkerBySource(source)
+			if worker == nil {
+				workerRespCh <- errorCommonWorkerResponse(fmt.Sprintf("source %s relevant worker-client not found", source), source, "")
+				return
+			}
+			var workerResp *pb.CommonWorkerResponse
+			resp, err := worker.SendRequest(ctx, &workerReq, s.cfg.RPCTimeout)
+			if err != nil {
+				workerResp = errorCommonWorkerResponse(err.Error(), source, worker.BaseInfo().Name)
+			} else {
+				workerResp = resp.UpdateValidation
+			}
+			workerResp.Source = source
+			workerRespCh <- workerResp
+		}(source)
+	}
+	wg.Wait()
+
+	workerResps := make([]*pb.CommonWorkerResponse, 0, len(sources))
+	for len(workerRespCh) > 0 {
+		workerResp := <-workerRespCh
+		workerResps = append(workerResps, workerResp)
+	}
+
+	sort.Slice(workerResps, func(i, j int) bool {
+		return workerResps[i].Source < workerResps[j].Source
+	})
+
+	return &pb.UpdateValidationResponse{
+		Result:  true,
+		Sources: workerResps,
+	}, nil
+}
