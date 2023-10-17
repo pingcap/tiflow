@@ -63,8 +63,9 @@ type dmlSink struct {
 		isDead       bool
 	}
 
-	ctx    context.Context
-	cancel context.CancelCauseFunc
+	ctx       context.Context
+	cancel    context.CancelFunc
+	cancelErr error
 
 	wg   sync.WaitGroup
 	dead chan struct{}
@@ -80,7 +81,7 @@ func newSink(ctx context.Context,
 	errCh chan error,
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	ctx, cancel := context.WithCancelCause(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
@@ -161,7 +162,8 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 				err = errors.New("MQSinkGetPartitionError")
 			})
 			if err != nil {
-				s.cancel(err)
+				s.cancelErr = err
+				s.cancel()
 				return errors.Trace(err)
 			}
 			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
@@ -189,7 +191,7 @@ func (s *dmlSink) Scheme() string {
 // Close closes the sink.
 func (s *dmlSink) Close() {
 	if s.cancel != nil {
-		s.cancel(nil)
+		s.cancel()
 	}
 	s.wg.Wait()
 
