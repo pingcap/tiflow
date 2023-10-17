@@ -20,12 +20,9 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
-	"github.com/pingcap/tiflow/cdc/contextutil"
-=======
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
->>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852)):cdc/sink/dmlsink/mq/mq_dml_sink.go
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
@@ -81,25 +78,18 @@ func newSink(ctx context.Context,
 	encoderConfig *common.Config,
 	encoderConcurrency int,
 	errCh chan error,
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
-=======
-) *dmlSink {
-	ctx, cancel := context.WithCancelCause(ctx)
-	statistics := metrics.NewStatistics(ctx, changefeedID, sink.RowSink)
-	worker := newWorker(changefeedID, protocol, producer, encoderGroup, statistics)
->>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 
 	s := &dmlSink{
 		id:       changefeedID,
@@ -165,15 +155,11 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
-<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink.go
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(topic)
-=======
-			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
 			failpoint.Inject("MQSinkGetPartitionError", func() {
 				log.Info("failpoint MQSinkGetPartitionError injected", zap.String("changefeedID", s.id.ID))
 				err = errors.New("MQSinkGetPartitionError")
 			})
->>>>>>> 215162d7e7 (sink(cdc): fix the bug that mq sink can lost callbacks (#9852)):cdc/sink/dmlsink/mq/mq_dml_sink.go
 			if err != nil {
 				s.cancel(err)
 				return errors.Trace(err)
