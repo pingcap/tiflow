@@ -597,7 +597,7 @@ func NewDDLJobPuller(
 
 		rawDDLCh := make(chan *model.RawKVEntry, defaultPullerOutputChanSize)
 		mp.sortedDDLCh = memorysorter.SortOutput(ctx, changefeed, rawDDLCh)
-		grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig)
+		grpcPool := sharedconn.NewConnAndClientPool(up.SecurityConfig, kv.GetGlobalGrpcMetrics())
 
 		client := kv.NewSharedClient(
 			changefeed, cfg, ddlPullerFilterLoop,

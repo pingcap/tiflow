@@ -140,12 +140,6 @@ func (e *rangeLockEntry) String() string {
 		len(e.waiters))
 }
 
-var currentID uint64 = 0
-
-func allocID() uint64 {
-	return atomic.AddUint64(&currentID, 1)
-}
-
 // RegionRangeLock is specifically used for kv client to manage exclusive region ranges. Acquiring lock will be blocked
 // if part of its range is already locked. It also manages checkpoint ts of all ranges. The ranges are marked by a
 // version number, which should comes from the Region's Epoch version. The version is used to compare which range is
@@ -166,10 +160,11 @@ type RegionRangeLock struct {
 
 // NewRegionRangeLock creates a new RegionRangeLock.
 func NewRegionRangeLock(
+	id uint64,
 	startKey, endKey []byte, startTs uint64, changefeedLogInfo string,
 ) *RegionRangeLock {
 	return &RegionRangeLock{
-		id:                allocID(),
+		id:                id,
 		totalSpan:         tablepb.Span{StartKey: startKey, EndKey: endKey},
 		changefeedLogInfo: changefeedLogInfo,
 		rangeCheckpointTs: newRangeTsMap(startKey, endKey, startTs),
@@ -489,7 +484,9 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 
 	lastEnd := l.totalSpan.StartKey
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
-		action(item.regionID, &item.state)
+		if action != nil {
+			action(item.regionID, &item.state)
+		}
 
 		r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, item.startKey) < 0
 		ckpt := item.state.CheckpointTs.Load()
