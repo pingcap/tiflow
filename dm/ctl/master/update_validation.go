@@ -49,7 +49,6 @@ func updateValidation(cmd *cobra.Command, _ []string) error {
 	if !ok {
 		return printUsageAndFailWithMessage(cmd, msg)
 	}
-	// we use taskName="" to represent we do operation on all task, so args.allTask don't need to pass
 	req := &pb.UpdateValidationRequest{
 		TaskName:   args.taskName,
 		Sources:    args.sources,
@@ -83,5 +82,8 @@ func parseValidationUpdateArgs(cmd *cobra.Command) (validationUpdateArgs, string
 		return args, "`task-name` should be set", false
 	}
 	args.taskName = cmd.Flags().Arg(0)
+	if len(args.taskName) == 0 {
+		return args, "`task-name` should be set", false
+	}
 	return args, "", true
 }
