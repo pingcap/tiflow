@@ -158,7 +158,6 @@ func (m *feedStateManager) Tick(resolvedTs model.Ts,
 		}
 	}
 
-	m.resolvedTs = resolvedTs
 	m.shouldBeRunning = true
 	defer func() {
 		if !m.shouldBeRunning {
