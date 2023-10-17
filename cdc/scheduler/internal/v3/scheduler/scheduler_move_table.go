@@ -67,7 +67,7 @@ func (m *moveTableScheduler) addTask(span tablepb.Span, target model.CaptureID) 
 }
 
 func (m *moveTableScheduler) Schedule(
-	_ model.Ts,
+	_ tablepb.Checkpoint,
 	currentSpans []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications *spanz.BtreeMap[*replication.ReplicationSet],

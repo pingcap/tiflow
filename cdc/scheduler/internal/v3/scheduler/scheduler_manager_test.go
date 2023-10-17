@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -53,14 +54,16 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 	// schedulerPriorityBasic bypasses task check.
 	replications := mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
 	runningTasks := mapToSpanMap(map[model.TableID]*replication.ScheduleTask{1: {}})
-	tasks := m.Schedule(0, currentSpans, captures, replications, runningTasks)
+
+	redoMetaManager := redo.NewDisabledMetaManager()
+	tasks := m.Schedule(0, currentSpans, captures, replications, runningTasks, redoMetaManager)
 	require.Len(t, tasks, 1)
 
 	// No more task.
 	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	})
-	tasks = m.Schedule(0, currentSpans, captures, replications, runningTasks)
+	tasks = m.Schedule(0, currentSpans, captures, replications, runningTasks, redoMetaManager)
 	require.Len(t, tasks, 0)
 
 	// Move table is dropped because of running tasks.
@@ -68,7 +71,7 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 	replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	})
-	tasks = m.Schedule(0, currentSpans, captures, replications, runningTasks)
+	tasks = m.Schedule(0, currentSpans, captures, replications, runningTasks, redoMetaManager)
 	require.Len(t, tasks, 0)
 
 	// Move table can proceed after clean up tasks.
@@ -77,6 +80,6 @@ func TestSchedulerManagerScheduler(t *testing.T) {
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 	})
 	runningTasks = spanz.NewBtreeMap[*replication.ScheduleTask]()
-	tasks = m.Schedule(0, currentSpans, captures, replications, runningTasks)
+	tasks = m.Schedule(0, currentSpans, captures, replications, runningTasks, redoMetaManager)
 	require.Len(t, tasks, 1)
 }

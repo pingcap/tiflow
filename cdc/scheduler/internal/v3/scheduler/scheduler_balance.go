@@ -56,7 +56,7 @@ func (b *balanceScheduler) Name() string {
 }
 
 func (b *balanceScheduler) Schedule(
-	_ model.Ts,
+	_ tablepb.Checkpoint,
 	_ []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications *spanz.BtreeMap[*replication.ReplicationSet],
