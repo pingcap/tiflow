@@ -194,9 +194,9 @@ type DataValidator struct {
 	streamerController *binlogstream.StreamerController
 	persistHelper      *validatorPersistHelper
 
-	validateInterval      time.Duration
-	checkInterval         time.Duration
-	cutOverLocationAtomic atomic.Pointer[binlog.Location]
+	validateInterval time.Duration
+	checkInterval    time.Duration
+	cutOverLocation  atomic.Pointer[binlog.Location]
 
 	workers   []*validateWorker
 	workerCnt int
@@ -958,11 +958,11 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 
 func (v *DataValidator) checkAndPersistCheckpointAndData(loc binlog.Location) error {
 	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
-	cutOverLocation := v.cutOverLocationAtomic.Load()
+	cutOverLocation := v.cutOverLocation.Load()
 	needCutOver := cutOverLocation != nil && binlog.CompareLocation(*cutOverLocation, loc, v.cfg.EnableGTID) <= 0
 	if time.Since(v.lastFlushTime) > metaFlushInterval || needCutOver {
 		if needCutOver {
-			v.cutOverLocationAtomic.Store(nil)
+			v.cutOverLocation.Store(nil)
 		}
 		v.lastFlushTime = time.Now()
 		if err := v.persistCheckpointAndData(loc); err != nil {
@@ -1337,7 +1337,7 @@ func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) e
 		}
 	}
 	cutOverLocation := binlog.NewLocation(*pos, gs)
-	v.cutOverLocationAtomic.Store(&cutOverLocation)
+	v.cutOverLocation.Store(&cutOverLocation)
 	return nil
 }
 
