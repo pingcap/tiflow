@@ -17,6 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
@@ -53,8 +54,11 @@ func (e *encoder) Build() []*common.Message {
 //
 //nolint:unused
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	// TODO implement me
-	panic("implement me")
+	message := newResolvedMessage(ts)
+	value, err := e.marshaller.Marshal(message)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrJSONMarshalFailed, err)
+	}
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
