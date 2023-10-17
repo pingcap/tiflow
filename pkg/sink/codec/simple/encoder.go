@@ -15,14 +15,17 @@ package simple
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
 //nolint:unused
-type encoder struct{}
+type encoder struct {
+}
 
 type builder struct{}
 
@@ -55,10 +58,11 @@ func (e *encoder) Build() []*common.Message {
 //nolint:unused
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	message := newResolvedMessage(ts)
-	value, err := e.marshaller.Marshal(message)
+	value, err := json.Marshal(message)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrJSONMarshalFailed, err)
+		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
+	return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), nil
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
