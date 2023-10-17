@@ -1424,11 +1424,19 @@ var doc = `{
         "config.DispatchRule": {
             "type": "object",
             "properties": {
+                "columns": {
+                    "description": "Columns are set when using columns dispatcher.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "dispatcher": {
                     "description": "Deprecated, please use PartitionRule.",
                     "type": "string"
                 },
                 "index": {
+                    "description": "IndexName is set when using index-value dispatcher with specified index.",
                     "type": "string"
                 },
                 "matcher": {
@@ -2380,6 +2388,12 @@ var doc = `{
         "v2.DispatchRule": {
             "type": "object",
             "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "index": {
                     "type": "string"
                 },
