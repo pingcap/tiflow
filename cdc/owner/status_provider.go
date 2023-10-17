@@ -24,14 +24,8 @@ import (
 // StatusProvider provide some func to get meta-information from owner
 // The interface is thread-safe.
 type StatusProvider interface {
-	// GetAllChangeFeedStatuses returns all changefeeds' runtime status.
-	GetAllChangeFeedStatuses(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI, error)
-
 	// GetChangeFeedStatus returns a changefeeds' runtime status.
 	GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error)
-
-	// GetAllChangeFeedInfo returns all changefeeds' info.
-	GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error)
 
 	// GetChangeFeedInfo returns a changefeeds' info.
 	GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error)
@@ -55,12 +49,8 @@ type StatusProvider interface {
 type QueryType int32
 
 const (
-	// QueryAllChangeFeedStatuses query all changefeed status.
-	QueryAllChangeFeedStatuses QueryType = iota
-	// QueryAllChangeFeedInfo is the type of query all changefeed info.
-	QueryAllChangeFeedInfo
 	// QueryAllTaskStatuses is the type of query all task statuses.
-	QueryAllTaskStatuses
+	QueryAllTaskStatuses QueryType = iota
 	// QueryProcessors is the type of query processors.
 	QueryProcessors
 	// QueryCaptures is the type of query captures info.
@@ -68,7 +58,11 @@ const (
 	// QueryHealth is the type of query cluster health info.
 	QueryHealth
 	// QueryOwner is the type of query changefeed owner
-	QueryOwner = 6
+	QueryOwner
+	// QueryChangefeedInfo is the type of query changefeed info
+	QueryChangefeedInfo
+	// QueryChangeFeedStatuses is the type of query changefeed status
+	QueryChangeFeedStatuses
 )
 
 // Query wraps query command and return results.
@@ -88,56 +82,36 @@ type ownerStatusProvider struct {
 	owner Owner
 }
 
-func (p *ownerStatusProvider) GetAllChangeFeedStatuses(ctx context.Context) (
-	map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI, error,
-) {
-	query := &Query{
-		Tp: QueryAllChangeFeedStatuses,
-	}
-	if err := p.sendQueryToOwner(ctx, query); err != nil {
-		return nil, errors.Trace(err)
-	}
-	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI), nil
-}
-
 func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 ) (*model.ChangeFeedStatusForAPI, error) {
-	statuses, err := p.GetAllChangeFeedStatuses(ctx)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	status, exist := statuses[changefeedID]
-	if !exist {
-		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID)
-	}
-	return status, nil
-}
-
-func (p *ownerStatusProvider) GetAllChangeFeedInfo(ctx context.Context) (
-	map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
-) {
 	query := &Query{
-		Tp: QueryAllChangeFeedInfo,
+		Tp:           QueryChangeFeedStatuses,
+		ChangeFeedID: changefeedID,
 	}
 	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return query.Data.(map[model.ChangeFeedID]*model.ChangeFeedInfo), nil
+	if query.Data == nil {
+		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID)
+	}
+	return query.Data.(*model.ChangeFeedStatusForAPI), nil
 }
 
 func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 ) (*model.ChangeFeedInfo, error) {
-	infos, err := p.GetAllChangeFeedInfo(ctx)
-	if err != nil {
+	query := &Query{
+		Tp:           QueryChangefeedInfo,
+		ChangeFeedID: changefeedID,
+	}
+	if err := p.sendQueryToOwner(ctx, query); err != nil {
 		return nil, errors.Trace(err)
 	}
-	info, exist := infos[changefeedID]
-	if !exist {
+	if query.Data == nil {
 		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID)
 	}
-	return info, nil
+	return query.Data.(*model.ChangeFeedInfo), nil
 }
 
 func (p *ownerStatusProvider) GetAllTaskStatuses(ctx context.Context,
