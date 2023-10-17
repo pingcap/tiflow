@@ -166,12 +166,13 @@ func (p *processor) AddTableSpan(
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
+				redoStartTs := checkpoint.ResolvedTs
 				if p.redo.r.Enabled() {
 					// ResolvedTs is store in external storage when redo log is enabled, so we need to
 					// start table with ResolvedTs in redoDMLManager.
-					p.redo.r.StartTable(span, checkpoint.ResolvedTs)
+					p.redo.r.StartTable(span, redoStartTs)
 				}
-				if err := p.sinkManager.r.StartTable(span, startTs); err != nil {
+				if err := p.sinkManager.r.StartTable(span, startTs, redoStartTs); err != nil {
 					return false, errors.Trace(err)
 				}
 			}

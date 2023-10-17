@@ -71,7 +71,7 @@ func (d *drainCaptureScheduler) setTarget(target model.CaptureID) bool {
 }
 
 func (d *drainCaptureScheduler) Schedule(
-	_ model.Ts,
+	_ tablepb.Checkpoint,
 	_ []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications *spanz.BtreeMap[*replication.ReplicationSet],
