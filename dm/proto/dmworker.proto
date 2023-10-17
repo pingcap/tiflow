@@ -506,6 +506,6 @@ enum ValidationErrOp {
 
 message UpdateValidationWorkerRequest {
     string taskName = 1;
-    string binlogPos = 2; // binlog-pos (that's file:pos format)
+    string binlogPos = 2; // binlog-pos (that's (file:pos) format)
     string binlogGTID = 3;
 }

@@ -1325,7 +1325,7 @@ func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) e
 		err error
 	)
 	if len(req.BinlogPos) > 0 {
-		pos, err = binlog.VerifyBinlogPos(req.BinlogGTID)
+		pos, err = binlog.VerifyBinlogPos(req.BinlogPos)
 		if err != nil {
 			return err
 		}
