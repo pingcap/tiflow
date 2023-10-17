@@ -108,7 +108,7 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 
 	pdClient = &mockPDClient{Client: pdClient, versionGen: defaultVersionGen}
 
-	grpcPool := sharedconn.NewConnAndClientPool(&security.Credential{})
+	grpcPool := sharedconn.NewConnAndClientPool(&security.Credential{}, nil)
 
 	regionCache := tikv.NewRegionCache(pdClient)
 

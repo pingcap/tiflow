@@ -250,13 +250,13 @@ func (c *connArray) sort(locked bool) {
 	})
 }
 
-func (p *ConnAndClientPool) connect(ctx context.Context, target string) (*grpc.ClientConn, error) {
-	grpcTLSOption, err := p.credential.ToGRPCDialOption()
+func (c *ConnAndClientPool) connect(ctx context.Context, target string) (*grpc.ClientConn, error) {
+	grpcTLSOption, err := c.credential.ToGRPCDialOption()
 	if err != nil {
 		return nil, err
 	}
 
-	var dialOptions = []grpc.DialOption{
+	dialOptions := []grpc.DialOption{
 		grpcTLSOption,
 		grpc.WithInitialWindowSize(grpcInitialWindowSize),
 		grpc.WithInitialConnWindowSize(grpcInitialConnWindowSize),
@@ -277,9 +277,9 @@ func (p *ConnAndClientPool) connect(ctx context.Context, target string) (*grpc.C
 		}),
 	}
 
-	if p.grpcMetrics != nil {
-		dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(p.grpcMetrics.UnaryClientInterceptor()))
-		dialOptions = append(dialOptions, grpc.WithStreamInterceptor(p.grpcMetrics.StreamClientInterceptor()))
+	if c.grpcMetrics != nil {
+		dialOptions = append(dialOptions, grpc.WithUnaryInterceptor(c.grpcMetrics.UnaryClientInterceptor()))
+		dialOptions = append(dialOptions, grpc.WithStreamInterceptor(c.grpcMetrics.StreamClientInterceptor()))
 	}
 
 	return grpc.DialContext(ctx, target, dialOptions...)
