@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
 
@@ -49,7 +50,7 @@ type gcManager struct {
 	lastUpdatedTime   time.Time
 	lastSucceededTime time.Time
 	lastSafePointTs   uint64
-	isTiCDCBlockGC    bool
+	isTiCDCBlockGC    atomic.Bool
 }
 
 // NewManager creates a new Manager.
@@ -99,7 +100,7 @@ func (m *gcManager) TryUpdateGCSafePoint(
 	// if the min checkpoint ts is equal to the current gc safe point, it
 	// means that the service gc safe point set by TiCDC is the min service
 	// gc safe point
-	m.isTiCDCBlockGC = actual == checkpointTs
+	m.isTiCDCBlockGC.Store(actual == checkpointTs)
 	m.lastSafePointTs = actual
 	m.lastSucceededTime = time.Now()
 	return nil
@@ -109,8 +110,13 @@ func (m *gcManager) CheckStaleCheckpointTs(
 	ctx context.Context, changefeedID model.ChangeFeedID, checkpointTs model.Ts,
 ) error {
 	gcSafepointUpperBound := checkpointTs - 1
+<<<<<<< HEAD
 	if m.isTiCDCBlockGC {
 		pdTime, _ := m.pdClock.CurrentTime()
+=======
+	if m.isTiCDCBlockGC.Load() {
+		pdTime := m.pdClock.CurrentTime()
+>>>>>>> 3b3b61e53a (gc(ticdc): fix data race in gc manager (#9897))
 		if pdTime.Sub(
 			oracle.GetTimeFromTS(gcSafepointUpperBound),
 		) > time.Duration(m.gcTTL)*time.Second {
