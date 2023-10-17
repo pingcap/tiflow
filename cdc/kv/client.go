@@ -378,9 +378,10 @@ func newEventFeedSession(
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
-	id := strconv.FormatUint(allocID(), 10)
+	id := allocID()
+	idStr := strconv.FormatUint(id, 10)
 	rangeLock := regionlock.NewRegionRangeLock(
-		totalSpan.StartKey, totalSpan.EndKey, startTs,
+		id, totalSpan.StartKey, totalSpan.EndKey, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
 	return &eventFeedSession{
 		client:     client,
@@ -393,7 +394,7 @@ func newEventFeedSession(
 		eventCh:           eventCh,
 		rangeLock:         rangeLock,
 		lockResolver:      lockResolver,
-		id:                id,
+		id:                idStr,
 		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
