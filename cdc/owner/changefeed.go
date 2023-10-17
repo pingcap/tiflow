@@ -341,7 +341,7 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context,
 func (c *changefeed) tick(ctx cdcContext.Context,
 	captures map[model.CaptureID]*model.CaptureInfo,
 ) (model.Ts, model.Ts, error) {
-	adminJobPending := c.feedStateManager.Tick(c.resolvedTs)
+	adminJobPending := c.feedStateManager.Tick(c.resolvedTs, c.latestStatus, c.latestInfo)
 	preCheckpointTs := c.latestInfo.GetCheckpointTs(c.latestStatus)
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure all changefeeds, no matter whether they are running or not, will be checked.

@@ -51,7 +51,7 @@ type FeedStateManager interface {
 	// Tick is the main logic of the FeedStateManager, it will be called periodically
 	// resolvedTs is the resolvedTs of the changefeed
 	// returns true if there is a pending admin job, if so changefeed should not run the tick logic
-	Tick(resolvedTs model.Ts) (adminJobPending bool)
+	Tick(resolvedTs model.Ts, status *model.ChangeFeedStatus, info *model.ChangeFeedInfo) (adminJobPending bool)
 	// HandleError is called an error occurs in Changefeed.Tick
 	HandleError(errs ...*model.RunningError)
 	// HandleWarning is called a warning occurs in Changefeed.Tick
@@ -100,9 +100,6 @@ func newFeedStateManager(up *upstream.Upstream,
 	m := new(feedStateManager)
 	m.upstream = up
 	m.state = state
-	if m.state != nil && m.state.Status != nil {
-		m.initCheckpointTs = state.Status.CheckpointTs
-	}
 
 	m.errBackoff = backoff.NewExponentialBackOff()
 	m.errBackoff.InitialInterval = defaultBackoffInitInterval
@@ -143,12 +140,14 @@ func (m *feedStateManager) resetErrRetry() {
 	m.lastErrorRetryTime = time.Unix(0, 0)
 }
 
-func (m *feedStateManager) Tick(resolvedTs model.Ts) (adminJobPending bool) {
-	m.checkAndInitLastRetryCheckpointTs(state.Status)
+func (m *feedStateManager) Tick(resolvedTs model.Ts,
+	status *model.ChangeFeedStatus, info *model.ChangeFeedInfo,
+) (adminJobPending bool) {
+	m.checkAndInitLastRetryCheckpointTs(status)
 
-	if m.state != nil && m.state.Status != nil {
-		if m.checkpointTs < m.state.Status.CheckpointTs {
-			m.checkpointTs = m.state.Status.CheckpointTs
+	if status != nil {
+		if m.checkpointTs < status.CheckpointTs {
+			m.checkpointTs = status.CheckpointTs
 			m.checkpointTsAdvanced = time.Now()
 		}
 		if m.resolvedTs < resolvedTs {
@@ -174,7 +173,7 @@ func (m *feedStateManager) Tick(resolvedTs model.Ts) (adminJobPending bool) {
 		return
 	}
 
-	switch m.state.Info.State {
+	switch info.State {
 	case model.StateUnInitialized:
 		m.patchState(model.StateNormal)
 		return
@@ -207,7 +206,7 @@ func (m *feedStateManager) Tick(resolvedTs model.Ts) (adminJobPending bool) {
 
 		// retry the changefeed
 		m.shouldBeRunning = true
-		if m.state.Status != nil {
+		if status != nil {
 			m.lastErrorRetryCheckpointTs = m.state.Status.CheckpointTs
 		}
 		m.patchState(model.StateWarning)
