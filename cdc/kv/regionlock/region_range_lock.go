@@ -489,7 +489,9 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 
 	lastEnd := l.totalSpan.StartKey
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
-		action(item.regionID, &item.state)
+		if action != nil {
+			action(item.regionID, &item.state)
+		}
 
 		r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, item.startKey) < 0
 		ckpt := item.state.CheckpointTs.Load()
