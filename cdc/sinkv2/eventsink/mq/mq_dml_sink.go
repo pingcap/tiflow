@@ -85,6 +85,7 @@ func newSink(ctx context.Context,
 
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
+		cancel()
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
