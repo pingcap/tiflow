@@ -20,6 +20,8 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
@@ -35,6 +37,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -60,8 +63,9 @@ type dmlSink struct {
 		isDead       bool
 	}
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx       context.Context
+	cancel    context.CancelFunc
+	cancelErr error
 
 	wg   sync.WaitGroup
 	dead chan struct{}
@@ -77,13 +81,14 @@ func newSink(ctx context.Context,
 	errCh chan error,
 ) (*dmlSink, error) {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
+	ctx, cancel := context.WithCancel(ctx)
 
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
+		cancel()
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
 	worker := newWorker(changefeedID, encoderConfig.Protocol,
 		encoderBuilder, encoderConcurrency, producer, statistics)
@@ -149,10 +154,17 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 			continue
 		}
 		callback := mergedCallback(txn.Callback, uint64(len(txn.Event.Rows)))
+
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(topic)
+			failpoint.Inject("MQSinkGetPartitionError", func() {
+				log.Info("failpoint MQSinkGetPartitionError injected", zap.String("changefeedID", s.id.ID))
+				err = errors.New("MQSinkGetPartitionError")
+			})
 			if err != nil {
+				s.cancelErr = err
+				s.cancel()
 				return errors.Trace(err)
 			}
 			partition := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
