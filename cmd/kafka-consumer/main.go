@@ -19,6 +19,8 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -293,7 +295,15 @@ func main() {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
 
-	wg := &sync.WaitGroup{}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Panic("Error starting pprof", zap.Error(err))
+		}
+	}()
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
