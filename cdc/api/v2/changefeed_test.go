@@ -202,8 +202,8 @@ func TestCreateChangefeed(t *testing.T) {
 				SinkURI:    cfg.SinkURI,
 			}, nil
 		}).AnyTimes()
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	ctrl.EXPECT().
+		CreateChangefeed(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrPDEtcdAPIError).Times(1)
 
 	cfConfig.SinkURI = mysqlSink
@@ -223,8 +223,8 @@ func TestCreateChangefeed(t *testing.T) {
 	helpers.EXPECT().
 		getEtcdClient(gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	ctrl.EXPECT().
+		CreateChangefeed(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 	w = httptest.NewRecorder()
@@ -334,6 +334,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	t.Parallel()
 	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	mockOwner := mock_owner.NewMockOwner(gomock.NewController(t))
 	mockCapture := mock_capture.NewMockCapture(gomock.NewController(t))
 	apiV2 := NewOpenAPIV2ForTest(mockCapture, helpers)
 	router := newRouter(apiV2)
@@ -342,6 +343,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	mockCapture.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	mockCapture.EXPECT().IsReady().Return(true).AnyTimes()
 	mockCapture.EXPECT().IsController().Return(true).AnyTimes()
+	mockCapture.EXPECT().GetOwner().Return(mockOwner, nil).AnyTimes()
 
 	// case 1 invalid id
 	invalidID := "Invalid_#"
@@ -391,11 +393,9 @@ func TestUpdateChangefeed(t *testing.T) {
 	// case 4: changefeed stopped, but get upstream failed: not found
 	oldCfInfo.UpstreamID = 100
 	oldCfInfo.State = "stopped"
-	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
-	etcdClient.EXPECT().
+	mockCapture.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
 		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
-	mockCapture.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -409,10 +409,9 @@ func TestUpdateChangefeed(t *testing.T) {
 
 	// case 5: json failed
 	oldCfInfo.UpstreamID = 1
-	etcdClient.EXPECT().
+	mockCapture.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(1)), gomock.Any()).
 		Return(nil, nil).AnyTimes()
-	mockCapture.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -474,7 +473,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
 		Times(1)
-	etcdClient.EXPECT().
+	mockOwner.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrEtcdAPIError).Times(1)
 
@@ -494,7 +493,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
 	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
-	etcdClient.EXPECT().
+	mockOwner.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 
@@ -511,7 +510,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
 	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
-	etcdClient.EXPECT().
+	mockOwner.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 

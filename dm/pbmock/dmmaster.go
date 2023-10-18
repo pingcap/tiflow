@@ -556,6 +556,26 @@ func (mr *MockMasterClientMockRecorder) UpdateTask(arg0, arg1 interface{}, arg2 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTask", reflect.TypeOf((*MockMasterClient)(nil).UpdateTask), varargs...)
 }
 
+// UpdateValidation mocks base method.
+func (m *MockMasterClient) UpdateValidation(arg0 context.Context, arg1 *pb.UpdateValidationRequest, arg2 ...grpc.CallOption) (*pb.UpdateValidationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateValidation", varargs...)
+	ret0, _ := ret[0].(*pb.UpdateValidationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateValidation indicates an expected call of UpdateValidation.
+func (mr *MockMasterClientMockRecorder) UpdateValidation(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidation", reflect.TypeOf((*MockMasterClient)(nil).UpdateValidation), varargs...)
+}
+
 // MockMasterServer is a mock of MasterServer interface.
 type MockMasterServer struct {
 	ctrl     *gomock.Controller
@@ -967,4 +987,19 @@ func (m *MockMasterServer) UpdateTask(arg0 context.Context, arg1 *pb.UpdateTaskR
 func (mr *MockMasterServerMockRecorder) UpdateTask(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTask", reflect.TypeOf((*MockMasterServer)(nil).UpdateTask), arg0, arg1)
+}
+
+// UpdateValidation mocks base method.
+func (m *MockMasterServer) UpdateValidation(arg0 context.Context, arg1 *pb.UpdateValidationRequest) (*pb.UpdateValidationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateValidation", arg0, arg1)
+	ret0, _ := ret[0].(*pb.UpdateValidationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateValidation indicates an expected call of UpdateValidation.
+func (mr *MockMasterServerMockRecorder) UpdateValidation(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidation", reflect.TypeOf((*MockMasterServer)(nil).UpdateValidation), arg0, arg1)
 }

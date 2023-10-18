@@ -255,10 +255,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			allEventSize += size
 		}
 
-		if err := advancer.tryAdvanceAndAcquireMem(
-			false,
-			pos.Valid(),
-		); err != nil {
+		if err := advancer.tryAdvanceAndAcquireMem(false, pos.Valid()); err != nil {
 			return errors.Trace(err)
 		}
 	}

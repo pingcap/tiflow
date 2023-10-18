@@ -196,7 +196,9 @@ func (m *Manager) Tick(ctx context.Context,
 
 	activeUpstreams := make(map[uint64]struct{})
 	for _, cf := range globalState.Changefeeds {
-		activeUpstreams[cf.Info.UpstreamID] = struct{}{}
+		if cf != nil && cf.Info != nil {
+			activeUpstreams[cf.Info.UpstreamID] = struct{}{}
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -118,6 +118,8 @@ service Master {
   rpc GetValidationError(GetValidationErrorRequest) returns(GetValidationErrorResponse) {}
 
   rpc OperateValidationError(OperateValidationErrorRequest) returns(OperateValidationErrorResponse) {}
+
+  rpc UpdateValidation(UpdateValidationRequest) returns(UpdateValidationResponse) {}
 }
 
 message StartTaskRequest {
@@ -515,3 +517,15 @@ message StopValidationResponse {
     repeated CommonWorkerResponse sources = 3;
 }
 
+message UpdateValidationRequest {
+  string taskName = 1;
+  repeated string sources = 2;
+  string binlogPos = 3; // binlog-pos (that's file:pos format)
+  string binlogGTID = 4;
+}
+
+message UpdateValidationResponse {
+  bool result = 1;
+  string msg = 2;
+  repeated CommonWorkerResponse sources = 3;
+}
