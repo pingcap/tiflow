@@ -275,6 +275,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				DispatcherRule: "",
 				PartitionRule:  rule.PartitionRule,
 				IndexName:      rule.IndexName,
+				Columns:        rule.Columns,
 				TopicRule:      rule.TopicRule,
 			})
 		}
@@ -554,6 +555,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				Matcher:       rule.Matcher,
 				PartitionRule: rule.PartitionRule,
 				IndexName:     rule.IndexName,
+				Columns:       rule.Columns,
 				TopicRule:     rule.TopicRule,
 			})
 		}
@@ -915,9 +917,10 @@ type LargeMessageHandleConfig struct {
 // This is a duplicate of config.DispatchRule
 type DispatchRule struct {
 	Matcher       []string `json:"matcher,omitempty"`
-	PartitionRule string   `json:"partition"`
-	IndexName     string   `json:"index"`
-	TopicRule     string   `json:"topic"`
+	PartitionRule string   `json:"partition,omitempty"`
+	IndexName     string   `json:"index,omitempty"`
+	Columns       []string `json:"columns,omitempty"`
+	TopicRule     string   `json:"topic,omitempty"`
 }
 
 // ColumnSelector represents a column selector for a table.

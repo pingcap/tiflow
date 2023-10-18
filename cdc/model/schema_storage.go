@@ -316,18 +316,50 @@ func (ti *TableInfo) Clone() *TableInfo {
 	return WrapTableInfo(ti.SchemaID, ti.TableName.Schema, ti.Version, ti.TableInfo.Clone())
 }
 
-// IndexByName returns the index columns and offsets of the corresponding index by name
-func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
+// GetIndex return the corresponding index by the given name.
+func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
 	for _, index := range ti.Indices {
-		if index.Name.O == name {
-			names := make([]string, 0, len(index.Columns))
-			offset := make([]int, 0, len(index.Columns))
-			for _, col := range index.Columns {
-				names = append(names, col.Name.O)
-				offset = append(offset, col.Offset)
-			}
-			return names, offset, true
+		if index != nil && index.Name.O == name {
+			return index
 		}
 	}
-	return nil, nil, false
+	return nil
+}
+
+// IndexByName returns the index columns and offsets of the corresponding index by name
+func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
+	index := ti.GetIndex(name)
+	if index == nil {
+		return nil, nil, false
+	}
+	names := make([]string, 0, len(index.Columns))
+	offset := make([]int, 0, len(index.Columns))
+	for _, col := range index.Columns {
+		names = append(names, col.Name.O)
+		offset = append(offset, col.Offset)
+	}
+	return names, offset, true
+}
+
+// ColumnsByNames returns the column offsets of the corresponding columns by names
+// If any column does not exist, return false
+func (ti *TableInfo) ColumnsByNames(names []string) ([]int, bool) {
+	// todo: optimize it
+	columnOffsets := make(map[string]int, len(ti.Columns))
+	for _, col := range ti.Columns {
+		if col != nil {
+			columnOffsets[col.Name.O] = col.Offset
+		}
+	}
+
+	result := make([]int, 0, len(names))
+	for _, col := range names {
+		offset, ok := columnOffsets[col]
+		if !ok {
+			return nil, false
+		}
+		result = append(result, offset)
+	}
+
+	return result, true
 }
