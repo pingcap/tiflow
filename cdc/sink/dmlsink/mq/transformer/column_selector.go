@@ -33,5 +33,7 @@ func NewColumnSelector(replicaConfig *config.ReplicaConfig) (*columnSelector, er
 
 // Transform implements Transformer interface.
 func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
+	// caution: after filter out columns, original columns should still keep at the same offset
+	// to prevent column dispatcher visit wrong column data.
 	return nil
 }
