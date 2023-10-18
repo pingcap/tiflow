@@ -425,11 +425,20 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	var errIn error
 	var infos map[model.ChangeFeedID]*model.ChangeFeedInfo
 	done := make(chan struct{})
 	go func() {
-		infos, errIn = statusProvider.GetAllChangeFeedInfo(ctx1)
+		info1, err := statusProvider.GetChangeFeedInfo(ctx1, cf1)
+		require.Nil(t, err)
+		info2, err := statusProvider.GetChangeFeedInfo(ctx1, cf2)
+		require.Nil(t, err)
+		info3, err := statusProvider.GetChangeFeedInfo(ctx1, cf3)
+		require.Nil(t, err)
+		infos = map[model.ChangeFeedID]*model.ChangeFeedInfo{
+			cf1: info1,
+			cf2: info2,
+			cf3: info3,
+		}
 		done <- struct{}{}
 	}()
 
@@ -447,7 +456,6 @@ WorkLoop:
 			require.Nil(t, err)
 		}
 	}
-	require.Nil(t, errIn)
 	require.NotNil(t, infos[cf1])
 	require.NotNil(t, infos[cf2])
 	require.NotNil(t, infos[cf3])
