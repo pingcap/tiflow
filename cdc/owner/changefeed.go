@@ -623,14 +623,9 @@ LOOP2:
 		}()
 	}
 
-	redoMetaManager, err := redo.NewMetaManager(cancelCtx,
-		c.id,
-		c.latestInfo.Config.Consistent)
-	if err != nil {
-		return err
-	}
-	redoMetaManager.SetStartTs(checkpointTs)
+	c.redoMetaMgr = redo.NewMetaManager(c.id, c.latestInfo.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
+		// todo: how to initialize this resolved ts ?
 		c.resolvedTs = c.redoMetaMgr.GetFlushedMeta().ResolvedTs
 		c.wg.Add(1)
 		go func() {
@@ -799,15 +794,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
-			redoMetaMgr, err := redo.NewMetaManager(ctx, c.id, cfInfo.Config.Consistent)
-			if err != nil {
-				log.Info("owner creates redo manager for clean fail",
-					zap.String("namespace", c.id.Namespace),
-					zap.String("changefeed", c.id.ID),
-					zap.Error(err))
-				return
-			}
-			c.redoMetaMgr = redoMetaMgr
+			c.redoMetaMgr = redo.NewMetaManager(c.id, cfInfo.Config.Consistent, 0)
 		}
 		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {

@@ -65,7 +65,7 @@ type metaManager struct {
 	startTs model.Ts
 
 	lastFlushTime          time.Time
-	flushIntervalInMs      int64
+	cfg                    *config.ConsistentConfig
 	metricFlushLogDuration prometheus.Observer
 }
 
@@ -77,43 +77,22 @@ func NewDisabledMetaManager() *metaManager {
 }
 
 // NewMetaManager creates a new meta Manager.
-func NewMetaManager(ctx context.Context, changefeedID model.ChangeFeedID,
-	cfg *config.ConsistentConfig,
-) (*metaManager, error) {
+func NewMetaManager(
+	changefeedID model.ChangeFeedID, cfg *config.ConsistentConfig, checkpoint model.Ts,
+) *metaManager {
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
-		return &metaManager{enabled: false}, nil
+		return &metaManager{enabled: false}
 	}
 
-	m := &metaManager{
-		captureID:         config.GetGlobalServerConfig().AdvertiseAddr,
-		changeFeedID:      changefeedID,
-		uuidGenerator:     uuid.NewGenerator(),
-		enabled:           true,
-		flushIntervalInMs: cfg.FlushIntervalInMs,
+	return &metaManager{
+		captureID:     config.GetGlobalServerConfig().AdvertiseAddr,
+		changeFeedID:  changefeedID,
+		uuidGenerator: uuid.NewGenerator(),
+		enabled:       true,
+		cfg:           cfg,
+		startTs:       checkpoint,
 	}
-
-	uri, err := storage.ParseRawURL(cfg.Storage)
-	if err != nil {
-		return nil, err
-	}
-	if redo.IsBlackholeStorage(uri.Scheme) {
-		return m, nil
-	}
-
-	// "nfs" and "local" scheme are converted to "file" scheme
-	redo.FixLocalScheme(uri)
-	extStorage, err := redo.InitExternalStorage(ctx, *uri)
-	if err != nil {
-		return nil, err
-	}
-	m.extStorage = extStorage
-	return m, nil
-}
-
-// SetStartTs sets the startTs of the redo log meta manager.
-func (m *metaManager) SetStartTs(startTs model.Ts) {
-	m.startTs = startTs
 }
 
 // Enabled returns whether this log manager is enabled
@@ -123,10 +102,18 @@ func (m *metaManager) Enabled() bool {
 
 // Run runs bgFlushMeta and bgGC.
 func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
-	if m.extStorage == nil {
-		log.Warn("extStorage of redo meta manager is nil, skip running")
-		return nil
+	uri, err := storage.ParseRawURL(m.cfg.Storage)
+	if err != nil {
+		return err
 	}
+	// "nfs" and "local" scheme are converted to "file" scheme
+	redo.FixLocalScheme(uri)
+
+	extStorage, err := redo.InitExternalStorage(ctx, *uri)
+	if err != nil {
+		return err
+	}
+	m.extStorage = extStorage
 
 	m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
 		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
@@ -147,7 +134,7 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		return m.bgFlushMeta(egCtx, m.flushIntervalInMs)
+		return m.bgFlushMeta(egCtx, m.cfg.FlushIntervalInMs)
 	})
 	eg.Go(func() error {
 		return m.bgGC(egCtx)

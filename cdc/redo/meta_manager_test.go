@@ -50,17 +50,18 @@ func TestInitAndWriteMeta(t *testing.T) {
 		{CheckpointTs: 8, ResolvedTs: 9},
 		{CheckpointTs: 9, ResolvedTs: 11},
 	}
-	toReomoveFiles := []string{}
+
+	var toRemoveFiles []string
 	for _, meta := range metas {
 		data, err := meta.MarshalMsg(nil)
 		require.NoError(t, err)
 		metaName := getMetafileName(captureID, changefeedID, uuid.NewGenerator())
 		err = extStorage.WriteFile(ctx, metaName, data)
 		require.NoError(t, err)
-		toReomoveFiles = append(toReomoveFiles, metaName)
+		toRemoveFiles = append(toRemoveFiles, metaName)
 	}
-	// err = extStorage.WriteFile(ctx, getDeletedChangefeedMarker(changefeedID), []byte{})
-	notRemoveFiles := []string{}
+
+	var notRemoveFiles []string
 	require.NoError(t, err)
 	for i := 0; i < 10; i++ {
 		fileName := "dummy" + getChangefeedMatcher(changefeedID) + strconv.Itoa(i)
@@ -76,12 +77,10 @@ func TestInitAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m, err := NewMetaManager(ctx, changefeedID, cfg)
-	require.NoError(t, err)
-	m.SetStartTs(startTs)
+	m := NewMetaManager(changefeedID, cfg, startTs)
 	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
 	require.Equal(t, uint64(11), m.metaResolvedTs.getFlushed())
-	for _, fileName := range toReomoveFiles {
+	for _, fileName := range toRemoveFiles {
 		ret, err := extStorage.FileExists(ctx, fileName)
 		require.NoError(t, err)
 		require.False(t, ret, "file %s should be removed", fileName)
@@ -141,9 +140,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m, err := NewMetaManager(ctx, changefeedID, cfg)
-	require.NoError(t, err)
-	m.SetStartTs(startTs)
+	m := NewMetaManager(changefeedID, cfg, startTs)
 	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
 	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
 	for _, fileName := range toRemoveFiles {
@@ -267,9 +264,7 @@ func TestGCAndCleanup(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m, err := NewMetaManager(ctx, changefeedID, cfg)
-	require.NoError(t, err)
-	m.SetStartTs(startTs)
+	m := NewMetaManager(changefeedID, cfg, startTs)
 	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
 	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
 
