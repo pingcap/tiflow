@@ -119,7 +119,10 @@ func newSink(ctx context.Context,
 
 		if err != nil {
 			if errors.Cause(err) == context.Canceled {
-				err = context.Cause(ctx)
+				if s.cancelErr == nil {
+					return
+				}
+				err = s.cancelErr
 			}
 			select {
 			case errCh <- err:
