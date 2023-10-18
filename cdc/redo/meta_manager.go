@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -52,6 +53,8 @@ type metaManager struct {
 	captureID    model.CaptureID
 	changeFeedID model.ChangeFeedID
 	enabled      bool
+
+	initialized atomic.Bool
 
 	metaCheckpointTs statefulRts
 	metaResolvedTs   statefulRts
@@ -98,6 +101,12 @@ func NewMetaManager(
 // Enabled returns whether this log manager is enabled
 func (m *metaManager) Enabled() bool {
 	return m.enabled
+}
+
+// Initialized return whether the meta manager is initialized,
+// which means the external storage is accessible to the meta manager.
+func (m *metaManager) Initialized() bool {
+	return m.initialized.Load()
 }
 
 // Run runs bgFlushMeta and bgGC.
