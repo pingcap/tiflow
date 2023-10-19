@@ -42,6 +42,7 @@ import (
 	eventsinkfactory "github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	"github.com/pingcap/tiflow/cmd/kafka-consumer/flowcontrol"
 	cmdUtil "github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -446,6 +447,8 @@ type Consumer struct {
 	sinks       []*partitionSinks
 	sinksMu     sync.Mutex
 
+	flowController *flowcontrol.FlowController
+
 	// initialize to 0 by default
 	globalResolvedTs uint64
 
@@ -459,6 +462,10 @@ type Consumer struct {
 
 	upstreamTiDB *sql.DB
 }
+
+const (
+	defaultMemoryQuotaInBytes = 4 * 1024 * 1024 * 1024 // 4GB
+)
 
 // NewConsumer creates a new cdc kafka consumer
 func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
@@ -503,6 +510,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		c.eventRouter = eventRouter
 	}
 
+	c.flowController = flowcontrol.NewFlowController(defaultMemoryQuotaInBytes)
 	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
@@ -669,6 +677,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					log.Panic("decode message value failed",
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
+				}
+				err = c.flowController.Consume(row, uint64(row.ApproximateBytes()), func(batch bool) error {
+
+				})
+				if err != nil {
+					return errors.Trace(err)
 				}
 
 				if c.eventRouter != nil {
@@ -867,7 +881,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
 			if err := c.forEachSink(func(sink *partitionSinks) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+				return c.syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
 				return errors.Trace(err)
 			}
@@ -898,14 +912,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		if err := c.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
+			return c.syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 		}); err != nil {
 			return errors.Trace(err)
 		}
 	}
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
+func (c *Consumer) syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -930,6 +944,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolv
 			return true
 		})
 		if flushedResolvedTs {
+			c.flowController.Release(resolvedTs)
 			return nil
 		}
 	}
