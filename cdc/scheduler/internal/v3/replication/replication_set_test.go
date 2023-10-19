@@ -220,10 +220,7 @@ func TestNewReplicationSet(t *testing.T) {
 	for id, tc := range testcases {
 		set := tc.set
 		status := tc.tableStatus
-		checkpoint := tablepb.Checkpoint{
-			CheckpointTs: tc.checkpoint,
-			ResolvedTs:   tc.checkpoint,
-		}
+		checkpoint := tc.checkpoint
 
 		span := tablepb.Span{TableID: 0}
 		output, err := NewReplicationSet(span, checkpoint, status, model.ChangeFeedID{})
@@ -271,7 +268,7 @@ func TestReplicationSetPoll(t *testing.T) {
 			}
 		}
 		span := tablepb.Span{TableID: 1}
-		r, _ := NewReplicationSet(span, tablepb.Checkpoint{}, status, model.ChangeFeedID{})
+		r, _ := NewReplicationSet(span, 0, status, model.ChangeFeedID{})
 		var tableStates []int
 		for state := range tablepb.TableState_name {
 			tableStates = append(tableStates, int(state))
@@ -303,7 +300,7 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 
 	tableID := model.TableID(1)
 	span := tablepb.Span{TableID: tableID}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, map[model.CaptureID]*tablepb.TableStatus{
+	r, err := NewReplicationSet(span, 0, map[model.CaptureID]*tablepb.TableStatus{
 		"1": {
 			Span:       tablepb.Span{TableID: tableID},
 			State:      tablepb.TableStateReplicating,
@@ -340,7 +337,7 @@ func TestReplicationSetAddTable(t *testing.T) {
 	from := "1"
 	tableID := model.TableID(1)
 	span := tablepb.Span{TableID: tableID}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Absent -> Prepare
@@ -485,7 +482,7 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 	from := "1"
 	tableID := model.TableID(1)
 	span := tablepb.Span{TableID: tableID}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Ignore removing table if it's not in replicating.
@@ -566,7 +563,7 @@ func TestReplicationSetMoveTable(t *testing.T) {
 
 	tableID := model.TableID(1)
 	span := tablepb.Span{TableID: tableID}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
@@ -798,7 +795,7 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 	from := "1"
 	tableID := model.TableID(1)
 	span := tablepb.Span{TableID: tableID}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	// Add table, Absent -> Prepare
@@ -1104,7 +1101,7 @@ func TestReplicationSetCaptureShutdownAfterReconstructCommitState(t *testing.T) 
 		from: {Span: tablepb.Span{TableID: tableID}, State: tablepb.TableStatePrepared},
 	}
 	span := tablepb.Span{TableID: tableID}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, tableStatus, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, "", r.Primary)
@@ -1125,7 +1122,7 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 
 	tableID := model.TableID(1)
 	span := tablepb.Span{TableID: tableID}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
@@ -1213,7 +1210,7 @@ func TestReplicationSetMoveTableSameDestCapture(t *testing.T) {
 
 	tableID := model.TableID(1)
 	span := tablepb.Span{TableID: tableID}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, nil, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
 	require.Nil(t, err)
 
 	source := "1"
@@ -1246,7 +1243,7 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 		},
 	}
 	span := tablepb.Span{TableID: 0}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, tableStatus, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.EqualValues(t, RoleSecondary, r.Captures["1"])
@@ -1329,7 +1326,7 @@ func TestReplicationSetRemoveRestart(t *testing.T) {
 		},
 	}
 	span := tablepb.Span{TableID: 0}
-	r, err := NewReplicationSet(span, tablepb.Checkpoint{}, tableStatus, model.ChangeFeedID{})
+	r, err := NewReplicationSet(span, 0, tableStatus, model.ChangeFeedID{})
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateRemoving, r.State)
 	require.False(t, r.hasRole(RoleSecondary))

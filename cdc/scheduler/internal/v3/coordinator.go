@@ -338,7 +338,7 @@ func (c *coordinator) poll(
 	currentSpans := c.reconciler.Reconcile(
 		ctx, &c.tableRanges, replications, c.captureM.Captures, c.compat)
 	allTasks := c.schedulerM.Schedule(
-		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks, c.redoMetaManager)
+		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks)
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)
