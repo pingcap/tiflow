@@ -1045,9 +1045,13 @@ func (c *memoryQuota) consumeWithBlocking(nBytes uint64) error {
 			return errFlowControllerAborted
 		}
 
-		if c.consumed.bytes+nBytes < c.quota {
+		newConsumed := c.consumed.bytes + nBytes
+		if newConsumed < c.quota {
 			break
 		}
+		log.Info("flow control: waiting for memory quota",
+			zap.Uint64("newConsumed", newConsumed),
+			zap.Uint64("quota", c.quota))
 		c.consumedCond.Wait()
 	}
 
