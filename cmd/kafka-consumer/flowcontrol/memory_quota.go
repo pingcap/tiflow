@@ -23,7 +23,7 @@ import (
 )
 
 var (
-	ErrFlowControllerLargerThanQuota = errors.New("flow controller request memory larger than quota")
+	errFlowControllerLargerThanQuota = errors.New("flow controller request memory larger than quota")
 	ErrorFlowControllerAborted       = errors.New("flow controller aborted")
 )
 
@@ -59,7 +59,7 @@ func newMemoryQuota(quota uint64) *MemoryQuota {
 // Should be used with care to prevent deadlock.
 func (c *MemoryQuota) consumeWithBlocking(nBytes uint64) error {
 	if nBytes >= c.quota {
-		return ErrFlowControllerLargerThanQuota
+		return errFlowControllerLargerThanQuota
 	}
 
 	c.consumed.Lock()
@@ -74,20 +74,6 @@ func (c *MemoryQuota) consumeWithBlocking(nBytes uint64) error {
 			break
 		}
 		c.consumedCond.Wait()
-	}
-
-	c.consumed.bytes += nBytes
-	return nil
-}
-
-// forceConsume is called when blocking is not acceptable and the limit can be violated
-// for the sake of avoid deadlock. It merely records the increased memory consumption.
-func (c *MemoryQuota) forceConsume(nBytes uint64) error {
-	c.consumed.Lock()
-	defer c.consumed.Unlock()
-
-	if c.isAborted.Load() {
-		return ErrorFlowControllerAborted
 	}
 
 	c.consumed.bytes += nBytes
@@ -113,18 +99,4 @@ func (c *MemoryQuota) release(nBytes uint64) {
 	}
 
 	c.consumed.Unlock()
-}
-
-// abort interrupts any ongoing consumeWithBlocking call
-func (c *MemoryQuota) abort() {
-	c.isAborted.Store(true)
-	c.consumedCond.Signal()
-}
-
-// getConsumption returns the current memory consumption
-func (c *MemoryQuota) getConsumption() uint64 {
-	c.consumed.Lock()
-	defer c.consumed.Unlock()
-
-	return c.consumed.bytes
 }

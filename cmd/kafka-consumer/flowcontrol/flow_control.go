@@ -56,7 +56,13 @@ func (c *FlowController) Consume(commitTs uint64, size uint64) error {
 		return errors.Trace(err)
 	}
 
-	c.enqueueSingleMsg(commitTs, size)
+	c.queueMu.Lock()
+	defer c.queueMu.Unlock()
+
+	c.queueMu.queue.PushBack(&entry{
+		commitTs: commitTs,
+		size:     size,
+	})
 
 	return nil
 }
@@ -77,25 +83,4 @@ func (c *FlowController) Release(resolvedTs uint64) {
 	c.queueMu.Unlock()
 
 	c.memoryQuota.release(nBytesToRelease)
-}
-
-// Note that msgs received by enqueueSingleMsg must be sorted by commitTs_startTs order.
-func (c *FlowController) enqueueSingleMsg(commitTs, size uint64) {
-	c.queueMu.Lock()
-	defer c.queueMu.Unlock()
-
-	c.queueMu.queue.PushBack(&entry{
-		commitTs: commitTs,
-		size:     size,
-	})
-}
-
-// Abort interrupts any ongoing Consume call
-func (c *FlowController) Abort() {
-	c.memoryQuota.abort()
-}
-
-// GetConsumption returns the current memory consumption
-func (c *FlowController) GetConsumption() uint64 {
-	return c.memoryQuota.getConsumption()
 }

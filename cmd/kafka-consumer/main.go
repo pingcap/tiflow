@@ -431,6 +431,8 @@ type partitionSinks struct {
 	tableSinksMap     sync.Map
 	// resolvedTs record the maximum timestamp of the received event
 	resolvedTs uint64
+
+	flowController *flowcontrol.FlowController
 }
 
 // Consumer represents a Sarama consumer group consumer
@@ -447,8 +449,6 @@ type Consumer struct {
 	sinkFactory *eventsinkfactory.SinkFactory
 	sinks       []*partitionSinks
 	sinksMu     sync.Mutex
-
-	flowController *flowcontrol.FlowController
 
 	// initialize to 0 by default
 	globalResolvedTs uint64
@@ -511,12 +511,15 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		c.eventRouter = eventRouter
 	}
 
-	c.flowController = flowcontrol.NewFlowController(defaultMemoryQuotaInBytes)
 	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
 	errChan := make(chan error, 1)
+
+	memoryQuotaPerPartition := defaultMemoryQuotaInBytes / int(o.partitionNum)
 	for i := 0; i < int(o.partitionNum); i++ {
-		c.sinks[i] = &partitionSinks{}
+		c.sinks[i] = &partitionSinks{
+			flowController: flowcontrol.NewFlowController(uint64(memoryQuotaPerPartition)),
+		}
 	}
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
@@ -679,14 +682,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-				err = c.flowController.Consume(row.CommitTs, uint64(row.ApproximateBytes()))
-				if err != nil {
-					if errors.Is(err, flowcontrol.ErrorFlowControllerAborted) {
-						log.Info("flow control aborted")
-						return nil
-					}
-					return cerror.Trace(err)
-				}
 
 				if c.eventRouter != nil {
 					target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
@@ -733,6 +728,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				group.Append(row)
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
+
+				err = sink.flowController.Consume(row.CommitTs, uint64(row.ApproximateBytes()))
+				if err != nil {
+					if errors.Is(err, flowcontrol.ErrorFlowControllerAborted) {
+						log.Info("flow control aborted")
+						return nil
+					}
+					return cerror.Trace(err)
+				}
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -884,7 +888,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
 			// flush DMLs
 			if err := c.forEachSink(func(sink *partitionSinks) error {
-				return c.syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
 				return cerror.Trace(err)
 			}
@@ -915,14 +919,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		if err := c.forEachSink(func(sink *partitionSinks) error {
-			return c.syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
+			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 		}); err != nil {
 			return cerror.Trace(err)
 		}
 	}
 }
 
-func (c *Consumer) syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
+func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -947,7 +951,7 @@ func (c *Consumer) syncFlushRowChangedEvents(ctx context.Context, sink *partitio
 			return true
 		})
 		if flushedResolvedTs {
-			c.flowController.Release(resolvedTs)
+			sink.flowController.Release(resolvedTs)
 			return nil
 		}
 	}
