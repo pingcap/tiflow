@@ -54,6 +54,8 @@ type metaManager struct {
 	changeFeedID model.ChangeFeedID
 	enabled      bool
 
+	// initialized means the meta manager now works normally.
+	// todo: how to use this fields ?
 	initialized atomic.Bool
 
 	metaCheckpointTs statefulRts
@@ -109,8 +111,7 @@ func (m *metaManager) Initialized() bool {
 	return m.initialized.Load()
 }
 
-// Run runs bgFlushMeta and bgGC.
-func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
+func (m *metaManager) preStart(ctx context.Context) error {
 	uri, err := storage.ParseRawURL(m.cfg.Storage)
 	if err != nil {
 		return err
@@ -126,6 +127,7 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 
 	m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
 		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
+
 	if err := m.preCleanupExtStorage(ctx); err != nil {
 		log.Warn("pre clean redo logs fail",
 			zap.String("namespace", m.changeFeedID.Namespace),
@@ -141,6 +143,14 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 		return err
 	}
 
+	return nil
+}
+
+// Run runs bgFlushMeta and bgGC.
+func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
+	if err := m.preStart(ctx); err != nil {
+		return err
+	}
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return m.bgFlushMeta(egCtx, m.cfg.FlushIntervalInMs)
@@ -148,6 +158,8 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	eg.Go(func() error {
 		return m.bgGC(egCtx)
 	})
+
+	m.initialized.Store(true)
 	return eg.Wait()
 }
 
@@ -180,8 +192,8 @@ func (m *metaManager) GetFlushedMeta() common.LogMeta {
 	return common.LogMeta{CheckpointTs: checkpointTs, ResolvedTs: resolvedTs}
 }
 
-// initMeta will read the meta file from external storage and initialize the meta
-// field of metaManager.
+// initMeta will read the meta file from external storage and
+// use it to initialize the meta field of the metaManager.
 func (m *metaManager) initMeta(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -209,20 +221,17 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 			}
 			return nil
 		}
-		if len(data) != 0 {
-			var meta common.LogMeta
-			_, err = meta.UnmarshalMsg(data)
-			if err != nil {
-				log.Error("redo: unmarshal meta data failed", zap.Error(err), zap.ByteString("data", data))
-				return err
-			}
-			metas = append(metas, &meta)
+		var meta common.LogMeta
+		_, err = meta.UnmarshalMsg(data)
+		if err != nil {
+			log.Error("redo: unmarshal meta data failed", zap.Error(err), zap.ByteString("data", data))
+			return err
 		}
+		metas = append(metas, &meta)
 		return nil
 	})
 	if err != nil {
-		return errors.WrapError(errors.ErrRedoMetaInitialize,
-			errors.Annotate(err, "read meta file fail"))
+		return errors.WrapError(errors.ErrRedoMetaInitialize, err)
 	}
 
 	var checkpointTs, resolvedTs uint64
@@ -235,8 +244,7 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 	m.metaResolvedTs.unflushed = resolvedTs
 	m.metaCheckpointTs.unflushed = checkpointTs
 	if err := m.maybeFlushMeta(ctx); err != nil {
-		return errors.WrapError(errors.ErrRedoMetaInitialize,
-			errors.Annotate(err, "flush meta file fail"))
+		return errors.WrapError(errors.ErrRedoMetaInitialize, err)
 	}
 	return util.DeleteFilesInExtStorage(ctx, m.extStorage, toRemoveMetaFiles)
 }
@@ -374,6 +382,10 @@ func (m *metaManager) flush(ctx context.Context, meta common.LogMeta) error {
 	}
 	metaFile := getMetafileName(m.captureID, m.changeFeedID, m.uuidGenerator)
 	if err := m.extStorage.WriteFile(ctx, metaFile, data); err != nil {
+		log.Error("redo: meta manager flush meta write file failed",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
+			zap.Error(err))
 		return errors.WrapError(errors.ErrExternalStorageAPI, err)
 	}
 
@@ -384,6 +396,10 @@ func (m *metaManager) flush(ctx context.Context, meta common.LogMeta) error {
 		}
 		err := m.extStorage.DeleteFile(ctx, m.preMetaFile)
 		if err != nil && !util.IsNotExistInExtStorage(err) {
+			log.Error("redo: meta manager flush meta delete file failed",
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID),
+				zap.Error(err))
 			return errors.WrapError(errors.ErrExternalStorageAPI, err)
 		}
 	}

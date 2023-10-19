@@ -78,8 +78,20 @@ func TestInitAndWriteMeta(t *testing.T) {
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
 	m := NewMetaManager(changefeedID, cfg, startTs)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, uint64(11), m.metaResolvedTs.getFlushed())
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return m.Run(ctx)
+	})
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaCheckpointTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return uint64(11) == m.metaResolvedTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
 	for _, fileName := range toRemoveFiles {
 		ret, err := extStorage.FileExists(ctx, fileName)
 		require.NoError(t, err)
@@ -91,7 +103,10 @@ func TestInitAndWriteMeta(t *testing.T) {
 		require.True(t, ret, "file %s should not be removed", fileName)
 	}
 
-	testWriteMeta(t, m)
+	testWriteMeta(t, ctx, m)
+
+	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
 func TestPreCleanupAndWriteMeta(t *testing.T) {
@@ -114,7 +129,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		{CheckpointTs: 9, ResolvedTs: 11},
 		{CheckpointTs: 11, ResolvedTs: 12},
 	}
-	toRemoveFiles := []string{}
+	var toRemoveFiles []string
 	for _, meta := range metas {
 		data, err := meta.MarshalMsg(nil)
 		require.NoError(t, err)
@@ -141,22 +156,35 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
 	m := NewMetaManager(changefeedID, cfg, startTs)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return m.Run(ctx)
+	})
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaCheckpointTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaResolvedTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
 	for _, fileName := range toRemoveFiles {
 		ret, err := extStorage.FileExists(ctx, fileName)
 		require.NoError(t, err)
 		require.False(t, ret, "file %s should be removed", fileName)
 	}
-	testWriteMeta(t, m)
+	testWriteMeta(t, ctx, m)
+
+	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
-func testWriteMeta(t *testing.T, m *metaManager) {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	checkMeta := func(targetCkpts, targetRts uint64) {
+func testWriteMeta(t *testing.T, ctx context.Context, m *metaManager) {
+	checkMeta := func(targetCheckpointTs, targetResolvedTs uint64) {
 		var checkpointTs, resolvedTs uint64
-		metas := []*common.LogMeta{}
+		var metas []*common.LogMeta
 		cnt := 0
 		m.extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
 			if !strings.HasSuffix(path, redo.MetaEXT) {
@@ -173,14 +201,10 @@ func testWriteMeta(t *testing.T, m *metaManager) {
 		})
 		require.Equal(t, 1, cnt)
 		common.ParseMeta(metas, &checkpointTs, &resolvedTs)
-		require.Equal(t, targetCkpts, checkpointTs)
-		require.Equal(t, targetRts, resolvedTs)
+		require.Equal(t, targetCheckpointTs, checkpointTs)
+		require.Equal(t, targetResolvedTs, resolvedTs)
 	}
 
-	eg := errgroup.Group{}
-	eg.Go(func() error {
-		return m.Run(ctx)
-	})
 	// test both regressed
 	meta := m.GetFlushedMeta()
 	m.UpdateMeta(1, 2)
@@ -206,9 +230,6 @@ func testWriteMeta(t *testing.T, m *metaManager) {
 		return m.metaCheckpointTs.getFlushed() == 16
 	}, time.Second, 50*time.Millisecond)
 	checkMeta(16, 21)
-
-	cancel()
-	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
 func TestGCAndCleanup(t *testing.T) {
@@ -265,13 +286,20 @@ func TestGCAndCleanup(t *testing.T) {
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
 	m := NewMetaManager(changefeedID, cfg, startTs)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
 
-	eg := errgroup.Group{}
+	var eg errgroup.Group
 	eg.Go(func() error {
 		return m.Run(ctx)
 	})
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaCheckpointTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaResolvedTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
 	checkGC(startTs)
 
 	for i := startTs; i <= uint64(maxCommitTs); i++ {
