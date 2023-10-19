@@ -96,7 +96,7 @@ func (cfg *MetaStoreConfiguration) GenDSN() (*dmysql.Config, error) {
 	// create test db used for parameter detection
 	// Refer https://github.com/go-sql-driver/mysql#parameters
 	if dsn.Params == nil {
-		dsn.Params = make(map[string]string, 1)
+		dsn.Params = make(map[string]string)
 	}
 	// enable parseTime for time.Time type
 	dsn.Params["parseTime"] = "true"
