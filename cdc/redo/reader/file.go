@@ -232,6 +232,7 @@ func sortAndWriteFile(
 	fileName string, cfg *readerConfig,
 ) error {
 	sortedName := getSortedFileName(fileName)
+	// todo: add uri
 	writerCfg := &writer.LogWriterConfig{
 		Dir:               cfg.dir,
 		MaxLogSizeInBytes: math.MaxInt32,

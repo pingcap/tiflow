@@ -103,7 +103,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 		require.True(t, ret, "file %s should not be removed", fileName)
 	}
 
-	testWriteMeta(t, ctx, m)
+	testWriteMeta(ctx, t, m)
 
 	cancel()
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
@@ -175,13 +175,13 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, ret, "file %s should be removed", fileName)
 	}
-	testWriteMeta(t, ctx, m)
+	testWriteMeta(ctx, t, m)
 
 	cancel()
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
-func testWriteMeta(t *testing.T, ctx context.Context, m *metaManager) {
+func testWriteMeta(ctx context.Context, t *testing.T, m *metaManager) {
 	checkMeta := func(targetCheckpointTs, targetResolvedTs uint64) {
 		var checkpointTs, resolvedTs uint64
 		var metas []*common.LogMeta

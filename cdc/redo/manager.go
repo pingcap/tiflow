@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo/common"
@@ -65,20 +64,17 @@ func NewDisabledDDLManager() *ddlManager {
 
 // NewDDLManager creates a new ddl Manager.
 func NewDDLManager(
-	ctx context.Context, changefeedID model.ChangeFeedID,
+	changefeedID model.ChangeFeedID,
 	cfg *config.ConsistentConfig, ddlStartTs model.Ts,
-) (*ddlManager, error) {
-	logManager, err := newLogManager(ctx, changefeedID, cfg, redo.RedoDDLLogFileType)
-	if err != nil {
-		return nil, err
-	}
+) *ddlManager {
+	m := newLogManager(changefeedID, cfg, redo.RedoDDLLogFileType)
 	span := spanz.TableIDToComparableSpan(0)
-	logManager.AddTable(span, ddlStartTs)
+	m.AddTable(span, ddlStartTs)
 	return &ddlManager{
-		logManager: logManager,
-		// The current fakeSpan is meaningless, find a meaningful sapn in the future.
+		logManager: m,
+		// The current fakeSpan is meaningless, find a meaningful span in the future.
 		fakeSpan: span,
-	}, nil
+	}
 }
 
 type ddlManager struct {
@@ -115,14 +111,12 @@ type DMLManager interface {
 }
 
 // NewDMLManager creates a new dml Manager.
-func NewDMLManager(ctx context.Context, changefeedID model.ChangeFeedID,
+func NewDMLManager(changefeedID model.ChangeFeedID,
 	cfg *config.ConsistentConfig,
-) (*dmlManager, error) {
-	logManager, err := newLogManager(ctx, changefeedID, cfg, redo.RedoRowLogFileType)
-	if err != nil {
-		return nil, err
+) *dmlManager {
+	return &dmlManager{
+		logManager: newLogManager(changefeedID, cfg, redo.RedoRowLogFileType),
 	}
-	return &dmlManager{logManager: logManager}, nil
 }
 
 // NewDisabledDMLManager creates a disabled dml Manager.
@@ -206,6 +200,8 @@ type logManager struct {
 	cfg     *writer.LogWriterConfig
 	writer  writer.RedoLogWriter
 
+	initialized atomic.Bool
+
 	rwlock sync.RWMutex
 	// TODO: remove logBuffer and use writer directly after file logWriter is deprecated.
 	logBuffer *chann.DrainableChann[cacheEvents]
@@ -228,29 +224,22 @@ type logManager struct {
 }
 
 func newLogManager(
-	ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	cfg *config.ConsistentConfig, logType string,
-) (*logManager, error) {
+) *logManager {
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
-		return &logManager{enabled: false}, nil
+		return &logManager{enabled: false}
 	}
 
-	uri, err := storage.ParseRawURL(cfg.Storage)
-	if err != nil {
-		return nil, err
-	}
-	m := &logManager{
+	return &logManager{
 		enabled: true,
 		cfg: &writer.LogWriterConfig{
-			ConsistentConfig:   *cfg,
-			LogType:            logType,
-			CaptureID:          config.GetGlobalServerConfig().AdvertiseAddr,
-			ChangeFeedID:       changefeedID,
-			URI:                *uri,
-			UseExternalStorage: redo.IsExternalStorage(uri.Scheme),
-			MaxLogSizeInBytes:  cfg.MaxLogSize * redo.Megabyte,
+			ConsistentConfig:  *cfg,
+			LogType:           logType,
+			CaptureID:         config.GetGlobalServerConfig().AdvertiseAddr,
+			ChangeFeedID:      changefeedID,
+			MaxLogSizeInBytes: cfg.MaxLogSize * redo.Megabyte,
 		},
 		logBuffer: chann.NewAutoDrainChann[cacheEvents](),
 		rtsMap:    spanz.SyncMap{},
@@ -263,21 +252,35 @@ func newLogManager(
 		metricRedoWorkerBusyRatio: common.RedoWorkerBusyRatio.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
+}
 
-	m.writer, err = factory.NewRedoLogWriter(ctx, m.cfg)
+// Initialized return true if the log manager is fully initialized,
+// which means the external storage is accessible, and all running resource allocated.
+func (m *logManager) Initialized() bool {
+	return m.initialized.Load()
+}
+
+func (m *logManager) preStart(ctx context.Context) error {
+	w, err := factory.NewRedoLogWriter(ctx, m.cfg)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return m, nil
+	m.writer = w
+	m.initialized.Store(true)
+	return nil
 }
 
 // Run implements pkg/util.Runnable.
 func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
-	if m.Enabled() {
-		defer m.close()
-		return m.bgUpdateLog(ctx)
+	if !m.Enabled() {
+		return nil
 	}
-	return nil
+
+	defer m.close()
+	if err := m.preStart(ctx); err != nil {
+		return err
+	}
+	return m.bgUpdateLog(ctx)
 }
 
 // WaitForReady implements pkg/util.Runnable.
