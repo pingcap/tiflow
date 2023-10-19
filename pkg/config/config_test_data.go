@@ -161,7 +161,10 @@ const (
     "cdc-v2": {
       "enable": false,
       "meta-store": {
-        "uri": ""
+        "uri": "",
+        "ssl-ca": "",
+        "ssl-cert": "",
+        "ssl-key": ""
       }
     }
   },
