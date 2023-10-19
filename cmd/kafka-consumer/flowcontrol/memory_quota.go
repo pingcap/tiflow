@@ -14,13 +14,17 @@
 package flowcontrol
 
 import (
-	"fmt"
 	"sync"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+)
+
+var (
+	ErrFlowControllerLargerThanQuota = errors.New("flow controller request memory larger than quota")
+	ErrorFlowControllerAborted       = errors.New("flow controller aborted")
 )
 
 // MemoryQuota is designed to curb the total memory consumption of processing the events
@@ -53,22 +57,9 @@ func newMemoryQuota(quota uint64) *MemoryQuota {
 // block until enough memory has been freed up by release.
 // blockCallBack will be called if the function will block.
 // Should be used with care to prevent deadlock.
-func (c *MemoryQuota) consumeWithBlocking(
-	nBytes uint64, blockCallBack func(bool) error,
-) error {
+func (c *MemoryQuota) consumeWithBlocking(nBytes uint64) error {
 	if nBytes >= c.quota {
-		return fmt.Errorf("flow controller request memory larger than quota, request: %d, quota: %d", nBytes, c.quota)
-	}
-
-	c.consumed.Lock()
-	if c.consumed.bytes+nBytes >= c.quota {
-		c.consumed.Unlock()
-		err := blockCallBack(false)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	} else {
-		c.consumed.Unlock()
+		return ErrFlowControllerLargerThanQuota
 	}
 
 	c.consumed.Lock()
@@ -76,7 +67,7 @@ func (c *MemoryQuota) consumeWithBlocking(
 
 	for {
 		if c.isAborted.Load() {
-			return fmt.Errorf("flow controller aborted")
+			return ErrorFlowControllerAborted
 		}
 
 		if c.consumed.bytes+nBytes < c.quota {
@@ -96,7 +87,7 @@ func (c *MemoryQuota) forceConsume(nBytes uint64) error {
 	defer c.consumed.Unlock()
 
 	if c.isAborted.Load() {
-		return fmt.Errorf("flow controller aborted")
+		return ErrorFlowControllerAborted
 	}
 
 	c.consumed.bytes += nBytes

@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
@@ -34,7 +35,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
-	"github.com/pingcap/errors"
+	cerror "github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -196,10 +197,10 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		replicaConfig.Sink.Protocol = util.AddressOf(o.protocol.String())
 		err := cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 		if _, err := filter.VerifyTableRules(replicaConfig.Filter); err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 		o.replicaConfig = replicaConfig
 	}
@@ -353,19 +354,19 @@ func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32,
 	// get partition number or create topic automatically
 	admin, err := sarama.NewClusterAdmin(address, cfg)
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.Trace(err)
 	}
 	topics, err := admin.ListTopics()
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.Trace(err)
 	}
 	err = admin.Close()
 	if err != nil {
-		return 0, errors.Trace(err)
+		return 0, cerror.Trace(err)
 	}
 	topicDetail, exist := topics[topic]
 	if !exist {
-		return 0, errors.Errorf("can not find topic %s", topic)
+		return 0, cerror.Errorf("can not find topic %s", topic)
 	}
 	log.Info("get partition number of topic",
 		zap.String("topic", topic),
@@ -376,13 +377,13 @@ func getPartitionNum(address []string, topic string, cfg *sarama.Config) (int32,
 func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error {
 	admin, err := sarama.NewClusterAdmin(address, cfg)
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.Trace(err)
 	}
 	defer admin.Close()
 	for i := 0; i <= 30; i++ {
 		topics, err := admin.ListTopics()
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 		if _, ok := topics[topic]; ok {
 			return nil
@@ -390,7 +391,7 @@ func waitTopicCreated(address []string, topic string, cfg *sarama.Config) error 
 		log.Info("wait the topic created", zap.String("topic", topic))
 		time.Sleep(1 * time.Second)
 	}
-	return errors.Errorf("wait the topic(%s) created timeout", topic)
+	return cerror.Errorf("wait the topic(%s) created timeout", topic)
 }
 
 func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
@@ -398,7 +399,7 @@ func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
 
 	version, err := sarama.ParseKafkaVersion(o.version)
 	if err != nil {
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 
 	config.ClientID = "ticdc_kafka_sarama_consumer"
@@ -417,7 +418,7 @@ func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
 			KeyPath:  o.key,
 		}).ToTLSConfig()
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.Trace(err)
 		}
 	}
 
@@ -474,7 +475,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 
 	tz, err := util.GetTimezone(o.timezone)
 	if err != nil {
-		return nil, errors.Annotate(err, "can not load timezone")
+		return nil, cerror.Annotate(err, "can not load timezone")
 	}
 	config.GetGlobalServerConfig().TZ = o.timezone
 	c.tz = tz
@@ -505,7 +506,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	if o.replicaConfig != nil {
 		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
 		if err != nil {
-			return nil, errors.Trace(err)
+			return nil, cerror.Trace(err)
 		}
 		c.eventRouter = eventRouter
 	}
@@ -522,13 +523,13 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan)
 	if err != nil {
 		cancel()
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 	c.sinkFactory = f
 
 	go func() {
 		err := <-errChan
-		if errors.Cause(err) != context.Canceled {
+		if !errors.Is(cerror.Cause(err), context.Canceled) {
 			log.Error("error on running consumer", zap.Error(err))
 		} else {
 			log.Info("consumer exited")
@@ -539,7 +540,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	ddlSink, err := ddlsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig())
 	if err != nil {
 		cancel()
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 	c.ddlSink = ddlSink
 	c.ready = make(chan bool)
@@ -613,14 +614,14 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	case config.ProtocolAvro:
 		schemaM, err := avro.NewConfluentSchemaManager(ctx, c.option.schemaRegistryURI, nil)
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic, c.tz)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}
 	if err != nil {
-		return errors.Trace(err)
+		return cerror.Trace(err)
 	}
 
 	log.Info("start consume claim",
@@ -631,7 +632,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	for message := range claim.Messages() {
 		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
 			log.Error("add key value to the decoder failed", zap.Error(err))
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 
 		counter := 0
@@ -678,17 +679,19 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.ByteString("value", message.Value),
 						zap.Error(err))
 				}
-				err = c.flowController.Consume(row, uint64(row.ApproximateBytes()), func(batch bool) error {
-
-				})
+				err = c.flowController.Consume(row.CommitTs, uint64(row.ApproximateBytes()))
 				if err != nil {
-					return errors.Trace(err)
+					if errors.Is(err, flowcontrol.ErrorFlowControllerAborted) {
+						log.Info("flow control aborted")
+						return nil
+					}
+					return cerror.Trace(err)
 				}
 
 				if c.eventRouter != nil {
 					target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
 					if err != nil {
-						return errors.Trace(err)
+						return cerror.Trace(err)
 					}
 					if partition != target {
 						log.Panic("RowChangedEvent dispatched to wrong partition",
@@ -842,7 +845,7 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 	defer c.sinksMu.Unlock()
 	for _, sink := range c.sinks {
 		if err := fn(sink); err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 	}
 	return nil
@@ -873,7 +876,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		minPartitionResolvedTs, err := c.getMinPartitionResolvedTs()
 		if err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 
 		// handle DDL
@@ -883,12 +886,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 			if err := c.forEachSink(func(sink *partitionSinks) error {
 				return c.syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
-				return errors.Trace(err)
+				return cerror.Trace(err)
 			}
 
 			// DDL can be executed, do it first.
 			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-				return errors.Trace(err)
+				return cerror.Trace(err)
 			}
 			c.popDDL()
 
@@ -914,7 +917,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 		if err := c.forEachSink(func(sink *partitionSinks) error {
 			return c.syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
 		}); err != nil {
-			return errors.Trace(err)
+			return cerror.Trace(err)
 		}
 	}
 }
@@ -975,7 +978,7 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
 		log.Error("open db failed", zap.Error(err))
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 
 	db.SetMaxOpenConns(10)
@@ -986,7 +989,7 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
 		log.Error("ping db failed", zap.Error(err))
-		return nil, errors.Trace(err)
+		return nil, cerror.Trace(err)
 	}
 	log.Info("open db success", zap.String("dsn", dsn))
 	return db, nil
