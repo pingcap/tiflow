@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -26,6 +27,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
+
+var _ controller.Controller = &controllerImpl{}
 
 type controllerImpl struct {
 	captureInfo     *model.CaptureInfo
