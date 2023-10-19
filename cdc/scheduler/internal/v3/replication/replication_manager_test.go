@@ -613,6 +613,10 @@ type mockRedoMetaManager struct {
 	enable       bool
 }
 
+func (m *mockRedoMetaManager) Running() bool {
+	return true
+}
+
 func (m *mockRedoMetaManager) UpdateMeta(checkpointTs, resolvedTs model.Ts) {
 }
 
