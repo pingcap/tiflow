@@ -23,6 +23,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
@@ -228,6 +230,16 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		}
 		if len(ineligibleTables) != 0 {
 			return nil, cerror.ErrTableIneligible.GenWithStackByArgs(ineligibleTables)
+		}
+	}
+
+	if redo.IsConsistentEnabled(replicaCfg.Consistent.Level) {
+		uri, err := storage.ParseRawURL(replicaCfg.Consistent.Storage)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if err := redo.ValidateStorage(uri); err != nil {
+			return nil, errors.Trace(err)
 		}
 	}
 

@@ -47,6 +47,9 @@ type MetaManager interface {
 	// Cleanup deletes all redo logs, which are only called from the owner
 	// when changefeed is deleted.
 	Cleanup(ctx context.Context) error
+
+	// Running return true if the meta manager is running or not.
+	Running() bool
 }
 
 type metaManager struct {
@@ -54,9 +57,8 @@ type metaManager struct {
 	changeFeedID model.ChangeFeedID
 	enabled      bool
 
-	// initialized means the meta manager now works normally.
-	// todo: how to use this fields ?
-	initialized atomic.Bool
+	// running means the meta manager now running normally.
+	running atomic.Bool
 
 	metaCheckpointTs statefulRts
 	metaResolvedTs   statefulRts
@@ -105,10 +107,10 @@ func (m *metaManager) Enabled() bool {
 	return m.enabled
 }
 
-// Initialized return whether the meta manager is initialized,
+// Running return whether the meta manager is initialized,
 // which means the external storage is accessible to the meta manager.
-func (m *metaManager) Initialized() bool {
-	return m.initialized.Load()
+func (m *metaManager) Running() bool {
+	return m.running.Load()
 }
 
 func (m *metaManager) preStart(ctx context.Context) error {
@@ -142,7 +144,6 @@ func (m *metaManager) preStart(ctx context.Context) error {
 			zap.Error(err))
 		return err
 	}
-
 	return nil
 }
 
@@ -159,7 +160,7 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 		return m.bgGC(egCtx)
 	})
 
-	m.initialized.Store(true)
+	m.running.Store(true)
 	return eg.Wait()
 }
 
@@ -246,6 +247,14 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 	if err := m.maybeFlushMeta(ctx); err != nil {
 		return errors.WrapError(errors.ErrRedoMetaInitialize, err)
 	}
+
+	flushedMeta := m.GetFlushedMeta()
+	log.Info("redo: meta manager flush init meta success",
+		zap.String("namespace", m.changeFeedID.Namespace),
+		zap.String("changefeed", m.changeFeedID.ID),
+		zap.Uint64("checkpointTs", flushedMeta.CheckpointTs),
+		zap.Uint64("resolvedTs", flushedMeta.ResolvedTs))
+
 	return util.DeleteFilesInExtStorage(ctx, m.extStorage, toRemoveMetaFiles)
 }
 

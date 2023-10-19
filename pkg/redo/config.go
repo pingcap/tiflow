@@ -220,6 +220,10 @@ func ValidateStorage(uri *url.URL) error {
 		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
 			fmt.Sprintf("can't make dir for new redo log: %+v", uri)))
 	}
+
+	// todo: add read and write permission check
+	// read, write, list, mkdir, rmdir
+
 	return nil
 }
 

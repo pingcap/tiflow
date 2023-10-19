@@ -200,8 +200,6 @@ type logManager struct {
 	cfg     *writer.LogWriterConfig
 	writer  writer.RedoLogWriter
 
-	initialized atomic.Bool
-
 	rwlock sync.RWMutex
 	// TODO: remove logBuffer and use writer directly after file logWriter is deprecated.
 	logBuffer *chann.DrainableChann[cacheEvents]
@@ -254,22 +252,6 @@ func newLogManager(
 	}
 }
 
-// Initialized return true if the log manager is fully initialized,
-// which means the external storage is accessible, and all running resource allocated.
-func (m *logManager) Initialized() bool {
-	return m.initialized.Load()
-}
-
-func (m *logManager) preStart(ctx context.Context) error {
-	w, err := factory.NewRedoLogWriter(ctx, m.cfg)
-	if err != nil {
-		return err
-	}
-	m.writer = w
-	m.initialized.Store(true)
-	return nil
-}
-
 // Run implements pkg/util.Runnable.
 func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if !m.Enabled() {
@@ -277,9 +259,17 @@ func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 	}
 
 	defer m.close()
-	if err := m.preStart(ctx); err != nil {
+	start := time.Now()
+	w, err := factory.NewRedoLogWriter(ctx, m.cfg)
+	if err != nil {
+		log.Error("redo: failed to create redo log writer",
+			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+			zap.String("changefeed", m.cfg.ChangeFeedID.ID),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
 		return err
 	}
+	m.writer = w
 	return m.bgUpdateLog(ctx)
 }
 

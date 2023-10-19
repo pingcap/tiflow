@@ -369,6 +369,13 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	default:
 	}
 
+	if c.redoMetaMgr.Enabled() {
+		if !c.redoMetaMgr.Running() {
+			return 0, 0, nil
+		}
+		c.resolvedTs = c.redoMetaMgr.GetFlushedMeta().ResolvedTs
+	}
+
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
 	if err != nil {
@@ -619,8 +626,6 @@ LOOP2:
 
 	c.redoMetaMgr = redo.NewMetaManager(c.id, c.latestInfo.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
-		// todo: how to initialize this resolved ts ?
-		c.resolvedTs = c.redoMetaMgr.GetFlushedMeta().ResolvedTs
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
