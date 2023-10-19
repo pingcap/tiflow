@@ -81,7 +81,6 @@ type ownerJob struct {
 //
 // The interface is thread-safe, except for Tick, it's only used by etcd worker.
 type Owner interface {
-	orchestrator.Reactor
 	EnqueueJob(adminJob model.AdminJob, done chan<- error)
 	RebalanceTables(cfID model.ChangeFeedID, done chan<- error)
 	ScheduleTable(
@@ -132,7 +131,10 @@ type ownerImpl struct {
 	cfg *config.SchedulerConfig
 }
 
-var _ Owner = &ownerImpl{}
+var (
+	_ orchestrator.Reactor = &ownerImpl{}
+	_ Owner                = &ownerImpl{}
+)
 
 // NewOwner creates a new Owner
 func NewOwner(
