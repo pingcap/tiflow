@@ -518,6 +518,29 @@ func TestUpstreamClientQuerySQL(t *testing.T) {
 		queryTypeRange,
 	)
 
+	// Test queryUpstreamsByIDs
+	expectedQueryUpstreamsByIDs := rows
+	queryUpstreamsByIDsRows := []interface{}{expectedQueryUpstreamsByIDs[0], expectedQueryUpstreamsByIDs[1]}
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `upstream` WHERE id IN (?,?)", []driver.Value{1, 2},
+		[]string{"id", "endpoints", "config", "version", "update_at"},
+		queryUpstreamsByIDsRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*UpstreamDO)
+			require.True(t, ok)
+			return []driver.Value{row.ID, row.Endpoints, row.Config, row.Version, row.UpdateAt}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			upstreams, err := client.queryUpstreamsByIDs(db, 1, 2)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, upstreams, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQueryUpstreamsByIDs, upstreams)
+			}
+		},
+		queryTypePoint,
+	)
+
 	// Test queryUpstreamByID
 	for _, row := range rows {
 		expectedQueryUpstreamByID := row

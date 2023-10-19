@@ -116,6 +116,11 @@ func (c *clientWithCache[T]) queryUpstreamsByUpdateAt(tx T, lastUpdateAt time.Ti
 	return c.client.queryUpstreamsByUpdateAt(tx, lastUpdateAt)
 }
 
+// queryUpstreamsByIDs implements the upstreamClient interface.
+func (c *clientWithCache[T]) queryUpstreamsByIDs(tx T, ids ...uint64) ([]*UpstreamDO, error) {
+	return c.cache.upsteram.getByKeys(ids), nil
+}
+
 // queryUpstreamByID implements the upstreamClient interface.
 func (c *clientWithCache[T]) queryUpstreamByID(tx T, id uint64) (*UpstreamDO, error) {
 	return c.cache.upsteram.get(id), nil

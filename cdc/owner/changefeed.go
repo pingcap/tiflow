@@ -623,24 +623,6 @@ LOOP2:
 		}()
 	}
 
-	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(cancelCtx,
-		c.id,
-		c.latestInfo.Config.Consistent, checkpointTs)
-	if err != nil {
-		return err
-	}
-	if c.redoMetaMgr.Enabled() {
-		c.resolvedTs = c.redoMetaMgr.GetFlushedMeta().ResolvedTs
-		c.wg.Add(1)
-		go func() {
-			defer c.wg.Done()
-			ctx.Throw(c.redoMetaMgr.Run(cancelCtx))
-		}()
-	}
-	log.Info("owner creates redo manager",
-		zap.String("namespace", c.id.Namespace),
-		zap.String("changefeed", c.id.ID))
-
 	downstreamType, err := c.latestInfo.DownstreamType()
 	if err != nil {
 		return errors.Trace(err)

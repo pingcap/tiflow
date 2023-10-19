@@ -126,6 +126,16 @@ func (c *ormClient) queryUpstreamsByUpdateAt(tx *gorm.DB, lastUpdateAt time.Time
 	return ups, nil
 }
 
+// queryUpstreamsByIDs implements the upstreamClient interface.
+func (c *ormClient) queryUpstreamsByIDs(tx *gorm.DB, ids ...uint64) ([]*UpstreamDO, error) {
+	ups := []*UpstreamDO{}
+	ret := tx.Where("id IN (?)", ids).Find(&ups)
+	if err := handleSingleOpErr(ret, int64(len(ids)), "QueryUpstreamsByIDs"); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return ups, nil
+}
+
 // queryUpstreamByID implements the upstreamClient interface.
 func (c *ormClient) queryUpstreamByID(tx *gorm.DB, id uint64) (*UpstreamDO, error) {
 	up := &UpstreamDO{}

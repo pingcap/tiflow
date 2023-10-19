@@ -258,6 +258,34 @@ func (c *CaptureOb[T]) GetChangefeed(cfs ...metadata.ChangefeedUUID) (infos []*m
 	return
 }
 
+// GetUpsreams returns the upstreams with the given IDs.
+func (c *CaptureOb[T]) GetUpsreams(ids ...model.UpstreamID) (ups []*model.UpstreamInfo, err error) {
+	var upDOs []*UpstreamDO
+	err = c.client.Txn(c.egCtx, func(tx T) error {
+		if len(ids) == 0 {
+			upDOs, err = c.client.queryUpstreams(tx)
+			return err
+		}
+		upDOs, err = c.client.queryUpstreamsByIDs(tx, ids...)
+		return err
+	})
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for _, upDO := range upDOs {
+		ups = append(ups, &model.UpstreamInfo{
+			ID:            upDO.ID,
+			PDEndpoints:   upDO.Endpoints,
+			CAPath:        upDO.Config.CAPath,
+			CertPath:      upDO.Config.CertPath,
+			KeyPath:       upDO.Config.KeyPath,
+			CertAllowedCN: upDO.Config.CertAllowedCN,
+		})
+	}
+	return
+}
+
 // GetChangefeedState returns the state of the changefeed with the given UUID.
 func (c *CaptureOb[T]) GetChangefeedState(cfs ...metadata.ChangefeedUUID) (states []*metadata.ChangefeedState, err error) {
 	var cfDOs []*ChangefeedStateDO

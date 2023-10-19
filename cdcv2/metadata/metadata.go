@@ -25,6 +25,8 @@ import (
 type Querier interface {
 	// GetChangefeeds queries some or all changefeeds.
 	GetChangefeed(...ChangefeedUUID) ([]*ChangefeedInfo, error)
+	// GetUpsreams queries some or all upstreams.
+	GetUpsreams(...uint64) ([]*model.UpstreamInfo, error)
 	// GetChangefeedState queries some or all changefeed states.
 	GetChangefeedState(...ChangefeedUUID) ([]*ChangefeedState, error)
 	// GetChangefeedProgress queries some or all changefeed progresses.

@@ -89,6 +89,7 @@ type upstreamClient[T TxnContext] interface {
 	updateUpstream(tx T, up *UpstreamDO) error
 	queryUpstreams(tx T) ([]*UpstreamDO, error)
 	queryUpstreamsByUpdateAt(tx T, lastUpdateAt time.Time) ([]*UpstreamDO, error)
+	queryUpstreamsByIDs(tx T, ids ...uint64) ([]*UpstreamDO, error)
 	queryUpstreamByID(tx T, id uint64) (*UpstreamDO, error)
 }
 
