@@ -15,9 +15,11 @@ package capture
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
@@ -25,13 +27,19 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
+	controllerv2 "github.com/pingcap/tiflow/cdcv2/controller"
+	"github.com/pingcap/tiflow/cdcv2/metadata"
+	msql "github.com/pingcap/tiflow/cdcv2/metadata/sql"
 	"github.com/pingcap/tiflow/pkg/config"
+	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/version"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -88,6 +96,10 @@ type captureImpl struct {
 	grpcService *p2p.ServerWrapper
 
 	cancel context.CancelFunc
+
+	storage            *sql.DB
+	captureObservation metadata.CaptureObservation
+	controllerObserver metadata.ControllerObservation
 }
 
 func (c *captureImpl) Run(ctx context.Context) error {
@@ -139,15 +151,94 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		log.Error("reset capture failed", zap.Error(err))
 		return errors.Trace(err)
 	}
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// todo:  run capture logic
-	return nil
+	defer func() {
+		c.Close()
+		c.grpcService.Reset(nil)
+	}()
+
+	g, stdCtx := errgroup.WithContext(stdCtx)
+
+	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
+		CaptureInfo:       c.info,
+		EtcdClient:        c.EtcdClient,
+		MessageServer:     c.MessageServer,
+		MessageRouter:     c.MessageRouter,
+		SortEngineFactory: c.sortEngineFactory,
+	})
+
+	g.Go(func() error {
+		return c.MessageServer.Run(ctx, c.MessageRouter.GetLocalChannel())
+	})
+
+	g.Go(func() error {
+		return c.captureObservation.Run(ctx,
+			func(ctx context.Context,
+				controllerObserver metadata.ControllerObservation,
+			) error {
+				c.controllerObserver = controllerObserver
+				ctrl := controllerv2.NewController(
+					c.upstreamManager,
+					c.info, controllerObserver, c.captureObservation)
+				c.controller = ctrl
+				return ctrl.Run(ctx)
+			})
+	})
+	return errors.Trace(g.Wait())
 }
 
 // reset the capture before run it.
 func (c *captureImpl) reset(ctx context.Context) error {
+	c.captureMu.Lock()
+	defer c.captureMu.Unlock()
+	c.info = &model.CaptureInfo{
+		ID:            uuid.New().String(),
+		AdvertiseAddr: c.config.AdvertiseAddr,
+		Version:       version.ReleaseVersion,
+	}
+
+	if c.upstreamManager != nil {
+		c.upstreamManager.Close()
+	}
+	c.upstreamManager = upstream.NewManager(ctx, c.EtcdClient.GetGCServiceID())
+	_, err := c.upstreamManager.AddDefaultUpstream(c.pdEndpoints, c.config.Security, c.pdClient)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	c.grpcService.Reset(nil)
+
+	if c.MessageRouter != nil {
+		c.MessageRouter.Close()
+		c.MessageRouter = nil
+	}
+	messageServerConfig := c.config.Debug.Messages.ToMessageServerConfig()
+	c.MessageServer = p2p.NewMessageServer(c.info.ID, messageServerConfig)
+	c.grpcService.Reset(c.MessageServer)
+
+	messageClientConfig := c.config.Debug.Messages.ToMessageClientConfig()
+
+	// Puts the advertise-addr of the local node to the client config.
+	// This is for metrics purpose only, so that the receiver knows which
+	// node the connections are from.
+	advertiseAddr := c.config.AdvertiseAddr
+	messageClientConfig.AdvertisedAddr = advertiseAddr
+
+	c.MessageRouter = p2p.NewMessageRouterWithLocalClient(c.info.ID, c.config.Security, messageClientConfig)
+
+	dsnConfig, err := c.config.Debug.CDCV2.MetaStoreConfig.GenDSN()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	c.storage, err = sql.Open("mysql", dsnConfig.FormatDSN())
+	if err != nil {
+		return errors.Trace(err)
+	}
+	captureDB, err := msql.NewCaptureObservation(c.storage, c.info)
+	c.captureObservation = captureDB
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
 }
 

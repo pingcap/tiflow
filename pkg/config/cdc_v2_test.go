@@ -38,3 +38,18 @@ func TestCDCV2ValidateAndAdjust(t *testing.T) {
 	cdcV2.MetaStoreConfig.URI = "mysql://127.0.0.1"
 	require.Nil(t, cdcV2.ValidateAndAdjust())
 }
+
+func TestGenDSN(t *testing.T) {
+	storeConfig := &MetaStoreConfiguration{
+		URI: "mysql://root:abcd@127.0.0.1:4000/cdc?a=c&timeout=1m",
+	}
+	dsn, err := storeConfig.GenDSN()
+	require.Nil(t, err)
+	require.Equal(t, "root", dsn.User)
+	require.Equal(t, "abcd", dsn.Passwd)
+	require.Equal(t, "127.0.0.1:4000", dsn.Addr)
+	require.Equal(t, "cdc", dsn.DBName)
+	require.Equal(t, "true", dsn.Params["parseTime"])
+	require.Equal(t, "1m", dsn.Params["timeout"])
+	require.Equal(t, "c", dsn.Params["a"])
+}
