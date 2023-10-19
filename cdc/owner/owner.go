@@ -585,31 +585,31 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 
 func (o *ownerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
-	case QueryAllChangeFeedStatuses:
-		ret := map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI{}
-		for cfID, cfReactor := range o.changefeeds {
-			ret[cfID] = &model.ChangeFeedStatusForAPI{}
-			if cfReactor.latestStatus == nil {
-				continue
-			}
-			ret[cfID].ResolvedTs = cfReactor.resolvedTs
-			ret[cfID].CheckpointTs = cfReactor.latestStatus.CheckpointTs
+	case QueryChangeFeedStatuses:
+		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
+		if !ok {
+			query.Data = nil
+			return nil
 		}
+		ret := &model.ChangeFeedStatusForAPI{}
+		ret.ResolvedTs = cfReactor.resolvedTs
+		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
 		query.Data = ret
-	case QueryAllChangeFeedInfo:
-		ret := map[model.ChangeFeedID]*model.ChangeFeedInfo{}
-		for cfID, cfReactor := range o.changefeeds {
-			if cfReactor.latestInfo == nil {
-				ret[cfID] = &model.ChangeFeedInfo{}
-				continue
-			}
+	case QueryChangefeedInfo:
+		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
+		if !ok {
+			query.Data = nil
+			return nil
+		}
+		if cfReactor.latestInfo == nil {
+			query.Data = &model.ChangeFeedInfo{}
+		} else {
 			var err error
-			ret[cfID], err = cfReactor.latestInfo.Clone()
+			query.Data, err = cfReactor.latestInfo.Clone()
 			if err != nil {
 				return errors.Trace(err)
 			}
 		}
-		query.Data = ret
 	case QueryAllTaskStatuses:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
 		if !ok {
