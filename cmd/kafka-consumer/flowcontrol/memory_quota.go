@@ -24,7 +24,8 @@ import (
 
 var (
 	errFlowControllerLargerThanQuota = errors.New("flow controller request memory larger than quota")
-	ErrorFlowControllerAborted       = errors.New("flow controller aborted")
+	// ErrorFlowControllerAborted is returned when the flow controller is aborted.
+	ErrorFlowControllerAborted = errors.New("flow controller aborted")
 )
 
 // MemoryQuota is designed to curb the total memory consumption of processing the events
