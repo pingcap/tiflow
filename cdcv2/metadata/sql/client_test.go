@@ -396,6 +396,44 @@ func TestProgressClientExecSQL(t *testing.T) {
 
 // ================================ Test Query =================================
 
+type queryType int32
+
+const (
+	queryTypePoint queryType = iota
+	queryTypeRange
+	queryTypeFullTable
+)
+
+func runMockQueryTest(
+	_ *testing.T, mock sqlmock.Sqlmock,
+	expectedSQL string, args []driver.Value,
+	columns []string, rows []interface{},
+	getValue func(interface{}) []driver.Value,
+	runQuery func(expectedRowsCnt int, expectedError error),
+	queryTpye queryType,
+) {
+	// Test normal execution
+	returnRows := sqlmock.NewRows(columns)
+	for _, row := range rows {
+		returnRows.AddRow(getValue(row)...)
+	}
+	mock.ExpectQuery(expectedSQL).WithArgs(args...).WillReturnRows(returnRows)
+	runQuery(len(rows), nil)
+
+	// Test return empty rows
+	mock.ExpectQuery(expectedSQL).WithArgs(args...).WillReturnRows(sqlmock.NewRows(columns))
+	if queryTpye == queryTypePoint {
+		runQuery(0, errors.ErrMetaRowsAffectedNotMatch)
+	} else {
+		runQuery(0, nil)
+	}
+
+	// Test return error
+	testErr := errors.New("test error")
+	mock.ExpectQuery(expectedSQL).WithArgs(args...).WillReturnError(testErr)
+	runQuery(0, testErr)
+}
+
 func TestUpstreamClientQuerySQL(t *testing.T) {
 	t.Parallel()
 
@@ -403,17 +441,745 @@ func TestUpstreamClientQuerySQL(t *testing.T) {
 	defer backendDB.Close()
 	client := NewORMClient("test-upstream-client-query", db)
 
+	rows := []*UpstreamDO{
+		{
+			ID:        1,
+			Endpoints: strings.Join([]string{"endpoint1", "endpoint2"}, ","),
+			Config:    nil, /* test nil */
+			Version:   1,
+			UpdateAt:  time.Now(),
+		},
+		{
+			ID:        2,
+			Endpoints: strings.Join([]string{"endpoint3", "endpoint4"}, ","),
+			Config:    &security.Credential{}, /* test empty */
+			Version:   2,
+			UpdateAt:  time.Now(),
+		},
+	}
+
 	// Test queryUpstreams
-	expectedSQL := "SELECT * FROM `upstream`"
-	mock.ExpectQuery(expectedSQL).WillReturnRows(
-		sqlmock.NewRows([]string{"id", "endpoints", "config", "version", "update_at"}).
-			AddRow(1, []byte("endpoint1,endpoint2"), nil, 1, time.Now()),
+	expectedQueryUpstreams := rows
+	queryUpstreamsRows := []interface{}{expectedQueryUpstreams[0], expectedQueryUpstreams[1]}
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `upstream`", nil,
+		[]string{"id", "endpoints", "config", "version", "update_at"},
+		queryUpstreamsRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*UpstreamDO)
+			require.True(t, ok)
+			return []driver.Value{row.ID, row.Endpoints, row.Config, row.Version, row.UpdateAt}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			upstreams, err := client.queryUpstreams(db)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, upstreams, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQueryUpstreams, upstreams)
+			}
+		},
+		queryTypeFullTable,
 	)
-	upstreams, err := client.queryUpstreams(db)
-	require.NoError(t, err)
-	require.Len(t, upstreams, 1)
-	require.Equal(t, uint64(1), upstreams[0].ID)
-	require.Equal(t, "endpoint1,endpoint2", upstreams[0].Endpoints)
-	require.Nil(t, upstreams[0].Config)
-	require.Equal(t, uint64(1), upstreams[0].Version)
+
+	// Test queryUpstreamsByUpdateAt
+	expectedQueryUpstreamsByUpdateAt := rows
+	queryUpstreamsByUpdateAtRows := []interface{}{expectedQueryUpstreamsByUpdateAt[0], expectedQueryUpstreamsByUpdateAt[1]}
+	queryAt := time.Now()
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `upstream` WHERE update_at > ?", []driver.Value{queryAt},
+		[]string{"id", "endpoints", "config", "version", "update_at"},
+		queryUpstreamsByUpdateAtRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*UpstreamDO)
+			require.True(t, ok)
+			return []driver.Value{row.ID, row.Endpoints, row.Config, row.Version, row.UpdateAt}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			upstreams, err := client.queryUpstreamsByUpdateAt(db, queryAt)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, upstreams, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQueryUpstreamsByUpdateAt, upstreams)
+			}
+		},
+		queryTypeRange,
+	)
+
+	// Test queryUpstreamByID
+	for _, row := range rows {
+		expectedQueryUpstreamByID := row
+		queryUpstreamByIDRows := []interface{}{row}
+		runMockQueryTest(t, mock,
+			"SELECT * FROM `upstream` WHERE id = ? LIMIT 1",
+			[]driver.Value{expectedQueryUpstreamByID.ID},
+			[]string{"id", "endpoints", "config", "version", "update_at"},
+			queryUpstreamByIDRows,
+			func(r interface{}) []driver.Value {
+				row, ok := r.(*UpstreamDO)
+				require.True(t, ok)
+				return []driver.Value{row.ID, row.Endpoints, row.Config, row.Version, row.UpdateAt}
+			},
+			func(expectedRowsCnt int, expectedError error) {
+				upstream, err := client.queryUpstreamByID(db, expectedQueryUpstreamByID.ID)
+				require.ErrorIs(t, err, expectedError)
+				if expectedRowsCnt != 0 {
+					require.Equal(t, expectedQueryUpstreamByID, upstream)
+				} else {
+					require.Nil(t, upstream)
+				}
+			},
+			queryTypePoint,
+		)
+	}
+}
+
+func TestChangefeedInfoClientQuerySQL(t *testing.T) {
+	t.Parallel()
+
+	backendDB, db, mock := newMockDB(t)
+	defer backendDB.Close()
+	client := NewORMClient("test-changefeed-info-client-query", db)
+
+	rows := []*ChangefeedInfoDO{
+		{
+			ChangefeedInfo: metadata.ChangefeedInfo{
+				ChangefeedIdent: metadata.ChangefeedIdent{
+					UUID:      1,
+					Namespace: "namespace",
+					ID:        "id",
+				},
+				UpstreamID: 1,
+				SinkURI:    "sinkURI",
+				StartTs:    1,
+				TargetTs:   1,
+				Config:     nil, /* test nil */
+			},
+			RemovedAt: nil, /* test nil */
+			Version:   1,
+			UpdateAt:  time.Now(),
+		},
+		{
+			ChangefeedInfo: metadata.ChangefeedInfo{
+				ChangefeedIdent: metadata.ChangefeedIdent{
+					UUID:      2,
+					Namespace: "namespace",
+					ID:        "id",
+				},
+				UpstreamID: 2,
+				SinkURI:    "sinkURI",
+				StartTs:    2,
+				TargetTs:   2,
+				Config:     &config.ReplicaConfig{}, /* test empty */
+			},
+			RemovedAt: &time.Time{}, /* test empty */
+			Version:   2,
+			UpdateAt:  time.Now(),
+		},
+	}
+
+	// Test queryChangefeedInfos
+	expectedQueryChangefeedInfos := rows
+	queryChangefeedInfosRows := []interface{}{expectedQueryChangefeedInfos[0], expectedQueryChangefeedInfos[1]}
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `changefeed_info`", nil,
+		[]string{
+			"uuid", "namespace", "id", "upstream_id", "sink_uri",
+			"start_ts", "target_ts", "config", "removed_at",
+			"version", "update_at",
+		},
+		queryChangefeedInfosRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ChangefeedInfoDO)
+			require.True(t, ok)
+			return []driver.Value{
+				row.UUID, row.Namespace, row.ID, row.UpstreamID, row.SinkURI,
+				row.StartTs, row.TargetTs, row.Config, row.RemovedAt,
+				row.Version, row.UpdateAt,
+			}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			changefeedInfos, err := client.queryChangefeedInfos(db)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, changefeedInfos, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQueryChangefeedInfos, changefeedInfos)
+			}
+		},
+		queryTypeFullTable,
+	)
+
+	// Test queryChangefeedInfosByUpdateAt
+	expectedQueryChangefeedInfosByUpdateAt := rows
+	queryChangefeedInfosByUpdateAtRows := []interface{}{
+		expectedQueryChangefeedInfosByUpdateAt[0],
+		expectedQueryChangefeedInfosByUpdateAt[1],
+	}
+	queryAt := time.Now()
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `changefeed_info` WHERE update_at > ?", []driver.Value{queryAt},
+		[]string{
+			"uuid", "namespace", "id", "upstream_id", "sink_uri",
+			"start_ts", "target_ts", "config", "removed_at",
+			"version", "update_at",
+		},
+		queryChangefeedInfosByUpdateAtRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ChangefeedInfoDO)
+			require.True(t, ok)
+			return []driver.Value{
+				row.UUID, row.Namespace, row.ID, row.UpstreamID, row.SinkURI,
+				row.StartTs, row.TargetTs, row.Config, row.RemovedAt,
+				row.Version, row.UpdateAt,
+			}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			changefeedInfos, err := client.queryChangefeedInfosByUpdateAt(db, queryAt)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, changefeedInfos, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQueryChangefeedInfosByUpdateAt, changefeedInfos)
+			}
+		},
+		queryTypeRange,
+	)
+
+	// Test queryChangefeedInfosByUUIDs
+	expectedQueryChangefeedInfosByUUIDs := rows
+	queryChangefeedInfosByUUIDsRows := []interface{}{
+		expectedQueryChangefeedInfosByUUIDs[0],
+		expectedQueryChangefeedInfosByUUIDs[1],
+	}
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `changefeed_info` WHERE uuid IN (?,?)", []driver.Value{1, 2},
+		[]string{
+			"uuid", "namespace", "id", "upstream_id", "sink_uri",
+			"start_ts", "target_ts", "config", "removed_at",
+			"version", "update_at",
+		},
+		queryChangefeedInfosByUUIDsRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ChangefeedInfoDO)
+			require.True(t, ok)
+			return []driver.Value{
+				row.UUID, row.Namespace, row.ID, row.UpstreamID, row.SinkURI,
+				row.StartTs, row.TargetTs, row.Config, row.RemovedAt,
+				row.Version, row.UpdateAt,
+			}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			changefeedInfos, err := client.queryChangefeedInfosByUUIDs(db, 1, 2)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, changefeedInfos, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQueryChangefeedInfosByUUIDs, changefeedInfos)
+			}
+		},
+		queryTypePoint,
+	)
+
+	// Test queryChangefeedInfoByUUID
+	for _, row := range rows {
+		expectedQueryChangefeedInfoByUUID := row
+		queryChangefeedInfoByUUIDRows := []interface{}{row}
+		runMockQueryTest(t, mock,
+			"SELECT * FROM `changefeed_info` WHERE uuid = ? LIMIT 1",
+			[]driver.Value{expectedQueryChangefeedInfoByUUID.UUID},
+			[]string{
+				"uuid", "namespace", "id", "upstream_id", "sink_uri",
+				"start_ts", "target_ts", "config", "removed_at",
+				"version", "update_at",
+			},
+			queryChangefeedInfoByUUIDRows,
+			func(r interface{}) []driver.Value {
+				row, ok := r.(*ChangefeedInfoDO)
+				require.True(t, ok)
+				return []driver.Value{
+					row.UUID, row.Namespace, row.ID, row.UpstreamID, row.SinkURI,
+					row.StartTs, row.TargetTs, row.Config, row.RemovedAt,
+					row.Version, row.UpdateAt,
+				}
+			},
+			func(expectedRowsCnt int, expectedError error) {
+				changefeedInfo, err := client.queryChangefeedInfoByUUID(db, expectedQueryChangefeedInfoByUUID.UUID)
+				require.ErrorIs(t, err, expectedError)
+				if expectedRowsCnt != 0 {
+					require.Equal(t, expectedQueryChangefeedInfoByUUID, changefeedInfo)
+				} else {
+					require.Nil(t, changefeedInfo)
+				}
+			},
+			queryTypePoint,
+		)
+	}
+}
+
+func TestChangefeedStateClientQuerySQL(t *testing.T) {
+	t.Parallel()
+
+	backendDB, db, mock := newMockDB(t)
+	defer backendDB.Close()
+	client := NewORMClient("test-changefeed-state-client-query", db)
+
+	rows := []*ChangefeedStateDO{
+		{
+			ChangefeedState: metadata.ChangefeedState{
+				ChangefeedUUID: 1,
+				State:          "state",
+				// Note that warning and error could be nil.
+				Warning: nil,                   /* test nil */
+				Error:   &model.RunningError{}, /* test empty*/
+			},
+			Version:  1,
+			UpdateAt: time.Now(),
+		},
+		{
+			ChangefeedState: metadata.ChangefeedState{
+				ChangefeedUUID: 2,
+				State:          "state",
+				Warning: &model.RunningError{
+					// ref: TestRunningErrorScan
+					// Time: time.Now(),
+					Addr: "addr",
+					Code: "warn",
+				},
+				Error: &model.RunningError{
+					// Time: time.Now(),
+					Addr: "addr",
+					Code: "error",
+				},
+			},
+			Version:  2,
+			UpdateAt: time.Now(),
+		},
+	}
+
+	// Test queryChangefeedStates
+	expectedQueryChangefeedStates := rows
+	queryChangefeedStatesRows := []interface{}{expectedQueryChangefeedStates[0], expectedQueryChangefeedStates[1]}
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `changefeed_state`", nil,
+		[]string{"changefeed_uuid", "state", "warning", "error", "version", "update_at"},
+		queryChangefeedStatesRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ChangefeedStateDO)
+			require.True(t, ok)
+			return []driver.Value{row.ChangefeedUUID, row.State, row.Warning, row.Error, row.Version, row.UpdateAt}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			changefeedStates, err := client.queryChangefeedStates(db)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, changefeedStates, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQueryChangefeedStates, changefeedStates)
+			}
+		},
+		queryTypeFullTable,
+	)
+
+	// Test queryChangefeedStatesByUpdateAt
+	expectedQueryChangefeedStatesByUpdateAt := rows
+	queryChangefeedStatesByUpdateAtRows := []interface{}{
+		expectedQueryChangefeedStatesByUpdateAt[0],
+		expectedQueryChangefeedStatesByUpdateAt[1],
+	}
+	queryAt := time.Now()
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `changefeed_state` WHERE update_at > ?", []driver.Value{queryAt},
+		[]string{"changefeed_uuid", "state", "warning", "error", "version", "update_at"},
+		queryChangefeedStatesByUpdateAtRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ChangefeedStateDO)
+			require.True(t, ok)
+			return []driver.Value{row.ChangefeedUUID, row.State, row.Warning, row.Error, row.Version, row.UpdateAt}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			changefeedStates, err := client.queryChangefeedStatesByUpdateAt(db, queryAt)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, changefeedStates, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQueryChangefeedStatesByUpdateAt, changefeedStates)
+			}
+		},
+		queryTypeRange,
+	)
+
+	// Test queryChangefeedStateByUUID
+	for _, row := range rows {
+		expectedQueryChangefeedStateByUUID := row
+		queryChangefeedStateByUUIDRows := []interface{}{row}
+		runMockQueryTest(t, mock,
+			"SELECT * FROM `changefeed_state` WHERE changefeed_uuid = ? LIMIT 1",
+			[]driver.Value{expectedQueryChangefeedStateByUUID.ChangefeedUUID},
+			[]string{"changefeed_uuid", "state", "warning", "error", "version", "update_at"},
+			queryChangefeedStateByUUIDRows,
+			func(r interface{}) []driver.Value {
+				row, ok := r.(*ChangefeedStateDO)
+				require.True(t, ok)
+				return []driver.Value{row.ChangefeedUUID, row.State, row.Warning, row.Error, row.Version, row.UpdateAt}
+			},
+			func(expectedRowsCnt int, expectedError error) {
+				changefeedState, err := client.queryChangefeedStateByUUID(db, expectedQueryChangefeedStateByUUID.ChangefeedUUID)
+				require.ErrorIs(t, err, expectedError)
+				if expectedRowsCnt != 0 {
+					require.Equal(t, expectedQueryChangefeedStateByUUID, changefeedState)
+				} else {
+					require.Nil(t, changefeedState)
+				}
+			},
+			queryTypePoint,
+		)
+	}
+
+	// Test queryChangefeedStateByUUIDWithLock
+	for _, row := range rows {
+		expectedQueryChangefeedStateByUUIDWithLock := row
+		queryChangefeedStateByUUIDWithLockRows := []interface{}{row}
+		runMockQueryTest(t, mock,
+			"SELECT * FROM `changefeed_state` WHERE changefeed_uuid = ? LIMIT 1 LOCK IN SHARE MODE",
+			[]driver.Value{expectedQueryChangefeedStateByUUIDWithLock.ChangefeedUUID},
+			[]string{"changefeed_uuid", "state", "warning", "error", "version", "update_at"},
+			queryChangefeedStateByUUIDWithLockRows,
+			func(r interface{}) []driver.Value {
+				row, ok := r.(*ChangefeedStateDO)
+				require.True(t, ok)
+				return []driver.Value{row.ChangefeedUUID, row.State, row.Warning, row.Error, row.Version, row.UpdateAt}
+			},
+			func(expectedRowsCnt int, expectedError error) {
+				changefeedState, err := client.queryChangefeedStateByUUIDWithLock(db, expectedQueryChangefeedStateByUUIDWithLock.ChangefeedUUID)
+				require.ErrorIs(t, err, expectedError)
+				if expectedRowsCnt != 0 {
+					require.Equal(t, expectedQueryChangefeedStateByUUIDWithLock, changefeedState)
+				} else {
+					require.Nil(t, changefeedState)
+				}
+			},
+			queryTypePoint,
+		)
+	}
+}
+
+func TestScheduleClientQuerySQL(t *testing.T) {
+	t.Parallel()
+
+	backendDB, db, mock := newMockDB(t)
+	defer backendDB.Close()
+	client := NewORMClient("test-schedule-client-query", db)
+
+	ownerCapture := "test-schedule-client-query"
+	rows := []*ScheduleDO{
+		{
+			ScheduledChangefeed: metadata.ScheduledChangefeed{
+				ChangefeedUUID: 1,
+				Owner:          nil, /* test nil */
+				OwnerState:     metadata.SchedRemoved,
+				Processors:     nil, /* test nil */
+				TaskPosition: metadata.ChangefeedProgress{
+					CheckpointTs: 1,
+				},
+			},
+			Version:  1,
+			UpdateAt: time.Now(),
+		},
+		{
+			ScheduledChangefeed: metadata.ScheduledChangefeed{
+				ChangefeedUUID: 2,
+				Owner:          &ownerCapture,
+				OwnerState:     metadata.SchedRemoved,
+				Processors:     &ownerCapture,
+				TaskPosition: metadata.ChangefeedProgress{
+					CheckpointTs: 2,
+				},
+			},
+			Version:  2,
+			UpdateAt: time.Now(),
+		},
+	}
+
+	// Test querySchedules
+	expectedQuerySchedules := rows
+	querySchedulesRows := []interface{}{expectedQuerySchedules[0], expectedQuerySchedules[1]}
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `schedule`", nil,
+		[]string{
+			"changefeed_uuid", "owner", "owner_state", "processors", "task_position",
+			"version", "update_at",
+		},
+		querySchedulesRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ScheduleDO)
+			require.True(t, ok)
+			return []driver.Value{
+				row.ChangefeedUUID, row.Owner, row.OwnerState, row.Processors, row.TaskPosition,
+				row.Version, row.UpdateAt,
+			}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			schedules, err := client.querySchedules(db)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, schedules, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQuerySchedules, schedules)
+			}
+		},
+		queryTypeFullTable,
+	)
+
+	// Test querySchedulesByUpdateAt
+	expectedQuerySchedulesByUpdateAt := rows
+	querySchedulesByUpdateAtRows := []interface{}{
+		expectedQuerySchedulesByUpdateAt[0],
+		expectedQuerySchedulesByUpdateAt[1],
+	}
+	queryAt := time.Now()
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `schedule` WHERE update_at > ?", []driver.Value{queryAt},
+		[]string{
+			"changefeed_uuid", "owner", "owner_state", "processors", "task_position",
+			"version", "update_at",
+		},
+		querySchedulesByUpdateAtRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ScheduleDO)
+			require.True(t, ok)
+			return []driver.Value{
+				row.ChangefeedUUID, row.Owner, row.OwnerState, row.Processors, row.TaskPosition,
+				row.Version, row.UpdateAt,
+			}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			schedules, err := client.querySchedulesByUpdateAt(db, queryAt)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, schedules, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQuerySchedulesByUpdateAt, schedules)
+			}
+		},
+		queryTypeRange,
+	)
+
+	// Test querySchedulesByOwnerIDAndUpdateAt
+	expectedQuerySchedulesByOwnerIDAndUpdateAt := rows
+	querySchedulesByOwnerIDAndUpdateAtRows := []interface{}{
+		expectedQuerySchedulesByOwnerIDAndUpdateAt[0],
+		expectedQuerySchedulesByOwnerIDAndUpdateAt[1],
+	}
+	queryAt = time.Now()
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `schedule` WHERE owner = ? and update_at > ?", []driver.Value{ownerCapture, queryAt},
+		[]string{
+			"changefeed_uuid", "owner", "owner_state", "processors", "task_position",
+			"version", "update_at",
+		},
+		querySchedulesByOwnerIDAndUpdateAtRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ScheduleDO)
+			require.True(t, ok)
+			return []driver.Value{
+				row.ChangefeedUUID, row.Owner, row.OwnerState, row.Processors, row.TaskPosition,
+				row.Version, row.UpdateAt,
+			}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			schedules, err := client.querySchedulesByOwnerIDAndUpdateAt(db, ownerCapture, queryAt)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, schedules, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQuerySchedulesByOwnerIDAndUpdateAt, schedules)
+			}
+		},
+		queryTypeRange,
+	)
+
+	// Test queryScheduleByUUID
+	for _, row := range rows {
+		expectedQueryScheduleByUUID := row
+		queryScheduleByUUIDRows := []interface{}{row}
+		runMockQueryTest(t, mock,
+			"SELECT * FROM `schedule` WHERE changefeed_uuid = ? LIMIT 1",
+			[]driver.Value{expectedQueryScheduleByUUID.ChangefeedUUID},
+			[]string{
+				"changefeed_uuid", "owner", "owner_state", "processors", "task_position",
+				"version", "update_at",
+			},
+			queryScheduleByUUIDRows,
+			func(r interface{}) []driver.Value {
+				row, ok := r.(*ScheduleDO)
+				require.True(t, ok)
+				return []driver.Value{
+					row.ChangefeedUUID, row.Owner, row.OwnerState, row.Processors, row.TaskPosition,
+					row.Version, row.UpdateAt,
+				}
+			},
+			func(expectedRowsCnt int, expectedError error) {
+				schedule, err := client.queryScheduleByUUID(db, expectedQueryScheduleByUUID.ChangefeedUUID)
+				require.ErrorIs(t, err, expectedError)
+				if expectedRowsCnt != 0 {
+					require.Equal(t, expectedQueryScheduleByUUID, schedule)
+				} else {
+					require.Nil(t, schedule)
+				}
+			},
+			queryTypePoint,
+		)
+	}
+
+	// Test querySchedulesUinqueOwnerIDs
+	expectedQuerySchedulesUinqueOwnerIDs := []string{"owner1", "owner2"}
+	querySchedulesUinqueOwnerIDsRows := []interface{}{
+		expectedQuerySchedulesUinqueOwnerIDs[0],
+		expectedQuerySchedulesUinqueOwnerIDs[1],
+	}
+	runMockQueryTest(t, mock,
+		"SELECT DISTINCT `owner` FROM `schedule` WHERE owner IS NOT NULL", nil,
+		[]string{"owner"},
+		querySchedulesUinqueOwnerIDsRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(string)
+			require.True(t, ok)
+			return []driver.Value{row}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			ownerIDs, err := client.querySchedulesUinqueOwnerIDs(db)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, ownerIDs, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedQuerySchedulesUinqueOwnerIDs, ownerIDs)
+			}
+		},
+		queryTypeFullTable,
+	)
+}
+
+func TestProgressClientQuerySQL(t *testing.T) {
+	t.Parallel()
+
+	backendDB, db, mock := newMockDB(t)
+	defer backendDB.Close()
+	client := NewORMClient("test-progress-client-query", db)
+
+	rows := []*ProgressDO{
+		{
+			CaptureID: "captureID-1",
+			Progress: &metadata.CaptureProgress{
+				1: {
+					CheckpointTs:      1,
+					MinTableBarrierTs: 1,
+				},
+				2: {
+					CheckpointTs:      2,
+					MinTableBarrierTs: 2,
+				},
+			},
+			Version:  1,
+			UpdateAt: time.Now(),
+		},
+		{
+			CaptureID: "captureID-2",
+			Progress:  &metadata.CaptureProgress{},
+			Version:   2,
+			UpdateAt:  time.Now(),
+		},
+	}
+
+	// Test queryProgresses
+	expectedqueryProgresses := rows
+	queryProgressesRows := []interface{}{expectedqueryProgresses[0], expectedqueryProgresses[1]}
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `progress`", nil,
+		[]string{"capture_id", "progress", "version", "update_at"},
+		queryProgressesRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ProgressDO)
+			require.True(t, ok)
+			return []driver.Value{row.CaptureID, row.Progress, row.Version, row.UpdateAt}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			progresses, err := client.queryProgresses(db)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, progresses, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedqueryProgresses, progresses)
+			}
+		},
+		queryTypeFullTable,
+	)
+
+	// Test queryProgressesByUpdateAt
+	expectedqueryProgressesByUpdateAt := rows
+	queryProgressesByUpdateAtRows := []interface{}{
+		expectedqueryProgressesByUpdateAt[0],
+		expectedqueryProgressesByUpdateAt[1],
+	}
+	queryAt := time.Now()
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `progress` WHERE update_at > ?", []driver.Value{queryAt},
+		[]string{"capture_id", "progress", "version", "update_at"},
+		queryProgressesByUpdateAtRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ProgressDO)
+			require.True(t, ok)
+			return []driver.Value{row.CaptureID, row.Progress, row.Version, row.UpdateAt}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			progresses, err := client.queryProgressesByUpdateAt(db, queryAt)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, progresses, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedqueryProgressesByUpdateAt, progresses)
+			}
+		},
+		queryTypeRange,
+	)
+
+	// Test queryProgressByCaptureID
+	for _, row := range rows {
+		expectedqueryProgressByCaptureID := row
+		queryProgressByCaptureIDRows := []interface{}{row}
+		runMockQueryTest(t, mock,
+			"SELECT * FROM `progress` WHERE capture_id = ? LIMIT 1",
+			[]driver.Value{expectedqueryProgressByCaptureID.CaptureID},
+			[]string{"capture_id", "progress", "version", "update_at"},
+			queryProgressByCaptureIDRows,
+			func(r interface{}) []driver.Value {
+				row, ok := r.(*ProgressDO)
+				require.True(t, ok)
+				return []driver.Value{row.CaptureID, row.Progress, row.Version, row.UpdateAt}
+			},
+			func(expectedRowsCnt int, expectedError error) {
+				progress, err := client.queryProgressByCaptureID(db, expectedqueryProgressByCaptureID.CaptureID)
+				require.ErrorIs(t, err, expectedError)
+				if expectedRowsCnt != 0 {
+					require.Equal(t, expectedqueryProgressByCaptureID, progress)
+				} else {
+					require.Nil(t, progress)
+				}
+			},
+			queryTypePoint,
+		)
+	}
+
+	// Test queryProgressByCaptureIDsWithLock
+	expectedqueryProgressByCaptureIDsWithLock := rows
+	queryProgressByCaptureIDsWithLockRows := []interface{}{rows[0], rows[1]}
+	captureIDs := []string{expectedqueryProgressByCaptureIDsWithLock[0].CaptureID, expectedqueryProgressByCaptureIDsWithLock[1].CaptureID}
+	runMockQueryTest(t, mock,
+		"SELECT * FROM `progress` WHERE capture_id in (?,?) LOCK IN SHARE MODE",
+		[]driver.Value{expectedqueryProgressByCaptureIDsWithLock[0].CaptureID, expectedqueryProgressByCaptureIDsWithLock[1].CaptureID},
+		[]string{"capture_id", "progress", "version", "update_at"},
+		queryProgressByCaptureIDsWithLockRows,
+		func(r interface{}) []driver.Value {
+			row, ok := r.(*ProgressDO)
+			require.True(t, ok)
+			return []driver.Value{row.CaptureID, row.Progress, row.Version, row.UpdateAt}
+		},
+		func(expectedRowsCnt int, expectedError error) {
+			progress, err := client.queryProgressByCaptureIDsWithLock(db, captureIDs)
+			require.ErrorIs(t, err, expectedError)
+			require.Len(t, progress, expectedRowsCnt)
+			if expectedRowsCnt != 0 {
+				require.Equal(t, expectedqueryProgressByCaptureIDsWithLock, progress)
+			}
+		},
+		queryTypeRange,
+	)
 }

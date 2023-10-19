@@ -278,7 +278,7 @@ func (c *CaptureOb[T]) GetChangefeedProgress(
 	var prDOs []*ProgressDO
 	var scDOs []*ScheduleDO
 	err = c.client.Txn(c.egCtx, func(tx T) error {
-		prDOs, err = c.client.queryProgresss(tx)
+		prDOs, err = c.client.queryProgresses(tx)
 		if err != nil {
 			return err
 		}
