@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"strings"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -652,15 +653,29 @@ func (s *mysqlBackend) multiStmtExecute(
 	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
 ) error {
 	start := time.Now()
-	multiStmtSQL := ""
-	multiStmtArgs := []any{}
+	var (
+		sb            strings.Builder
+		multiStmtArgs []any
+	)
+	// preallocate the string builder's capacity to avoid memory reallocation.
+	size := 0
 	for i, query := range dmls.sqls {
-		multiStmtSQL += query
+		size += len(query)
 		if i != len(dmls.sqls)-1 {
-			multiStmtSQL += ";"
+			size += 1
+		}
+	}
+	sb.Grow(size)
+
+	for i, query := range dmls.sqls {
+		sb.WriteString(query)
+		if i != len(dmls.sqls)-1 {
+			sb.WriteString(";")
 		}
 		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
 	}
+	multiStmtSQL := sb.String()
+
 	log.Debug("exec row", zap.Int("workerID", s.workerID),
 		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
