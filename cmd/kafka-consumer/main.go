@@ -465,7 +465,7 @@ type Consumer struct {
 }
 
 const (
-	defaultMemoryQuotaInBytes = 4 * 1024 * 1024 * 1024 // 4GB
+	defaultMemoryQuotaInBytes = 1024 * 1024 * 1024 // 1GB
 )
 
 // NewConsumer creates a new cdc kafka consumer
@@ -521,6 +521,9 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 			flowController: newFlowController(uint64(memoryQuotaPerPartition)),
 		}
 	}
+	log.Info("flow controller created for each partition",
+		zap.Int32("partitionNum", o.partitionNum),
+		zap.Int("quota", memoryQuotaPerPartition))
 
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
 	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan)
@@ -729,7 +732,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 
-				err = sink.flowController.consume(row.CommitTs, uint64(row.ApproximateBytes()))
+				size := uint64(row.ApproximateBytes())
+				err = sink.flowController.consume(row.CommitTs, size)
 				if err != nil {
 					if errors.Is(err, errFlowControllerAborted) {
 						log.Info("flow control aborted")
@@ -737,6 +741,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 					return cerror.Trace(err)
 				}
+				log.Info("flow control consumed", zap.Uint64("consumed", size))
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -945,13 +950,14 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolv
 				log.Error("Failed to update resolved ts", zap.Error(err))
 				return false
 			}
-			if !tableSink.(tablesink.TableSink).GetCheckpointTs().EqualOrGreater(resolvedTs) {
+			checkpointTs := tableSink.(tablesink.TableSink).GetCheckpointTs()
+			if !checkpointTs.EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
 			}
+			sink.flowController.release(checkpointTs.Ts)
 			return true
 		})
 		if flushedResolvedTs {
-			sink.flowController.release(resolvedTs)
 			return nil
 		}
 	}
