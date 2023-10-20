@@ -741,7 +741,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 					return cerror.Trace(err)
 				}
-				log.Info("flow control consumed", zap.Uint64("consumed", size))
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -1055,13 +1054,18 @@ func (c *memoryQuota) consumeWithBlocking(nBytes uint64) error {
 		if newConsumed < c.quota {
 			break
 		}
-		log.Info("flow control: waiting for memory quota",
-			zap.Uint64("newConsumed", newConsumed),
+		log.Warn("flowController: memory quota is exceeded, blocking",
+			zap.Uint64("used", c.consumed.bytes),
 			zap.Uint64("quota", c.quota))
 		c.consumedCond.Wait()
 	}
 
 	c.consumed.bytes += nBytes
+
+	log.Info("flowController: consumed memory",
+		zap.Uint64("used", c.consumed.bytes),
+		zap.Uint64("quota", c.quota))
+
 	return nil
 }
 
@@ -1082,6 +1086,11 @@ func (c *memoryQuota) release(nBytes uint64) {
 		c.consumedCond.Signal()
 		return
 	}
+
+	log.Info("flowController: released memory",
+		zap.Uint64("released", nBytes),
+		zap.Uint64("used", c.consumed.bytes),
+		zap.Uint64("quota", c.quota))
 
 	c.consumed.Unlock()
 }
