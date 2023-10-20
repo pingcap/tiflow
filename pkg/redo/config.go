@@ -215,15 +215,24 @@ func ValidateStorage(uri *url.URL) error {
 		return err
 	}
 
+	// todo: the default dir mode is set as 755, is this ok?
 	err := os.MkdirAll(uri.Path, DefaultDirMode)
 	if err != nil {
 		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
 			fmt.Sprintf("can't make dir for new redo log: %+v", uri)))
 	}
 
-	// todo: add read and write permission check
-	// read, write, list, mkdir, rmdir
+	file := filepath.Join(uri.Path, "file.test")
+	if err := os.WriteFile(file, []byte(""), DefaultFileMode); err != nil {
+		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
+			fmt.Sprintf("can't write file for new redo log: %+v", uri)))
+	}
 
+	if _, err := os.ReadFile(file); err != nil {
+		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
+			fmt.Sprintf("can't read file for new redo log: %+v", uri)))
+	}
+	_ = os.Remove(file)
 	return nil
 }
 
