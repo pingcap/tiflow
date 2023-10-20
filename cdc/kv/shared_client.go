@@ -729,57 +729,6 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		}
 		s.totalSpans.RUnlock()
 	}
-	resolveLastRun := make(map[uint64]time.Time)
-
-	gcResolveLastRun := func() {
-		if len(resolveLastRun) > 1024 {
-			copied := make(map[uint64]time.Time)
-			now := time.Now()
-			for regionID, lastRun := range resolveLastRun {
-				if now.Sub(lastRun) < resolveLockMinInterval {
-					resolveLastRun[regionID] = lastRun
-				}
-			}
-			resolveLastRun = copied
-		}
-	}
-
-	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
-		if state.CheckpointTs.Load() > maxVersion || !state.Initialzied.Load() {
-			return
-		}
-		if lastRun, ok := resolveLastRun[regionID]; ok {
-			if time.Since(lastRun) < resolveLockMinInterval {
-				return
-			}
-		}
-		start := time.Now()
-		defer s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
-
-		if err := s.lockResolver.Resolve(ctx, regionID, maxVersion); err != nil {
-			log.Warn("event feed resolve lock fail",
-				zap.String("namespace", s.changefeed.Namespace),
-				zap.String("changefeed", s.changefeed.ID),
-				zap.Uint64("regionID", regionID),
-				zap.Error(err))
-		}
-		resolveLastRun[regionID] = time.Now()
-	}
-
-	gcTicker := time.NewTicker(resolveLockMinInterval * 3 / 2)
-	defer gcTicker.Stop()
-	for {
-		var task resolveLockTask
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-gcTicker.C:
-			gcResolveLastRun()
-		case task = <-s.resolveLockCh.Out():
-			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
-			doResolve(task.regionID, task.state, task.maxVersion)
-		}
-	}
 }
 
 func (s *SharedClient) newRequestedTable(
