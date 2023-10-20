@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -254,6 +255,9 @@ func newLogManager(
 
 // Run implements pkg/util.Runnable.
 func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
+	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
+		failpoint.Return(errors.New("changefeed new redo manager injected error"))
+	})
 	if !m.Enabled() {
 		return nil
 	}
