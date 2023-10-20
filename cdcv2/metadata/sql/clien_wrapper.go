@@ -610,6 +610,14 @@ func (e *entity[K, V]) doUpsert(
 	e.Lock()
 	defer e.Unlock()
 
+	upsert := func(key K, value V) {
+		e.m[key] = value
+		newUpdataAt := value.GetUpdateAt()
+		if newUpdataAt.After(e.lastUpdateAt) {
+			e.lastUpdateAt = newUpdataAt
+		}
+	}
+
 	for _, newV := range inComming {
 		key := newV.GetKey()
 		oldV, ok := e.m[key]
@@ -622,7 +630,7 @@ func (e *entity[K, V]) doUpsert(
 			if versionEqual && !updateAtEqual {
 				log.Debug("inconsistent version and update_at", zap.Any("old", oldV), zap.Any("new", newV))
 				// TODO: maybe we should check the equality of other fields.
-				e.m[key] = newV
+				upsert(key, newV)
 				continue
 			}
 		}
@@ -632,12 +640,7 @@ func (e *entity[K, V]) doUpsert(
 				log.Debug("skip update or insert", zap.Any("old", oldV), zap.Any("new", newV))
 				continue
 			}
-
-			e.m[key] = newV
-			newUpdataAt := newV.GetUpdateAt()
-			if newUpdataAt.After(e.lastUpdateAt) {
-				e.lastUpdateAt = newUpdataAt
-			}
+			upsert(key, newV)
 		}
 	}
 }
