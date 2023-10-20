@@ -64,7 +64,7 @@ type CaptureOb[T TxnContext] struct {
 // NewCaptureObservation creates a capture observation.
 func NewCaptureObservation(
 	backendDB *sql.DB, selfInfo *model.CaptureInfo, opts ...ClientOptionFunc,
-) (*CaptureOb[*gorm.DB], error) {
+) (*CaptureOb[*ormWrapper], error) {
 	db, err := ormUtil.NewGormDB(backendDB, "mysql")
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func NewCaptureObservation(
 		return nil, errors.Trace(err)
 	}
 	ormClient := NewORMClient(selfInfo.ID, db)
-	client, err := NewClient(electionStorage, ormClient, opts...)
+	client, err := NewOrmClientWithCache(electionStorage, ormClient, opts...)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -82,7 +82,7 @@ func NewCaptureObservation(
 	if err := AutoMigrate(db); err != nil {
 		return nil, errors.Trace(err)
 	}
-	return &CaptureOb[*gorm.DB]{
+	return &CaptureOb[*ormWrapper]{
 		selfInfo:         selfInfo,
 		client:           client,
 		uuidGenerator:    NewUUIDGenerator("orm", db),

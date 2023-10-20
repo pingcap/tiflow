@@ -20,7 +20,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
-	"github.com/pingcap/tiflow/pkg/errors"
 	"gorm.io/gorm"
 )
 
@@ -31,25 +30,9 @@ type client[T TxnContext] interface {
 	checker[T]
 }
 
-func NewClient[T TxnContext](
-	leaderChecker LeaderChecker[T],
-	checker checker[T],
-	opts ...ClientOptionFunc,
-) (client[T], error) {
-	options := setClientOptions(opts...)
-	if options.cacheFlushInterval < 0 {
-		return nil, errors.ErrMetaClientInvalidConfig.
-			GenWithStackByArgs("cacheFlushInterval must be greater than or equal to 0")
-	}
-	if options.cacheFlushInterval > 0 {
-		return newClientWithCache[T](leaderChecker, checker, options)
-	}
-	return newClientWithTimeout[T](leaderChecker, checker, options.timeout), nil
-}
-
 // TxnContext is a type set that can be used as the transaction context.
 type TxnContext interface {
-	*gorm.DB | *sql.Tx
+	*gorm.DB | *sql.Tx | *ormWrapper
 }
 
 // TxnAction is a series of operations that can be executed in a transaction and the
@@ -61,6 +44,8 @@ type TxnAction[T TxnContext] func(T) error
 
 // ormTxnAction represents a transaction action that uses gorm.DB as the transaction context.
 type ormTxnAction = TxnAction[*gorm.DB]
+
+type ormWrapperAction = TxnAction[*ormWrapper]
 
 // sqlTxnAction represents a transaction action that uses sql.Tx as the transaction context.
 // Note that sqlTxnAction is not implemented yet, it is reserved for future use.
