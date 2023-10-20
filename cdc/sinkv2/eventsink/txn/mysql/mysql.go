@@ -19,6 +19,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	dmysql "github.com/go-sql-driver/mysql"
@@ -616,20 +617,17 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 func (s *mysqlBackend) multiStmtExecute(
 	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
 ) error {
-	start := time.Now()
-	multiStmtSQL := ""
-	multiStmtArgs := []any{}
-	for i, query := range dmls.sqls {
-		multiStmtSQL += query
-		if i != len(dmls.sqls)-1 {
-			multiStmtSQL += ";"
-		}
-		multiStmtArgs = append(multiStmtArgs, dmls.values[i]...)
+	var multiStmtArgs []any
+	for _, value := range dmls.values {
+		multiStmtArgs = append(multiStmtArgs, value...)
 	}
+	multiStmtSQL := strings.Join(dmls.sqls, ";")
+
 	log.Debug("exec row", zap.Int("workerID", s.workerID),
 		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
+	start := time.Now()
 	_, execError := tx.ExecContext(ctx, multiStmtSQL, multiStmtArgs...)
 	if execError != nil {
 		err := logDMLTxnErr(
