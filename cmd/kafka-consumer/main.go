@@ -732,15 +732,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 
-				size := uint64(row.ApproximateBytes())
-				err = sink.flowController.consume(row.CommitTs, size)
-				if err != nil {
-					if errors.Is(err, errFlowControllerAborted) {
-						log.Info("flow control aborted")
-						return nil
-					}
-					return cerror.Trace(err)
-				}
+				//size := uint64(row.ApproximateBytes())
+				//err = sink.flowController.consume(row.CommitTs, size)
+				//if err != nil {
+				//	if errors.Is(err, errFlowControllerAborted) {
+				//		log.Info("flow control aborted")
+				//		return nil
+				//	}
+				//	return cerror.Trace(err)
+				//}
 			case model.MessageTypeResolved:
 				ts, err := decoder.NextResolvedEvent()
 				if err != nil {
@@ -949,11 +949,10 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolv
 				log.Error("Failed to update resolved ts", zap.Error(err))
 				return false
 			}
-			checkpointTs := tableSink.(tablesink.TableSink).GetCheckpointTs()
-			if !checkpointTs.EqualOrGreater(resolvedTs) {
+			if !tableSink.(tablesink.TableSink).GetCheckpointTs().EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
 			}
-			sink.flowController.release(checkpointTs.Ts)
+			//sink.flowController.release(checkpointTs.Ts)
 			return true
 		})
 		if flushedResolvedTs {
