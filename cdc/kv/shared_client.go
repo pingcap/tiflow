@@ -707,9 +707,17 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
-			ckptTime := oracle.GetTimeFromTS(attr.FastestRegion.CheckpointTs)
-			if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
-				log.Info("event feed finds a slow region",
+			if attr.SlowestRegion.Initialized {
+				ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
+					log.Info("event feed finds a slow region",
+						zap.String("namespace", s.changefeed.Namespace),
+						zap.String("changefeed", s.changefeed.ID),
+						zap.Any("subscriptionID", subscriptionID),
+						zap.Any("slowRegion", attr.SlowestRegion))
+				}
+			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
+				log.Info("event feed initializes a region too slow",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
