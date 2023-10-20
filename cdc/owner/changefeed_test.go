@@ -594,6 +594,7 @@ func testChangefeedReleaseResource(
 		CfID: cf.id,
 		Type: model.AdminRemove,
 	})
+
 	cf.isReleased = false
 	// changefeed tick will release resources
 	cf.Tick(ctx, state.Info, state.Status, captures)

@@ -314,8 +314,19 @@ func (m *metaManager) shouldRemoved(path string, checkPointTs uint64) bool {
 
 // deleteAllLogs delete all redo logs and leave a deleted mark.
 func (m *metaManager) deleteAllLogs(ctx context.Context) error {
+	// when one changefeed with redo enabled gets deleted, it's extStorage should always be set to not nil
+	// otherwise it should have already meet panic during changefeed running time.
+	// the extStorage may be nil in the unit test, so just set the external storage to make unit test happy.
 	if m.extStorage == nil {
-		return nil
+		uri, err := storage.ParseRawURL(m.cfg.Storage)
+		redo.FixLocalScheme(uri)
+		if err != nil {
+			return err
+		}
+		m.extStorage, err = redo.InitExternalStorage(ctx, *uri)
+		if err != nil {
+			return err
+		}
 	}
 	// Write deleted mark before clean any files.
 	deleteMarker := getDeletedChangefeedMarker(m.changeFeedID)
