@@ -172,7 +172,7 @@ func FixLocalScheme(uri *url.URL) {
 
 // IsBlackholeStorage returns whether a blackhole storage is used.
 func IsBlackholeStorage(scheme string) bool {
-	return ConsistentStorage(scheme) == consistentStorageBlackhole
+	return strings.HasPrefix(scheme, string(consistentStorageBlackhole))
 }
 
 // InitExternalStorage init an external storage.

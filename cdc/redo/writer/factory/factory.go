@@ -15,6 +15,7 @@ package factory
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
@@ -42,8 +43,10 @@ func NewRedoLogWriter(
 	lwCfg.UseExternalStorage = redo.IsExternalStorage(uri.Scheme)
 
 	if redo.IsBlackholeStorage(uri.Scheme) {
-		return blackhole.NewLogWriter(), nil
+		invalid := strings.HasSuffix(uri.Scheme, "invalid")
+		return blackhole.NewLogWriter(invalid), nil
 	}
+
 	if lwCfg.UseFileBackend {
 		return file.NewLogWriter(ctx, lwCfg)
 	}

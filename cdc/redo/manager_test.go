@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
-	"github.com/pingcap/tiflow/cdc/redo/writer/blackhole"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -269,14 +268,10 @@ func TestLogManagerError(t *testing.T) {
 	cfg := &config.ConsistentConfig{
 		Level:             string(redo.ConsistentLevelEventual),
 		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           "blackhole://",
+		Storage:           "blackhole-invalid://",
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
 	logMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
-	err := logMgr.writer.Close()
-	require.NoError(t, err)
-	logMgr.writer = blackhole.NewInvalidLogWriter(logMgr.writer)
-
 	var eg errgroup.Group
 	eg.Go(func() error {
 		return logMgr.Run(ctx)
@@ -300,7 +295,7 @@ func TestLogManagerError(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	err = eg.Wait()
+	err := eg.Wait()
 	require.Regexp(t, ".*invalid black hole writer.*", err)
 	require.Regexp(t, ".*WriteLog.*", err)
 }
