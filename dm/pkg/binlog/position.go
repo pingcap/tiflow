@@ -366,8 +366,8 @@ func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
 //
 // but if can't compare gSet1 and gSet2, will returns 0, false.
 func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
-	gSetIsEmpty1 := gSet1 == nil || len(gSet1.String()) == 0
-	gSetIsEmpty2 := gSet2 == nil || len(gSet2.String()) == 0
+	gSetIsEmpty1 := gtid.IsZeroGTIDSet(gSet1)
+	gSetIsEmpty2 := gtid.IsZeroGTIDSet(gSet2)
 
 	switch {
 	case gSetIsEmpty1 && gSetIsEmpty2:
