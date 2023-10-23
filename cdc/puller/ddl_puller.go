@@ -424,7 +424,14 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 
 	snap := p.schemaStorage.GetLastSnapshot()
 	if err := snap.FillSchemaName(job); err != nil {
-		log.Info("failed to fill schema name for ddl job", zap.Error(err))
+		log.Info("failed to fill schema name for ddl job",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.String("query", job.Query),
+			zap.Stringer("job", job),
+			zap.Error(err))
 		discard, fErr := p.filter.
 			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
 		if fErr != nil {
@@ -465,7 +472,13 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		} else {
 			log.Info("rename table ddl job",
 				zap.String("oldTableName", oldTable.TableName.Table),
-				zap.String("oldSchemaName", oldTable.TableName.Schema))
+				zap.String("oldSchemaName", oldTable.TableName.Schema),
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.String("schema", job.SchemaName),
+				zap.String("table", job.TableName),
+				zap.String("query", job.Query),
+				zap.Stringer("job", job))
 			// since we can find the old table, we must can find the old schema.
 			// 2. If we can find the preTableInfo, we filter it by the old table name.
 			skipByOldTableName, err := p.filter.ShouldDiscardDDL(job.StartTS,
