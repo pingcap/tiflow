@@ -20,19 +20,23 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
 //nolint:unused
-type encoder struct {
-}
+type encoder struct{}
 
 type builder struct{}
 
 // NewBuilder returns a new builder
 func NewBuilder() *builder {
-	// TODO implement me
-	panic("implement me")
+	return &builder{}
+}
+
+// Build implement the RowEventEncoderBuilder interface
+func (b *builder) Build() codec.RowEventEncoder {
+	return &encoder{}
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface

@@ -20,12 +20,14 @@ const (
 )
 
 type message struct {
-	Schema   string                 `json:"schema"`
-	Table    string                 `json:"table"`
-	Type     EventType              `json:"type"`
-	CommitTs uint64                 `json:"commitTs"`
-	Data     map[string]interface{} `json:"data"`
-	Old      map[string]interface{} `json:"old"`
+	// Scheme and Table is empty for the resolved ts event.
+	Schema   string    `json:"schema,omitempty"`
+	Table    string    `json:"table,omitempty"`
+	Type     EventType `json:"type"`
+	CommitTs uint64    `json:"commitTs"`
+	// Data is available for the row changed event.
+	Data map[string]interface{} `json:"data,omitempty"`
+	Old  map[string]interface{} `json:"old,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
