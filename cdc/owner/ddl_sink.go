@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/format"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -426,7 +427,13 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 
 // addSpecialComment translate tidb feature to comment
 func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
-	stms, _, err := parser.New().Parse(ddl.Query, ddl.Charset, ddl.Collate)
+	p := parser.New()
+	mode, err := mysql.GetSQLMode(s.info.Config.SQLMode)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	p.SetSQLMode(mode)
+	stms, _, err := p.Parse(ddl.Query, ddl.Charset, ddl.Collate)
 	if err != nil {
 		return "", errors.Trace(err)
 	}
