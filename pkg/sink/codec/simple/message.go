@@ -13,9 +13,11 @@
 
 package simple
 
+// EventType describes the type of the event.
 type EventType string
 
 const (
+	// WatermarkType is the type of the watermark event.
 	WatermarkType EventType = "WATERMARK"
 )
 
