@@ -130,15 +130,17 @@ func (m *metaManager) preStart(ctx context.Context) error {
 	m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
 		WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
 
-	if err := m.preCleanupExtStorage(ctx); err != nil {
-		log.Warn("pre clean redo logs fail",
+	err = m.preCleanupExtStorage(ctx)
+	if err != nil {
+		log.Warn("redo: pre clean redo logs fail",
 			zap.String("namespace", m.changeFeedID.Namespace),
 			zap.String("changefeed", m.changeFeedID.ID),
 			zap.Error(err))
 		return err
 	}
-	if err := m.initMeta(ctx); err != nil {
-		log.Warn("init redo meta fail",
+	err = m.initMeta(ctx)
+	if err != nil {
+		log.Warn("redo: init redo meta fail",
 			zap.String("namespace", m.changeFeedID.Namespace),
 			zap.String("changefeed", m.changeFeedID.ID),
 			zap.Error(err))
@@ -207,7 +209,10 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 	}
 	var toRemoveMetaFiles []string
 	err := m.extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
-		log.Info("redo: meta manager walk dir", zap.String("path", path), zap.Int64("size", size))
+		log.Info("redo: meta manager walk dir",
+			zap.String("namespace", m.changeFeedID.Namespace),
+			zap.String("changefeed", m.changeFeedID.ID),
+			zap.String("path", path), zap.Int64("size", size))
 		// TODO: use prefix to accelerate traverse operation
 		if !strings.HasSuffix(path, redo.MetaEXT) {
 			return nil
@@ -216,7 +221,10 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 
 		data, err := m.extStorage.ReadFile(ctx, path)
 		if err != nil {
-			log.Warn("redo: read meta file failed", zap.String("path", path), zap.Error(err))
+			log.Warn("redo: read meta file failed",
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID),
+				zap.String("path", path), zap.Error(err))
 			if !util.IsNotExistInExtStorage(err) {
 				return err
 			}
@@ -225,7 +233,10 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 		var meta common.LogMeta
 		_, err = meta.UnmarshalMsg(data)
 		if err != nil {
-			log.Error("redo: unmarshal meta data failed", zap.Error(err), zap.ByteString("data", data))
+			log.Error("redo: unmarshal meta data failed",
+				zap.String("namespace", m.changeFeedID.Namespace),
+				zap.String("changefeed", m.changeFeedID.ID),
+				zap.Error(err), zap.ByteString("data", data))
 			return err
 		}
 		metas = append(metas, &meta)
