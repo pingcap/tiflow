@@ -16,6 +16,8 @@ package kv
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +42,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	kvclientv2 "github.com/tikv/client-go/v2/kv"
+	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -246,6 +249,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
 	g.Go(func() error { return s.resolveLock(ctx) })
+	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	log.Info("event feed started",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -686,6 +690,52 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 			s.metrics.lockResolveWaitDuration.Observe(float64(time.Since(task.enter).Milliseconds()))
 			doResolve(task.regionID, task.state, task.maxVersion)
 		}
+	}
+}
+
+func (s *SharedClient) logSlowRegions(ctx context.Context) error {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+
+		currTime := s.pdClock.CurrentTime()
+		s.totalSpans.RLock()
+		for subscriptionID, rt := range s.totalSpans.v {
+			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
+			if attr.SlowestRegion.Initialized {
+				ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
+					log.Info("event feed finds a slow region",
+						zap.String("namespace", s.changefeed.Namespace),
+						zap.String("changefeed", s.changefeed.ID),
+						zap.Any("subscriptionID", subscriptionID),
+						zap.Any("slowRegion", attr.SlowestRegion))
+				}
+			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
+				log.Info("event feed initializes a region too slow",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Any("subscriptionID", subscriptionID),
+					zap.Any("slowRegion", attr.SlowestRegion))
+			}
+			if len(attr.Holes) > 0 {
+				holes := make([]string, 0, len(attr.Holes))
+				for _, hole := range attr.Holes {
+					holes = append(holes, fmt.Sprintf("[%s,%s)", hole.StartKey, hole.EndKey))
+				}
+				log.Info("event feed holes exist",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Any("subscriptionID", subscriptionID),
+					zap.String("holes", strings.Join(holes, ", ")))
+			}
+		}
+		s.totalSpans.RUnlock()
 	}
 }
 

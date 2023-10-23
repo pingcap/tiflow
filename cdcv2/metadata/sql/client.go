@@ -171,8 +171,8 @@ type progressClient[T TxnContext] interface {
 	createProgress(tx T, pr *ProgressDO) error
 	deleteProgress(tx T, pr *ProgressDO) error
 	updateProgress(tx T, pr *ProgressDO) error
-	queryProgresss(tx T) ([]*ProgressDO, error)
-	queryProgresssByUpdateAt(tx T, lastUpdateAt time.Time) ([]*ProgressDO, error)
+	queryProgresses(tx T) ([]*ProgressDO, error)
+	queryProgressesByUpdateAt(tx T, lastUpdateAt time.Time) ([]*ProgressDO, error)
 	queryProgressByCaptureID(tx T, id string) (*ProgressDO, error)
 	queryProgressByCaptureIDsWithLock(tx T, ids []string) ([]*ProgressDO, error)
 }

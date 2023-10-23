@@ -487,8 +487,9 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 		if action != nil {
 			action(item.regionID, &item.state)
 		}
-
-		r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, item.startKey) < 0
+		if spanz.EndCompare(lastEnd, item.startKey) < 0 {
+			r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: item.startKey})
+		}
 		ckpt := item.state.CheckpointTs.Load()
 		if ckpt > r.FastestRegion.CheckpointTs {
 			r.FastestRegion.RegionID = item.regionID
@@ -505,13 +506,15 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 		lastEnd = item.endKey
 		return true
 	})
-	r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0
+	if spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0 {
+		r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: l.totalSpan.EndKey})
+	}
 	return
 }
 
 // CollectedLockedRangeAttrs returns by `RegionRangeLock.CollectedLockedRangeAttrs`.
 type CollectedLockedRangeAttrs struct {
-	HoleExists    bool
+	Holes         []tablepb.Span
 	FastestRegion LockedRangeAttrs
 	SlowestRegion LockedRangeAttrs
 }
