@@ -25,16 +25,13 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
 // kafkaTopicManager is a manager for kafka topics.
 type kafkaTopicManager struct {
 	changefeedID model.ChangeFeedID
-	role         util.Role
-
-	admin kafka.ClusterAdminClient
+	admin        kafka.ClusterAdminClient
 
 	cfg *kafka.AutoCreateTopicConfig
 
@@ -46,11 +43,9 @@ func NewKafkaTopicManager(
 	changefeedID model.ChangeFeedID,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
-	role util.Role,
 ) *kafkaTopicManager {
 	return &kafkaTopicManager{
 		changefeedID: changefeedID,
-		role:         role,
 		admin:        admin,
 		cfg:          cfg,
 	}

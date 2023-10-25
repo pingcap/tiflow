@@ -24,7 +24,6 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // GetTopic returns the topic name from the sink URI.
@@ -96,9 +95,8 @@ func GetTopicManagerAndTryCreateTopic(
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
 	adminClient kafka.ClusterAdminClient,
-	role util.Role,
 ) (manager.TopicManager, error) {
-	topicManager := manager.NewKafkaTopicManager(changefeedID, adminClient, topicCfg, role)
+	topicManager := manager.NewKafkaTopicManager(changefeedID, adminClient, topicCfg)
 
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)

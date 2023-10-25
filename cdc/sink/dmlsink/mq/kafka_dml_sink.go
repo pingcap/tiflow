@@ -86,7 +86,6 @@ func NewKafkaDMLSink(
 		topic,
 		options.DeriveTopicConfig(),
 		adminClient,
-		tiflowutil.RoleProcessor,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
