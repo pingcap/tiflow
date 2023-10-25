@@ -106,12 +106,12 @@ func TestParseZeroAsEmptyGTIDSet(t *testing.T) {
 	require.Equal(t, "", gset.String())
 }
 
-func TestIsZeroGTIDSet(t *testing.T) {
+func TestCheckGTIDSetEmpty(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
 		gsetStr string
-		isZero  bool
+		isEmpty bool
 		flavor  string
 	}{
 		{
@@ -149,6 +149,6 @@ func TestIsZeroGTIDSet(t *testing.T) {
 		t.Logf("test case %d", i)
 		gset, err := ParserGTID(testCase.flavor, testCase.gsetStr)
 		require.NoError(t, err)
-		require.Equal(t, testCase.isZero, IsZeroGTIDSet(gset))
+		require.Equal(t, testCase.isEmpty, CheckGTIDSetEmpty(gset))
 	}
 }

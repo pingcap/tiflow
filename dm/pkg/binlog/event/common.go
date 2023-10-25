@@ -173,7 +173,7 @@ func GTIDIncrease(flavor string, gSet gmysql.GTIDSet) (gmysql.GTIDSet, error) {
 
 // verifySingleGTID verifies gSet whether only containing a single valid GTID.
 func verifySingleGTID(flavor string, gSet gmysql.GTIDSet) (interface{}, error) {
-	if gtid.IsZeroGTIDSet(gSet) {
+	if gtid.CheckGTIDSetEmpty(gSet) {
 		return nil, terror.ErrBinlogEmptyGTID.Generate()
 	}
 
