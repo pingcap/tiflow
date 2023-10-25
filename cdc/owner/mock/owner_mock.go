@@ -13,7 +13,6 @@ import (
 	model "github.com/pingcap/tiflow/cdc/model"
 	owner "github.com/pingcap/tiflow/cdc/owner"
 	scheduler "github.com/pingcap/tiflow/cdc/scheduler"
-	orchestrator "github.com/pingcap/tiflow/pkg/orchestrator"
 )
 
 // MockOwner is a mock of Owner interface.
@@ -109,21 +108,6 @@ func (m *MockOwner) ScheduleTable(cfID model.ChangeFeedID, toCapture model.Captu
 func (mr *MockOwnerMockRecorder) ScheduleTable(cfID, toCapture, tableID, done interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleTable", reflect.TypeOf((*MockOwner)(nil).ScheduleTable), cfID, toCapture, tableID, done)
-}
-
-// Tick mocks base method.
-func (m *MockOwner) Tick(ctx context.Context, state orchestrator.ReactorState) (orchestrator.ReactorState, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tick", ctx, state)
-	ret0, _ := ret[0].(orchestrator.ReactorState)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Tick indicates an expected call of Tick.
-func (mr *MockOwnerMockRecorder) Tick(ctx, state interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tick", reflect.TypeOf((*MockOwner)(nil).Tick), ctx, state)
 }
 
 // UpdateChangefeed mocks base method.
