@@ -481,7 +481,9 @@ LOOP2:
 	}
 
 	checkpointTs := c.latestStatus.CheckpointTs
-	c.resolvedTs = checkpointTs
+	if c.resolvedTs == 0 {
+		c.resolvedTs = checkpointTs
+	}
 	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
@@ -630,7 +632,6 @@ LOOP2:
 		return err
 	}
 	if c.redoMetaMgr.Enabled() {
-		c.resolvedTs = c.redoMetaMgr.GetFlushedMeta().ResolvedTs
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
@@ -748,7 +749,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.barriers = nil
 	c.initialized = false
 	c.isReleased = true
-	c.resolvedTs = 0
 
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
