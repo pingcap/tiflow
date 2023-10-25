@@ -33,8 +33,9 @@ func TestPartitions(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
+	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
 	defer manager.Close()
 
 	partitionsNum, err := manager.GetPartitionNum(
@@ -55,8 +56,9 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
+	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -71,7 +73,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
@@ -80,6 +82,7 @@ func TestCreateTopic(t *testing.T) {
 		err,
 	)
 
+	topic := "new-topic-failed"
 	// Invalid replication factor.
 	// It happens when replication-factor is greater than the number of brokers.
 	cfg = &kafka.AutoCreateTopicConfig{
@@ -87,9 +90,9 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager = NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
 	defer manager.Close()
-	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic-failed")
+	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, topic)
 	require.Regexp(
 		t,
 		"kafka create topic failed: kafka server: Replication-factor is invalid",
@@ -108,14 +111,16 @@ func TestCreateTopicWithDelay(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
+	topic := "new_topic"
+	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, model.DefaultChangeFeedID("test"), adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
 	defer manager.Close()
-	partitionNum, err := manager.createTopic(ctx, "new_topic")
+	partitionNum, err := manager.createTopic(ctx, topic)
 	require.Nil(t, err)
-	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
+	err = adminClient.SetRemainingFetchesUntilTopicVisible(topic, 3)
 	require.Nil(t, err)
-	err = manager.waitUntilTopicVisible(ctx, "new_topic")
+	err = manager.waitUntilTopicVisible(ctx, topic)
 	require.Nil(t, err)
 	require.Equal(t, int32(2), partitionNum)
 }
