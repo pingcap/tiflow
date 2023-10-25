@@ -48,14 +48,12 @@ func NewKafkaTopicManager(
 	cfg *kafka.AutoCreateTopicConfig,
 	role util.Role,
 ) *kafkaTopicManager {
-	mgr := &kafkaTopicManager{
+	return &kafkaTopicManager{
 		changefeedID: changefeedID,
 		role:         role,
 		admin:        admin,
 		cfg:          cfg,
 	}
-
-	return mgr
 }
 
 // GetPartitionNum returns the number of partitions of the topic.
@@ -217,6 +215,7 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 		}
 	}
 
-	m.tryUpdatePartitionsAndLogging(topicName, partitionNum)
+	// store the partition number specified in the sink-uri which is adjusted.
+	m.tryUpdatePartitionsAndLogging(topicName, m.cfg.PartitionNum)
 	return partitionNum, nil
 }
