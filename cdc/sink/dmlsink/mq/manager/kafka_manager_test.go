@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,7 +34,7 @@ func TestPartitions(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
+	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg)
 
 	partitionsNum, err := manager.GetPartitionNum(
 		ctx,
@@ -56,7 +55,7 @@ func TestCreateTopic(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
+	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg)
 
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.Nil(t, err)
@@ -71,7 +70,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
+	manager = NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg)
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
 		t,
@@ -87,7 +86,7 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 4,
 	}
 
-	manager = NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
+	manager = NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg)
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic-failed")
 	require.Regexp(
 		t,
@@ -108,7 +107,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg, util.RoleTester)
+	manager := NewKafkaTopicManager(model.DefaultChangeFeedID("test"), adminClient, cfg)
 	partitionNum, err := manager.createTopic(ctx, "new_topic")
 	require.Nil(t, err)
 	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
