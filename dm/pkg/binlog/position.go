@@ -365,9 +365,18 @@ func IsFreshPosition(location Location, flavor string, cmpGTID bool) bool {
 //	-1, true if gSet1 is less than gSet2
 //
 // but if can't compare gSet1 and gSet2, will returns 0, false.
+var (
+	emptyMySQLGTIDSet, _   = gmysql.ParseMysqlGTIDSet("")
+	emptyMariaDBGTIDSet, _ = gmysql.ParseMariadbGTIDSet("")
+)
+
+func CheckGTIDSetEmpty(gSet gmysql.GTIDSet) bool {
+	return gSet == nil || gSet.Equal(emptyMySQLGTIDSet) || gSet.Equal(emptyMariaDBGTIDSet)
+}
+
 func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
-	gSetIsEmpty1 := gSet1 == nil || len(gSet1.String()) == 0
-	gSetIsEmpty2 := gSet2 == nil || len(gSet2.String()) == 0
+	gSetIsEmpty1 := CheckGTIDSetEmpty(gSet1)
+	gSetIsEmpty2 := CheckGTIDSetEmpty(gSet2)
 
 	switch {
 	case gSetIsEmpty1 && gSetIsEmpty2:
