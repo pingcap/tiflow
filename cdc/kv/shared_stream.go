@@ -468,6 +468,19 @@ func (s *requestedStream) sendRegionChangeEvents(
 		} else {
 			subscriptionID = tableSubID
 		}
+
+		switch x := event.Event.(type) {
+		case *cdcpb.Event_Admin_:
+		case *cdcpb.Event_Error:
+			log.Info("event feed receives a region error",
+				zap.String("namespace", c.changefeed.Namespace),
+				zap.String("changefeed", c.changefeed.ID),
+				zap.Uint64("streamID", s.streamID),
+				zap.Any("subscriptionID", subscriptionID),
+				zap.Uint64("regionID", event.RegionId),
+				zap.Any("error", x.Error))
+		}
+
 		if state := s.getState(subscriptionID, regionID); state != nil {
 			sfEvent := newEventItem(event, state, s)
 			slot := hashRegionID(regionID, len(c.workers))
