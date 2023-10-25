@@ -4057,7 +4057,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	// 2. location already has GTID position
 	// 3. location is totally new, has no position info
 	// 4. location is too early thus not a COMMIT location, which happens when it's reset by other logic
-	if !s.cfg.EnableGTID || location.GTIDSetStr() != "" || location.Position.Name == "" || location.Position.Pos == 4 {
+	if !s.cfg.EnableGTID || !binlog.CheckGTIDSetEmpty(location.GetGTID()) || location.Position.Name == "" || location.Position.Pos == 4 {
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController
