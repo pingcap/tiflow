@@ -279,6 +279,14 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedule
 			status.State = tablepb.TableStateStopping
 		}
 		result = append(result, status)
+
+		log.Info("schedulerv3: agent collect table status",
+			zap.String("namespace", a.ChangeFeedID.Namespace),
+			zap.String("changefeed", a.ChangeFeedID.ID),
+			zap.Int64("tableID", span.TableID),
+			zap.Uint64("checkpoint", status.Checkpoint.CheckpointTs),
+			zap.Uint64("resolved", status.Checkpoint.ResolvedTs),
+			zap.Any("state", status.State))
 		return true
 	})
 	for _, span := range request.GetSpans() {
