@@ -598,7 +598,13 @@ func (cp *RemoteCheckPoint) IsOlderThanTablePoint(table *filter.Table, location 
 		return false
 	}
 	oldLocation := point.MySQLLocation()
+<<<<<<< HEAD
 	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation))
+=======
+	// if we update enable-gtid = false to true, we need to compare binlog position instead of GTID before we save table point
+	cmpGTID := cp.cfg.EnableGTID && !(binlog.CheckGTIDSetEmpty(oldLocation.GetGTID()) && binlog.ComparePosition(oldLocation.Position, binlog.MinPosition) > 0)
+	cp.logCtx.L().Debug("compare table location whether is newer", zap.Stringer("location", location), zap.Stringer("old location", oldLocation), zap.Bool("cmpGTID", cmpGTID))
+>>>>>>> 5ec0b15ee1 (Removed String() call in favor of variable substitution. (#9829))
 
 	if useLE {
 		return binlog.CompareLocation(location, oldLocation, cp.cfg.EnableGTID) <= 0
