@@ -517,12 +517,12 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		ctx, cancelOwner := context.WithCancel(ctx)
 		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
 		g.Go(func() error {
-			return c.runEtcdWorker(ownerCtx, owner,
+			return c.runEtcdWorker(ownerCtx, owner.(orchestrator.Reactor),
 				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL),
 				ownerFlushInterval, util.RoleOwner.String())
 		})
 		g.Go(func() error {
-			er := c.runEtcdWorker(ownerCtx, controller,
+			er := c.runEtcdWorker(ownerCtx, controller.(orchestrator.Reactor),
 				globalState,
 				// todo: do not use owner flush interval
 				ownerFlushInterval, util.RoleController.String())
