@@ -284,8 +284,12 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 		return 0, errors.Trace(err)
 	}
 	if detail, ok := topicDetails[topicName]; ok {
-		m.tryUpdatePartitionsAndLogging(topicName, detail.NumPartitions)
-		return detail.NumPartitions, nil
+		numPartition := detail.NumPartitions
+		if topicName == m.defaultTopic {
+			numPartition = m.cfg.PartitionNum
+		}
+		m.tryUpdatePartitionsAndLogging(topicName, numPartition)
+		return numPartition, nil
 	}
 
 	partitionNum, err := m.createTopic(ctx, topicName)
