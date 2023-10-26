@@ -369,13 +369,6 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	default:
 	}
 
-	if c.redoMetaMgr.Enabled() {
-		if !c.redoMetaMgr.Running() {
-			return 0, 0, nil
-		}
-		c.resolvedTs = c.redoMetaMgr.GetFlushedMeta().ResolvedTs
-	}
-
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
 	if err != nil {
