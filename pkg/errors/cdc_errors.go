@@ -130,6 +130,11 @@ var (
 		errors.RFCCodeText("CDC:ErrDispatcherFailed"),
 	)
 
+	ErrTransformerFailed = errors.Normalize(
+		"transformer failed",
+		errors.RFCCodeText("CDC:ErrTransformFailed"),
+	)
+
 	// internal errors
 	ErrAdminStopProcessor = errors.Normalize(
 		"stop processor by admin command",
