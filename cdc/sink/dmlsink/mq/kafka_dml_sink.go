@@ -98,7 +98,8 @@ func NewKafkaDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	trans, err := transformer.NewColumnSelector(replicaConfig)
+	// todo: what if the `replicaConfig.Sink` is nil.
+	trans, err := transformer.NewColumnSelector(replicaConfig.Sink.ColumnSelectors)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
