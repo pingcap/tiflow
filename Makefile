@@ -1,5 +1,5 @@
 ### Makefile for tiflow
-.PHONY: build test check clean fmt cdc kafka_consumer storage_consumer coverage \
+.PHONY: build test check clean fmt cdc cdc_fips kafka_consumer storage_consumer coverage \
 	integration_test_build integration_test integration_test_mysql integration_test_kafka bank \
 	kafka_docker_integration_test kafka_docker_integration_test_with_build \
 	clean_integration_test_containers \
@@ -42,6 +42,7 @@ DM_TEST_DIR := /tmp/dm_test
 ENGINE_TEST_DIR := /tmp/engine_test
 
 GO       := GO111MODULE=on go
+
 ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
@@ -59,6 +60,7 @@ else ifeq (${OS}, "darwin")
 endif
 
 GOBUILD  := CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+GOBUILDFIPS  := CGO_ENABLED=1 GOEXPERIMENT=boringcrypto $(GO) build -tags boringcrypto $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
@@ -156,6 +158,9 @@ build-cdc-with-failpoint: ## Build cdc with failpoint enabled.
 
 cdc:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go
+
+cdc_fips:
+	$(GOBUILDFIPS) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
 
 kafka_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go
