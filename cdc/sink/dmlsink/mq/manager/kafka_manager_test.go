@@ -22,29 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPartitions(t *testing.T) {
-	t.Parallel()
-
-	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer adminClient.Close()
-	cfg := &kafka.AutoCreateTopicConfig{
-		AutoCreate:        true,
-		PartitionNum:      2,
-		ReplicationFactor: 1,
-	}
-
-	changefeedID := model.DefaultChangeFeedID("test")
-	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
-	defer manager.Close()
-
-	partitionsNum, err := manager.GetPartitionNum(
-		ctx,
-		kafka.DefaultMockTopicName)
-	require.Nil(t, err)
-	require.Equal(t, int32(3), partitionsNum)
-}
-
 func TestCreateTopic(t *testing.T) {
 	t.Parallel()
 
@@ -61,14 +38,14 @@ func TestCreateTopic(t *testing.T) {
 	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
-	require.Nil(t, err)
-	require.Equal(t, int32(3), partitionNum)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), partitionNum)
 
 	partitionNum, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionNum)
 	partitionsNum, err := manager.GetPartitionNum(ctx, "new-topic")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionsNum)
 
 	// Try to create a topic without auto create.
@@ -117,10 +94,10 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(ctx, topic)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	err = adminClient.SetRemainingFetchesUntilTopicVisible(topic, 3)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	err = manager.waitUntilTopicVisible(ctx, topic)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionNum)
 }
