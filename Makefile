@@ -42,7 +42,6 @@ DM_TEST_DIR := /tmp/dm_test
 ENGINE_TEST_DIR := /tmp/engine_test
 
 GO       := GO111MODULE=on go
-
 ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
