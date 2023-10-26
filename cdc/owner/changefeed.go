@@ -488,7 +488,9 @@ LOOP2:
 	}
 
 	checkpointTs := c.latestStatus.CheckpointTs
-	c.resolvedTs = checkpointTs
+	if c.resolvedTs == 0 {
+		c.resolvedTs = checkpointTs
+	}
 	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
@@ -743,7 +745,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.barriers = nil
 	c.initialized = false
 	c.isReleased = true
-	c.resolvedTs = 0
 
 	log.Info("changefeed closed",
 		zap.String("namespace", c.id.Namespace),
