@@ -447,12 +447,20 @@ LOOP2:
 		}
 	}
 
+<<<<<<< HEAD
 	checkpointTs := c.state.Status.CheckpointTs
 	if c.resolvedTs == 0 {
 		c.resolvedTs = checkpointTs
 	}
 
 	minTableBarrierTs := c.state.Status.MinTableBarrierTs
+=======
+	checkpointTs := c.latestStatus.CheckpointTs
+	if c.resolvedTs == 0 {
+		c.resolvedTs = checkpointTs
+	}
+	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
