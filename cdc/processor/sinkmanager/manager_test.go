@@ -152,7 +152,11 @@ func TestAddTable(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
 	require.Equal(t, 0, manager.sinkProgressHeap.len(), "Not started table shout not in progress heap")
+<<<<<<< HEAD
 	err := manager.StartTable(tableID, 1)
+=======
+	err := manager.StartTable(span, 1)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.NoError(t, err)
 	require.Equal(t, uint64(0x7ffffffffffbffff), tableSink.(*tableSinkWrapper).replicateTs)
 
@@ -176,7 +180,11 @@ func TestRemoveTable(t *testing.T) {
 	tableSink, ok := manager.tableSinks.Load(tableID)
 	require.True(t, ok)
 	require.NotNil(t, tableSink)
+<<<<<<< HEAD
 	err := manager.StartTable(tableID, 0)
+=======
+	err := manager.StartTable(span, 0)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.NoError(t, err)
 	addTableAndAddEventsToSortEngine(t, e, tableID)
 	manager.UpdateBarrierTs(4, nil)
@@ -216,7 +224,11 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 	manager.schemaStorage.AdvanceResolvedTs(5)
+<<<<<<< HEAD
 	err := manager.StartTable(tableID, 0)
+=======
+	err := manager.StartTable(span, 0)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -244,7 +256,11 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 3)
 	manager.schemaStorage.AdvanceResolvedTs(4)
+<<<<<<< HEAD
 	err := manager.StartTable(tableID, 0)
+=======
+	err := manager.StartTable(span, 0)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -271,7 +287,11 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 	manager.UpdateBarrierTs(4, nil)
 	manager.UpdateReceivedSorterResolvedTs(tableID, 5)
 	manager.schemaStorage.AdvanceResolvedTs(5)
+<<<<<<< HEAD
 	err := manager.StartTable(tableID, 0)
+=======
+	err := manager.StartTable(span, 0)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
@@ -347,11 +367,21 @@ func TestSinkManagerRunWithErrors(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskError")
 	}()
 
+<<<<<<< HEAD
 	source.AddTable(1)
 	manager.AddTable(1, 100, math.MaxUint64)
 	manager.StartTable(1, 100)
 	source.Add(1, model.NewResolvedPolymorphicEvent(0, 101))
 	manager.UpdateReceivedSorterResolvedTs(1, 101)
+=======
+	span := spanz.TableIDToComparableSpan(1)
+
+	source.AddTable(span, "test", 100)
+	manager.AddTable(span, 100, math.MaxUint64)
+	manager.StartTable(span, 100)
+	source.Add(span, model.NewResolvedPolymorphicEvent(0, 101))
+	manager.UpdateReceivedSorterResolvedTs(span, 101)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	manager.UpdateBarrierTs(101, nil)
 
 	timer := time.NewTimer(5 * time.Second)

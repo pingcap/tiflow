@@ -166,6 +166,7 @@ func (p *processor) AddTable(
 			// table is `prepared`, and a `isPrepare = false` request indicate that old table should
 			// be stopped on original capture already, it's safe to start replicating data now.
 			if !isPrepare {
+<<<<<<< HEAD
 				if p.pullBasedSinking {
 					if p.redoDMLMgr.Enabled() {
 						// ResolvedTs is store in external storage when redo log is enabled, so we need to
@@ -177,6 +178,15 @@ func (p *processor) AddTable(
 					}
 				} else {
 					p.tables[tableID].Start(startTs)
+=======
+				if p.redo.r.Enabled() {
+					// ResolvedTs is store in external storage when redo log is enabled, so we need to
+					// start table with ResolvedTs in redoDMLManager.
+					p.redo.r.StartTable(span, checkpoint.ResolvedTs)
+				}
+				if err := p.sinkManager.r.StartTable(span, startTs); err != nil {
+					return false, errors.Trace(err)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 				}
 			}
 			return true, nil

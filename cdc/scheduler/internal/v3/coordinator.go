@@ -313,7 +313,11 @@ func (c *coordinator) poll(
 	replications := c.replicationM.ReplicationSets()
 	runningTasks := c.replicationM.RunningTasks()
 	allTasks := c.schedulerM.Schedule(
+<<<<<<< HEAD
 		checkpointTs, currentTables, c.captureM.Captures, replications, runningTasks)
+=======
+		checkpointTs, currentSpans, c.captureM.Captures, replications, runningTasks)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 
 	// Handle generated schedule tasks.
 	msgs, err = c.replicationM.HandleTasks(allTasks)

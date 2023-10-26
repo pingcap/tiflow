@@ -266,7 +266,12 @@ func TestReplicationSetPoll(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{},
 			}
 		}
+<<<<<<< HEAD
 		r, _ := NewReplicationSet(1, 0, status, model.ChangeFeedID{})
+=======
+		span := tablepb.Span{TableID: 1}
+		r, _ := NewReplicationSet(span, 0, status, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 		var tableStates []int
 		for state := range tablepb.TableState_name {
 			tableStates = append(tableStates, int(state))
@@ -297,7 +302,12 @@ func TestReplicationSetPollUnknownCapture(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
+<<<<<<< HEAD
 	r, err := NewReplicationSet(tableID, 0, map[model.CaptureID]*tablepb.TableStatus{
+=======
+	span := tablepb.Span{TableID: tableID}
+	r, err := NewReplicationSet(span, 0, map[model.CaptureID]*tablepb.TableStatus{
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 		"1": {
 			TableID:    tableID,
 			State:      tablepb.TableStateReplicating,
@@ -333,7 +343,12 @@ func TestReplicationSetAddTable(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
+<<<<<<< HEAD
 	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: tableID}
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 
 	// Absent -> Prepare
@@ -477,7 +492,12 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
+<<<<<<< HEAD
 	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: tableID}
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 
 	// Ignore removing table if it's not in replicating.
@@ -555,7 +575,12 @@ func TestReplicationSetMoveTable(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
+<<<<<<< HEAD
 	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: tableID}
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 
 	source := "1"
@@ -786,7 +811,12 @@ func TestReplicationSetCaptureShutdown(t *testing.T) {
 
 	from := "1"
 	tableID := model.TableID(1)
+<<<<<<< HEAD
 	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: tableID}
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 
 	// Add table, Absent -> Prepare
@@ -1091,7 +1121,12 @@ func TestReplicationSetCaptureShutdownAfterReconstructCommitState(t *testing.T) 
 	tableStatus := map[model.CaptureID]*tablepb.TableStatus{
 		from: {TableID: tableID, State: tablepb.TableStatePrepared},
 	}
+<<<<<<< HEAD
 	r, err := NewReplicationSet(tableID, 0, tableStatus, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: tableID}
+	r, err := NewReplicationSet(span, 0, tableStatus, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.Equal(t, "", r.Primary)
@@ -1111,7 +1146,12 @@ func TestReplicationSetMoveTableWithHeartbeatResponse(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
+<<<<<<< HEAD
 	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: tableID}
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 
 	source := "1"
@@ -1198,7 +1238,12 @@ func TestReplicationSetMoveTableSameDestCapture(t *testing.T) {
 	t.Parallel()
 
 	tableID := model.TableID(1)
+<<<<<<< HEAD
 	r, err := NewReplicationSet(tableID, 0, nil, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: tableID}
+	r, err := NewReplicationSet(span, 0, nil, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 
 	source := "1"
@@ -1230,7 +1275,12 @@ func TestReplicationSetCommitRestart(t *testing.T) {
 			Checkpoint: tablepb.Checkpoint{},
 		},
 	}
+<<<<<<< HEAD
 	r, err := NewReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: 0}
+	r, err := NewReplicationSet(span, 0, tableStatus, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateCommit, r.State)
 	require.EqualValues(t, RoleSecondary, r.Captures["1"])
@@ -1312,7 +1362,12 @@ func TestReplicationSetRemoveRestart(t *testing.T) {
 			Checkpoint: tablepb.Checkpoint{},
 		},
 	}
+<<<<<<< HEAD
 	r, err := NewReplicationSet(0, 0, tableStatus, model.ChangeFeedID{})
+=======
+	span := tablepb.Span{TableID: 0}
+	r, err := NewReplicationSet(span, 0, tableStatus, model.ChangeFeedID{})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Nil(t, err)
 	require.Equal(t, ReplicationSetStateRemoving, r.State)
 	require.False(t, r.hasRole(RoleSecondary))
@@ -1425,4 +1480,30 @@ func TestReplicationSetHeap_MinK(t *testing.T) {
 	}
 	require.Equal(t, expectedTables, tables)
 	require.Equal(t, 0, h.Len())
+}
+
+func TestUpdateCheckpointAndStats(t *testing.T) {
+	cases := []struct {
+		checkpoint tablepb.Checkpoint
+		stats      tablepb.Stats
+	}{
+		{
+			checkpoint: tablepb.Checkpoint{
+				CheckpointTs: 1,
+				ResolvedTs:   2,
+			},
+			stats: tablepb.Stats{},
+		},
+		{
+			checkpoint: tablepb.Checkpoint{
+				CheckpointTs: 2,
+				ResolvedTs:   1,
+			},
+			stats: tablepb.Stats{},
+		},
+	}
+	r := &ReplicationSet{}
+	for _, c := range cases {
+		r.updateCheckpointAndStats(c.checkpoint, c.stats)
+	}
 }

@@ -144,7 +144,11 @@ func TestDrainStoppingCapture(t *testing.T) {
 	replications = map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
+<<<<<<< HEAD
 	}
+=======
+	})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.EqualValues(t, 2, tasks[0].MoveTable.TableID)
@@ -156,7 +160,11 @@ func TestDrainSkipOwner(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
+<<<<<<< HEAD
 	currentTables := make([]model.TableID, 0)
+=======
+	currentTables := make([]tablepb.Span, 0)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {},
 		"b": {IsOwner: true, State: member.CaptureStateStopping},
@@ -175,7 +183,11 @@ func TestDrainImbalanceCluster(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
+<<<<<<< HEAD
 	currentTables := make([]model.TableID, 0)
+=======
+	currentTables := make([]tablepb.Span, 0)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {State: member.CaptureStateInitialized},
 		"b": {IsOwner: true, State: member.CaptureStateInitialized},
@@ -195,7 +207,11 @@ func TestDrainEvenlyDistributedTables(t *testing.T) {
 	t.Parallel()
 
 	var checkpointTs model.Ts
+<<<<<<< HEAD
 	currentTables := make([]model.TableID, 0)
+=======
+	currentTables := make([]tablepb.Span, 0)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	captures := map[model.CaptureID]*member.CaptureStatus{
 		"a": {State: member.CaptureStateInitialized},
 		"b": {IsOwner: true, State: member.CaptureStateInitialized},

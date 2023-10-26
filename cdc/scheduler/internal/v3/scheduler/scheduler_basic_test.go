@@ -77,10 +77,17 @@ func TestSchedulerBasic(t *testing.T) {
 			},
 		},
 		4: {State: replication.ReplicationSetStateAbsent},
+<<<<<<< HEAD
 	}
 	tasks = b.Schedule(1, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].TableID, model.TableID(4))
+=======
+	})
+	tasks = b.Schedule(1, currentTables, captures, replications)
+	require.Len(t, tasks, 1)
+	require.Equal(t, tasks[0].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(1))
 
 	// DDL CREATE/DROP/TRUNCATE TABLE.
@@ -110,6 +117,7 @@ func TestSchedulerBasic(t *testing.T) {
 				"a": replication.RoleUndetermined, "b": replication.RoleSecondary,
 			},
 		},
+<<<<<<< HEAD
 	}
 	tasks = b.Schedule(2, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
@@ -121,6 +129,19 @@ func TestSchedulerBasic(t *testing.T) {
 		require.Equal(t, tasks[1].BurstBalance.AddTables[0].TableID, model.TableID(4))
 		require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(2))
 		require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].TableID, model.TableID(5))
+=======
+	})
+	tasks = b.Schedule(2, currentTables, captures, replications)
+	require.Len(t, tasks, 2)
+	if tasks[0].BurstBalance.AddTables != nil {
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(2))
+		require.Equal(t, tasks[1].BurstBalance.RemoveTables[0].Span.TableID, model.TableID(5))
+	} else {
+		require.Equal(t, tasks[1].BurstBalance.AddTables[0].Span.TableID, model.TableID(4))
+		require.Equal(t, tasks[0].BurstBalance.AddTables[0].CheckpointTs, model.Ts(2))
+		require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].Span.TableID, model.TableID(5))
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	}
 
 	// RemoveTable only.
@@ -155,7 +176,11 @@ func TestSchedulerBasic(t *testing.T) {
 				"b": replication.RoleUndetermined,
 			},
 		},
+<<<<<<< HEAD
 	}
+=======
+	})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks = b.Schedule(3, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Equal(t, tasks[0].BurstBalance.RemoveTables[0].TableID, model.TableID(5))

@@ -35,7 +35,11 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	replications := map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+<<<<<<< HEAD
 	}
+=======
+	})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks := sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.NotNil(t, tasks[0].MoveTable)
@@ -54,7 +58,11 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	replications = map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+<<<<<<< HEAD
 	}
+=======
+	})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 
@@ -66,7 +74,11 @@ func TestSchedulerBalanceCaptureOnline(t *testing.T) {
 	replications = map[model.TableID]*replication.ReplicationSet{
 		1: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+<<<<<<< HEAD
 	}
+=======
+	})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks = sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 }
@@ -85,7 +97,11 @@ func TestSchedulerBalanceTaskLimit(t *testing.T) {
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		3: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		4: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
+<<<<<<< HEAD
 	}
+=======
+	})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks := sched.Schedule(0, currentTables, captures, replications)
 	require.Len(t, tasks, 2)
 

@@ -23,7 +23,11 @@ type scheduler interface {
 	Name() string
 	Schedule(
 		checkpointTs model.Ts,
+<<<<<<< HEAD
 		currentTables []model.TableID,
+=======
+		currentSpans []tablepb.Span,
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 		aliveCaptures map[model.CaptureID]*member.CaptureStatus,
 		replications map[model.TableID]*replication.ReplicationSet) []*replication.ScheduleTask
 }

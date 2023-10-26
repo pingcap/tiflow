@@ -50,18 +50,27 @@ func TestSchedulerMoveTable(t *testing.T) {
 	require.Len(t, tasks, 0)
 
 	// move a not exist table
+<<<<<<< HEAD
 	scheduler.addTask(model.TableID(0), "a")
+=======
+	scheduler.addTask(tablepb.Span{TableID: 0}, "a")
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// move table to a not exist capture
+<<<<<<< HEAD
 	scheduler.addTask(model.TableID(1), "c")
+=======
+	scheduler.addTask(tablepb.Span{TableID: 1}, "c")
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 
 	// move table not replicating
 	scheduler.addTask(model.TableID(1), "b")
 	tasks = scheduler.Schedule(
+<<<<<<< HEAD
 		checkpointTs, currentTables, captures, map[model.TableID]*replication.ReplicationSet{})
 	require.Len(t, tasks, 0)
 
@@ -72,6 +81,18 @@ func TestSchedulerMoveTable(t *testing.T) {
 
 	scheduler.addTask(model.TableID(1), "b")
 	replications[model.TableID(1)].State = replication.ReplicationSetStateReplicating
+=======
+		checkpointTs, currentTables, captures, spanz.NewBtreeMap[*replication.ReplicationSet]())
+	require.Len(t, tasks, 0)
+
+	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
+	replications.GetV(tablepb.Span{TableID: 1}).State = replication.ReplicationSetStatePrepare
+	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
+	require.Len(t, tasks, 0)
+
+	scheduler.addTask(tablepb.Span{TableID: 1}, "b")
+	replications.GetV(tablepb.Span{TableID: 1}).State = replication.ReplicationSetStateReplicating
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 1)
 	require.Equal(t, model.TableID(1), tasks[0].MoveTable.TableID)

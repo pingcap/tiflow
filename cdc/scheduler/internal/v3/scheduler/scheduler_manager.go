@@ -19,6 +19,10 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -65,8 +69,13 @@ func (sm *Manager) Schedule(
 	checkpointTs model.Ts,
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*member.CaptureStatus,
+<<<<<<< HEAD
 	replications map[model.TableID]*replication.ReplicationSet,
 	runTasking map[model.TableID]*replication.ScheduleTask,
+=======
+	replications *spanz.BtreeMap[*replication.ReplicationSet],
+	runTasking *spanz.BtreeMap[*replication.ScheduleTask],
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 ) []*replication.ScheduleTask {
 	for sid, scheduler := range sm.schedulers {
 		// Basic scheduler bypasses max task check, because it handles the most
@@ -78,7 +87,11 @@ func (sm *Manager) Schedule(
 				return nil
 			}
 		}
+<<<<<<< HEAD
 		tasks := scheduler.Schedule(checkpointTs, currentTables, aliveCaptures, replications)
+=======
+		tasks := scheduler.Schedule(checkpointTs, currentSpans, aliveCaptures, replications)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 		for _, t := range tasks {
 			name := struct {
 				scheduler, task string

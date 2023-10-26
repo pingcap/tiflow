@@ -65,7 +65,12 @@ func TestSchedulerRebalance(t *testing.T) {
 	require.Len(t, tasks, 0)
 
 	// table not in the replication set,
+<<<<<<< HEAD
 	tasks = scheduler.Schedule(checkpointTs, []model.TableID{0}, captures, replications)
+=======
+	tasks = scheduler.Schedule(
+		checkpointTs, spanz.ArrayToSpan([]model.TableID{0}), captures, replications)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	require.Len(t, tasks, 0)
 
 	// not all tables are replicating,
@@ -78,7 +83,11 @@ func TestSchedulerRebalance(t *testing.T) {
 		2: {State: replication.ReplicationSetStateReplicating, Primary: "a"},
 		3: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
 		4: {State: replication.ReplicationSetStateReplicating, Primary: "b"},
+<<<<<<< HEAD
 	}
+=======
+	})
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 	tasks = scheduler.Schedule(checkpointTs, currentTables, captures, replications)
 	require.Len(t, tasks, 0)
 

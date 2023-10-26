@@ -57,9 +57,20 @@ type MoveTable struct {
 
 // AddTable is a schedule task for adding a table.
 type AddTable struct {
+<<<<<<< HEAD
 	TableID      model.TableID
 	CaptureID    model.CaptureID
 	CheckpointTs model.Ts
+=======
+	Span         tablepb.Span
+	CaptureID    model.CaptureID
+	CheckpointTs model.Ts
+}
+
+func (t AddTable) String() string {
+	return fmt.Sprintf("AddTable, span: %s, capture: %s, checkpointTs: %d",
+		t.Span.String(), t.CaptureID, t.CheckpointTs)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 }
 
 // RemoveTable is a schedule task for removing a table.
@@ -151,6 +162,7 @@ func (r *Manager) HandleCaptureChanges(
 				tableStatus[table.TableID][captureID] = &table
 			}
 		}
+<<<<<<< HEAD
 		for tableID, status := range tableStatus {
 			table, err := NewReplicationSet(
 				tableID, checkpointTs, status, r.changefeedID)
@@ -158,6 +170,20 @@ func (r *Manager) HandleCaptureChanges(
 				return nil, errors.Trace(err)
 			}
 			r.tables[tableID] = table
+=======
+		var err error
+		spanStatusMap.Ascend(func(span tablepb.Span, status map[string]*tablepb.TableStatus) bool {
+			table, err1 := NewReplicationSet(span, checkpointTs, status, r.changefeedID)
+			if err1 != nil {
+				err = errors.Trace(err1)
+				return false
+			}
+			r.spans.ReplaceOrInsert(table.Span, table)
+			return true
+		})
+		if err != nil {
+			return nil, errors.Trace(err)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 		}
 	}
 	sentMsgs := make([]*schedulepb.Message, 0)
@@ -372,10 +398,16 @@ func (r *Manager) handleAddTableTask(
 ) ([]*schedulepb.Message, error) {
 	r.acceptAddTableTask++
 	var err error
+<<<<<<< HEAD
 	table := r.tables[task.TableID]
 	if table == nil {
 		table, err = NewReplicationSet(
 			task.TableID, task.CheckpointTs, nil, r.changefeedID)
+=======
+	table, ok := r.spans.Get(task.Span)
+	if !ok {
+		table, err = NewReplicationSet(task.Span, task.CheckpointTs, nil, r.changefeedID)
+>>>>>>> 0c29040814 (scheduler(ticdc): revert 3b8d55 and do not return error when resolvedTs less than checkpoint (#9953))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
