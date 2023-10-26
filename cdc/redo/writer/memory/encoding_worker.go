@@ -124,7 +124,7 @@ func newEncodingWorkerGroup(workerNum int) *encodingWorkerGroup {
 func (e *encodingWorkerGroup) Run(ctx context.Context) (err error) {
 	defer func() {
 		close(e.closed)
-		if err != nil {
+		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("redo fileWorkerGroup closed with error", zap.Error(err))
 		}
 	}()

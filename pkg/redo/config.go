@@ -214,8 +214,7 @@ func ValidateStorage(uri *url.URL) error {
 		_, err := initExternalStorageForTest(ctx, *uri)
 		return err
 	}
-
-	// todo: the default dir mode is set as 755, is this ok?
+	
 	err := os.MkdirAll(uri.Path, DefaultDirMode)
 	if err != nil {
 		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
