@@ -101,6 +101,8 @@ type consumerOption struct {
 
 	// upstreamTiDBDSN is the dsn of the upstream TiDB cluster
 	upstreamTiDBDSN string
+
+	enableProfiling bool
 }
 
 // Adjust the consumer option by the upstream uri passed in parameters.
@@ -242,6 +244,7 @@ func main() {
 	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for Kafka SSL connection")
 	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for Kafka SSL connection")
 	flag.StringVar(&consumerOption.key, "key", "", "Private key path for Kafka SSL connection")
+	flag.BoolVar(&consumerOption.enableProfiling, "enable-profiling", false, "enable pprof profiling")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
@@ -298,13 +301,15 @@ func main() {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := http.ListenAndServe(":26060", nil); err != nil {
-			log.Panic("Error starting pprof", zap.Error(err))
-		}
-	}()
+	if consumerOption.enableProfiling {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := http.ListenAndServe(":6060", nil); err != nil {
+				log.Panic("Error starting pprof", zap.Error(err))
+			}
+		}()
+	}
 
 	wg.Add(1)
 	go func() {
