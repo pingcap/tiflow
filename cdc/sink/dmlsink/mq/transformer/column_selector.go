@@ -26,28 +26,8 @@ type Transformer interface {
 }
 
 type columnSelector struct {
-	tableMatcher  filter.Filter
-	columnMatcher *columnMatcher
-}
-
-type columnMatcher struct {
-	matcher filter.Filter
-}
-
-func newColumnMatcher(columns []string, caseSensitive bool) (*columnMatcher, error) {
-	matcher, err := filter.Parse(columns)
-	if err != nil {
-		return nil, err
-	}
-	if !caseSensitive {
-		matcher = filter.CaseInsensitive(matcher)
-	}
-	return &columnMatcher{matcher: matcher}, nil
-}
-
-// Match return true if the column matches.
-func (m *columnMatcher) Match(column string) bool {
-	return m.matcher.MatchSchema(column)
+	tableF  filter.Filter
+	columnM *columnMatcher
 }
 
 func newColumnSelector(
@@ -65,37 +45,26 @@ func newColumnSelector(
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, rule.Columns)
 	}
 	return &columnSelector{
-		tableMatcher:  tableM,
-		columnMatcher: columnM,
+		tableF:  tableM,
+		columnM: columnM,
 	}, nil
 }
 
 // Transform implements Transformer interface
 func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
-	if !s.tableMatcher.MatchTable(event.Table.Schema, event.Table.Table) {
-		return cerror.ErrTransformerFailed.GenWithStackByArgs("table not match")
+	// the event does not match the table filter, skip it
+	if !s.tableF.MatchTable(event.Table.Schema, event.Table.Table) {
+		return nil
 	}
 
-	//for _, matcher := range s.matchers {
-	//	if !matcher.tableMatcher.MatchTable(event.Table.Schema, event.Table.Table) {
-	//		continue
-	//	}
-	//	for _, column := range event.Columns {
-	//
-	//	}
-	//
-	//	for _, column := range event.PreColumns {
-	//
-	//	}
-	//
-	//	//if matcher.tableMatcher.MatchTable(event.Table.Schema, event.Table.Table) {
-	//	//	for _, column := range event.Columns {
-	//	//		if !matcher.columnMatcher.Match(column.Name) {
-	//	//			column.Value = nil
-	//	//		}
-	//	//	}
-	//	//}
-	//}
+	for _, column := range event.Columns {
+
+	}
+
+	for _, column := range event.PreColumns {
+
+	}
+
 	//// caution: after filter out columns, original columns should still keep at the same offset
 	//// to prevent column dispatcher visit wrong column data.
 	//return nil
@@ -127,10 +96,30 @@ func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
 //			return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, r.Columns)
 //		}
 //		result.matchers = append(result.matchers, &matcher{
-//			tableMatcher:  tableM,
-//			columnMatcher: columnM,
+//			tableF:  tableM,
+//			columnM: columnM,
 //		})
 //	}
 //
 //	return result, nil
 //}
+
+type columnMatcher struct {
+	matcher filter.Filter
+}
+
+func newColumnMatcher(columns []string, caseSensitive bool) (*columnMatcher, error) {
+	matcher, err := filter.Parse(columns)
+	if err != nil {
+		return nil, err
+	}
+	if !caseSensitive {
+		matcher = filter.CaseInsensitive(matcher)
+	}
+	return &columnMatcher{matcher: matcher}, nil
+}
+
+// Match return true if the column matches.
+func (m *columnMatcher) Match(column string) bool {
+	return m.matcher.MatchSchema(column)
+}
