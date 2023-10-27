@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package transformer
+package column_selector
 
 import (
 	"testing"
@@ -59,14 +59,14 @@ var (
 )
 
 func TestNewColumnSelectorNoRules(t *testing.T) {
-	// the column selector rule is not set
+	// the column selector is not set
 	replicaConfig := config.GetDefaultReplicaConfig()
-	selectors, err := NewColumnSelector(replicaConfig)
+	selectors, err := New(replicaConfig)
 	require.NoError(t, err)
 	require.NotNil(t, selectors)
-	require.Len(t, selectors, 0)
+	require.Len(t, selectors.selectors, 0)
 
-	err = selectors.Transform(event)
+	err = selectors.Apply(event)
 	require.NoError(t, err)
 	for _, column := range event.Columns {
 		require.NotNil(t, column.Value)
@@ -96,12 +96,12 @@ func TestNewColumnSelector(t *testing.T) {
 			Columns: []string{"co?1"},
 		},
 	}
-	selectors, err := NewColumnSelector(replicaConfig)
+	selectors, err := New(replicaConfig)
 	require.NoError(t, err)
-	require.Len(t, selectors, 4)
+	require.Len(t, selectors.selectors, 4)
 
 	// column3 is filter out, set to nil.
-	err = selectors.Transform(event)
+	err = selectors.Apply(event)
 	require.NoError(t, err)
 	require.Equal(t, []byte("val1"), event.Columns[0].Value)
 	require.Equal(t, []byte("val2"), event.Columns[1].Value)
@@ -132,7 +132,7 @@ func TestNewColumnSelector(t *testing.T) {
 		},
 	}
 	// the first column `a` is filter out, set to nil.
-	err = selectors.Transform(event)
+	err = selectors.Apply(event)
 	require.NoError(t, err)
 	require.Nil(t, event.Columns[0].Value)
 	require.Equal(t, []byte("b"), event.Columns[1].Value)
@@ -162,7 +162,7 @@ func TestNewColumnSelector(t *testing.T) {
 			},
 		},
 	}
-	err = selectors.Transform(event)
+	err = selectors.Apply(event)
 	require.NoError(t, err)
 	require.Equal(t, []byte("col"), event.Columns[0].Value)
 	require.Equal(t, []byte("col1"), event.Columns[1].Value)
@@ -193,7 +193,7 @@ func TestNewColumnSelector(t *testing.T) {
 			},
 		},
 	}
-	err = selectors.Transform(event)
+	err = selectors.Apply(event)
 	require.NoError(t, err)
 	require.Nil(t, event.Columns[0].Value)
 	require.Equal(t, []byte("col1"), event.Columns[1].Value)

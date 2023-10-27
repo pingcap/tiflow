@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package transformer
+package column_selector
 
 import (
 	filter "github.com/pingcap/tidb/util/table-filter"
@@ -20,35 +20,14 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
-// Transformer is the interface for transform the event.
-type Transformer interface {
-	Match(table *model.TableName) bool
-	Transform(event *model.RowChangedEvent) error
-}
-
-type ColumnSelectors []*columnSelector
-
-func (c ColumnSelectors) Match(_ *model.TableName) bool {
-	return true
-}
-
-func (c ColumnSelectors) Transform(event *model.RowChangedEvent) error {
-	for _, selector := range c {
-		if selector.Match(event.Table) {
-			return selector.Transform(event)
-		}
-	}
-	return nil
-}
-
-type columnSelector struct {
+type selector struct {
 	tableF  filter.Filter
 	columnM filter.ColumnFilter
 }
 
-func newColumnSelector(
+func newSelector(
 	rule *config.ColumnSelector, caseSensitive bool,
-) (*columnSelector, error) {
+) (*selector, error) {
 	tableM, err := filter.Parse(rule.Matcher)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, rule.Matcher)
@@ -60,19 +39,20 @@ func newColumnSelector(
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, rule.Columns)
 	}
-	return &columnSelector{
+
+	return &selector{
 		tableF:  tableM,
 		columnM: columnM,
 	}, nil
 }
 
 // Match implements Transformer interface
-func (s *columnSelector) Match(table *model.TableName) bool {
+func (s *selector) Match(table *model.TableName) bool {
 	return s.tableF.MatchTable(table.Schema, table.Table)
 }
 
-// Transform implements Transformer interface
-func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
+// Apply implements Transformer interface
+func (s *selector) Apply(event *model.RowChangedEvent) error {
 	// the event does not match the table filter, skip it
 	if !s.tableF.MatchTable(event.Table.Schema, event.Table.Table) {
 		return nil
@@ -92,16 +72,37 @@ func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
 	return nil
 }
 
-// NewColumnSelector return a column selector
-func NewColumnSelector(cfg *config.ReplicaConfig) (ColumnSelectors, error) {
-	result := make(ColumnSelectors, 0, len(cfg.Sink.ColumnSelectors))
+// ColumnSelector manages an array of selectors, the first selector match the given
+// event is used to select out columns.
+type ColumnSelector struct {
+	selectors []*selector
+}
+
+// New return a column selector
+func New(cfg *config.ReplicaConfig) (*ColumnSelector, error) {
+	selectors := make([]*selector, 0, len(cfg.Sink.ColumnSelectors))
 	for _, r := range cfg.Sink.ColumnSelectors {
-		selector, err := newColumnSelector(r, cfg.CaseSensitive)
+		selector, err := newSelector(r, cfg.CaseSensitive)
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, selector)
+		selectors = append(selectors, selector)
 	}
 
-	return result, nil
+	return &ColumnSelector{
+		selectors: selectors,
+	}, nil
+}
+
+func (c *ColumnSelector) Match(_ *model.TableName) bool {
+	return true
+}
+
+func (c *ColumnSelector) Apply(event *model.RowChangedEvent) error {
+	for _, s := range c.selectors {
+		if s.Match(event.Table) {
+			return s.Apply(event)
+		}
+	}
+	return nil
 }
