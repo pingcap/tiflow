@@ -51,6 +51,17 @@ func TestPartition(t *testing.T) {
 	partitionsNum, err = manager.GetPartitionNum(ctx, "new-topic")
 	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionsNum)
+
+	// assume a topic already exist, the not default topic won't be affected by the default topic's partition number.
+	err = adminClient.CreateTopic(ctx, &kafka.TopicDetail{
+		Name:          "new-topic-2",
+		NumPartitions: 3,
+	}, false)
+	require.NoError(t, err)
+
+	partitionsNum, err = manager.GetPartitionNum(ctx, "new-topic-2")
+	require.NoError(t, err)
+	require.Equal(t, int32(3), partitionsNum)
 }
 
 func TestGetTopic(t *testing.T) {
