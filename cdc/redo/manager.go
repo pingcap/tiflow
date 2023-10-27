@@ -546,11 +546,13 @@ func (m *logManager) close() {
 	atomic.StoreInt32(&m.closed, 1)
 
 	m.logBuffer.CloseAndDrain()
-	if err := m.writer.Close(); err != nil && errors.Cause(err) != context.Canceled {
-		log.Error("redo manager fails to close writer",
-			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
-			zap.String("changefeed", m.cfg.ChangeFeedID.ID),
-			zap.Error(err))
+	if m.writer != nil {
+		if err := m.writer.Close(); err != nil && errors.Cause(err) != context.Canceled {
+			log.Error("redo manager fails to close writer",
+				zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+				zap.String("changefeed", m.cfg.ChangeFeedID.ID),
+				zap.Error(err))
+		}
 	}
 	log.Info("redo manager closed",
 		zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
