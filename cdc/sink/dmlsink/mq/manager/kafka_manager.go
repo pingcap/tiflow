@@ -170,7 +170,7 @@ func (m *kafkaTopicManager) fetchAllTopicsPartitionsNum(
 	}
 
 	// it may happen the following case:
-	// 1. use create the default topic with partition number set as 3 manually
+	// 1. user create the default topic with partition number set as 3 manually
 	// 2. set the partition-number as 2 in the sink-uri.
 	// in the such case, we should use 2 instead of 3 as the partition number.
 	_, ok := numPartitions[m.defaultTopic]
