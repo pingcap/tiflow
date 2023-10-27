@@ -301,7 +301,7 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := http.ListenAndServe(":16060", nil); err != nil {
+		if err := http.ListenAndServe(":26060", nil); err != nil {
 			log.Panic("Error starting pprof", zap.Error(err))
 		}
 	}()
