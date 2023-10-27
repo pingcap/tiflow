@@ -13,6 +13,10 @@
 
 package simple
 
+const (
+	defaultVersion = 0
+)
+
 // EventType describes the type of the event.
 type EventType string
 
@@ -22,6 +26,7 @@ const (
 )
 
 type message struct {
+	Version int `json:"version"`
 	// Scheme and Table is empty for the resolved ts event.
 	Schema   string    `json:"schema,omitempty"`
 	Table    string    `json:"table,omitempty"`
@@ -34,6 +39,7 @@ type message struct {
 
 func newResolvedMessage(ts uint64) *message {
 	return &message{
+		Version:  defaultVersion,
 		Type:     WatermarkType,
 		CommitTs: ts,
 	}
