@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -46,12 +47,18 @@ type MetaManager interface {
 	// Cleanup deletes all redo logs, which are only called from the owner
 	// when changefeed is deleted.
 	Cleanup(ctx context.Context) error
+
+	// Running return true if the meta manager is running or not.
+	Running() bool
 }
 
 type metaManager struct {
 	captureID    model.CaptureID
 	changeFeedID model.ChangeFeedID
 	enabled      bool
+
+	// running means the meta manager now running normally.
+	running atomic.Bool
 
 	metaCheckpointTs statefulRts
 	metaResolvedTs   statefulRts
@@ -98,6 +105,12 @@ func NewMetaManager(
 // Enabled returns whether this log manager is enabled
 func (m *metaManager) Enabled() bool {
 	return m.enabled
+}
+
+// Running return whether the meta manager is initialized,
+// which means the external storage is accessible to the meta manager.
+func (m *metaManager) Running() bool {
+	return m.running.Load()
 }
 
 func (m *metaManager) preStart(ctx context.Context) error {
@@ -148,6 +161,8 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	eg.Go(func() error {
 		return m.bgGC(egCtx)
 	})
+
+	m.running.Store(true)
 	return eg.Wait()
 }
 
