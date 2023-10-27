@@ -14,6 +14,7 @@
 package transformer
 
 import (
+	"github.com/pingcap/log"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -22,7 +23,24 @@ import (
 
 // Transformer is the interface for transform the event.
 type Transformer interface {
+	Match(table *model.TableName) bool
 	Transform(event *model.RowChangedEvent) error
+}
+
+type ColumnSelectors []*columnSelector
+
+func (c ColumnSelectors) Match(_ *model.TableName) bool {
+	return true
+}
+
+func (c ColumnSelectors) Transform(event *model.RowChangedEvent) error {
+	for _, selector := range c {
+		if selector.Match(event.Table) {
+			return selector.Transform(event)
+		}
+	}
+	log.Panic("column selectors must cover all tables")
+	return nil
 }
 
 type columnSelector struct {
@@ -50,6 +68,11 @@ func newColumnSelector(
 	}, nil
 }
 
+// Match implements Transformer interface
+func (s *columnSelector) Match(table *model.TableName) bool {
+	return s.tableF.MatchTable(table.Schema, table.Table)
+}
+
 // Transform implements Transformer interface
 func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
 	// the event does not match the table filter, skip it
@@ -58,51 +81,39 @@ func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
 	}
 
 	for _, column := range event.Columns {
-
+		if s.columnM.Match(column.Name) {
+			column.Value = nil
+		}
 	}
 
 	for _, column := range event.PreColumns {
-
+		if s.columnM.Match(column.Name) {
+			column.Value = nil
+		}
 	}
-
-	//// caution: after filter out columns, original columns should still keep at the same offset
-	//// to prevent column dispatcher visit wrong column data.
-	//return nil
+	return nil
 }
 
 // NewColumnSelector return a column selector
-//func NewColumnSelector(cfg *config.ReplicaConfig) (*columnSelector, error) {
-//	// If an event does not match any column selector rules in the config file,
-//	// it won't be transformed, all columns match the *.* rule
-//	ruleConfig := append(cfg.Sink.ColumnSelectors, &config.ColumnSelector{
-//		Matcher: []string{"*.*"},
-//		Columns: []string{"*.*"},
-//	})
-//
-//	result := &columnSelector{
-//		matchers: make([]*matcher, len(ruleConfig)),
-//	}
-//
-//	for _, r := range ruleConfig {
-//		tableM, err := filter.Parse(r.Matcher)
-//		if err != nil {
-//			return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, r.Matcher)
-//		}
-//		if !cfg.CaseSensitive {
-//			tableM = filter.CaseInsensitive(tableM)
-//		}
-//		columnM, err := newColumnMatcher(r.Columns, cfg.CaseSensitive)
-//		if err != nil {
-//			return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, r.Columns)
-//		}
-//		result.matchers = append(result.matchers, &matcher{
-//			tableF:  tableM,
-//			columnM: columnM,
-//		})
-//	}
-//
-//	return result, nil
-//}
+func NewColumnSelector(cfg *config.ReplicaConfig) (ColumnSelectors, error) {
+	// If an event does not match any column selector rules in the config file,
+	// it won't be transformed, all columns match the *.* rule
+	ruleConfig := append(cfg.Sink.ColumnSelectors, &config.ColumnSelector{
+		Matcher: []string{"*.*"},
+		Columns: []string{"*.*"},
+	})
+
+	result := make(ColumnSelectors, 0, len(ruleConfig))
+	for _, r := range ruleConfig {
+		selector, err := newColumnSelector(r, cfg.CaseSensitive)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, selector)
+	}
+
+	return result, nil
+}
 
 type columnMatcher struct {
 	matcher filter.Filter
