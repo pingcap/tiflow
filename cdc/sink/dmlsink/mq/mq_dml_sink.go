@@ -176,7 +176,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 				return errors.Trace(err)
 			}
 
-			err = s.alive.transformer.Transform(row)
+			err = s.alive.transformer.Apply(row)
 			if err != nil {
 				s.cancel(err)
 				return errors.Trace(err)
