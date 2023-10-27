@@ -14,7 +14,6 @@
 package transformer
 
 import (
-	"github.com/pingcap/log"
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -39,7 +38,6 @@ func (c ColumnSelectors) Transform(event *model.RowChangedEvent) error {
 			return selector.Transform(event)
 		}
 	}
-	log.Panic("column selectors must cover all tables")
 	return nil
 }
 
@@ -81,13 +79,13 @@ func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
 	}
 
 	for _, column := range event.Columns {
-		if s.columnM.Match(column.Name) {
+		if !s.columnM.Match(column.Name) {
 			column.Value = nil
 		}
 	}
 
 	for _, column := range event.PreColumns {
-		if s.columnM.Match(column.Name) {
+		if !s.columnM.Match(column.Name) {
 			column.Value = nil
 		}
 	}
@@ -96,15 +94,8 @@ func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
 
 // NewColumnSelector return a column selector
 func NewColumnSelector(cfg *config.ReplicaConfig) (ColumnSelectors, error) {
-	// If an event does not match any column selector rules in the config file,
-	// it won't be transformed, all columns match the *.* rule
-	ruleConfig := append(cfg.Sink.ColumnSelectors, &config.ColumnSelector{
-		Matcher: []string{"*.*"},
-		Columns: []string{"*.*"},
-	})
-
-	result := make(ColumnSelectors, 0, len(ruleConfig))
-	for _, r := range ruleConfig {
+	result := make(ColumnSelectors, 0, len(cfg.Sink.ColumnSelectors))
+	for _, r := range cfg.Sink.ColumnSelectors {
 		selector, err := newColumnSelector(r, cfg.CaseSensitive)
 		if err != nil {
 			return nil, err
