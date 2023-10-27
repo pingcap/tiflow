@@ -51,7 +51,7 @@ func (r *rebalanceScheduler) Name() string {
 }
 
 func (r *rebalanceScheduler) Schedule(
-	_ tablepb.Checkpoint,
+	_ model.Ts,
 	currentSpans []tablepb.Span,
 	captures map[model.CaptureID]*member.CaptureStatus,
 	replications *spanz.BtreeMap[*replication.ReplicationSet],
