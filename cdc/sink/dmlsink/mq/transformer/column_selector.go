@@ -43,7 +43,7 @@ func (c ColumnSelectors) Transform(event *model.RowChangedEvent) error {
 
 type columnSelector struct {
 	tableF  filter.Filter
-	columnM *columnMatcher
+	columnM filter.ColumnFilter
 }
 
 func newColumnSelector(
@@ -56,7 +56,7 @@ func newColumnSelector(
 	if !caseSensitive {
 		tableM = filter.CaseInsensitive(tableM)
 	}
-	columnM, err := newColumnMatcher(rule.Columns, caseSensitive)
+	columnM, err := filter.ParseColumnFilter(rule.Columns)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, rule.Columns)
 	}
@@ -79,13 +79,13 @@ func (s *columnSelector) Transform(event *model.RowChangedEvent) error {
 	}
 
 	for _, column := range event.Columns {
-		if !s.columnM.Match(column.Name) {
+		if !s.columnM.MatchColumn(column.Name) {
 			column.Value = nil
 		}
 	}
 
 	for _, column := range event.PreColumns {
-		if !s.columnM.Match(column.Name) {
+		if !s.columnM.MatchColumn(column.Name) {
 			column.Value = nil
 		}
 	}
@@ -104,24 +104,4 @@ func NewColumnSelector(cfg *config.ReplicaConfig) (ColumnSelectors, error) {
 	}
 
 	return result, nil
-}
-
-type columnMatcher struct {
-	matcher filter.Filter
-}
-
-func newColumnMatcher(columns []string, caseSensitive bool) (*columnMatcher, error) {
-	matcher, err := filter.Parse(columns)
-	if err != nil {
-		return nil, err
-	}
-	if !caseSensitive {
-		matcher = filter.CaseInsensitive(matcher)
-	}
-	return &columnMatcher{matcher: matcher}, nil
-}
-
-// Match return true if the column matches.
-func (m *columnMatcher) Match(column string) bool {
-	return m.matcher.MatchSchema(column)
 }

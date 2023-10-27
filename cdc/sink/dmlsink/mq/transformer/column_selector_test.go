@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	eventTable1 = &model.RowChangedEvent{
+	event = &model.RowChangedEvent{
 		Table: &model.TableName{
 			Schema: "test",
 			Table:  "table1",
@@ -66,12 +66,12 @@ func TestNewColumnSelectorNoRules(t *testing.T) {
 	require.NotNil(t, selectors)
 	require.Len(t, selectors, 0)
 
-	err = selectors.Transform(eventTable1)
+	err = selectors.Transform(event)
 	require.NoError(t, err)
-	for _, column := range eventTable1.Columns {
+	for _, column := range event.Columns {
 		require.NotNil(t, column.Value)
 	}
-	for _, column := range eventTable1.PreColumns {
+	for _, column := range event.PreColumns {
 		require.NotNil(t, column.Value)
 	}
 }
@@ -89,7 +89,7 @@ func TestNewColumnSelector(t *testing.T) {
 		},
 		{
 			Matcher: []string{"test2.*"},
-			Columns: []string{"co*", "!col1"},
+			Columns: []string{"co*", "!col2"},
 		},
 		{
 			Matcher: []string{"test3.*"},
@@ -100,14 +100,103 @@ func TestNewColumnSelector(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, selectors, 4)
 
-	err = selectors.Transform(eventTable1)
+	// column3 is filter out, set to nil.
+	err = selectors.Transform(event)
 	require.NoError(t, err)
-	require.Equal(t, []byte("val1"), eventTable1.Columns[0].Value)
-	require.Equal(t, []byte("val2"), eventTable1.Columns[1].Value)
-	require.Nil(t, eventTable1.Columns[3].Value)
+	require.Equal(t, []byte("val1"), event.Columns[0].Value)
+	require.Equal(t, []byte("val2"), event.Columns[1].Value)
+	require.Nil(t, event.Columns[2].Value)
 
-	require.Equal(t, []byte("val1"), eventTable1.PreColumns[0].Value)
-	require.Equal(t, []byte("val2"), eventTable1.PreColumns[1].Value)
-	require.Nil(t, eventTable1.PreColumns[3].Value)
+	require.Equal(t, []byte("val1"), event.PreColumns[0].Value)
+	require.Equal(t, []byte("val2"), event.PreColumns[1].Value)
+	require.Nil(t, event.PreColumns[2].Value)
 
+	event = &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test1",
+			Table:  "table1",
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "a",
+				Value: []byte("a"),
+			},
+			{
+				Name:  "b",
+				Value: []byte("b"),
+			},
+			{
+				Name:  "c",
+				Value: []byte("c"),
+			},
+		},
+	}
+	// the first column `a` is filter out, set to nil.
+	err = selectors.Transform(event)
+	require.NoError(t, err)
+	require.Nil(t, event.Columns[0].Value)
+	require.Equal(t, []byte("b"), event.Columns[1].Value)
+	require.Equal(t, []byte("c"), event.Columns[2].Value)
+
+	event = &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test2",
+			Table:  "table1",
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "col",
+				Value: []byte("col"),
+			},
+			{
+				Name:  "col1",
+				Value: []byte("col1"),
+			},
+			{
+				Name:  "col2",
+				Value: []byte("col2"),
+			},
+			{
+				Name:  "col3",
+				Value: []byte("col3"),
+			},
+		},
+	}
+	err = selectors.Transform(event)
+	require.NoError(t, err)
+	require.Equal(t, []byte("col"), event.Columns[0].Value)
+	require.Equal(t, []byte("col1"), event.Columns[1].Value)
+	require.Nil(t, event.Columns[2].Value)
+	require.Equal(t, []byte("col3"), event.Columns[3].Value)
+
+	event = &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test3",
+			Table:  "table1",
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "col",
+				Value: []byte("col"),
+			},
+			{
+				Name:  "col1",
+				Value: []byte("col1"),
+			},
+			{
+				Name:  "col2",
+				Value: []byte("col2"),
+			},
+			{
+				Name:  "coA1",
+				Value: []byte("coA1"),
+			},
+		},
+	}
+	err = selectors.Transform(event)
+	require.NoError(t, err)
+	require.Nil(t, event.Columns[0].Value)
+	require.Equal(t, []byte("col1"), event.Columns[1].Value)
+	require.Nil(t, event.Columns[2].Value)
+	require.Equal(t, []byte("coA1"), event.Columns[3].Value)
 }
