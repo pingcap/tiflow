@@ -16,6 +16,8 @@ package kv
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +42,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	kvclientv2 "github.com/tikv/client-go/v2/kv"
+	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -246,6 +249,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
 	g.Go(func() error { return s.resolveLock(ctx) })
+	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	log.Info("event feed started",
 		zap.String("namespace", s.changefeed.Namespace),
@@ -406,7 +410,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 
 func (s *SharedClient) appendRequest(r *requestedStore, sri singleRegionInfo) {
 	offset := r.nextStream.Add(1) % uint32(len(r.streams))
-	log.Debug("event feed will request a region",
+	log.Info("event feed will request a region",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("streamID", r.streams[offset].streamID),
@@ -572,7 +576,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 	switch eerr := err.(type) {
 	case *eventError:
 		innerErr := eerr.err
-		log.Debug("cdc error",
+		log.Info("cdc region error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
@@ -689,12 +693,58 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 	}
 }
 
+func (s *SharedClient) logSlowRegions(ctx context.Context) error {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+
+		currTime := s.pdClock.CurrentTime()
+		s.totalSpans.RLock()
+		for subscriptionID, rt := range s.totalSpans.v {
+			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
+			if attr.SlowestRegion.Initialized {
+				ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
+					log.Info("event feed finds a slow region",
+						zap.String("namespace", s.changefeed.Namespace),
+						zap.String("changefeed", s.changefeed.ID),
+						zap.Any("subscriptionID", subscriptionID),
+						zap.Any("slowRegion", attr.SlowestRegion))
+				}
+			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
+				log.Info("event feed initializes a region too slow",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Any("subscriptionID", subscriptionID),
+					zap.Any("slowRegion", attr.SlowestRegion))
+			}
+			if len(attr.Holes) > 0 {
+				holes := make([]string, 0, len(attr.Holes))
+				for _, hole := range attr.Holes {
+					holes = append(holes, fmt.Sprintf("[%s,%s)", hole.StartKey, hole.EndKey))
+				}
+				log.Info("event feed holes exist",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Any("subscriptionID", subscriptionID),
+					zap.String("holes", strings.Join(holes, ", ")))
+			}
+		}
+		s.totalSpans.RUnlock()
+	}
+}
+
 func (s *SharedClient) newRequestedTable(
 	subID SubscriptionID, span tablepb.Span, startTs uint64,
 	eventCh chan<- MultiplexingEvent,
 ) *requestedTable {
 	cfName := s.changefeed.String()
-	rangeLock := regionlock.NewRegionRangeLock(span.StartKey, span.EndKey, startTs, cfName)
+	rangeLock := regionlock.NewRegionRangeLock(uint64(subID), span.StartKey, span.EndKey, startTs, cfName)
 
 	rt := &requestedTable{
 		subscriptionID: subID,

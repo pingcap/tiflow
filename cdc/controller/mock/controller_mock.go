@@ -10,7 +10,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	model "github.com/pingcap/tiflow/cdc/model"
-	orchestrator "github.com/pingcap/tiflow/pkg/orchestrator"
 )
 
 // MockController is a mock of Controller interface.
@@ -149,19 +148,4 @@ func (m *MockController) IsChangefeedExists(ctx context.Context, id model.Change
 func (mr *MockControllerMockRecorder) IsChangefeedExists(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsChangefeedExists", reflect.TypeOf((*MockController)(nil).IsChangefeedExists), ctx, id)
-}
-
-// Tick mocks base method.
-func (m *MockController) Tick(ctx context.Context, state orchestrator.ReactorState) (orchestrator.ReactorState, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tick", ctx, state)
-	ret0, _ := ret[0].(orchestrator.ReactorState)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Tick indicates an expected call of Tick.
-func (mr *MockControllerMockRecorder) Tick(ctx, state interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tick", reflect.TypeOf((*MockController)(nil).Tick), ctx, state)
 }

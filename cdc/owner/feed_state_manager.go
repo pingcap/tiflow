@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -40,6 +39,30 @@ const (
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 )
+
+// FeedStateManager manages the life cycle of a changefeed, currently it is responsible for:
+// 1. Handle admin jobs
+// 2. Handle errors
+// 3. Handle warnings
+// 4. Control the status of a changefeed
+type FeedStateManager interface {
+	// PushAdminJob pushed an admin job to the admin job queue
+	PushAdminJob(job *model.AdminJob)
+	// Tick is the main logic of the FeedStateManager, it will be called periodically
+	// resolvedTs is the resolvedTs of the changefeed
+	// returns true if there is a pending admin job, if so changefeed should not run the tick logic
+	Tick(resolvedTs model.Ts, status *model.ChangeFeedStatus, info *model.ChangeFeedInfo) (adminJobPending bool)
+	// HandleError is called an error occurs in Changefeed.Tick
+	HandleError(errs ...*model.RunningError)
+	// HandleWarning is called a warning occurs in Changefeed.Tick
+	HandleWarning(warnings ...*model.RunningError)
+	// ShouldRunning returns if the changefeed should be running
+	ShouldRunning() bool
+	// ShouldRemoved returns if the changefeed should be removed
+	ShouldRemoved() bool
+	// MarkFinished is call when a changefeed is finished
+	MarkFinished()
+}
 
 // feedStateManager manages the ReactorState of a changefeed
 // when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
@@ -71,9 +94,12 @@ type feedStateManager struct {
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
-func newFeedStateManager(up *upstream.Upstream, cfg *config.ReplicaConfig) *feedStateManager {
+func newFeedStateManager(up *upstream.Upstream,
+	state *orchestrator.ChangefeedReactorState,
+) *feedStateManager {
 	m := new(feedStateManager)
 	m.upstream = up
+	m.state = state
 
 	m.errBackoff = backoff.NewExponentialBackOff()
 	m.errBackoff.InitialInterval = defaultBackoffInitInterval
@@ -81,8 +107,8 @@ func newFeedStateManager(up *upstream.Upstream, cfg *config.ReplicaConfig) *feed
 	m.errBackoff.Multiplier = defaultBackoffMultiplier
 	m.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
 	// backoff will stop once the defaultBackoffMaxElapsedTime has elapsed.
-	m.errBackoff.MaxElapsedTime = *cfg.ChangefeedErrorStuckDuration
-	m.changefeedErrorStuckDuration = *cfg.ChangefeedErrorStuckDuration
+	m.errBackoff.MaxElapsedTime = *state.Info.Config.ChangefeedErrorStuckDuration
+	m.changefeedErrorStuckDuration = *state.Info.Config.ChangefeedErrorStuckDuration
 
 	m.resetErrRetry()
 	m.isRetrying = false
@@ -114,15 +140,14 @@ func (m *feedStateManager) resetErrRetry() {
 	m.lastErrorRetryTime = time.Unix(0, 0)
 }
 
-func (m *feedStateManager) Tick(
-	state *orchestrator.ChangefeedReactorState,
-	resolvedTs model.Ts,
+func (m *feedStateManager) Tick(resolvedTs model.Ts,
+	status *model.ChangeFeedStatus, info *model.ChangeFeedInfo,
 ) (adminJobPending bool) {
-	m.checkAndInitLastRetryCheckpointTs(state.Status)
+	m.checkAndInitLastRetryCheckpointTs(status)
 
-	if state.Status != nil {
-		if m.checkpointTs < state.Status.CheckpointTs {
-			m.checkpointTs = state.Status.CheckpointTs
+	if status != nil {
+		if m.checkpointTs < status.CheckpointTs {
+			m.checkpointTs = status.CheckpointTs
 			m.checkpointTsAdvanced = time.Now()
 		}
 		if m.resolvedTs < resolvedTs {
@@ -132,7 +157,7 @@ func (m *feedStateManager) Tick(
 			m.checkpointTsAdvanced = time.Now()
 		}
 	}
-	m.state = state
+
 	m.shouldBeRunning = true
 	defer func() {
 		if !m.shouldBeRunning {
@@ -147,7 +172,7 @@ func (m *feedStateManager) Tick(
 		return
 	}
 
-	switch m.state.Info.State {
+	switch info.State {
 	case model.StateUnInitialized:
 		m.patchState(model.StateNormal)
 		return
@@ -180,7 +205,7 @@ func (m *feedStateManager) Tick(
 
 		// retry the changefeed
 		m.shouldBeRunning = true
-		if m.state.Status != nil {
+		if status != nil {
 			m.lastErrorRetryCheckpointTs = m.state.Status.CheckpointTs
 		}
 		m.patchState(model.StateWarning)
@@ -193,14 +218,14 @@ func (m *feedStateManager) Tick(
 	case model.StateNormal, model.StateWarning:
 		m.checkAndChangeState()
 		errs := m.errorsReportedByProcessors()
-		m.handleError(errs...)
+		m.HandleError(errs...)
 		// only handle warnings when there are no errors
 		// otherwise, the warnings will cover the errors
 		if len(errs) == 0 {
 			// warning are come from processors' sink component
 			// they ere not fatal errors, so we don't need to stop the changefeed
 			warnings := m.warningsReportedByProcessors()
-			m.handleWarning(warnings...)
+			m.HandleWarning(warnings...)
 		}
 	}
 	return
@@ -506,7 +531,7 @@ func (m *feedStateManager) warningsReportedByProcessors() []*model.RunningError 
 	return result
 }
 
-func (m *feedStateManager) handleError(errs ...*model.RunningError) {
+func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 	if len(errs) == 0 {
 		return
 	}
@@ -572,7 +597,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	}
 }
 
-func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
+func (m *feedStateManager) HandleWarning(errs ...*model.RunningError) {
 	if len(errs) == 0 {
 		return
 	}
@@ -591,7 +616,7 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
 			)
 			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
-			m.handleError(&model.RunningError{
+			m.HandleError(&model.RunningError{
 				Time:    lastError.Time,
 				Addr:    lastError.Addr,
 				Code:    string(code),
