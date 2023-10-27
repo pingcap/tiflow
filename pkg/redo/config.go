@@ -214,7 +214,7 @@ func ValidateStorage(uri *url.URL) error {
 		_, err := initExternalStorageForTest(ctx, *uri)
 		return err
 	}
-	
+
 	err := os.MkdirAll(uri.Path, DefaultDirMode)
 	if err != nil {
 		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
