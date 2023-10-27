@@ -56,11 +56,8 @@ type tableExclusive struct {
 }
 
 func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *requestedStore) *requestedStream {
-	stream := &requestedStream{
-		streamID: streamIDGen.Add(1),
-		requests: chann.NewAutoDrainChann[singleRegionInfo](),
-	}
-	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
+	stream := newRequestedStream(streamIDGen.Add(1))
+	stream.requests = chann.NewAutoDrainChann[singleRegionInfo]()
 
 	waitForPreFetching := func() error {
 		if stream.preFetchForConnecting != nil {
@@ -116,6 +113,12 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 		}
 	})
 
+	return stream
+}
+
+func newRequestedStream(streamID uint64) *requestedStream {
+	stream := &requestedStream{streamID: streamID}
+	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
 	return stream
 }
 
@@ -423,6 +426,9 @@ func (s *requestedStream) takeState(subscriptionID SubscriptionID, regionID uint
 	if m, ok := s.requestedRegions.m[subscriptionID]; ok {
 		state = m[regionID]
 		delete(m, regionID)
+		if len(m) == 0 {
+			delete(s.requestedRegions.m, subscriptionID)
+		}
 	}
 	return
 }
@@ -469,8 +475,8 @@ func (s *requestedStream) sendRegionChangeEvents(
 			subscriptionID = tableSubID
 		}
 
+		state := s.getState(subscriptionID, regionID)
 		switch x := event.Event.(type) {
-		case *cdcpb.Event_Admin_:
 		case *cdcpb.Event_Error:
 			log.Info("event feed receives a region error",
 				zap.String("namespace", c.changefeed.Namespace),
@@ -478,10 +484,11 @@ func (s *requestedStream) sendRegionChangeEvents(
 				zap.Uint64("streamID", s.streamID),
 				zap.Any("subscriptionID", subscriptionID),
 				zap.Uint64("regionID", event.RegionId),
+				zap.Bool("stateIsNil", state == nil),
 				zap.Any("error", x.Error))
 		}
 
-		if state := s.getState(subscriptionID, regionID); state != nil {
+		if state != nil {
 			sfEvent := newEventItem(event, state, s)
 			slot := hashRegionID(regionID, len(c.workers))
 			if err := c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
