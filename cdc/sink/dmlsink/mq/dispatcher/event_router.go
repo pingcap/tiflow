@@ -147,7 +147,7 @@ func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
 					"index is not unique when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
 			}
 		case *partition.ColumnsDispatcher:
-			_, ok := table.ColumnsByNames(v.Columns)
+			_, ok := table.OffsetsByNames(v.Columns)
 			if !ok {
 				return cerror.ErrDispatcherFailed.GenWithStack(
 					"columns not found when verify the table, table: %v, columns: %v", table.TableName, v.Columns)
