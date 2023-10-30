@@ -341,9 +341,9 @@ func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 	return names, offset, true
 }
 
-// ColumnsByNames returns the column offsets of the corresponding columns by names
+// OffsetsByNames returns the column offsets of the corresponding columns by names
 // If any column does not exist, return false
-func (ti *TableInfo) ColumnsByNames(names []string) ([]int, bool) {
+func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 	// todo: optimize it
 	columnOffsets := make(map[string]int, len(ti.Columns))
 	for _, col := range ti.Columns {
