@@ -58,17 +58,18 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 		return nil
 	}
 
-	for _, column := range event.Columns {
-		if !s.columnM.MatchColumn(column.Name) {
-			column.Value = nil
+	for i := 0; i < len(event.Columns); i++ {
+		if !s.columnM.MatchColumn(event.Columns[i].Name) {
+			event.Columns[i] = nil
 		}
 	}
 
-	for _, column := range event.PreColumns {
-		if !s.columnM.MatchColumn(column.Name) {
-			column.Value = nil
+	for i := 0; i < len(event.PreColumns); i++ {
+		if !s.columnM.MatchColumn(event.PreColumns[i].Name) {
+			event.PreColumns[i] = nil
 		}
 	}
+
 	return nil
 }
 

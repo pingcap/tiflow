@@ -21,42 +21,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	event = &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "table1",
+var event = &model.RowChangedEvent{
+	Table: &model.TableName{
+		Schema: "test",
+		Table:  "table1",
+	},
+	Columns: []*model.Column{
+		{
+			Name:  "col1",
+			Value: []byte("val1"),
 		},
-		Columns: []*model.Column{
-			{
-				Name:  "col1",
-				Value: []byte("val1"),
-			},
-			{
-				Name:  "col2",
-				Value: []byte("val2"),
-			},
-			{
-				Name:  "col3",
-				Value: []byte("val3"),
-			},
+		{
+			Name:  "col2",
+			Value: []byte("val2"),
 		},
-		PreColumns: []*model.Column{
-			{
-				Name:  "col1",
-				Value: []byte("val1"),
-			},
-			{
-				Name:  "col2",
-				Value: []byte("val2"),
-			},
-			{
-				Name:  "col3",
-				Value: []byte("val3"),
-			},
+		{
+			Name:  "col3",
+			Value: []byte("val3"),
 		},
-	}
-)
+	},
+	PreColumns: []*model.Column{
+		{
+			Name:  "col1",
+			Value: []byte("val1"),
+		},
+		{
+			Name:  "col2",
+			Value: []byte("val2"),
+		},
+		{
+			Name:  "col3",
+			Value: []byte("val3"),
+		},
+	},
+}
 
 func TestNewColumnSelectorNoRules(t *testing.T) {
 	// the column selector is not set
@@ -105,11 +103,11 @@ func TestNewColumnSelector(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("val1"), event.Columns[0].Value)
 	require.Equal(t, []byte("val2"), event.Columns[1].Value)
-	require.Nil(t, event.Columns[2].Value)
+	require.Nil(t, event.Columns[2])
 
 	require.Equal(t, []byte("val1"), event.PreColumns[0].Value)
 	require.Equal(t, []byte("val2"), event.PreColumns[1].Value)
-	require.Nil(t, event.PreColumns[2].Value)
+	require.Nil(t, event.PreColumns[2])
 
 	event = &model.RowChangedEvent{
 		Table: &model.TableName{
@@ -134,7 +132,7 @@ func TestNewColumnSelector(t *testing.T) {
 	// the first column `a` is filter out, set to nil.
 	err = selectors.Apply(event)
 	require.NoError(t, err)
-	require.Nil(t, event.Columns[0].Value)
+	require.Nil(t, event.Columns[0])
 	require.Equal(t, []byte("b"), event.Columns[1].Value)
 	require.Equal(t, []byte("c"), event.Columns[2].Value)
 
@@ -166,7 +164,7 @@ func TestNewColumnSelector(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("col"), event.Columns[0].Value)
 	require.Equal(t, []byte("col1"), event.Columns[1].Value)
-	require.Nil(t, event.Columns[2].Value)
+	require.Nil(t, event.Columns[2])
 	require.Equal(t, []byte("col3"), event.Columns[3].Value)
 
 	event = &model.RowChangedEvent{
@@ -195,8 +193,8 @@ func TestNewColumnSelector(t *testing.T) {
 	}
 	err = selectors.Apply(event)
 	require.NoError(t, err)
-	require.Nil(t, event.Columns[0].Value)
+	require.Nil(t, event.Columns[0])
 	require.Equal(t, []byte("col1"), event.Columns[1].Value)
-	require.Nil(t, event.Columns[2].Value)
+	require.Nil(t, event.Columns[2])
 	require.Equal(t, []byte("coA1"), event.Columns[3].Value)
 }
