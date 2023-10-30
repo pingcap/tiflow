@@ -43,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
+	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -206,7 +207,6 @@ func (s *server) prepare(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 
-<<<<<<< HEAD
 	if err := s.startActorSystems(ctx); err != nil {
 		return errors.Trace(err)
 	}
@@ -214,10 +214,6 @@ func (s *server) prepare(ctx context.Context) error {
 	if err := s.setMemoryLimit(); err != nil {
 		return errors.Trace(err)
 	}
-=======
-	s.createSortEngineFactory()
-	s.setMemoryLimit()
->>>>>>> 7e338795d4 (server(ticdc): use TiDB gcTuner in a more reasonable way (#9786))
 
 	s.capture = capture.NewCapture(
 		s.pdEndpoints, cdcEtcdClient, s.grpcService,
@@ -226,25 +222,22 @@ func (s *server) prepare(ctx context.Context) error {
 	return nil
 }
 
-func (s *server) setMemoryLimit() {
+func (s *server) setMemoryLimit() error {
 	conf := config.GetGlobalServerConfig()
-	if conf.GcTunerMemoryThreshold > maxGcTunerMemory {
-		// If total memory is larger than 512GB, we will not set memory limit.
-		// Because the memory limit is not accurate, and it is not necessary to set memory limit.
-		log.Info("total memory is larger than 512GB, skip setting memory limit",
-			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
-			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
-		)
-		return
+	totalMemory, err := util.GetMemoryLimit()
+	if err != nil {
+		return errors.Trace(err)
 	}
-	if conf.GcTunerMemoryThreshold > 0 {
+	if conf.MaxMemoryPercentage > 0 {
+		goMemLimit := totalMemory * uint64(conf.MaxMemoryPercentage) / 100
 		gctuner.EnableGOGCTuner.Store(true)
-		gctuner.Tuning(conf.GcTunerMemoryThreshold)
+		gctuner.Tuning(goMemLimit)
 		log.Info("enable gctuner, set memory limit",
-			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
-			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
+			zap.Uint64("bytes", goMemLimit),
+			zap.String("memory", humanize.IBytes(goMemLimit)),
 		)
 	}
+	return nil
 }
 
 func (s *server) startActorSystems(ctx context.Context) error {
