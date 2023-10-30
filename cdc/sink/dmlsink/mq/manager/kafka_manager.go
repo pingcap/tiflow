@@ -58,11 +58,7 @@ type kafkaTopicManager struct {
 // NewKafkaTopicManager creates a new topic manager.
 func NewKafkaTopicManager(
 	ctx context.Context,
-<<<<<<< HEAD
-=======
 	defaultTopic string,
-	changefeedID model.ChangeFeedID,
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955))
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
 ) *kafkaTopicManager {

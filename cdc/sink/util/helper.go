@@ -94,11 +94,7 @@ func GetTopicManagerAndTryCreateTopic(
 	adminClient kafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager := manager.NewKafkaTopicManager(
-<<<<<<< HEAD
-		ctx, adminClient, topicCfg,
-=======
-		ctx, topic, changefeedID, adminClient, topicCfg,
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955))
+		ctx, topic, adminClient, topicCfg,
 	)
 
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {

@@ -21,31 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-<<<<<<< HEAD
-func TestPartitions(t *testing.T) {
-	t.Parallel()
-
-	adminClient := kafka.NewClusterAdminClientMockImpl()
-	defer adminClient.Close()
-	cfg := &kafka.AutoCreateTopicConfig{
-		AutoCreate:        true,
-		PartitionNum:      2,
-		ReplicationFactor: 1,
-	}
-
-	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, adminClient, cfg)
-	defer manager.Close()
-
-	partitionsNum, err := manager.GetPartitionNum(
-		ctx,
-		kafka.DefaultMockTopicName)
-	require.Nil(t, err)
-	require.Equal(t, int32(3), partitionsNum)
-}
-
-=======
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955))
 func TestCreateTopic(t *testing.T) {
 	t.Parallel()
 
@@ -57,13 +32,8 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-<<<<<<< HEAD
-	manager := NewKafkaTopicManager(ctx, adminClient, cfg)
-=======
-	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955))
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.NoError(t, err)
@@ -78,11 +48,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-<<<<<<< HEAD
-	manager = NewKafkaTopicManager(ctx, adminClient, cfg)
-=======
-	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg)
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955))
+	manager = NewKafkaTopicManager(ctx, "new-topic2", adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
@@ -99,11 +65,7 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-<<<<<<< HEAD
-	manager = NewKafkaTopicManager(ctx, adminClient, cfg)
-=======
-	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955))
+	manager = NewKafkaTopicManager(ctx, topic, adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, topic)
 	require.Regexp(
@@ -125,13 +87,8 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	}
 
 	topic := "new_topic"
-	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-<<<<<<< HEAD
-	manager := NewKafkaTopicManager(ctx, adminClient, cfg)
-=======
-	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955))
+	manager := NewKafkaTopicManager(ctx, topic, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(ctx, topic)
 	require.NoError(t, err)

@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
@@ -35,10 +34,8 @@ func TestPartition(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-
-	manager, err := GetTopicManagerAndTryCreateTopic(ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient)
+	manager, err := GetTopicManagerAndTryCreateTopic(ctx, kafka.DefaultMockTopicName, cfg, adminClient)
 	require.NoError(t, err)
 	defer manager.Close()
 
