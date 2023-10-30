@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
-	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/transformer/column_selector"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/transformer/columnselector"
 	"github.com/pingcap/tiflow/cdc/sink/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -105,7 +105,7 @@ func NewPulsarDMLSink(
 		return nil, errors.Trace(err)
 	}
 
-	trans, err := column_selector.New(replicaConfig)
+	trans, err := columnselector.New(replicaConfig)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

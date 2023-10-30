@@ -130,9 +130,9 @@ var (
 		errors.RFCCodeText("CDC:ErrDispatcherFailed"),
 	)
 
-	ErrTransformerFailed = errors.Normalize(
-		"transformer failed",
-		errors.RFCCodeText("CDC:ErrTransformFailed"),
+	ErrColumnSelectorFailed = errors.Normalize(
+		"column selector failed",
+		errors.RFCCodeText("CDC:ErrColumnSelectorFailed"),
 	)
 
 	// internal errors

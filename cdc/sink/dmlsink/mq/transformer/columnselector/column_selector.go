@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package column_selector
+package columnselector
 
 import (
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 type selector struct {
@@ -30,14 +30,14 @@ func newSelector(
 ) (*selector, error) {
 	tableM, err := filter.Parse(rule.Matcher)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, rule.Matcher)
+		return nil, errors.WrapError(errors.ErrFilterRuleInvalid, err, rule.Matcher)
 	}
 	if !caseSensitive {
 		tableM = filter.CaseInsensitive(tableM)
 	}
 	columnM, err := filter.ParseColumnFilter(rule.Columns)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrFilterRuleInvalid, err, rule.Columns)
+		return nil, errors.WrapError(errors.ErrFilterRuleInvalid, err, rule.Columns)
 	}
 
 	return &selector{
@@ -58,16 +58,28 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 		return nil
 	}
 
-	for i := 0; i < len(event.Columns); i++ {
-		if !s.columnM.MatchColumn(event.Columns[i].Name) {
-			event.Columns[i] = nil
+	for idx, column := range event.Columns {
+		if s.columnM.MatchColumn(column.Name) {
+			continue
 		}
+		if column.Flag.IsHandleKey() || column.Flag.IsUniqueKey() {
+			return errors.ErrColumnSelectorFailed.GenWithStack(
+				"primary key or unique key cannot be filtered out, table: %v, column: %s",
+				event.Table, column.Name)
+		}
+		event.Columns[idx] = nil
 	}
 
-	for i := 0; i < len(event.PreColumns); i++ {
-		if !s.columnM.MatchColumn(event.PreColumns[i].Name) {
-			event.PreColumns[i] = nil
+	for idx, column := range event.PreColumns {
+		if s.columnM.MatchColumn(column.Name) {
+			continue
 		}
+		if column.Flag.IsHandleKey() || column.Flag.IsUniqueKey() {
+			return errors.ErrColumnSelectorFailed.GenWithStack(
+				"primary key or unique key cannot be filtered out, table: %v, column: %s",
+				event.Table, column.Name)
+		}
+		event.PreColumns[idx] = nil
 	}
 
 	return nil
@@ -95,15 +107,47 @@ func New(cfg *config.ReplicaConfig) (*ColumnSelector, error) {
 	}, nil
 }
 
-func (c *ColumnSelector) Match(_ *model.TableName) bool {
-	return true
-}
-
+// Apply the column selector to the given event.
 func (c *ColumnSelector) Apply(event *model.RowChangedEvent) error {
 	for _, s := range c.selectors {
 		if s.Match(event.Table) {
 			return s.Apply(event)
 		}
 	}
+	return nil
+}
+
+// VerifyTables return the error if any given table cannot satisfy the column selector constraints.
+// 1. if the column is filter out, it must not be a part of handle key or the unique key.
+func (c *ColumnSelector) VerifyTables(infos []*model.TableInfo) error {
+	if len(c.selectors) == 0 {
+		return nil
+	}
+
+	for _, table := range infos {
+		for _, s := range c.selectors {
+			if !s.Match(&table.TableName) {
+				continue
+			}
+			for columnID, flag := range table.ColumnsFlag {
+				columnInfo, ok := table.GetColumnInfo(columnID)
+				if !ok {
+					return errors.ErrColumnSelectorFailed.GenWithStack(
+						"column not found when verify the table for the column selector, table: %v, column: %s",
+						table.TableName, columnInfo.Name)
+				}
+
+				if s.columnM.MatchColumn(columnInfo.Name.O) {
+					continue
+				}
+				if flag.IsHandleKey() || flag.IsUniqueKey() {
+					return errors.ErrColumnSelectorFailed.GenWithStack(
+						"primary key or unique key cannot be filtered out, table: %v, column: %s",
+						table.TableName, columnInfo.Name)
+				}
+			}
+		}
+	}
+
 	return nil
 }

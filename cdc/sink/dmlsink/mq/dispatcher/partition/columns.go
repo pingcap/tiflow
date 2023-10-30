@@ -65,7 +65,11 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 	}
 
 	for idx := 0; idx < len(r.Columns); idx++ {
-		r.hasher.Write([]byte(r.Columns[idx]), []byte(model.ColumnValueString(dispatchCols[offsets[idx]].Value)))
+		col := dispatchCols[offsets[idx]]
+		if col == nil {
+			continue
+		}
+		r.hasher.Write([]byte(r.Columns[idx]), []byte(model.ColumnValueString(col.Value)))
 	}
 
 	sum32 := r.hasher.Sum32()
