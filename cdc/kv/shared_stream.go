@@ -93,8 +93,8 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 			for _, m := range stream.clearStates() {
 				for _, state := range m {
 					state.markStopped(&sendRequestToStoreErr{})
+					sfEvent := newEventItem(nil, state, stream)
 					slot := hashRegionID(state.sri.verID.GetID(), len(c.workers))
-					sfEvent := statefulEvent{eventItem: eventItem{state: state}}
 					_ = c.workers[slot].sendEvent(ctx, sfEvent)
 				}
 			}
