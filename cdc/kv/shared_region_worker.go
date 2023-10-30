@@ -102,12 +102,7 @@ func (w *sharedRegionWorker) run(ctx context.Context) error {
 }
 
 func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, stream *requestedStream) {
-	if stream != nil {
-		// stream can be nil if it's obviously unnecessary to re-schedule the region.
-		stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
-	}
-
-	reschedule := state.markRemoved()
+	stepsToRemoved := state.markRemoved()
 	err := state.takeError()
 	log.Info("region worker get a region error",
 		zap.String("namespace", w.changefeed.Namespace),
@@ -115,10 +110,13 @@ func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, str
 		zap.Uint64("streamID", stream.streamID),
 		zap.Any("subscriptionID", state.getRegionID()),
 		zap.Uint64("regionID", state.sri.verID.GetID()),
-		zap.Bool("reschedule", reschedule),
+		zap.Bool("reschedule", stepsToRemoved),
 		zap.Error(err))
 
-	if reschedule {
+	if stepsToRemoved {
+		if stream != nil {
+			stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
+		}
 		// For SharedClient and SharedWorker, err will never be nil.
 		w.client.onRegionFail(newRegionErrorInfo(state.getRegionInfo(), err))
 	}
