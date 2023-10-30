@@ -355,8 +355,8 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			//    and then those regions from the bad requestID will be unsubscribed finally.
 			for _, state := range s.takeStates(subscriptionID) {
 				state.markStopped(&sendRequestToStoreErr{})
+				sfEvent := newEventItem(nil, state, s)
 				slot := hashRegionID(state.sri.verID.GetID(), len(c.workers))
-				sfEvent := statefulEvent{eventItem: eventItem{state: state}}
 				if err = c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
 					return errors.Trace(err)
 				}

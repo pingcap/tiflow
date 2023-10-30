@@ -114,10 +114,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, str
 		zap.Error(err))
 
 	if stepsToRemoved {
-		if stream != nil {
-			stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
-		}
-		// For SharedClient and SharedWorker, err will never be nil.
+		stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
 		w.client.onRegionFail(newRegionErrorInfo(state.getRegionInfo(), err))
 	}
 }
