@@ -43,7 +43,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
-	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -210,11 +209,7 @@ func (s *server) prepare(ctx context.Context) error {
 	if err := s.startActorSystems(ctx); err != nil {
 		return errors.Trace(err)
 	}
-
-	if err := s.setMemoryLimit(); err != nil {
-		return errors.Trace(err)
-	}
-
+	s.setMemoryLimit()
 	s.capture = capture.NewCapture(
 		s.pdEndpoints, cdcEtcdClient, s.grpcService,
 		s.tableActorSystem, s.sortEngineFactory, s.sorterSystem, s.pdClient)
@@ -222,22 +217,25 @@ func (s *server) prepare(ctx context.Context) error {
 	return nil
 }
 
-func (s *server) setMemoryLimit() error {
+func (s *server) setMemoryLimit() {
 	conf := config.GetGlobalServerConfig()
-	totalMemory, err := util.GetMemoryLimit()
-	if err != nil {
-		return errors.Trace(err)
+	if conf.GcTunerMemoryThreshold > maxGcTunerMemory {
+		// If total memory is larger than 512GB, we will not set memory limit.
+		// Because the memory limit is not accurate, and it is not necessary to set memory limit.
+		log.Info("total memory is larger than 512GB, skip setting memory limit",
+			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
+			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
+		)
+		return
 	}
-	if conf.MaxMemoryPercentage > 0 {
-		goMemLimit := totalMemory * uint64(conf.MaxMemoryPercentage) / 100
+	if conf.GcTunerMemoryThreshold > 0 {
 		gctuner.EnableGOGCTuner.Store(true)
-		gctuner.Tuning(goMemLimit)
+		gctuner.Tuning(conf.GcTunerMemoryThreshold)
 		log.Info("enable gctuner, set memory limit",
-			zap.Uint64("bytes", goMemLimit),
-			zap.String("memory", humanize.IBytes(goMemLimit)),
+			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
+			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
 		)
 	}
-	return nil
 }
 
 func (s *server) startActorSystems(ctx context.Context) error {
