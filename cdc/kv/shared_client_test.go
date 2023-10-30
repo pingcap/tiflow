@@ -47,11 +47,13 @@ func TestRequestedStreamRequestedRegions(t *testing.T) {
 	require.NotNil(t, stream.getState(1, 2))
 	require.NotNil(t, stream.takeState(1, 2))
 	require.Nil(t, stream.getState(1, 2))
+	require.Equal(t, 0, len(stream.requestedRegions.m))
 
 	stream.setState(1, 2, &regionFeedState{})
 	require.NotNil(t, stream.getState(1, 2))
 	require.NotNil(t, stream.takeState(1, 2))
 	require.Nil(t, stream.getState(1, 2))
+	require.Equal(t, 0, len(stream.requestedRegions.m))
 }
 
 func TestRequestedTable(t *testing.T) {
