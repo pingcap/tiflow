@@ -179,7 +179,9 @@ func (s *SinkConfig) MaskSensitiveData() {
 
 // CSVConfig defines a series of configuration items for csv codec.
 type CSVConfig struct {
-	// delimiter between fields
+	// delimiter between fields, it can be 1 character or at most 2 characters
+	// It can not be CR or LF or contains CR or LF.
+	// It should have exclusive characters with quote.
 	Delimiter string `toml:"delimiter" json:"delimiter"`
 	// quoting character
 	Quote string `toml:"quote" json:"quote"`
@@ -214,7 +216,7 @@ func (c *CSVConfig) validateAndAdjust() error {
 	case 0:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config delimiter cannot be empty"))
-	case 1:
+	case 1, 2:
 		if strings.ContainsRune(c.Delimiter, CR) || strings.ContainsRune(c.Delimiter, LF) {
 			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 				errors.New("csv config delimiter contains line break characters"))
@@ -224,9 +226,13 @@ func (c *CSVConfig) validateAndAdjust() error {
 			errors.New("csv config delimiter contains more than one character"))
 	}
 
-	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config quote and delimiter cannot be the same"))
+	if len(c.Quote) > 0 {
+		for _, r := range c.Delimiter {
+			if strings.ContainsRune(c.Quote, r) {
+				return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+					errors.New("csv config quote and delimiter has common characters which is not allowed"))
+			}
+		}
 	}
 
 	// validate binary encoding method

@@ -334,6 +334,15 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "valid delimiter with 2 characters",
+			config: &CSVConfig{
+				Quote:                "\"",
+				Delimiter:            "FE",
+				BinaryEncodingMethod: BinaryEncodingHex,
+			},
+			wantErr: "",
+		},
+		{
 			name: "delimiter is empty",
 			config: &CSVConfig{
 				Quote:     "'",
@@ -363,7 +372,15 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 				Quote:     "'",
 				Delimiter: "'",
 			},
-			wantErr: "csv config quote and delimiter cannot be the same",
+			wantErr: "csv config quote and delimiter has common characters which is not allowed",
+		},
+		{
+			name: "delimiter and quote contain common characters",
+			config: &CSVConfig{
+				Quote:     "EX",
+				Delimiter: "FE",
+			},
+			wantErr: "csv config quote and delimiter has common characters which is not allowed",
 		},
 		{
 			name: "invalid binary encoding method",
