@@ -47,15 +47,18 @@ func newSelector(
 }
 
 // Match implements Transformer interface
-func (s *selector) Match(table *model.TableName) bool {
-	return s.tableF.MatchTable(table.Schema, table.Table)
+func (s *selector) Match(schema, table string) bool {
+	return s.tableF.MatchTable(schema, table)
 }
 
 // Apply implements Transformer interface
+// return error if the given event cannot match the selector, it's the caller's
+// responsibility make sure the given event match the selector first before apply it.
 func (s *selector) Apply(event *model.RowChangedEvent) error {
-	// the event does not match the table filter, skip it
-	if !s.tableF.MatchTable(event.Table.Schema, event.Table.Table) {
-		return nil
+	// defensive check, this should not happen.
+	if !s.Match(event.Table.Schema, event.Table.Table) {
+		return errors.ErrColumnSelectorFailed.GenWithStack(
+			"the given event does not match the column selector, table: %v", event.Table)
 	}
 
 	for idx, column := range event.Columns {
@@ -110,7 +113,7 @@ func New(cfg *config.ReplicaConfig) (*ColumnSelector, error) {
 // Apply the column selector to the given event.
 func (c *ColumnSelector) Apply(event *model.RowChangedEvent) error {
 	for _, s := range c.selectors {
-		if s.Match(event.Table) {
+		if s.Match(event.Table.Schema, event.Table.Table) {
 			return s.Apply(event)
 		}
 	}
@@ -126,7 +129,7 @@ func (c *ColumnSelector) VerifyTables(infos []*model.TableInfo) error {
 
 	for _, table := range infos {
 		for _, s := range c.selectors {
-			if !s.Match(&table.TableName) {
+			if !s.Match(table.TableName.Schema, table.TableName.Table) {
 				continue
 			}
 			for columnID, flag := range table.ColumnsFlag {
