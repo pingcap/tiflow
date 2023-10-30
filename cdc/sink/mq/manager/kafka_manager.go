@@ -44,6 +44,8 @@ const (
 type kafkaTopicManager struct {
 	changefeedID model.ChangeFeedID
 
+	defaultTopic string
+
 	admin kafka.ClusterAdminClient
 
 	cfg *kafkaconfig.AutoCreateTopicConfig
@@ -59,11 +61,17 @@ type kafkaTopicManager struct {
 // NewKafkaTopicManager creates a new topic manager.
 func NewKafkaTopicManager(
 	ctx context.Context,
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
+=======
+	defaultTopic string,
+	changefeedID model.ChangeFeedID,
+>>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 	admin kafka.ClusterAdminClient,
 	cfg *kafkaconfig.AutoCreateTopicConfig,
 ) *kafkaTopicManager {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	mgr := &kafkaTopicManager{
+		defaultTopic:      defaultTopic,
 		changefeedID:      changefeedID,
 		admin:             admin,
 		cfg:               cfg,
@@ -170,6 +178,15 @@ func (m *kafkaTopicManager) getMetadataOfTopics() ([]*sarama.TopicMetadata, erro
 			zap.Duration("duration", time.Since(start)),
 		)
 		return nil, err
+	}
+
+	// it may happen the following case:
+	// 1. user create the default topic with partition number set as 3 manually
+	// 2. set the partition-number as 2 in the sink-uri.
+	// in the such case, we should use 2 instead of 3 as the partition number.
+	_, ok := numPartitions[m.defaultTopic]
+	if ok {
+		numPartitions[m.defaultTopic] = m.cfg.PartitionNum
 	}
 
 	log.Info(
@@ -287,6 +304,7 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(topicName string) (in
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
+<<<<<<< HEAD:cdc/sink/mq/manager/kafka_manager.go
 	for _, detail := range topicDetails {
 		if detail.Err == sarama.ErrNoError {
 			if detail.Name == topicName {
@@ -307,6 +325,15 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(topicName string) (in
 				zap.Error(detail.Err))
 			return 0, errors.Trace(detail.Err)
 		}
+=======
+	if detail, ok := topicDetails[topicName]; ok {
+		numPartition := detail.NumPartitions
+		if topicName == m.defaultTopic {
+			numPartition = m.cfg.PartitionNum
+		}
+		m.tryUpdatePartitionsAndLogging(topicName, numPartition)
+		return numPartition, nil
+>>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955)):cdc/sink/dmlsink/mq/manager/kafka_manager.go
 	}
 
 	partitionNum, err := m.createTopic(topicName)
