@@ -67,8 +67,8 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 		}
 		if column.Flag.IsHandleKey() || column.Flag.IsUniqueKey() {
 			return errors.ErrColumnSelectorFailed.GenWithStack(
-				"primary key or unique key cannot be filtered out, table: %v, column: %s",
-				event.Table, column.Name)
+				"primary key or unique key cannot be filtered out by the column selector, "+
+					"table: %v, column: %s", event.Table, column.Name)
 		}
 		event.Columns[idx] = nil
 	}
@@ -79,8 +79,8 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 		}
 		if column.Flag.IsHandleKey() || column.Flag.IsUniqueKey() {
 			return errors.ErrColumnSelectorFailed.GenWithStack(
-				"primary key or unique key cannot be filtered out, table: %v, column: %s",
-				event.Table, column.Name)
+				"primary key or unique key cannot be filtered out by the column selector, "+
+					"table: %v, column: %s", event.Table, column.Name)
 		}
 		event.PreColumns[idx] = nil
 	}
@@ -145,12 +145,23 @@ func (c *ColumnSelector) VerifyTables(infos []*model.TableInfo) error {
 				}
 				if flag.IsHandleKey() || flag.IsUniqueKey() {
 					return errors.ErrColumnSelectorFailed.GenWithStack(
-						"primary key or unique key cannot be filtered out, table: %v, column: %s",
-						table.TableName, columnInfo.Name)
+						"primary key or unique key cannot be filtered out by the column selector, "+
+							"table: %v, column: %s", table.TableName, columnInfo.Name)
 				}
 			}
 		}
 	}
 
 	return nil
+}
+
+// Match return true if the given `schema.table` column is matched.
+func (c *ColumnSelector) Match(schema, table, column string) bool {
+	for _, s := range c.selectors {
+		if !s.Match(schema, table) {
+			continue
+		}
+		return s.columnM.MatchColumn(column)
+	}
+	return true
 }
