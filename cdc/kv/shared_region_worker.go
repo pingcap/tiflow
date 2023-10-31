@@ -102,13 +102,20 @@ func (w *sharedRegionWorker) run(ctx context.Context) error {
 }
 
 func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, stream *requestedStream) {
-	if stream != nil {
-		// stream can be nil if it's obviously unnecessary to re-schedule the region.
-		stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
+	stepsToRemoved := state.markRemoved()
+	err := state.takeError()
+	if err != nil {
+		log.Info("region worker get a region error",
+			zap.String("namespace", w.changefeed.Namespace),
+			zap.String("changefeed", w.changefeed.ID),
+			zap.Uint64("streamID", stream.streamID),
+			zap.Any("subscriptionID", state.getRegionID()),
+			zap.Uint64("regionID", state.sri.verID.GetID()),
+			zap.Bool("reschedule", stepsToRemoved),
+			zap.Error(err))
 	}
-	if state.markRemoved() {
-		// For SharedClient and SharedWorker, err will never be nil.
-		err := state.takeError()
+	if stepsToRemoved {
+		stream.takeState(SubscriptionID(state.requestID), state.getRegionID())
 		w.client.onRegionFail(newRegionErrorInfo(state.getRegionInfo(), err))
 	}
 }
@@ -128,16 +135,16 @@ func (w *sharedRegionWorker) processEvent(ctx context.Context, event statefulEve
 				w.handleSingleRegionError(state, event.stream)
 				return
 			}
-		case *cdcpb.Event_Admin_:
-		case *cdcpb.Event_Error:
-			state.markStopped(&eventError{err: x.Error})
-			w.handleSingleRegionError(state, event.stream)
-			return
 		case *cdcpb.Event_ResolvedTs:
 			w.handleResolvedTs(ctx, resolvedTsBatch{
 				ts:      x.ResolvedTs,
 				regions: []*regionFeedState{state},
 			})
+		case *cdcpb.Event_Error:
+			state.markStopped(&eventError{err: x.Error})
+			w.handleSingleRegionError(state, event.stream)
+			return
+		case *cdcpb.Event_Admin_:
 		}
 	} else if len(event.resolvedTsBatch.regions) > 0 {
 		w.handleResolvedTs(ctx, event.resolvedTsBatch)

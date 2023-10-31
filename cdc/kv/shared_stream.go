@@ -56,11 +56,8 @@ type tableExclusive struct {
 }
 
 func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *requestedStore) *requestedStream {
-	stream := &requestedStream{
-		streamID: streamIDGen.Add(1),
-		requests: chann.NewAutoDrainChann[singleRegionInfo](),
-	}
-	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
+	stream := newRequestedStream(streamIDGen.Add(1))
+	stream.requests = chann.NewAutoDrainChann[singleRegionInfo]()
 
 	waitForPreFetching := func() error {
 		if stream.preFetchForConnecting != nil {
@@ -96,8 +93,8 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 			for _, m := range stream.clearStates() {
 				for _, state := range m {
 					state.markStopped(&sendRequestToStoreErr{})
+					sfEvent := newEventItem(nil, state, stream)
 					slot := hashRegionID(state.sri.verID.GetID(), len(c.workers))
-					sfEvent := statefulEvent{eventItem: eventItem{state: state}}
 					_ = c.workers[slot].sendEvent(ctx, sfEvent)
 				}
 			}
@@ -116,6 +113,12 @@ func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *reque
 		}
 	})
 
+	return stream
+}
+
+func newRequestedStream(streamID uint64) *requestedStream {
+	stream := &requestedStream{streamID: streamID}
+	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
 	return stream
 }
 
@@ -352,8 +355,8 @@ func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *request
 			//    and then those regions from the bad requestID will be unsubscribed finally.
 			for _, state := range s.takeStates(subscriptionID) {
 				state.markStopped(&sendRequestToStoreErr{})
+				sfEvent := newEventItem(nil, state, s)
 				slot := hashRegionID(state.sri.verID.GetID(), len(c.workers))
-				sfEvent := statefulEvent{eventItem: eventItem{state: state}}
 				if err = c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
 					return errors.Trace(err)
 				}
@@ -423,6 +426,9 @@ func (s *requestedStream) takeState(subscriptionID SubscriptionID, regionID uint
 	if m, ok := s.requestedRegions.m[subscriptionID]; ok {
 		state = m[regionID]
 		delete(m, regionID)
+		if len(m) == 0 {
+			delete(s.requestedRegions.m, subscriptionID)
+		}
 	}
 	return
 }
@@ -468,7 +474,21 @@ func (s *requestedStream) sendRegionChangeEvents(
 		} else {
 			subscriptionID = tableSubID
 		}
-		if state := s.getState(subscriptionID, regionID); state != nil {
+
+		state := s.getState(subscriptionID, regionID)
+		switch x := event.Event.(type) {
+		case *cdcpb.Event_Error:
+			log.Info("event feed receives a region error",
+				zap.String("namespace", c.changefeed.Namespace),
+				zap.String("changefeed", c.changefeed.ID),
+				zap.Uint64("streamID", s.streamID),
+				zap.Any("subscriptionID", subscriptionID),
+				zap.Uint64("regionID", event.RegionId),
+				zap.Bool("stateIsNil", state == nil),
+				zap.Any("error", x.Error))
+		}
+
+		if state != nil {
 			sfEvent := newEventItem(event, state, s)
 			slot := hashRegionID(regionID, len(c.workers))
 			if err := c.workers[slot].sendEvent(ctx, sfEvent); err != nil {
