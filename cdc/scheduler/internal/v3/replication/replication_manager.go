@@ -78,14 +78,14 @@ func (t MoveTable) String() string {
 
 // AddTable is a schedule task for adding a table.
 type AddTable struct {
-	Span       tablepb.Span
-	CaptureID  model.CaptureID
-	Checkpoint tablepb.Checkpoint
+	Span         tablepb.Span
+	CaptureID    model.CaptureID
+	CheckpointTs model.Ts
 }
 
 func (t AddTable) String() string {
-	return fmt.Sprintf("AddTable, span: %s, capture: %s, checkpointTs: %d, resolvedTs: %d",
-		t.Span.String(), t.CaptureID, t.Checkpoint.CheckpointTs, t.Checkpoint.ResolvedTs)
+	return fmt.Sprintf("AddTable, span: %s, capture: %s, checkpointTs: %d",
+		t.Span.String(), t.CaptureID, t.CheckpointTs)
 }
 
 // RemoveTable is a schedule task for removing a table.
@@ -200,12 +200,7 @@ func (r *Manager) HandleCaptureChanges(
 		}
 		var err error
 		spanStatusMap.Ascend(func(span tablepb.Span, status map[string]*tablepb.TableStatus) bool {
-			checkpoint := tablepb.Checkpoint{
-				CheckpointTs: checkpointTs,
-				// Note that the real resolved ts is stored in the status.
-				ResolvedTs: checkpointTs,
-			}
-			table, err1 := NewReplicationSet(span, checkpoint, status, r.changefeedID)
+			table, err1 := NewReplicationSet(span, checkpointTs, status, r.changefeedID)
 			if err1 != nil {
 				err = errors.Trace(err1)
 				return false
@@ -442,7 +437,7 @@ func (r *Manager) handleAddTableTask(
 	var err error
 	table, ok := r.spans.Get(task.Span)
 	if !ok {
-		table, err = NewReplicationSet(task.Span, task.Checkpoint, nil, r.changefeedID)
+		table, err = NewReplicationSet(task.Span, task.CheckpointTs, nil, r.changefeedID)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
