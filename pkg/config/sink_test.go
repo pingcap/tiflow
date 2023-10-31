@@ -377,7 +377,7 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 		{
 			name: "delimiter and quote contain common characters",
 			config: &CSVConfig{
-				Quote:     "EX",
+				Quote:     "E",
 				Delimiter: "FE",
 			},
 			wantErr: "csv config quote and delimiter has common characters which is not allowed",
