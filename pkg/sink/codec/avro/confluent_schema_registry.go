@@ -210,20 +210,12 @@ func (m *confluentSchemaManager) Lookup(
 	m.cacheRWLock.RLock()
 	entry, exists := m.cache[schemaName]
 	if exists && entry.schemaID.confluentSchemaID == schemaID.confluentSchemaID {
-		log.Debug("Avro schema lookup cache hit",
-			zap.String("key", schemaName),
-			zap.Int("schemaID", entry.schemaID.confluentSchemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, nil
 	}
 	m.cacheRWLock.RUnlock()
 
-	log.Info("Avro schema lookup cache miss",
-		zap.String("key", schemaName),
-		zap.Int("schemaID", schemaID.confluentSchemaID))
-
 	uri := m.registryURL + "/schemas/ids/" + strconv.Itoa(schemaID.confluentSchemaID)
-	log.Debug("Querying for latest schema", zap.String("uri", uri))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
 	if err != nil {
@@ -289,11 +281,6 @@ func (m *confluentSchemaManager) Lookup(
 	m.cacheRWLock.Lock()
 	m.cache[schemaName] = cacheEntry
 	m.cacheRWLock.Unlock()
-
-	log.Info("Avro schema lookup successful with cache miss",
-		zap.Int("schemaID", cacheEntry.schemaID.confluentSchemaID),
-		zap.String("schema", cacheEntry.codec.Schema()))
-
 	return cacheEntry.codec, nil
 }
 

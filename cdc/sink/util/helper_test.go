@@ -14,11 +14,55 @@
 package util
 
 import (
+	"context"
 	"net/url"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPartition(t *testing.T) {
+	t.Parallel()
+
+	adminClient := kafka.NewClusterAdminClientMockImpl()
+	defer adminClient.Close()
+
+	cfg := &kafka.AutoCreateTopicConfig{
+		AutoCreate:        true,
+		PartitionNum:      2,
+		ReplicationFactor: 1,
+	}
+
+	changefeedID := model.DefaultChangeFeedID("test")
+	ctx := context.Background()
+
+	manager, err := GetTopicManagerAndTryCreateTopic(ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient)
+	require.NoError(t, err)
+	defer manager.Close()
+
+	// default topic, real partition is 3, but 2 is set in the sink-uri, so return 2.
+	partitionsNum, err := manager.GetPartitionNum(ctx, kafka.DefaultMockTopicName)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), partitionsNum)
+
+	// new topic, create it with partition number as 2.
+	partitionsNum, err = manager.GetPartitionNum(ctx, "new-topic")
+	require.NoError(t, err)
+	require.Equal(t, int32(2), partitionsNum)
+
+	// assume a topic already exist, the not default topic won't be affected by the default topic's partition number.
+	err = adminClient.CreateTopic(ctx, &kafka.TopicDetail{
+		Name:          "new-topic-2",
+		NumPartitions: 3,
+	}, false)
+	require.NoError(t, err)
+
+	partitionsNum, err = manager.GetPartitionNum(ctx, "new-topic-2")
+	require.NoError(t, err)
+	require.Equal(t, int32(3), partitionsNum)
+}
 
 func TestGetTopic(t *testing.T) {
 	t.Parallel()

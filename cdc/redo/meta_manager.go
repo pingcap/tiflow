@@ -74,6 +74,8 @@ type metaManager struct {
 	lastFlushTime          time.Time
 	cfg                    *config.ConsistentConfig
 	metricFlushLogDuration prometheus.Observer
+
+	flushIntervalInMs int64
 }
 
 // NewDisabledMetaManager creates a disabled Meta Manager.
@@ -92,14 +94,21 @@ func NewMetaManager(
 		return &metaManager{enabled: false}
 	}
 
-	return &metaManager{
-		captureID:     config.GetGlobalServerConfig().AdvertiseAddr,
-		changeFeedID:  changefeedID,
-		uuidGenerator: uuid.NewGenerator(),
-		enabled:       true,
-		cfg:           cfg,
-		startTs:       checkpoint,
+	m := &metaManager{
+		captureID:         config.GetGlobalServerConfig().AdvertiseAddr,
+		changeFeedID:      changefeedID,
+		uuidGenerator:     uuid.NewGenerator(),
+		enabled:           true,
+		cfg:               cfg,
+		flushIntervalInMs: cfg.MetaFlushIntervalInMs,
 	}
+
+	if m.flushIntervalInMs < redo.MinFlushIntervalInMs {
+		log.Warn("redo flush interval is too small, use default value",
+			zap.Int64("interval", m.flushIntervalInMs))
+		m.flushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
+	}
+	return m
 }
 
 // Enabled returns whether this log manager is enabled
