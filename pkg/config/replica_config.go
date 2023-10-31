@@ -43,10 +43,19 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Enable: false,
 	},
 	Consistent: &ConsistentConfig{
+<<<<<<< HEAD
 		Level:             "none",
 		MaxLogSize:        64,
 		FlushIntervalInMs: DefaultFlushIntervalInMs,
 		Storage:           "",
+=======
+		Level:                 "none",
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		Storage:               "",
+		UseFileBackend:        false,
+>>>>>>> afe43311da (redo(ticdc): add meta flush interval configuration (#9959))
 	},
 }
 

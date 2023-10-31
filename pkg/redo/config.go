@@ -35,6 +35,23 @@ var (
 )
 
 const (
+<<<<<<< HEAD
+=======
+	// DefaultTimeout is the default timeout for writing external storage.
+	DefaultTimeout = 15 * time.Minute
+	// CloseTimeout is the default timeout for close redo writer.
+	CloseTimeout = 15 * time.Second
+
+	// FlushWarnDuration is the warning duration for flushing external storage.
+	FlushWarnDuration = time.Second * 20
+	// DefaultFlushIntervalInMs is the default flush interval for redo log.
+	DefaultFlushIntervalInMs = 2000
+	// DefaultMetaFlushIntervalInMs is the default flush interval for redo meta.
+	DefaultMetaFlushIntervalInMs = 200
+	// MinFlushIntervalInMs is the minimum flush interval for redo log.
+	MinFlushIntervalInMs = 50
+
+>>>>>>> afe43311da (redo(ticdc): add meta flush interval configuration (#9959))
 	// DefaultFileMode is the default mode when operation files
 	DefaultFileMode = 0o644
 	// DefaultDirMode is the default mode when operation dir

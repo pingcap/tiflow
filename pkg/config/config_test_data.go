@@ -61,8 +61,24 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+<<<<<<< HEAD
     "storage": ""
   }
+=======
+    "meta-flush-interval": 200,
+    "storage": "",
+    "use-file-backend": false
+  },
+  "scheduler": {
+    "enable-table-across-nodes": false,
+    "region-threshold": 100000
+  },
+  "integrity": {
+    "integrity-check-level": "none",
+    "corruption-handle-level": "warn"
+ },
+  "changefeed-error-stuck-duration": 1800000000000
+>>>>>>> afe43311da (redo(ticdc): add meta flush interval configuration (#9959))
 }`
 
 	testCfgTestServerConfigMarshal = `{
@@ -187,8 +203,27 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+<<<<<<< HEAD
     "storage": ""
   }
+=======
+    "meta-flush-interval": 200,
+    "storage": "",
+    "use-file-backend": false
+  },
+  "scheduler": {
+    "enable-table-across-nodes": true,
+    "region-per-span": 0,
+    "region-threshold": 100001,
+    "write-key-threshold": 100001,
+    "region-per-span": 0
+  },
+  "integrity": {
+    "integrity-check-level": "none",
+    "corruption-handle-level": "warn"
+  },
+  "changefeed-error-stuck-duration": 1800000000000
+>>>>>>> afe43311da (redo(ticdc): add meta flush interval configuration (#9959))
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -232,7 +267,24 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+<<<<<<< HEAD
     "storage": ""
   }
+=======
+    "meta-flush-interval": 200,
+    "storage": "",
+    "use-file-backend": false
+  },
+  "scheduler": {
+    "enable-table-across-nodes": true,
+    "region-threshold": 100001,
+    "write-key-threshold": 100001
+  },
+  "integrity": {
+    "integrity-check-level": "none",
+    "corruption-handle-level": "warn"
+  },
+  "changefeed-error-stuck-duration": 1800000000000
+>>>>>>> afe43311da (redo(ticdc): add meta flush interval configuration (#9959))
 }`
 )

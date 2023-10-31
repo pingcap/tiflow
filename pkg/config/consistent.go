@@ -30,10 +30,19 @@ const (
 
 // ConsistentConfig represents replication consistency config for a changefeed.
 type ConsistentConfig struct {
+<<<<<<< HEAD
 	Level             string `toml:"level" json:"level"`
 	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
 	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
 	Storage           string `toml:"storage" json:"storage"`
+=======
+	Level                 string `toml:"level" json:"level"`
+	MaxLogSize            int64  `toml:"max-log-size" json:"max-log-size"`
+	FlushIntervalInMs     int64  `toml:"flush-interval" json:"flush-interval"`
+	MetaFlushIntervalInMs int64  `toml:"meta-flush-interval" json:"meta-flush-interval"`
+	Storage               string `toml:"storage" json:"storage"`
+	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
+>>>>>>> afe43311da (redo(ticdc): add meta flush interval configuration (#9959))
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.
@@ -50,6 +59,15 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
 			fmt.Sprintf("The consistent.flush-interval:%d must be equal or greater than %d",
 				c.FlushIntervalInMs, minFlushIntervalInMs))
+	}
+
+	if c.MetaFlushIntervalInMs == 0 {
+		c.MetaFlushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
+	}
+	if c.MetaFlushIntervalInMs < redo.MinFlushIntervalInMs {
+		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
+			fmt.Sprintf("The consistent.meta-flush-interval:%d must be equal or greater than %d",
+				c.MetaFlushIntervalInMs, redo.MinFlushIntervalInMs))
 	}
 
 	uri, err := storage.ParseRawURL(c.Storage)
