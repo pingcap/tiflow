@@ -15,8 +15,12 @@ package simple
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
@@ -27,8 +31,12 @@ type builder struct{}
 
 // NewBuilder returns a new builder
 func NewBuilder() *builder {
-	// TODO implement me
-	panic("implement me")
+	return &builder{}
+}
+
+// Build implement the RowEventEncoderBuilder interface
+func (b *builder) Build() codec.RowEventEncoder {
+	return &encoder{}
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
@@ -53,8 +61,12 @@ func (e *encoder) Build() []*common.Message {
 //
 //nolint:unused
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	// TODO implement me
-	panic("implement me")
+	message := newResolvedMessage(ts)
+	value, err := json.Marshal(message)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+	return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), nil
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
