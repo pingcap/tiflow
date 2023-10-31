@@ -223,7 +223,7 @@ func (c *CSVConfig) validateAndAdjust() error {
 		}
 	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains more than one character"))
+			errors.New("csv config delimiter contains more than two characters"))
 	}
 
 	if len(c.Quote) > 0 {
