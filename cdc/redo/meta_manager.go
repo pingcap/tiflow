@@ -100,6 +100,7 @@ func NewMetaManager(
 		uuidGenerator:     uuid.NewGenerator(),
 		enabled:           true,
 		cfg:               cfg,
+		startTs:           checkpoint,
 		flushIntervalInMs: cfg.MetaFlushIntervalInMs,
 	}
 
