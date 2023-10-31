@@ -70,12 +70,22 @@ func newProcessor4Test(
 		} else {
 			tmpDir := t.TempDir()
 			redoDir := fmt.Sprintf("%s/%s", tmpDir, changefeedID)
+<<<<<<< HEAD
 			dmlMgr, err := redo.NewDMLManager(ctx, &config.ConsistentConfig{
 				Level:             string(redoPkg.ConsistentLevelEventual),
 				MaxLogSize:        redoPkg.DefaultMaxLogSize,
 				FlushIntervalInMs: redoPkg.DefaultFlushIntervalInMs,
 				Storage:           "file://" + redoDir,
 				UseFileBackend:    false,
+=======
+			dmlMgr, err := redo.NewDMLManager(ctx, changefeedID, &config.ConsistentConfig{
+				Level:                 string(redoPkg.ConsistentLevelEventual),
+				MaxLogSize:            redoPkg.DefaultMaxLogSize,
+				FlushIntervalInMs:     redoPkg.DefaultFlushIntervalInMs,
+				MetaFlushIntervalInMs: redoPkg.DefaultMetaFlushIntervalInMs,
+				Storage:               "file://" + redoDir,
+				UseFileBackend:        false,
+>>>>>>> afe43311da (redo(ticdc): add meta flush interval configuration (#9959))
 			})
 			require.NoError(t, err)
 			p.redo.r = dmlMgr

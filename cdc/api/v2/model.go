@@ -260,11 +260,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	}
 	if c.Consistent != nil {
 		res.Consistent = &config.ConsistentConfig{
-			Level:             c.Consistent.Level,
-			MaxLogSize:        c.Consistent.MaxLogSize,
-			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
-			Storage:           c.Consistent.Storage,
-			UseFileBackend:    c.Consistent.UseFileBackend,
+			Level:                 c.Consistent.Level,
+			MaxLogSize:            c.Consistent.MaxLogSize,
+			FlushIntervalInMs:     c.Consistent.FlushIntervalInMs,
+			MetaFlushIntervalInMs: c.Consistent.MetaFlushIntervalInMs,
+			Storage:               c.Consistent.Storage,
+			UseFileBackend:        c.Consistent.UseFileBackend,
 		}
 	}
 	if c.Sink != nil {
@@ -627,11 +628,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
-			Level:             cloned.Consistent.Level,
-			MaxLogSize:        cloned.Consistent.MaxLogSize,
-			FlushIntervalInMs: cloned.Consistent.FlushIntervalInMs,
-			Storage:           cloned.Consistent.Storage,
-			UseFileBackend:    cloned.Consistent.UseFileBackend,
+			Level:                 cloned.Consistent.Level,
+			MaxLogSize:            cloned.Consistent.MaxLogSize,
+			FlushIntervalInMs:     cloned.Consistent.FlushIntervalInMs,
+			MetaFlushIntervalInMs: cloned.Consistent.MetaFlushIntervalInMs,
+			Storage:               cloned.Consistent.Storage,
+			UseFileBackend:        cloned.Consistent.UseFileBackend,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -807,11 +809,20 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
+<<<<<<< HEAD
 	Level             string `json:"level"`
 	MaxLogSize        int64  `json:"max_log_size"`
 	FlushIntervalInMs int64  `json:"flush_interval"`
 	Storage           string `json:"storage"`
 	UseFileBackend    bool   `json:"use_file_backend"`
+=======
+	Level                 string `json:"level,omitempty"`
+	MaxLogSize            int64  `json:"max_log_size"`
+	FlushIntervalInMs     int64  `json:"flush_interval"`
+	MetaFlushIntervalInMs int64  `json:"meta_flush_interval"`
+	Storage               string `json:"storage,omitempty"`
+	UseFileBackend        bool   `json:"use_file_backend"`
+>>>>>>> afe43311da (redo(ticdc): add meta flush interval configuration (#9959))
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

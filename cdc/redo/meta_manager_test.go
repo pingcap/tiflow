@@ -72,10 +72,11 @@ func TestInitAndWriteMeta(t *testing.T) {
 
 	startTs := uint64(10)
 	cfg := &config.ConsistentConfig{
-		Level:             string(redo.ConsistentLevelEventual),
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           uri.String(),
-		FlushIntervalInMs: redo.MinFlushIntervalInMs,
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               uri.String(),
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
 	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
 	require.NoError(t, err)
@@ -136,10 +137,11 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 
 	startTs := uint64(10)
 	cfg := &config.ConsistentConfig{
-		Level:             string(redo.ConsistentLevelEventual),
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           uri.String(),
-		FlushIntervalInMs: redo.MinFlushIntervalInMs,
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               uri.String(),
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
 	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
 	require.NoError(t, err)
@@ -261,10 +263,11 @@ func TestGCAndCleanup(t *testing.T) {
 
 	startTs := uint64(3)
 	cfg := &config.ConsistentConfig{
-		Level:             string(redo.ConsistentLevelEventual),
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           uri.String(),
-		FlushIntervalInMs: redo.MinFlushIntervalInMs,
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               uri.String(),
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
 	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
 	require.NoError(t, err)
