@@ -670,10 +670,14 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
+<<<<<<< HEAD
 	p.redo.r, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
 	if err != nil {
 		return err
 	}
+=======
+	p.redo.r = redo.NewDMLManager(p.changefeedID, p.latestInfo.Config.Consistent)
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	p.redo.name = "RedoManager"
 	p.redo.spawn(stdCtx)
 

@@ -702,10 +702,11 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	defer c.ddlListMu.Unlock()
 	// DDL CommitTs fallback, just crash it to indicate the bug.
 	if c.ddlWithMaxCommitTs != nil && ddl.CommitTs < c.ddlWithMaxCommitTs.CommitTs {
-		log.Panic("DDL CommitTs < maxCommitTsDDL.CommitTs",
+		log.Warn("DDL CommitTs < maxCommitTsDDL.CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.Uint64("maxCommitTs", c.ddlWithMaxCommitTs.CommitTs),
 			zap.Any("DDL", ddl))
+		return
 	}
 
 	// A rename tables DDL job contains multiple DDL events with same CommitTs.
