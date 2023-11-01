@@ -15,7 +15,9 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -27,25 +29,55 @@ import (
 	"go.uber.org/zap"
 )
 
-func main() {
-	var upstreamURI string
-	var downstreamURI string
-	var dbNames []string
-	var configFile string
+type options struct {
+	upstreamURI   string
+	downstreamURI string
+	dbNames       string
+	configFile    string
+}
 
-	upstreamDB, err := openDB(upstreamURI)
+func (o *options) validate() error {
+	if o.upstreamURI == "" {
+		return errors.New("upstreamURI is required")
+	}
+	if o.downstreamURI == "" {
+		return errors.New("downstreamURI is required")
+	}
+	if len(o.dbNames) == 0 {
+		return errors.New("dbNames is required")
+	}
+	return nil
+}
+
+func main() {
+
+	o := &options{}
+
+	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	flags.StringVar(&o.upstreamURI, "upstream-uri", "", "upstream database uri")
+	flags.StringVar(&o.downstreamURI, "downstream-uri", "", "downstream database uri")
+	flags.StringVar(&o.dbNames, "db-names", "", "database names")
+	flags.StringVar(&o.configFile, "config", "", "config file")
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		log.Panic("parse args failed", zap.Error(err))
+	}
+	if err := o.validate(); err != nil {
+		log.Panic("invalid options", zap.Error(err))
+	}
+
+	upstreamDB, err := openDB(o.upstreamURI)
 	if err != nil {
 		log.Panic("cannot open db for the upstream", zap.Error(err))
 	}
 
-	downstreamDB, err := openDB(downstreamURI)
+	downstreamDB, err := openDB(o.downstreamURI)
 	if err != nil {
 		log.Panic("cannot open db for the downstream", zap.Error(err))
 	}
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	if configFile != "" {
-		err = cmdUtil.StrictDecodeFile(configFile, "checksum checker", replicaConfig)
+	if o.configFile != "" {
+		err = cmdUtil.StrictDecodeFile(o.configFile, "checksum checker", replicaConfig)
 		if err != nil {
 			log.Panic("cannot decode config file", zap.Error(err))
 		}
@@ -56,6 +88,7 @@ func main() {
 		log.Panic("cannot create column filter", zap.Error(err))
 	}
 
+	dbNames := strings.Split(o.dbNames, ",")
 	err = compareCRC32CheckSum(upstreamDB, downstreamDB, dbNames, columnFilter)
 	if err != nil {
 		log.Panic("compare checksum failed", zap.Error(err))
