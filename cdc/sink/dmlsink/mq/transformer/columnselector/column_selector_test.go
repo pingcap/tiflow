@@ -16,8 +16,11 @@ package columnselector
 import (
 	"testing"
 
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -197,4 +200,97 @@ func TestNewColumnSelector(t *testing.T) {
 	require.Equal(t, []byte("col1"), event.Columns[1].Value)
 	require.Nil(t, event.Columns[2])
 	require.Equal(t, []byte("coA1"), event.Columns[3].Value)
+}
+
+func TestVerifyTableColumnNotAllowFiltered(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.ColumnSelectors = []*config.ColumnSelector{
+		{
+			Matcher: []string{"test.*"},
+			Columns: []string{"b"},
+		},
+	}
+	selector, err := New(replicaConfig)
+	require.NoError(t, err)
+
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, config.ProtocolDefault, "default", "default")
+	require.NoError(t, err)
+
+	info := &timodel.TableInfo{
+		Name: timodel.CIStr{O: "t1", L: "t1"},
+		Columns: []*timodel.ColumnInfo{
+			{
+				ID:     0,
+				Name:   timodel.CIStr{O: "a", L: "a"},
+				Offset: 0,
+			},
+			{
+				ID:     1,
+				Name:   timodel.CIStr{O: "b", L: "b"},
+				Offset: 1,
+			},
+			{
+				ID:     2,
+				Name:   timodel.CIStr{O: "c", L: "c"},
+				Offset: 2,
+			},
+		},
+	}
+	table := model.WrapTableInfo(0, "test", 0, info)
+	table.ColumnsFlag[0] = model.HandleKeyFlag
+	infos := []*model.TableInfo{table}
+
+	// column `a` is handle key, but it is filter out, return error.
+	err = selector.VerifyTables(infos, eventRouter)
+	require.ErrorIs(t, err, cerror.ErrColumnSelectorFailed)
+}
+
+func TestVerifyTablesColumnFilteredInDispatcher(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.ColumnSelectors = []*config.ColumnSelector{
+		{
+			Matcher: []string{"test.*"},
+			Columns: []string{"a", "b"},
+		},
+	}
+	replicaConfig.Sink.DispatchRules = []*config.DispatchRule{
+		{
+			Matcher:       []string{"test.*"},
+			PartitionRule: "columns",
+			Columns:       []string{"c"},
+		},
+	}
+
+	selectors, err := New(replicaConfig)
+	require.NoError(t, err)
+
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, config.ProtocolDefault, "default", "default")
+	require.NoError(t, err)
+
+	info := &timodel.TableInfo{
+		Name: timodel.CIStr{O: "t1", L: "t1"},
+		Columns: []*timodel.ColumnInfo{
+			{
+				ID:     0,
+				Name:   timodel.CIStr{O: "a", L: "a"},
+				Offset: 0,
+			},
+			{
+				ID:     1,
+				Name:   timodel.CIStr{O: "b", L: "b"},
+				Offset: 1,
+			},
+			{
+				ID:     2,
+				Name:   timodel.CIStr{O: "c", L: "c"},
+				Offset: 2,
+			},
+		},
+	}
+
+	table := model.WrapTableInfo(0, "test", 0, info)
+	// column `c` is filter out, but it is used in the column dispatcher, return error.
+	infos := []*model.TableInfo{table}
+	err = selectors.VerifyTables(infos, eventRouter)
+	require.ErrorIs(t, err, cerror.ErrColumnSelectorFailed)
 }

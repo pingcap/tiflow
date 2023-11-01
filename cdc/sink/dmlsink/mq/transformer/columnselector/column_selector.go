@@ -16,6 +16,8 @@ package columnselector
 import (
 	filter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/partition"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
@@ -52,8 +54,8 @@ func (s *selector) Match(schema, table string) bool {
 }
 
 // Apply implements Transformer interface
-// return error if the given event cannot match the selector, it's the caller's
-// responsibility make sure the given event match the selector first before apply it.
+// return error if the given event cannot match the selector, or the column cannot be filtered out.
+// the caller's should make sure the given event match the selector first before apply it.
 func (s *selector) Apply(event *model.RowChangedEvent) error {
 	// defensive check, this should not happen.
 	if !s.Match(event.Table.Schema, event.Table.Table) {
@@ -122,7 +124,10 @@ func (c *ColumnSelector) Apply(event *model.RowChangedEvent) error {
 
 // VerifyTables return the error if any given table cannot satisfy the column selector constraints.
 // 1. if the column is filter out, it must not be a part of handle key or the unique key.
-func (c *ColumnSelector) VerifyTables(infos []*model.TableInfo) error {
+// 2. if the filtered out column is used in the column dispatcher, return error.
+func (c *ColumnSelector) VerifyTables(
+	infos []*model.TableInfo, eventRouter *dispatcher.EventRouter,
+) error {
 	if len(c.selectors) == 0 {
 		return nil
 	}
@@ -143,10 +148,24 @@ func (c *ColumnSelector) VerifyTables(infos []*model.TableInfo) error {
 				if s.columnM.MatchColumn(columnInfo.Name.O) {
 					continue
 				}
+				// the column is filter out.
 				if flag.IsHandleKey() || flag.IsUniqueKey() {
 					return errors.ErrColumnSelectorFailed.GenWithStack(
 						"primary key or unique key cannot be filtered out by the column selector, "+
 							"table: %v, column: %s", table.TableName, columnInfo.Name)
+				}
+
+				partitionDispatcher := eventRouter.GetPartitionDispatcher(table.TableName.Schema, table.TableName.Table)
+				switch v := partitionDispatcher.(type) {
+				case *partition.ColumnsDispatcher:
+					for _, col := range v.Columns {
+						if col == columnInfo.Name.O {
+							return errors.ErrColumnSelectorFailed.GenWithStack(
+								"the filtered out column is used in the column dispatcher, "+
+									"table: %v, column: %s", table.TableName, columnInfo.Name)
+						}
+					}
+				default:
 				}
 			}
 		}
@@ -155,8 +174,8 @@ func (c *ColumnSelector) VerifyTables(infos []*model.TableInfo) error {
 	return nil
 }
 
-// Match return true if the given `schema.table` column is matched.
-func (c *ColumnSelector) Match(schema, table, column string) bool {
+// VerifyColumn return true if the given `schema.table` column is matched.
+func (c *ColumnSelector) VerifyColumn(schema, table, column string) bool {
 	for _, s := range c.selectors {
 		if !s.Match(schema, table) {
 			continue
