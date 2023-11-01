@@ -588,17 +588,7 @@ LOOP2:
 	}
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
-<<<<<<< HEAD
-	c.redoDDLMgr, err = redo.NewDDLManager(cancelCtx, c.id, c.state.Info.Config.Consistent, ddlStartTs)
-	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
-		err = errors.New("changefeed new redo manager injected error")
-	})
-	if err != nil {
-		return err
-	}
-=======
-	c.redoDDLMgr = redo.NewDDLManager(c.id, c.latestInfo.Config.Consistent, ddlStartTs)
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
+	c.redoDDLMgr = redo.NewDDLManager(c.id, c.state.Info.Config.Consistent, ddlStartTs)
 	if c.redoDDLMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -607,16 +597,7 @@ LOOP2:
 		}()
 	}
 
-<<<<<<< HEAD
-	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(cancelCtx,
-		c.id,
-		c.state.Info.Config.Consistent, checkpointTs)
-	if err != nil {
-		return err
-	}
-=======
-	c.redoMetaMgr = redo.NewMetaManager(c.id, c.latestInfo.Config.Consistent, checkpointTs)
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
+	c.redoMetaMgr = redo.NewMetaManager(c.id, c.state.Info.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -785,19 +766,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
-<<<<<<< HEAD
-			redoMetaMgr, err := redo.NewMetaManager(ctx, c.id, c.state.Info.Config.Consistent)
-			if err != nil {
-				log.Info("owner creates redo manager for clean fail",
-					zap.String("namespace", c.id.Namespace),
-					zap.String("changefeed", c.id.ID),
-					zap.Error(err))
-				return
-			}
-			c.redoMetaMgr = redoMetaMgr
-=======
-			c.redoMetaMgr = redo.NewMetaManager(c.id, cfInfo.Config.Consistent, 0)
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
+			c.redoMetaMgr = redo.NewMetaManager(c.id, c.state.Info.Config.Consistent, 0)
 		}
 		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {
