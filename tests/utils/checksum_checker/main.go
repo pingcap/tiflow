@@ -203,7 +203,7 @@ func getColumns(tx *sql.Tx, schema, table string, selector *columnselector.Colum
 		if err := rows.Scan(&t.Field, &t.Type, &t.Null, &t.Key, &t.Default, &t.Extra); err != nil {
 			return result, errors.Trace(err)
 		}
-		if selector.Match(schema, table, t.Field) {
+		if selector.VerifyColumn(schema, table, t.Field) {
 			result = append(result, t.Field)
 		}
 	}

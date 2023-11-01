@@ -515,21 +515,20 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 		return ineligibleTables, eligibleTables, nil
 	}
 
-	selectors, err := columnselector.New(replicaConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	err = selectors.VerifyTables(tableInfos)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, topic, scheme)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	err = eventRouter.VerifyTables(tableInfos)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	selectors, err := columnselector.New(replicaConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	err = selectors.VerifyTables(tableInfos, eventRouter)
 	if err != nil {
 		return nil, nil, err
 	}
