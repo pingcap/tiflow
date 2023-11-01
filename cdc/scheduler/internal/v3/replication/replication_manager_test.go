@@ -604,6 +604,10 @@ func (m *mockRedoMetaManager) Enabled() bool {
 	return m.enable
 }
 
+func (m *mockRedoMetaManager) Running() bool {
+	return true
+}
+
 func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
 	r := NewReplicationManager(1, model.ChangeFeedID{})
