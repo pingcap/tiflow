@@ -428,6 +428,11 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 // addSpecialComment translate tidb feature to comment
 func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 	p := parser.New()
+	// We need to use the correct SQL mode to parse the DDL query.
+	// Otherwise, the parser may fail to parse the DDL query.
+	// For example, it is needed to parse the following DDL query:
+	//  `alter table "t" add column "c" int default 1;`
+	// by adding `ANSI_QUOTES` to the SQL mode.
 	mode, err := mysql.GetSQLMode(s.info.Config.SQLMode)
 	if err != nil {
 		return "", errors.Trace(err)
