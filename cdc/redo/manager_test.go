@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
-	"github.com/pingcap/tiflow/cdc/redo/writer/blackhole"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -121,15 +120,11 @@ func TestLogManagerInProcessor(t *testing.T) {
 			FlushIntervalInMs: redo.MinFlushIntervalInMs,
 			UseFileBackend:    useFileBackend,
 		}
-		dmlMgr, err := NewDMLManager(ctx, model.DefaultChangeFeedID("test"), cfg)
-		require.NoError(t, err)
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			dmlMgr.Run(ctx)
-		}()
-
+		dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+		var eg errgroup.Group
+		eg.Go(func() error {
+			return dmlMgr.Run(ctx)
+		})
 		// check emit row changed events can move forward resolved ts
 		spans := []tablepb.Span{
 			spanz.TableIDToComparableSpan(53),
@@ -202,7 +197,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 		checkResolvedTs(t, dmlMgr.logManager, flushResolvedTs)
 
 		cancel()
-		wg.Wait()
+		require.ErrorIs(t, eg.Wait(), context.Canceled)
 	}
 
 	testWriteDMLs("blackhole://", true)
@@ -233,18 +228,16 @@ func TestLogManagerInOwner(t *testing.T) {
 			UseFileBackend:    useFileBackend,
 		}
 		startTs := model.Ts(10)
-		ddlMgr, err := NewDDLManager(ctx, model.DefaultChangeFeedID("test"), cfg, startTs)
-		require.NoError(t, err)
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ddlMgr.Run(ctx)
-		}()
+		ddlMgr := NewDDLManager(model.DefaultChangeFeedID("test"), cfg, startTs)
+
+		var eg errgroup.Group
+		eg.Go(func() error {
+			return ddlMgr.Run(ctx)
+		})
 
 		require.Equal(t, startTs, ddlMgr.GetResolvedTs())
 		ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
-		err = ddlMgr.EmitDDLEvent(ctx, ddl)
+		err := ddlMgr.EmitDDLEvent(ctx, ddl)
 		require.NoError(t, err)
 		require.Equal(t, startTs, ddlMgr.GetResolvedTs())
 
@@ -252,7 +245,7 @@ func TestLogManagerInOwner(t *testing.T) {
 		checkResolvedTs(t, ddlMgr.logManager, ddl.CommitTs)
 
 		cancel()
-		wg.Wait()
+		require.ErrorIs(t, eg.Wait(), context.Canceled)
 	}
 
 	testWriteDDLs("blackhole://", true)
@@ -275,23 +268,14 @@ func TestLogManagerError(t *testing.T) {
 	cfg := &config.ConsistentConfig{
 		Level:             string(redo.ConsistentLevelEventual),
 		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           "blackhole://",
+		Storage:           "blackhole-invalid://",
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	logMgr, err := NewDMLManager(ctx, model.DefaultChangeFeedID("test"), cfg)
-	require.NoError(t, err)
-	err = logMgr.writer.Close()
-	require.NoError(t, err)
-	logMgr.writer = blackhole.NewInvalidLogWriter(logMgr.writer)
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := logMgr.Run(ctx)
-		require.Regexp(t, ".*invalid black hole writer.*", err)
-		require.Regexp(t, ".*WriteLog.*", err)
-	}()
+	logMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return logMgr.Run(ctx)
+	})
 
 	testCases := []struct {
 		span tablepb.Span
@@ -310,7 +294,10 @@ func TestLogManagerError(t *testing.T) {
 		err := logMgr.emitRedoEvents(ctx, tc.span, nil, tc.rows...)
 		require.NoError(t, err)
 	}
-	wg.Wait()
+
+	err := eg.Wait()
+	require.Regexp(t, ".*invalid black hole writer.*", err)
+	require.Regexp(t, ".*WriteLog.*", err)
 }
 
 func BenchmarkBlackhole(b *testing.B) {
@@ -336,9 +323,8 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 		UseFileBackend:    useFileBackend,
 	}
-	dmlMgr, err := NewDMLManager(ctx, model.DefaultChangeFeedID("test"), cfg)
-	require.Nil(b, err)
-	eg := errgroup.Group{}
+	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+	var eg errgroup.Group
 	eg.Go(func() error {
 		return dmlMgr.Run(ctx)
 	})
@@ -366,7 +352,7 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		go func(span tablepb.Span) {
 			defer wg.Done()
 			maxCommitTs := maxTsMap.GetV(span)
-			rows := []*model.RowChangedEvent{}
+			var rows []*model.RowChangedEvent
 			for i := 0; i < maxRowCount; i++ {
 				if i%100 == 0 {
 					// prepare new row change events
@@ -409,6 +395,6 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		time.Sleep(time.Millisecond * 500)
 	}
 	cancel()
-	err = eg.Wait()
-	require.ErrorIs(b, err, context.Canceled)
+
+	require.ErrorIs(b, eg.Wait(), context.Canceled)
 }

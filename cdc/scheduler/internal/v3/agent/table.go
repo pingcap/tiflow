@@ -311,7 +311,7 @@ func newTableSpanManager(
 func (tm *tableSpanManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	var err error
-	toBeDropped := []tablepb.Span{}
+	var toBeDropped []tablepb.Span
 	tm.tables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
 		message, err1 := table.poll(ctx)
 		if err != nil {
