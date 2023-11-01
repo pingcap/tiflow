@@ -204,6 +204,7 @@ func (w *regionWorker) checkShouldExit() error {
 
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
 	regionID := state.getRegionID()
+	isStale := state.isStale()
 	log.Info("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
 		zap.String("changefeed", w.session.client.changefeed.ID),
@@ -211,9 +212,10 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", &state.sri.span),
 		zap.Uint64("resolvedTs", state.sri.resolvedTs()),
+		zap.Bool("isStale", isStale),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
-	if state.isStale() {
+	if isStale {
 		return w.checkShouldExit()
 	}
 	// We need to ensure when the error is handled, `isStale` must be set. So set it before sending the error.
