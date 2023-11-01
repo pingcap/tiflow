@@ -178,6 +178,7 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 }
 
 func TestToDDLEventWithSQLMode(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		query   string
