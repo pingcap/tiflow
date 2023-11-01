@@ -317,6 +317,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	default:
 	}
 
+	if c.redoMetaMgr.Enabled() {
+		if !c.redoMetaMgr.Running() {
+			return 0, 0, nil
+		}
+	}
+
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
 	if err != nil {
@@ -551,6 +557,7 @@ LOOP2:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
+<<<<<<< HEAD
 	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
 	c.redoDDLMgr, err = redo.NewDDLManager(stdCtx, c.state.Info.Config.Consistent, ddlStartTs)
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
@@ -559,6 +566,15 @@ LOOP2:
 	if err != nil {
 		return err
 	}
+=======
+	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, c.latestInfo.SinkURI, c.latestInfo.Config)
+	if err != nil {
+		return err
+	}
+	c.observerLastTick = atomic.NewTime(time.Time{})
+
+	c.redoDDLMgr = redo.NewDDLManager(c.id, c.latestInfo.Config.Consistent, ddlStartTs)
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	if c.redoDDLMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -567,11 +583,15 @@ LOOP2:
 		}()
 	}
 
+<<<<<<< HEAD
 	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(stdCtx,
 		c.state.Info.Config.Consistent, checkpointTs)
 	if err != nil {
 		return err
 	}
+=======
+	c.redoMetaMgr = redo.NewMetaManager(c.id, c.latestInfo.Config.Consistent, checkpointTs)
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -733,6 +753,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
+<<<<<<< HEAD
 			redoMetaMgr, err := redo.NewMetaManager(ctx, c.state.Info.Config.Consistent)
 			if err != nil {
 				log.Info("owner creates redo manager for clean fail",
@@ -742,6 +763,9 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 				return
 			}
 			c.redoMetaMgr = redoMetaMgr
+=======
+			c.redoMetaMgr = redo.NewMetaManager(c.id, cfInfo.Config.Consistent, 0)
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 		}
 		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {

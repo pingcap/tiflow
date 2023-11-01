@@ -782,6 +782,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		return errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	stdCtx := contextutil.PutChangefeedIDInCtx(ctx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
 
@@ -817,6 +818,15 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		}()
 	}
 	log.Info("processor creates redo manager",
+=======
+	p.redo.r = redo.NewDMLManager(p.changefeedID, p.latestInfo.Config.Consistent)
+	p.redo.name = "RedoManager"
+	p.redo.changefeedID = p.changefeedID
+	p.redo.spawn(prcCtx)
+
+	sortEngine, err := p.globalVars.SortEngineFactory.Create(p.changefeedID)
+	log.Info("Processor creates sort engine",
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 

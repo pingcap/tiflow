@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
-	"github.com/pingcap/tiflow/cdc/redo/writer/blackhole"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/stretchr/testify/require"
@@ -119,6 +118,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 			FlushIntervalInMs: redo.MinFlushIntervalInMs,
 			UseFileBackend:    useFileBackend,
 		}
+<<<<<<< HEAD
 		dmlMgr, err := NewDMLManager(ctx, cfg)
 		require.NoError(t, err)
 		wg := sync.WaitGroup{}
@@ -128,6 +128,13 @@ func TestLogManagerInProcessor(t *testing.T) {
 			dmlMgr.Run(ctx)
 		}()
 
+=======
+		dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+		var eg errgroup.Group
+		eg.Go(func() error {
+			return dmlMgr.Run(ctx)
+		})
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 		// check emit row changed events can move forward resolved ts
 		spans := []model.TableID{53, 55, 57, 59}
 
@@ -195,7 +202,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 		checkResolvedTs(t, dmlMgr.logManager, flushResolvedTs)
 
 		cancel()
-		wg.Wait()
+		require.ErrorIs(t, eg.Wait(), context.Canceled)
 	}
 
 	testWriteDMLs("blackhole://", true)
@@ -226,6 +233,7 @@ func TestLogManagerInOwner(t *testing.T) {
 			UseFileBackend:    useFileBackend,
 		}
 		startTs := model.Ts(10)
+<<<<<<< HEAD
 		ddlMgr, err := NewDDLManager(ctx, cfg, startTs)
 		require.NoError(t, err)
 		wg := sync.WaitGroup{}
@@ -234,10 +242,18 @@ func TestLogManagerInOwner(t *testing.T) {
 			defer wg.Done()
 			ddlMgr.Run(ctx)
 		}()
+=======
+		ddlMgr := NewDDLManager(model.DefaultChangeFeedID("test"), cfg, startTs)
+
+		var eg errgroup.Group
+		eg.Go(func() error {
+			return ddlMgr.Run(ctx)
+		})
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 
 		require.Equal(t, startTs, ddlMgr.GetResolvedTs())
 		ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
-		err = ddlMgr.EmitDDLEvent(ctx, ddl)
+		err := ddlMgr.EmitDDLEvent(ctx, ddl)
 		require.NoError(t, err)
 		require.Equal(t, startTs, ddlMgr.GetResolvedTs())
 
@@ -245,7 +261,7 @@ func TestLogManagerInOwner(t *testing.T) {
 		checkResolvedTs(t, ddlMgr.logManager, ddl.CommitTs)
 
 		cancel()
-		wg.Wait()
+		require.ErrorIs(t, eg.Wait(), context.Canceled)
 	}
 
 	testWriteDDLs("blackhole://", true)
@@ -268,9 +284,10 @@ func TestLogManagerError(t *testing.T) {
 	cfg := &config.ConsistentConfig{
 		Level:             string(redo.ConsistentLevelEventual),
 		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           "blackhole://",
+		Storage:           "blackhole-invalid://",
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
+<<<<<<< HEAD
 	logMgr, err := NewDMLManager(ctx, cfg)
 	require.NoError(t, err)
 	err = logMgr.writer.Close()
@@ -285,6 +302,13 @@ func TestLogManagerError(t *testing.T) {
 		require.Regexp(t, ".*invalid black hole writer.*", err)
 		require.Regexp(t, ".*WriteLog.*", err)
 	}()
+=======
+	logMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return logMgr.Run(ctx)
+	})
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 
 	testCases := []struct {
 		span model.TableID
@@ -303,7 +327,10 @@ func TestLogManagerError(t *testing.T) {
 		err := logMgr.emitRedoEvents(ctx, tc.span, nil, tc.rows...)
 		require.NoError(t, err)
 	}
-	wg.Wait()
+
+	err := eg.Wait()
+	require.Regexp(t, ".*invalid black hole writer.*", err)
+	require.Regexp(t, ".*WriteLog.*", err)
 }
 
 func BenchmarkBlackhole(b *testing.B) {
@@ -329,9 +356,14 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 		UseFileBackend:    useFileBackend,
 	}
+<<<<<<< HEAD
 	dmlMgr, err := NewDMLManager(ctx, cfg)
 	require.Nil(b, err)
 	eg := errgroup.Group{}
+=======
+	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+	var eg errgroup.Group
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	eg.Go(func() error {
 		return dmlMgr.Run(ctx)
 	})
@@ -357,8 +389,13 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		wg.Add(1)
 		go func(tableID model.TableID) {
 			defer wg.Done()
+<<<<<<< HEAD
 			maxCommitTs := maxTsMap[tableID]
 			rows := []*model.RowChangedEvent{}
+=======
+			maxCommitTs := maxTsMap.GetV(span)
+			var rows []*model.RowChangedEvent
+>>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 			for i := 0; i < maxRowCount; i++ {
 				if i%100 == 0 {
 					// prepare new row change events
@@ -399,6 +436,6 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		time.Sleep(time.Millisecond * 500)
 	}
 	cancel()
-	err = eg.Wait()
-	require.ErrorIs(b, err, context.Canceled)
+
+	require.ErrorIs(b, eg.Wait(), context.Canceled)
 }
