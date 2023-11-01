@@ -50,7 +50,6 @@ func (o *options) validate() error {
 }
 
 func main() {
-
 	o := &options{}
 
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
