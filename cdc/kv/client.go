@@ -19,6 +19,7 @@ import (
 	"io"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	tidbkv "github.com/tikv/client-go/v2/kv"
+	"github.com/tikv/client-go/v2/oracle"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -420,13 +422,11 @@ func (s *eventFeedSession) eventFeed(ctx context.Context, ts uint64) error {
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(func() error {
-		return s.dispatchRequest(ctx)
-	})
+	g.Go(func() error { return s.dispatchRequest(ctx) })
 
-	g.Go(func() error {
-		return s.requestRegionToStore(ctx, g)
-	})
+	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
+
+	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	g.Go(func() error {
 		for {
@@ -684,13 +684,13 @@ func (s *eventFeedSession) requestRegionToStore(
 		state := newRegionFeedState(sri, requestID)
 		pendingRegions.setByRequestID(requestID, state)
 
-		log.Debug("start new request",
+		log.Info("start new request",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Int64("tableID", s.tableID),
 			zap.String("tableName", s.tableName),
-			zap.String("addr", storeAddr),
-			zap.Any("request", req))
+			zap.Uint64("regionID", sri.verID.GetID()),
+			zap.String("addr", storeAddr))
 
 		err = stream.client.Send(req)
 
@@ -882,6 +882,13 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	switch eerr := errors.Cause(err).(type) {
 	case *eventError:
 		innerErr := eerr.err
+		log.Info("cdc region error",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName),
+			zap.Stringer("error", innerErr))
+
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
 			metricFeedNotLeaderCounter.Inc()
 			s.client.regionCache.UpdateLeader(errInfo.verID, notLeader.GetLeader(), errInfo.rpcCtx.AccessIdx)
@@ -1209,6 +1216,17 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 			continue
 		}
 
+		switch x := event.Event.(type) {
+		case *cdcpb.Event_Error:
+			log.Info("event feed receives a region error",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.Uint64("regionID", event.RegionId),
+				zap.Any("error", x.Error))
+		}
+
 		slot := worker.inputCalcSlot(event.RegionId)
 		statefulEvents[slot] = append(statefulEvents[slot], &regionStatefulEvent{
 			changeEvent: event,
@@ -1299,6 +1317,51 @@ func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.Can
 	defer s.streamsLock.RUnlock()
 	cancel, ok = s.streamsCanceller[storeAddr]
 	return
+}
+
+func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+
+		currTime := s.client.pdClock.CurrentTime()
+		attr := s.rangeLock.CollectLockedRangeAttrs(nil)
+		if attr.SlowestRegion.Initialized {
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+			if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
+				log.Info("event feed finds a slow region",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Int64("tableID", s.tableID),
+					zap.String("tableName", s.tableName),
+					zap.Any("slowRegion", attr.SlowestRegion))
+			}
+		} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
+			log.Info("event feed initializes a region too slow",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.Any("slowRegion", attr.SlowestRegion))
+		}
+		if len(attr.Holes) > 0 {
+			holes := make([]string, 0, len(attr.Holes))
+			for _, hole := range attr.Holes {
+				holes = append(holes, fmt.Sprintf("[%s,%s)", hole.StartKey, hole.EndKey))
+			}
+			log.Info("event feed holes exist",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.String("holes", strings.Join(holes, ", ")))
+		}
+	}
 }
 
 func assembleRowEvent(regionID uint64, entry *cdcpb.Event_Row) (model.RegionFeedEvent, error) {

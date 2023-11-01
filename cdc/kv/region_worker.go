@@ -195,16 +195,26 @@ func (w *regionWorker) checkShouldExit() error {
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
 	state.setRegionInfoResolvedTs()
 	regionID := state.getRegionID()
+	isStale := state.isStale()
 	log.Info("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
 		zap.String("changefeed", w.session.client.changefeed.ID),
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
+<<<<<<< HEAD
 		zap.Stringer("span", state.sri.span),
 		zap.Uint64("resolvedTs", state.sri.resolvedTs),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
 	if state.isStopped() {
+=======
+		zap.Stringer("span", &state.sri.span),
+		zap.Uint64("resolvedTs", state.sri.resolvedTs()),
+		zap.Bool("isStale", isStale),
+		zap.Error(err))
+	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
+	if isStale {
+>>>>>>> 69c180af98 (kv-client(cdc): add more logs to help debug slow regions (#9981))
 		return w.checkShouldExit()
 	}
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
