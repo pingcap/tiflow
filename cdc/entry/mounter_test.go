@@ -986,11 +986,13 @@ func TestGetDefaultZeroValue(t *testing.T) {
 
 func TestBuildTableInfo(t *testing.T) {
 	cases := []struct {
+		caseNumber          int
 		origin              string
 		recovered           string
 		recoveredWithNilCol string
 	}{
 		{
+			1,
 			"CREATE TABLE t1 (c INT PRIMARY KEY)",
 			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
 				"  `c` int(0) NOT NULL,\n" +
@@ -1002,6 +1004,7 @@ func TestBuildTableInfo(t *testing.T) {
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 		},
 		{
+			2,
 			"CREATE TABLE t1 (" +
 				" c INT UNSIGNED," +
 				" c2 VARCHAR(10) NOT NULL," +
@@ -1023,6 +1026,7 @@ func TestBuildTableInfo(t *testing.T) {
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 		},
 		{
+			3,
 			"CREATE TABLE t1 (" +
 				" c INT UNSIGNED," +
 				" gen INT AS (c+1) VIRTUAL," +
@@ -1048,6 +1052,7 @@ func TestBuildTableInfo(t *testing.T) {
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 		},
 		{
+			4,
 			"CREATE TABLE `t1` (" +
 				"  `a` int(11) NOT NULL," +
 				"  `b` int(11) DEFAULT NULL," +
@@ -1069,6 +1074,39 @@ func TestBuildTableInfo(t *testing.T) {
 				"  PRIMARY KEY (`a`(0)) /*T![clustered_index] CLUSTERED */\n" +
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 		},
+		{
+			5,
+			"CREATE TABLE your_table (" +
+				" id INT NOT NULL," +
+				" name VARCHAR(50) NOT NULL," +
+				" email VARCHAR(100) NOT NULL," +
+				" age INT NOT NULL ," +
+				" address VARCHAR(200) NOT NULL," +
+				" PRIMARY KEY (id, name)," +
+				" UNIQUE INDEX idx_unique_1 (id, email, age)," +
+				" UNIQUE INDEX idx_unique_2 (name, email, address)" +
+				" );",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `id` int(0) NOT NULL,\n" +
+				"  `name` varchar(0) NOT NULL,\n" +
+				"  `email` varchar(0) NOT NULL,\n" +
+				"  `age` int(0) NOT NULL,\n" +
+				"  `address` varchar(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`id`(0),`name`(0)) /*T![clustered_index] CLUSTERED */,\n" +
+				"  UNIQUE KEY `idx_1` (`id`(0),`email`(0),`age`(0)),\n" +
+				"  UNIQUE KEY `idx_2` (`name`(0),`email`(0),`address`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `id` int(0) NOT NULL,\n" +
+				"  `name` varchar(0) NOT NULL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  PRIMARY KEY (`id`(0),`name`(0)) /*T![clustered_index] CLUSTERED */,\n" +
+				"  UNIQUE KEY `idx_1` (`id`(0),`omitted`(0),`omitted`(0)),\n" +
+				"  UNIQUE KEY `idx_2` (`name`(0),`omitted`(0),`omitted`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
 	}
 	p := parser.New()
 	for _, c := range cases {
@@ -1083,7 +1121,18 @@ func TestBuildTableInfo(t *testing.T) {
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
 		require.NotNil(t, handle.UniqueNotNullIdx)
 		require.Equal(t, c.recovered, showCreateTable(t, recoveredTI))
-
+		// make sure BuildTiDBTableInfo indentify the correct primary key
+		if c.caseNumber == 5 {
+			inexes := recoveredTI.Indices
+			primaryCount := 0
+			for i := range inexes {
+				if inexes[i].Primary {
+					primaryCount++
+				}
+			}
+			require.Equal(t, 1, primaryCount)
+			require.Equal(t, 2, len(handle.UniqueNotNullIdx.Columns))
+		}
 		// mimic the columns are set to nil when old value feature is disabled
 		for i := range cols {
 			if !cols[i].Flag.IsHandleKey() {
