@@ -514,23 +514,26 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 			continue
 		}
 		if firstCol.Flag.IsPrimaryKey() {
-			// If all columns in the index are primary key, then the index is primary key.
-			if CheckIfIndexesPrimaryKey(colOffsets, columns) {
-				indexInfo.Primary = true
-			}
 			indexInfo.Unique = true
 		}
 		if firstCol.Flag.IsUniqueKey() {
 			indexInfo.Unique = true
 		}
 
+		isPrimary := true
 		for _, offset := range colOffsets {
-			col := ret.Columns[offset]
+			col := columns[offset]
+			// When only all columns in the index are primary key, then the index is primary key.
+			if col == nil || !col.Flag.IsPrimaryKey() {
+				isPrimary = false
+			}
 
+			tiCol := ret.Columns[offset]
 			indexCol := &model.IndexColumn{}
-			indexCol.Name = col.Name
+			indexCol.Name = tiCol.Name
 			indexCol.Offset = offset
 			indexInfo.Columns = append(indexInfo.Columns, indexCol)
+			indexInfo.Primary = isPrimary
 		}
 
 		// TODO: revert the "all column set index related flag" to "only the
@@ -539,17 +542,6 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		ret.Indices = append(ret.Indices, indexInfo)
 	}
 	return ret
-}
-
-// CheckIfIndexesPrimaryKey checks if all columns in a index is primary key
-func CheckIfIndexesPrimaryKey(columnOffsets []int, columns []*Column) bool {
-	for _, offset := range columnOffsets {
-		column := columns[offset]
-		if column == nil || !column.Flag.IsPrimaryKey() {
-			return false
-		}
-	}
-	return true
 }
 
 // ColumnValueString returns the string representation of the column value
