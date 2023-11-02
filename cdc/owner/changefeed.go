@@ -339,6 +339,12 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 	default:
 	}
 
+	if c.redoMetaMgr.Enabled() {
+		if !c.redoMetaMgr.Running() {
+			return nil
+		}
+	}
+
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
 	if err != nil {
@@ -582,13 +588,7 @@ LOOP2:
 	}
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
-	c.redoDDLMgr, err = redo.NewDDLManager(cancelCtx, c.id, c.state.Info.Config.Consistent, ddlStartTs)
-	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
-		err = errors.New("changefeed new redo manager injected error")
-	})
-	if err != nil {
-		return err
-	}
+	c.redoDDLMgr = redo.NewDDLManager(c.id, c.state.Info.Config.Consistent, ddlStartTs)
 	if c.redoDDLMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -597,12 +597,7 @@ LOOP2:
 		}()
 	}
 
-	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(cancelCtx,
-		c.id,
-		c.state.Info.Config.Consistent, checkpointTs)
-	if err != nil {
-		return err
-	}
+	c.redoMetaMgr = redo.NewMetaManager(c.id, c.state.Info.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -771,15 +766,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
-			redoMetaMgr, err := redo.NewMetaManager(ctx, c.id, c.state.Info.Config.Consistent)
-			if err != nil {
-				log.Info("owner creates redo manager for clean fail",
-					zap.String("namespace", c.id.Namespace),
-					zap.String("changefeed", c.id.ID),
-					zap.Error(err))
-				return
-			}
-			c.redoMetaMgr = redoMetaMgr
+			c.redoMetaMgr = redo.NewMetaManager(c.id, c.state.Info.Config.Consistent, 0)
 		}
 		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {

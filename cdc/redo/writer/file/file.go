@@ -86,7 +86,7 @@ func NewFileWriter(
 	var extStorage storage.ExternalStorage
 	if cfg.UseExternalStorage {
 		var err error
-		extStorage, err = redo.InitExternalStorage(ctx, cfg.URI)
+		extStorage, err = redo.InitExternalStorage(ctx, *cfg.URI)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +129,7 @@ func NewFileWriter(
 	// if we use S3 as the remote storage, a file allocator can be leveraged to
 	// pre-allocate files for us.
 	// TODO: test whether this improvement can also be applied to NFS.
-	if cfg.UseExternalStorage {
+	if w.cfg.UseExternalStorage {
 		w.allocator = fsutil.NewFileAllocator(cfg.Dir, cfg.LogType, cfg.MaxLogSizeInBytes)
 	}
 
