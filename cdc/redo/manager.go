@@ -246,7 +246,7 @@ func newLogManager(
 }
 
 // Run implements pkg/util.Runnable.
-func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
+func (m *logManager) Run(ctx context.Context) error {
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
 		failpoint.Return(errors.New("changefeed new redo manager injected error"))
 	})

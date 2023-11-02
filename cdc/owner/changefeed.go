@@ -319,7 +319,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	if c.redoMetaMgr.Enabled() {
 		if !c.redoMetaMgr.Running() {
-			return 0, 0, nil
+			return nil
 		}
 	}
 
@@ -557,13 +557,7 @@ LOOP2:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-	c.redoDDLMgr, err = redo.NewDDLManager(stdCtx, c.state.Info.Config.Consistent, ddlStartTs)
-	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
-		err = errors.New("changefeed new redo manager injected error")
-	})
-	if err != nil {
-		return err
-	}
+	c.redoDDLMgr = redo.NewDDLManager(c.id, c.state.Info.Config.Consistent, ddlStartTs)
 	if c.redoDDLMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -572,7 +566,7 @@ LOOP2:
 		}()
 	}
 
-	c.redoMetaMgr = redo.NewMetaManager(c.id, contextutil.CaptureAddrFromCtx(ctx), c.state.Info.Config.Consistent, checkpointTs)
+	c.redoMetaMgr = redo.NewMetaManager(c.id, c.state.Info.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -734,7 +728,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
-			c.redoMetaMgr = redo.NewMetaManager(c.id, contextutil.CaptureAddrFromCtx(ctx), c.state.Info.Config.Consistent, 0)
+			c.redoMetaMgr = redo.NewMetaManager(c.id, c.state.Info.Config.Consistent, 0)
 		}
 		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {

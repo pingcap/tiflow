@@ -86,48 +86,10 @@ func NewDisabledMetaManager() *metaManager {
 	}
 }
 
-<<<<<<< HEAD
-// NewMetaManagerWithInit creates a new Manager and initializes the meta.
-func NewMetaManagerWithInit(
-	ctx context.Context, cfg *config.ConsistentConfig, startTs model.Ts,
-) (*metaManager, error) {
-	m, err := NewMetaManager(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	// There is no need to perform initialize operation if metaMgr is disabled
-	// or the scheme is blackhole.
-	if m.extStorage != nil {
-		m.metricFlushLogDuration = common.RedoFlushLogDurationHistogram.
-			WithLabelValues(m.changeFeedID.Namespace, m.changeFeedID.ID)
-		if err = m.preCleanupExtStorage(ctx); err != nil {
-			log.Warn("pre clean redo logs fail",
-				zap.String("namespace", m.changeFeedID.Namespace),
-				zap.String("changefeed", m.changeFeedID.ID),
-				zap.Error(err))
-			return nil, err
-		}
-		if err = m.initMeta(ctx, startTs); err != nil {
-			log.Warn("init redo meta fail",
-				zap.String("namespace", m.changeFeedID.Namespace),
-				zap.String("changefeed", m.changeFeedID.ID),
-				zap.Error(err))
-			return nil, err
-		}
-	}
-
-	return m, nil
-}
-
-// NewMetaManager creates a new meta Manager.
-func NewMetaManager(ctx context.Context, cfg *config.ConsistentConfig) (*metaManager, error) {
-=======
 // NewMetaManager creates a new meta Manager.
 func NewMetaManager(
 	changefeedID model.ChangeFeedID, cfg *config.ConsistentConfig, checkpoint model.Ts,
 ) *metaManager {
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
 		return &metaManager{enabled: false}
@@ -138,19 +100,9 @@ func NewMetaManager(
 		changeFeedID:      contextutil.ChangefeedIDFromCtx(ctx),
 		uuidGenerator:     uuid.NewGenerator(),
 		enabled:           true,
-<<<<<<< HEAD
-		flushIntervalInMs: cfg.FlushIntervalInMs,
-=======
 		cfg:               cfg,
 		startTs:           checkpoint,
-		flushIntervalInMs: cfg.MetaFlushIntervalInMs,
-	}
-
-	if m.flushIntervalInMs < redo.MinFlushIntervalInMs {
-		log.Warn("redo flush interval is too small, use default value",
-			zap.Int64("interval", m.flushIntervalInMs))
-		m.flushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
+		flushIntervalInMs: cfg.FlushIntervalInMs,
 	}
 	return m
 }
@@ -203,16 +155,9 @@ func (m *metaManager) preStart(ctx context.Context) error {
 }
 
 // Run runs bgFlushMeta and bgGC.
-<<<<<<< HEAD
 func (m *metaManager) Run(ctx context.Context) error {
-	if m.extStorage == nil {
-		log.Warn("extStorage of redo meta manager is nil, skip running")
-		return nil
-=======
-func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if err := m.preStart(ctx); err != nil {
 		return err
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	}
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
