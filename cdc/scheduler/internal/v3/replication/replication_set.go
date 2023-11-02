@@ -162,9 +162,7 @@ func NewReplicationSet(
 			return nil, r.inconsistentError(table, captureID,
 				"schedulerv3: table id inconsistent")
 		}
-		if err := r.updateCheckpointAndStats(table.Checkpoint, table.Stats); err != nil {
-			return nil, errors.Trace(err)
-		}
+		r.updateCheckpointAndStats(table.Checkpoint, table.Stats)
 
 		switch table.State {
 		case tablepb.TableStateReplicating:
@@ -485,8 +483,8 @@ func (r *ReplicationSet) pollOnPrepare(
 		}
 	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
-			err := r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
-			return nil, false, errors.Trace(err)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
+			return nil, false, nil
 		}
 	case tablepb.TableStateStopping, tablepb.TableStateStopped:
 		if r.Primary == captureID {
@@ -587,9 +585,7 @@ func (r *ReplicationSet) pollOnCommit(
 
 	case tablepb.TableStateStopped, tablepb.TableStateAbsent:
 		if r.Primary == captureID {
-			if err := r.updateCheckpointAndStats(input.Checkpoint, input.Stats); err != nil {
-				return nil, false, errors.Trace(err)
-			}
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 			original := r.Primary
 			r.clearPrimary()
 			if !r.hasRole(RoleSecondary) {
@@ -653,9 +649,7 @@ func (r *ReplicationSet) pollOnCommit(
 
 	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
-			if err := r.updateCheckpointAndStats(input.Checkpoint, input.Stats); err != nil {
-				return nil, false, errors.Trace(err)
-			}
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 			if r.hasRole(RoleSecondary) {
 				// Original primary is not stopped, ask for stopping.
 				return &schedulepb.Message{
@@ -688,8 +682,8 @@ func (r *ReplicationSet) pollOnCommit(
 
 	case tablepb.TableStateStopping:
 		if r.Primary == captureID && r.hasRole(RoleSecondary) {
-			err := r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
-			return nil, false, errors.Trace(err)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
+			return nil, false, nil
 		} else if r.isInRole(captureID, RoleUndetermined) {
 			log.Info("schedulerv3: capture is stopping during Commit",
 				zap.Stringer("tableState", input),
@@ -714,8 +708,8 @@ func (r *ReplicationSet) pollOnReplicating(
 	switch input.State {
 	case tablepb.TableStateReplicating:
 		if r.Primary == captureID {
-			err := r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
-			return nil, false, errors.Trace(err)
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
+			return nil, false, nil
 		}
 		return nil, false, r.multiplePrimaryError(
 			input, captureID, "schedulerv3: multiple primary")
@@ -726,10 +720,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	case tablepb.TableStateStopping:
 	case tablepb.TableStateStopped:
 		if r.Primary == captureID {
-			if err := r.updateCheckpointAndStats(input.Checkpoint, input.Stats); err != nil {
-				return nil, false, errors.Trace(err)
-			}
-
+			r.updateCheckpointAndStats(input.Checkpoint, input.Stats)
 			// Primary is stopped, but we still has secondary.
 			// Clear primary and promote secondary when it's prepared.
 			log.Info("schedulerv3: primary is stopped during Replicating",
@@ -919,7 +910,7 @@ func (r *ReplicationSet) handleCaptureShutdown(
 
 func (r *ReplicationSet) updateCheckpointAndStats(
 	checkpoint tablepb.Checkpoint, stats tablepb.Stats,
-) error {
+) {
 	if checkpoint.ResolvedTs < checkpoint.CheckpointTs {
 		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
 			zap.Any("replicationSet", r),
@@ -941,11 +932,8 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 			zap.Any("replicationSet", r),
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
-		return errors.ErrInvalidCheckpointTs.GenWithStackByArgs(r.Checkpoint.CheckpointTs,
-			r.Checkpoint.ResolvedTs)
 	}
 	r.Stats = stats
-	return nil
 }
 
 // SetHeap is a max-heap, it implements heap.Interface.
