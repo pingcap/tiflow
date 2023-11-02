@@ -552,6 +552,9 @@ func TestAddSpecialComment(t *testing.T) {
 	}
 
 	s := &ddlSinkImpl{}
+	s.info = &model.ChangeFeedInfo{
+		Config: config.GetDefaultReplicaConfig(),
+	}
 	for _, ca := range testCase {
 		re, err := s.addSpecialComment(ca.event)
 		require.Nil(t, err)
