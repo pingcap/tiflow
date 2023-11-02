@@ -23,7 +23,6 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -64,28 +63,17 @@ func newProcessor4Test(
 			return nil
 		}
 
-		stdCtx := contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 		if !enableRedo {
 			p.redo.r = redo.NewDisabledDMLManager()
 		} else {
 			tmpDir := t.TempDir()
 			redoDir := fmt.Sprintf("%s/%s", tmpDir, changefeedID)
-<<<<<<< HEAD
-			dmlMgr, err := redo.NewDMLManager(ctx, &config.ConsistentConfig{
+			dmlMgr := redo.NewDMLManager(changefeedID, &config.ConsistentConfig{
 				Level:             string(redoPkg.ConsistentLevelEventual),
 				MaxLogSize:        redoPkg.DefaultMaxLogSize,
 				FlushIntervalInMs: redoPkg.DefaultFlushIntervalInMs,
 				Storage:           "file://" + redoDir,
 				UseFileBackend:    false,
-=======
-			dmlMgr := redo.NewDMLManager(changefeedID, &config.ConsistentConfig{
-				Level:                 string(redoPkg.ConsistentLevelEventual),
-				MaxLogSize:            redoPkg.DefaultMaxLogSize,
-				FlushIntervalInMs:     redoPkg.DefaultFlushIntervalInMs,
-				MetaFlushIntervalInMs: redoPkg.DefaultMetaFlushIntervalInMs,
-				Storage:               "file://" + redoDir,
-				UseFileBackend:        false,
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 			})
 			p.redo.r = dmlMgr
 		}
@@ -96,9 +84,9 @@ func newProcessor4Test(
 		p.sinkManager.r, p.sourceManager.r, _ = sinkmanager.NewManagerWithMemEngine(
 			t, changefeedID, state.Info, p.redo.r)
 		p.sinkManager.name = "SinkManager"
-		p.sinkManager.spawn(stdCtx)
+		p.sinkManager.spawn(ctx)
 		p.sourceManager.name = "SourceManager"
-		p.sourceManager.spawn(stdCtx)
+		p.sourceManager.spawn(ctx)
 
 		// NOTICE: we have to bind the sourceManager to the sinkManager
 		// otherwise the sinkManager will not receive the resolvedTs.
