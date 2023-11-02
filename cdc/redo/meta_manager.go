@@ -72,7 +72,6 @@ type metaManager struct {
 	startTs model.Ts
 
 	lastFlushTime          time.Time
-	flushIntervalInMs      int64
 	cfg                    *config.ConsistentConfig
 	metricFlushLogDuration prometheus.Observer
 }
@@ -94,13 +93,12 @@ func NewMetaManager(
 	}
 
 	m := &metaManager{
-		captureID:         config.GetGlobalServerConfig().AdvertiseAddr,
-		changeFeedID:      changefeedID,
-		uuidGenerator:     uuid.NewGenerator(),
-		enabled:           true,
-		flushIntervalInMs: cfg.FlushIntervalInMs,
-		cfg:               cfg,
-		startTs:           checkpoint,
+		captureID:     config.GetGlobalServerConfig().AdvertiseAddr,
+		changeFeedID:  changefeedID,
+		uuidGenerator: uuid.NewGenerator(),
+		enabled:       true,
+		cfg:           cfg,
+		startTs:       checkpoint,
 	}
 	return m
 }
