@@ -118,23 +118,11 @@ func TestLogManagerInProcessor(t *testing.T) {
 			FlushIntervalInMs: redo.MinFlushIntervalInMs,
 			UseFileBackend:    useFileBackend,
 		}
-<<<<<<< HEAD
-		dmlMgr, err := NewDMLManager(ctx, cfg)
-		require.NoError(t, err)
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			dmlMgr.Run(ctx)
-		}()
-
-=======
 		dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 		var eg errgroup.Group
 		eg.Go(func() error {
 			return dmlMgr.Run(ctx)
 		})
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 		// check emit row changed events can move forward resolved ts
 		spans := []model.TableID{53, 55, 57, 59}
 
@@ -233,23 +221,12 @@ func TestLogManagerInOwner(t *testing.T) {
 			UseFileBackend:    useFileBackend,
 		}
 		startTs := model.Ts(10)
-<<<<<<< HEAD
-		ddlMgr, err := NewDDLManager(ctx, cfg, startTs)
-		require.NoError(t, err)
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			ddlMgr.Run(ctx)
-		}()
-=======
 		ddlMgr := NewDDLManager(model.DefaultChangeFeedID("test"), cfg, startTs)
 
 		var eg errgroup.Group
 		eg.Go(func() error {
 			return ddlMgr.Run(ctx)
 		})
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 
 		require.Equal(t, startTs, ddlMgr.GetResolvedTs())
 		ddl := &model.DDLEvent{StartTs: 100, CommitTs: 120, Query: "CREATE TABLE `TEST.T1`"}
@@ -287,28 +264,11 @@ func TestLogManagerError(t *testing.T) {
 		Storage:           "blackhole-invalid://",
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-<<<<<<< HEAD
-	logMgr, err := NewDMLManager(ctx, cfg)
-	require.NoError(t, err)
-	err = logMgr.writer.Close()
-	require.NoError(t, err)
-	logMgr.writer = blackhole.NewInvalidLogWriter(logMgr.writer)
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := logMgr.Run(ctx)
-		require.Regexp(t, ".*invalid black hole writer.*", err)
-		require.Regexp(t, ".*WriteLog.*", err)
-	}()
-=======
 	logMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 	var eg errgroup.Group
 	eg.Go(func() error {
 		return logMgr.Run(ctx)
 	})
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 
 	testCases := []struct {
 		span model.TableID
@@ -356,14 +316,8 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 		UseFileBackend:    useFileBackend,
 	}
-<<<<<<< HEAD
-	dmlMgr, err := NewDMLManager(ctx, cfg)
-	require.Nil(b, err)
-	eg := errgroup.Group{}
-=======
 	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 	var eg errgroup.Group
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	eg.Go(func() error {
 		return dmlMgr.Run(ctx)
 	})
@@ -389,13 +343,8 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		wg.Add(1)
 		go func(tableID model.TableID) {
 			defer wg.Done()
-<<<<<<< HEAD
 			maxCommitTs := maxTsMap[tableID]
 			rows := []*model.RowChangedEvent{}
-=======
-			maxCommitTs := maxTsMap.GetV(span)
-			var rows []*model.RowChangedEvent
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 			for i := 0; i < maxRowCount; i++ {
 				if i%100 == 0 {
 					// prepare new row change events

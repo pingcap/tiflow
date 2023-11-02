@@ -309,15 +309,8 @@ func newTableManager(
 
 func (tm *tableManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
-<<<<<<< HEAD
 	for tableID, table := range tm.tables {
 		message, err := table.poll(ctx)
-=======
-	var err error
-	var toBeDropped []tablepb.Span
-	tm.tables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
-		message, err1 := table.poll(ctx)
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 		if err != nil {
 			return result, errors.Trace(err)
 		}

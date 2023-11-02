@@ -78,13 +78,6 @@ func TestInitAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-<<<<<<< HEAD
-	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
-	require.NoError(t, err)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, uint64(11), m.metaResolvedTs.getFlushed())
-	for _, fileName := range toReomoveFiles {
-=======
 	m := NewMetaManager(changefeedID, cfg, startTs)
 
 	var eg errgroup.Group
@@ -101,7 +94,6 @@ func TestInitAndWriteMeta(t *testing.T) {
 	}, time.Second, 50*time.Millisecond)
 
 	for _, fileName := range toRemoveFiles {
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 		ret, err := extStorage.FileExists(ctx, fileName)
 		require.NoError(t, err)
 		require.False(t, ret, "file %s should be removed", fileName)
@@ -164,12 +156,6 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-<<<<<<< HEAD
-	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
-	require.NoError(t, err)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
-=======
 	m := NewMetaManager(changefeedID, cfg, startTs)
 
 	var eg errgroup.Group
@@ -185,7 +171,6 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		return startTs == m.metaResolvedTs.getFlushed()
 	}, time.Second, 50*time.Millisecond)
 
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	for _, fileName := range toRemoveFiles {
 		ret, err := extStorage.FileExists(ctx, fileName)
 		require.NoError(t, err)
@@ -307,14 +292,7 @@ func TestGCAndCleanup(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-<<<<<<< HEAD
-	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
-	require.NoError(t, err)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
-=======
 	m := NewMetaManager(changefeedID, cfg, startTs)
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 
 	var eg errgroup.Group
 	eg.Go(func() error {

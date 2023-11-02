@@ -52,7 +52,6 @@ func NewLogWriter(
 		return nil, errors.WrapError(errors.ErrRedoConfigInvalid,
 			errors.New("invalid LogWriterConfig"))
 	}
-
 	// "nfs" and "local" scheme are converted to "file" scheme
 	if !cfg.UseExternalStorage {
 		redo.FixLocalScheme(cfg.URI)

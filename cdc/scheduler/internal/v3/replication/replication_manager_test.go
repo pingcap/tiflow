@@ -585,13 +585,12 @@ func (m *mockRedoMetaManager) Enabled() bool {
 	return m.enable
 }
 
-<<<<<<< HEAD
 func (m *mockRedoMetaManager) Run(ctx context.Context) error {
 	return nil
-=======
+}
+
 func (m *mockRedoMetaManager) Running() bool {
 	return true
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 }
 
 func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {

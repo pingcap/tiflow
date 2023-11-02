@@ -21,11 +21,6 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/contextutil"
-=======
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
@@ -66,33 +61,14 @@ func NewDisabledDDLManager() *ddlManager {
 
 // NewDDLManager creates a new ddl Manager.
 func NewDDLManager(
-<<<<<<< HEAD
-	ctx context.Context, cfg *config.ConsistentConfig, ddlStartTs model.Ts,
-) (*ddlManager, error) {
-	logManager, err := newLogManager(ctx, cfg, redo.RedoDDLLogFileType)
-	if err != nil {
-		return nil, err
-	}
-	tableID := int64(0)
-	logManager.AddTable(tableID, ddlStartTs)
-	return &ddlManager{
-		logManager: logManager,
-		// The current fakeTableID is meaningless, find a meaningful id in the future.
-		fakeTableID: tableID,
-	}, nil
-=======
 	changefeedID model.ChangeFeedID,
 	cfg *config.ConsistentConfig, ddlStartTs model.Ts,
 ) *ddlManager {
 	m := newLogManager(changefeedID, cfg, redo.RedoDDLLogFileType)
-	span := spanz.TableIDToComparableSpan(0)
-	m.AddTable(span, ddlStartTs)
+	m.AddTable(0, ddlStartTs)
 	return &ddlManager{
 		logManager: m,
-		// The current fakeSpan is meaningless, find a meaningful span in the future.
-		fakeSpan: span,
 	}
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 }
 
 type ddlManager struct {
@@ -129,18 +105,11 @@ type DMLManager interface {
 }
 
 // NewDMLManager creates a new dml Manager.
-<<<<<<< HEAD
-func NewDMLManager(ctx context.Context, cfg *config.ConsistentConfig) (*dmlManager, error) {
-	logManager, err := newLogManager(ctx, cfg, redo.RedoRowLogFileType)
-	if err != nil {
-		return nil, err
-=======
 func NewDMLManager(changefeedID model.ChangeFeedID,
 	cfg *config.ConsistentConfig,
 ) *dmlManager {
 	return &dmlManager{
 		logManager: newLogManager(changefeedID, cfg, redo.RedoRowLogFileType),
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	}
 }
 
@@ -247,36 +216,14 @@ type logManager struct {
 }
 
 func newLogManager(
-<<<<<<< HEAD
-	ctx context.Context, cfg *config.ConsistentConfig, logType string,
-) (*logManager, error) {
-=======
 	changefeedID model.ChangeFeedID,
 	cfg *config.ConsistentConfig, logType string,
 ) *logManager {
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
 		return &logManager{enabled: false}
 	}
 
-<<<<<<< HEAD
-	uri, err := storage.ParseRawURL(cfg.Storage)
-	if err != nil {
-		return nil, err
-	}
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	m := &logManager{
-		enabled: true,
-		cfg: &writer.LogWriterConfig{
-			ConsistentConfig:   *cfg,
-			LogType:            logType,
-			CaptureID:          contextutil.CaptureAddrFromCtx(ctx),
-			ChangeFeedID:       changefeedID,
-			URI:                *uri,
-			UseExternalStorage: redo.IsExternalStorage(uri.Scheme),
-			MaxLogSizeInBytes:  cfg.MaxLogSize * redo.Megabyte,
-=======
 	return &logManager{
 		enabled: true,
 		cfg: &writer.LogWriterConfig{
@@ -285,7 +232,6 @@ func newLogManager(
 			CaptureID:         config.GetGlobalServerConfig().AdvertiseAddr,
 			ChangeFeedID:      changefeedID,
 			MaxLogSizeInBytes: cfg.MaxLogSize * redo.Megabyte,
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 		},
 		logBuffer: chann.NewDrainableChann[cacheEvents](),
 		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
@@ -299,10 +245,6 @@ func newLogManager(
 	}
 }
 
-<<<<<<< HEAD
-func (m *logManager) Run(ctx context.Context) error {
-	defer m.close()
-=======
 // Run implements pkg/util.Runnable.
 func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
@@ -324,7 +266,6 @@ func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 		return err
 	}
 	m.writer = w
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	return m.bgUpdateLog(ctx)
 }
 

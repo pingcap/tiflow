@@ -54,49 +54,8 @@ func newProcessor4Test(
 		captureInfo,
 		model.ChangeFeedID4Test("processor-test", "processor-test"), up, liveness, 0)
 	p.lazyInit = func(ctx cdcContext.Context) error {
-<<<<<<< HEAD
 		p.agent = &mockAgent{executor: p}
 		p.sinkV1 = mocksink.NewNormalMockSink()
-=======
-		if p.initialized {
-			return nil
-		}
-
-		if !enableRedo {
-			p.redo.r = redo.NewDisabledDMLManager()
-		} else {
-			tmpDir := t.TempDir()
-			redoDir := fmt.Sprintf("%s/%s", tmpDir, changefeedID)
-			dmlMgr := redo.NewDMLManager(changefeedID, &config.ConsistentConfig{
-				Level:                 string(redoPkg.ConsistentLevelEventual),
-				MaxLogSize:            redoPkg.DefaultMaxLogSize,
-				FlushIntervalInMs:     redoPkg.DefaultFlushIntervalInMs,
-				MetaFlushIntervalInMs: redoPkg.DefaultMetaFlushIntervalInMs,
-				Storage:               "file://" + redoDir,
-				UseFileBackend:        false,
-			})
-			p.redo.r = dmlMgr
-		}
-		p.redo.name = "RedoManager"
-		p.redo.changefeedID = changefeedID
-		p.redo.spawn(ctx)
-
-		p.agent = &mockAgent{executor: p, liveness: liveness}
-		p.sinkManager.r, p.sourceManager.r, _ = sinkmanager.NewManagerWithMemEngine(
-			t, changefeedID, info, p.redo.r)
-		p.sinkManager.name = "SinkManager"
-		p.sinkManager.changefeedID = changefeedID
-		p.sinkManager.spawn(ctx)
-		p.sourceManager.name = "SourceManager"
-		p.sourceManager.changefeedID = changefeedID
-		p.sourceManager.spawn(ctx)
-
-		// NOTICE: we have to bind the sourceManager to the sinkManager
-		// otherwise the sinkManager will not receive the resolvedTs.
-		p.sourceManager.r.OnResolve(p.sinkManager.r.UpdateReceivedSorterResolvedTs)
-
-		p.initialized = true
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 		return nil
 	}
 	p.redoDMLMgr = redo.NewDisabledDMLManager()

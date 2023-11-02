@@ -557,8 +557,6 @@ LOOP2:
 		ctx.Throw(c.ddlPuller.Run(cancelCtx))
 	}()
 
-<<<<<<< HEAD
-	stdCtx := contextutil.PutChangefeedIDInCtx(cancelCtx, c.id)
 	c.redoDDLMgr, err = redo.NewDDLManager(stdCtx, c.state.Info.Config.Consistent, ddlStartTs)
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
 		err = errors.New("changefeed new redo manager injected error")
@@ -566,37 +564,20 @@ LOOP2:
 	if err != nil {
 		return err
 	}
-=======
-	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, c.latestInfo.SinkURI, c.latestInfo.Config)
-	if err != nil {
-		return err
-	}
-	c.observerLastTick = atomic.NewTime(time.Time{})
-
-	c.redoDDLMgr = redo.NewDDLManager(c.id, c.latestInfo.Config.Consistent, ddlStartTs)
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
 	if c.redoDDLMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			ctx.Throw(c.redoDDLMgr.Run(stdCtx))
+			ctx.Throw(c.redoDDLMgr.Run(ctx))
 		}()
 	}
 
-<<<<<<< HEAD
-	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(stdCtx,
-		c.state.Info.Config.Consistent, checkpointTs)
-	if err != nil {
-		return err
-	}
-=======
-	c.redoMetaMgr = redo.NewMetaManager(c.id, c.latestInfo.Config.Consistent, checkpointTs)
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
+	c.redoMetaMgr = redo.NewMetaManager(c.id, contextutil.CaptureAddrFromCtx(ctx), c.state.Info.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			ctx.Throw(c.redoMetaMgr.Run(stdCtx))
+			ctx.Throw(c.redoMetaMgr.Run(ctx))
 		}()
 	}
 	log.Info("owner creates redo manager",
@@ -753,19 +734,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
-<<<<<<< HEAD
-			redoMetaMgr, err := redo.NewMetaManager(ctx, c.state.Info.Config.Consistent)
-			if err != nil {
-				log.Info("owner creates redo manager for clean fail",
-					zap.String("namespace", c.id.Namespace),
-					zap.String("changefeed", c.id.ID),
-					zap.Error(err))
-				return
-			}
-			c.redoMetaMgr = redoMetaMgr
-=======
-			c.redoMetaMgr = redo.NewMetaManager(c.id, cfInfo.Config.Consistent, 0)
->>>>>>> 684d117c67 (redo(ticdc): fix redo initialization block the owner (#9887))
+			c.redoMetaMgr = redo.NewMetaManager(c.id, contextutil.CaptureAddrFromCtx(ctx), c.state.Info.Config.Consistent, 0)
 		}
 		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {
