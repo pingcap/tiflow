@@ -341,7 +341,7 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	if c.redoMetaMgr.Enabled() {
 		if !c.redoMetaMgr.Running() {
-			return 0, 0, nil
+			return nil
 		}
 	}
 
