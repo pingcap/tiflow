@@ -75,7 +75,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m := NewMetaManager(changefeedID, captureID, cfg, startTs)
+	m := NewMetaManager(changefeedID, cfg, startTs)
 
 	var eg errgroup.Group
 	eg.Go(func() error {
@@ -151,7 +151,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m := NewMetaManager(changefeedID, captureID, cfg, startTs)
+	m := NewMetaManager(changefeedID, cfg, startTs)
 
 	var eg errgroup.Group
 	eg.Go(func() error {
@@ -279,7 +279,7 @@ func TestGCAndCleanup(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m := NewMetaManager(changefeedID, captureID, cfg, startTs)
+	m := NewMetaManager(changefeedID, cfg, startTs)
 
 	var eg errgroup.Group
 	eg.Go(func() error {
