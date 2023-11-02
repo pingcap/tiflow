@@ -55,7 +55,7 @@ func main() {
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flags.StringVar(&o.upstreamURI, "upstream-uri", "", "upstream database uri")
 	flags.StringVar(&o.downstreamURI, "downstream-uri", "", "downstream database uri")
-	flags.StringVar(&o.dbNames, "db-names", "", "database names")
+	flags.StringVar(&o.dbNames, "databases", "", "database names, separate by the `,`")
 	flags.StringVar(&o.configFile, "config", "", "config file")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		log.Panic("parse args failed", zap.Error(err))
