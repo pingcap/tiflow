@@ -85,7 +85,7 @@ func NewDisabledMetaManager() *metaManager {
 
 // NewMetaManager creates a new meta Manager.
 func NewMetaManager(
-	changefeedID model.ChangeFeedID, captureID string,
+	changefeedID model.ChangeFeedID,
 	cfg *config.ConsistentConfig, checkpoint model.Ts,
 ) *metaManager {
 	// return a disabled Manager if no consistent config or normal consistent level
@@ -94,7 +94,7 @@ func NewMetaManager(
 	}
 
 	m := &metaManager{
-		captureID:     captureID,
+		captureID:     config.GetGlobalServerConfig().AdvertiseAddr,
 		changeFeedID:  changefeedID,
 		uuidGenerator: uuid.NewGenerator(),
 		enabled:       true,
@@ -123,7 +123,6 @@ func (m *metaManager) preStart(ctx context.Context) error {
 	}
 	// "nfs" and "local" scheme are converted to "file" scheme
 	redo.FixLocalScheme(uri)
-
 	extStorage, err := redo.InitExternalStorage(ctx, *uri)
 	if err != nil {
 		return err
@@ -164,7 +163,6 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	eg.Go(func() error {
 		return m.bgGC(egCtx)
 	})
-
 	m.running.Store(true)
 	return eg.Wait()
 }
