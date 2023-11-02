@@ -22,7 +22,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -75,8 +74,6 @@ type metaManager struct {
 	lastFlushTime          time.Time
 	cfg                    *config.ConsistentConfig
 	metricFlushLogDuration prometheus.Observer
-
-	flushIntervalInMs int64
 }
 
 // NewDisabledMetaManager creates a disabled Meta Manager.
@@ -96,13 +93,12 @@ func NewMetaManager(
 	}
 
 	m := &metaManager{
-		captureID:         contextutil.CaptureAddrFromCtx(ctx),
-		changeFeedID:      contextutil.ChangefeedIDFromCtx(ctx),
-		uuidGenerator:     uuid.NewGenerator(),
-		enabled:           true,
-		cfg:               cfg,
-		startTs:           checkpoint,
-		flushIntervalInMs: cfg.FlushIntervalInMs,
+		changeFeedID:  changefeedID,
+		captureID:     config.GetGlobalServerConfig().AdvertiseAddr,
+		uuidGenerator: uuid.NewGenerator(),
+		enabled:       true,
+		cfg:           cfg,
+		startTs:       checkpoint,
 	}
 	return m
 }
@@ -266,7 +262,6 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 		zap.String("changefeed", m.changeFeedID.ID),
 		zap.Uint64("checkpointTs", flushedMeta.CheckpointTs),
 		zap.Uint64("resolvedTs", flushedMeta.ResolvedTs))
-
 	return util.DeleteFilesInExtStorage(ctx, m.extStorage, toRemoveMetaFiles)
 }
 

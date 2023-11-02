@@ -65,9 +65,12 @@ func NewDDLManager(
 	cfg *config.ConsistentConfig, ddlStartTs model.Ts,
 ) *ddlManager {
 	m := newLogManager(changefeedID, cfg, redo.RedoDDLLogFileType)
-	m.AddTable(0, ddlStartTs)
+	tableID := int64(0)
+	m.AddTable(tableID, ddlStartTs)
 	return &ddlManager{
 		logManager: m,
+		// The current fakeTableID is meaningless, find a meaningful id in the future.
+		fakeTableID: tableID,
 	}
 }
 
@@ -105,8 +108,8 @@ type DMLManager interface {
 }
 
 // NewDMLManager creates a new dml Manager.
-func NewDMLManager(changefeedID model.ChangeFeedID,
-	cfg *config.ConsistentConfig,
+func NewDMLManager(
+	changefeedID model.ChangeFeedID, cfg *config.ConsistentConfig,
 ) *dmlManager {
 	return &dmlManager{
 		logManager: newLogManager(changefeedID, cfg, redo.RedoRowLogFileType),
@@ -216,8 +219,7 @@ type logManager struct {
 }
 
 func newLogManager(
-	changefeedID model.ChangeFeedID,
-	cfg *config.ConsistentConfig, logType string,
+	changefeedID model.ChangeFeedID, cfg *config.ConsistentConfig, logType string,
 ) *logManager {
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
