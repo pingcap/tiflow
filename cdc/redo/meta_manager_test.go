@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -38,9 +37,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, captureID)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
-	ctx = contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 
 	extStorage, uri, err := util.GetTestExtStorage(ctx, t.TempDir())
 	require.NoError(t, err)
@@ -78,7 +75,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m := NewMetaManager(changefeedID, cfg, startTs)
+	m := NewMetaManager(changefeedID, captureID, cfg, startTs)
 
 	var eg errgroup.Group
 	eg.Go(func() error {
@@ -116,9 +113,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, captureID)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
-	ctx = contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 
 	extStorage, uri, err := util.GetTestExtStorage(ctx, t.TempDir())
 	require.NoError(t, err)
@@ -156,7 +151,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m := NewMetaManager(changefeedID, cfg, startTs)
+	m := NewMetaManager(changefeedID, captureID, cfg, startTs)
 
 	var eg errgroup.Group
 	eg.Go(func() error {
@@ -239,9 +234,7 @@ func TestGCAndCleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	captureID := "test-capture"
-	ctx = contextutil.PutCaptureAddrInCtx(ctx, captureID)
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
-	ctx = contextutil.PutChangefeedIDInCtx(ctx, changefeedID)
 
 	extStorage, uri, err := util.GetTestExtStorage(ctx, t.TempDir())
 	require.NoError(t, err)
@@ -286,7 +279,7 @@ func TestGCAndCleanup(t *testing.T) {
 		Storage:           uri.String(),
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 	}
-	m := NewMetaManager(changefeedID, cfg, startTs)
+	m := NewMetaManager(changefeedID, captureID, cfg, startTs)
 
 	var eg errgroup.Group
 	eg.Go(func() error {
