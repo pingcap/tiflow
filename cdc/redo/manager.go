@@ -274,7 +274,15 @@ func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 		return err
 	}
 	m.writer = w
-	return m.bgUpdateLog(ctx)
+	return m.bgUpdateLog(ctx, m.getFlushDuration())
+}
+
+func (m *logManager) getFlushDuration() time.Duration {
+	flushIntervalInMs := m.cfg.FlushIntervalInMs
+	if m.cfg.LogType == redo.RedoDDLLogFileType {
+		flushIntervalInMs = m.cfg.MetaFlushIntervalInMs
+	}
+	return time.Duration(flushIntervalInMs) * time.Millisecond
 }
 
 // WaitForReady implements pkg/util.Runnable.
@@ -483,15 +491,14 @@ func (m *logManager) onResolvedTsMsg(span tablepb.Span, resolvedTs model.Ts) {
 	}
 }
 
-func (m *logManager) bgUpdateLog(ctx context.Context) error {
+func (m *logManager) bgUpdateLog(ctx context.Context, flushDuration time.Duration) error {
 	m.releaseMemoryCbs = make([]func(), 0, 1024)
-	flushIntervalInMs := m.cfg.FlushIntervalInMs
-	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
+	ticker := time.NewTicker(flushDuration)
 	defer ticker.Stop()
 	log.Info("redo manager bgUpdateLog is running",
 		zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 		zap.String("changefeed", m.cfg.ChangeFeedID.ID),
-		zap.Int64("flushIntervalInMs", flushIntervalInMs))
+		zap.Duration("flushIntervalInMs", flushDuration))
 
 	var err error
 	// logErrCh is used to retrieve errors from log flushing goroutines.
