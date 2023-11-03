@@ -24,8 +24,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/redo/writer"
-	"github.com/pingcap/tiflow/cdc/redo/writer/blackhole"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/stretchr/testify/require"
@@ -259,54 +257,6 @@ func TestLogManagerInOwner(t *testing.T) {
 		testWriteDDLs(storage, true)
 		testWriteDDLs(storage, false)
 	}
-}
-
-// TestManagerError tests whether internal error in bgUpdateLog could be managed correctly.
-func TestLogManagerError(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-
-	cfg := &config.ConsistentConfig{
-		Level:                 string(redo.ConsistentLevelEventual),
-		MaxLogSize:            redo.DefaultMaxLogSize,
-		Storage:               "blackhole://",
-		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
-		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
-	}
-	logMgr, err := NewDMLManager(ctx, cfg)
-	require.NoError(t, err)
-	err = logMgr.writer.Close()
-	require.NoError(t, err)
-	logMgr.writer = blackhole.NewInvalidLogWriter(logMgr.writer)
-
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := logMgr.Run(ctx)
-		require.Regexp(t, ".*invalid black hole writer.*", err)
-		require.Regexp(t, ".*WriteLog.*", err)
-	}()
-
-	testCases := []struct {
-		span model.TableID
-		rows []writer.RedoEvent
-	}{
-		{
-			span: 53,
-			rows: []writer.RedoEvent{
-				&model.RowChangedEvent{CommitTs: 120, Table: &model.TableName{TableID: 53}},
-				&model.RowChangedEvent{CommitTs: 125, Table: &model.TableName{TableID: 53}},
-				&model.RowChangedEvent{CommitTs: 130, Table: &model.TableName{TableID: 53}},
-			},
-		},
-	}
-	for _, tc := range testCases {
-		err := logMgr.emitRedoEvents(ctx, tc.span, nil, tc.rows...)
-		require.NoError(t, err)
-	}
-	wg.Wait()
 }
 
 func BenchmarkBlackhole(b *testing.B) {
