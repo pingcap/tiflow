@@ -95,9 +95,34 @@ func TestLogManagerInProcessor(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+<<<<<<< HEAD
 	logMgr, err := NewMockManager(ctx)
 	require.Nil(t, err)
 	defer logMgr.Cleanup(ctx)
+=======
+	testWriteDMLs := func(storage string, useFileBackend bool) {
+		ctx, cancel := context.WithCancel(ctx)
+		cfg := &config.ConsistentConfig{
+			Level:                 string(redo.ConsistentLevelEventual),
+			MaxLogSize:            redo.DefaultMaxLogSize,
+			Storage:               storage,
+			FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+			MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+			UseFileBackend:        useFileBackend,
+		}
+		dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+		var eg errgroup.Group
+		eg.Go(func() error {
+			return dmlMgr.Run(ctx)
+		})
+		// check emit row changed events can move forward resolved ts
+		spans := []tablepb.Span{
+			spanz.TableIDToComparableSpan(53),
+			spanz.TableIDToComparableSpan(55),
+			spanz.TableIDToComparableSpan(57),
+			spanz.TableIDToComparableSpan(59),
+		}
+>>>>>>> 11c217841e (redo(ticdc): use meta flush interval in redo ddl manager (#9999))
 
 	checkResolvedTs := func(mgr LogManager, expectedRts uint64) {
 		time.Sleep(time.Duration(config.DefaultFlushIntervalInMs+200) * time.Millisecond)
@@ -177,6 +202,7 @@ func TestLogManagerInOwner(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+<<<<<<< HEAD
 	logMgr, err := NewMockManager(ctx)
 	require.Nil(t, err)
 	defer logMgr.Cleanup(ctx)
@@ -204,6 +230,17 @@ func BenchmarkRedoManagerWaitFlush(b *testing.B) {
 	for _, tp := range maxTsMap {
 		if *tp < minResolvedTs {
 			minResolvedTs = *tp
+=======
+	testWriteDDLs := func(storage string, useFileBackend bool) {
+		ctx, cancel := context.WithCancel(ctx)
+		cfg := &config.ConsistentConfig{
+			Level:                 string(redo.ConsistentLevelEventual),
+			MaxLogSize:            redo.DefaultMaxLogSize,
+			Storage:               storage,
+			FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+			MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+			UseFileBackend:        useFileBackend,
+>>>>>>> 11c217841e (redo(ticdc): use meta flush interval in redo ddl manager (#9999))
 		}
 	}
 
@@ -320,9 +357,17 @@ func TestManagerError(t *testing.T) {
 	defer cancel()
 
 	cfg := &config.ConsistentConfig{
+<<<<<<< HEAD
 		Level:             string(redo.ConsistentLevelEventual),
 		Storage:           "blackhole://",
 		FlushIntervalInMs: config.DefaultFlushIntervalInMs,
+=======
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               "blackhole-invalid://",
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+>>>>>>> 11c217841e (redo(ticdc): use meta flush interval in redo ddl manager (#9999))
 	}
 
 	errCh := make(chan error, 1)
@@ -385,9 +430,37 @@ func TestReuseWritter(t *testing.T) {
 
 	dir := t.TempDir()
 	cfg := &config.ConsistentConfig{
+<<<<<<< HEAD
 		Level:             string(redo.ConsistentLevelEventual),
 		Storage:           "local://" + dir,
 		FlushIntervalInMs: config.DefaultFlushIntervalInMs,
+=======
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               storage,
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		UseFileBackend:        useFileBackend,
+	}
+	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return dmlMgr.Run(ctx)
+	})
+
+	// Init tables
+	numOfTables := 200
+	tables := make([]model.TableID, 0, numOfTables)
+	maxTsMap := spanz.NewHashMap[*model.Ts]()
+	startTs := uint64(100)
+	for i := 0; i < numOfTables; i++ {
+		tableID := model.TableID(i)
+		tables = append(tables, tableID)
+		span := spanz.TableIDToComparableSpan(tableID)
+		ts := startTs
+		maxTsMap.ReplaceOrInsert(span, &ts)
+		dmlMgr.AddTable(span, startTs)
+>>>>>>> 11c217841e (redo(ticdc): use meta flush interval in redo ddl manager (#9999))
 	}
 
 	errCh := make(chan error, 1)

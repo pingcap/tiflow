@@ -150,6 +150,7 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	if err != nil {
 		return nil, err
 	}
+<<<<<<< HEAD
 
 	m := &ManagerImpl{
 		changeFeedID:  contextutil.ChangefeedIDFromCtx(ctx),
@@ -187,6 +188,18 @@ func NewManager(ctx context.Context, cfg *config.ConsistentConfig, opts *Manager
 	}
 
 	return m, nil
+=======
+	m.writer = w
+	return m.bgUpdateLog(ctx, m.getFlushDuration())
+}
+
+func (m *logManager) getFlushDuration() time.Duration {
+	flushIntervalInMs := m.cfg.FlushIntervalInMs
+	if m.cfg.LogType == redo.RedoDDLLogFileType {
+		flushIntervalInMs = m.cfg.MetaFlushIntervalInMs
+	}
+	return time.Duration(flushIntervalInMs) * time.Millisecond
+>>>>>>> 11c217841e (redo(ticdc): use meta flush interval in redo ddl manager (#9999))
 }
 
 // NewDisabledManager returns a disabled log manger instance, used in test only
@@ -479,9 +492,22 @@ func (m *ManagerImpl) onResolvedTsMsg(tableID model.TableID, resolvedTs model.Ts
 	value.(*statefulRts).checkAndSetUnflushed(resolvedTs)
 }
 
+<<<<<<< HEAD
 func (m *ManagerImpl) bgUpdateLog(
 	ctx context.Context, flushIntervalInMs int64, errCh chan<- error,
 ) {
+=======
+func (m *logManager) bgUpdateLog(ctx context.Context, flushDuration time.Duration) error {
+	m.releaseMemoryCbs = make([]func(), 0, 1024)
+	ticker := time.NewTicker(flushDuration)
+	defer ticker.Stop()
+	log.Info("redo manager bgUpdateLog is running",
+		zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+		zap.String("changefeed", m.cfg.ChangeFeedID.ID),
+		zap.Duration("flushIntervalInMs", flushDuration))
+
+	var err error
+>>>>>>> 11c217841e (redo(ticdc): use meta flush interval in redo ddl manager (#9999))
 	// logErrCh is used to retrieve errors from log flushing goroutines.
 	// if the channel is full, it's better to block subsequent flushing goroutines.
 	logErrCh := make(chan error, 1)
