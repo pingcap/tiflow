@@ -562,7 +562,7 @@ LOOP2:
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			ctx.Throw(c.redoDDLMgr.Run(ctx))
+			ctx.Throw(c.redoDDLMgr.Run(cancelCtx))
 		}()
 	}
 
@@ -571,7 +571,7 @@ LOOP2:
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			ctx.Throw(c.redoMetaMgr.Run(ctx))
+			ctx.Throw(c.redoMetaMgr.Run(cancelCtx))
 		}()
 	}
 	log.Info("owner creates redo manager",
