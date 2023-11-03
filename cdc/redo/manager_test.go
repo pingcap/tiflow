@@ -268,18 +268,11 @@ func TestLogManagerError(t *testing.T) {
 	defer cancel()
 
 	cfg := &config.ConsistentConfig{
-<<<<<<< HEAD
-		Level:             string(redo.ConsistentLevelEventual),
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           "blackhole://",
-		FlushIntervalInMs: redo.MinFlushIntervalInMs,
-=======
 		Level:                 string(redo.ConsistentLevelEventual),
 		MaxLogSize:            redo.DefaultMaxLogSize,
-		Storage:               "blackhole-invalid://",
+		Storage:               "blackhole://",
 		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
->>>>>>> 11c217841e (redo(ticdc): use meta flush interval in redo ddl manager (#9999))
 	}
 	logMgr, err := NewDMLManager(ctx, cfg)
 	require.NoError(t, err)

@@ -265,9 +265,6 @@ func newLogManager(
 
 func (m *logManager) Run(ctx context.Context) error {
 	defer m.close()
-<<<<<<< HEAD
-	return m.bgUpdateLog(ctx)
-=======
 	start := time.Now()
 	w, err := factory.NewRedoLogWriter(ctx, m.cfg)
 	if err != nil {
@@ -288,7 +285,6 @@ func (m *logManager) getFlushDuration() time.Duration {
 		flushIntervalInMs = m.cfg.MetaFlushIntervalInMs
 	}
 	return time.Duration(flushIntervalInMs) * time.Millisecond
->>>>>>> 11c217841e (redo(ticdc): use meta flush interval in redo ddl manager (#9999))
 }
 
 // Enabled returns whether this log manager is enabled
