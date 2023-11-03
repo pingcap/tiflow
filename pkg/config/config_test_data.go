@@ -60,6 +60,7 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
     "storage": "",
     "use-file-backend": false
   }
@@ -211,6 +212,7 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
     "storage": "",
     "use-file-backend": false
   }
@@ -271,6 +273,7 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
     "storage": "",
     "use-file-backend": false
   }

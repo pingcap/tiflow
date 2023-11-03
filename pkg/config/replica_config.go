@@ -65,11 +65,12 @@ var defaultReplicaConfig = &ReplicaConfig{
 		AdvanceTimeoutInSec:      DefaultAdvanceTimeoutInSec,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Level:                 "none",
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		Storage:               "",
+		UseFileBackend:        false,
 	},
 }
 

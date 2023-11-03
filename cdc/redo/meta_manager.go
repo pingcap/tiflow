@@ -120,7 +120,13 @@ func NewMetaManager(ctx context.Context, cfg *config.ConsistentConfig) (*metaMan
 		changeFeedID:      contextutil.ChangefeedIDFromCtx(ctx),
 		uuidGenerator:     uuid.NewGenerator(),
 		enabled:           true,
-		flushIntervalInMs: cfg.FlushIntervalInMs,
+		flushIntervalInMs: cfg.MetaFlushIntervalInMs,
+	}
+
+	if m.flushIntervalInMs < redo.MinFlushIntervalInMs {
+		log.Warn("redo flush interval is too small, use default value",
+			zap.Int64("interval", m.flushIntervalInMs))
+		m.flushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
 	}
 
 	uri, err := storage.ParseRawURL(cfg.Storage)
