@@ -100,6 +100,13 @@ func NewMetaManager(
 		cfg:           cfg,
 		startTs:       checkpoint,
 	}
+
+	if m.cfg.MetaFlushIntervalInMs < redo.MinFlushIntervalInMs {
+		log.Warn("redo flush interval is too small, use default value",
+			zap.Int64("interval", m.cfg.MetaFlushIntervalInMs))
+		m.cfg.MetaFlushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
+	}
+
 	return m
 }
 

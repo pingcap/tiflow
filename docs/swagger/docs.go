@@ -1764,6 +1764,9 @@ var doc = `{
                 "max_log_size": {
                     "type": "integer"
                 },
+                "meta_flush_interval": {
+                    "type": "integer"
+                },
                 "storage": {
                     "type": "string"
                 },

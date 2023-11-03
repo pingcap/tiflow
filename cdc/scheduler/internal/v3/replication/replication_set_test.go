@@ -1426,3 +1426,29 @@ func TestReplicationSetHeap_MinK(t *testing.T) {
 	require.Equal(t, expectedTables, tables)
 	require.Equal(t, 0, h.Len())
 }
+
+func TestUpdateCheckpointAndStats(t *testing.T) {
+	cases := []struct {
+		checkpoint tablepb.Checkpoint
+		stats      tablepb.Stats
+	}{
+		{
+			checkpoint: tablepb.Checkpoint{
+				CheckpointTs: 1,
+				ResolvedTs:   2,
+			},
+			stats: tablepb.Stats{},
+		},
+		{
+			checkpoint: tablepb.Checkpoint{
+				CheckpointTs: 2,
+				ResolvedTs:   1,
+			},
+			stats: tablepb.Stats{},
+		},
+	}
+	r := &ReplicationSet{}
+	for _, c := range cases {
+		r.updateCheckpointAndStats(c.checkpoint, c.stats)
+	}
+}
