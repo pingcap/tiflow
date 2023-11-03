@@ -1102,9 +1102,9 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	switch {
 	case mysql.HasAutoIncrementFlag(oldCol.GetFlag()) && !mysql.HasAutoIncrementFlag(newCol.GetFlag()):
 		return bf.RemoveAutoIncrement, nil
-	case mysql.HasPriKeyFlag(oldCol.GetFlag()) != mysql.HasPriKeyFlag(newCol.GetFlag()):
+	case mysql.HasPriKeyFlag(oldCol.GetFlag()) && !mysql.HasPriKeyFlag(newCol.GetFlag()):
 		return bf.DropPrimaryKey, nil
-	case mysql.HasUniKeyFlag(oldCol.GetFlag()) != mysql.HasUniKeyFlag(newCol.GetFlag()):
+	case mysql.HasUniKeyFlag(oldCol.GetFlag()) && !mysql.HasUniKeyFlag(newCol.GetFlag()):
 		return bf.DropUniqueKey, nil
 	case oldCol.GetDefaultValue() != newCol.GetDefaultValue():
 		return bf.ModifyDefaultValue, nil
