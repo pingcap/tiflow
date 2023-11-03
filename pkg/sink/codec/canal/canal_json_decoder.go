@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/goccy/go-json"
+	"github.com/bytedance/sonic"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -126,7 +126,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	if err := json.Unmarshal(encodedData, msg); err != nil {
+	if err := sonic.Unmarshal(encodedData, msg); err != nil {
 		log.Error("canal-json decoder unmarshal data failed",
 			zap.Error(err), zap.ByteString("data", encodedData))
 		return model.MessageTypeUnknown, false, err
@@ -152,7 +152,7 @@ func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, cl
 		return nil, err
 	}
 	message := &canalJSONMessageWithTiDBExtension{}
-	err = json.Unmarshal(value, message)
+	err = sonic.Unmarshal(value, message)
 	if err != nil {
 		return nil, err
 	}

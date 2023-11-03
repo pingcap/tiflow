@@ -15,9 +15,9 @@ package common
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/tikv/client-go/v2/oracle"
@@ -164,6 +164,6 @@ type ClaimCheckMessage struct {
 // UnmarshalClaimCheckMessage unmarshal bytes to ClaimCheckMessage.
 func UnmarshalClaimCheckMessage(data []byte) (*ClaimCheckMessage, error) {
 	var m ClaimCheckMessage
-	err := json.Unmarshal(data, &m)
+	err := sonic.Unmarshal(data, &m)
 	return &m, err
 }
