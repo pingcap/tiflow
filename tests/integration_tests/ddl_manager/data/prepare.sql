@@ -99,8 +99,9 @@ CREATE TABLE t10 (
 DROP TABLE t9;
 
 
-# Test TiCDC can handle DDLs that across databases
-# Please note that we should write the database name explicitly in the DDLs
+---Test TiCDC can handle DDLs that across databases
+---Please note that we should write the database name explicitly in the DDLs
+
 drop database if exists `across_db_1`;
 create database `across_db_1`;
 
