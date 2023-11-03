@@ -686,6 +686,18 @@ func (v *DataValidator) doValidate() {
 
 		currEndLoc := v.streamerController.GetCurEndLocation()
 		locationForFlush = v.streamerController.GetTxnEndLocation()
+		// if cut over location is set, we need to check whether we need to flush syncer immediately
+		if cutOverLocation := v.cutOverLocation.Load(); cutOverLocation != nil &&
+			binlog.CompareLocation(*cutOverLocation, locationForFlush, v.cfg.EnableGTID) <= 0 {
+			switch e.Event.(type) {
+			case *replication.XIDEvent, *replication.QueryEvent:
+				v.syncer.flushJobs()
+			case *replication.GenericEvent:
+				if e.Header.EventType == replication.HEARTBEAT_EVENT {
+					v.syncer.flushJobs()
+				}
+			}
+		}
 
 		// wait until syncer synced current event
 		err = v.waitSyncerSynced(currEndLoc)
@@ -1320,12 +1332,12 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 
 func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) error {
 	var (
-		pos *mysql.Position
+		pos = mysql.Position{}
 		gs  mysql.GTIDSet
 		err error
 	)
 	if len(req.BinlogPos) > 0 {
-		pos, err = binlog.VerifyBinlogPos(req.BinlogPos)
+		pos, err = binlog.PositionFromPosStr(req.BinlogPos)
 		if err != nil {
 			return err
 		}
@@ -1336,7 +1348,7 @@ func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) e
 			return err
 		}
 	}
-	cutOverLocation := binlog.NewLocation(*pos, gs)
+	cutOverLocation := binlog.NewLocation(pos, gs)
 	v.cutOverLocation.Store(&cutOverLocation)
 	return nil
 }
@@ -1404,6 +1416,14 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 			validatorBinlogGtid = flushedLoc.GetGTID().String()
 		}
 	}
+	var cutoverBinlogPos, cutoverBinlogGTID string
+	if cutOverLoc := v.cutOverLocation.Load(); cutOverLoc != nil {
+		cutoverBinlogPos = cutOverLoc.Position.String()
+		if cutOverLoc.GetGTID() != nil {
+			cutoverBinlogGTID = cutOverLoc.GetGTID().String()
+		}
+	}
+
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
@@ -1415,5 +1435,7 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 		ProcessedRowsStatus: processedRows,
 		PendingRowsStatus:   pendingRows,
 		ErrorRowsStatus:     errorRows,
+		CutoverBinlogPos:    cutoverBinlogPos,
+		CutoverBinlogGtid:   cutoverBinlogGTID,
 	}
 }

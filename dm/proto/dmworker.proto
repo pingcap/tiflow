@@ -437,6 +437,8 @@ message ValidationStatus {
     string processedRowsStatus = 8;
     string pendingRowsStatus = 9;
     string errorRowsStatus = 10;
+    string cutoverBinlogPos = 11;
+    string cutoverBinlogGtid = 12;
 }
 
 message ValidationTableStatus {
