@@ -217,6 +217,8 @@ type Syncer struct {
 		isQueryEvent  bool
 	}
 
+	cutOverLocation atomic.Pointer[binlog.Location]
+
 	handleJobFunc func(*job) (bool, error)
 	flushSeq      int64
 
@@ -1112,7 +1114,12 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	skipCheckFlush := false
 	defer func() {
 		if !skipCheckFlush && err == nil {
-			err = s.flushIfOutdated()
+			if cutoverLocation := s.cutOverLocation.Load(); cutoverLocation != nil && binlog.CompareLocation(*cutoverLocation, job.currentLocation, s.cfg.EnableGTID) <= 0 {
+				err = s.flushJobs()
+				s.cutOverLocation.Store(nil)
+			} else {
+				err = s.flushIfOutdated()
+			}
 		}
 	}()
 
