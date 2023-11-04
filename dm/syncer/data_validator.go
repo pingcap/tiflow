@@ -686,18 +686,6 @@ func (v *DataValidator) doValidate() {
 
 		currEndLoc := v.streamerController.GetCurEndLocation()
 		locationForFlush = v.streamerController.GetTxnEndLocation()
-		// if cut over location is set, we need to check whether we need to flush syncer immediately
-		if cutOverLocation := v.cutOverLocation.Load(); cutOverLocation != nil &&
-			binlog.CompareLocation(*cutOverLocation, locationForFlush, v.cfg.EnableGTID) <= 0 {
-			switch e.Event.(type) {
-			case *replication.XIDEvent, *replication.QueryEvent:
-				v.syncer.flushJobs()
-			case *replication.GenericEvent:
-				if e.Header.EventType == replication.HEARTBEAT_EVENT {
-					v.syncer.flushJobs()
-				}
-			}
-		}
 
 		// wait until syncer synced current event
 		err = v.waitSyncerSynced(currEndLoc)
@@ -1350,6 +1338,7 @@ func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) e
 	}
 	cutOverLocation := binlog.NewLocation(pos, gs)
 	v.cutOverLocation.Store(&cutOverLocation)
+	v.syncer.cutOverLocation.Store(&cutOverLocation)
 	return nil
 }
 

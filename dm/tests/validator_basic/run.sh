@@ -748,7 +748,6 @@ function test_update_validator() {
 	run_sql_source1 "delete from $db_name.t1 where id=1"
 	# check validator before start, should pass
 	# validate pass
-	read -n 1000
 	trigger_checkpoint_flush
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
@@ -776,22 +775,26 @@ function test_update_validator() {
 		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
 		"new\/ignored\/resolved: 0\/0\/0" 1
 	# set gtid_executed again, should be triggered by dml event
-	# gtid_executed=($(get_gtid_executed $MYSQL_HOST1 $MYSQL_PORT1))
-	# run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-	# 	"validation update test -s $SOURCE_ID1 --cutover-binlog-gtid $gtid_executed" \
-	# 	"\"result\": true" 2
-	# run_sql_source1 "insert into $db_name.t1(id, name) values (4, 'c')"
-	# sleep 1.5
-	# run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-	# 	"query-status test" \
-	# 	"\"synced\": true" 1
-	# check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	# run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-	# 	"query-status test" \
-	# 	"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/1\"" 1 \
-	# 	"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
-	# 	"new\/ignored\/resolved: 0\/0\/0" 1 \
-	# 	"\"cutoverBinlogGtid\": \"\"" 1
+	gtid_executed=($(get_gtid_executed $MYSQL_HOST1 $MYSQL_PORT1))
+	extracted_number=$(echo "$gtid_executed" | grep -Eo '[0-9]+$')
+	incremented_number=$((extracted_number + 1))
+	gtid_cutover=$(echo "$gtid_executed" | sed "s/${extracted_number}$/${incremented_number}/")
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test -s $SOURCE_ID1 --cutover-binlog-gtid $gtid_cutover" \
+		"\"result\": true" 2
+	run_sql_source1 "insert into $db_name.t1(id, name) values (4, 'c')"
+	# directly sleep without flush, can cutover by itself
+	sleep 1.5
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"cutoverBinlogGtid\": \"\"" 1
 }
 
 run_standalone $*
