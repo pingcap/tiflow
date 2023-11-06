@@ -60,6 +60,9 @@ type Config struct {
 	// exposed to the outside users.
 	AvroEnableWatermark bool
 
+	// canal-json only
+	ContentCompatible bool
+
 	// for sinking to cloud storage
 	Delimiter            string
 	Quote                string
