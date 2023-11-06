@@ -25,7 +25,6 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -279,7 +278,7 @@ func fromCsvValToColValue(csvConfig *common.Config, csvVal any, ft types.FieldTy
 }
 
 // fromColValToCsvVal converts column from TiDB type to csv type.
-func fromColValToCsvVal(csvConfig *common.Config, col *model.Column, ft *types.FieldType) (any, error) {
+func fromColValToCsvVal(csvConfig *common.Config, col *model.Column) (any, error) {
 	if col.Value == nil {
 		return nil, nil
 	}
@@ -310,7 +309,7 @@ func fromColValToCsvVal(csvConfig *common.Config, col *model.Column, ft *types.F
 		if v, ok := col.Value.(string); ok {
 			return v, nil
 		}
-		enumVar, err := types.ParseEnumValue(ft.GetElems(), col.Value.(uint64))
+		enumVar, err := types.ParseEnumValue(col.FieldType.GetElems(), col.Value.(uint64))
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrCSVEncodeFailed, err)
 		}
@@ -319,7 +318,7 @@ func fromColValToCsvVal(csvConfig *common.Config, col *model.Column, ft *types.F
 		if v, ok := col.Value.(string); ok {
 			return v, nil
 		}
-		setVar, err := types.ParseSetValue(ft.GetElems(), col.Value.(uint64))
+		setVar, err := types.ParseSetValue(col.FieldType.GetElems(), col.Value.(uint64))
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrCSVEncodeFailed, err)
 		}
@@ -342,7 +341,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 	}
 	if e.IsDelete() {
 		csvMsg.opType = operationDelete
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.ColInfos)
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns)
 		if err != nil {
 			return nil, err
 		}
@@ -353,7 +352,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 			csvMsg.opType = operationUpdate
 		}
 		// for insert and update operation, we only record the after columns.
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.ColInfos)
+		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns)
 		if err != nil {
 			return nil, err
 		}
@@ -388,16 +387,16 @@ func csvMsg2RowChangedEvent(csvConfig *common.Config, csvMsg *csvMessage, ticols
 	return e, nil
 }
 
-func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.Column, colInfos []rowcodec.ColInfo) ([]any, error) {
+func rowChangeColumns2CSVColumns(csvConfig *common.Config, cols []*model.Column) ([]any, error) {
 	var csvColumns []any
-	for i, column := range cols {
+	for _, column := range cols {
 		// column could be nil in a condition described in
 		// https://github.com/pingcap/tiflow/issues/6198#issuecomment-1191132951
 		if column == nil {
 			continue
 		}
 
-		converted, err := fromColValToCsvVal(csvConfig, column, colInfos[i].Ft)
+		converted, err := fromColValToCsvVal(csvConfig, column)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
