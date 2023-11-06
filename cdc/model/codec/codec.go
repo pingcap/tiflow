@@ -192,7 +192,6 @@ func redoLogFromV1(rv1 *codecv1.RedoLog) (r *model.RedoLog) {
 			CommitTs:            rv1.RedoRow.Row.CommitTs,
 			RowID:               rv1.RedoRow.Row.RowID,
 			Table:               tableNameFromV1(rv1.RedoRow.Row.Table),
-			ColInfos:            rv1.RedoRow.Row.ColInfos,
 			TableInfo:           rv1.RedoRow.Row.TableInfo,
 			Columns:             make([]*model.Column, 0, len(rv1.RedoRow.Row.Columns)),
 			PreColumns:          make([]*model.Column, 0, len(rv1.RedoRow.Row.PreColumns)),

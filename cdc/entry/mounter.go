@@ -334,14 +334,13 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 
 func datum2Column(
 	tableInfo *model.TableInfo, datums map[int64]types.Datum,
-) ([]*model.Column, []types.Datum, []*timodel.ColumnInfo, []rowcodec.ColInfo, error) {
+) ([]*model.Column, []types.Datum, []*timodel.ColumnInfo, error) {
 	cols := make([]*model.Column, len(tableInfo.RowColumnsOffset))
 	rawCols := make([]types.Datum, len(tableInfo.RowColumnsOffset))
 
 	// columnInfos and rowColumnInfos hold different column metadata,
 	// they should have the same length and order.
 	columnInfos := make([]*timodel.ColumnInfo, len(tableInfo.RowColumnsOffset))
-	rowColumnInfos := make([]rowcodec.ColInfo, len(tableInfo.RowColumnsOffset))
 
 	_, _, extendColumnInfos := tableInfo.GetRowColInfos()
 
@@ -368,7 +367,7 @@ func datum2Column(
 			colDatums, colValue, size, warn, err = getDefaultOrZeroValue(colInfo)
 		}
 		if err != nil {
-			return nil, nil, nil, nil, errors.Trace(err)
+			return nil, nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
 			log.Warn(warn, zap.String("table", tableInfo.TableName.String()),
@@ -378,6 +377,7 @@ func datum2Column(
 		defaultValue := GetDDLDefaultDefinition(colInfo)
 		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
+		extColInfo := extendColumnInfos[idx]
 		cols[offset] = &model.Column{
 			Name:      colName,
 			Type:      colInfo.GetType(),
@@ -386,13 +386,17 @@ func datum2Column(
 			Value:     colValue,
 			Default:   defaultValue,
 			Flag:      tableInfo.ColumnsFlag[colID],
+
+			ID:            colInfo.ID,
+			FieldType:     extColInfo.Ft,
+			VirtualGenCol: extColInfo.VirtualGenCol,
+			IsPKHandle:    extColInfo.IsPKHandle,
 			// ApproximateBytes = column data size + column struct size
 			ApproximateBytes: size + sizeOfEmptyColumn,
 		}
 		columnInfos[offset] = colInfo
-		rowColumnInfos[offset] = extendColumnInfos[idx]
 	}
-	return cols, rawCols, columnInfos, rowColumnInfos, nil
+	return cols, rawCols, columnInfos, nil
 }
 
 // return error if cannot get the expected checksum from the decoder
@@ -478,11 +482,10 @@ func (m *mounter) verifyChecksum(
 
 func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, dataSize int64) (*model.RowChangedEvent, model.RowChangedDatums, error) {
 	var (
-		rawRow            model.RowChangedDatums
-		columnInfos       []*timodel.ColumnInfo
-		extendColumnInfos []rowcodec.ColInfo
-		matched           bool
-		err               error
+		rawRow      model.RowChangedDatums
+		columnInfos []*timodel.ColumnInfo
+		matched     bool
+		err         error
 
 		checksum *integrity.Checksum
 
@@ -499,7 +502,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
-		preCols, preRawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.PreRow)
+		preCols, preRawCols, columnInfos, err = datum2Column(tableInfo, row.PreRow)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -528,7 +531,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		current uint32
 	)
 	if row.RowExist {
-		cols, rawCols, columnInfos, extendColumnInfos, err = datum2Column(tableInfo, row.Row)
+		cols, rawCols, columnInfos, err = datum2Column(tableInfo, row.Row)
 		if err != nil {
 			return nil, rawRow, errors.Trace(err)
 		}
@@ -581,7 +584,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			TableID:     row.PhysicalTableID,
 			IsPartition: tableInfo.GetPartitionInfo() != nil,
 		},
-		ColInfos:   extendColumnInfos,
 		TableInfo:  tableInfo,
 		Columns:    cols,
 		PreColumns: preCols,

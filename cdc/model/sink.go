@@ -25,7 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -315,8 +315,7 @@ type RowChangedEvent struct {
 
 	// Table contains the table name and table ID.
 	// NOTICE: We store the physical table ID here, not the logical table ID.
-	Table    *TableName         `json:"table" msg:"table"`
-	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
+	Table *TableName `json:"table" msg:"table"`
 	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
 	// not the physical ID.
 	// For normal table, there is only one ID, which is the physical ID.
@@ -439,10 +438,9 @@ func (r *RowChangedEvent) GetHandleKeyColumnValues() []string {
 	return result
 }
 
-// HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
-	pkeyCols := make([]*Column, 0)
-	pkeyColInfos := make([]rowcodec.ColInfo, 0)
+// GetHandleKeyColumns return handle key columns.
+func (r *RowChangedEvent) GetHandleKeyColumns() []*Column {
+	result := make([]*Column, 0)
 
 	var cols []*Column
 	if r.IsDelete() {
@@ -451,15 +449,12 @@ func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
 		cols = r.Columns
 	}
 
-	for i, col := range cols {
+	for _, col := range cols {
 		if col != nil && col.Flag.IsHandleKey() {
-			pkeyCols = append(pkeyCols, col)
-			pkeyColInfos = append(pkeyColInfos, r.ColInfos[i])
+			result = append(result, col)
 		}
 	}
-
-	// It is okay not to have handle keys, so the empty array is an acceptable result
-	return pkeyCols, pkeyColInfos
+	return result
 }
 
 // WithHandlePrimaryFlag set `HandleKeyFlag` and `PrimaryKeyFlag`
@@ -516,6 +511,11 @@ type Column struct {
 	Flag      ColumnFlagType `json:"flag" msg:"-"`
 	Value     interface{}    `json:"value" msg:"-"`
 	Default   interface{}    `json:"default" msg:"-"`
+
+	ID            int64            `json:"-" msg:"-"`
+	IsPKHandle    bool             `json:"-" msg:"-"`
+	VirtualGenCol bool             `json:"-" msg:"-"`
+	FieldType     *types.FieldType `json:"-" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-"`

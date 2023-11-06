@@ -29,7 +29,6 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -48,22 +47,18 @@ type BatchEncoder struct {
 	config *common.Config
 }
 
-type avroEncodeInput struct {
-	columns  []*model.Column
-	colInfos []rowcodec.ColInfo
+type columnArray []*model.Column
+
+func (r columnArray) Less(i, j int) bool {
+	return r[i].ID < r[j].ID
 }
 
-func (r *avroEncodeInput) Less(i, j int) bool {
-	return r.colInfos[i].ID < r.colInfos[j].ID
+func (r columnArray) Len() int {
+	return len(r)
 }
 
-func (r *avroEncodeInput) Len() int {
-	return len(r.columns)
-}
-
-func (r *avroEncodeInput) Swap(i, j int) {
-	r.colInfos[i], r.colInfos[j] = r.colInfos[j], r.colInfos[i]
-	r.columns[i], r.columns[j] = r.columns[j], r.columns[i]
+func (r columnArray) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
 }
 
 type avroEncodeResult struct {
@@ -75,17 +70,13 @@ type avroEncodeResult struct {
 }
 
 func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
-	cols, colInfos := e.HandleKeyColInfos()
+	keyColumns := e.GetHandleKeyColumns()
 	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
 	// todo: disallow force replicate mode if using the avro.
-	if len(cols) == 0 {
+	if len(keyColumns) == 0 {
 		return nil, nil
 	}
 
-	keyColumns := &avroEncodeInput{
-		columns:  cols,
-		colInfos: colInfos,
-	}
 	avroCodec, header, err := a.getKeySchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, keyColumns)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -119,10 +110,10 @@ func topicName2SchemaSubjects(topicName, subjectSuffix string) string {
 }
 
 func (a *BatchEncoder) getValueSchemaCodec(
-	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, input *avroEncodeInput,
+	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, columns []*model.Column,
 ) (*goavro.Codec, []byte, error) {
 	schemaGen := func() (string, error) {
-		schema, err := a.value2AvroSchema(tableName, input)
+		schema, err := a.value2AvroSchema(tableName, columns)
 		if err != nil {
 			log.Error("avro: generating value schema failed", zap.Error(err))
 			return "", errors.Trace(err)
@@ -139,7 +130,7 @@ func (a *BatchEncoder) getValueSchemaCodec(
 }
 
 func (a *BatchEncoder) getKeySchemaCodec(
-	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, keyColumns *avroEncodeInput,
+	ctx context.Context, topic string, tableName *model.TableName, tableVersion uint64, keyColumns []*model.Column,
 ) (*goavro.Codec, []byte, error) {
 	schemaGen := func() (string, error) {
 		schema, err := a.key2AvroSchema(tableName, keyColumns)
@@ -163,20 +154,16 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 		return nil, nil
 	}
 
-	input := &avroEncodeInput{
-		columns:  e.Columns,
-		colInfos: e.ColInfos,
-	}
-	if len(input.columns) == 0 {
+	if len(e.Columns) == 0 {
 		return nil, nil
 	}
 
-	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, input)
+	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, e.Table, e.TableInfo.Version, e.Columns)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	native, err := a.columns2AvroData(input)
+	native, err := a.columns2AvroData(e.Columns)
 	if err != nil {
 		log.Error("avro: converting value to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
@@ -560,7 +547,7 @@ func (a *BatchEncoder) schemaWithExtension(
 
 func (a *BatchEncoder) columns2AvroSchema(
 	tableName *model.TableName,
-	input *avroEncodeInput,
+	columns []*model.Column,
 ) (*avroSchemaTop, error) {
 	top := &avroSchemaTop{
 		Tp:        "record",
@@ -568,8 +555,8 @@ func (a *BatchEncoder) columns2AvroSchema(
 		Namespace: getAvroNamespace(a.namespace, tableName.Schema),
 		Fields:    nil,
 	}
-	for i, col := range input.columns {
-		avroType, err := a.columnToAvroSchema(col, input.colInfos[i].Ft)
+	for _, col := range columns {
+		avroType, err := a.columnToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
@@ -578,7 +565,7 @@ func (a *BatchEncoder) columns2AvroSchema(
 
 		copied := *col
 		copied.Value = copied.Default
-		defaultValue, _, err := a.columnToAvroData(&copied, input.colInfos[i].Ft)
+		defaultValue, _, err := a.columnToAvroData(&copied)
 		if err != nil {
 			log.Error("fail to get default value for avro schema")
 			return nil, errors.Trace(err)
@@ -615,13 +602,13 @@ func (a *BatchEncoder) columns2AvroSchema(
 
 func (a *BatchEncoder) value2AvroSchema(
 	tableName *model.TableName,
-	input *avroEncodeInput,
+	columns []*model.Column,
 ) (string, error) {
 	if a.config.EnableRowChecksum {
-		sort.Sort(input)
+		sort.Sort(columnArray(columns))
 	}
 
-	top, err := a.columns2AvroSchema(tableName, input)
+	top, err := a.columns2AvroSchema(tableName, columns)
 	if err != nil {
 		return "", err
 	}
@@ -643,7 +630,7 @@ func (a *BatchEncoder) value2AvroSchema(
 
 func (a *BatchEncoder) key2AvroSchema(
 	tableName *model.TableName,
-	keyColumns *avroEncodeInput,
+	keyColumns []*model.Column,
 ) (string, error) {
 	top, err := a.columns2AvroSchema(tableName, keyColumns)
 	if err != nil {
@@ -659,14 +646,14 @@ func (a *BatchEncoder) key2AvroSchema(
 }
 
 func (a *BatchEncoder) columns2AvroData(
-	input *avroEncodeInput,
+	columns []*model.Column,
 ) (map[string]interface{}, error) {
-	ret := make(map[string]interface{}, len(input.columns))
-	for i, col := range input.columns {
+	ret := make(map[string]interface{}, len(columns))
+	for _, col := range columns {
 		if col == nil {
 			continue
 		}
-		data, str, err := a.columnToAvroData(col, input.colInfos[i].Ft)
+		data, str, err := a.columnToAvroData(col)
 		if err != nil {
 			return nil, err
 		}
@@ -683,10 +670,7 @@ func (a *BatchEncoder) columns2AvroData(
 	return ret, nil
 }
 
-func (a *BatchEncoder) columnToAvroSchema(
-	col *model.Column,
-	ft *types.FieldType,
-) (interface{}, error) {
+func (a *BatchEncoder) columnToAvroSchema(col *model.Column) (interface{}, error) {
 	tt := getTiDBTypeFromColumn(col)
 	switch col.Type {
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24:
@@ -727,7 +711,7 @@ func (a *BatchEncoder) columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeBit:
-		displayFlen := ft.GetFlen()
+		displayFlen := col.FieldType.GetFlen()
 		if displayFlen == -1 {
 			displayFlen, _ = mysql.GetDefaultFieldLengthAndDecimal(col.Type)
 		}
@@ -740,8 +724,8 @@ func (a *BatchEncoder) columnToAvroSchema(
 		}, nil
 	case mysql.TypeNewDecimal:
 		if a.config.AvroDecimalHandlingMode == common.DecimalHandlingModePrecise {
-			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(ft.GetType())
-			displayFlen, displayDecimal := ft.GetFlen(), ft.GetDecimal()
+			defaultFlen, defaultDecimal := mysql.GetDefaultFieldLengthAndDecimal(col.FieldType.GetType())
+			displayFlen, displayDecimal := col.FieldType.GetFlen(), col.FieldType.GetDecimal()
 			// length not specified, set it to system type default
 			if displayFlen == -1 {
 				displayFlen = defaultFlen
@@ -782,8 +766,8 @@ func (a *BatchEncoder) columnToAvroSchema(
 			Parameters: map[string]string{tidbType: tt},
 		}, nil
 	case mysql.TypeEnum, mysql.TypeSet:
-		es := make([]string, 0, len(ft.GetElems()))
-		for _, e := range ft.GetElems() {
+		es := make([]string, 0, len(col.FieldType.GetElems()))
+		for _, e := range col.FieldType.GetElems() {
 			e = escapeEnumAndSetOptions(e)
 			es = append(es, e)
 		}
@@ -815,10 +799,7 @@ func (a *BatchEncoder) columnToAvroSchema(
 	}
 }
 
-func (a *BatchEncoder) columnToAvroData(
-	col *model.Column,
-	ft *types.FieldType,
-) (interface{}, string, error) {
+func (a *BatchEncoder) columnToAvroData(col *model.Column) (interface{}, string, error) {
 	if col.Value == nil {
 		return nil, "null", nil
 	}
@@ -933,7 +914,7 @@ func (a *BatchEncoder) columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		elements := ft.GetElems()
+		elements := col.FieldType.GetElems()
 		number := col.Value.(uint64)
 		enumVar, err := types.ParseEnumValue(elements, number)
 		if err != nil {
@@ -945,7 +926,7 @@ func (a *BatchEncoder) columnToAvroData(
 		if v, ok := col.Value.(string); ok {
 			return v, "string", nil
 		}
-		elements := ft.GetElems()
+		elements := col.FieldType.GetElems()
 		number := col.Value.(uint64)
 		setVar, err := types.ParseSetValue(elements, number)
 		if err != nil {
