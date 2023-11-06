@@ -164,7 +164,7 @@ func newJSONMessageForDML(
 		const prefix string = ",\"sqlType\":"
 		out.RawString(prefix)
 		emptyColumn := true
-		for _, col := range columns {
+		for idx, col := range columns {
 			if col != nil {
 				if onlyHandleKey && !col.Flag.IsHandleKey() {
 					continue
@@ -175,7 +175,8 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				mysqlType := getMySQLType(col)
+				extColInfo := e.ColInfos[idx]
+				mysqlType := extColInfo.Ft.CompactStr()
 				javaType, err := getJavaSQLType(col, mysqlType)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
