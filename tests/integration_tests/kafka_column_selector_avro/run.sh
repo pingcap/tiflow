@@ -37,7 +37,7 @@ function run() {
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	changefeed_id="test"
-	TOPIC_NAME="column-selector-test"
+	TOPIC_NAME="column-selector-avro-test"
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=avro&enable-tidb-extension=true&avro-enable-watermark=true"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c ${changefeed_id} --config="$CUR/conf/changefeed.toml" --schema-registry=http://127.0.0.1:8088
 
