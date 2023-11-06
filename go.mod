@@ -17,7 +17,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.29
 	github.com/benbjohnson/clock v1.3.5
 	github.com/bradleyjkemp/grpc-tools v0.2.5
-	github.com/bytedance/sonic v1.10.2
 	github.com/cenkalti/backoff/v4 v4.0.2
 	github.com/chaos-mesh/go-sqlsmith v0.0.0-20220905074648-403033efad45
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
@@ -137,8 +136,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.14.14 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.20.1 // indirect
 	github.com/aws/smithy-go v1.13.5 // indirect
-	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
-	github.com/chenzhuoyu/iasm v0.9.0 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.4 // indirect
@@ -149,12 +146,9 @@ require (
 	github.com/jellydator/ttlcache/v3 v3.0.1 // indirect
 	github.com/jfcg/sixb v1.3.8 // indirect
 	github.com/jfcg/sorty/v2 v2.1.0 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
-	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.27.2 // indirect
 	k8s.io/apimachinery v0.27.2 // indirect
