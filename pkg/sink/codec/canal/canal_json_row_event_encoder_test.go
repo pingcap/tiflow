@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -602,6 +604,12 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
+		ColInfos: []rowcodec.ColInfo{
+			{
+				ID: 0,
+				Ft: types.NewFieldType(mysql.TypeVarchar),
+			},
+		},
 	}
 
 	tests := []struct {
@@ -675,6 +683,12 @@ func TestMaxMessageBytes(t *testing.T) {
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
+		ColInfos: []rowcodec.ColInfo{
+			{
+				ID: 0,
+				Ft: types.NewFieldType(mysql.TypeVarchar),
+			},
+		},
 	}
 
 	ctx := context.Background()
