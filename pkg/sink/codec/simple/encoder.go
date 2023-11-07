@@ -73,6 +73,15 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 //
 //nolint:unused
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	// TODO implement me
-	panic("implement me")
+	var message *message
+	if event.IsBootstrap {
+		message = newBootstrapMessage(event)
+	} else {
+		message = newDDLMessage(event)
+	}
+	value, err := json.Marshal(message)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+	return common.NewDDLMsg(config.ProtocolSimple, nil, value, event), nil
 }

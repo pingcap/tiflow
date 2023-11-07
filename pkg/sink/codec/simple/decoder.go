@@ -84,6 +84,14 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 // NextDDLEvent returns the next DDL event if exists
 func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
-	// TODO implement me
-	panic("implement me")
+	if d.msg.Type != DDLType || d.msg.Type != BootstrapType {
+		return nil, cerror.ErrCodecDecode.GenWithStack(
+			"not found ddl event message")
+	}
+	ddl, err := d.msg.TableSchema.ToDDLEvent(d.msg)
+	if err != nil {
+		return nil, err
+	}
+	d.msg = nil
+	return ddl, nil
 }
