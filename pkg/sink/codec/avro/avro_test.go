@@ -60,56 +60,78 @@ type avroTestColumnTuple struct {
 
 var avroTestColumns = []*avroTestColumnTuple{
 	{
-		model.Column{Name: "tiny", Value: int64(1), Type: mysql.TypeTiny},
-		rowcodec.ColInfo{
+		model.Column{
 			ID:            1,
+			Name:          "tiny",
+			Value:         int64(1),
+			Type:          mysql.TypeTiny,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeTiny),
+			FieldType:     types.NewFieldType(mysql.TypeTiny),
+		},
+		rowcodec.ColInfo{
+			ID: 1,
 		},
 		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT"}},
 		int32(1), "int",
 	},
 	{
-		model.Column{Name: "short", Value: int64(1), Type: mysql.TypeShort},
-		rowcodec.ColInfo{
+		model.Column{
 			ID:            2,
+			Name:          "short",
+			Value:         int64(1),
+			Type:          mysql.TypeShort,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeShort),
+			FieldType:     types.NewFieldType(mysql.TypeShort),
+		},
+		rowcodec.ColInfo{
+			ID: 2,
 		},
 		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT"}},
 		int32(1), "int",
 	},
 	{
-		model.Column{Name: "int24", Value: int64(1), Type: mysql.TypeInt24},
-		rowcodec.ColInfo{
+		model.Column{
 			ID:            3,
+			Name:          "int24",
+			Value:         int64(1),
+			Type:          mysql.TypeInt24,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeInt24),
+			FieldType:     types.NewFieldType(mysql.TypeInt24),
+		},
+		rowcodec.ColInfo{
+			ID: 3,
 		},
 		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT"}},
 		int32(1), "int",
 	},
 	{
-		model.Column{Name: "long", Value: int64(1), Type: mysql.TypeLong},
-		rowcodec.ColInfo{
+		model.Column{
 			ID:            4,
+			Name:          "long",
+			Value:         int64(1),
+			Type:          mysql.TypeLong,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeLong),
+			FieldType:     types.NewFieldType(mysql.TypeLong),
+		},
+		rowcodec.ColInfo{
+			ID: 4,
 		},
 		avroSchema{Type: "int", Parameters: map[string]string{"tidb_type": "INT"}},
 		int32(1), "int",
 	},
 	{
-		model.Column{Name: "longlong", Value: int64(1), Type: mysql.TypeLonglong},
-		rowcodec.ColInfo{
+		model.Column{
 			ID:            5,
+			Name:          "longlong",
+			Value:         int64(1),
+			Type:          mysql.TypeLonglong,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            types.NewFieldType(mysql.TypeLonglong),
+			FieldType:     types.NewFieldType(mysql.TypeLonglong),
 		},
 		avroSchema{Type: "long", Parameters: map[string]string{"tidb_type": "BIGINT"}},
 		int64(1), "long",
