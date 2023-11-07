@@ -56,6 +56,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -3428,7 +3429,12 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	// 1. GTID is not enabled
 	// 2. location already has GTID position
 	// 3. location is totally new, has no position info
+<<<<<<< HEAD
 	if !s.cfg.EnableGTID || location.GTIDSetStr() != "" || location.Position.Name == "" {
+=======
+	// 4. location is too early thus not a COMMIT location, which happens when it's reset by other logic
+	if !s.cfg.EnableGTID || !gtid.CheckGTIDSetEmpty(location.GetGTID()) || location.Position.Name == "" || location.Position.Pos == 4 {
+>>>>>>> 955296da89 (dm: reduce gSet.String() usage by using zeroGSet for checking empty (#9944))
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController
