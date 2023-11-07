@@ -21,6 +21,7 @@ import (
 	"github.com/mailru/easyjson/jwriter"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -176,7 +177,11 @@ func newJSONMessageForDML(
 					out.RawByte(',')
 				}
 				extColInfo := e.ColInfos[idx]
-				mysqlType := extColInfo.Ft.CompactStr()
+				mysqlType := extColInfo.Ft.String()
+				if extColInfo.Ft.GetType() == mysql.TypeYear {
+					mysqlType = "year"
+				}
+
 				javaType, err := getJavaSQLType(col, mysqlType)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)

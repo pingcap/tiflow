@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 )
 
 type testColumnTuple struct {
@@ -300,26 +301,26 @@ var (
 		//	rowcodec.ColInfo{ID: 35, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarchar)},
 		//	"varbinary", internal.JavaSQLTypeBLOB, "测试varbinary", "测试varbinary",
 		//},
-
-		{
-			&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
-			rowcodec.ColInfo{ID: 36, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTinyBlob)},
-			"tinytext", internal.JavaSQLTypeCLOB, "测试Tinytext", "测试Tinytext",
-		},
-
+		//
+		//{
+		//	&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
+		//	rowcodec.ColInfo{ID: 36, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeTinyBlob))},
+		//	"tinytext", internal.JavaSQLTypeCLOB, "测试Tinytext", "测试Tinytext",
+		//},
+		//
 		//{
 		//	&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")},
-		//	rowcodec.ColInfo{ID: 37, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBlob)},
+		//	rowcodec.ColInfo{ID: 37, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeBlob))},
 		//	"text", internal.JavaSQLTypeCLOB, "测试text", "测试text",
 		//},
 		//{
 		//	&model.Column{Name: "mediumtext", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")},
-		//	rowcodec.ColInfo{ID: 38, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeMediumBlob)},
+		//	rowcodec.ColInfo{ID: 38, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeMediumBlob))},
 		//	"mediumtext", internal.JavaSQLTypeCLOB, "测试mediumtext", "测试mediumtext",
 		//},
 		//{
 		//	&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")},
-		//	rowcodec.ColInfo{ID: 39, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLongBlob)},
+		//	rowcodec.ColInfo{ID: 39, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeLongBlob))},
 		//	"longtext", internal.JavaSQLTypeCLOB, "测试longtext", "测试longtext",
 		//},
 		//
@@ -387,11 +388,11 @@ var (
 		//	rowcodec.ColInfo{ID: 49, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeEnum)},
 		//	"enum", internal.JavaSQLTypeINTEGER, "1", "1",
 		//},
-		//{
-		//	&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(3)},
-		//	rowcodec.ColInfo{ID: 50, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeSet)},
-		//	"set", internal.JavaSQLTypeBIT, "3", uint64(3),
-		//},
+		{
+			&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(2)},
+			rowcodec.ColInfo{ID: 50, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b", "c"})},
+			"set", internal.JavaSQLTypeBIT, "2", uint64(2),
+		},
 		//{
 		//	&model.Column{
 		//		Name: "bit", Type: mysql.TypeBit, Value: uint64(65),

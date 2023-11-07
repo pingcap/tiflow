@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tiflow/cdc/model"
 )
@@ -17,5 +18,11 @@ func SetUnsigned(ft *types.FieldType) *types.FieldType {
 
 func SetElems(ft *types.FieldType, elems []string) *types.FieldType {
 	ft.SetElems(elems)
+	return ft
+}
+
+func NewTextFieldType(ft *types.FieldType) *types.FieldType {
+	ft.SetCollate(mysql.DefaultCollationName)
+	ft.SetCharset(mysql.DefaultCharset)
 	return ft
 }
