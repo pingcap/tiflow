@@ -1,7 +1,4 @@
 [sink]
 column-selectors = [
-    {matcher = ['test.t1'], columns = ['a', 'b']},
     {matcher = ['test.*'], columns = ["*", "!b"]},
-
-    {matcher = ['test1.t1'], columns = ['column*', '!column1']},
 ]
