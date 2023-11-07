@@ -489,6 +489,7 @@ var (
 		},
 		Columns:    testColumns,
 		PreColumns: nil,
+		ColInfos:   testColInfos,
 	}
 
 	testCaseUpdate = &model.RowChangedEvent{
@@ -499,6 +500,7 @@ var (
 		},
 		Columns:    testColumns,
 		PreColumns: testColumns,
+		ColInfos:   testColInfos,
 	}
 
 	testCaseDelete = &model.RowChangedEvent{
@@ -509,6 +511,7 @@ var (
 		},
 		Columns:    nil,
 		PreColumns: testColumns,
+		ColInfos:   testColInfos,
 	}
 
 	testCaseDDL = &model.DDLEvent{
