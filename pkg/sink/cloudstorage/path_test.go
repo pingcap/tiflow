@@ -17,9 +17,14 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -274,4 +279,52 @@ func TestIsSchemaFile(t *testing.T) {
 		require.Equal(t, tt.expect, IsSchemaFile(tt.path),
 			"testCase: %s, path: %v", tt.name, tt.path)
 	}
+}
+
+func TestCheckOrWriteSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	f := testFilePathGenerator(ctx, t, dir)
+
+	var columns []*timodel.ColumnInfo
+	ft := types.NewFieldType(mysql.TypeLong)
+	ft.SetFlag(mysql.PriKeyFlag | mysql.NotNullFlag)
+	col := &timodel.ColumnInfo{
+		Name:         timodel.NewCIStr("Id"),
+		FieldType:    *ft,
+		DefaultValue: 10,
+	}
+	columns = append(columns, col)
+	tableInfo := &model.TableInfo{
+		TableInfo: &timodel.TableInfo{Columns: columns},
+		Version:   100,
+		TableName: model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 20,
+		},
+	}
+
+	table := VersionedTableName{
+		TableNameWithPhysicTableID: tableInfo.TableName,
+		TableInfoVersion:           tableInfo.Version,
+	}
+
+	err := f.CheckOrWriteSchema(ctx, table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, tableInfo.Version, f.versionMap[table])
+
+	// test only table version changed, schema file should be reused
+	table.TableInfoVersion = 101
+	err = f.CheckOrWriteSchema(ctx, table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, tableInfo.Version, f.versionMap[table])
+
+	dir = filepath.Join(dir, "test/table1/meta")
+	cnt, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(cnt))
 }
