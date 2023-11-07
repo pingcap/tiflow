@@ -140,7 +140,7 @@ func NewCloudStorageSink(
 		cancel:          wgCancel,
 		dead:            make(chan struct{}),
 	}
-	s.alive.msgCh = chann.NewAutoDrainChann[eventFragment]()
+	s.alive.msgCh = chann.NewDrainableChann[eventFragment]()
 
 	encodedCh := make(chan eventFragment, defaultChannelSize)
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
