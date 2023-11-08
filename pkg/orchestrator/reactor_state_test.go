@@ -123,6 +123,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
+						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -177,6 +178,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
+						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -236,6 +238,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity: config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
+						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -330,6 +333,7 @@ func TestPatchInfo(t *testing.T) {
 			Scheduler:                    defaultConfig.Scheduler,
 			Integrity:                    defaultConfig.Integrity,
 			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
+			SQLMode:                      defaultConfig.SQLMode,
 		},
 	}
 	cfInfo.RmUnusedFields()
@@ -352,6 +356,7 @@ func TestPatchInfo(t *testing.T) {
 			Scheduler:                    defaultConfig.Scheduler,
 			Integrity:                    defaultConfig.Integrity,
 			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
+			SQLMode:                      defaultConfig.SQLMode,
 		},
 	}
 	cfInfo.RmUnusedFields()
