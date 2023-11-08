@@ -48,15 +48,16 @@ const (
 	DeleteType EventType = "DELETE"
 )
 
-type Column struct {
+// ColumnSchema is the schema of the column.
+type ColumnSchema struct {
 	Name     string      `json:"name"`
 	DataType string      `json:"dataType"`
 	Nullable string      `json:"nullable"`
-	Default  interface{} `json:"default,omitempty"`
+	Default  interface{} `json:"default"`
 }
 
 // FromTiColumnInfo converts from TiDB ColumnInfo to TableCol.
-func (c *Column) FromTiColumnInfo(col *timodel.ColumnInfo, outputColumnID bool) {
+func (c *ColumnSchema) FromTiColumnInfo(col *timodel.ColumnInfo) {
 	c.Name = col.Name.O
 	c.DataType = strings.ToUpper(types.TypeToStr(col.GetType(), col.GetCharset()))
 	if mysql.HasUnsignedFlag(col.GetFlag()) {
@@ -69,7 +70,7 @@ func (c *Column) FromTiColumnInfo(col *timodel.ColumnInfo, outputColumnID bool) 
 }
 
 // ToTiColumnInfo converts from TableCol to TiDB ColumnInfo.
-func (c *Column) ToTiColumnInfo(indexes []*Index) (*timodel.ColumnInfo, error) {
+func (c *ColumnSchema) ToTiColumnInfo(indexes []*IndexSchema) (*timodel.ColumnInfo, error) {
 	col := new(timodel.ColumnInfo)
 
 	col.Name = timodel.NewCIStr(c.Name)
@@ -84,7 +85,7 @@ func (c *Column) ToTiColumnInfo(indexes []*Index) (*timodel.ColumnInfo, error) {
 		col.SetCharset(charset.CharsetUTF8MB4)
 	}
 
-	var primaryKey *Index
+	var primaryKey *IndexSchema
 	for _, index := range indexes {
 		if index.Primary == "true" {
 			primaryKey = index
@@ -111,7 +112,8 @@ func (c *Column) ToTiColumnInfo(indexes []*Index) (*timodel.ColumnInfo, error) {
 	return col, nil
 }
 
-type Index struct {
+// IndexSchema is the schema of the index.
+type IndexSchema struct {
 	Name     string   `json:"name"`
 	Unique   string   `json:"unique,omitempty"`
 	Primary  string   `json:"primary,omitempty"`
@@ -120,7 +122,7 @@ type Index struct {
 }
 
 // FromTiIndexInfo converts from TiDB IndexInfo to Index.
-func (i *Index) FromTiIndexInfo(index *timodel.IndexInfo, tableInfo *timodel.TableInfo) {
+func (i *IndexSchema) FromTiIndexInfo(index *timodel.IndexInfo, tableInfo *timodel.TableInfo) {
 	i.Name = index.Name.O
 
 	if index.Unique {
@@ -150,7 +152,7 @@ func (i *Index) FromTiIndexInfo(index *timodel.IndexInfo, tableInfo *timodel.Tab
 }
 
 // ToTiIndexInfo converts from Index to TiDB IndexInfo.
-func (i *Index) ToTiIndexInfo() (*timodel.IndexInfo, error) {
+func (i *IndexSchema) ToTiIndexInfo() (*timodel.IndexInfo, error) {
 	index := new(timodel.IndexInfo)
 	index.Columns = make([]*timodel.IndexColumn, 0)
 	for i, col := range i.Columns {
@@ -168,9 +170,10 @@ func (i *Index) ToTiIndexInfo() (*timodel.IndexInfo, error) {
 	return index, nil
 }
 
+// TableSchema is the schema of the table.
 type TableSchema struct {
-	Columns []*Column `json:"columns"`
-	Indexes []*Index  `json:"indexes"`
+	Columns []*ColumnSchema `json:"columns"`
+	Indexes []*IndexSchema  `json:"indexes"`
 }
 
 // FromTableInfo converts from model.TableInfo to TableSchema.
@@ -184,16 +187,16 @@ func (t *TableSchema) FromTableInfo(tableInfo *model.TableInfo) {
 		return int(tiColumns[i].ID) < int(tiColumns[j].ID)
 	})
 
-	columns := make([]*Column, 0, len(tiColumns))
+	columns := make([]*ColumnSchema, 0, len(tiColumns))
 	for _, col := range tiColumns {
-		column := &Column{}
-		column.FromTiColumnInfo(col, false)
+		column := &ColumnSchema{}
+		column.FromTiColumnInfo(col)
 		columns = append(columns, column)
 	}
 
-	indexes := make([]*Index, 0, len(tableInfo.Indices))
+	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
-		index := &Index{}
+		index := &IndexSchema{}
 		index.FromTiIndexInfo(idx, tableInfo.TableInfo)
 		indexes = append(indexes, index)
 	}
@@ -231,6 +234,7 @@ func (t *TableSchema) ToTableInfo(msg *message) (*model.TableInfo, error) {
 	return info, nil
 }
 
+// ToDDLEvent converts from message to DDLEvent.
 func (t *TableSchema) ToDDLEvent(msg *message) (*model.DDLEvent, error) {
 	info, err := t.ToTableInfo(msg)
 	if err != nil {
@@ -259,9 +263,6 @@ type message struct {
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
 	// SQL is only for the DDL event.
 	SQL string `json:"sql,omitempty"`
-	// PreSchema and PreTable is only for rename table ddl event.
-	PreSchema string `json:"preSchema,omitempty"`
-	PreTable  string `json:"preTable,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
@@ -284,10 +285,6 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 		Type:        DDLType,
 		SQL:         ddl.Query,
 		TableSchema: &tableSchema,
-	}
-	if ddl.Type == timodel.ActionRenameTable {
-		msg.PreSchema = ddl.PreTableInfo.TableName.Schema
-		msg.PreTable = ddl.PreTableInfo.TableName.Table
 	}
 	return msg
 }
