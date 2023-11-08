@@ -569,6 +569,9 @@ func (a *BatchEncoder) columns2AvroSchema(
 		Fields:    nil,
 	}
 	for i, col := range input.columns {
+		if col == nil {
+			continue
+		}
 		avroType, err := a.columnToAvroSchema(col, input.colInfos[i].Ft)
 		if err != nil {
 			return nil, err

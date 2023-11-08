@@ -1,0 +1,4 @@
+[sink]
+column-selectors = [
+    {matcher = ['test.*'], columns = ["*", "!b"]},
+]

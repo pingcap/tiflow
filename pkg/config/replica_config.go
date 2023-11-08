@@ -291,6 +291,13 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err := c.Integrity.Validate(); err != nil {
 			return err
 		}
+
+		if c.Integrity.Enabled() && len(c.Sink.ColumnSelectors) != 0 {
+			log.Error("it's not allowed to enable the integrity check and column selector at the same time")
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"integrity check enabled and column selector set, not allowed")
+
+		}
 	}
 
 	if c.ChangefeedErrorStuckDuration != nil &&
