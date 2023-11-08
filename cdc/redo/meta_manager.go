@@ -166,7 +166,7 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	}
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		return m.bgFlushMeta(egCtx, m.cfg.FlushIntervalInMs)
+		return m.bgFlushMeta(egCtx)
 	})
 	eg.Go(func() error {
 		return m.bgGC(egCtx)
@@ -467,8 +467,8 @@ func (m *metaManager) Cleanup(ctx context.Context) error {
 	return m.deleteAllLogs(ctx)
 }
 
-func (m *metaManager) bgFlushMeta(egCtx context.Context, flushIntervalInMs int64) (err error) {
-	ticker := time.NewTicker(time.Duration(flushIntervalInMs) * time.Millisecond)
+func (m *metaManager) bgFlushMeta(egCtx context.Context) (err error) {
+	ticker := time.NewTicker(time.Duration(m.flushIntervalInMs) * time.Millisecond)
 	defer func() {
 		ticker.Stop()
 		log.Info("redo metaManager bgFlushMeta exits",

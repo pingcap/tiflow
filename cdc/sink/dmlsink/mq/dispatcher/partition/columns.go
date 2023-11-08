@@ -55,7 +55,7 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 		dispatchCols = row.PreColumns
 	}
 
-	offsets, ok := row.TableInfo.ColumnsByNames(r.Columns)
+	offsets, ok := row.TableInfo.OffsetsByNames(r.Columns)
 	if !ok {
 		log.Error("columns not found when dispatch event",
 			zap.Any("tableName", row.Table),
@@ -65,7 +65,11 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 	}
 
 	for idx := 0; idx < len(r.Columns); idx++ {
-		r.hasher.Write([]byte(r.Columns[idx]), []byte(model.ColumnValueString(dispatchCols[offsets[idx]].Value)))
+		col := dispatchCols[offsets[idx]]
+		if col == nil {
+			continue
+		}
+		r.hasher.Write([]byte(r.Columns[idx]), []byte(model.ColumnValueString(col.Value)))
 	}
 
 	sum32 := r.hasher.Sum32()

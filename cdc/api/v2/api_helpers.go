@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/transformer/columnselector"
 	"github.com/pingcap/tiflow/cdc/sink/validator"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -518,8 +519,16 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 	if err != nil {
 		return nil, nil, err
 	}
-
 	err = eventRouter.VerifyTables(tableInfos)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	selectors, err := columnselector.New(replicaConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	err = selectors.VerifyTables(tableInfos, eventRouter)
 	if err != nil {
 		return nil, nil, err
 	}

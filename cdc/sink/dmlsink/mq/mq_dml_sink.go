@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
+	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/transformer"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -48,6 +49,8 @@ type dmlSink struct {
 
 	alive struct {
 		sync.RWMutex
+
+		transformer transformer.Transformer
 		// eventRouter used to route events to the right topic and partition.
 		eventRouter *dispatcher.EventRouter
 		// topicManager used to manage topics.
@@ -77,6 +80,7 @@ func newDMLSink(
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
+	transformer transformer.Transformer,
 	encoderGroup codec.EncoderGroup,
 	protocol config.Protocol,
 	scheme string,
@@ -95,6 +99,7 @@ func newDMLSink(
 		dead:        make(chan struct{}),
 		scheme:      scheme,
 	}
+	s.alive.transformer = transformer
 	s.alive.eventRouter = eventRouter
 	s.alive.topicManager = topicManager
 	s.alive.worker = worker
@@ -170,6 +175,13 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 				s.cancel(err)
 				return errors.Trace(err)
 			}
+
+			err = s.alive.transformer.Apply(row)
+			if err != nil {
+				s.cancel(err)
+				return errors.Trace(err)
+			}
+
 			index, key, err := s.alive.eventRouter.GetPartitionForRowChange(row, partitionNum)
 			if err != nil {
 				s.cancel(err)
