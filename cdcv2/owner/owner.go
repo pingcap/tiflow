@@ -21,26 +21,29 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
+	"github.com/pingcap/tiflow/cdc/processor"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
-	msql "github.com/pingcap/tiflow/cdcv2/metadata/sql"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
-	"gorm.io/gorm"
 )
+
+var _ owner.Owner = &Owner{}
 
 // Owner implements the owner interface.
 type Owner struct {
 	upstreamManager    *upstream.Manager
-	captureObservation *msql.CaptureOb[*gorm.DB]
+	captureObservation metadata.CaptureObservation
 	cfg                *config.SchedulerConfig
 	storage            *sql.DB
+	changefeedUUIDMap  map[metadata.ChangefeedUUID]*changefeedImpl
 
 	liveness *model.Liveness
 
@@ -147,7 +150,7 @@ func NewOwner(
 	liveness *model.Liveness,
 	upstreamManager *upstream.Manager,
 	cfg *config.SchedulerConfig,
-	captureObservation *msql.CaptureOb[*gorm.DB],
+	captureObservation metadata.CaptureObservation,
 	querier metadata.Querier,
 	storage *sql.DB,
 ) *Owner {
@@ -174,10 +177,76 @@ func (o *Owner) Run(ctx cdcContext.Context) error {
 			// the admin job may not be processed all the time. And http api relies on
 			// admin job, which will cause all http api unavailable.
 			o.handleJobs(ctx)
+			self := o.captureObservation.Self()
+			var progress metadata.CaptureProgress = make(map[metadata.ChangefeedUUID]metadata.ChangefeedProgress)
+			for _, cf := range o.changefeedUUIDMap {
+				// tick changefeed
+				info, err := o.queryChangefeedInfo(cf.uuid)
+				if err != nil {
+					log.Warn("changefeed not found when handle a job",
+						zap.Any("job", cf),
+						zap.Error(err))
+					continue
+				}
+				//only one capture
+				cp, bt := cf.Tick(ctx, info, cf.Status, map[model.CaptureID]*model.CaptureInfo{self.ID: self})
+				// check if the changefeed tick successfully
+				if cp > 0 && bt > 0 {
+					cf.Status = &model.ChangeFeedStatus{
+						CheckpointTs:      cp,
+						MinTableBarrierTs: bt,
+					}
+					progress[cf.uuid] = metadata.ChangefeedProgress{
+						CheckpointTs:      cp,
+						MinTableBarrierTs: bt,
+					}
+				}
+			}
+			if len(progress) > 0 {
+				_ = o.captureObservation.Advance(progress)
+			}
 		case cf := <-o.captureObservation.OwnerChanges():
 			switch cf.OwnerState {
 			case metadata.SchedRemoving:
+				//stop changefeed
+				changefeed, exist := o.changefeedUUIDMap[cf.ChangefeedUUID]
+				if !exist {
+					log.Warn("changefeed not found when handle a job", zap.Any("job", cf))
+					continue
+				}
+				changefeed.Close(ctx)
+				delete(o.changefeedUUIDMap, cf.ChangefeedUUID)
+				_ = o.captureObservation.PostOwnerRemoved(cf.ChangefeedUUID, cf.TaskPosition)
 			case metadata.SchedLaunched:
+				if _, ok := o.changefeedUUIDMap[cf.ChangefeedUUID]; ok {
+					log.Panic("changefeed already launched", zap.Uint64("id", cf.ChangefeedUUID))
+				}
+				// create changefeed
+				cfInfo, err := o.queryChangefeedInfo(cf.ChangefeedUUID)
+				if err != nil {
+					log.Warn("query changefeed failed", zap.Uint64("id", cf.ChangefeedUUID))
+					continue
+				}
+				mstatus := &model.ChangeFeedStatus{
+					CheckpointTs:      cf.TaskPosition.CheckpointTs,
+					MinTableBarrierTs: cf.TaskPosition.MinTableBarrierTs,
+					AdminJobType:      cf.TaskPosition.AdminJobType,
+				}
+				up, _ := o.upstreamManager.GetDefaultUpstream()
+				cfID := model.ChangeFeedID{Namespace: cfInfo.Namespace, ID: cfInfo.ID}
+				self := o.captureObservation.Self()
+				// per changefeed schedule config
+				cfg := *o.cfg
+				cfg.ChangefeedSettings = cfInfo.Config.Scheduler
+				p := processor.NewProcessor(cfInfo, mstatus, self, cfID, up,
+					o.liveness, 0, &cfg,
+					&ownerInfoClient{
+						ownerID:  self.ID,
+						captures: []*model.CaptureInfo{self},
+					})
+				feedstateManager := newFeedStateManager(cfID, up, o.captureObservation.OnOwnerLaunched(cf.ChangefeedUUID))
+				changefeed := owner.NewChangefeed(cfID, cfInfo, mstatus, feedstateManager, up, &cfg)
+				o.changefeedUUIDMap[cf.ChangefeedUUID] = newChangefeed(changefeed, cf.ChangefeedUUID, cfInfo, mstatus, p, feedstateManager, o.captureObservation, o.querier)
 			}
 		}
 	}
@@ -202,6 +271,33 @@ func (o *ownerInfoClient) GetOwnerRevision(context.Context, model.CaptureID) (in
 // nolint:unused
 func (o *ownerInfoClient) GetCaptures(context.Context) (int64, []*model.CaptureInfo, error) {
 	return 0, o.captures, nil
+}
+
+func (o *Owner) queryChangefeedInfo(uuid metadata.ChangefeedUUID) (*model.ChangeFeedInfo, error) {
+	info, err := o.querier.GetChangefeed(uuid)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if len(info) < 1 {
+		return nil, errors.Errorf("changefeed %d not found", uuid)
+	}
+	state, err := o.querier.GetChangefeedState(uuid)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	cfInfo := info[0]
+	return &model.ChangeFeedInfo{
+		UpstreamID: cfInfo.UpstreamID,
+		SinkURI:    cfInfo.SinkURI,
+		Config:     cfInfo.Config,
+		Namespace:  cfInfo.Namespace,
+		ID:         cfInfo.ID,
+		State:      state[0].State,
+		Error:      state[0].Error,
+		Warning:    state[0].Warning,
+		StartTs:    cfInfo.StartTs,
+		TargetTs:   cfInfo.TargetTs,
+	}, nil
 }
 
 func (o *Owner) handleJobs(_ context.Context) {
