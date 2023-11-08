@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -31,6 +33,10 @@ var customReplicaConfig = &ReplicaConfig{
 	ForceReplicate:        false,
 	IgnoreIneligibleTable: false,
 	CheckGCSafePoint:      false,
+	BDRMode:               util.AddressOf(false),
+	EnableSyncPoint:       util.AddressOf(false),
+	SyncPointInterval:     util.AddressOf(JSONDuration{duration: 10 * time.Minute}),
+	SyncPointRetention:    util.AddressOf(JSONDuration{duration: 24 * time.Hour}),
 	Filter: &FilterConfig{
 		MySQLReplicationRules: &MySQLReplicationRules{
 			DoTables:     []*Table{{"a", "b"}, {"c", "d"}},
@@ -65,6 +71,14 @@ var customReplicaConfig = &ReplicaConfig{
 		},
 		TxnAtomicity: "table",
 		Terminator:   "a",
+		CSVConfig: &CSVConfig{
+			Quote:      string(config.DoubleQuoteChar),
+			Delimiter:  config.Comma,
+			NullString: config.NULL,
+		},
+		DateSeparator:            "day",
+		EncoderConcurrency:       util.AddressOf(32),
+		EnablePartitionSeparator: util.AddressOf(true),
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -74,13 +88,25 @@ var customReplicaConfig = &ReplicaConfig{
 		IntegrityCheckLevel:   "none",
 		CorruptionHandleLevel: "warn",
 	},
+	Consistent: &ConsistentConfig{
+		Level:                 "none",
+		MaxLogSize:            64,
+		FlushIntervalInMs:     2000,
+		MetaFlushIntervalInMs: 200,
+		Storage:               "",
+		UseFileBackend:        false,
+	},
 }
 
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
-	MemoryQuota:      1024 * 1024 * 1024,
-	CaseSensitive:    true,
-	CheckGCSafePoint: true,
+	MemoryQuota:        1024 * 1024 * 1024,
+	CaseSensitive:      true,
+	CheckGCSafePoint:   true,
+	EnableSyncPoint:    util.AddressOf(false),
+	SyncPointInterval:  util.AddressOf(JSONDuration{duration: 10 * time.Minute}),
+	SyncPointRetention: util.AddressOf(JSONDuration{duration: 24 * time.Hour}),
+	BDRMode:            util.AddressOf(false),
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -88,7 +114,15 @@ var defaultReplicaConfig = &ReplicaConfig{
 		WorkerNum: 16,
 	},
 	Sink: &SinkConfig{
-		Terminator: "\r\n",
+		CSVConfig: &CSVConfig{
+			Quote:      string(config.DoubleQuoteChar),
+			Delimiter:  config.Comma,
+			NullString: config.NULL,
+		},
+		Terminator:               "\r\n",
+		DateSeparator:            "day",
+		EncoderConcurrency:       util.AddressOf(32),
+		EnablePartitionSeparator: util.AddressOf(true),
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -97,6 +131,14 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Integrity: &IntegrityConfig{
 		IntegrityCheckLevel:   "none",
 		CorruptionHandleLevel: "warn",
+	},
+	Consistent: &ConsistentConfig{
+		Level:                 "none",
+		MaxLogSize:            64,
+		FlushIntervalInMs:     2000,
+		MetaFlushIntervalInMs: 200,
+		Storage:               "",
+		UseFileBackend:        false,
 	},
 }
 
