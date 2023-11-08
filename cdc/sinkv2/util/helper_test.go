@@ -18,15 +18,17 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sink/kafka"
+	"github.com/Shopify/sarama"
+	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
+
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 )
 
 func TestPartition(t *testing.T) {
 	t.Parallel()
 
-	adminClient := kafka.NewClusterAdminClientMockImpl()
+	adminClient := pkafka.NewClusterAdminClientMockImpl()
 	defer adminClient.Close()
 
 	cfg := &kafka.AutoCreateTopicConfig{
@@ -35,31 +37,29 @@ func TestPartition(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-
-	manager, err := GetTopicManagerAndTryCreateTopic(ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient)
+	manager, err := GetTopicManagerAndTryCreateTopic(ctx, pkafka.DefaultMockTopicName, cfg, adminClient)
 	require.NoError(t, err)
 	defer manager.Close()
 
 	// default topic, real partition is 3, but 2 is set in the sink-uri, so return 2.
-	partitionsNum, err := manager.GetPartitionNum(ctx, kafka.DefaultMockTopicName)
+	partitionsNum, err := manager.GetPartitionNum(pkafka.DefaultMockTopicName)
 	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionsNum)
 
 	// new topic, create it with partition number as 2.
-	partitionsNum, err = manager.GetPartitionNum(ctx, "new-topic")
+	partitionsNum, err = manager.GetPartitionNum("new-topic")
 	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionsNum)
 
 	// assume a topic already exist, the not default topic won't be affected by the default topic's partition number.
-	err = adminClient.CreateTopic(ctx, &kafka.TopicDetail{
-		Name:          "new-topic-2",
+	err = adminClient.CreateTopic("new-topic-2", &sarama.TopicDetail{
+		
 		NumPartitions: 3,
 	}, false)
 	require.NoError(t, err)
 
-	partitionsNum, err = manager.GetPartitionNum(ctx, "new-topic-2")
+	partitionsNum, err = manager.GetPartitionNum("new-topic-2")
 	require.NoError(t, err)
 	require.Equal(t, int32(3), partitionsNum)
 }

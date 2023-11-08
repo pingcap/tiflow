@@ -17,7 +17,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/model"
 	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
@@ -37,8 +36,7 @@ func TestPartitions(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	changefeedID := model.DefaultChangeFeedID("test")
-	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, adminClient, cfg)
 	defer manager.Close()
 	partitionsNum, err := manager.GetPartitionNum(kafka.DefaultMockTopicName)
 	require.NoError(t, err)
@@ -60,8 +58,7 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	changefeedID := model.DefaultChangeFeedID("test")
-	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(kafka.DefaultMockTopicName)
 	require.NoError(t, err)
@@ -76,7 +73,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, "new-topic2", adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible("new-topic2")
 	require.Regexp(
@@ -93,7 +90,7 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, topic, adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(topic)
 	require.Regexp(
@@ -117,9 +114,8 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	}
 
 	topic := "new_topic"
-	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, topic, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(topic)
 	require.NoError(t, err)
