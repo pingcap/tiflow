@@ -16,7 +16,6 @@ package claimcheck
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,7 +101,7 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, key, value []byte, fileNa
 
 // FileNameWithPrefix returns the file name with prefix, the full path.
 func (c *ClaimCheck) FileNameWithPrefix(fileName string) string {
-	return filepath.Join(c.storage.URI(), fileName)
+	return c.storage.URI() + "/" + fileName
 }
 
 // CleanMetrics the claim check by clean up the metrics.
