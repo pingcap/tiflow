@@ -23,6 +23,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	kafkaconfig "github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -61,10 +62,10 @@ type kafkaTopicManager struct {
 func NewKafkaTopicManager(
 	ctx context.Context,
 	defaultTopic string,
-	changefeedID model.ChangeFeedID,
 	admin kafka.ClusterAdminClient,
 	cfg *kafkaconfig.AutoCreateTopicConfig,
 ) *kafkaTopicManager {
+	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	mgr := &kafkaTopicManager{
 		defaultTopic:      defaultTopic,
 		changefeedID:      changefeedID,

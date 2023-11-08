@@ -80,12 +80,9 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/mq_ddl_sink_test.go
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
 	defer leader.Close()
-=======
 	// partition-number is 2, so only send DDL events to 2 partitions.
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955)):cdc/sink/ddlsink/mq/mq_ddl_sink_test.go
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=2" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
@@ -114,8 +111,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	err = s.WriteDDLEvent(ctx, ddl)
 	require.Nil(t, err)
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/mq_ddl_sink_test.go
-		3, "All partitions should be broadcast")
+		2, "All partitions should be broadcast")
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
@@ -124,15 +120,6 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 		Topic:     "mock_topic",
 		Partition: 1,
 	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
-	}), 1)
-=======
-		2, "All partitions should be broadcast")
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 1), 1)
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955)):cdc/sink/ddlsink/mq/mq_ddl_sink_test.go
 }
 
 func TestWriteDDLEventToZeroPartition(t *testing.T) {
@@ -192,12 +179,9 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/mq_ddl_sink_test.go
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
 	defer leader.Close()
-=======
 	// partition-num is set to 2, so send checkpoint to 2 partitions.
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955)):cdc/sink/ddlsink/mq/mq_ddl_sink_test.go
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=2" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip" +
@@ -220,8 +204,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	require.Nil(t, err)
 
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/mq_ddl_sink_test.go
-		3, "All partitions should be broadcast")
+		2, "All partitions should be broadcast")
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
@@ -230,15 +213,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 		Topic:     "mock_topic",
 		Partition: 1,
 	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
-	}), 1)
-=======
-		2, "All partitions should be broadcast")
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 1), 1)
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955)):cdc/sink/ddlsink/mq/mq_ddl_sink_test.go
+
 }
 
 func TestWriteCheckpointTsToTableTopics(t *testing.T) {
@@ -298,19 +273,10 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	require.Nil(t, err)
 
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
-<<<<<<< HEAD:cdc/sinkv2/ddlsink/mq/mq_ddl_sink_test.go
-		6, "All topics and partitions should be broadcast")
+		4, "All topics and partitions should be broadcast")
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 1,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
 	}), 1)
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "cdc_person",
@@ -324,13 +290,6 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 		Topic:     "cdc_person2",
 		Partition: 0,
 	}), 1)
-=======
-		4, "All topics and partitions should be broadcast")
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("mock_topic", 0), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("cdc_person", 0), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("cdc_person1", 0), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents("cdc_person2", 0), 1)
->>>>>>> d30b4c3793 (kafka(ticdc): topic manager return the partition number specified in the sink-uri (#9955)):cdc/sink/ddlsink/mq/mq_ddl_sink_test.go
 }
 
 func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
