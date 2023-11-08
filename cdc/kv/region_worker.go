@@ -193,7 +193,6 @@ func (w *regionWorker) checkShouldExit() error {
 }
 
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
-	state.setRegionInfoResolvedTs()
 	regionID := state.getRegionID()
 	log.Info("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
@@ -201,14 +200,14 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", &state.sri.span),
-		zap.Uint64("resolvedTs", state.sri.resolvedTs),
+		zap.Uint64("resolvedTs", state.sri.resolvedTs()),
 		zap.Error(err))
 	// if state is already marked stopped, it must have been or would be processed by `onRegionFail`
-	if state.isStopped() {
+	if state.isStale() {
 		return w.checkShouldExit()
 	}
 	// We need to ensure when the error is handled, `isStopped` must be set. So set it before sending the error.
-	state.markStopped()
+	state.markStopped(err)
 	w.delRegionState(regionID)
 	failpoint.Inject("kvClientSingleFeedProcessDelay", nil)
 
@@ -295,7 +294,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 			maxVersion := oracle.ComposeTS(oracle.GetPhysical(currentTimeFromPD.Add(-10*time.Second)), 0)
 			for _, rts := range expired {
 				state, ok := w.getRegionState(rts.regionID)
-				if !ok || state.isStopped() {
+				if !ok || state.isStale() {
 					// state is already deleted or stopped, just continue,
 					// and don't need to push resolved ts back to heap.
 					continue
@@ -356,7 +355,7 @@ func (w *regionWorker) resolveLock(ctx context.Context) error {
 
 func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEvent) error {
 	// event.state is nil when resolvedTsEvent is not nil
-	skipEvent := event.state != nil && event.state.isStopped()
+	skipEvent := event.state != nil && event.state.isStale()
 	if skipEvent {
 		return nil
 	}
@@ -616,7 +615,7 @@ func (w *regionWorker) handleEventEntry(
 	x *cdcpb.Event_Entries_,
 	state *regionFeedState,
 ) error {
-	regionID, regionSpan, startTime, _ := state.getRegionMeta()
+	regionID, regionSpan, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
 		// if a region with kv range [a, z), and we only want the get [b, c) from this region,
 		// tikv will return all key events in the region, although specified [b, c) int the request.
@@ -630,13 +629,6 @@ func (w *regionWorker) handleEventEntry(
 		}
 		switch entry.Type {
 		case cdcpb.Event_INITIALIZED:
-			if time.Since(startTime) > 20*time.Second {
-				log.Warn("The time cost of initializing is too much",
-					zap.String("namespace", w.session.client.changefeed.Namespace),
-					zap.String("changefeed", w.session.client.changefeed.ID),
-					zap.Duration("duration", time.Since(startTime)),
-					zap.Uint64("regionID", regionID))
-			}
 			w.metrics.metricPullEventInitializedCounter.Inc()
 
 			state.setInitialized()
@@ -743,7 +735,7 @@ func (w *regionWorker) handleResolvedTs(
 	regions := make([]uint64, 0, len(revents.regions))
 
 	for _, state := range revents.regions {
-		if state.isStopped() || !state.isInitialized() {
+		if state.isStale() || !state.isInitialized() {
 			continue
 		}
 		regionID := state.getRegionID()
@@ -778,7 +770,7 @@ func (w *regionWorker) handleResolvedTs(
 	default:
 	}
 	for _, state := range revents.regions {
-		if state.isStopped() || !state.isInitialized() {
+		if state.isStale() || !state.isInitialized() {
 			continue
 		}
 		state.updateResolvedTs(resolvedTs)
@@ -804,10 +796,10 @@ func (w *regionWorker) evictAllRegions() {
 	for _, states := range w.statesManager.states {
 		deletes = deletes[:0]
 		states.iter(func(regionID uint64, regionState *regionFeedState) bool {
-			if regionState.isStopped() {
+			if regionState.isStale() {
 				return true
 			}
-			regionState.markStopped()
+			regionState.markStopped(nil)
 			deletes = append(deletes, struct {
 				regionID    uint64
 				regionState *regionFeedState
@@ -818,7 +810,6 @@ func (w *regionWorker) evictAllRegions() {
 		})
 		for _, del := range deletes {
 			w.delRegionState(del.regionID)
-			del.regionState.setRegionInfoResolvedTs()
 			// since the context used in region worker will be cancelled after
 			// region worker exits, we must use the parent context to prevent
 			// regionErrorInfo loss.
