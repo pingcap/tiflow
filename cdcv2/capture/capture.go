@@ -75,7 +75,7 @@ type captureImpl struct {
 	pdClient        pd.Client
 	pdEndpoints     []string
 	ownerMu         sync.Mutex
-	owner           *ownerv2.Impl
+	owner           *ownerv2.Owner
 	controller      controller.Controller
 	upstreamManager *upstream.Manager
 

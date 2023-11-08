@@ -35,8 +35,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Impl implements the owner interface.
-type Impl struct {
+// Owner implements the owner interface.
+type Owner struct {
 	upstreamManager    *upstream.Manager
 	captureObservation *msql.CaptureOb[*gorm.DB]
 	cfg                *config.SchedulerConfig
@@ -54,7 +54,7 @@ type Impl struct {
 }
 
 // UpdateChangefeedAndUpstream updates the changefeed info and upstream info.
-func (o *Impl) UpdateChangefeedAndUpstream(ctx context.Context,
+func (o *Owner) UpdateChangefeedAndUpstream(ctx context.Context,
 	upstreamInfo *model.UpstreamInfo,
 	changeFeedInfo *model.ChangeFeedInfo,
 	changeFeedID model.ChangeFeedID,
@@ -63,14 +63,14 @@ func (o *Impl) UpdateChangefeedAndUpstream(ctx context.Context,
 }
 
 // UpdateChangefeed updates the changefeed info.
-func (o *Impl) UpdateChangefeed(ctx context.Context,
+func (o *Owner) UpdateChangefeed(ctx context.Context,
 	changeFeedInfo *model.ChangeFeedInfo,
 ) error {
 	panic("implement me")
 }
 
 // EnqueueJob enqueues a job to the owner.
-func (o *Impl) EnqueueJob(adminJob model.AdminJob,
+func (o *Owner) EnqueueJob(adminJob model.AdminJob,
 	done chan<- error,
 ) {
 	o.pushOwnerJob(&ownerJob{
@@ -82,7 +82,7 @@ func (o *Impl) EnqueueJob(adminJob model.AdminJob,
 }
 
 // RebalanceTables rebalances the tables of a changefeed.
-func (o *Impl) RebalanceTables(cfID model.ChangeFeedID,
+func (o *Owner) RebalanceTables(cfID model.ChangeFeedID,
 	done chan<- error,
 ) {
 	o.pushOwnerJob(&ownerJob{
@@ -93,7 +93,7 @@ func (o *Impl) RebalanceTables(cfID model.ChangeFeedID,
 }
 
 // ScheduleTable schedules a table to a capture.
-func (o *Impl) ScheduleTable(cfID model.ChangeFeedID,
+func (o *Owner) ScheduleTable(cfID model.ChangeFeedID,
 	toCapture model.CaptureID,
 	tableID model.TableID, done chan<- error,
 ) {
@@ -107,7 +107,7 @@ func (o *Impl) ScheduleTable(cfID model.ChangeFeedID,
 }
 
 // DrainCapture drains a capture.
-func (o *Impl) DrainCapture(query *scheduler.Query,
+func (o *Owner) DrainCapture(query *scheduler.Query,
 	done chan<- error,
 ) {
 	o.pushOwnerJob(&ownerJob{
@@ -118,7 +118,7 @@ func (o *Impl) DrainCapture(query *scheduler.Query,
 }
 
 // WriteDebugInfo writes the debug info to the writer.
-func (o *Impl) WriteDebugInfo(w io.Writer,
+func (o *Owner) WriteDebugInfo(w io.Writer,
 	done chan<- error,
 ) {
 	o.pushOwnerJob(&ownerJob{
@@ -129,7 +129,7 @@ func (o *Impl) WriteDebugInfo(w io.Writer,
 }
 
 // Query queries owner internal information.
-func (o *Impl) Query(query *owner.Query, done chan<- error) {
+func (o *Owner) Query(query *owner.Query, done chan<- error) {
 	o.pushOwnerJob(&ownerJob{
 		Tp:    ownerJobTypeQuery,
 		query: query,
@@ -138,7 +138,7 @@ func (o *Impl) Query(query *owner.Query, done chan<- error) {
 }
 
 // AsyncStop stops the owner asynchronously.
-func (o *Impl) AsyncStop() {
+func (o *Owner) AsyncStop() {
 	panic("implement me")
 }
 
@@ -150,8 +150,8 @@ func NewOwner(
 	captureObservation *msql.CaptureOb[*gorm.DB],
 	querier metadata.Querier,
 	storage *sql.DB,
-) *Impl {
-	return &Impl{
+) *Owner {
+	return &Owner{
 		upstreamManager:    upstreamManager,
 		captureObservation: captureObservation,
 		cfg:                cfg,
@@ -162,7 +162,7 @@ func NewOwner(
 }
 
 // Run runs the owner.
-func (o *Impl) Run(ctx cdcContext.Context) error {
+func (o *Owner) Run(ctx cdcContext.Context) error {
 	tick := time.NewTicker(time.Millisecond * 100)
 	for {
 		select {
@@ -204,7 +204,7 @@ func (o *ownerInfoClient) GetCaptures(context.Context) (int64, []*model.CaptureI
 	return 0, o.captures, nil
 }
 
-func (o *Impl) handleJobs(_ context.Context) {
+func (o *Owner) handleJobs(_ context.Context) {
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
 		switch job.Tp {
@@ -226,7 +226,7 @@ func (o *Impl) handleJobs(_ context.Context) {
 }
 
 // nolint
-func (o *Impl) handleQueries(query *owner.Query) error {
+func (o *Owner) handleQueries(query *owner.Query) error {
 	switch query.Tp {
 	case owner.QueryChangeFeedStatuses:
 	case owner.QueryProcessors:
@@ -238,11 +238,11 @@ func (o *Impl) handleQueries(query *owner.Query) error {
 	return nil
 }
 
-func (o *Impl) isHealthy() bool {
+func (o *Owner) isHealthy() bool {
 	return false
 }
 
-func (o *Impl) takeOwnerJobs() []*ownerJob {
+func (o *Owner) takeOwnerJobs() []*ownerJob {
 	o.ownerJobQueue.Lock()
 	defer o.ownerJobQueue.Unlock()
 
@@ -251,7 +251,7 @@ func (o *Impl) takeOwnerJobs() []*ownerJob {
 	return jobs
 }
 
-func (o *Impl) pushOwnerJob(job *ownerJob) {
+func (o *Owner) pushOwnerJob(job *ownerJob) {
 	o.ownerJobQueue.Lock()
 	defer o.ownerJobQueue.Unlock()
 	if atomic.LoadInt32(&o.closed) != 0 {
@@ -268,7 +268,7 @@ func (o *Impl) pushOwnerJob(job *ownerJob) {
 }
 
 // nolint:unused
-func (o *Impl) cleanupOwnerJob() {
+func (o *Owner) cleanupOwnerJob() {
 	log.Info("cleanup owner jobs as owner has been closed")
 	jobs := o.takeOwnerJobs()
 	for _, job := range jobs {
