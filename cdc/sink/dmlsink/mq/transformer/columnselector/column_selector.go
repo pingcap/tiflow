@@ -67,9 +67,9 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 		if s.columnM.MatchColumn(column.Name) {
 			continue
 		}
-		if column.Flag.IsHandleKey() || column.Flag.IsUniqueKey() {
+		if column.Flag.IsHandleKey() {
 			return errors.ErrColumnSelectorFailed.GenWithStack(
-				"primary key or unique key cannot be filtered out by the column selector, "+
+				"handle key column cannot be filtered out by the column selector, "+
 					"table: %v, column: %s", event.Table, column.Name)
 		}
 		event.Columns[idx] = nil
@@ -79,9 +79,9 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 		if s.columnM.MatchColumn(column.Name) {
 			continue
 		}
-		if column.Flag.IsHandleKey() || column.Flag.IsUniqueKey() {
+		if column.Flag.IsHandleKey() {
 			return errors.ErrColumnSelectorFailed.GenWithStack(
-				"primary key or unique key cannot be filtered out by the column selector, "+
+				"handle key column cannot be filtered out by the column selector, "+
 					"table: %v, column: %s", event.Table, column.Name)
 		}
 		event.PreColumns[idx] = nil
@@ -149,9 +149,9 @@ func (c *ColumnSelector) VerifyTables(
 					continue
 				}
 				// the column is filter out.
-				if flag.IsHandleKey() || flag.IsUniqueKey() {
+				if flag.IsHandleKey() {
 					return errors.ErrColumnSelectorFailed.GenWithStack(
-						"primary key or unique key cannot be filtered out by the column selector, "+
+						"handle key column cannot be filtered out by the column selector, "+
 							"table: %v, column: %s", table.TableName, columnInfo.Name)
 				}
 
