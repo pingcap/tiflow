@@ -213,7 +213,6 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 		Topic:     "mock_topic",
 		Partition: 1,
 	}), 1)
-
 }
 
 func TestWriteCheckpointTsToTableTopics(t *testing.T) {
