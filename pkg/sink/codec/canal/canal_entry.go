@@ -385,8 +385,17 @@ func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
 }
 
 // when decoding the canal format, remove `unsigned` to get the original `mysql type`.
-func trimUnsignedFromMySQLType(mysqlType string) string {
-	return strings.TrimSuffix(mysqlType, " unsigned")
+func extractBasicMySQLType(mysqlType string) string {
+	//return strings.TrimSuffix(mysqlType, " unsigned")
+	if strings.HasSuffix(mysqlType, " unsigned") {
+		return strings.TrimSuffix(mysqlType, " unsigned")
+	}
+
+	if strings.HasPrefix(mysqlType, "set") {
+		return "set"
+	}
+
+	return mysqlType
 }
 
 func getMySQLType(c *model.Column) string {
