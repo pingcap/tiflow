@@ -3228,15 +3228,18 @@ func (s *Server) UpdateValidation(ctx context.Context, req *pb.UpdateValidationR
 	if shouldRet {
 		return resp2, err
 	}
-	sources := req.Sources
-	if len(sources) == 0 {
-		sources = s.getTaskSourceNameList(req.TaskName)
-		if len(sources) == 0 {
-			return &pb.UpdateValidationResponse{
-				Result: false,
-				Msg:    fmt.Sprintf("task %s has no source or not exist, please check the task name and status", req.TaskName),
-			}, nil
+	resp := &pb.UpdateValidationResponse{
+		Result: false,
+	}
+	subTaskCfgs := s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
+		if len(req.Sources) > 0 {
+			resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s` and sources `%v`",
+				req.TaskName, req.Sources)
+		} else {
+			resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s`", req.TaskName)
 		}
+		return resp, nil
 	}
 
 	workerReq := workerrpc.Request{
@@ -3248,31 +3251,48 @@ func (s *Server) UpdateValidation(ctx context.Context, req *pb.UpdateValidationR
 		},
 	}
 
-	workerRespCh := make(chan *pb.CommonWorkerResponse, len(sources))
+	sourcesLen := 0
+	for _, subTaskCfg := range subTaskCfgs {
+		sourcesLen += len(subTaskCfg)
+	}
+	workerRespCh := make(chan *pb.CommonWorkerResponse, sourcesLen)
 	var wg sync.WaitGroup
-	for _, source := range sources {
-		wg.Add(1)
-		go func(source string) {
-			defer wg.Done()
-			worker := s.scheduler.GetWorkerBySource(source)
-			if worker == nil {
-				workerRespCh <- errorCommonWorkerResponse(fmt.Sprintf("source %s relevant worker-client not found", source), source, "")
-				return
-			}
-			var workerResp *pb.CommonWorkerResponse
-			resp, err := worker.SendRequest(ctx, &workerReq, s.cfg.RPCTimeout)
-			if err != nil {
-				workerResp = errorCommonWorkerResponse(err.Error(), source, worker.BaseInfo().Name)
-			} else {
-				workerResp = resp.UpdateValidation
-			}
-			workerResp.Source = source
-			workerRespCh <- workerResp
-		}(source)
+	for _, subTaskCfg := range subTaskCfgs {
+		for sourceID := range subTaskCfg {
+			wg.Add(1)
+			go func(source string) {
+				defer wg.Done()
+				sourceCfg := s.scheduler.GetSourceCfgByID(source)
+				// can't directly use subtaskCfg here, because it will be overwritten by sourceCfg
+				if sourceCfg.EnableGTID {
+					if len(req.BinlogGTID) == 0 {
+						workerRespCh <- errorCommonWorkerResponse(fmt.Sprintf("source %s didn't specify cutover-binlog-gtid when enableGTID is true", source), source, "")
+						return
+					}
+				} else if len(req.BinlogPos) == 0 {
+					workerRespCh <- errorCommonWorkerResponse(fmt.Sprintf("source %s didn't specify cutover-binlog-pos when enableGTID is false", source), source, "")
+					return
+				}
+				worker := s.scheduler.GetWorkerBySource(source)
+				if worker == nil {
+					workerRespCh <- errorCommonWorkerResponse(fmt.Sprintf("source %s relevant worker-client not found", source), source, "")
+					return
+				}
+				var workerResp *pb.CommonWorkerResponse
+				resp, err := worker.SendRequest(ctx, &workerReq, s.cfg.RPCTimeout)
+				if err != nil {
+					workerResp = errorCommonWorkerResponse(err.Error(), source, worker.BaseInfo().Name)
+				} else {
+					workerResp = resp.UpdateValidation
+				}
+				workerResp.Source = source
+				workerRespCh <- workerResp
+			}(sourceID)
+		}
 	}
 	wg.Wait()
 
-	workerResps := make([]*pb.CommonWorkerResponse, 0, len(sources))
+	workerResps := make([]*pb.CommonWorkerResponse, 0, sourcesLen)
 	for len(workerRespCh) > 0 {
 		workerResp := <-workerRespCh
 		workerResps = append(workerResps, workerResp)

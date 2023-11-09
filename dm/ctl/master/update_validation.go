@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/spf13/cobra"
 )
 
@@ -71,15 +72,27 @@ func parseValidationUpdateArgs(cmd *cobra.Command) (validationUpdateArgs, string
 	if args.sources, err = common.GetSourceArgs(cmd); err != nil {
 		return args, err.Error(), false
 	}
-	if args.cutoverBinlogPos, err = cmd.Flags().GetString("cutover-binlog-name"); err != nil {
+	if args.cutoverBinlogPos, err = cmd.Flags().GetString("cutover-binlog-pos"); err != nil {
 		return args, err.Error(), false
 	}
+	if len(args.cutoverBinlogPos) != 0 {
+		_, err = binlog.PositionFromPosStr(args.cutoverBinlogPos)
+		if err != nil {
+			return args, err.Error(), false
+		}
+	}
+
 	if args.cutoverBinlogGTID, err = cmd.Flags().GetString("cutover-binlog-gtid"); err != nil {
 		return args, err.Error(), false
 	}
+	if len(args.cutoverBinlogGTID) != 0 && len(args.cutoverBinlogPos) != 0 {
+		return args, "you must specify either one of '--cutover-binlog-pos' or '--cutover-binlog-pos'", false
+	}
 
-	if len(cmd.Flags().Args()) != 1 {
+	if len(cmd.Flags().Args()) == 0 {
 		return args, "`task-name` should be set", false
+	} else if len(cmd.Flags().Args()) > 1 {
+		return args, "should specify only one `task-name`", false
 	}
 	args.taskName = cmd.Flags().Arg(0)
 	if len(args.taskName) == 0 {

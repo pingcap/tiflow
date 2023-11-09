@@ -11,6 +11,11 @@ db_name=$TEST_NAME
 # 44 normal help message + 1 "PASS" line
 help_cnt=45
 
+function get_uuid() {
+	uuid=$(echo "show variables like '%server_uuid%';" | MYSQL_PWD=123456 mysql -uroot -h$1 -P$2 | awk 'FNR == 2 {print $2}')
+	echo $uuid
+}
+
 function run() {
 	# check dmctl output with help flag
 	# it should usage for root command
@@ -427,25 +432,77 @@ function run_validation_start_stop_cmd {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test2" \
 		"\"unit\": \"Sync\"" 1
+	uuid=($(get_uuid $MYSQL_HOST2 $MYSQL_PORT2))
+	echo "--> (fail) validation update: on non-existed validator"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test -s $SOURCE_ID2 --cutover-binlog-gtid $uuid:1-999" \
+		"\"result\": false" 1 \
+		"validator not found for task" 1
 
 	echo "--> (success) validation start: start all tasks"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --all-task --mode fast" \
 		"\"result\": true" 1
+
+	echo "--> (fail) validation update: missing task-name"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update" \
+		"\`task-name\` should be set" 1
+	echo "--> (fail) validation update: multi tasks"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test test2" \
+		"should specify only one" 1
+	echo "--> (fail) validation update: non-existed subtask"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update xxxxx" \
+		"\"result\": false" 1 \
+		"cannot get subtask by task name \`xxxxx\`" 1
+	echo "--> (fail) validation update: non-exist source"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update -s xxxxx test" \
+		"\"result\": false" 1 \
+		"cannot get subtask by task name \`test\` and sources" 1
+	echo "--> (fail) validation update: not specify cutover-binlog-gtid"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test -s $SOURCE_ID2" \
+		"\"result\": false" 1 \
+		"didn't specify cutover-binlog-gtid" 1
+	echo "--> (fail) validation update: not specify cutover-binlog-pos"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test2 -s $SOURCE_ID1" \
+		"\"result\": false" 1 \
+		"didn't specify cutover-binlog-pos" 1
+	echo "--> (fail) validation update: invalid cutover-binlog-pos"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test -s $SOURCE_ID1 --cutover-binlog-pos xxx" \
+		"invalid binlog pos" 1
+	echo "--> (fail) validation update: specify both cutover-binlog-pos and cutover-binlog-gtid"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test -s $SOURCE_ID1 --cutover-binlog-pos '(mysql-bin.000001, 2345)' --cutover-binlog-gtid $uuid:1-999" \
+		"you must specify either one of" 1
+	echo "--> (success) validation update: on exist source"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test -s $SOURCE_ID2 --cutover-binlog-gtid $uuid:1-999" \
+		"\"result\": true" 2
+
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test" \
 		"\"result\": true" 1 \
 		"\"mode\": \"full\"" 0 \
 		"\"mode\": \"fast\"" 2 \
 		"\"stage\": \"Running\"" 2 \
-		"\"stage\": \"Stopped\"" 0
+		"\"stage\": \"Stopped\"" 0 \
+		"\"cutoverBinlogPos\"" 2 \
+		"\"cutoverBinlogGtid\": \"$uuid:1-999\"" 1
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation status test2" \
 		"\"result\": true" 1 \
 		"\"mode\": \"full\"" 0 \
 		"\"mode\": \"fast\"" 1 \
 		"\"stage\": \"Running\"" 1 \
-		"\"stage\": \"Stopped\"" 0
+		"\"stage\": \"Stopped\"" 0 \
+		"\"cutoverBinlogPos\"" 1 \
+		"\"cutoverBinlogGtid\": \"$uuid:1-999\"" 0
 
 	echo "--> (success) validation stop: stop all tasks"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
