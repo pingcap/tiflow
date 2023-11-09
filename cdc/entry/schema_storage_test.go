@@ -549,7 +549,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	jobs = append(jobs, job)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	storage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
+	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -883,7 +883,7 @@ func TestSchemaStorage(t *testing.T) {
 		jobs, err := getAllHistoryDDLJob(store, f)
 		require.Nil(t, err)
 
-		schemaStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
+		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
 		require.Nil(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
@@ -1008,4 +1008,28 @@ func TestHandleKey(t *testing.T) {
 	tb3, ok := snap.TableByName("test", "simple_test3")
 	require.True(t, ok)
 	require.Equal(t, int64(-2), tb3.HandleIndexID)
+}
+
+func TestGetPrimaryKey(t *testing.T) {
+	t.Parallel()
+
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t1(a int primary key, b int)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+
+	names := tableInfo.GetPrimaryKeyColumnNames()
+	require.Len(t, names, 1)
+	require.Containsf(t, names, "a", "names: %v", names)
+
+	sql = `create table test.t2(a int, b int, c int, primary key(a, b))`
+	job = helper.DDL2Job(sql)
+	tableInfo = model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+
+	names = tableInfo.GetPrimaryKeyColumnNames()
+	require.Len(t, names, 2)
+	require.Containsf(t, names, "a", "names: %v", names)
+	require.Containsf(t, names, "b", "names: %v", names)
 }
