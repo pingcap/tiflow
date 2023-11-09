@@ -186,6 +186,16 @@ func TestVerifyTables(t *testing.T) {
 	require.Nil(t, event.PreColumns[3])
 	require.Nil(t, event.PreColumns[4])
 
+	event = event4Test()
+	event.PreColumns = nil
+	err = selectors.Apply(event)
+	require.NoError(t, err)
+
+	event = event4Test()
+	event.Columns = nil
+	err = selectors.Apply(event)
+	require.NoError(t, err)
+
 	replicaConfig.Sink.ColumnSelectors = []*config.ColumnSelector{
 		{
 			Matcher: []string{"test.t1"},

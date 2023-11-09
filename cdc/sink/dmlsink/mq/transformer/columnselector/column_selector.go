@@ -64,32 +64,36 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 	}
 
 	retainedColumns := make(map[string]struct{}, len(event.Columns))
-	for idx, column := range event.Columns {
-		if s.columnM.MatchColumn(column.Name) {
-			retainedColumns[column.Name] = struct{}{}
-			continue
+	if len(event.Columns) != 0 {
+		for idx, column := range event.Columns {
+			if s.columnM.MatchColumn(column.Name) {
+				retainedColumns[column.Name] = struct{}{}
+				continue
+			}
+			event.Columns[idx] = nil
 		}
-		event.Columns[idx] = nil
+
+		if !verifyIndices(event.TableInfo, retainedColumns) {
+			return errors.ErrColumnSelectorFailed.GenWithStack(
+				"no primary key columns or unique key columns obtained after filter out, "+
+					"table: %+v", event.Table)
+		}
 	}
 
-	if !verifyIndices(event.TableInfo, retainedColumns) {
-		return errors.ErrColumnSelectorFailed.GenWithStack(
-			"no primary key columns or unique key columns obtained after filter out, "+
-				"table: v%", event.Table)
-	}
-
-	clear(retainedColumns)
-	for idx, column := range event.PreColumns {
-		if s.columnM.MatchColumn(column.Name) {
-			retainedColumns[column.Name] = struct{}{}
-			continue
+	if len(event.PreColumns) != 0 {
+		clear(retainedColumns)
+		for idx, column := range event.PreColumns {
+			if s.columnM.MatchColumn(column.Name) {
+				retainedColumns[column.Name] = struct{}{}
+				continue
+			}
+			event.PreColumns[idx] = nil
 		}
-		event.PreColumns[idx] = nil
-	}
-	if !verifyIndices(event.TableInfo, retainedColumns) {
-		return errors.ErrColumnSelectorFailed.GenWithStack(
-			"no primary key columns or unique key columns obtained after filter out, "+
-				"table: v%", event.Table)
+		if !verifyIndices(event.TableInfo, retainedColumns) {
+			return errors.ErrColumnSelectorFailed.GenWithStack(
+				"no primary key columns or unique key columns obtained after filter out, "+
+					"table: %+v", event.Table)
+		}
 	}
 
 	return nil
@@ -173,7 +177,7 @@ func (c *ColumnSelector) VerifyTables(
 
 			if !verifyIndices(table, retainedColumns) {
 				return errors.ErrColumnSelectorFailed.GenWithStack(
-					"no primary key columns or unique key columns obtained after filter out, table: v%", table.TableName)
+					"no primary key columns or unique key columns obtained after filter out, table: %+v", table.TableName)
 			}
 		}
 	}
