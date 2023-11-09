@@ -1309,6 +1309,33 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
 }
 
+<<<<<<< HEAD
+=======
+func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) error {
+	var (
+		pos = mysql.Position{}
+		gs  mysql.GTIDSet
+		err error
+	)
+	if len(req.BinlogPos) > 0 {
+		pos, err = binlog.PositionFromPosStr(req.BinlogPos)
+		if err != nil {
+			return err
+		}
+	}
+	if len(req.BinlogGTID) > 0 {
+		gs, err = gtid.ParserGTID(v.cfg.Flavor, req.BinlogGTID)
+		if err != nil {
+			return err
+		}
+	}
+	cutOverLocation := binlog.NewLocation(pos, gs)
+	v.cutOverLocation.Store(&cutOverLocation)
+	v.syncer.cutOverLocation.Store(&cutOverLocation)
+	return nil
+}
+
+>>>>>>> cf54e036c0 (validator: add more tests for validation update and fix previous bugs (#10003))
 func (v *DataValidator) getErrorRowCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -1372,6 +1399,14 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 			validatorBinlogGtid = flushedLoc.GetGTID().String()
 		}
 	}
+	var cutoverBinlogPos, cutoverBinlogGTID string
+	if cutOverLoc := v.cutOverLocation.Load(); cutOverLoc != nil {
+		cutoverBinlogPos = cutOverLoc.Position.String()
+		if cutOverLoc.GetGTID() != nil {
+			cutoverBinlogGTID = cutOverLoc.GetGTID().String()
+		}
+	}
+
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
@@ -1383,5 +1418,7 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 		ProcessedRowsStatus: processedRows,
 		PendingRowsStatus:   pendingRows,
 		ErrorRowsStatus:     errorRows,
+		CutoverBinlogPos:    cutoverBinlogPos,
+		CutoverBinlogGtid:   cutoverBinlogGTID,
 	}
 }
