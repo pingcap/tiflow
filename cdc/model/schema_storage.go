@@ -363,3 +363,26 @@ func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 
 	return result, true
 }
+
+// GetPrimaryKeyColumnNames returns the primary key column names
+func (ti *TableInfo) GetPrimaryKeyColumnNames() map[string]struct{} {
+	result := make(map[string]struct{})
+	for _, index := range ti.Indices {
+		if index.Primary {
+			for _, col := range index.Columns {
+				result[col.Name.O] = struct{}{}
+			}
+			return result
+		}
+	}
+
+	for _, columnsOffsets := range ti.IndexColumnsOffset {
+		for _, offset := range columnsOffsets {
+			columnInfo := ti.Columns[offset]
+			if mysql.HasPriKeyFlag(columnInfo.FieldType.GetFlag()) {
+				result[columnInfo.Name.O] = struct{}{}
+			}
+		}
+	}
+	return result
+}

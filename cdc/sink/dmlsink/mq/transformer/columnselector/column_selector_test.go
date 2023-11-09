@@ -11,55 +11,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build intest
+// +build intest
+
 package columnselector
 
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
-var event = &model.RowChangedEvent{
-	Table: &model.TableName{
-		Schema: "test",
-		Table:  "table1",
-	},
-	Columns: []*model.Column{
-		{
-			Name:  "col1",
-			Value: []byte("val1"),
-		},
-		{
-			Name:  "col2",
-			Value: []byte("val2"),
-		},
-		{
-			Name:  "col3",
-			Value: []byte("val3"),
-		},
-	},
-	PreColumns: []*model.Column{
-		{
-			Name:  "col1",
-			Value: []byte("val1"),
-		},
-		{
-			Name:  "col2",
-			Value: []byte("val2"),
-		},
-		{
-			Name:  "col3",
-			Value: []byte("val3"),
-		},
-	},
-}
-
-func TestNewColumnSelectorNoRules(t *testing.T) {
+func TestNewColumnSelector(t *testing.T) {
 	// the column selector is not set
 	replicaConfig := config.GetDefaultReplicaConfig()
 	selectors, err := New(replicaConfig)
@@ -67,22 +35,44 @@ func TestNewColumnSelectorNoRules(t *testing.T) {
 	require.NotNil(t, selectors)
 	require.Len(t, selectors.selectors, 0)
 
-	err = selectors.Apply(event)
-	require.NoError(t, err)
+	event := &model.RowChangedEvent{
+		Table: &model.TableName{
+			Schema: "test",
+			Table:  "table1",
+		},
+		Columns: []*model.Column{
+			{
+				Name:  "col1",
+				Value: []byte("val1"),
+			},
+			{
+				Name:  "col2",
+				Value: []byte("val2"),
+			},
+		},
+		PreColumns: []*model.Column{
+			{
+				Name:  "col1",
+				Value: []byte("val1"),
+			},
+			{
+				Name:  "col2",
+				Value: []byte("val2"),
+			},
+		},
+	}
+
 	for _, column := range event.Columns {
-		require.NotNil(t, column.Value)
+		require.NotNil(t, column)
 	}
 	for _, column := range event.PreColumns {
-		require.NotNil(t, column.Value)
+		require.NotNil(t, column)
 	}
-}
 
-func TestNewColumnSelector(t *testing.T) {
-	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.ColumnSelectors = []*config.ColumnSelector{
 		{
 			Matcher: []string{"test.*"},
-			Columns: []string{"col1", "col2"},
+			Columns: []string{"a", "b"},
 		},
 		{
 			Matcher: []string{"test1.*"},
@@ -97,152 +87,147 @@ func TestNewColumnSelector(t *testing.T) {
 			Columns: []string{"co?1"},
 		},
 	}
-	selectors, err := New(replicaConfig)
+	selectors, err = New(replicaConfig)
 	require.NoError(t, err)
 	require.Len(t, selectors.selectors, 4)
-
-	// column3 is filter out, set to nil.
-	err = selectors.Apply(event)
-	require.NoError(t, err)
-	require.Equal(t, []byte("val1"), event.Columns[0].Value)
-	require.Equal(t, []byte("val2"), event.Columns[1].Value)
-	require.Nil(t, event.Columns[2])
-
-	require.Equal(t, []byte("val1"), event.PreColumns[0].Value)
-	require.Equal(t, []byte("val2"), event.PreColumns[1].Value)
-	require.Nil(t, event.PreColumns[2])
-
-	event = &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "test1",
-			Table:  "table1",
-		},
-		Columns: []*model.Column{
-			{
-				Name:  "a",
-				Value: []byte("a"),
-			},
-			{
-				Name:  "b",
-				Value: []byte("b"),
-			},
-			{
-				Name:  "c",
-				Value: []byte("c"),
-			},
-		},
-	}
-	// the first column `a` is filter out, set to nil.
-	err = selectors.Apply(event)
-	require.NoError(t, err)
-	require.Nil(t, event.Columns[0])
-	require.Equal(t, []byte("b"), event.Columns[1].Value)
-	require.Equal(t, []byte("c"), event.Columns[2].Value)
-
-	event = &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "test2",
-			Table:  "table1",
-		},
-		Columns: []*model.Column{
-			{
-				Name:  "col",
-				Value: []byte("col"),
-			},
-			{
-				Name:  "col1",
-				Value: []byte("col1"),
-			},
-			{
-				Name:  "col2",
-				Value: []byte("col2"),
-			},
-			{
-				Name:  "col3",
-				Value: []byte("col3"),
-			},
-		},
-	}
-	err = selectors.Apply(event)
-	require.NoError(t, err)
-	require.Equal(t, []byte("col"), event.Columns[0].Value)
-	require.Equal(t, []byte("col1"), event.Columns[1].Value)
-	require.Nil(t, event.Columns[2])
-	require.Equal(t, []byte("col3"), event.Columns[3].Value)
-
-	event = &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "test3",
-			Table:  "table1",
-		},
-		Columns: []*model.Column{
-			{
-				Name:  "col",
-				Value: []byte("col"),
-			},
-			{
-				Name:  "col1",
-				Value: []byte("col1"),
-			},
-			{
-				Name:  "col2",
-				Value: []byte("col2"),
-			},
-			{
-				Name:  "coA1",
-				Value: []byte("coA1"),
-			},
-		},
-	}
-	err = selectors.Apply(event)
-	require.NoError(t, err)
-	require.Nil(t, event.Columns[0])
-	require.Equal(t, []byte("col1"), event.Columns[1].Value)
-	require.Nil(t, event.Columns[2])
-	require.Equal(t, []byte("coA1"), event.Columns[3].Value)
 }
 
-func TestVerifyTableColumnNotAllowFiltered(t *testing.T) {
+func TestVerifyTables(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t1(
+    	a int primary key,
+    	b int,
+    	c int,
+    	d int,
+    	e int,
+    	unique key uk_b_c(b, c),
+    	unique key uk_d_e(d, e),
+    	key idx_c_d(c, d))`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+	infos := []*model.TableInfo{tableInfo}
+
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink.ColumnSelectors = []*config.ColumnSelector{
 		{
-			Matcher: []string{"test.*"},
-			Columns: []string{"b"},
+			Matcher: []string{"test.t1"},
+			Columns: []string{"a", "b"},
 		},
 	}
-	selector, err := New(replicaConfig)
+	selectors, err := New(replicaConfig)
 	require.NoError(t, err)
 
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, config.ProtocolDefault, "default", "default")
 	require.NoError(t, err)
+	// handle key column `a` is retained, so return no error
+	err = selectors.VerifyTables(infos, eventRouter)
+	require.NoError(t, err)
 
-	info := &timodel.TableInfo{
-		Name: timodel.CIStr{O: "t1", L: "t1"},
-		Columns: []*timodel.ColumnInfo{
-			{
-				ID:     0,
-				Name:   timodel.CIStr{O: "a", L: "a"},
-				Offset: 0,
+	event4Test := func() *model.RowChangedEvent {
+		return &model.RowChangedEvent{
+			Table: &model.TableName{Schema: "test", Table: "t1"},
+			Columns: []*model.Column{
+				{
+					Name:  "a",
+					Value: []byte("1"),
+				},
+				{
+					Name:  "b",
+					Value: []byte("2"),
+				},
+				{
+					Name:  "c",
+					Value: []byte("3"),
+				},
+				{
+					Name:  "d",
+					Value: []byte("4"),
+				},
+				{
+					Name:  "e",
+					Value: []byte("5"),
+				},
 			},
-			{
-				ID:     1,
-				Name:   timodel.CIStr{O: "b", L: "b"},
-				Offset: 1,
+			PreColumns: []*model.Column{
+				{
+					Name:  "a",
+					Value: []byte("1"),
+				},
+				{
+					Name:  "b",
+					Value: []byte("2"),
+				},
+				{
+					Name:  "c",
+					Value: []byte("3"),
+				},
+				{
+					Name:  "d",
+					Value: []byte("4"),
+				},
+				{
+					Name:  "e",
+					Value: []byte("5"),
+				},
 			},
-			{
-				ID:     2,
-				Name:   timodel.CIStr{O: "c", L: "c"},
-				Offset: 2,
-			},
+		}
+	}
+
+	event := event4Test()
+	err = selectors.Apply(event)
+	require.NoError(t, err)
+	require.Nil(t, event.Columns[2])
+	require.Nil(t, event.Columns[3])
+	require.Nil(t, event.Columns[4])
+	require.Nil(t, event.PreColumns[2])
+	require.Nil(t, event.PreColumns[3])
+	require.Nil(t, event.PreColumns[4])
+
+	replicaConfig.Sink.ColumnSelectors = []*config.ColumnSelector{
+		{
+			Matcher: []string{"test.t1"},
+			Columns: []string{"b", "c"},
 		},
 	}
-	table := model.WrapTableInfo(0, "test", 0, info)
-	table.ColumnsFlag[0] = model.HandleKeyFlag
-	infos := []*model.TableInfo{table}
+	selectors, err = New(replicaConfig)
+	require.NoError(t, err)
 
-	// column `a` is handle key, but it is filter out, return error.
-	err = selector.VerifyTables(infos, eventRouter)
-	require.ErrorIs(t, err, cerror.ErrColumnSelectorFailed)
+	// handle key column `a` is filtered out, but unique key `uk_b_c` has all columns retained, so return no error.
+	err = selectors.VerifyTables(infos, eventRouter)
+	require.NoError(t, err)
+
+	event = event4Test()
+	err = selectors.Apply(event)
+	require.NoError(t, err)
+	require.NotNil(t, event.Columns[0])
+	require.NotNil(t, event.Columns[3])
+	require.NotNil(t, event.Columns[4])
+	require.NotNil(t, event.PreColumns[0])
+	require.NotNil(t, event.PreColumns[3])
+	require.NotNil(t, event.PreColumns[4])
+
+	replicaConfig.Sink.ColumnSelectors = []*config.ColumnSelector{
+		{
+			Matcher: []string{"test.*"},
+			Columns: []string{"c", "d"},
+		},
+		{
+			Matcher: []string{"test.t1"},
+			Columns: []string{"a", "b"},
+		},
+	}
+	selectors, err = New(replicaConfig)
+	require.NoError(t, err)
+
+	// handle key column `a` is filtered out, no one unique key has all columns retained, so return error.
+	err = selectors.VerifyTables(infos, eventRouter)
+	require.ErrorIs(t, err, errors.ErrColumnSelectorFailed)
+
+	event = event4Test()
+	err = selectors.Apply(event)
+	require.ErrorIs(t, err, errors.ErrColumnSelectorFailed)
 }
 
 func TestVerifyTablesColumnFilteredInDispatcher(t *testing.T) {
@@ -267,30 +252,14 @@ func TestVerifyTablesColumnFilteredInDispatcher(t *testing.T) {
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, config.ProtocolDefault, "default", "default")
 	require.NoError(t, err)
 
-	info := &timodel.TableInfo{
-		Name: timodel.CIStr{O: "t1", L: "t1"},
-		Columns: []*timodel.ColumnInfo{
-			{
-				ID:     0,
-				Name:   timodel.CIStr{O: "a", L: "a"},
-				Offset: 0,
-			},
-			{
-				ID:     1,
-				Name:   timodel.CIStr{O: "b", L: "b"},
-				Offset: 1,
-			},
-			{
-				ID:     2,
-				Name:   timodel.CIStr{O: "c", L: "c"},
-				Offset: 2,
-			},
-		},
-	}
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
 
-	table := model.WrapTableInfo(0, "test", 0, info)
-	// column `c` is filter out, but it is used in the column dispatcher, return error.
-	infos := []*model.TableInfo{table}
+	sql := `create table test.t1(a int primary key, b int, c int)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+	infos := []*model.TableInfo{tableInfo}
+
 	err = selectors.VerifyTables(infos, eventRouter)
-	require.ErrorIs(t, err, cerror.ErrColumnSelectorFailed)
+	require.ErrorIs(t, err, errors.ErrColumnSelectorFailed)
 }
