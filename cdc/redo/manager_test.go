@@ -52,6 +52,8 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		Storage:               storage,
 		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		UseFileBackend:        useFileBackend,
 	}
 	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
