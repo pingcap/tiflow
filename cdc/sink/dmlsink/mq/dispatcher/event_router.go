@@ -119,13 +119,14 @@ func (s *EventRouter) GetPartitionForRowChange(
 	row *model.RowChangedEvent,
 	partitionNum int32,
 ) (int32, string, error) {
-	_, partitionDispatcher := s.matchDispatcher(
-		row.Table.Schema, row.Table.Table,
-	)
+	return s.GetPartitionDispatcher(row.Table.Schema, row.Table.Table).
+		DispatchRowChangedEvent(row, partitionNum)
+}
 
-	return partitionDispatcher.DispatchRowChangedEvent(
-		row, partitionNum,
-	)
+// GetPartitionDispatcher returns the partition dispatcher for a specific table.
+func (s *EventRouter) GetPartitionDispatcher(schema, table string) partition.Dispatcher {
+	_, partitionDispatcher := s.matchDispatcher(schema, table)
+	return partitionDispatcher
 }
 
 // VerifyTables return error if any one table route rule is invalid.
@@ -147,7 +148,7 @@ func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
 					"index is not unique when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
 			}
 		case *partition.ColumnsDispatcher:
-			_, ok := table.ColumnsByNames(v.Columns)
+			_, ok := table.OffsetsByNames(v.Columns)
 			if !ok {
 				return cerror.ErrDispatcherFailed.GenWithStack(
 					"columns not found when verify the table, table: %v, columns: %v", table.TableName, v.Columns)

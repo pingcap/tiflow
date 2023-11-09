@@ -73,7 +73,11 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 				"index not found when dispatch event, table: %v, index: %s", row.Table, r.IndexName)
 		}
 		for idx := 0; idx < len(names); idx++ {
-			r.hasher.Write([]byte(names[idx]), []byte(model.ColumnValueString(dispatchCols[offsets[idx]].Value)))
+			col := dispatchCols[offsets[idx]]
+			if col == nil {
+				continue
+			}
+			r.hasher.Write([]byte(names[idx]), []byte(model.ColumnValueString(col.Value)))
 		}
 	}
 

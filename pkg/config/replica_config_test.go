@@ -22,6 +22,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/compression"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -233,6 +234,22 @@ func TestReplicaConfigValidate(t *testing.T) {
 	}
 	err = conf.ValidateAndAdjust(sinkURL)
 	require.Error(t, err)
+}
+
+func TestValidateIntegrity(t *testing.T) {
+	sinkURL, err := url.Parse("kafka://topic?protocol=avro")
+	require.NoError(t, err)
+
+	cfg := GetDefaultReplicaConfig()
+	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	cfg.Sink.ColumnSelectors = []*ColumnSelector{
+		{
+			Matcher: []string{"a.b"}, Columns: []string{"c"},
+		},
+	}
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 }
 
 func TestValidateAndAdjust(t *testing.T) {
