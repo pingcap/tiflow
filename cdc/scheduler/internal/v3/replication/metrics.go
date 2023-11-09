@@ -133,6 +133,13 @@ var (
 			Name:      "slow_table_puller_resolved_ts",
 			Help:      "Puller Slowest ResolvedTs",
 		}, []string{"namespace", "changefeed"})
+	slowestTablePullerResolvedTsLag = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "scheduler",
+			Name:      "slow_table_puller_resolved_ts_lag",
+			Help:      "Puller Slowest ResolvedTs lag",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics used in scheduler
@@ -154,4 +161,5 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(slowestTableRegionGaugeVec)
 
 	registry.MustRegister(slowestTablePullerResolvedTs)
+	registry.MustRegister(slowestTablePullerResolvedTsLag)
 }

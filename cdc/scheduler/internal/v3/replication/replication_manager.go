@@ -840,10 +840,12 @@ func (r *Manager) CollectMetrics() {
 
 	if table, ok := r.spans.Get(r.slowestSink); ok {
 		if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
+			slowestTablePullerResolvedTs.WithLabelValues(cf.Namespace, cf.ID).Set(float64(pullerCkpt.ResolvedTs))
+
+			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.ResolvedTs)
 			phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
-			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.CheckpointTs)
 			lag := float64(phyCurrentTs-phyCkptTs) / 1e3
-			slowestTablePullerResolvedTs.WithLabelValues(cf.Namespace, cf.ID).Set(lag)
+			slowestTablePullerResolvedTsLag.WithLabelValues(cf.Namespace, cf.ID).Set(lag)
 		}
 	}
 }
