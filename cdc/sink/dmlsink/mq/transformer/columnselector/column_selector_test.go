@@ -202,12 +202,12 @@ func TestVerifyTables(t *testing.T) {
 	event = event4Test()
 	err = selectors.Apply(event)
 	require.NoError(t, err)
-	require.NotNil(t, event.Columns[0])
-	require.NotNil(t, event.Columns[3])
-	require.NotNil(t, event.Columns[4])
-	require.NotNil(t, event.PreColumns[0])
-	require.NotNil(t, event.PreColumns[3])
-	require.NotNil(t, event.PreColumns[4])
+	require.Nil(t, event.Columns[0])
+	require.Nil(t, event.Columns[3])
+	require.Nil(t, event.Columns[4])
+	require.Nil(t, event.PreColumns[0])
+	require.Nil(t, event.PreColumns[3])
+	require.Nil(t, event.PreColumns[4])
 
 	replicaConfig.Sink.ColumnSelectors = []*config.ColumnSelector{
 		{
