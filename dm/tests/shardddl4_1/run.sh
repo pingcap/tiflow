@@ -1256,7 +1256,6 @@ function DM_STRICT_OPTIMISTIC_DOUBLE_SOURCE() {
 		"clean_table" "optimistic"
 }
 
-
 function DM_OPTIMISTIC_SHOW_LOCKS_CASE() {
 	run_sql_source2 "alter table ${shardddl1}.${tb1} modify column b binary;"
 	run_sql_source2 "create table ${shardddl1}.test (a int primary key, col1 int);"
