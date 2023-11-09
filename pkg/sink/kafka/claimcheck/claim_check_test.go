@@ -11,14 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package memory
+package claimcheck
 
 import (
+	"context"
 	"testing"
 
-	"github.com/pingcap/tiflow/pkg/leakutil"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+func TestClaimCheckFileName(t *testing.T) {
+	ctx := context.Background()
+	storageURI := "file:///tmp/abc/"
+	changefeedID := model.DefaultChangeFeedID("test")
+
+	claimCheck, err := New(ctx, storageURI, changefeedID)
+	require.NoError(t, err)
+
+	fileName := claimCheck.FileNameWithPrefix("file.json")
+	require.Equal(t, "file:////tmp/abc/file.json", fileName)
 }

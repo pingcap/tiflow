@@ -11,14 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package memory
+package transformer
 
-import (
-	"testing"
+import "github.com/pingcap/tiflow/cdc/model"
 
-	"github.com/pingcap/tiflow/pkg/leakutil"
-)
-
-func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+// Transformer is the interface for transform the event.
+type Transformer interface {
+	Apply(event *model.RowChangedEvent) error
 }
