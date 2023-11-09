@@ -90,11 +90,13 @@ var customReplicaConfig = &ReplicaConfig{
 		EnablePartitionSeparator: true,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "",
-		MaxLogSize:        65,
-		FlushIntervalInMs: 500,
-		Storage:           "local://test",
-		UseFileBackend:    true,
+		Level:                 "",
+		MaxLogSize:            65,
+		FlushIntervalInMs:     500,
+		MetaFlushIntervalInMs: 98,
+		EncoderWorkerNum:      45,
+		Storage:               "local://test",
+		UseFileBackend:        true,
 	},
 }
 
@@ -127,8 +129,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
 		MaxLogSize:            redo.DefaultMaxLogSize,
+		EncoderWorkerNum:      redo.DefaultEncodingWorkerNum,
 		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
 	},
