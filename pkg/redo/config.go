@@ -50,7 +50,7 @@ const (
 	MinFlushIntervalInMs = 50
 
 	// DefaultEncodingWorkerNum is the default number of encoding workers.
-	DefaultEncodingWorkerNum = 16
+	DefaultEncodingWorkerNum = 32
 	// DefaultEncodingInputChanSize is the default size of input channel for encoding worker.
 	DefaultEncodingInputChanSize = 128
 	// DefaultEncodingOutputChanSize is the default size of output channel for encoding worker.
