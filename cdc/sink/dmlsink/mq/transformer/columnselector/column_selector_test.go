@@ -127,7 +127,8 @@ func TestVerifyTables(t *testing.T) {
 
 	event4Test := func() *model.RowChangedEvent {
 		return &model.RowChangedEvent{
-			Table: &model.TableName{Schema: "test", Table: "t1"},
+			Table:     &model.TableName{Schema: "test", Table: "t1"},
+			TableInfo: tableInfo,
 			Columns: []*model.Column{
 				{
 					Name:  "a",
