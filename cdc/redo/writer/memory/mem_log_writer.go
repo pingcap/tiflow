@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	defaultEncodingWorkerNum      = 16
+	defaultEncodingWorkerNum      = 32
 	defaultEncodingInputChanSize  = 128
 	defaultEncodingOutputChanSize = 2048
 	// Maximum allocated memory is flushWorkerNum*maxLogSize, which is
