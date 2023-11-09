@@ -114,11 +114,22 @@ func TestLogManagerInProcessor(t *testing.T) {
 	testWriteDMLs := func(storage string, useFileBackend bool) {
 		ctx, cancel := context.WithCancel(ctx)
 		cfg := &config.ConsistentConfig{
+<<<<<<< HEAD
 			Level:             string(redo.ConsistentLevelEventual),
 			MaxLogSize:        redo.DefaultMaxLogSize,
 			Storage:           storage,
 			FlushIntervalInMs: redo.MinFlushIntervalInMs,
 			UseFileBackend:    useFileBackend,
+=======
+			Level:                 string(redo.ConsistentLevelEventual),
+			MaxLogSize:            redo.DefaultMaxLogSize,
+			Storage:               storage,
+			FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+			MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+			EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+			FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+			UseFileBackend:        useFileBackend,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
 		}
 		dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 		var eg errgroup.Group
@@ -221,11 +232,22 @@ func TestLogManagerInOwner(t *testing.T) {
 	testWriteDDLs := func(storage string, useFileBackend bool) {
 		ctx, cancel := context.WithCancel(ctx)
 		cfg := &config.ConsistentConfig{
+<<<<<<< HEAD
 			Level:             string(redo.ConsistentLevelEventual),
 			MaxLogSize:        redo.DefaultMaxLogSize,
 			Storage:           storage,
 			FlushIntervalInMs: redo.MinFlushIntervalInMs,
 			UseFileBackend:    useFileBackend,
+=======
+			Level:                 string(redo.ConsistentLevelEventual),
+			MaxLogSize:            redo.DefaultMaxLogSize,
+			Storage:               storage,
+			FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+			MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+			EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+			FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+			UseFileBackend:        useFileBackend,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
 		}
 		startTs := model.Ts(10)
 		ddlMgr := NewDDLManager(model.DefaultChangeFeedID("test"), cfg, startTs)
@@ -266,10 +288,20 @@ func TestLogManagerError(t *testing.T) {
 	defer cancel()
 
 	cfg := &config.ConsistentConfig{
+<<<<<<< HEAD
 		Level:             string(redo.ConsistentLevelEventual),
 		MaxLogSize:        redo.DefaultMaxLogSize,
 		Storage:           "blackhole-invalid://",
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
+=======
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               "blackhole-invalid://",
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
 	}
 	logMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 	var eg errgroup.Group
@@ -317,11 +349,22 @@ func BenchmarkFileWriter(b *testing.B) {
 func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := &config.ConsistentConfig{
+<<<<<<< HEAD
 		Level:             string(redo.ConsistentLevelEventual),
 		MaxLogSize:        redo.DefaultMaxLogSize,
 		Storage:           storage,
 		FlushIntervalInMs: redo.MinFlushIntervalInMs,
 		UseFileBackend:    useFileBackend,
+=======
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               storage,
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		UseFileBackend:        useFileBackend,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
 	}
 	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 	var eg errgroup.Group

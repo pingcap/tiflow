@@ -69,11 +69,22 @@ func newProcessor4Test(
 			tmpDir := t.TempDir()
 			redoDir := fmt.Sprintf("%s/%s", tmpDir, changefeedID)
 			dmlMgr := redo.NewDMLManager(changefeedID, &config.ConsistentConfig{
+<<<<<<< HEAD
 				Level:             string(redoPkg.ConsistentLevelEventual),
 				MaxLogSize:        redoPkg.DefaultMaxLogSize,
 				FlushIntervalInMs: redoPkg.DefaultFlushIntervalInMs,
 				Storage:           "file://" + redoDir,
 				UseFileBackend:    false,
+=======
+				Level:                 string(redoPkg.ConsistentLevelEventual),
+				MaxLogSize:            redoPkg.DefaultMaxLogSize,
+				FlushIntervalInMs:     redoPkg.DefaultFlushIntervalInMs,
+				MetaFlushIntervalInMs: redoPkg.DefaultMetaFlushIntervalInMs,
+				EncodingWorkerNum:     redoPkg.DefaultEncodingWorkerNum,
+				FlushWorkerNum:        redoPkg.DefaultFlushWorkerNum,
+				Storage:               "file://" + redoDir,
+				UseFileBackend:        false,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
 			})
 			p.redo.r = dmlMgr
 		}

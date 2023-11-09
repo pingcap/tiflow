@@ -60,6 +60,12 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+<<<<<<< HEAD
+=======
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
     "storage": "",
     "use-file-backend": false
   },
@@ -273,6 +279,12 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+<<<<<<< HEAD
+=======
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
     "storage": "",
     "use-file-backend": false
   },
@@ -406,6 +418,12 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+<<<<<<< HEAD
+=======
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
     "storage": "",
     "use-file-backend": false
   },

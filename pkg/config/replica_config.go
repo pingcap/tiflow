@@ -69,11 +69,22 @@ var defaultReplicaConfig = &ReplicaConfig{
 		AdvanceTimeoutInSec:      util.AddressOf(DefaultAdvanceTimeoutInSec),
 	},
 	Consistent: &ConsistentConfig{
+<<<<<<< HEAD
 		Level:             "none",
 		MaxLogSize:        redo.DefaultMaxLogSize,
 		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 		Storage:           "",
 		UseFileBackend:    false,
+=======
+		Level:                 "none",
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		Storage:               "",
+		UseFileBackend:        false,
+>>>>>>> 028b3afe2e (redo(ticdc): add writer related parameter (#10025))
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
