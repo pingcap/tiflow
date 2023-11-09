@@ -130,6 +130,11 @@ var (
 		errors.RFCCodeText("CDC:ErrDispatcherFailed"),
 	)
 
+	ErrColumnSelectorFailed = errors.Normalize(
+		"column selector failed",
+		errors.RFCCodeText("CDC:ErrColumnSelectorFailed"),
+	)
+
 	// internal errors
 	ErrAdminStopProcessor = errors.Normalize(
 		"stop processor by admin command",
