@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
-	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 )
 
 type testColumnTuple struct {
@@ -388,27 +387,27 @@ var (
 		//	rowcodec.ColInfo{ID: 49, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeEnum)},
 		//	"enum", internal.JavaSQLTypeINTEGER, "1", "1",
 		//},
+		//{
+		//	&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(2)},
+		//	rowcodec.ColInfo{ID: 50, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b", "c"})},
+		//	"set", internal.JavaSQLTypeBIT, "2", uint64(2),
+		//},
 		{
-			&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(2)},
-			rowcodec.ColInfo{ID: 50, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b", "c"})},
-			"set", internal.JavaSQLTypeBIT, "2", uint64(2),
+			&model.Column{
+				Name: "bit", Type: mysql.TypeBit, Value: uint64(65),
+				Flag: model.UnsignedFlag | model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 51, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBit)},
+			"bit(1)", internal.JavaSQLTypeBIT, "65", uint64(65),
 		},
-		//{
-		//	&model.Column{
-		//		Name: "bit", Type: mysql.TypeBit, Value: uint64(65),
-		//		Flag: model.UnsignedFlag | model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 51, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBit)},
-		//	"bit", internal.JavaSQLTypeBIT, "65", uint64(65),
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}",
-		//		Flag: model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 52, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeJSON)},
-		//	"json", internal.JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}", "{\"key1\": \"value1\"}",
-		//},
+		{
+			&model.Column{
+				Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}",
+				Flag: model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 52, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeJSON)},
+			"json", internal.JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}", "{\"key1\": \"value1\"}",
+		},
 	}
 
 	defaultCanalBatchTester = &struct {

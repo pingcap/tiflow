@@ -391,6 +391,10 @@ func extractBasicMySQLType(mysqlType string) string {
 		return strings.TrimSuffix(mysqlType, " unsigned")
 	}
 
+	if strings.HasPrefix(mysqlType, "bit") {
+		return "bit"
+	}
+
 	if strings.HasPrefix(mysqlType, "set") {
 		return "set"
 	}
