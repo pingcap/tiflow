@@ -92,11 +92,7 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	if !cfg.CaseSensitive {
-		f = tfilter.CaseInsensitive(f)
-	}
-
+	f = tfilter.CaseInsensitive(f)
 	dmlExprFilter, err := newExprFilter(tz, cfg.Filter)
 	if err != nil {
 		return nil, err
