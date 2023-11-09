@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -106,15 +107,15 @@ type encodingWorkerGroup struct {
 
 func newEncodingWorkerGroup(workerNum int) *encodingWorkerGroup {
 	if workerNum <= 0 {
-		workerNum = defaultEncodingWorkerNum
+		workerNum = redo.DefaultEncodingWorkerNum
 	}
 	inputChs := make([]chan *polymorphicRedoEvent, workerNum)
 	for i := 0; i < workerNum; i++ {
-		inputChs[i] = make(chan *polymorphicRedoEvent, defaultEncodingInputChanSize)
+		inputChs[i] = make(chan *polymorphicRedoEvent, redo.DefaultEncodingInputChanSize)
 	}
 	return &encodingWorkerGroup{
 		inputChs:  inputChs,
-		outputCh:  make(chan *polymorphicRedoEvent, defaultEncodingOutputChanSize),
+		outputCh:  make(chan *polymorphicRedoEvent, redo.DefaultEncodingOutputChanSize),
 		workerNum: workerNum,
 		closed:    make(chan struct{}),
 	}

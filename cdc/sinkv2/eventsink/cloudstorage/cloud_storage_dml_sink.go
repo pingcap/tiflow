@@ -80,7 +80,7 @@ type dmlSink struct {
 	alive struct {
 		sync.RWMutex
 		// msgCh is a channel to hold eventFragment.
-		msgCh  chan eventFragment
+		msgCh  *chann.DrainableChann[eventFragment]
 		isDead bool
 	}
 
@@ -140,7 +140,7 @@ func NewCloudStorageSink(
 		cancel:          wgCancel,
 		dead:            make(chan struct{}),
 	}
-	s.alive.msgCh = make(chan eventFragment, defaultChannelSize)
+	s.alive.msgCh = chann.NewDrainableChann[eventFragment]()
 
 	encodedCh := make(chan eventFragment, defaultChannelSize)
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
@@ -148,7 +148,7 @@ func NewCloudStorageSink(
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh, encodedCh)
+		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedCh)
 	}
 	// create defragmenter.
 	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
@@ -168,7 +168,7 @@ func NewCloudStorageSink(
 
 		s.alive.Lock()
 		s.alive.isDead = true
-		close(s.alive.msgCh)
+		s.alive.msgCh.CloseAndDrain()
 		s.alive.Unlock()
 		close(s.dead)
 
@@ -234,7 +234,7 @@ func (s *dmlSink) WriteEvents(txns ...*eventsink.CallbackableEvent[*model.Single
 
 		s.statistics.ObserveRows(txn.Event.Rows...)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
-		s.alive.msgCh <- eventFragment{
+		s.alive.msgCh.In() <- eventFragment{
 			seqNumber:      seq,
 			versionedTable: tbl,
 			event:          txn,

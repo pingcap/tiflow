@@ -77,6 +77,8 @@ func TestInitAndWriteMeta(t *testing.T) {
 		Storage:               uri.String(),
 		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
 	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
 	require.NoError(t, err)
@@ -142,6 +144,8 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		Storage:               uri.String(),
 		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
 	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
 	require.NoError(t, err)
@@ -274,6 +278,8 @@ func TestGCAndCleanup(t *testing.T) {
 		Storage:               uri.String(),
 		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
 	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
 	require.NoError(t, err)

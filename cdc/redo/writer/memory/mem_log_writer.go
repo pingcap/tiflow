@@ -24,15 +24,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var (
-	defaultEncodingWorkerNum      = 16
-	defaultEncodingInputChanSize  = 128
-	defaultEncodingOutputChanSize = 2048
-	// Maximum allocated memory is flushWorkerNum*maxLogSize, which is
-	// `8*64MB = 512MB` by default.
-	defaultFlushWorkerNum = 8
-)
-
 var _ writer.RedoLogWriter = (*memoryLogWriter)(nil)
 
 type memoryLogWriter struct {
@@ -71,11 +62,11 @@ func NewLogWriter(
 		cancel: lwCancel,
 	}
 
-	lw.encodeWorkers = newEncodingWorkerGroup(defaultEncodingWorkerNum)
+	lw.encodeWorkers = newEncodingWorkerGroup(cfg.EncodingWorkerNum)
 	eg.Go(func() error {
 		return lw.encodeWorkers.Run(lwCtx)
 	})
-	lw.fileWorkers = newFileWorkerGroup(cfg, defaultFlushWorkerNum, extStorage, opts...)
+	lw.fileWorkers = newFileWorkerGroup(cfg, cfg.FlushWorkerNum, extStorage, opts...)
 	eg.Go(func() error {
 		return lw.fileWorkers.Run(lwCtx, lw.encodeWorkers.outputCh)
 	})

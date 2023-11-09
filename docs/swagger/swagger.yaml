@@ -386,7 +386,11 @@ definitions:
     type: object
   v2.ConsistentConfig:
     properties:
+      encoding_worker_num:
+        type: integer
       flush_interval:
+        type: integer
+      flush_worker_num:
         type: integer
       level:
         type: string

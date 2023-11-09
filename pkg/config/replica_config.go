@@ -38,7 +38,7 @@ const (
 
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
@@ -69,6 +69,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		MaxLogSize:            redo.DefaultMaxLogSize,
 		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
 	},

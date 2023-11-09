@@ -28,6 +28,8 @@ type ConsistentConfig struct {
 	MaxLogSize            int64  `toml:"max-log-size" json:"max-log-size"`
 	FlushIntervalInMs     int64  `toml:"flush-interval" json:"flush-interval"`
 	MetaFlushIntervalInMs int64  `toml:"meta-flush-interval" json:"meta-flush-interval"`
+	EncodingWorkerNum     int    `toml:"encoding-worker-num" json:"encoding-worker-num"`
+	FlushWorkerNum        int    `toml:"flush-worker-num" json:"flush-worker-num"`
 	Storage               string `toml:"storage" json:"storage"`
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
 }
@@ -58,6 +60,13 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
 			fmt.Sprintf("The consistent.meta-flush-interval:%d must be equal or greater than %d",
 				c.MetaFlushIntervalInMs, redo.MinFlushIntervalInMs))
+	}
+
+	if c.EncodingWorkerNum == 0 {
+		c.EncodingWorkerNum = redo.DefaultEncodingWorkerNum
+	}
+	if c.FlushWorkerNum == 0 {
+		c.FlushWorkerNum = redo.DefaultFlushWorkerNum
 	}
 
 	uri, err := storage.ParseRawURL(c.Storage)

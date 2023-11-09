@@ -30,7 +30,7 @@ import (
 // note: this is api published default value, not change it
 var defaultAPIConfig = &ReplicaConfig{
 	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
@@ -60,6 +60,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		MaxLogSize:            64,
 		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
 	},

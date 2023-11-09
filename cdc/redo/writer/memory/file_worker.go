@@ -103,7 +103,7 @@ func newFileWorkerGroup(
 	opts ...writer.Option,
 ) *fileWorkerGroup {
 	if workerNum <= 0 {
-		workerNum = defaultFlushWorkerNum
+		workerNum = redo.DefaultFlushWorkerNum
 	}
 
 	op := &writer.LogWriterOptions{}
