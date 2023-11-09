@@ -3426,8 +3426,20 @@
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
+<<<<<<< HEAD
               "legendFormat": "{{changefeed}}",
+=======
+              "legendFormat": "{{namespace}}-{{changefeed}}-barrier",
+>>>>>>> bf206ea9a2 (puller(cdc): add metrics for slowest changefeed puller (#10054))
               "refId": "C"
+            },
+            {
+              "exemplar": true,
+              "expr": "max(ticdc_scheduler_slow_table_puller_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\"}) by (namespace, changefeed)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-puller",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -3632,8 +3644,20 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
+<<<<<<< HEAD
               "legendFormat": "{{changefeed}}",
+=======
+              "legendFormat": "{{namespace}}-{{changefeed}}-barrier",
+>>>>>>> bf206ea9a2 (puller(cdc): add metrics for slowest changefeed puller (#10054))
               "refId": "C"
+            },
+            {
+              "exemplar": true,
+              "expr": "max(ticdc_scheduler_slow_table_puller_resolved_ts_lag{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", namespace=~\"$namespace\", changefeed=~\"$changefeed\"}) by (namespace, changefeed)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-puller",
+              "refId": "A"
             }
           ],
           "thresholds": [],
