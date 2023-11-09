@@ -489,18 +489,12 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 
 	lastEnd := l.totalSpan.StartKey
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
-<<<<<<< HEAD
-		action(item.regionID, &item.state)
-
-		r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, item.startKey) < 0
-=======
 		if action != nil {
 			action(item.regionID, &item.state)
 		}
 		if spanz.EndCompare(lastEnd, item.startKey) < 0 {
 			r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: item.startKey})
 		}
->>>>>>> a71208a423 (kv-client(cdc): log slowest regions and region holes (#9933))
 		ckpt := item.state.CheckpointTs.Load()
 		if ckpt > r.FastestRegion.CheckpointTs {
 			r.FastestRegion.RegionID = item.regionID
