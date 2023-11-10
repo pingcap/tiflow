@@ -31,8 +31,12 @@ import (
 // note: this is api published default value, not change it
 var defaultAPIConfig = &ReplicaConfig{
 	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
+<<<<<<< HEAD
 	CaseSensitive:      true,
 	EnableOldValue:     true,
+=======
+	CaseSensitive:      false,
+>>>>>>> db3a2ddccd (config(ticdc): change case-sensitive default value (#10049))
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
 	SyncPointInterval:  &JSONDuration{10 * time.Minute},

@@ -108,6 +108,7 @@ var customReplicaConfig = &ReplicaConfig{
 
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
+<<<<<<< HEAD
 	MemoryQuota:        1024 * 1024 * 1024,
 	CaseSensitive:      true,
 	EnableOldValue:     true,
@@ -115,6 +116,11 @@ var defaultReplicaConfig = &ReplicaConfig{
 	EnableSyncPoint:    false,
 	SyncPointInterval:  &JSONDuration{time.Minute * 10},
 	SyncPointRetention: &JSONDuration{time.Hour * 24},
+=======
+	MemoryQuota:      1024 * 1024 * 1024,
+	CaseSensitive:    false,
+	CheckGCSafePoint: true,
+>>>>>>> db3a2ddccd (config(ticdc): change case-sensitive default value (#10049))
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},

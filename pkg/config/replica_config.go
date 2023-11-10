@@ -41,8 +41,12 @@ const (
 
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        DefaultChangefeedMemoryQuota,
+<<<<<<< HEAD
 	CaseSensitive:      true,
 	EnableOldValue:     true,
+=======
+	CaseSensitive:      false,
+>>>>>>> db3a2ddccd (config(ticdc): change case-sensitive default value (#10049))
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
 	SyncPointInterval:  time.Minute * 10,
