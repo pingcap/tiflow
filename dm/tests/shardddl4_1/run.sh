@@ -1258,15 +1258,15 @@ function DM_STRICT_OPTIMISTIC_DOUBLE_SOURCE() {
 
 function DM_OPTIMISTIC_SHOW_LOCKS_CASE() {
 	run_sql_source2 "alter table ${shardddl1}.${tb1} modify column b binary;"
-	run_sql_source2 "create table ${shardddl1}.test (a int primary key, col1 int);"
-	run_sql_source2 "create table ${shardddl2}.test (a int primary key, col1 int);"
-	run_sql_source2 "alter table ${shardddl1}.test modify column col1 varchar(11);"
-	run_sql_source2 "alter table ${shardddl2}.test modify column col1 binary;"
+	run_sql_source2 "create table ${shardddl1}.${t_1} (a int primary key, col1 int);"
+	run_sql_source2 "create table ${shardddl2}.${t_1} (a int primary key, col1 int);"
+	run_sql_source2 "alter table ${shardddl1}.${t_1} modify column col1 varchar(11);"
+	run_sql_source2 "alter table ${shardddl2}.${t_1} modify column col1 binary;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"shard-ddl-lock" \
 		"\"ID\": \"test-\`shardddl\`.\`tb\`\"" 1 \
-		"\"ID\": \"test-\`shardddl\`.\`test\`\"" 1 \
-		"ALTER TABLE \`shardddl\`.\`test\`" 1
+		"\"ID\": \"test-\`shardddl\`.\`${t_1}\`\"" 1 \
+		"ALTER TABLE \`shardddl\`.\`${t_1}\`" 1
 }
 
 function DM_OPTIMISTIC_SHOW_LOCKS() {
