@@ -19,10 +19,9 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
+	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
-
-	"github.com/pingcap/tiflow/cdc/sink/mq/producer/kafka"
 )
 
 func TestPartition(t *testing.T) {
@@ -54,7 +53,7 @@ func TestPartition(t *testing.T) {
 
 	// assume a topic already exist, the not default topic won't be affected by the default topic's partition number.
 	err = adminClient.CreateTopic("new-topic-2", &sarama.TopicDetail{
-		
+
 		NumPartitions: 3,
 	}, false)
 	require.NoError(t, err)
