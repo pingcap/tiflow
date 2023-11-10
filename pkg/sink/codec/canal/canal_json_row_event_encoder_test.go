@@ -547,8 +547,9 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	encoder := &JSONRowEventEncoder{
-		builder: newCanalEntryBuilder(),
+		builder: newCanalEntryBuilder(codecConfig),
 		config:  &common.Config{EnableTiDBExtension: true},
 	}
 	require.NotNil(t, encoder)

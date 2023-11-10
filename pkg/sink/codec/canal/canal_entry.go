@@ -25,8 +25,10 @@ import (
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"golang.org/x/text/encoding"
@@ -43,12 +45,14 @@ const (
 
 type canalEntryBuilder struct {
 	bytesDecoder *encoding.Decoder // default charset is ISO-8859-1
+	config       *common.Config
 }
 
 // newCanalEntryBuilder creates a new canalEntryBuilder
-func newCanalEntryBuilder() *canalEntryBuilder {
+func newCanalEntryBuilder(config *common.Config) *canalEntryBuilder {
 	return &canalEntryBuilder{
 		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
+		config:       config,
 	}
 }
 
@@ -119,8 +123,8 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
-func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
-	mysqlType := getMySQLType(c)
+func (b *canalEntryBuilder) buildColumn(c *model.Column, colInfo rowcodec.ColInfo, colName string, updated bool) (*canal.Column, error) {
+	mysqlType := getMySQLType(colInfo.Ft, c.Flag, b.config.ContentCompatible)
 	javaType, err := getJavaSQLType(c, mysqlType)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -146,11 +150,11 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*canal.RowData, error) {
 	var columns []*canal.Column
-	for _, column := range e.Columns {
+	for idx, column := range e.Columns {
 		if column == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
+		c, err := b.buildColumn(column, e.ColInfos[idx], column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -159,14 +163,14 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 
 	onlyHandleKeyColumns = onlyHandleKeyColumns && e.IsDelete()
 	var preColumns []*canal.Column
-	for _, column := range e.PreColumns {
+	for idx, column := range e.PreColumns {
 		if column == nil {
 			continue
 		}
 		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
+		c, err := b.buildColumn(column, e.ColInfos[idx], column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -384,6 +388,13 @@ func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
 	return mysqlType
 }
 
+func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
+	if !zerofill {
+		return mysqlType
+	}
+	return mysqlType + " zerofill"
+}
+
 // when decoding the canal format, remove `unsigned` to get the original `mysql type`.
 func extractBasicMySQLType(mysqlType string) string {
 	//return strings.TrimSuffix(mysqlType, " unsigned")
@@ -402,22 +413,25 @@ func extractBasicMySQLType(mysqlType string) string {
 	return mysqlType
 }
 
-func getMySQLType(c *model.Column) string {
-	mysqlType := types.TypeStr(c.Type)
-	// make `mysqlType` representation keep the same as the canal official implementation
-	mysqlType = withUnsigned4MySQLType(mysqlType, c.Flag.IsUnsigned())
+func getMySQLType(fieldType *types.FieldType, flag model.ColumnFlagType, fullType bool) string {
+	if !fullType {
+		result := types.TypeStr(fieldType.GetType())
+		result = withUnsigned4MySQLType(result, flag.IsUnsigned())
+		result = withZerofill4MySQLType(result, flag.IsZerofill())
+		if !flag.IsBinary() {
+			return result
+		}
 
-	if !c.Flag.IsBinary() {
-		return mysqlType
+		if types.IsTypeBlob(fieldType.GetType()) {
+			return strings.Replace(result, "text", "blob", 1)
+		}
+		if types.IsTypeChar(fieldType.GetType()) {
+			return strings.Replace(result, "char", "binary", 1)
+		}
+		return result
 	}
 
-	if types.IsTypeBlob(c.Type) {
-		return strings.Replace(mysqlType, "text", "blob", 1)
-	}
-
-	if types.IsTypeChar(c.Type) {
-		return strings.Replace(mysqlType, "char", "binary", 1)
-	}
-
-	return mysqlType
+	result := fieldType.InfoSchemaStr()
+	result = withZerofill4MySQLType(result, flag.IsZerofill())
+	return result
 }

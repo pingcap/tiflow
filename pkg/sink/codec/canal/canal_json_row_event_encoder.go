@@ -21,7 +21,7 @@ import (
 	"github.com/mailru/easyjson/jwriter"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -31,12 +31,15 @@ import (
 	"go.uber.org/zap"
 )
 
-func fillColumns(columns []*model.Column,
+func fillColumns(
+	ColInfos []rowcodec.ColInfo,
+	columns []*model.Column,
 	onlyOutputUpdatedColumn bool,
 	onlyHandleKeyColumn bool,
 	newColumnMap map[string]*model.Column,
 	out *jwriter.Writer,
 	builder *canalEntryBuilder,
+	fullType bool,
 ) error {
 	if len(columns) == 0 {
 		out.RawString("null")
@@ -45,7 +48,7 @@ func fillColumns(columns []*model.Column,
 	out.RawByte('[')
 	out.RawByte('{')
 	isFirst := true
-	for _, col := range columns {
+	for idx, col := range columns {
 		if col != nil {
 			// column equal, do not output it
 			if onlyOutputUpdatedColumn && shouldIgnoreColumn(col, newColumnMap) {
@@ -59,7 +62,7 @@ func fillColumns(columns []*model.Column,
 			} else {
 				out.RawByte(',')
 			}
-			mysqlType := getMySQLType(col)
+			mysqlType := getMySQLType(ColInfos[idx].Ft, col.Flag, fullType)
 			javaType, err := getJavaSQLType(col, mysqlType)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -176,12 +179,7 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				extColInfo := e.ColInfos[idx]
-				mysqlType := extColInfo.Ft.String()
-				if extColInfo.Ft.GetType() == mysql.TypeYear {
-					mysqlType = "year"
-				}
-
+				mysqlType := getMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
 				javaType, err := getJavaSQLType(col, mysqlType)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -223,13 +221,13 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.PreColumns, false, onlyHandleKey, nil, out, builder); err != nil {
+		if err := fillColumns(e.ColInfos, e.PreColumns, false, onlyHandleKey, nil, out, builder, config.ContentCompatible); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder); err != nil {
+		if err := fillColumns(e.ColInfos, e.Columns, false, onlyHandleKey, nil, out, builder, config.ContentCompatible); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
@@ -241,11 +239,11 @@ func newJSONMessageForDML(
 			}
 		}
 		out.RawString(",\"old\":")
-		if err := fillColumns(e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder); err != nil {
+		if err := fillColumns(e.ColInfos, e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder, config.ContentCompatible); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder); err != nil {
+		if err := fillColumns(e.ColInfos, e.Columns, false, onlyHandleKey, nil, out, builder, config.ContentCompatible); err != nil {
 			return nil, err
 		}
 	} else {
@@ -309,7 +307,7 @@ func newJSONRowEventEncoder(
 	config *common.Config, claimCheck *claimcheck.ClaimCheck,
 ) codec.RowEventEncoder {
 	return &JSONRowEventEncoder{
-		builder:    newCanalEntryBuilder(),
+		builder:    newCanalEntryBuilder(config),
 		messages:   make([]*common.Message, 0, 1),
 		config:     config,
 		claimCheck: claimCheck,
