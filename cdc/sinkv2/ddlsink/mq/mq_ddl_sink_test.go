@@ -82,8 +82,9 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
 	defer leader.Close()
+	// partition-number is 2, so only send DDL events to 2 partitions.
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
-		"&max-message-bytes=1048576&partition-num=1" +
+		"&max-message-bytes=1048576&partition-num=2" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&protocol=open-protocol"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
 
@@ -110,7 +111,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	err = s.WriteDDLEvent(ctx, ddl)
 	require.Nil(t, err)
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
-		3, "All partitions should be broadcast")
+		2, "All partitions should be broadcast")
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
@@ -118,10 +119,6 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 1,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
 	}), 1)
 }
 
@@ -184,8 +181,9 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 
 	leader, topic := initBroker(t, kafka.DefaultMockPartitionNum)
 	defer leader.Close()
+	// partition-num is set to 2, so send checkpoint to 2 partitions.
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
-		"&max-message-bytes=1048576&partition-num=1" +
+		"&max-message-bytes=1048576&partition-num=2" +
 		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip" +
 		"&protocol=canal-json&enable-tidb-extension=true"
 	uri := fmt.Sprintf(uriTemplate, leader.Addr(), topic)
@@ -206,7 +204,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	require.Nil(t, err)
 
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
-		3, "All partitions should be broadcast")
+		2, "All partitions should be broadcast")
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
@@ -214,10 +212,6 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 1,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
 	}), 1)
 }
 
@@ -278,18 +272,10 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	require.Nil(t, err)
 
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
-		6, "All topics and partitions should be broadcast")
+		4, "All topics and partitions should be broadcast")
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "mock_topic",
 		Partition: 0,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 1,
-	}), 1)
-	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
-		Topic:     "mock_topic",
-		Partition: 2,
 	}), 1)
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetEvents(mqv1.TopicPartitionKey{
 		Topic:     "cdc_person",

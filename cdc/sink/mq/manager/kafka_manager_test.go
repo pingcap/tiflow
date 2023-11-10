@@ -35,11 +35,12 @@ func TestPartitions(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(context.TODO(), adminClient, cfg)
+	ctx := context.Background()
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, adminClient, cfg)
 	defer manager.Close()
 	partitionsNum, err := manager.GetPartitionNum(kafka.DefaultMockTopicName)
-	require.Nil(t, err)
-	require.Equal(t, int32(3), partitionsNum)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), partitionsNum)
 }
 
 func TestCreateTopic(t *testing.T) {
@@ -57,22 +58,22 @@ func TestCreateTopic(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(ctx, adminClient, cfg)
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(kafka.DefaultMockTopicName)
-	require.Nil(t, err)
-	require.Equal(t, int32(3), partitionNum)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), partitionNum)
 
 	partitionNum, err = manager.CreateTopicAndWaitUntilVisible("new-topic")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionNum)
 	partitionsNum, err := manager.GetPartitionNum("new-topic")
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionsNum)
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(ctx, adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, "new-topic2", adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible("new-topic2")
 	require.Regexp(
@@ -81,6 +82,7 @@ func TestCreateTopic(t *testing.T) {
 		err,
 	)
 
+	topic := "new-topic-failed"
 	// Invalid replication factor.
 	// It happens when replication-factor is greater than the number of brokers.
 	cfg = &kafkaconfig.AutoCreateTopicConfig{
@@ -88,9 +90,9 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager = NewKafkaTopicManager(ctx, adminClient, cfg)
+	manager = NewKafkaTopicManager(ctx, topic, adminClient, cfg)
 	defer manager.Close()
-	_, err = manager.CreateTopicAndWaitUntilVisible("new-topic-failed")
+	_, err = manager.CreateTopicAndWaitUntilVisible(topic)
 	require.Regexp(
 		t,
 		"new sarama producer: kafka server: Replication-factor is invalid",
@@ -111,13 +113,15 @@ func TestCreateTopicWithDelay(t *testing.T) {
 		ReplicationFactor: 1,
 	}
 
-	manager := NewKafkaTopicManager(context.TODO(), adminClient, cfg)
+	topic := "new_topic"
+	ctx := context.Background()
+	manager := NewKafkaTopicManager(ctx, topic, adminClient, cfg)
 	defer manager.Close()
-	partitionNum, err := manager.createTopic("new_topic")
-	require.Nil(t, err)
-	err = adminClient.SetRemainingFetchesUntilTopicVisible("new_topic", 3)
-	require.Nil(t, err)
-	err = manager.waitUntilTopicVisible("new_topic")
-	require.Nil(t, err)
+	partitionNum, err := manager.createTopic(topic)
+	require.NoError(t, err)
+	err = adminClient.SetRemainingFetchesUntilTopicVisible(topic, 3)
+	require.NoError(t, err)
+	err = manager.waitUntilTopicVisible(topic)
+	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionNum)
 }
