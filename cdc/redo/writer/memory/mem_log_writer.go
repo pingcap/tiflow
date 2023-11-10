@@ -24,7 +24,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-
 var _ writer.RedoLogWriter = (*memoryLogWriter)(nil)
 
 type memoryLogWriter struct {
