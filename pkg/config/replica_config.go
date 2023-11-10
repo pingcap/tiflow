@@ -27,9 +27,19 @@ import (
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
+<<<<<<< HEAD
 	CaseSensitive:    true,
 	EnableOldValue:   true,
 	CheckGCSafePoint: true,
+=======
+	MemoryQuota:        DefaultChangefeedMemoryQuota,
+	CaseSensitive:      false,
+	CheckGCSafePoint:   true,
+	EnableSyncPoint:    util.AddressOf(false),
+	SyncPointInterval:  util.AddressOf(10 * time.Minute),
+	SyncPointRetention: util.AddressOf(24 * time.Hour),
+	BDRMode:            util.AddressOf(false),
+>>>>>>> db3a2ddccd (config(ticdc): change case-sensitive default value (#10049))
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
