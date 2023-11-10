@@ -22,6 +22,7 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
@@ -717,7 +718,7 @@ func GenXIDEvent(header *replication.EventHeader, latestPos uint32, xid uint64) 
 // GenMariaDBGTIDListEvent generates a MariadbGTIDListEvent.
 // ref: https://mariadb.com/kb/en/library/gtid_list_event/
 func GenMariaDBGTIDListEvent(header *replication.EventHeader, latestPos uint32, gSet gmysql.GTIDSet) (*replication.BinlogEvent, error) {
-	if gSet == nil || len(gSet.String()) == 0 {
+	if gtid.IsZeroGTIDSet(gSet) {
 		return nil, terror.ErrBinlogEmptyGTID.Generate()
 	}
 
