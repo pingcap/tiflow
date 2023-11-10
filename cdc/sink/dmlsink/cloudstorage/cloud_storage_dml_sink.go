@@ -80,7 +80,7 @@ type DMLSink struct {
 	alive struct {
 		sync.RWMutex
 		// msgCh is a channel to hold eventFragment.
-		msgCh  chan eventFragment
+		msgCh  *chann.DrainableChann[eventFragment]
 		isDead bool
 	}
 
@@ -142,7 +142,7 @@ func NewDMLSink(ctx context.Context,
 		cancel:          wgCancel,
 		dead:            make(chan struct{}),
 	}
-	s.alive.msgCh = make(chan eventFragment, defaultChannelSize)
+	s.alive.msgCh = chann.NewAutoDrainChann[eventFragment]()
 
 	encodedCh := make(chan eventFragment, defaultChannelSize)
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
@@ -150,7 +150,7 @@ func NewDMLSink(ctx context.Context,
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh, encodedCh)
+		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedCh)
 	}
 	// create defragmenter.
 	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
@@ -170,7 +170,7 @@ func NewDMLSink(ctx context.Context,
 
 		s.alive.Lock()
 		s.alive.isDead = true
-		close(s.alive.msgCh)
+		s.alive.msgCh.CloseAndDrain()
 		s.alive.Unlock()
 		close(s.dead)
 
@@ -236,7 +236,7 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 
 		s.statistics.ObserveRows(txn.Event.Rows...)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
-		s.alive.msgCh <- eventFragment{
+		s.alive.msgCh.In() <- eventFragment{
 			seqNumber:      seq,
 			versionedTable: tbl,
 			event:          txn,
