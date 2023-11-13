@@ -45,7 +45,6 @@ func TestEncodeCheckpoint(t *testing.T) {
 }
 
 func TestEncodeDDLEvent(t *testing.T) {
-	t.Parallel()
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -86,7 +85,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 }
 
 func TestEncodeBootstrapEvent(t *testing.T) {
-	t.Parallel()
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
