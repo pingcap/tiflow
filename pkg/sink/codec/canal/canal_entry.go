@@ -120,7 +120,7 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
-	mysqlType := getMySQLType(c)
+	mysqlType := getMySQLType(c.Type, c.Flag)
 	javaType, err := getJavaSQLType(c, mysqlType)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -389,20 +389,20 @@ func trimUnsignedFromMySQLType(mysqlType string) string {
 	return strings.TrimSuffix(mysqlType, " unsigned")
 }
 
-func getMySQLType(c *model.Column) string {
-	mysqlType := types.TypeStr(c.Type)
+func getMySQLType(tp byte, flag model.ColumnFlagType) string {
+	mysqlType := types.TypeStr(tp)
 	// make `mysqlType` representation keep the same as the canal official implementation
-	mysqlType = withUnsigned4MySQLType(mysqlType, c.Flag.IsUnsigned())
+	mysqlType = withUnsigned4MySQLType(mysqlType, flag.IsUnsigned())
 
-	if !c.Flag.IsBinary() {
+	if !flag.IsBinary() {
 		return mysqlType
 	}
 
-	if types.IsTypeBlob(c.Type) {
+	if types.IsTypeBlob(tp) {
 		return strings.Replace(mysqlType, "text", "blob", 1)
 	}
 
-	if types.IsTypeChar(c.Type) {
+	if types.IsTypeChar(tp) {
 		return strings.Replace(mysqlType, "char", "binary", 1)
 	}
 
