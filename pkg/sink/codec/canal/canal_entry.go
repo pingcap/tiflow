@@ -389,10 +389,12 @@ func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
 }
 
 func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
-	if !zerofill {
-		return mysqlType
+	if zerofill &&
+		strings.HasPrefix(mysqlType, "bit") &&
+		strings.HasPrefix(mysqlType, "year") {
+		return mysqlType + " zerofill"
 	}
-	return mysqlType + " zerofill"
+	return mysqlType
 }
 
 // when decoding the canal format, remove `unsigned` to get the original `mysql type`.
