@@ -174,7 +174,6 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				g
 				javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
