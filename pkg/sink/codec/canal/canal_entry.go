@@ -305,7 +305,7 @@ func getJavaSQLType(value interface{}, tp byte, flag model.ColumnFlagType) (resu
 
 	switch javaType {
 	case internal.JavaSQLTypeBINARY, internal.JavaSQLTypeVARBINARY, internal.JavaSQLTypeLONGVARBINARY:
-		if types.IsTypeBlob(tp) {
+		if flag.IsBinary() {
 			return internal.JavaSQLTypeBLOB, nil
 		}
 		return internal.JavaSQLTypeCLOB, nil
