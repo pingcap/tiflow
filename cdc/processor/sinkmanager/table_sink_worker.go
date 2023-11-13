@@ -201,13 +201,14 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if err != nil {
 			return errors.Trace(err)
 		}
+		// NOTE: lowerBound can be updated by `fetchFromCache`, so `lastPos` should also be updated.
+		advancer.lastPos = lowerBound.Prev()
 		if drained {
 			// If drained is true it means we have drained all events from the cache,
 			// we can return directly instead of get events from the source manager again.
-			performCallback(lowerBound.Prev())
+			performCallback(advancer.lastPos)
 			return nil
 		}
-		advancer.lastPos = lowerBound.Prev()
 	}
 
 	// lowerBound and upperBound are both closed intervals.
