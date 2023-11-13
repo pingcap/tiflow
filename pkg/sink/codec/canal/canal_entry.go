@@ -304,7 +304,7 @@ func isCanalDDL(t canal.EventType) bool {
 	return false
 }
 
-func getJavaSQLType(c *model.Column, mysqlType string) (result internal.JavaSQLType, err error) {
+func getJavaSQLType(mysqlType byte, flag model.ColumnFlagType, c *model.Column, mysqlType string) (result internal.JavaSQLType, err error) {
 	javaType := internal.MySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
 	switch javaType {
