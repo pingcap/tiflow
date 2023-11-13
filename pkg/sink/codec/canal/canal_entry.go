@@ -424,6 +424,9 @@ func getMySQLType(fieldType *types.FieldType, flag model.ColumnFlagType, fullTyp
 			return result
 		}
 
+		// todo: use this to query the mysql type
+		//result = types.TypeToStr(fieldType.GetType(), fieldType.GetCharset())
+
 		if types.IsTypeBlob(fieldType.GetType()) {
 			return strings.Replace(result, "text", "blob", 1)
 		}
