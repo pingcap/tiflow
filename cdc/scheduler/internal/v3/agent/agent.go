@@ -49,6 +49,8 @@ type agent struct {
 	// 1. The capture receives a SIGTERM signal.
 	// 2. The agent receives a stopping heartbeat.
 	liveness *model.Liveness
+
+	lastCheckpointWarn time.Time
 }
 
 type agentInfo struct {
@@ -98,6 +100,8 @@ func newAgent(
 		tableM:    newTableManager(changeFeedID, tableExecutor),
 		liveness:  liveness,
 		compat:    compat.New(map[model.CaptureID]*model.CaptureInfo{}),
+
+		lastCheckpointWarn: time.Now(),
 	}
 
 	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -247,11 +251,13 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedule
 
 	for tableID, table := range allTables {
 		status := table.getTableStatus(request.CollectStats)
-		if status.Checkpoint.CheckpointTs > status.Checkpoint.ResolvedTs {
+		if status.Checkpoint.CheckpointTs > status.Checkpoint.ResolvedTs &&
+			time.Since(a.lastCheckpointWarn) > 30*time.Second {
 			log.Warn("schedulerv3: CheckpointTs is greater than ResolvedTs",
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.Int64("tableID", tableID))
+			a.lastCheckpointWarn = time.Now()
 		}
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
