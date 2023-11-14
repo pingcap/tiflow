@@ -147,6 +147,7 @@ require (
 	github.com/jfcg/sixb v1.3.8 // indirect
 	github.com/jfcg/sorty/v2 v2.1.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
+	github.com/robfig/cron v1.2.0 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

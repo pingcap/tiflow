@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -29,6 +30,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -402,4 +405,37 @@ func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, err
 	}
 
 	return fileIdx, nil
+}
+
+var dateSeparatorDayRegexp *regexp.Regexp
+
+// RemoveExpiredFiles removes expired files from external storage.
+func RemoveExpiredFiles(
+	ctx context.Context,
+	storage storage.ExternalStorage,
+	cfg *Config,
+	checkpointTs model.Ts,
+) (uint64, error) {
+	if cfg.DateSeparator != config.DateSeparatorDay.String() {
+		return 0, nil
+	}
+	if dateSeparatorDayRegexp == nil {
+		dateSeparatorDayRegexp = regexp.MustCompile(config.DateSeparatorDay.GetPattern())
+	}
+
+	ttl := time.Duration(cfg.FileExpirationDays) * time.Hour * 24
+	currTime := oracle.GetTimeFromTS(checkpointTs).Add(-ttl)
+	expiredDate := currTime.Format("2006-01-02")
+
+	cnt := uint64(0)
+	err := util.RemoveFilesIf(ctx, storage, func(path string) bool {
+		// the path is like: <schema>/<table>/<tableVersion>/<partitionID>/<date>/CDC{num}.extension
+		match := dateSeparatorDayRegexp.FindString(path)
+		if match != "" && match < expiredDate {
+			cnt++
+			return true
+		}
+		return false
+	}, nil)
+	return cnt, err
 }
