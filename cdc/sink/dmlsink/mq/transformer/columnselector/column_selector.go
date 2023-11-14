@@ -63,28 +63,37 @@ func (s *selector) Apply(event *model.RowChangedEvent) error {
 			"the given event does not match the column selector, table: %v", event.Table)
 	}
 
-	for idx, column := range event.Columns {
-		if s.columnM.MatchColumn(column.Name) {
-			continue
+	retainedColumns := make(map[string]struct{}, len(event.Columns))
+	if len(event.Columns) != 0 {
+		for idx, column := range event.Columns {
+			if s.columnM.MatchColumn(column.Name) {
+				retainedColumns[column.Name] = struct{}{}
+				continue
+			}
+			event.Columns[idx] = nil
 		}
-		if column.Flag.IsHandleKey() || column.Flag.IsUniqueKey() {
+
+		if !verifyIndices(event.TableInfo, retainedColumns) {
 			return errors.ErrColumnSelectorFailed.GenWithStack(
-				"primary key or unique key cannot be filtered out by the column selector, "+
-					"table: %v, column: %s", event.Table, column.Name)
+				"no primary key columns or unique key columns obtained after filter out, "+
+					"table: %+v", event.Table)
 		}
-		event.Columns[idx] = nil
 	}
 
-	for idx, column := range event.PreColumns {
-		if s.columnM.MatchColumn(column.Name) {
-			continue
+	if len(event.PreColumns) != 0 {
+		clear(retainedColumns)
+		for idx, column := range event.PreColumns {
+			if s.columnM.MatchColumn(column.Name) {
+				retainedColumns[column.Name] = struct{}{}
+				continue
+			}
+			event.PreColumns[idx] = nil
 		}
-		if column.Flag.IsHandleKey() || column.Flag.IsUniqueKey() {
+		if !verifyIndices(event.TableInfo, retainedColumns) {
 			return errors.ErrColumnSelectorFailed.GenWithStack(
-				"primary key or unique key cannot be filtered out by the column selector, "+
-					"table: %v, column: %s", event.Table, column.Name)
+				"no primary key columns or unique key columns obtained after filter out, "+
+					"table: %+v", event.Table)
 		}
-		event.PreColumns[idx] = nil
 	}
 
 	return nil
@@ -137,22 +146,19 @@ func (c *ColumnSelector) VerifyTables(
 			if !s.Match(table.TableName.Schema, table.TableName.Table) {
 				continue
 			}
-			for columnID, flag := range table.ColumnsFlag {
+
+			retainedColumns := make(map[string]struct{})
+			for columnID := range table.ColumnsFlag {
 				columnInfo, ok := table.GetColumnInfo(columnID)
 				if !ok {
 					return errors.ErrColumnSelectorFailed.GenWithStack(
 						"column not found when verify the table for the column selector, table: %v, column: %s",
 						table.TableName, columnInfo.Name)
 				}
-
-				if s.columnM.MatchColumn(columnInfo.Name.O) {
+				columnName := columnInfo.Name.O
+				if s.columnM.MatchColumn(columnName) {
+					retainedColumns[columnName] = struct{}{}
 					continue
-				}
-				// the column is filter out.
-				if flag.IsHandleKey() || flag.IsUniqueKey() {
-					return errors.ErrColumnSelectorFailed.GenWithStack(
-						"primary key or unique key cannot be filtered out by the column selector, "+
-							"table: %v, column: %s", table.TableName, columnInfo.Name)
 				}
 
 				partitionDispatcher := eventRouter.GetPartitionDispatcher(table.TableName.Schema, table.TableName.Table)
@@ -168,10 +174,51 @@ func (c *ColumnSelector) VerifyTables(
 				default:
 				}
 			}
+
+			if !verifyIndices(table, retainedColumns) {
+				return errors.ErrColumnSelectorFailed.GenWithStack(
+					"no primary key columns or unique key columns obtained after filter out, table: %+v", table.TableName)
+			}
 		}
 	}
-
 	return nil
+}
+
+// verifyIndices return true if the primary key retained,
+// else at least there are one unique key columns in the retained columns.
+func verifyIndices(table *model.TableInfo, retainedColumns map[string]struct{}) bool {
+	primaryKeyColumns := table.GetPrimaryKeyColumnNames()
+
+	retained := true
+	for name := range primaryKeyColumns {
+		if _, ok := retainedColumns[name]; !ok {
+			retained = false
+			break
+		}
+	}
+	// primary key columns are retained, return true.
+	if retained {
+		return true
+	}
+
+	// at least one unique key columns are retained, return true.
+	for _, index := range table.Indices {
+		if !index.Unique {
+			continue
+		}
+
+		retained = true
+		for _, col := range index.Columns {
+			if _, ok := retainedColumns[col.Name.O]; !ok {
+				retained = false
+				break
+			}
+		}
+		if retained {
+			return true
+		}
+	}
+	return false
 }
 
 // VerifyColumn return true if the given `schema.table` column is matched.

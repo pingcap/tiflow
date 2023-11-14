@@ -48,7 +48,7 @@ func fillColumns(
 	out.RawByte('[')
 	out.RawByte('{')
 	isFirst := true
-	for idx, col := range columns {
+	for _, col := range columns {
 		if col != nil {
 			// column equal, do not output it
 			if onlyOutputUpdatedColumn && shouldIgnoreColumn(col, newColumnMap) {
@@ -62,8 +62,7 @@ func fillColumns(
 			} else {
 				out.RawByte(',')
 			}
-			mysqlType := getMySQLType(ColInfos[idx].Ft, col.Flag, fullType)
-			javaType, err := getJavaSQLType(col, mysqlType)
+			javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
@@ -179,15 +178,14 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				mysqlType := getMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
-				javaType, err := getJavaSQLType(col, mysqlType)
+				javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
-				mysqlTypeMap[col.Name] = mysqlType
+				mysqlTypeMap[col.Name] = getMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
 			}
 		}
 		if emptyColumn {

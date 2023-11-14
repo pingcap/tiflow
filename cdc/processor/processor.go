@@ -63,6 +63,9 @@ type Processor interface {
 	// It can be called in etcd ticks, so it should never be blocked.
 	// Tick Returns: error and warnings. error will be propagated to the owner, and warnings will be record.
 	Tick(cdcContext.Context, *model.ChangeFeedInfo, *model.ChangeFeedStatus) (error, error)
+
+	// Close closes the processor.
+	Close() error
 }
 
 var _ Processor = (*processor)(nil)
