@@ -49,6 +49,8 @@ type agent struct {
 	// 1. The capture receives a SIGTERM signal.
 	// 2. The agent receives a stopping heartbeat.
 	liveness *model.Liveness
+
+	lastCheckpointWarn time.Time
 }
 
 type agentInfo struct {
@@ -98,6 +100,8 @@ func newAgent(
 		tableM:    newTableManager(changeFeedID, tableExecutor),
 		liveness:  liveness,
 		compat:    compat.New(map[model.CaptureID]*model.CaptureInfo{}),
+
+		lastCheckpointWarn: time.Now(),
 	}
 
 	etcdCliCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
