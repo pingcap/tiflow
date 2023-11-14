@@ -58,8 +58,7 @@ func fillColumns(columns []*model.Column,
 			} else {
 				out.RawByte(',')
 			}
-			mysqlType := getMySQLType(col)
-			javaType, err := getJavaSQLType(col, mysqlType)
+			javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
@@ -175,15 +174,14 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
+				javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
-				mysqlTypeMap[col.Name] = mysqlType
+				mysqlTypeMap[col.Name] = getMySQLType(col.Type, col.Flag)
 			}
 		}
 		if emptyColumn {
