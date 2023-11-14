@@ -17,9 +17,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	timodel "github.com/pingcap/tidb/parser/model"
@@ -27,9 +27,11 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/robfig/cron"
 	"go.uber.org/zap"
 )
 
@@ -43,8 +45,9 @@ type DDLSink struct {
 	// statistic is used to record the DDL metrics
 	statistics *metrics.Statistics
 	storage    storage.ExternalStorage
+	cfg        *cloudstorage.Config
 
-	outputColumnID           bool
+	lastCheckpointTs         atomic.Uint64
 	lastSendCheckpointTsTime time.Time
 }
 
@@ -54,6 +57,22 @@ func NewDDLSink(ctx context.Context,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 ) (*DDLSink, error) {
+	return newDDLSink(ctx, changefeedID, sinkURI, replicaConfig, nil)
+}
+
+func newDDLSink(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+	sinkURI *url.URL,
+	replicaConfig *config.ReplicaConfig,
+	cleanupJob func(),
+) (*DDLSink, error) {
+	// create cloud storage config and then apply the params of sinkURI to it.
+	cfg := cloudstorage.NewConfig()
+	err := cfg.Apply(ctx, sinkURI, replicaConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	storage, err := util.GetExternalStorageFromURI(ctx, sinkURI.String())
 	if err != nil {
 		return nil, err
@@ -63,13 +82,17 @@ func NewDDLSink(ctx context.Context,
 		id:                       changefeedID,
 		storage:                  storage,
 		statistics:               metrics.NewStatistics(ctx, changefeedID, sink.TxnSink),
+		cfg:                      cfg,
 		lastSendCheckpointTsTime: time.Now(),
 	}
 
-	if replicaConfig != nil && replicaConfig.Sink.CloudStorageConfig != nil {
-		d.outputColumnID = util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.OutputColumnID)
+	// Note: It is intended to run the cleanup goroutine in the background.
+	// we don't wait for it to finish since the gourotine would be stuck if
+	// the downstream is abnormal, especially when the downstream is a nfs.
+	if cleanupJob == nil {
+		cleanupJob = d.runCleanup(ctx)
 	}
-
+	go d.bgCleanup(ctx, cleanupJob)
 	return d, nil
 }
 
@@ -98,7 +121,7 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	}
 
 	var def cloudstorage.TableDefinition
-	def.FromDDLEvent(ddl, d.outputColumnID)
+	def.FromDDLEvent(ddl, d.cfg.OutputColumnID)
 	if err := writeFile(def); err != nil {
 		return errors.Trace(err)
 	}
@@ -106,7 +129,7 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	if ddl.Type == timodel.ActionExchangeTablePartition {
 		// For exchange partition, we need to write the schema of the source table.
 		var sourceTableDef cloudstorage.TableDefinition
-		sourceTableDef.FromTableInfo(ddl.PreTableInfo, ddl.TableInfo.Version, d.outputColumnID)
+		sourceTableDef.FromTableInfo(ddl.PreTableInfo, ddl.TableInfo.Version, d.cfg.OutputColumnID)
 		return writeFile(sourceTableDef)
 	}
 	return nil
@@ -125,6 +148,7 @@ func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 
 	defer func() {
 		d.lastSendCheckpointTsTime = time.Now()
+		d.lastCheckpointTs.Store(ts)
 	}()
 	ckpt, err := json.Marshal(map[string]uint64{"checkpoint-ts": ts})
 	if err != nil {
@@ -132,6 +156,68 @@ func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	}
 	err = d.storage.WriteFile(ctx, "metadata", ckpt)
 	return errors.Trace(err)
+}
+
+func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJob func()) {
+	if d.cfg.DateSeparator != config.DateSeparatorDay.String() || d.cfg.FileExpirationDays <= 0 {
+		log.Info("skip cleanup expired files for storage sink",
+			zap.String("namespace", d.id.Namespace),
+			zap.String("changefeedID", d.id.ID),
+			zap.String("date-separator", d.cfg.DateSeparator),
+			zap.Int("expired-file-ttl", d.cfg.FileExpirationDays))
+		return
+	}
+
+	clenupCron := cron.New()
+	clenupCron.AddFunc(d.cfg.FileCleanupCronSpec, cleanupJob)
+	clenupCron.Start()
+	defer clenupCron.Stop()
+	log.Info("start schedule cleanup expired files for storage sink",
+		zap.String("namespace", d.id.Namespace),
+		zap.String("changefeedID", d.id.ID),
+		zap.String("date-separator", d.cfg.DateSeparator),
+		zap.Int("expired-file-ttl", d.cfg.FileExpirationDays))
+
+	// wait for the context done
+	<-ctx.Done()
+	log.Info("stop schedule cleanup expired files for storage sink",
+		zap.String("namespace", d.id.Namespace),
+		zap.String("changefeedID", d.id.ID),
+		zap.Error(ctx.Err()))
+}
+
+func (d *DDLSink) runCleanup(ctx context.Context) func() {
+	isCleanupRunning := atomic.Bool{}
+	return func() {
+		if !isCleanupRunning.CompareAndSwap(false, true) {
+			log.Warn("cleanup expired files is already running, skip this round",
+				zap.String("namespace", d.id.Namespace),
+				zap.String("changefeedID", d.id.ID))
+			return
+		}
+
+		defer isCleanupRunning.Store(false)
+		start := time.Now()
+		checkpointTs := d.lastCheckpointTs.Load()
+		cnt, err := cloudstorage.RemoveExpiredFiles(ctx, d.storage, d.cfg, checkpointTs)
+		if err != nil {
+			log.Error("failed to remove expired files",
+				zap.String("namespace", d.id.Namespace),
+				zap.String("changefeedID", d.id.ID),
+				zap.Uint64("checkpointTs", checkpointTs),
+				zap.Duration("cost", time.Since(start)),
+				zap.Error(err),
+			)
+			return
+		}
+
+		log.Info("remove expired files",
+			zap.String("namespace", d.id.Namespace),
+			zap.String("changefeedID", d.id.ID),
+			zap.Uint64("checkpointTs", checkpointTs),
+			zap.Uint64("count", cnt),
+			zap.Duration("cost", time.Since(start)))
+	}
 }
 
 // Close closes the sink.
