@@ -54,11 +54,11 @@ func NewLogWriter(
 	}
 	// "nfs" and "local" scheme are converted to "file" scheme
 	if !cfg.UseExternalStorage {
-		redo.FixLocalScheme(&cfg.URI)
+		redo.FixLocalScheme(cfg.URI)
 		cfg.UseExternalStorage = redo.IsExternalStorage(cfg.URI.Scheme)
 	}
 
-	extStorage, err := redo.InitExternalStorage(ctx, cfg.URI)
+	extStorage, err := redo.InitExternalStorage(ctx, *cfg.URI)
 	if err != nil {
 		return nil, err
 	}

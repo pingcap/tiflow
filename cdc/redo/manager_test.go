@@ -54,9 +54,8 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 		UseFileBackend:        useFileBackend,
 	}
-	dmlMgr, err := NewDMLManager(ctx, cfg)
-	require.Nil(b, err)
-	eg := errgroup.Group{}
+	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
+	var eg errgroup.Group
 	eg.Go(func() error {
 		return dmlMgr.Run(ctx)
 	})
@@ -124,6 +123,6 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		time.Sleep(time.Millisecond * 500)
 	}
 	cancel()
-	err = eg.Wait()
-	require.ErrorIs(b, err, context.Canceled)
+
+	require.ErrorIs(b, eg.Wait(), context.Canceled)
 }

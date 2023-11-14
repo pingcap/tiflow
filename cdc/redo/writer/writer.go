@@ -52,7 +52,7 @@ type LogWriterConfig struct {
 	CaptureID    model.CaptureID
 	ChangeFeedID model.ChangeFeedID
 
-	URI                url.URL
+	URI                *url.URL
 	UseExternalStorage bool
 	Dir                string
 	MaxLogSizeInBytes  int64
