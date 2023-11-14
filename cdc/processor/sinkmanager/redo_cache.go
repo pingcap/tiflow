@@ -59,8 +59,13 @@ type popResult struct {
 	events      []*model.RowChangedEvent
 	size        uint64 // size of events.
 	releaseSize uint64 // size of all released events.
-	pushCount   int
-	success     bool
+
+	// many RowChangedEvent can come from one same PolymorphicEvent.
+	// pushCount indicates the count of raw PolymorphicEvents.
+	pushCount int
+
+	// success indicates whether there is a gap between cached events and required events.
+	success bool
 
 	// If success, upperBoundIfSuccess is the upperBound of poped events.
 	// The caller should fetch events (upperBoundIfSuccess, upperBound] from engine.
