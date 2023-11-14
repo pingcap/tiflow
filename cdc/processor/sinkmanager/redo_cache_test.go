@@ -134,7 +134,7 @@ func TestRedoEventCacheAllPopBranches(t *testing.T) {
 	require.False(t, popRes.success)
 	require.Equal(t, engine.Position{StartTs: 103, CommitTs: 112}, popRes.lowerBoundIfFail)
 
-	batch = []*model.RowChangedEvent{&model.RowChangedEvent{StartTs: 102, CommitTs: 112}}
+	batch = []*model.RowChangedEvent{{StartTs: 102, CommitTs: 112}}
 	ok, _ = appender.pushBatch(batch, 0, engine.Position{StartTs: 102, CommitTs: 102})
 	require.True(t, ok)
 	require.Equal(t, 2, appender.readyCount)
@@ -144,4 +144,5 @@ func TestRedoEventCacheAllPopBranches(t *testing.T) {
 	require.Equal(t, 0, len(popRes.events))
 	require.Equal(t, engine.Position{StartTs: 500, CommitTs: 502}, popRes.upperBoundIfSuccess)
 	require.Equal(t, 0, appender.readyCount)
+	require.Equal(t, 0, len(appender.events))
 }

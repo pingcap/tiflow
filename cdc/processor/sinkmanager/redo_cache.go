@@ -57,8 +57,13 @@ type popResult struct {
 	events      []*model.RowChangedEvent
 	size        uint64 // size of events.
 	releaseSize uint64 // size of all released events.
-	pushCount   int
-	success     bool
+
+	// many RowChangedEvent can come from one same PolymorphicEvent.
+	// pushCount indicates the count of raw PolymorphicEvents.
+	pushCount int
+
+	// success indicates whether there is a gap between cached events and required events.
+	success bool
 
 	// If success, upperBoundIfSuccess is the upperBound of poped events.
 	// The caller should fetch events (upperBoundIfSuccess, upperBound] from engine.
@@ -148,7 +153,6 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 		if e.lowerBound.Compare(upperBound.Next()) <= 0 {
 			res.lowerBoundIfFail = e.lowerBound
 		} else {
-			res.lowerBoundIfFail = upperBound.Next()
 			res.lowerBoundIfFail = upperBound.Next()
 		}
 		return

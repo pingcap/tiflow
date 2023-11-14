@@ -212,7 +212,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		if err != nil {
 			return errors.Trace(err)
 		}
-        lastPos = lowerBound.Prev()
+		lastPos = lowerBound.Prev()
 		if drained {
 			performCallback(lastPos)
 			return nil
