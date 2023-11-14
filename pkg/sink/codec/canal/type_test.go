@@ -18,6 +18,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -238,20 +239,21 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	_, _, colInfos = tableInfo.GetRowColInfos()
-	mysqlType = getMySQLType(colInfos[0].Ft, tableInfo.ColumnsFlag[colInfos[0].ID], false)
-	require.Equal(t, "int", mysqlType)
 
 	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
 	require.Equal(t, "bit", mysqlType)
-
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
-	require.Equal(t, "bit", mysqlType)
-
 	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
 	require.Equal(t, "bit(1)", mysqlType)
 
+	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	require.Equal(t, "bit", mysqlType)
 	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
 	require.Equal(t, "bit(3)", mysqlType)
+
+	mysqlType = getMySQLType(colInfos[3].Ft, tableInfo.ColumnsFlag[colInfos[3].ID], false)
+	require.Equal(t, "bool", mysqlType)
+	mysqlType = getMySQLType(colInfos[3].Ft, tableInfo.ColumnsFlag[colInfos[3].ID], true)
+	require.Equal(t, "bool", mysqlType)
 }
 
 func TestGetMySQLType4FloatType(t *testing.T) {
@@ -290,7 +292,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 
 	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
 	require.Equal(t, "float", mysqlType)
-	// todo: this is diffrent to the canal-json, revise this.
+	// todo: this is different to the canal-json, revise this.
 	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
 	require.Equal(t, "float", mysqlType)
 
@@ -343,15 +345,19 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
-	mysqlType := getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType := colInfos[1].Ft
+	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType := getMySQLType(fieldType, flag, false)
 	require.Equal(t, "decimal", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "decimal(10,0)", mysqlType)
 
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
 	// todo: this is different to the canal-json, it shows `numeric` instead of `decimal`
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "decimal", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "decimal(10,0)", mysqlType)
 
 	sql = `create table test.t2(a int primary key, b decimal(5), c decimal(5, 2))`
@@ -399,15 +405,22 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
-	mysqlType := getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType := colInfos[1].Ft
+	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType := getMySQLType(fieldType, flag, false)
 	require.Equal(t, "time", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "time", mysqlType)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "time", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "time(3)", mysqlType)
+	javaType, err := getJavaSQLType("02:20:20", fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeTIME)
 
 	sql = `create table test.t2(a int primary key, b datetime, c datetime(3))`
 	job = helper.DDL2Job(sql)
@@ -415,15 +428,22 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 
 	_, _, colInfos = tableInfo.GetRowColInfos()
 
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType = colInfos[1].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "datetime", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "datetime", mysqlType)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "datetime", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "datetime(3)", mysqlType)
+	javaType, err = getJavaSQLType("2020-02-20 02:20:20", fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeTIMESTAMP)
 
 	sql = `create table test.t3(a int primary key, b timestamp, c timestamp(3))`
 	job = helper.DDL2Job(sql)
@@ -431,15 +451,22 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 
 	_, _, colInfos = tableInfo.GetRowColInfos()
 
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType = colInfos[1].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "timestamp", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "timestamp", mysqlType)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "timestamp", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "timestamp(3)", mysqlType)
+	javaType, err = getJavaSQLType("2020-02-20 02:20:20", fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeTIMESTAMP)
 
 	sql = `create table test.t4(a int primary key, b year, c year(4))`
 	job = helper.DDL2Job(sql)
@@ -447,15 +474,22 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 
 	_, _, colInfos = tableInfo.GetRowColInfos()
 
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType = colInfos[1].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "year", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "year(4)", mysqlType)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "year", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "year(4)", mysqlType)
+	javaType, err = getJavaSQLType("2020", fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeVARCHAR)
 }
 
 func TestGetMySQLType4Char(t *testing.T) {
@@ -470,15 +504,22 @@ func TestGetMySQLType4Char(t *testing.T) {
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
-	mysqlType := getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType := colInfos[1].Ft
+	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType := getMySQLType(fieldType, flag, false)
 	require.Equal(t, "char", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "char(1)", mysqlType)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "char", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "char(123)", mysqlType)
+	javaType, err := getJavaSQLType([]uint8("测试char"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeCHAR)
 
 	sql = `create table test.t1(a int primary key, b varchar(123))`
 	job = helper.DDL2Job(sql)
@@ -486,10 +527,15 @@ func TestGetMySQLType4Char(t *testing.T) {
 
 	_, _, colInfos = tableInfo.GetRowColInfos()
 
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType = colInfos[1].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "varchar", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "varchar(123)", mysqlType)
+	javaType, err = getJavaSQLType([]uint8("测试varchar"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeVARCHAR)
 }
 
 func TestGetMySQLType4TextTypes(t *testing.T) {
@@ -504,25 +550,45 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
-	mysqlType := getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType := colInfos[1].Ft
+	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType := getMySQLType(fieldType, flag, false)
 	require.Equal(t, "text", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "text", mysqlType)
+	javaType, err := getJavaSQLType([]uint8("测试text"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeCLOB)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "tinytext", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "tinytext", mysqlType)
+	javaType, err = getJavaSQLType([]uint8("测试tinytext"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeCLOB)
 
-	mysqlType = getMySQLType(colInfos[3].Ft, tableInfo.ColumnsFlag[colInfos[3].ID], false)
+	fieldType = colInfos[3].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[3].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "mediumtext", mysqlType)
-	mysqlType = getMySQLType(colInfos[3].Ft, tableInfo.ColumnsFlag[colInfos[3].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "mediumtext", mysqlType)
+	javaType, err = getJavaSQLType([]uint8("测试mediumtext"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeCLOB)
 
-	mysqlType = getMySQLType(colInfos[4].Ft, tableInfo.ColumnsFlag[colInfos[4].ID], false)
+	fieldType = colInfos[4].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[4].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "longtext", mysqlType)
-	mysqlType = getMySQLType(colInfos[4].Ft, tableInfo.ColumnsFlag[colInfos[4].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "longtext", mysqlType)
+	javaType, err = getJavaSQLType([]uint8("测试longtext"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeCLOB)
 }
 
 func TestGetMySQLType4BinaryType(t *testing.T) {
@@ -537,14 +603,21 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
-	mysqlType := getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType := colInfos[1].Ft
+	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType := getMySQLType(fieldType, flag, false)
 	require.Equal(t, "binary", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "binary(1)", mysqlType)
+	javaType, err := getJavaSQLType([]uint8("测试binary"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "binary", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "binary(10)", mysqlType)
 
 	sql = `create table test.t2(a int primary key, b varbinary(23))`
@@ -553,10 +626,15 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 
 	_, _, colInfos = tableInfo.GetRowColInfos()
 
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType = colInfos[1].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "varbinary", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "varbinary(23)", mysqlType)
+	javaType, err = getJavaSQLType([]uint8("测试varbinary"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, internal.JavaSQLTypeBLOB, javaType)
 }
 
 func TestGetMySQLType4BlobType(t *testing.T) {
@@ -571,25 +649,45 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
-	mysqlType := getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType := colInfos[1].Ft
+	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+	mysqlType := getMySQLType(fieldType, flag, false)
 	require.Equal(t, "blob", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "blob", mysqlType)
+	javaType, err := getJavaSQLType([]uint8("测试blob"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "tinyblob", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "tinyblob", mysqlType)
+	javaType, err = getJavaSQLType([]uint8("测试tinyblob"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 
-	mysqlType = getMySQLType(colInfos[3].Ft, tableInfo.ColumnsFlag[colInfos[3].ID], false)
+	fieldType = colInfos[3].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[3].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "mediumblob", mysqlType)
-	mysqlType = getMySQLType(colInfos[3].Ft, tableInfo.ColumnsFlag[colInfos[3].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "mediumblob", mysqlType)
+	javaType, err = getJavaSQLType([]uint8("测试mediumblob"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 
-	mysqlType = getMySQLType(colInfos[4].Ft, tableInfo.ColumnsFlag[colInfos[4].ID], false)
+	fieldType = colInfos[4].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[4].ID]
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "longblob", mysqlType)
-	mysqlType = getMySQLType(colInfos[4].Ft, tableInfo.ColumnsFlag[colInfos[4].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "longblob", mysqlType)
+	javaType, err = getJavaSQLType([]uint8("测试longblob"), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, javaType, internal.JavaSQLTypeBLOB)
 }
 
 func TestGetMySQLType4EnumAndSet(t *testing.T) {
@@ -604,15 +702,29 @@ func TestGetMySQLType4EnumAndSet(t *testing.T) {
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
-	mysqlType := getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
+	fieldType := colInfos[1].Ft
+	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
+
+	mysqlType := getMySQLType(fieldType, flag, false)
 	require.Equal(t, "enum", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "enum('a','b','c')", mysqlType)
 
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], false)
+	javaType, err := getJavaSQLType(uint64(1), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
+
+	fieldType = colInfos[2].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
+
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "set", mysqlType)
-	mysqlType = getMySQLType(colInfos[2].Ft, tableInfo.ColumnsFlag[colInfos[2].ID], true)
+	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "set('a','b','c')", mysqlType)
+
+	javaType, err = getJavaSQLType(uint64(2), fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, internal.JavaSQLTypeBIT, javaType)
 }
 
 func TestGetMySQLType4JSON(t *testing.T) {
@@ -627,28 +739,15 @@ func TestGetMySQLType4JSON(t *testing.T) {
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
-	mysqlType := getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], false)
-	require.Equal(t, "json", mysqlType)
-	mysqlType = getMySQLType(colInfos[1].Ft, tableInfo.ColumnsFlag[colInfos[1].ID], true)
-	require.Equal(t, "json", mysqlType)
-}
+	fieldType := colInfos[1].Ft
+	flag := tableInfo.ColumnsFlag[colInfos[1].ID]
 
-//func TestGetMySQLTypeAndJavaSQLType(t *testing.T) {
-//	t.Parallel()
-//	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-//	canalEntryBuilder := newCanalEntryBuilder(codecConfig)
-//	for _, item := range testColumnsTable {
-//		obtainedMySQLType := getMySQLType(item.column)
-//		require.Equal(t, item.expectedMySQLType, obtainedMySQLType)
-//
-//		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
-//		require.Nil(t, err)
-//		require.Equal(t, item.expectedJavaSQLType, obtainedJavaSQLType)
-//
-//		if !item.column.Flag.IsBinary() {
-//			obtainedFinalValue, err := canalEntryBuilder.formatValue(item.column.Value, obtainedJavaSQLType)
-//			require.Nil(t, err)
-//			require.Equal(t, item.expectedEncodedValue, obtainedFinalValue)
-//		}
-//	}
-//}
+	mysqlType := getMySQLType(fieldType, flag, false)
+	require.Equal(t, "json", mysqlType)
+	mysqlType = getMySQLType(fieldType, flag, true)
+	require.Equal(t, "json", mysqlType)
+
+	javaType, err := getJavaSQLType("{\"key1\": \"value1\"}", fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, internal.JavaSQLTypeVARCHAR, javaType)
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 )
 
 type testColumnTuple struct {
@@ -273,133 +274,133 @@ var (
 		//	"decimal unsigned", internal.JavaSQLTypeDECIMAL, "2333", "2333",
 		//},
 		//
-		//// for column value type in `[]uint8` and have `BinaryFlag`, expectedEncodedValue is dummy.
-		//{
-		//	&model.Column{Name: "varchar", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")},
-		//	rowcodec.ColInfo{ID: 32, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarchar)},
-		//	"varchar", internal.JavaSQLTypeVARCHAR, "测试Varchar", "测试Varchar",
-		//},
-		//{
-		//	&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")},
-		//	rowcodec.ColInfo{ID: 33, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeString)},
-		//	"char", internal.JavaSQLTypeCHAR, "测试String", "测试String",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"),
-		//		Flag: model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 34, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeString)},
-		//	"binary", internal.JavaSQLTypeBLOB, "测试Binary", "测试Binary",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
-		//		Flag: model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 35, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarchar)},
-		//	"varbinary", internal.JavaSQLTypeBLOB, "测试varbinary", "测试varbinary",
-		//},
-		//
-		//{
-		//	&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
-		//	rowcodec.ColInfo{ID: 36, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeTinyBlob))},
-		//	"tinytext", internal.JavaSQLTypeCLOB, "测试Tinytext", "测试Tinytext",
-		//},
-		//
-		//{
-		//	&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")},
-		//	rowcodec.ColInfo{ID: 37, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeBlob))},
-		//	"text", internal.JavaSQLTypeCLOB, "测试text", "测试text",
-		//},
-		//{
-		//	&model.Column{Name: "mediumtext", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")},
-		//	rowcodec.ColInfo{ID: 38, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeMediumBlob))},
-		//	"mediumtext", internal.JavaSQLTypeCLOB, "测试mediumtext", "测试mediumtext",
-		//},
-		//{
-		//	&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")},
-		//	rowcodec.ColInfo{ID: 39, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeLongBlob))},
-		//	"longtext", internal.JavaSQLTypeCLOB, "测试longtext", "测试longtext",
-		//},
-		//
-		//{
-		//	&model.Column{
-		//		Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"),
-		//		Flag: model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 40, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTinyBlob)},
-		//	"tinyblob", internal.JavaSQLTypeBLOB, "测试tinyblob", "测试tinyblob",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "blob", Type: mysql.TypeBlob, Value: []uint8("测试blob"),
-		//		Flag: model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 41, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBlob)},
-		//	"blob", internal.JavaSQLTypeBLOB, "测试blob", "测试blob",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "mediumblob", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"),
-		//		Flag: model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 42, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeMediumBlob)},
-		//	"mediumblob", internal.JavaSQLTypeBLOB, "测试mediumblob", "测试mediumblob",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "longblob", Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"),
-		//		Flag: model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 43, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLongBlob)},
-		//	"longblob", internal.JavaSQLTypeBLOB, "测试longblob", "测试longblob",
-		//},
+		// for column value type in `[]uint8` and have `BinaryFlag`, expectedEncodedValue is dummy.
+		{
+			&model.Column{Name: "varchar", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")},
+			rowcodec.ColInfo{ID: 32, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarchar)},
+			"varchar", internal.JavaSQLTypeVARCHAR, "测试Varchar", "测试Varchar",
+		},
+		{
+			&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")},
+			rowcodec.ColInfo{ID: 33, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeString)},
+			"char", internal.JavaSQLTypeCHAR, "测试String", "测试String",
+		},
+		{
+			&model.Column{
+				Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"),
+				Flag: model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 34, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeString)},
+			"binary", internal.JavaSQLTypeBLOB, "测试Binary", "测试Binary",
+		},
+		{
+			&model.Column{
+				Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
+				Flag: model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 35, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarchar)},
+			"varbinary", internal.JavaSQLTypeBLOB, "测试varbinary", "测试varbinary",
+		},
+
+		{
+			&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
+			rowcodec.ColInfo{ID: 36, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeTinyBlob))},
+			"tinytext", internal.JavaSQLTypeCLOB, "测试Tinytext", "测试Tinytext",
+		},
+
+		{
+			&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")},
+			rowcodec.ColInfo{ID: 37, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeBlob))},
+			"text", internal.JavaSQLTypeCLOB, "测试text", "测试text",
+		},
+		{
+			&model.Column{Name: "mediumtext", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")},
+			rowcodec.ColInfo{ID: 38, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeMediumBlob))},
+			"mediumtext", internal.JavaSQLTypeCLOB, "测试mediumtext", "测试mediumtext",
+		},
+		{
+			&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")},
+			rowcodec.ColInfo{ID: 39, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeLongBlob))},
+			"longtext", internal.JavaSQLTypeCLOB, "测试longtext", "测试longtext",
+		},
+
+		{
+			&model.Column{
+				Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"),
+				Flag: model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 40, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTinyBlob)},
+			"tinyblob", internal.JavaSQLTypeBLOB, "测试tinyblob", "测试tinyblob",
+		},
+		{
+			&model.Column{
+				Name: "blob", Type: mysql.TypeBlob, Value: []uint8("测试blob"),
+				Flag: model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 41, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBlob)},
+			"blob", internal.JavaSQLTypeBLOB, "测试blob", "测试blob",
+		},
+		{
+			&model.Column{
+				Name: "mediumblob", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"),
+				Flag: model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 42, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeMediumBlob)},
+			"mediumblob", internal.JavaSQLTypeBLOB, "测试mediumblob", "测试mediumblob",
+		},
+		{
+			&model.Column{
+				Name: "longblob", Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"),
+				Flag: model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 43, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLongBlob)},
+			"longblob", internal.JavaSQLTypeBLOB, "测试longblob", "测试longblob",
+		},
 		//
 		//{
 		//	&model.Column{Name: "date", Type: mysql.TypeDate, Value: "2020-02-20"},
 		//	rowcodec.ColInfo{ID: 44, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDate)},
 		//	"date", internal.JavaSQLTypeDATE, "2020-02-20", "2020-02-20",
 		//},
-		//{
-		//	&model.Column{Name: "datetime", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"},
-		//	rowcodec.ColInfo{ID: 45, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDatetime)},
-		//	"datetime", internal.JavaSQLTypeTIMESTAMP, "2020-02-20 02:20:20", "2020-02-20 02:20:20",
-		//},
-		//{
-		//	&model.Column{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"},
-		//	rowcodec.ColInfo{ID: 46, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTimestamp)},
-		//	"timestamp", internal.JavaSQLTypeTIMESTAMP, "2020-02-20 10:20:20", "2020-02-20 10:20:20",
-		//},
-		//{
-		//	&model.Column{Name: "time", Type: mysql.TypeDuration, Value: "02:20:20"},
-		//	rowcodec.ColInfo{ID: 47, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDuration)},
-		//	"time", internal.JavaSQLTypeTIME, "02:20:20", "02:20:20",
-		//},
-		//{
-		//	&model.Column{Name: "year", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag},
-		//	rowcodec.ColInfo{ID: 48, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeYear)},
-		//	"year", internal.JavaSQLTypeVARCHAR, "2020", "2020",
-		//},
-		//
-		//{
-		//	&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: uint64(1)},
-		//	rowcodec.ColInfo{ID: 49, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeEnum)},
-		//	"enum", internal.JavaSQLTypeINTEGER, "1", "1",
-		//},
-		//{
-		//	&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(2)},
-		//	rowcodec.ColInfo{ID: 50, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b", "c"})},
-		//	"set", internal.JavaSQLTypeBIT, "2", uint64(2),
-		//},
 		{
-			&model.Column{
-				Name: "bit", Type: mysql.TypeBit, Value: uint64(65),
-				Flag: model.UnsignedFlag | model.BinaryFlag,
-			},
-			rowcodec.ColInfo{ID: 51, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBit)},
-			"bit(1)", internal.JavaSQLTypeBIT, "65", uint64(65),
+			&model.Column{Name: "datetime", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"},
+			rowcodec.ColInfo{ID: 45, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDatetime)},
+			"datetime", internal.JavaSQLTypeTIMESTAMP, "2020-02-20 02:20:20", "2020-02-20 02:20:20",
 		},
+		{
+			&model.Column{Name: "timestamp", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"},
+			rowcodec.ColInfo{ID: 46, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTimestamp)},
+			"timestamp", internal.JavaSQLTypeTIMESTAMP, "2020-02-20 10:20:20", "2020-02-20 10:20:20",
+		},
+		{
+			&model.Column{Name: "time", Type: mysql.TypeDuration, Value: "02:20:20"},
+			rowcodec.ColInfo{ID: 47, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDuration)},
+			"time", internal.JavaSQLTypeTIME, "02:20:20", "02:20:20",
+		},
+		{
+			&model.Column{Name: "year", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag},
+			rowcodec.ColInfo{ID: 48, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeYear)},
+			"year", internal.JavaSQLTypeVARCHAR, "2020", "2020",
+		},
+
+		{
+			&model.Column{Name: "enum", Type: mysql.TypeEnum, Value: uint64(1)},
+			rowcodec.ColInfo{ID: 49, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeEnum)},
+			"enum", internal.JavaSQLTypeINTEGER, "1", "1",
+		},
+		{
+			&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(2)},
+			rowcodec.ColInfo{ID: 50, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b", "c"})},
+			"set", internal.JavaSQLTypeBIT, "2", uint64(2),
+		},
+		//{
+		//	&model.Column{
+		//		Name: "bit", Type: mysql.TypeBit, Value: uint64(65),
+		//		Flag: model.UnsignedFlag | model.BinaryFlag,
+		//	},
+		//	rowcodec.ColInfo{ID: 51, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBit)},
+		//	"bit(1)", internal.JavaSQLTypeBIT, "65", uint64(65),
+		//},
 		{
 			&model.Column{
 				Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}",
