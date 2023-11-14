@@ -157,7 +157,6 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 			res.lowerBoundIfFail = e.lowerBound
 		} else {
 			res.lowerBoundIfFail = upperBound.Next()
-			res.lowerBoundIfFail = upperBound.Next()
 		}
 		return
 	}
