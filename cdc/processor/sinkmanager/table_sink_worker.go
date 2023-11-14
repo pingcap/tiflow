@@ -278,7 +278,7 @@ func (w *sinkWorker) fetchFromCache(
 	}
 	popRes := cache.pop(*lowerBound, *upperBound)
 	if popRes.success {
-		newLowerBound = popRes.boundary.Next()
+		newLowerBound = popRes.upperBoundIfSuccess.Next()
 		if len(popRes.events) > 0 {
 			w.metricOutputEventCountKV.Add(float64(popRes.pushCount))
 			w.metricRedoEventCacheHit.Add(float64(popRes.size))
@@ -289,9 +289,9 @@ func (w *sinkWorker) fetchFromCache(
 
 		// Get a resolvedTs so that we can record it into sink memory quota.
 		var resolvedTs model.ResolvedTs
-		isCommitFence := popRes.boundary.IsCommitFence()
+		isCommitFence := popRes.upperBoundIfSuccess.IsCommitFence()
 		if w.splitTxn {
-			resolvedTs = model.NewResolvedTs(popRes.boundary.CommitTs)
+			resolvedTs = model.NewResolvedTs(popRes.upperBoundIfSuccess.CommitTs)
 			if !isCommitFence {
 				resolvedTs.Mode = model.BatchResolvedMode
 				resolvedTs.BatchID = batchID.Load()
@@ -299,9 +299,9 @@ func (w *sinkWorker) fetchFromCache(
 			}
 		} else {
 			if isCommitFence {
-				resolvedTs = model.NewResolvedTs(popRes.boundary.CommitTs)
+				resolvedTs = model.NewResolvedTs(popRes.upperBoundIfSuccess.CommitTs)
 			} else {
-				resolvedTs = model.NewResolvedTs(popRes.boundary.CommitTs - 1)
+				resolvedTs = model.NewResolvedTs(popRes.upperBoundIfSuccess.CommitTs - 1)
 			}
 		}
 		// Transfer the memory usage from redoMemQuota to sinkMemQuota.
@@ -317,7 +317,7 @@ func (w *sinkWorker) fetchFromCache(
 			zap.Any("resolvedTs", resolvedTs),
 			zap.Error(err))
 	} else {
-		newUpperBound = popRes.boundary.Prev()
+		newUpperBound = popRes.lowerBoundIfFail.Prev()
 	}
 	cacheDrained = newLowerBound.Compare(newUpperBound) > 0
 	log.Debug("fetchFromCache is performed",
