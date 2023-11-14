@@ -147,4 +147,5 @@ func TestRedoEventCacheAllPopBranches(t *testing.T) {
 	require.Equal(t, 0, len(popRes.events))
 	require.Equal(t, engine.Position{StartTs: 500, CommitTs: 502}, popRes.upperBoundIfSuccess)
 	require.Equal(t, 0, appender.readyCount)
+	require.Equal(t, 0, len(appender.events))
 }
