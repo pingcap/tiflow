@@ -39,240 +39,240 @@ type testColumnTuple struct {
 
 var (
 	testColumnsTable = []*testColumnTuple{
-		//{
-		//	&model.Column{Name: "tinyint", Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Type: mysql.TypeTiny, Value: int64(127)},
-		//	rowcodec.ColInfo{ID: 1, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTiny)},
-		//	"tinyint", internal.JavaSQLTypeTINYINT, "127", "127",
-		//},
-		//
-		//{
-		//	&model.Column{
-		//		Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
-		//	"tinyint unsigned", internal.JavaSQLTypeTINYINT, "127", "127",
-		//},
-		//
-		//{
-		//	&model.Column{
-		//		Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
-		//	"tinyint unsigned", internal.JavaSQLTypeSMALLINT, "128", "128",
-		//},
-		//
-		//{
-		//	&model.Column{
-		//		Name: "tinyint unsigned 3", Type: mysql.TypeTiny, Value: "0",
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 4, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
-		//	"tinyint unsigned", internal.JavaSQLTypeTINYINT, "0", "0",
-		//},
-		//
-		//{
-		//	&model.Column{
-		//		Name: "tinyint unsigned 4", Type: mysql.TypeTiny, Value: nil,
-		//		Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 5, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
-		//	"tinyint unsigned", internal.JavaSQLTypeTINYINT, "", nil,
-		//},
-		//
-		//{
-		//	&model.Column{Name: "smallint", Type: mysql.TypeShort, Value: int64(32767)},
-		//	rowcodec.ColInfo{ID: 6, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeShort)},
-		//	"smallint", internal.JavaSQLTypeSMALLINT, "32767", "32767",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 7, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
-		//	"smallint unsigned", internal.JavaSQLTypeSMALLINT, "32767", "32767",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 8, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
-		//	"smallint unsigned", internal.JavaSQLTypeINTEGER, "32768", "32768",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "smallint unsigned 3", Type: mysql.TypeShort, Value: "0",
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 9, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
-		//	"smallint unsigned", internal.JavaSQLTypeSMALLINT, "0", "0",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "smallint unsigned 4", Type: mysql.TypeShort, Value: nil,
-		//		Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 10, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
-		//	"smallint unsigned", internal.JavaSQLTypeSMALLINT, "", nil,
-		//},
-		//
-		//{
-		//	&model.Column{Name: "mediumint", Type: mysql.TypeInt24, Value: int64(8388607)},
-		//	rowcodec.ColInfo{ID: 11, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeInt24)},
-		//	"mediumint", internal.JavaSQLTypeINTEGER, "8388607", "8388607",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 12, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
-		//	"mediumint unsigned", internal.JavaSQLTypeINTEGER, "8388607", "8388607",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 13, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
-		//	"mediumint unsigned", internal.JavaSQLTypeINTEGER, "8388608", "8388608",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "mediumint unsigned 3", Type: mysql.TypeInt24, Value: "0",
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 14, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
-		//	"mediumint unsigned", internal.JavaSQLTypeINTEGER, "0", "0",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "mediumint unsigned 4", Type: mysql.TypeInt24, Value: nil,
-		//		Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 15, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
-		//	"mediumint unsigned", internal.JavaSQLTypeINTEGER, "", nil,
-		//},
-		//
-		//{
-		//	&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)},
-		//	rowcodec.ColInfo{ID: 16, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
-		//	"int", internal.JavaSQLTypeINTEGER, "2147483647", "2147483647",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 17, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
-		//	"int unsigned", internal.JavaSQLTypeINTEGER, "2147483647", "2147483647",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 18, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
-		//	"int unsigned", internal.JavaSQLTypeBIGINT, "2147483648", "2147483648",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "int unsigned 3", Type: mysql.TypeLong, Value: "0",
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 19, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
-		//	"int unsigned", internal.JavaSQLTypeINTEGER, "0", "0",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "int unsigned 4", Type: mysql.TypeLong, Value: nil,
-		//		Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 20, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
-		//	"int unsigned", internal.JavaSQLTypeINTEGER, "", nil,
-		//},
-		//
-		//{
-		//	&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)},
-		//	rowcodec.ColInfo{ID: 21, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLonglong)},
-		//	"bigint", internal.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 22, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong))},
-		//	"bigint unsigned", internal.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808),
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 23, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong))},
-		//	"bigint unsigned", internal.JavaSQLTypeDECIMAL, "9223372036854775808", "9223372036854775808",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "bigint unsigned 3", Type: mysql.TypeLonglong, Value: "0",
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 24, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong))},
-		//	"bigint unsigned", internal.JavaSQLTypeBIGINT, "0", "0",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "bigint unsigned 4", Type: mysql.TypeLonglong, Value: nil,
-		//		Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 25, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong))},
-		//	"bigint unsigned", internal.JavaSQLTypeBIGINT, "", nil,
-		//},
-		//
-		//{
-		//	&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14},
-		//	rowcodec.ColInfo{ID: 26, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeFloat)},
-		//	"float", internal.JavaSQLTypeREAL, "3.14", "3.14",
-		//},
-		//{
-		//	&model.Column{Name: "double", Type: mysql.TypeDouble, Value: 2.71},
-		//	rowcodec.ColInfo{ID: 27, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDouble)},
-		//	"double", internal.JavaSQLTypeDOUBLE, "2.71", "2.71",
-		//},
-		//{
-		//	&model.Column{Name: "decimal", Type: mysql.TypeNewDecimal, Value: "2333"},
-		//	rowcodec.ColInfo{ID: 28, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeNewDecimal)},
-		//	"decimal", internal.JavaSQLTypeDECIMAL, "2333", "2333",
-		//},
-		//
-		//{
-		//	&model.Column{
-		//		Name: "float unsigned", Type: mysql.TypeFloat, Value: 3.14,
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 29, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeFloat))},
-		//	"float unsigned", internal.JavaSQLTypeREAL, "3.14", "3.14",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71,
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 30, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeDouble))},
-		//	"double unsigned", internal.JavaSQLTypeDOUBLE, "2.71", "2.71",
-		//},
-		//{
-		//	&model.Column{
-		//		Name: "decimal unsigned", Type: mysql.TypeNewDecimal, Value: "2333",
-		//		Flag: model.UnsignedFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 31, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeNewDecimal))},
-		//	"decimal unsigned", internal.JavaSQLTypeDECIMAL, "2333", "2333",
-		//},
+		{
+			&model.Column{Name: "tinyint", Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Type: mysql.TypeTiny, Value: int64(127)},
+			rowcodec.ColInfo{ID: 1, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeTiny)},
+			"tinyint", internal.JavaSQLTypeTINYINT, "127", "127",
+		},
+
+		{
+			&model.Column{
+				Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
+			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "127", "127",
+		},
+
+		{
+			&model.Column{
+				Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
+			"tinyint unsigned", internal.JavaSQLTypeSMALLINT, "128", "128",
+		},
+
+		{
+			&model.Column{
+				Name: "tinyint unsigned 3", Type: mysql.TypeTiny, Value: "0",
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 4, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
+			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "0", "0",
+		},
+
+		{
+			&model.Column{
+				Name: "tinyint unsigned 4", Type: mysql.TypeTiny, Value: nil,
+				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
+			},
+			rowcodec.ColInfo{ID: 5, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
+			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "", nil,
+		},
+
+		{
+			&model.Column{Name: "smallint", Type: mysql.TypeShort, Value: int64(32767)},
+			rowcodec.ColInfo{ID: 6, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeShort)},
+			"smallint", internal.JavaSQLTypeSMALLINT, "32767", "32767",
+		},
+		{
+			&model.Column{
+				Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 7, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
+			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "32767", "32767",
+		},
+		{
+			&model.Column{
+				Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 8, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
+			"smallint unsigned", internal.JavaSQLTypeINTEGER, "32768", "32768",
+		},
+		{
+			&model.Column{
+				Name: "smallint unsigned 3", Type: mysql.TypeShort, Value: "0",
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 9, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
+			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "0", "0",
+		},
+		{
+			&model.Column{
+				Name: "smallint unsigned 4", Type: mysql.TypeShort, Value: nil,
+				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
+			},
+			rowcodec.ColInfo{ID: 10, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
+			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "", nil,
+		},
+
+		{
+			&model.Column{Name: "mediumint", Type: mysql.TypeInt24, Value: int64(8388607)},
+			rowcodec.ColInfo{ID: 11, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeInt24)},
+			"mediumint", internal.JavaSQLTypeINTEGER, "8388607", "8388607",
+		},
+		{
+			&model.Column{
+				Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 12, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
+			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "8388607", "8388607",
+		},
+		{
+			&model.Column{
+				Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 13, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
+			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "8388608", "8388608",
+		},
+		{
+			&model.Column{
+				Name: "mediumint unsigned 3", Type: mysql.TypeInt24, Value: "0",
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 14, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
+			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "0", "0",
+		},
+		{
+			&model.Column{
+				Name: "mediumint unsigned 4", Type: mysql.TypeInt24, Value: nil,
+				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
+			},
+			rowcodec.ColInfo{ID: 15, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
+			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "", nil,
+		},
+
+		{
+			&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)},
+			rowcodec.ColInfo{ID: 16, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLong)},
+			"int", internal.JavaSQLTypeINTEGER, "2147483647", "2147483647",
+		},
+		{
+			&model.Column{
+				Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 17, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
+			"int unsigned", internal.JavaSQLTypeINTEGER, "2147483647", "2147483647",
+		},
+		{
+			&model.Column{
+				Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 18, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
+			"int unsigned", internal.JavaSQLTypeBIGINT, "2147483648", "2147483648",
+		},
+		{
+			&model.Column{
+				Name: "int unsigned 3", Type: mysql.TypeLong, Value: "0",
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 19, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
+			"int unsigned", internal.JavaSQLTypeINTEGER, "0", "0",
+		},
+		{
+			&model.Column{
+				Name: "int unsigned 4", Type: mysql.TypeLong, Value: nil,
+				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
+			},
+			rowcodec.ColInfo{ID: 20, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
+			"int unsigned", internal.JavaSQLTypeINTEGER, "", nil,
+		},
+
+		{
+			&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)},
+			rowcodec.ColInfo{ID: 21, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLonglong)},
+			"bigint", internal.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
+		},
+		{
+			&model.Column{
+				Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 22, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong))},
+			"bigint unsigned", internal.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
+		},
+		{
+			&model.Column{
+				Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808),
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 23, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong))},
+			"bigint unsigned", internal.JavaSQLTypeDECIMAL, "9223372036854775808", "9223372036854775808",
+		},
+		{
+			&model.Column{
+				Name: "bigint unsigned 3", Type: mysql.TypeLonglong, Value: "0",
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 24, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong))},
+			"bigint unsigned", internal.JavaSQLTypeBIGINT, "0", "0",
+		},
+		{
+			&model.Column{
+				Name: "bigint unsigned 4", Type: mysql.TypeLonglong, Value: nil,
+				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
+			},
+			rowcodec.ColInfo{ID: 25, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong))},
+			"bigint unsigned", internal.JavaSQLTypeBIGINT, "", nil,
+		},
+
+		{
+			&model.Column{Name: "float", Type: mysql.TypeFloat, Value: 3.14},
+			rowcodec.ColInfo{ID: 26, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeFloat)},
+			"float", internal.JavaSQLTypeREAL, "3.14", "3.14",
+		},
+		{
+			&model.Column{Name: "double", Type: mysql.TypeDouble, Value: 2.71},
+			rowcodec.ColInfo{ID: 27, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDouble)},
+			"double", internal.JavaSQLTypeDOUBLE, "2.71", "2.71",
+		},
+		{
+			&model.Column{Name: "decimal", Type: mysql.TypeNewDecimal, Value: "2333"},
+			rowcodec.ColInfo{ID: 28, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeNewDecimal)},
+			"decimal", internal.JavaSQLTypeDECIMAL, "2333", "2333",
+		},
+
+		{
+			&model.Column{
+				Name: "float unsigned", Type: mysql.TypeFloat, Value: 3.14,
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 29, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeFloat))},
+			"float unsigned", internal.JavaSQLTypeREAL, "3.14", "3.14",
+		},
+		{
+			&model.Column{
+				Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71,
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 30, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeDouble))},
+			"double unsigned", internal.JavaSQLTypeDOUBLE, "2.71", "2.71",
+		},
+		{
+			&model.Column{
+				Name: "decimal unsigned", Type: mysql.TypeNewDecimal, Value: "2333",
+				Flag: model.UnsignedFlag,
+			},
+			rowcodec.ColInfo{ID: 31, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeNewDecimal))},
+			"decimal unsigned", internal.JavaSQLTypeDECIMAL, "2333", "2333",
+		},
 		//
 		// for column value type in `[]uint8` and have `BinaryFlag`, expectedEncodedValue is dummy.
 		{
@@ -356,12 +356,12 @@ var (
 			rowcodec.ColInfo{ID: 43, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeLongBlob)},
 			"longblob", internal.JavaSQLTypeBLOB, "测试longblob", "测试longblob",
 		},
-		//
-		//{
-		//	&model.Column{Name: "date", Type: mysql.TypeDate, Value: "2020-02-20"},
-		//	rowcodec.ColInfo{ID: 44, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDate)},
-		//	"date", internal.JavaSQLTypeDATE, "2020-02-20", "2020-02-20",
-		//},
+
+		{
+			&model.Column{Name: "date", Type: mysql.TypeDate, Value: "2020-02-20"},
+			rowcodec.ColInfo{ID: 44, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDate)},
+			"date", internal.JavaSQLTypeDATE, "2020-02-20", "2020-02-20",
+		},
 		{
 			&model.Column{Name: "datetime", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"},
 			rowcodec.ColInfo{ID: 45, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeDatetime)},
@@ -393,14 +393,14 @@ var (
 			rowcodec.ColInfo{ID: 50, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b", "c"})},
 			"set", internal.JavaSQLTypeBIT, "2", uint64(2),
 		},
-		//{
-		//	&model.Column{
-		//		Name: "bit", Type: mysql.TypeBit, Value: uint64(65),
-		//		Flag: model.UnsignedFlag | model.BinaryFlag,
-		//	},
-		//	rowcodec.ColInfo{ID: 51, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBit)},
-		//	"bit(1)", internal.JavaSQLTypeBIT, "65", uint64(65),
-		//},
+		{
+			&model.Column{
+				Name: "bit", Type: mysql.TypeBit, Value: uint64(65),
+				Flag: model.UnsignedFlag | model.BinaryFlag,
+			},
+			rowcodec.ColInfo{ID: 51, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeBit)},
+			"bit(1)", internal.JavaSQLTypeBIT, "65", uint64(65),
+		},
 		{
 			&model.Column{
 				Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}",
