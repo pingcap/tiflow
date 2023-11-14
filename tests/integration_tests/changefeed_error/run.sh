@@ -108,7 +108,7 @@ function run() {
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	changefeedid_3="changefeed-initialize-error"
-	run_cdc_cli changefeed create --start-ts=0 --sink-uri="$SINK_URI" -c $changefeedid_3
+	run_cdc_cli changefeed create --start-ts=0 --sink-uri="$SINK_URI" -c $changefeedid_3 --config=$CUR/conf/enable_redo.toml
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_3} "normal" "null" ""
 	run_cdc_cli changefeed pause -c $changefeedid_3
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} ${changefeedid_3} "stopped" "changefeed new redo manager injected error" ""
