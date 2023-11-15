@@ -171,7 +171,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
 	javaType, err = getJavaSQLType(uint64(8388608), fieldType.GetType(), flag)
 	require.NoError(t, err)
-	require.Equal(t, internal.JavaSQLTypeBIGINT, javaType)
+	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
 	javaType, err = getJavaSQLType("0", fieldType.GetType(), flag)
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
@@ -364,12 +364,13 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeBIT, javaType)
 
+	// bool is identical to tinyint in the TiDB.
 	fieldType = colInfos[3].Ft
 	flag = tableInfo.ColumnsFlag[colInfos[3].ID]
 	mysqlType = getMySQLType(fieldType, flag, false)
-	require.Equal(t, "bool", mysqlType)
+	require.Equal(t, "tinyint", mysqlType)
 	mysqlType = getMySQLType(fieldType, flag, true)
-	require.Equal(t, "bool", mysqlType)
+	require.Equal(t, "tinyint(1)", mysqlType)
 }
 
 func TestGetMySQLType4FloatType(t *testing.T) {
@@ -431,7 +432,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "double(26,3)", mysqlType)
 
-	sql = `create table test.t2(
+	sql = `create table test.t3(
     	a int primary key,
     	b float unsigned,
     	c double unsigned,
