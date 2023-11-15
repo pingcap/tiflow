@@ -151,7 +151,8 @@ const (
     "enable-kv-connect-backoff": false
   },
   "cluster-id": "default",
-  "max-memory-percentage": 70
+  "max-memory-percentage": 0,
+  "gc-tuner-memory-threshold": 0
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
