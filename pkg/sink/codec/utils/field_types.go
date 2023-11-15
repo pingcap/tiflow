@@ -16,6 +16,11 @@ func SetUnsigned(ft *types.FieldType) *types.FieldType {
 	return ft
 }
 
+func SetFlag(ft *types.FieldType, flag uint) *types.FieldType {
+	ft.SetFlag(flag)
+	return ft
+}
+
 func SetElems(ft *types.FieldType, elems []string) *types.FieldType {
 	ft.SetElems(elems)
 	return ft

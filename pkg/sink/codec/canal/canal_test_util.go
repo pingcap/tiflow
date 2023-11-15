@@ -424,6 +424,12 @@ var (
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
 				}},
+				ColInfos: []rowcodec.ColInfo{{
+					ID:            1,
+					IsPKHandle:    false,
+					VirtualGenCol: false,
+					Ft:            types.NewFieldType(mysql.TypeVarchar),
+				}},
 			}},
 			{
 				{
@@ -434,11 +440,23 @@ var (
 						Type:  mysql.TypeVarchar,
 						Value: []byte("aa"),
 					}},
+					ColInfos: []rowcodec.ColInfo{{
+						ID:            1,
+						IsPKHandle:    false,
+						VirtualGenCol: false,
+						Ft:            types.NewFieldType(mysql.TypeVarchar),
+					}},
 				},
 				{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
 					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					ColInfos: []rowcodec.ColInfo{{
+						ID:            1,
+						IsPKHandle:    false,
+						VirtualGenCol: false,
+						Ft:            types.NewFieldType(mysql.TypeVarchar),
+					}},
 				},
 			},
 		},

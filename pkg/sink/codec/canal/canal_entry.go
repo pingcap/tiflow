@@ -389,8 +389,8 @@ func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
 
 func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
 	if zerofill &&
-		strings.HasPrefix(mysqlType, "bit") &&
-		strings.HasPrefix(mysqlType, "year") {
+		!strings.HasPrefix(mysqlType, "bit") &&
+		!strings.HasPrefix(mysqlType, "year") {
 		return mysqlType + " zerofill"
 	}
 	return mysqlType

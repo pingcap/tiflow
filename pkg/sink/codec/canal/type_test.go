@@ -923,4 +923,8 @@ func TestGetMySQLType4JSON(t *testing.T) {
 	javaType, err := getJavaSQLType("{\"key1\": \"value1\"}", fieldType.GetType(), flag)
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeVARCHAR, javaType)
+
+	javaType, err = getJavaSQLType(nil, fieldType.GetType(), flag)
+	require.NoError(t, err)
+	require.Equal(t, internal.JavaSQLTypeVARCHAR, javaType)
 }
