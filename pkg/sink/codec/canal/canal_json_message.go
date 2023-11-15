@@ -213,6 +213,15 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 	return result, nil
 }
 
+func extractBasicMySQLType(mysqlType string) string {
+	for i := 0; i < len(mysqlType); i++ {
+		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
+			return mysqlType[:i]
+		}
+	}
+	return mysqlType
+}
+
 func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) *model.Column {
 	mysqlTypeStr = extractBasicMySQLType(mysqlTypeStr)
 	mysqlType := types.StrToType(mysqlTypeStr)

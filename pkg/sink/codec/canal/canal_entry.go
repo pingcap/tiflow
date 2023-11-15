@@ -387,24 +387,6 @@ func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
 	return mysqlType
 }
 
-// when decoding the canal format, remove `unsigned` to get the original `mysql type`.
-func extractBasicMySQLType(mysqlType string) string {
-	//return strings.TrimSuffix(mysqlType, " unsigned")
-	if strings.HasSuffix(mysqlType, " unsigned") {
-		return strings.TrimSuffix(mysqlType, " unsigned")
-	}
-
-	if strings.HasPrefix(mysqlType, "bit") {
-		return "bit"
-	}
-
-	if strings.HasPrefix(mysqlType, "set") {
-		return "set"
-	}
-
-	return mysqlType
-}
-
 func getMySQLType(fieldType *types.FieldType, flag model.ColumnFlagType, fullType bool) string {
 	if !fullType {
 		result := types.TypeStr(fieldType.GetType())

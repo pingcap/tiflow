@@ -290,7 +290,7 @@ var (
 				Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"),
 				Flag: model.BinaryFlag,
 			},
-			rowcodec.ColInfo{ID: 34, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeString)},
+			rowcodec.ColInfo{ID: 34, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeString))},
 			"binary", internal.JavaSQLTypeBLOB, "测试Binary", "测试Binary",
 		},
 		{
@@ -298,7 +298,7 @@ var (
 				Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
 				Flag: model.BinaryFlag,
 			},
-			rowcodec.ColInfo{ID: 35, IsPKHandle: false, VirtualGenCol: false, Ft: types.NewFieldType(mysql.TypeVarchar)},
+			rowcodec.ColInfo{ID: 35, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeVarchar))},
 			"varbinary", internal.JavaSQLTypeBLOB, "测试varbinary", "测试varbinary",
 		},
 
