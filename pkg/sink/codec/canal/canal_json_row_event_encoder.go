@@ -21,25 +21,24 @@ import (
 	"github.com/mailru/easyjson/jwriter"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
 
 func fillColumns(
-	ColInfos []rowcodec.ColInfo,
 	columns []*model.Column,
 	onlyOutputUpdatedColumn bool,
 	onlyHandleKeyColumn bool,
 	newColumnMap map[string]*model.Column,
 	out *jwriter.Writer,
 	builder *canalEntryBuilder,
-	fullType bool,
+	javaTypeMap map[string]internal.JavaSQLType,
 ) error {
 	if len(columns) == 0 {
 		out.RawString("null")
@@ -62,9 +61,9 @@ func fillColumns(
 			} else {
 				out.RawByte(',')
 			}
-			javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
+			javaType, ok := javaTypeMap[col.Name]
+			if !ok {
+				return cerror.ErrCanalEncodeFailed.GenWithStack("java type is not found for column %s", col.Name)
 			}
 			value, err := builder.formatValue(col.Value, javaType)
 			if err != nil {
@@ -99,6 +98,7 @@ func newJSONMessageForDML(
 	}
 
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
+	javaTypeMap := make(map[string]internal.JavaSQLType, len(e.Columns))
 
 	out := &jwriter.Writer{}
 	out.RawByte('{')
@@ -185,6 +185,7 @@ func newJSONMessageForDML(
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
+				javaTypeMap[col.Name] = javaType
 				mysqlTypeMap[col.Name] = getMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
 			}
 		}
@@ -219,13 +220,13 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.ColInfos, e.PreColumns, false, onlyHandleKey, nil, out, builder, config.ContentCompatible); err != nil {
+		if err := fillColumns(e.PreColumns, false, onlyHandleKey, nil, out, builder, javaTypeMap); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.ColInfos, e.Columns, false, onlyHandleKey, nil, out, builder, config.ContentCompatible); err != nil {
+		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder, javaTypeMap); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
@@ -237,11 +238,11 @@ func newJSONMessageForDML(
 			}
 		}
 		out.RawString(",\"old\":")
-		if err := fillColumns(e.ColInfos, e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder, config.ContentCompatible); err != nil {
+		if err := fillColumns(e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder, javaTypeMap); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.ColInfos, e.Columns, false, onlyHandleKey, nil, out, builder, config.ContentCompatible); err != nil {
+		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder, javaTypeMap); err != nil {
 			return nil, err
 		}
 	} else {
