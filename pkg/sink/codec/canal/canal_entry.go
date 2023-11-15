@@ -306,15 +306,6 @@ func isCanalDDL(t canal.EventType) bool {
 
 func getJavaSQLType(value interface{}, tp byte, flag model.ColumnFlagType) (result internal.JavaSQLType, err error) {
 	javaType := internal.MySQLType2JavaType(tp, flag.IsBinary())
-
-	switch javaType {
-	case internal.JavaSQLTypeBINARY, internal.JavaSQLTypeVARBINARY, internal.JavaSQLTypeLONGVARBINARY:
-		if flag.IsBinary() {
-			return internal.JavaSQLTypeBLOB, nil
-		}
-		return internal.JavaSQLTypeCLOB, nil
-	}
-
 	// flag `isUnsigned` only for `numerical` and `bit`, `year` data type.
 	if !flag.IsUnsigned() {
 		return javaType, nil
