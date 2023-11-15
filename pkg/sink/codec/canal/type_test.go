@@ -23,7 +23,6 @@ import (
 )
 
 func TestGetMySQLType4IntTypes(t *testing.T) {
-	t.Parallel()
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -374,8 +373,6 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 }
 
 func TestGetMySQLType4FloatType(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -479,8 +476,6 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 }
 
 func TestGetMySQLType4Decimal(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -553,8 +548,6 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 }
 
 func TestGetMySQLType4TimeTypes(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -667,8 +660,6 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 }
 
 func TestGetMySQLType4Char(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -713,8 +704,6 @@ func TestGetMySQLType4Char(t *testing.T) {
 }
 
 func TestGetMySQLType4TextTypes(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -766,8 +755,6 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 }
 
 func TestGetMySQLType4BinaryType(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -812,8 +799,6 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 }
 
 func TestGetMySQLType4BlobType(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -865,8 +850,6 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 }
 
 func TestGetMySQLType4EnumAndSet(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -902,8 +885,6 @@ func TestGetMySQLType4EnumAndSet(t *testing.T) {
 }
 
 func TestGetMySQLType4JSON(t *testing.T) {
-	t.Parallel()
-
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
