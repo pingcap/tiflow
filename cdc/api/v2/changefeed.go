@@ -600,18 +600,20 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 			_ = c.Error(err)
 			return
 		}
+		// use the default pdClient
 		pdClient = up.PDClient
 	} else {
 		credential := cfg.PDConfig.toCredential()
 		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
+		// create a new pdClient
 		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 		if err != nil {
 			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 			return
 		}
+		defer pdClient.Close()
 	}
-	defer pdClient.Close()
 
 	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,
