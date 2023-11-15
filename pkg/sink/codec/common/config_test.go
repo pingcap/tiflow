@@ -457,3 +457,14 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, 456, c.MaxBatchSize)
 	require.Equal(t, c.LargeMessageHandle.LargeMessageHandleOption, config.LargeMessageHandleOptionClaimCheck)
 }
+
+func TestApplyConfig4CanalJSON(t *testing.T) {
+	uri := "kafka://127.0.0.1:9092/abc?protocol=canal-json&content-compatible=true"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolCanalJSON)
+	err = codecConfig.Apply(sinkURI, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, true, codecConfig.ContentCompatible)
+}

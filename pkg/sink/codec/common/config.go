@@ -130,6 +130,8 @@ type urlConfig struct {
 
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
+
+	ContentCompatible *bool `form:"content-compatible"`
 }
 
 // Apply fill the Config
@@ -213,6 +215,11 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
 	}
+
+	if c.Protocol == config.ProtocolCanalJSON {
+		c.ContentCompatible = *urlParameter.ContentCompatible
+	}
+
 	return nil
 }
 
