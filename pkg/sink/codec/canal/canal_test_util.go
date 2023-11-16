@@ -304,23 +304,23 @@ var (
 
 		{
 			&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
-			rowcodec.ColInfo{ID: 36, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeTinyBlob))},
+			rowcodec.ColInfo{ID: 36, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(mysql.TypeTinyBlob)},
 			"tinytext", internal.JavaSQLTypeCLOB, "测试Tinytext", "测试Tinytext",
 		},
 
 		{
 			&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")},
-			rowcodec.ColInfo{ID: 37, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeBlob))},
+			rowcodec.ColInfo{ID: 37, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(mysql.TypeBlob)},
 			"text", internal.JavaSQLTypeCLOB, "测试text", "测试text",
 		},
 		{
 			&model.Column{Name: "mediumtext", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")},
-			rowcodec.ColInfo{ID: 38, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeMediumBlob))},
+			rowcodec.ColInfo{ID: 38, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(mysql.TypeMediumBlob)},
 			"mediumtext", internal.JavaSQLTypeCLOB, "测试mediumtext", "测试mediumtext",
 		},
 		{
 			&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")},
-			rowcodec.ColInfo{ID: 39, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(types.NewFieldType(mysql.TypeLongBlob))},
+			rowcodec.ColInfo{ID: 39, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(mysql.TypeLongBlob)},
 			"longtext", internal.JavaSQLTypeCLOB, "测试longtext", "测试longtext",
 		},
 

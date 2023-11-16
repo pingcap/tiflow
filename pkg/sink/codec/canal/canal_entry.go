@@ -389,22 +389,10 @@ func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
 
 func getMySQLType(fieldType *types.FieldType, flag model.ColumnFlagType, fullType bool) string {
 	if !fullType {
-		result := types.TypeStr(fieldType.GetType())
+		result := types.TypeToStr(fieldType.GetType(), fieldType.GetCharset())
 		result = withUnsigned4MySQLType(result, flag.IsUnsigned())
 		result = withZerofill4MySQLType(result, flag.IsZerofill())
-		if !flag.IsBinary() {
-			return result
-		}
 
-		// todo: use this to query the mysql type
-		//result = types.TypeToStr(fieldType.GetType(), fieldType.GetCharset())
-
-		if types.IsTypeBlob(fieldType.GetType()) {
-			return strings.Replace(result, "text", "blob", 1)
-		}
-		if types.IsTypeChar(fieldType.GetType()) {
-			return strings.Replace(result, "char", "binary", 1)
-		}
 		return result
 	}
 

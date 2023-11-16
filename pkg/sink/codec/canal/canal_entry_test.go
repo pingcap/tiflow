@@ -49,8 +49,8 @@ func TestInsert(t *testing.T) {
 			{ID: 1, IsPKHandle: true, Ft: utils.SetFlag(types.NewFieldType(mysql.TypeLong), uint(model.PrimaryKeyFlag))},
 			{ID: 2, Ft: types.NewFieldType(mysql.TypeVarchar)},
 			{ID: 3, Ft: types.NewFieldType(mysql.TypeTiny)},
-			{ID: 4, Ft: types.NewFieldType(mysql.TypeBlob)},
-			{ID: 5, Ft: types.NewFieldType(mysql.TypeBlob)},
+			{ID: 4, Ft: utils.NewTextFieldType(mysql.TypeBlob)},
+			{ID: 5, Ft: utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeBlob))},
 		},
 	}
 

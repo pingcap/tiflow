@@ -466,5 +466,6 @@ func TestApplyConfig4CanalJSON(t *testing.T) {
 	codecConfig := NewConfig(config.ProtocolCanalJSON)
 	err = codecConfig.Apply(sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
-	require.Equal(t, true, codecConfig.ContentCompatible)
+	require.True(t, codecConfig.ContentCompatible)
+	require.True(t, codecConfig.OnlyOutputUpdatedColumns)
 }
