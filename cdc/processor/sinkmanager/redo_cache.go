@@ -57,11 +57,20 @@ type popResult struct {
 	events      []*model.RowChangedEvent
 	size        uint64 // size of events.
 	releaseSize uint64 // size of all released events.
-	pushCount   int
-	success     bool
-	// If success, boundary is the upperBound of poped events.
-	// Otherwise, boundary is the lowerBound of cached events.
-	boundary engine.Position
+
+	// many RowChangedEvent can come from one same PolymorphicEvent.
+	// pushCount indicates the count of raw PolymorphicEvents.
+	pushCount int
+
+	// success indicates whether there is a gap between cached events and required events.
+	success bool
+
+	// If success, upperBoundIfSuccess is the upperBound of poped events.
+	// The caller should fetch events (upperBoundIfSuccess, upperBound] from engine.
+	upperBoundIfSuccess engine.Position
+	// If fail, lowerBoundIfFail is the lowerBound of cached events.
+	// The caller should fetch events [lowerBound, lowerBoundIfFail) from engine.
+	lowerBoundIfFail engine.Position
 }
 
 // newRedoEventCache creates a redoEventCache instance.
@@ -142,26 +151,28 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
 		if e.lowerBound.Compare(upperBound.Next()) <= 0 {
-			res.boundary = e.lowerBound
+			res.lowerBoundIfFail = e.lowerBound
 		} else {
-			res.boundary = upperBound.Next()
+			res.lowerBoundIfFail = upperBound.Next()
 		}
 		return
 	}
+
 	if !e.upperBound.Valid() {
-		// if e.upperBound is invalid, it means there are no resolved transactions
-		// in the cache.
+		// It means there are no resolved cached transactions in the required range.
 		// NOTE: the caller will fetch events [lowerBound, res.boundary) from engine.
 		res.success = false
-		res.boundary = upperBound.Next()
+		res.lowerBoundIfFail = upperBound.Next()
 		return
 	}
 
 	res.success = true
-	if upperBound.Compare(e.upperBound) > 0 {
-		res.boundary = e.upperBound
+	if lowerBound.Compare(e.upperBound) > 0 {
+		res.upperBoundIfSuccess = lowerBound.Prev()
+	} else if upperBound.Compare(e.upperBound) > 0 {
+		res.upperBoundIfSuccess = e.upperBound
 	} else {
-		res.boundary = upperBound
+		res.upperBoundIfSuccess = upperBound
 	}
 
 	startIdx := sort.Search(e.readyCount, func(i int) bool {
@@ -173,28 +184,23 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 		res.releaseSize += e.sizes[i]
 	}
 
-	var endIdx int
-	if startIdx == e.readyCount {
-		endIdx = startIdx
-	} else {
-		endIdx = sort.Search(e.readyCount, func(i int) bool {
-			pos := engine.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
-			return pos.Compare(res.boundary) > 0
-		})
-		res.events = e.events[startIdx:endIdx]
-		for i := startIdx; i < endIdx; i++ {
-			res.size += e.sizes[i]
-			res.pushCount += int(e.pushCounts[i])
-		}
-		res.releaseSize += res.size
+	endIdx := sort.Search(e.readyCount, func(i int) bool {
+		pos := engine.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
+		return pos.Compare(res.upperBoundIfSuccess) > 0
+	})
+	res.events = e.events[startIdx:endIdx]
+	for i := startIdx; i < endIdx; i++ {
+		res.size += e.sizes[i]
+		res.pushCount += int(e.pushCounts[i])
 	}
+	res.releaseSize += res.size
 
 	e.events = e.events[endIdx:]
 	e.sizes = e.sizes[endIdx:]
 	e.pushCounts = e.pushCounts[endIdx:]
 	e.readyCount -= endIdx
 	// Update boundaries. Set upperBound to invalid if the range has been drained.
-	e.lowerBound = res.boundary.Next()
+	e.lowerBound = res.upperBoundIfSuccess.Next()
 	if e.lowerBound.Compare(e.upperBound) > 0 {
 		e.upperBound = engine.Position{}
 	}
