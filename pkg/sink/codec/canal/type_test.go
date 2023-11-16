@@ -304,7 +304,6 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	flag = tableInfo.ColumnsFlag[colInfos[0].ID]
 	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "int unsigned zerofill", mysqlType)
-	// todo: verify this on the canal before merge this PR
 	mysqlType = getMySQLType(fieldType, flag, true)
 	require.Equal(t, "int(10) unsigned zerofill", mysqlType)
 
@@ -405,10 +404,7 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, internal.JavaSQLTypeDOUBLE, javaType)
 
-	sql = `create table test.t2(
-    	a int primary key,
-    	b float(20),
-    	c double(26, 3))`
+	sql = `create table test.t2(a int primary key, b float(10, 3), c float(10))`
 	job = helper.DDL2Job(sql)
 	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
@@ -418,18 +414,31 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
 	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "float", mysqlType)
-	// todo: this is different to the canal-json, revise this.
 	mysqlType = getMySQLType(fieldType, flag, true)
-	require.Equal(t, "float", mysqlType)
+	require.Equal(t, "float(10,3)", mysqlType)
 
 	fieldType = colInfos[2].Ft
 	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
 	mysqlType = getMySQLType(fieldType, flag, false)
+	require.Equal(t, "float", mysqlType)
+	mysqlType = getMySQLType(fieldType, flag, true)
+	require.Equal(t, "float", mysqlType)
+
+	sql = `create table test.t3(a int primary key, b double(20, 3))`
+	job = helper.DDL2Job(sql)
+	tableInfo = model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos = tableInfo.GetRowColInfos()
+
+	fieldType = colInfos[1].Ft
+	flag = tableInfo.ColumnsFlag[colInfos[1].ID]
+
+	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "double", mysqlType)
 	mysqlType = getMySQLType(fieldType, flag, true)
-	require.Equal(t, "double(26,3)", mysqlType)
+	require.Equal(t, "double(20,3)", mysqlType)
 
-	sql = `create table test.t3(
+	sql = `create table test.t4(
     	a int primary key,
     	b float unsigned,
     	c double unsigned,
@@ -494,7 +503,6 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 
 	fieldType = colInfos[2].Ft
 	flag = tableInfo.ColumnsFlag[colInfos[2].ID]
-	// todo: this is different to the canal-json, it shows `numeric` instead of `decimal`
 	mysqlType = getMySQLType(fieldType, flag, false)
 	require.Equal(t, "decimal", mysqlType)
 	mysqlType = getMySQLType(fieldType, flag, true)

@@ -220,13 +220,17 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.PreColumns, false, onlyHandleKey, nil, out, builder, javaTypeMap); err != nil {
+		if err := fillColumns(
+			e.PreColumns, false, onlyHandleKey, nil, out, builder, javaTypeMap,
+		); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder, javaTypeMap); err != nil {
+		if err := fillColumns(
+			e.Columns, false, onlyHandleKey, nil, out, builder, javaTypeMap,
+		); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
@@ -238,11 +242,15 @@ func newJSONMessageForDML(
 			}
 		}
 		out.RawString(",\"old\":")
-		if err := fillColumns(e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder, javaTypeMap); err != nil {
+		if err := fillColumns(
+			e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder, javaTypeMap,
+		); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder, javaTypeMap); err != nil {
+		if err := fillColumns(
+			e.Columns, false, onlyHandleKey, nil, out, builder, javaTypeMap,
+		); err != nil {
 			return nil, err
 		}
 	} else {
