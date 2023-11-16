@@ -218,7 +218,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 
 	if c.Protocol == config.ProtocolCanalJSON {
 		c.ContentCompatible = util.GetOrZero(urlParameter.ContentCompatible)
-		c.OnlyOutputUpdatedColumns = true
+		if c.ContentCompatible {
+			c.OnlyOutputUpdatedColumns = true
+		}
 	}
 
 	return nil
