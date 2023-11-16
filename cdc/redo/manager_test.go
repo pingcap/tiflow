@@ -119,6 +119,8 @@ func TestLogManagerInProcessor(t *testing.T) {
 			Storage:               storage,
 			FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 			MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+			EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+			FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 			UseFileBackend:        useFileBackend,
 		}
 		dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
@@ -227,6 +229,8 @@ func TestLogManagerInOwner(t *testing.T) {
 			Storage:               storage,
 			FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 			MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+			EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+			FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 			UseFileBackend:        useFileBackend,
 		}
 		startTs := model.Ts(10)
@@ -273,6 +277,8 @@ func TestLogManagerError(t *testing.T) {
 		Storage:               "blackhole-invalid://",
 		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
 	logMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 	var eg errgroup.Group
@@ -325,6 +331,8 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		Storage:               storage,
 		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		UseFileBackend:        useFileBackend,
 	}
 	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)

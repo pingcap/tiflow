@@ -57,6 +57,12 @@ type Changefeed interface {
 	Tick(cdcContext.Context, *model.ChangeFeedInfo,
 		*model.ChangeFeedStatus,
 		map[model.CaptureID]*model.CaptureInfo) (model.Ts, model.Ts)
+
+	// Close closes the changefeed.
+	Close(ctx cdcContext.Context)
+
+	// GetScheduler returns the scheduler of this changefeed.
+	GetScheduler() scheduler.Scheduler
 }
 
 var _ Changefeed = (*changefeed)(nil)
@@ -159,6 +165,10 @@ type changefeed struct {
 	// The latest changefeed info and status from meta storage. they are updated in every Tick.
 	latestInfo   *model.ChangeFeedInfo
 	latestStatus *model.ChangeFeedStatus
+}
+
+func (c *changefeed) GetScheduler() scheduler.Scheduler {
+	return c.scheduler
 }
 
 // NewChangefeed creates a new changefeed.

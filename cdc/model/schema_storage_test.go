@@ -339,17 +339,17 @@ func TestColumnsByNames(t *testing.T) {
 	}
 
 	names := []string{"col1", "col2", "col3"}
-	offsets, ok := tableInfo.ColumnsByNames(names)
+	offsets, ok := tableInfo.OffsetsByNames(names)
 	require.True(t, ok)
 	require.Equal(t, []int{0, 1, 2}, offsets)
 
 	names = []string{"col2"}
-	offsets, ok = tableInfo.ColumnsByNames(names)
+	offsets, ok = tableInfo.OffsetsByNames(names)
 	require.True(t, ok)
 	require.Equal(t, []int{1}, offsets)
 
 	names = []string{"col1", "col-not-found"}
-	offsets, ok = tableInfo.ColumnsByNames(names)
+	offsets, ok = tableInfo.OffsetsByNames(names)
 	require.False(t, ok)
 	require.Nil(t, offsets)
 }

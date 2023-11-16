@@ -189,22 +189,6 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	for i := 0; i < len(fileReaders); i++ {
-		rl, err := fileReaders[i].Read()
-		if err != nil {
-			if err != io.EOF {
-				return errors.Trace(err)
-			}
-			continue
-		}
-
-		ld := &logWithIdx{
-			data: rl,
-			idx:  i,
-		}
-		redoLogHeap = append(redoLogHeap, ld)
-	}
-	heap.Init(&redoLogHeap)
 
 	for redoLogHeap.Len() != 0 {
 		item := heap.Pop(&redoLogHeap).(*logWithIdx)
