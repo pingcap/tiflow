@@ -132,6 +132,12 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, err
 	}
 	b.msg = msg
+
+	if b.msg.messageType() == model.MessageTypeRow {
+		log.Info("canal-json decoder unmarshal data success",
+			zap.ByteString("data", encodedData), zap.Any("msg", b.msg))
+	}
+
 	return b.msg.messageType(), true, nil
 }
 
