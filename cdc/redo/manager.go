@@ -274,7 +274,29 @@ func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 		return err
 	}
 	m.writer = w
+<<<<<<< HEAD
 	return m.bgUpdateLog(ctx)
+=======
+	return m.bgUpdateLog(ctx, m.getFlushDuration())
+}
+
+func (m *logManager) getFlushDuration() time.Duration {
+	flushIntervalInMs := m.cfg.FlushIntervalInMs
+	defaultFlushIntervalInMs := redo.DefaultFlushIntervalInMs
+	if m.cfg.LogType == redo.RedoDDLLogFileType {
+		flushIntervalInMs = m.cfg.MetaFlushIntervalInMs
+		defaultFlushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
+	}
+	if flushIntervalInMs < redo.MinFlushIntervalInMs {
+		log.Warn("redo flush interval is too small, use default value",
+			zap.Stringer("namespace", m.cfg.ChangeFeedID),
+			zap.Int("default", defaultFlushIntervalInMs),
+			zap.String("logType", m.cfg.LogType),
+			zap.Int64("interval", flushIntervalInMs))
+		flushIntervalInMs = int64(defaultFlushIntervalInMs)
+	}
+	return time.Duration(flushIntervalInMs) * time.Millisecond
+>>>>>>> a54a062d03 (redo(ticdc): fix redo zero flush interval panic issue (#10102))
 }
 
 // WaitForReady implements pkg/util.Runnable.
