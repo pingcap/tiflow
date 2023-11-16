@@ -90,7 +90,7 @@ func TestRegionRangeLock(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.TODO()
-	l := NewRegionRangeLock([]byte("a"), []byte("h"), math.MaxUint64, "")
+	l := NewRegionRangeLock(1, []byte("a"), []byte("h"), math.MaxUint64, "")
 	mustLockRangeSuccess(ctx, t, l, "a", "e", 1, 1, math.MaxUint64)
 	unlockRange(l, "a", "e", 1, 1, 100)
 
@@ -107,7 +107,7 @@ func TestRegionRangeLock(t *testing.T) {
 func TestRegionRangeLockStale(t *testing.T) {
 	t.Parallel()
 
-	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
+	l := NewRegionRangeLock(1, []byte("a"), []byte("z"), math.MaxUint64, "")
 	ctx := context.TODO()
 	mustLockRangeSuccess(ctx, t, l, "c", "g", 1, 10, math.MaxUint64)
 	mustLockRangeSuccess(ctx, t, l, "j", "n", 2, 8, math.MaxUint64)
@@ -130,7 +130,7 @@ func TestRegionRangeLockLockingRegionID(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.TODO()
-	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
+	l := NewRegionRangeLock(1, []byte("a"), []byte("z"), math.MaxUint64, "")
 	mustLockRangeSuccess(ctx, t, l, "c", "d", 1, 10, math.MaxUint64)
 
 	mustLockRangeStale(ctx, t, l, "e", "f", 1, 5, "e", "f")
@@ -166,7 +166,7 @@ func TestRegionRangeLockCanBeCancelled(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	l := NewRegionRangeLock([]byte("a"), []byte("z"), math.MaxUint64, "")
+	l := NewRegionRangeLock(1, []byte("a"), []byte("z"), math.MaxUint64, "")
 	mustLockRangeSuccess(ctx, t, l, "g", "h", 1, 10, math.MaxUint64)
 	wait := mustLockRangeWait(ctx, t, l, "g", "h", 1, 12)
 	cancel()
