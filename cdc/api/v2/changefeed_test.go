@@ -426,6 +426,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		createTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
+	cp.EXPECT().GetUpstreamManager().Return(nil, nil).AnyTimes()
 	helpers.EXPECT().
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
@@ -445,6 +446,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	// case 7: update transaction failed
+	cp.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	helpers.EXPECT().
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
@@ -468,6 +470,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
+	cp.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	etcdClient.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
@@ -484,6 +487,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
+	cp.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	etcdClient.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
