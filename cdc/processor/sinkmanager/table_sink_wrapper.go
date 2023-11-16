@@ -50,7 +50,7 @@ type tableSinkWrapper struct {
 	// tableSink is the underlying sink.
 	tableSink             tablesink.TableSink
 	tableSinkCheckpointTs model.ResolvedTs
-	tableSinkMu           sync.Mutex
+	tableSinkMu           sync.RWMutex
 
 	// state used to control the lifecycle of the table.
 	state *tablepb.TableState
@@ -282,19 +282,13 @@ func (t *tableSinkWrapper) markAsClosed() {
 	}
 }
 
-func (t *tableSinkWrapper) asyncClose() bool {
+func (t *tableSinkWrapper) asyncStop() bool {
 	t.markAsClosing()
-	if t.asyncClearTableSink() {
+	if t.asyncCloseAndClearTableSink() {
 		t.markAsClosed()
 		return true
 	}
 	return false
-}
-
-func (t *tableSinkWrapper) close() {
-	t.markAsClosing()
-	t.clearTableSink()
-	t.markAsClosed()
 }
 
 // Return true means the internal table sink has been initialized.
@@ -308,23 +302,38 @@ func (t *tableSinkWrapper) initTableSink() bool {
 	return true
 }
 
-func (t *tableSinkWrapper) asyncClearTableSink() bool {
-	t.tableSinkMu.Lock()
-	defer t.tableSinkMu.Unlock()
-	if t.tableSink != nil {
-		if !t.tableSink.AsyncClose() {
-			return false
-		}
-		checkpointTs := t.tableSink.GetCheckpointTs()
-		if t.tableSinkCheckpointTs.Less(checkpointTs) {
-			t.tableSinkCheckpointTs = checkpointTs
-		}
-		t.tableSink = nil
+func (t *tableSinkWrapper) asyncCloseTableSink() bool {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink == nil {
+		return true
 	}
-	return true
+	return t.tableSink.AsyncClose()
 }
 
-func (t *tableSinkWrapper) clearTableSink() {
+func (t *tableSinkWrapper) closeTableSink() {
+	t.tableSinkMu.RLock()
+	defer t.tableSinkMu.RUnlock()
+	if t.tableSink == nil {
+		return
+	}
+	t.tableSink.Close()
+}
+
+func (t *tableSinkWrapper) asyncCloseAndClearTableSink() bool {
+	closed := t.asyncCloseTableSink()
+	if closed {
+		t.doTableSinkClear()
+	}
+	return closed
+}
+
+func (t *tableSinkWrapper) closeAndClearTableSink() {
+	t.closeTableSink()
+	t.doTableSinkClear()
+}
+
+func (t *tableSinkWrapper) doTableSinkClear() {
 	t.tableSinkMu.Lock()
 	defer t.tableSinkMu.Unlock()
 	if t.tableSink != nil {

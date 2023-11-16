@@ -312,7 +312,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// events have been reported. Then we can continue the table
 			// at the checkpoint position.
 			case tablesink.SinkInternalError:
-				task.tableSink.clearTableSink()
+				task.tableSink.closeAndClearTableSink()
 				// After the table sink is cleared all pending events are sent out or dropped.
 				// So we can re-add the table into sinkMemQuota.
 				w.sinkMemQuota.ClearTable(task.tableSink.tableID)

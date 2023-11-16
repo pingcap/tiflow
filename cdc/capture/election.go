@@ -39,11 +39,11 @@ func newElection(sess *concurrency.Session, key string) election {
 	}
 }
 
-func (e *electionImpl) campaign(ctx context.Context, key string) error {
+func (e *electionImpl) campaign(ctx context.Context, val string) error {
 	failpoint.Inject("capture-campaign-compacted-error", func() {
 		failpoint.Return(errors.Trace(mvcc.ErrCompacted))
 	})
-	return e.election.Campaign(ctx, key)
+	return e.election.Campaign(ctx, val)
 }
 
 func (e *electionImpl) resign(ctx context.Context) error {

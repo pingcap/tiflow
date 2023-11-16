@@ -273,6 +273,20 @@ func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err er
 				zap.Error(err))
 			m.clearSinkFactory()
 			sinkFactoryErrors = make(chan error, 16)
+
+			start := time.Now()
+			log.Info("Sink manager is closing all table sinks",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID))
+			m.tableSinks.Range(func(key, value interface{}) bool {
+				value.(*tableSinkWrapper).closeTableSink()
+				m.sinkMemQuota.ClearTable(key.(model.TableID))
+				return true
+			})
+			log.Info("Sink manager has closed all table sinks",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Duration("cost", time.Since(start)))
 		}
 
 		if !cerror.IsChangefeedUnRetryableError(err) && errors.Cause(err) != context.Canceled {
@@ -413,22 +427,17 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 	}()
 }
 
+func (m *SinkManager) getUpperBound(tableSinkUpperBoundTs model.Ts) engine.Position {
+	schemaTs := m.schemaStorage.ResolvedTs()
+	if schemaTs != math.MaxUint64 && tableSinkUpperBoundTs > schemaTs+1 {
+		// schemaTs == math.MaxUint64 means it's in tests.
+		tableSinkUpperBoundTs = schemaTs + 1
+	}
+	return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
+}
+
 // generateSinkTasks generates tasks to fetch data from the source manager.
 func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
-	// Task upperbound is limited by barrierTs and schemaResolvedTs.
-	// But receivedSorterResolvedTs can be less than barrierTs, in which case
-	// the table is just scheduled to this node.
-	getUpperBound := func(
-		tableSinkUpperBoundTs model.Ts,
-	) engine.Position {
-		schemaTs := m.schemaStorage.ResolvedTs()
-		if schemaTs != math.MaxUint64 && tableSinkUpperBoundTs > schemaTs+1 {
-			// schemaTs == math.MaxUint64 means it's in tests.
-			tableSinkUpperBoundTs = schemaTs + 1
-		}
-		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
-	}
-
 	dispatchTasks := func() error {
 		tables := make([]*tableSinkWrapper, 0, sinkWorkerNum)
 		progs := make([]*progress, 0, sinkWorkerNum)
@@ -476,7 +485,7 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink.getUpperBoundTs())
+			upperBound := m.getUpperBound(tableSink.getUpperBoundTs())
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
 				m.sinkProgressHeap.push(slowestTableProgress)
@@ -502,7 +511,7 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 			t := &sinkTask{
 				tableID:       tableSink.tableID,
 				lowerBound:    lowerBound,
-				getUpperBound: getUpperBound,
+				getUpperBound: m.getUpperBound,
 				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
 					p := &progress{
@@ -566,18 +575,6 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 }
 
 func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
-	// We use the table's resolved ts as the upper bound to fetch events.
-	getUpperBound := func(tableSinkUpperBoundTs model.Ts) engine.Position {
-		// If a task carries events after schemaResolvedTs, mounter group threads
-		// can be blocked on waiting schemaResolvedTs get advanced.
-		schemaTs := m.schemaStorage.ResolvedTs()
-		if tableSinkUpperBoundTs > schemaTs+1 {
-			tableSinkUpperBoundTs = schemaTs + 1
-		}
-
-		return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
-	}
-
 	dispatchTasks := func() error {
 		tables := make([]*tableSinkWrapper, 0, redoWorkerNum)
 		progs := make([]*progress, 0, redoWorkerNum)
@@ -624,7 +621,7 @@ func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
 			tableSink := tables[i]
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
-			upperBound := getUpperBound(tableSink.getReceivedSorterResolvedTs())
+			upperBound := m.getUpperBound(tableSink.getReceivedSorterResolvedTs())
 
 			// The table has no available progress.
 			if lowerBound.Compare(upperBound) >= 0 {
@@ -646,7 +643,7 @@ func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
 			t := &redoTask{
 				tableID:       tableSink.tableID,
 				lowerBound:    lowerBound,
-				getUpperBound: getUpperBound,
+				getUpperBound: m.getUpperBound,
 				tableSink:     tableSink,
 				callback: func(lastWrittenPos engine.Position) {
 					p := &progress{
@@ -840,7 +837,7 @@ func (m *SinkManager) AsyncStopTable(tableID model.TableID) bool {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", tableID))
 	}
-	if tableSink.(*tableSinkWrapper).asyncClose() {
+	if tableSink.(*tableSinkWrapper).asyncStop() {
 		cleanedBytes := m.sinkMemQuota.RemoveTable(tableID)
 		cleanedBytes += m.redoMemQuota.RemoveTable(tableID)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
@@ -910,7 +907,7 @@ func (m *SinkManager) GetTableState(tableID model.TableID) (tablepb.TableState, 
 	// again or not if it returns false. So we must retry `tableSink.asyncClose` here
 	// if necessary. It's better to remove the dirty logic in the future.
 	tableSink := wrapper.(*tableSinkWrapper)
-	if tableSink.getState() == tablepb.TableStateStopping && tableSink.asyncClose() {
+	if tableSink.getState() == tablepb.TableStateStopping && tableSink.asyncStop() {
 		cleanedBytes := m.sinkMemQuota.RemoveTable(tableID)
 		cleanedBytes += m.redoMemQuota.RemoveTable(tableID)
 		log.Debug("MemoryQuotaTracing: Clean up memory quota for table sink task when removing table",
@@ -982,14 +979,6 @@ func (m *SinkManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 	start := time.Now()
 	m.waitSubroutines()
-	m.tableSinks.Range(func(_, value interface{}) bool {
-		sink := value.(*tableSinkWrapper)
-		sink.close()
-		if m.eventCache != nil {
-			m.eventCache.removeTable(sink.tableID)
-		}
-		return true
-	})
 	m.clearSinkFactory()
 
 	log.Info("Closed sink manager",

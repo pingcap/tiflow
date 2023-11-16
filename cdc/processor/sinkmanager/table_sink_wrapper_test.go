@@ -65,6 +65,22 @@ func (m *mockSink) Dead() <-chan struct{} {
 	return make(chan struct{})
 }
 
+type mockDelayedTableSink struct {
+	tablesink.TableSink
+
+	closeCnt    int
+	closeTarget int
+}
+
+func (t *mockDelayedTableSink) AsyncClose() bool {
+	t.closeCnt++
+	if t.closeCnt >= t.closeTarget {
+		t.TableSink.Close()
+		return true
+	}
+	return false
+}
+
 //nolint:unparam
 func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.TableID) (*tableSinkWrapper, *mockSink) {
 	tableState := tablepb.TableStatePreparing
@@ -84,13 +100,26 @@ func createTableSinkWrapper(changefeedID model.ChangeFeedID, tableID model.Table
 	return wrapper, sink
 }
 
-func TestTableSinkWrapperClose(t *testing.T) {
+func TestTableSinkWrapperStop(t *testing.T) {
 	t.Parallel()
 
 	wrapper, _ := createTableSinkWrapper(model.DefaultChangeFeedID("1"), 1)
+	wrapper.tableSink = &mockDelayedTableSink{
+		TableSink:   wrapper.tableSink,
+		closeCnt:    0,
+		closeTarget: 10,
+	}
 	require.Equal(t, tablepb.TableStatePreparing, wrapper.getState())
-	wrapper.close()
+
+	closeCnt := 0
+	for {
+		closeCnt++
+		if wrapper.asyncStop() {
+			break
+		}
+	}
 	require.Equal(t, tablepb.TableStateStopped, wrapper.getState(), "table sink state should be stopped")
+	require.Equal(t, 10, closeCnt, "table sink should be closed 10 times")
 }
 
 func TestUpdateReceivedSorterResolvedTs(t *testing.T) {

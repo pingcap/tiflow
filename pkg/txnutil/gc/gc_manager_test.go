@@ -112,6 +112,7 @@ func TestIgnoreFailedFeed(t *testing.T) {
 	pdClock := pdutil.NewClock4Test()
 	gcManager := NewManager(etcd.GcServiceIDForTest(),
 		mockPDClient, pdClock).(*gcManager)
+	gcManager.gcTTL = 24 * 60 * 60
 
 	// 5 hours ago
 	ts1 := oracle.GoTimeToTS(time.Now().Add(-time.Hour * 5))

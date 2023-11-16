@@ -756,6 +756,11 @@ var (
 			" caused by GC. checkpoint-ts %d is earlier than or equal to GC safepoint at %d",
 		errors.RFCCodeText("CDC:ErrSnapshotLostByGC"),
 	)
+	ErrGCTTLExceeded = errors.Normalize(
+		"the checkpoint-ts(%d) lag of the changefeed(%s) has exceeded "+
+			"the GC TTL and the changefeed is blocking global GC progression",
+		errors.RFCCodeText("CDC:ErrGCTTLExceeded"),
+	)
 	ErrNotOwner = errors.Normalize(
 		"this capture is not a owner",
 		errors.RFCCodeText("CDC:ErrNotOwner"),
