@@ -22,12 +22,12 @@ function run() {
 
 	cd $WORK_DIR
 
-	TOPIC_NAME="ticdc-canal-json-content-compatible"
+	TOPIC_NAME="ticdc-canal-json-test"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	if [ "$SINK_TYPE" == "kafka" ]; then
-		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&content-compatible=true"
+		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&kafka-version=${KAFKA_VERSION}"
 	fi
 
 	if [ "$SINK_TYPE" == "pulsar" ]; then
