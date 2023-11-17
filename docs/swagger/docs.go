@@ -1755,7 +1755,13 @@ var doc = `{
         "v2.ConsistentConfig": {
             "type": "object",
             "properties": {
+                "encoding_worker_num": {
+                    "type": "integer"
+                },
                 "flush_interval": {
+                    "type": "integer"
+                },
+                "flush_worker_num": {
                     "type": "integer"
                 },
                 "level": {
