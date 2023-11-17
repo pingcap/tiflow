@@ -202,15 +202,10 @@ func NewReplicationSet(
 			// We need to wait its state becomes Stopped or Absent before
 			// proceeding further scheduling.
 			log.Warn("schedulerv3: found a stopping capture during initializing",
-<<<<<<< HEAD
-				zap.Any("replicationSet", r),
-				zap.Int64("tableID", table.TableID),
-=======
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.Int64("tableID", table.Span.TableID),
+				zap.Int64("tableID", table.TableID),
 				zap.Any("replicationSet", r),
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 				zap.Any("status", tableStatus))
 			err := r.setCapture(captureID, RoleUndetermined)
 			if err != nil {
@@ -222,15 +217,10 @@ func NewReplicationSet(
 			// Ignore stop state.
 		default:
 			log.Warn("schedulerv3: unknown table state",
-<<<<<<< HEAD
-				zap.Any("replicationSet", r),
-				zap.Int64("tableID", table.TableID),
-=======
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.Int64("tableID", table.Span.TableID),
+				zap.Int64("tableID", table.TableID),
 				zap.Any("replicationSet", r),
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 				zap.Any("status", tableStatus))
 		}
 	}
@@ -859,14 +849,10 @@ func (r *ReplicationSet) handleAddTable(
 	// Ignore add table if it's not in Absent state.
 	if r.State != ReplicationSetStateAbsent {
 		log.Warn("schedulerv3: add table is ignored",
-<<<<<<< HEAD
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
-=======
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.Int64("tableID", r.Span.TableID),
+			zap.Int64("tableID", r.TableID),
 			zap.Any("replicationSet", r))
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 		return nil, nil
 	}
 	err := r.setCapture(captureID, RoleSecondary)
@@ -898,14 +884,10 @@ func (r *ReplicationSet) handleMoveTable(
 	// Ignore move table if it has been removed already.
 	if r.hasRemoved() {
 		log.Warn("schedulerv3: move table is ignored",
-<<<<<<< HEAD
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
-=======
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.Int64("tableID", r.Span.TableID),
+			zap.Int64("tableID", r.TableID),
 			zap.Any("replicationSet", r))
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 		return nil, nil
 	}
 	// Ignore move table if
@@ -913,14 +895,10 @@ func (r *ReplicationSet) handleMoveTable(
 	// 2) the dest capture is the primary.
 	if r.State != ReplicationSetStateReplicating || r.Primary == dest {
 		log.Warn("schedulerv3: move table is ignored",
-<<<<<<< HEAD
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
-=======
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.Int64("tableID", r.Span.TableID),
+			zap.Int64("tableID", r.TableID),
 			zap.Any("replicationSet", r))
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 		return nil, nil
 	}
 	oldState := r.State
@@ -947,27 +925,19 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 	// Ignore remove table if it has been removed already.
 	if r.hasRemoved() {
 		log.Warn("schedulerv3: remove table is ignored",
-<<<<<<< HEAD
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
-=======
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.Int64("tableID", r.Span.TableID),
+			zap.Int64("tableID", r.TableID),
 			zap.Any("replicationSet", r))
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 		return nil, nil
 	}
 	// Ignore remove table if it's not in Replicating state.
 	if r.State != ReplicationSetStateReplicating {
 		log.Warn("schedulerv3: remove table is ignored",
-<<<<<<< HEAD
-			zap.Any("replicationSet", r), zap.Int64("tableID", r.TableID))
-=======
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.Int64("tableID", r.Span.TableID),
+			zap.Int64("tableID", r.TableID),
 			zap.Any("replicationSet", r))
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 		return nil, nil
 	}
 	oldState := r.State
@@ -975,7 +945,7 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 	log.Info("schedulerv3: replication state transition, remove table",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.Int64("tableID", r.Span.TableID),
+		zap.Int64("tableID", r.TableID),
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState))
 	status := tablepb.TableStatus{
@@ -1016,7 +986,7 @@ func (r *ReplicationSet) handleCaptureShutdown(
 	log.Info("schedulerv3: replication state transition, capture shutdown",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.Int64("tableID", r.Span.TableID),
+		zap.Int64("tableID", r.TableID),
 		zap.Any("replicationSet", r),
 		zap.Stringer("old", oldState), zap.Stringer("new", r.State))
 	return msgs, true, errors.Trace(err)
@@ -1029,7 +999,7 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.Int64("tableID", r.Span.TableID),
+			zap.Int64("tableID", r.TableID),
 			zap.Any("replicationSet", r),
 			zap.Any("checkpoint", checkpoint))
 
@@ -1048,7 +1018,7 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.Int64("tableID", r.Span.TableID),
+			zap.Int64("tableID", r.TableID),
 			zap.Any("replicationSet", r),
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))

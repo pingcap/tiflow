@@ -327,14 +327,8 @@ func (r *Manager) HandleTasks(
 	tasks []*ScheduleTask,
 ) ([]*schedulepb.Message, error) {
 	// Check if a running task is finished.
-<<<<<<< HEAD
 	for tableID := range r.runningTasks {
 		if table, ok := r.tables[tableID]; ok {
-=======
-	var toBeDeleted []tablepb.Span
-	r.runningTasks.Ascend(func(span tablepb.Span, task *ScheduleTask) bool {
-		if table, ok := r.spans.Get(span); ok {
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 			// If table is back to Replicating or Removed,
 			// the running task is finished.
 			if table.State == ReplicationSetStateReplicating || table.hasRemoved() {
@@ -686,13 +680,8 @@ func (r *Manager) logSlowTableInfo(currentTables []model.TableID, currentTime ti
 		log.Info("schedulerv3: slow table",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-<<<<<<< HEAD
 			zap.Int64("tableID", table.TableID),
 			zap.String("tableStatus", table.Stats.String()),
-=======
-			zap.Int64("tableID", table.Span.TableID),
-			zap.String("tableStatus", table.State.String()),
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 			zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
 			zap.Duration("checkpointLag", currentTime.

@@ -99,18 +99,13 @@ func (b *basicScheduler) Schedule(
 				zap.Any("allCaptureStatus", captures))
 			return tasks
 		}
-<<<<<<< HEAD
 		log.Info("schedulerv3: burst add table",
 			zap.String("namespace", b.changefeedID.Namespace),
 			zap.String("changefeed", b.changefeedID.ID),
 			zap.Strings("captureIDs", captureIDs),
 			zap.Int64s("tableIDs", newTables))
 		tasks = append(
-			tasks, newBurstAddTables(checkpointTs, newTables, captureIDs))
-=======
-		tasks = append(
-			tasks, newBurstAddTables(b.changefeedID, checkpointTs, newSpans, captureIDs))
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
+			tasks, newBurstAddTables(b.changefeedID, checkpointTs, newTables, captureIDs))
 	}
 
 	// Build remove table tasks.
@@ -121,7 +116,6 @@ func (b *basicScheduler) Schedule(
 	// and for all tables in currentTables have a record in replications.
 	if !(tablesLenEqual && tablesAllFind) {
 		// The two sets are not identical. We need to find removed tables.
-<<<<<<< HEAD
 		intersectionTable := make(map[model.TableID]struct{}, len(currentTables))
 		for _, tableID := range currentTables {
 			_, ok := replications[tableID]
@@ -129,14 +123,6 @@ func (b *basicScheduler) Schedule(
 				continue
 			}
 			intersectionTable[tableID] = struct{}{}
-=======
-		intersectionTable := spanz.NewBtreeMap[struct{}]()
-		for _, span := range currentSpans {
-			_, ok := replications.Get(span)
-			if ok {
-				intersectionTable.ReplaceOrInsert(span, struct{}{})
-			}
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 		}
 		rmTables := make([]model.TableID, 0)
 		for tableID := range replications {
@@ -144,19 +130,11 @@ func (b *basicScheduler) Schedule(
 			if !ok {
 				rmTables = append(rmTables, tableID)
 			}
-<<<<<<< HEAD
 		}
-		if len(rmTables) > 0 {
-			tasks = append(tasks,
-				newBurstRemoveTables(rmTables, replications, b.changefeedID))
-=======
-			return true
-		})
 
-		removeTableTasks := newBurstRemoveTables(rmSpans, replications, b.changefeedID)
+		removeTableTasks := newBurstRemoveTables(rmTables, replications, b.changefeedID)
 		if removeTableTasks != nil {
 			tasks = append(tasks, removeTableTasks)
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 		}
 	}
 	return tasks
@@ -164,34 +142,23 @@ func (b *basicScheduler) Schedule(
 
 // newBurstAddTables add each new table to captures in a round-robin way.
 func newBurstAddTables(
-<<<<<<< HEAD
+	changefeedID model.ChangeFeedID,
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newTables))
 	for _, tableID := range newTables {
-		tables = append(tables, replication.AddTable{
-			TableID:      tableID,
-			CaptureID:    captureIDs[idx],
-=======
-	changefeedID model.ChangeFeedID,
-	checkpointTs model.Ts, newSpans []tablepb.Span, captureIDs []model.CaptureID,
-) *replication.ScheduleTask {
-	idx := 0
-	tables := make([]replication.AddTable, 0, len(newSpans))
-	for _, span := range newSpans {
 		targetCapture := captureIDs[idx]
 		tables = append(tables, replication.AddTable{
-			Span:         span,
+			TableID:      tableID,
 			CaptureID:    targetCapture,
->>>>>>> 744211d931 (scheduler(ticdc): fix incorrect scheduling task counter (#9840) (#9848))
 			CheckpointTs: checkpointTs,
 		})
 		log.Info("schedulerv3: burst add table",
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
 			zap.String("captureID", targetCapture),
-			zap.Any("tableID", span.TableID))
+			zap.Any("tableID", tableID))
 
 		idx++
 		if idx >= len(captureIDs) {
@@ -233,7 +200,7 @@ func newBurstRemoveTables(
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
 			zap.String("captureID", captureID),
-			zap.Any("tableID", span.TableID))
+			zap.Any("tableID", tableID))
 	}
 
 	if len(tables) == 0 {
