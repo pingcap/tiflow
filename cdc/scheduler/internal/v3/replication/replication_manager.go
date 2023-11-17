@@ -70,8 +70,8 @@ type MoveTable struct {
 }
 
 func (t MoveTable) String() string {
-	return fmt.Sprintf("MoveTable, span: %s, dest: %s",
-		t.Span.String(), t.DestCapture)
+	return fmt.Sprintf("MoveTable, tableID: %d, dest: %s",
+		t.TableID, t.DestCapture)
 }
 
 // AddTable is a schedule task for adding a table.
@@ -82,8 +82,8 @@ type AddTable struct {
 }
 
 func (t AddTable) String() string {
-	return fmt.Sprintf("AddTable, span: %s, capture: %s, checkpointTs: %d",
-		t.Span.String(), t.CaptureID, t.CheckpointTs)
+	return fmt.Sprintf("AddTable, tableID: %d, capture: %s, checkpointTs: %d",
+		t.TableID, t.CaptureID, t.CheckpointTs)
 }
 
 // RemoveTable is a schedule task for removing a table.
@@ -93,8 +93,8 @@ type RemoveTable struct {
 }
 
 func (t RemoveTable) String() string {
-	return fmt.Sprintf("RemoveTable, span: %s, capture: %s",
-		t.Span.String(), t.CaptureID)
+	return fmt.Sprintf("RemoveTable, tableID: %d, capture: %s",
+		t.TableID, t.CaptureID)
 }
 
 // ScheduleTask is a schedule task that wraps add/move/remove table tasks.
