@@ -1078,7 +1078,7 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 
 	if tableName == nil {
-		log.Warn("failed to get table name for metric")
+		log.Warn("failed to get table name for metric", zap.Any("tableID", tableID))
 		return strconv.Itoa(int(tableID))
 	}
 

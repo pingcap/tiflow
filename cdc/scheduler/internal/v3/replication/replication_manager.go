@@ -15,6 +15,7 @@ package replication
 
 import (
 	"container/heap"
+	"fmt"
 	"math"
 	"time"
 
@@ -49,10 +50,28 @@ type BurstBalance struct {
 	MoveTables   []MoveTable
 }
 
+func (b BurstBalance) String() string {
+	if len(b.AddTables) != 0 {
+		return fmt.Sprintf("BurstBalance, add tables: %v", b.AddTables)
+	}
+	if len(b.RemoveTables) != 0 {
+		return fmt.Sprintf("BurstBalance, remove tables: %v", b.RemoveTables)
+	}
+	if len(b.MoveTables) != 0 {
+		return fmt.Sprintf("BurstBalance, move tables: %v", b.MoveTables)
+	}
+	return "BurstBalance, no tables"
+}
+
 // MoveTable is a schedule task for moving a table.
 type MoveTable struct {
 	TableID     model.TableID
 	DestCapture model.CaptureID
+}
+
+func (t MoveTable) String() string {
+	return fmt.Sprintf("MoveTable, tableID: %d, dest: %s",
+		t.TableID, t.DestCapture)
 }
 
 // AddTable is a schedule task for adding a table.
@@ -62,10 +81,20 @@ type AddTable struct {
 	CheckpointTs model.Ts
 }
 
+func (t AddTable) String() string {
+	return fmt.Sprintf("AddTable, tableID: %d, capture: %s, checkpointTs: %d",
+		t.TableID, t.CaptureID, t.CheckpointTs)
+}
+
 // RemoveTable is a schedule task for removing a table.
 type RemoveTable struct {
 	TableID   model.TableID
 	CaptureID model.CaptureID
+}
+
+func (t RemoveTable) String() string {
+	return fmt.Sprintf("RemoveTable, tableID: %d, capture: %s",
+		t.TableID, t.CaptureID)
 }
 
 // ScheduleTask is a schedule task that wraps add/move/remove table tasks.
@@ -90,6 +119,22 @@ func (s *ScheduleTask) Name() string {
 		return "burstBalance"
 	}
 	return "unknown"
+}
+
+func (s *ScheduleTask) String() string {
+	if s.MoveTable != nil {
+		return s.MoveTable.String()
+	}
+	if s.AddTable != nil {
+		return s.AddTable.String()
+	}
+	if s.RemoveTable != nil {
+		return s.RemoveTable.String()
+	}
+	if s.BurstBalance != nil {
+		return s.BurstBalance.String()
+	}
+	return ""
 }
 
 // Manager manages replications and running scheduling tasks.
