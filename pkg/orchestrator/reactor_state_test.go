@@ -129,6 +129,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -180,6 +182,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -236,6 +240,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+						ChangefeedErrorStuckDuration: config.
+							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -324,6 +330,8 @@ func TestPatchInfo(t *testing.T) {
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
 			Consistent: defaultConfig.Consistent,
+			ChangefeedErrorStuckDuration: config.
+				GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -340,6 +348,8 @@ func TestPatchInfo(t *testing.T) {
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
 			Consistent: defaultConfig.Consistent,
+			ChangefeedErrorStuckDuration: config.
+				GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {

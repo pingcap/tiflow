@@ -323,6 +323,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.Consistent == nil {
 		info.Config.Consistent = defaultConfig.Consistent
 	}
+	if info.Config.ChangefeedErrorStuckDuration == 0 {
+		info.Config.ChangefeedErrorStuckDuration = defaultConfig.ChangefeedErrorStuckDuration
+	}
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.
@@ -358,6 +361,11 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		info.fixEnableOldValue()
 		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
 			zap.Bool("enableOldValue", info.Config.EnableOldValue))
+	}
+	if info.Config.ChangefeedErrorStuckDuration == 0 {
+		log.Info("Start fixing incompatible changefeed error stuck duration", zap.String("changefeed", info.String()))
+		info.Config.ChangefeedErrorStuckDuration = config.GetDefaultReplicaConfig().ChangefeedErrorStuckDuration
+		log.Info("Fix incompatible changefeed error stuck duration completed", zap.String("changefeed", info.String()))
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -36,7 +37,6 @@ const (
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 10 * time.Minute
-	defaultBackoffMaxElapsedTime      = 30 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
 )
@@ -66,26 +66,27 @@ type feedStateManager struct {
 	resolvedTs       model.Ts
 	initCheckpointTs model.Ts
 
-	checkpointTsAdvanced time.Time
-	lastCheckpointTs     model.Ts
+	checkpointTsAdvanced         time.Time
+	lastCheckpointTs             model.Ts
+	changefeedErrorStuckDuration time.Duration
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
-func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
-	f := new(feedStateManager)
-	f.upstream = up
+func newFeedStateManager(up *upstream.Upstream, cfg *config.ReplicaConfig) *feedStateManager {
+	m := new(feedStateManager)
+	m.upstream = up
 
-	f.errBackoff = backoff.NewExponentialBackOff()
-	f.errBackoff.InitialInterval = defaultBackoffInitInterval
-	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
-	f.errBackoff.Multiplier = defaultBackoffMultiplier
-	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
+	m.errBackoff = backoff.NewExponentialBackOff()
+	m.errBackoff.InitialInterval = defaultBackoffInitInterval
+	m.errBackoff.MaxInterval = defaultBackoffMaxInterval
+	m.errBackoff.Multiplier = defaultBackoffMultiplier
+	m.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
 	// backoff will stop once the defaultBackoffMaxElapsedTime has elapsed.
-	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
+	m.errBackoff.MaxElapsedTime = cfg.ChangefeedErrorStuckDuration
+	m.changefeedErrorStuckDuration = cfg.ChangefeedErrorStuckDuration
 
-	f.resetErrRetry()
-
-	return f
+	m.resetErrRetry()
+	return m
 }
 
 func (m *feedStateManager) Tick(
@@ -558,8 +559,8 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		// 1. checkpoint lag is large enough;
 		// 2. checkpoint hasn't been advanced for a long while;
 		// 3. the changefeed has been initialized.
-		if currTime.Sub(ckptTime) > defaultBackoffMaxElapsedTime &&
-			time.Since(m.checkpointTsAdvanced) > defaultBackoffMaxElapsedTime &&
+		if currTime.Sub(ckptTime) > m.changefeedErrorStuckDuration &&
+			time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration &&
 			m.resolvedTs > m.initCheckpointTs {
 			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
 			m.handleError(&model.RunningError{

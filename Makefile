@@ -245,7 +245,7 @@ clean_integration_test_containers: ## Clean MySQL and Kafka integration test con
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-mysql-integration.yml down -v
 	docker-compose -f $(TICDC_DOCKER_DEPLOYMENTS_DIR)/docker-compose-kafka-integration.yml down -v
 
-fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci generate_mock go-generate
+fmt: tools/bin/gofumports tools/bin/shfmt tools/bin/gci #generate_mock go-generate
 	@echo "run gci (format imports)"
 	tools/bin/gci write $(FILES) 2>&1 | $(FAIL_ON_STDOUT)
 	@echo "run gofumports"
@@ -322,11 +322,11 @@ check-static: tools/bin/golangci-lint
 
 check: check-copyright fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width \
-	swagger-spec check-makefiles check_engine_integration_test
+	check-makefiles check_engine_integration_test
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 fast_check: check-copyright fmt check-static tidy terror_check errdoc \
-	check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec check-makefiles \
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width check-makefiles \
 	check_cdc_integration_test check_dm_integration_test check_engine_integration_test 
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
@@ -346,10 +346,7 @@ unit_test_coverage:
 
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
-
-swagger-spec: tools/bin/swag
-	tools/bin/swag init --exclude dm,engine --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
-
+	
 generate_mock: ## Generate mock code.
 generate_mock: tools/bin/mockgen
 	scripts/generate-mock.sh

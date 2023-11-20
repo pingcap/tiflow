@@ -62,7 +62,8 @@ const (
     "flush-interval": 2000,
     "storage": "",
     "use-file-backend": false
-  }
+  },
+  "changefeed-error-stuck-duration": 1800000000000
 }`
 
 	testCfgTestServerConfigMarshal = `{
@@ -213,7 +214,8 @@ const (
     "flush-interval": 2000,
     "storage": "",
     "use-file-backend": false
-  }
+  },
+  "changefeed-error-stuck-duration": 1800000000000
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -273,6 +275,7 @@ const (
     "flush-interval": 2000,
     "storage": "",
     "use-file-backend": false
-  }
+  },
+  "changefeed-error-stuck-duration": 1800000000000
 }`
 )
