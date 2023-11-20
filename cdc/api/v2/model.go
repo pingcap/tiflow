@@ -189,6 +189,8 @@ type ReplicaConfig struct {
 	Mounter    *MounterConfig    `json:"mounter"`
 	Sink       *SinkConfig       `json:"sink"`
 	Consistent *ConsistentConfig `json:"consistent"`
+
+	ChangefeedErrorStuckDuration *JSONDuration `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -212,6 +214,10 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	if c.SyncPointRetention != nil {
 		res.SyncPointRetention = c.SyncPointRetention.duration
 	}
+	if c.ChangefeedErrorStuckDuration != nil {
+		res.ChangefeedErrorStuckDuration = c.ChangefeedErrorStuckDuration.duration
+	}
+
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -339,16 +345,17 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	cloned := c.Clone()
 	res := &ReplicaConfig{
-		MemoryQuota:           cloned.MemoryQuota,
-		CaseSensitive:         cloned.CaseSensitive,
-		EnableOldValue:        cloned.EnableOldValue,
-		ForceReplicate:        cloned.ForceReplicate,
-		IgnoreIneligibleTable: false,
-		CheckGCSafePoint:      cloned.CheckGCSafePoint,
-		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
-		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
-		BDRMode:               cloned.BDRMode,
+		MemoryQuota:                  cloned.MemoryQuota,
+		CaseSensitive:                cloned.CaseSensitive,
+		EnableOldValue:               cloned.EnableOldValue,
+		ForceReplicate:               cloned.ForceReplicate,
+		IgnoreIneligibleTable:        false,
+		CheckGCSafePoint:             cloned.CheckGCSafePoint,
+		EnableSyncPoint:              cloned.EnableSyncPoint,
+		SyncPointInterval:            &JSONDuration{cloned.SyncPointInterval},
+		SyncPointRetention:           &JSONDuration{cloned.SyncPointRetention},
+		BDRMode:                      cloned.BDRMode,
+		ChangefeedErrorStuckDuration: &JSONDuration{cloned.ChangefeedErrorStuckDuration},
 	}
 
 	if cloned.Filter != nil {

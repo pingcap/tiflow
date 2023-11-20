@@ -181,6 +181,17 @@ func TestValidateAndAdjust(t *testing.T) {
 
 	cfg.Sink.EncoderConcurrency = -1
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
+
+	// changefeed error stuck duration is less than 30 minutes
+	cfg = GetDefaultReplicaConfig()
+	duration := minChangeFeedErrorStuckDuration - time.Second*1
+	cfg.ChangefeedErrorStuckDuration = duration
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "The ChangefeedErrorStuckDuration")
+	duration = minChangeFeedErrorStuckDuration
+	cfg.ChangefeedErrorStuckDuration = duration
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 }
 
 func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {

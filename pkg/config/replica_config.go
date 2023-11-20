@@ -33,7 +33,8 @@ const (
 	// minSyncPointInterval is the minimum of SyncPointInterval can be set.
 	minSyncPointInterval = time.Second * 30
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
-	minSyncPointRetention = time.Hour * 1
+	minSyncPointRetention           = time.Hour * 1
+	minChangeFeedErrorStuckDuration = time.Minute * 30
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -72,6 +73,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Storage:               "",
 		UseFileBackend:        false,
 	},
+	ChangefeedErrorStuckDuration: time.Minute * 30,
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -104,13 +106,14 @@ type replicaConfig struct {
 	// BDR(Bidirectional Replication) is a feature that allows users to
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.
-	BDRMode            bool              `toml:"bdr-mode" json:"bdr-mode"`
-	SyncPointInterval  time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
-	SyncPointRetention time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
-	Filter             *FilterConfig     `toml:"filter" json:"filter"`
-	Mounter            *MounterConfig    `toml:"mounter" json:"mounter"`
-	Sink               *SinkConfig       `toml:"sink" json:"sink"`
-	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
+	BDRMode                      bool              `toml:"bdr-mode" json:"bdr-mode"`
+	SyncPointInterval            time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
+	SyncPointRetention           time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
+	Filter                       *FilterConfig     `toml:"filter" json:"filter"`
+	Mounter                      *MounterConfig    `toml:"mounter" json:"mounter"`
+	Sink                         *SinkConfig       `toml:"sink" json:"sink"`
+	Consistent                   *ConsistentConfig `toml:"consistent" json:"consistent"`
+	ChangefeedErrorStuckDuration time.Duration     `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -208,6 +211,14 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 	}
 	if c.MemoryQuota == uint64(0) {
 		c.FixMemoryQuota()
+	}
+
+	if c.ChangefeedErrorStuckDuration < minChangeFeedErrorStuckDuration {
+		return cerror.ErrInvalidReplicaConfig.
+			FastGenByArgs(
+				fmt.Sprintf("The ChangefeedErrorStuckDuration:%f must be larger than %f Seconds",
+					c.ChangefeedErrorStuckDuration.Seconds(),
+					minChangeFeedErrorStuckDuration.Seconds()))
 	}
 
 	return nil

@@ -201,7 +201,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		info = ctx.ChangefeedVars().Info
 		return info, true, nil
 	})
-
+	tester.MustApplyPatches()
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID, state, up,
 		// new ddl puller
 		func(ctx context.Context,

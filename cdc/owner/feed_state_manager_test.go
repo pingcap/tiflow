@@ -844,7 +844,7 @@ func TestHandleWarning(t *testing.T) {
 	tester.MustApplyPatches()
 	// mock the checkpointTs is not progressing for defaultBackoffMaxElapsedTime time
 	manager.checkpointTsAdvanced = manager.
-		checkpointTsAdvanced.Add(-(defaultBackoffMaxElapsedTime + 1))
+		checkpointTsAdvanced.Add(-(manager.changefeedErrorStuckDuration + 1))
 	// resolveTs = 202 > checkpointTs = 201
 	manager.Tick(state, 202)
 	// some patches will be generated when the manager.Tick is called

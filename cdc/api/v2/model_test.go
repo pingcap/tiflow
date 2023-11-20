@@ -63,6 +63,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		Storage:               "",
 		UseFileBackend:        false,
 	},
+	ChangefeedErrorStuckDuration: &JSONDuration{config.
+		GetDefaultReplicaConfig().ChangefeedErrorStuckDuration},
 }
 
 func TestDefaultReplicaConfig(t *testing.T) {
