@@ -78,8 +78,16 @@ func (d *decoder) NextResolvedEvent() (uint64, error) {
 
 // NextRowChangedEvent returns the next row changed event if exists
 func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
-	// TODO implement me
-	panic("implement me")
+	if d.msg == nil || (d.msg.Data == nil && d.msg.Old == nil) {
+		return nil, cerror.ErrCodecDecode.GenWithStack(
+			"not found row changed event message")
+	}
+	event, err := buildRowChangedEvent(d.msg)
+	if err != nil {
+		return nil, err
+	}
+	d.msg = nil
+	return event, nil
 }
 
 // NextDDLEvent returns the next DDL event if exists

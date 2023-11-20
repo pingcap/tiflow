@@ -26,24 +26,14 @@ import (
 
 //nolint:unused
 type encoder struct {
+	config *common.Config
+
 	messages []*common.Message
-}
-
-type builder struct{}
-
-// NewBuilder returns a new builder
-func NewBuilder() *builder {
-	return &builder{}
-}
-
-// Build implement the RowEventEncoderBuilder interface
-func (b *builder) Build() codec.RowEventEncoder {
-	return &encoder{}
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
 func (e *encoder) AppendRowChangedEvent(
-	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
+	_ context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
 	m := newDMLMessage(event)
 	value, err := json.Marshal(m)
@@ -95,9 +85,33 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 		message = newDDLMessage(event)
 	}
 	value, err := json.Marshal(message)
-	
+
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
 	return common.NewDDLMsg(config.ProtocolSimple, nil, value, event), nil
+}
+
+type builder struct {
+	config *common.Config
+}
+
+// NewBuilder returns a new builder
+func NewBuilder(config *common.Config) *builder {
+	return &builder{
+		config: config,
+	}
+}
+
+// Build implement the RowEventEncoderBuilder interface
+func (b *builder) Build() codec.RowEventEncoder {
+	return &encoder{
+		config:   b.config,
+		messages: make([]*common.Message, 0, 1),
+	}
+}
+
+// CleanMetrics implement the RowEventEncoderBuilder interface
+func (b *builder) CleanMetrics() {
+	// do nothing
 }

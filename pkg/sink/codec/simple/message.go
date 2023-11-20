@@ -253,6 +253,45 @@ func (t *TableSchema) ToDDLEvent(msg *message) (*model.DDLEvent, error) {
 	}, nil
 }
 
+func buildRowChangedEvent(msg *message) (*model.RowChangedEvent, error) {
+	result := &model.RowChangedEvent{
+		CommitTs: msg.CommitTs,
+		Table: &model.TableName{
+			Schema: msg.Database,
+			Table:  msg.Table,
+		},
+	}
+
+	if msg.Data != nil {
+		columns, err := buildColumns(msg.Data)
+		if err != nil {
+			return nil, err
+		}
+		result.Columns = columns
+	}
+
+	if msg.Old != nil {
+		columns, err := buildColumns(msg.Old)
+		if err != nil {
+			return nil, err
+		}
+		result.PreColumns = columns
+	}
+	return result, nil
+}
+
+func buildColumns(rawData map[string]string) ([]*model.Column, error) {
+	result := make([]*model.Column, 0, len(rawData))
+	for name, value := range rawData {
+		col := &model.Column{
+			Name:  name,
+			Value: value,
+		}
+		result = append(result, col)
+	}
+	return result, nil
+}
+
 type message struct {
 	Version int `json:"version"`
 	// Scheme and Table is empty for the resolved ts event.
