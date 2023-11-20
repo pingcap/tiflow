@@ -306,3 +306,21 @@ func TestIsAllowedDDL(t *testing.T) {
 		require.Equal(t, tc.allowed, isAllowedDDL(tc.ActionType), "%#v", tc)
 	}
 }
+
+func TestIsSchemaDDL(t *testing.T) {
+	cases := []struct {
+		actionType timodel.ActionType
+		isSchema   bool
+	}{
+		{timodel.ActionCreateSchema, true},
+		{timodel.ActionDropSchema, true},
+		{timodel.ActionModifySchemaCharsetAndCollate, true},
+		{timodel.ActionCreateTable, false},
+		{timodel.ActionDropTable, false},
+		{timodel.ActionTruncateTable, false},
+		{timodel.ActionAddColumn, false},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.isSchema, IsSchemaDDL(tc.actionType), "%#v", tc)
+	}
+}
