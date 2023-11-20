@@ -63,18 +63,10 @@ type feedStateManager struct {
 
 	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
 	// has been advanced or not.
-<<<<<<< HEAD
-	resolvedTs       model.Ts
-	initCheckpointTs model.Ts
-
-	checkpointTsAdvanced         time.Time
-	lastCheckpointTs             model.Ts
-=======
 	resolvedTs           model.Ts
 	checkpointTs         model.Ts
 	checkpointTsAdvanced time.Time
 
->>>>>>> upstream/release-6.5
 	changefeedErrorStuckDuration time.Duration
 }
 
@@ -92,16 +84,8 @@ func newFeedStateManager(up *upstream.Upstream, cfg *config.ReplicaConfig) *feed
 	m.errBackoff.MaxElapsedTime = cfg.ChangefeedErrorStuckDuration
 	m.changefeedErrorStuckDuration = cfg.ChangefeedErrorStuckDuration
 
-<<<<<<< HEAD
 	m.resetErrRetry()
 	return m
-=======
-	f.changefeedErrorStuckDuration = defaultBackoffMaxElapsedTime
-
-	f.resetErrRetry()
-	f.isRetrying = false
-	return f
->>>>>>> upstream/release-6.5
 }
 
 func (m *feedStateManager) shouldRetry() bool {
