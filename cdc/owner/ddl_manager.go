@@ -219,15 +219,6 @@ func (m *ddlManager) tick(
 			}
 
 			for _, event := range events {
-				// If changefeed is in BDRMode, skip ddl.
-				if m.BDRMode {
-					log.Info("changefeed is in BDRMode, skip a ddl event",
-						zap.String("namespace", m.changfeedID.Namespace),
-						zap.String("ID", m.changfeedID.ID),
-						zap.Any("ddlEvent", event))
-					continue
-				}
-
 				if event.TableInfo != nil &&
 					m.schema.IsIneligibleTableID(event.TableInfo.TableName.TableID) {
 					log.Warn("ignore the DDL event of ineligible table",
@@ -337,6 +328,24 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 	if m.executingDDL == nil {
 		return nil
 	}
+
+	// If changefeed is in BDRMode, skip ddl.
+	if m.BDRMode {
+		log.Info("changefeed is in BDRMode, skip a ddl event",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("ID", m.changfeedID.ID),
+			zap.Any("ddlEvent", m.executingDDL))
+		tableName := m.executingDDL.TableInfo.TableName
+		// Set it to nil first to accelerate GC.
+		m.pendingDDLs[tableName][0] = nil
+		m.pendingDDLs[tableName] = m.pendingDDLs[tableName][1:]
+		m.schema.DoGC(m.executingDDL.CommitTs - 1)
+		m.justSentDDL = m.executingDDL
+		m.executingDDL = nil
+		m.cleanCache()
+		return nil
+	}
+
 	failpoint.Inject("ExecuteNotDone", func() {
 		// This ddl will never finish executing.
 		// It is used to test the logic that a ddl only block the related table
