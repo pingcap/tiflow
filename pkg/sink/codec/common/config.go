@@ -130,8 +130,7 @@ type urlConfig struct {
 
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
-
-	ContentCompatible *bool `form:"content-compatible"`
+	ContentCompatible        *bool  `form:"content-compatible"`
 }
 
 // Apply fill the Config
@@ -234,6 +233,10 @@ func mergeConfig(
 	if replicaConfig.Sink != nil {
 		dest.AvroSchemaRegistry = util.GetOrZero(replicaConfig.Sink.SchemaRegistry)
 		dest.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
+		dest.ContentCompatible = replicaConfig.Sink.ContentCompatible
+		if util.GetOrZero(dest.ContentCompatible) {
+			dest.OnlyOutputUpdatedColumns = util.AddressOf(true)
+		}
 		if replicaConfig.Sink.KafkaConfig != nil {
 			dest.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
 			if replicaConfig.Sink.KafkaConfig.CodecConfig != nil {

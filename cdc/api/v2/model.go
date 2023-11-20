@@ -451,6 +451,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
+			ContentCompatible:                c.Sink.ContentCompatible,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			PulsarConfig:                     pulsarConfig,
@@ -731,6 +732,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
+			ContentCompatible:                cloned.Sink.ContentCompatible,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			PulsarConfig:                     pulsarConfig,
@@ -896,6 +898,7 @@ type SinkConfig struct {
 	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
 	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
 	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
+	ContentCompatible                *bool               `json:"content_compatible"`
 	SafeMode                         *bool               `json:"safe_mode,omitempty"`
 	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
 	PulsarConfig                     *PulsarConfig       `json:"pulsar_config,omitempty"`

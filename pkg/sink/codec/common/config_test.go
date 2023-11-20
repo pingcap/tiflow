@@ -381,6 +381,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -413,6 +414,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -451,11 +453,23 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
 	require.Equal(t, 456, c.MaxBatchSize)
 	require.Equal(t, c.LargeMessageHandle.LargeMessageHandleOption, config.LargeMessageHandleOptionClaimCheck)
+
+	replicaConfig = config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.ContentCompatible = aws.Bool(true)
+	uri = "kafka://127.0.0.1:9092/content-compatible?protocol=canal-json"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	c = NewConfig(config.ProtocolCanalJSON)
+	err = c.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, c.ContentCompatible)
+	require.True(t, c.OnlyOutputUpdatedColumns)
 }
 
 func TestApplyConfig4CanalJSON(t *testing.T) {
