@@ -48,6 +48,9 @@ type Config struct {
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
 
+	// canal-json only
+	ContentCompatible bool
+
 	// for sinking to cloud storage
 	Delimiter            string
 	Quote                string
@@ -111,6 +114,7 @@ type urlConfig struct {
 
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
+	ContentCompatible        *bool  `form:"content-compatible"`
 }
 
 // Apply fill the Config
@@ -184,7 +188,22 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
 
+<<<<<<< HEAD
 	c.DeleteOnlyHandleKeyColumns = !replicaConfig.EnableOldValue
+=======
+	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
+	if c.DeleteOnlyHandleKeyColumns && replicaConfig.ForceReplicate {
+		return cerror.ErrCodecInvalidConfig.GenWithStack(
+			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
+	}
+
+	if c.Protocol == config.ProtocolCanalJSON {
+		c.ContentCompatible = util.GetOrZero(urlParameter.ContentCompatible)
+		if c.ContentCompatible {
+			c.OnlyOutputUpdatedColumns = true
+		}
+	}
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 
 	return nil
 }
@@ -197,6 +216,10 @@ func mergeConfig(
 	if replicaConfig.Sink != nil {
 		dest.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
 		dest.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
+		dest.ContentCompatible = replicaConfig.Sink.ContentCompatible
+		if util.GetOrZero(dest.ContentCompatible) {
+			dest.OnlyOutputUpdatedColumns = util.AddressOf(true)
+		}
 		if replicaConfig.Sink.KafkaConfig != nil {
 			dest.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
 			if replicaConfig.Sink.KafkaConfig.CodecConfig != nil {

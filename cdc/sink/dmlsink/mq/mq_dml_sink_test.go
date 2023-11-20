@@ -20,6 +20,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -83,7 +86,8 @@ func TestWriteEvents(t *testing.T) {
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
+		ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 	}
 
 	events := make([]*dmlsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)

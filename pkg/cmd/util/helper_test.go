@@ -206,11 +206,23 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 			NullString:           config.NULL,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
+<<<<<<< HEAD
 		Terminator:               "\r\n",
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		Protocol:                 "open-protocol",
 		AdvanceTimeoutInSec:      util.AddressOf(uint(150)),
+=======
+		Terminator:                       util.AddressOf("\r\n"),
+		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
+		EnablePartitionSeparator:         util.AddressOf(true),
+		EnableKafkaSinkV2:                util.AddressOf(false),
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
+		Protocol:                         util.AddressOf("open-protocol"),
+		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	}, cfg.Sink)
 }
 
@@ -239,7 +251,14 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			IncludeCommitTs:      false,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
+<<<<<<< HEAD
 		AdvanceTimeoutInSec: util.AddressOf(uint(150)),
+=======
+		OnlyOutputUpdatedColumns:         util.AddressOf(false),
+		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
+		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	}, cfg.Sink)
 }
 

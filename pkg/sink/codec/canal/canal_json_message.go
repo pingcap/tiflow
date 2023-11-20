@@ -212,6 +212,63 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 	return result, nil
 }
 
+<<<<<<< HEAD
+=======
+func extractBasicMySQLType(mysqlType string) string {
+	for i := 0; i < len(mysqlType); i++ {
+		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
+			return mysqlType[:i]
+		}
+	}
+	return mysqlType
+}
+
+func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) *model.Column {
+	mysqlTypeStr = extractBasicMySQLType(mysqlTypeStr)
+	mysqlType := types.StrToType(mysqlTypeStr)
+
+	result := &model.Column{
+		Type:  mysqlType,
+		Name:  name,
+		Value: value,
+	}
+	if result.Value == nil {
+		return result
+	}
+
+	data, ok := value.(string)
+	if !ok {
+		log.Panic("canal-json encoded message should have type in `string`")
+	}
+
+	if mysqlType == mysql.TypeBit || mysqlType == mysql.TypeSet {
+		val, err := strconv.ParseUint(data, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for bit", zap.Any("col", result), zap.Error(err))
+		}
+		result.Value = val
+		return result
+	}
+
+	var err error
+	if isBinaryMySQLType(mysqlTypeStr) {
+		// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
+		encoder := charmap.ISO8859_1.NewEncoder()
+		value, err = encoder.String(data)
+		if err != nil {
+			log.Panic("invalid column value, please report a bug", zap.Any("col", result), zap.Error(err))
+		}
+	}
+
+	result.Value = value
+	return result
+}
+
+func isBinaryMySQLType(mysqlType string) bool {
+	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
+}
+
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {
 	result := new(model.DDLEvent)
 	// we lost the startTs from kafka message

@@ -41,7 +41,11 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
+<<<<<<< HEAD
 	conf.Sink.Protocol = "open-protocol"
+=======
+	conf.Sink.Protocol = util.AddressOf("canal-json")
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -64,6 +68,11 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Scheduler.WriteKeyThreshold = 100001
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+<<<<<<< HEAD
+=======
+	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
+	conf.Sink.ContentCompatible = aws.Bool(true)
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.AdvanceTimeoutInSec = util.AddressOf(uint(150))
 	conf.Sink.KafkaConfig = &KafkaConfig{
@@ -161,7 +170,11 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
+<<<<<<< HEAD
 	conf.Sink.Protocol = "open-protocol"
+=======
+	conf.Sink.Protocol = util.AddressOf("canal-json")
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
