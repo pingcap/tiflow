@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -48,6 +50,12 @@ func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
 				}},
+				ColInfos: []rowcodec.ColInfo{
+					{
+						ID: 1,
+						Ft: types.NewFieldType(mysql.TypeVarchar),
+					},
+				},
 			},
 		},
 	}
@@ -86,6 +94,12 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
 				}},
+				ColInfos: []rowcodec.ColInfo{
+					{
+						ID: 1,
+						Ft: types.NewFieldType(mysql.TypeVarchar),
+					},
+				},
 			},
 			{
 				CommitTs: 2,
@@ -95,6 +109,12 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 					Type:  mysql.TypeVarchar,
 					Value: []byte("bb"),
 				}},
+				ColInfos: []rowcodec.ColInfo{
+					{
+						ID: 1,
+						Ft: types.NewFieldType(mysql.TypeVarchar),
+					},
+				},
 			},
 		},
 	}

@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -33,7 +35,8 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 	t.Parallel()
 	cfg := common.NewConfig(config.ProtocolCanalJSON)
 
-	builder := &jsonRowEventEncoderBuilder{config: cfg}
+	builder, err := NewJSONRowEventEncoderBuilder(context.Background(), cfg)
+	require.NoError(t, err)
 	encoder, ok := builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 	require.NotNil(t, encoder.config)
@@ -47,9 +50,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
 	require.NoError(t, err)
 
-	e := builder.Build()
-
-	encoder, ok := e.(*JSONRowEventEncoder)
+	encoder, ok := builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 
 	data, err := newJSONMessageForDML(encoder.builder, testCaseInsert, encoder.config, false, "")
@@ -165,9 +166,8 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	builder, err = NewJSONRowEventEncoderBuilder(ctx, codecConfig)
 	require.NoError(t, err)
-	e = builder.Build()
 
-	encoder, ok = e.(*JSONRowEventEncoder)
+	encoder, ok = builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false, "")
 	require.NoError(t, err)
@@ -179,7 +179,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
 
-	encoder, ok = e.(*JSONRowEventEncoder)
+	encoder, ok = builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false, "")
 	require.NoError(t, err)
@@ -545,8 +545,9 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	encoder := &JSONRowEventEncoder{
-		builder: newCanalEntryBuilder(),
+		builder: newCanalEntryBuilder(codecConfig),
 		config:  &common.Config{EnableTiDBExtension: true},
 	}
 	require.NotNil(t, encoder)
@@ -602,6 +603,12 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
+		ColInfos: []rowcodec.ColInfo{
+			{
+				ID: 0,
+				Ft: types.NewFieldType(mysql.TypeVarchar),
+			},
+		},
 	}
 
 	tests := []struct {
@@ -675,6 +682,12 @@ func TestMaxMessageBytes(t *testing.T) {
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
+		ColInfos: []rowcodec.ColInfo{
+			{
+				ID: 0,
+				Ft: types.NewFieldType(mysql.TypeVarchar),
+			},
+		},
 	}
 
 	ctx := context.Background()
@@ -700,4 +713,53 @@ func TestMaxMessageBytes(t *testing.T) {
 	encoder = builder.Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
 	require.Error(t, err, cerror.ErrMessageTooLarge)
+}
+
+func TestCanalJSONContentCompatibleE2E(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.ContentCompatible = true
+
+	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+
+	encoder := builder.Build()
+
+	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
+	require.NoError(t, err)
+
+	message := encoder.Build()[0]
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, messageType, model.MessageTypeRow)
+
+	decodedEvent, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.Equal(t, decodedEvent.CommitTs, testCaseInsert.CommitTs)
+	require.Equal(t, decodedEvent.Table.Schema, testCaseInsert.Table.Schema)
+	require.Equal(t, decodedEvent.Table.Table, testCaseInsert.Table.Table)
+
+	obtainedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
+	for _, column := range decodedEvent.Columns {
+		obtainedColumns[column.Name] = column
+	}
+
+	expectedValue := collectExpectedDecodedValue(testColumnsTable)
+	for _, actual := range testCaseInsert.Columns {
+		obtained, ok := obtainedColumns[actual.Name]
+		require.True(t, ok)
+		require.Equal(t, actual.Type, obtained.Type)
+		require.Equal(t, expectedValue[actual.Name], obtained.Value)
+	}
 }
