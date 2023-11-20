@@ -130,6 +130,8 @@ type ddlManager struct {
 	BDRMode       bool
 	sinkType      model.DownstreamType
 	ddlResolvedTs model.Ts
+
+	needSendBootstrapEvent bool
 }
 
 func newDDLManager(
@@ -143,6 +145,7 @@ func newDDLManager(
 	redoMetaManager redo.MetaManager,
 	sinkType model.DownstreamType,
 	bdrMode bool,
+	needSendBootstrapEvent bool,
 ) *ddlManager {
 	log.Info("create ddl manager",
 		zap.String("namaspace", changefeedID.Namespace),
@@ -164,9 +167,10 @@ func newDDLManager(
 		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
 		// use the passed sinkType after we support get resolvedTs from sink
-		sinkType:        model.DB,
-		tableCheckpoint: make(map[model.TableName]model.Ts),
-		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
+		sinkType:               model.DB,
+		tableCheckpoint:        make(map[model.TableName]model.Ts),
+		pendingDDLs:            make(map[model.TableName][]*model.DDLEvent),
+		needSendBootstrapEvent: needSendBootstrapEvent,
 	}
 }
 

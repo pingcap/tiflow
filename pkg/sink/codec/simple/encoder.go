@@ -25,19 +25,30 @@ import (
 )
 
 //nolint:unused
-type encoder struct{}
+type encoder struct {
+	cfg *common.Config
+}
 
-type builder struct{}
+type builder struct {
+	cfg *common.Config
+}
 
 // NewBuilder returns a new builder
-func NewBuilder() *builder {
-	return &builder{}
+func NewBuilder(cfg *common.Config) *builder {
+	return &builder{
+		cfg: cfg,
+	}
 }
 
 // Build implement the RowEventEncoderBuilder interface
 func (b *builder) Build() codec.RowEventEncoder {
-	return &encoder{}
+	return &encoder{
+		cfg: b.cfg,
+	}
 }
+
+// CleanMetrics implement the RowEventEncoderBuilder interface
+func (b *builder) CleanMetrics() {}
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
 //
