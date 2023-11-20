@@ -57,21 +57,17 @@ const (
 type ColumnSchema struct {
 	Name     string      `json:"name"`
 	DataType string      `json:"dataType"`
-	Nullable string      `json:"nullable"`
+	Nullable bool        `json:"nullable"`
 	Default  interface{} `json:"default"`
 }
 
-// FromTiColumnInfo converts from TiDB ColumnInfo to TableCol.
-func (c *ColumnSchema) FromTiColumnInfo(col *timodel.ColumnInfo) {
-	c.Name = col.Name.O
-	c.DataType = strings.ToUpper(types.TypeToStr(col.GetType(), col.GetCharset()))
-	if mysql.HasUnsignedFlag(col.GetFlag()) {
-		c.DataType += " UNSIGNED"
+func newColumnSchema(col *timodel.ColumnInfo) *ColumnSchema {
+	return &ColumnSchema{
+		Name:     col.Name.O,
+		DataType: col.GetTypeDesc(),
+		Nullable: mysql.HasNotNullFlag(col.GetFlag()),
+		Default:  entry.GetDDLDefaultDefinition(col),
 	}
-	if mysql.HasNotNullFlag(col.GetFlag()) {
-		c.Nullable = "false"
-	}
-	c.Default = entry.GetDDLDefaultDefinition(col)
 }
 
 // ToTiColumnInfo converts from TableCol to TiDB ColumnInfo.
@@ -108,7 +104,7 @@ func (c *ColumnSchema) ToTiColumnInfo(indexes []*IndexSchema) (*timodel.ColumnIn
 		}
 	}
 
-	if c.Nullable == "false" {
+	if c.Nullable == false {
 		col.AddFlag(mysql.NotNullFlag)
 	}
 
@@ -181,8 +177,7 @@ type TableSchema struct {
 	Indexes []*IndexSchema  `json:"indexes"`
 }
 
-// FromTableInfo converts from model.TableInfo to TableSchema.
-func (t *TableSchema) FromTableInfo(tableInfo *model.TableInfo) {
+func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	tiColumns := make([]*timodel.ColumnInfo, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		tiColumns = append(tiColumns, col.Clone())
@@ -194,9 +189,7 @@ func (t *TableSchema) FromTableInfo(tableInfo *model.TableInfo) {
 
 	columns := make([]*ColumnSchema, 0, len(tiColumns))
 	for _, col := range tiColumns {
-		column := &ColumnSchema{}
-		column.FromTiColumnInfo(col)
-		columns = append(columns, column)
+		columns = append(columns, newColumnSchema(col))
 	}
 
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
@@ -206,8 +199,10 @@ func (t *TableSchema) FromTableInfo(tableInfo *model.TableInfo) {
 		indexes = append(indexes, index)
 	}
 
-	t.Columns = columns
-	t.Indexes = indexes
+	return &TableSchema{
+		Columns: columns,
+		Indexes: indexes,
+	}
 }
 
 // ToTableInfo converts from TableSchema to TableInfo.
@@ -318,33 +313,21 @@ func newResolvedMessage(ts uint64) *message {
 }
 
 func newDDLMessage(ddl *model.DDLEvent) *message {
-	var tableSchema TableSchema
-	tableSchema.FromTableInfo(ddl.TableInfo)
-
+	tableSchema := newTableSchema(ddl.TableInfo)
 	msg := &message{
 		Version:     defaultVersion,
-		CommitTs:    ddl.CommitTs,
 		Database:    ddl.TableInfo.TableName.Schema,
 		Table:       ddl.TableInfo.TableName.Table,
 		Type:        DDLType,
-		SQL:         ddl.Query,
-		TableSchema: &tableSchema,
-	}
-	return msg
-}
-
-func newBootstrapMessage(ddl *model.DDLEvent) *message {
-	var tableSchema TableSchema
-	tableSchema.FromTableInfo(ddl.TableInfo)
-
-	return &message{
-		Version:     defaultVersion,
 		CommitTs:    ddl.CommitTs,
-		Database:    ddl.TableInfo.TableName.Schema,
-		Table:       ddl.TableInfo.TableName.Table,
-		Type:        BootstrapType,
-		TableSchema: &tableSchema,
+		SQL:         ddl.Query,
+		TableSchema: tableSchema,
 	}
+	if ddl.IsBootstrap {
+		msg.Type = BootstrapType
+	}
+
+	return msg
 }
 
 func newDMLMessage(event *model.RowChangedEvent) *message {

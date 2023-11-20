@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
@@ -186,7 +187,7 @@ func newJSONMessageForDML(
 				out.RawByte(':')
 				out.Int32(int32(javaType))
 				javaTypeMap[col.Name] = javaType
-				mysqlTypeMap[col.Name] = getMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
+				mysqlTypeMap[col.Name] = utils.GetMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
 			}
 		}
 		if emptyColumn {
