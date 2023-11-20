@@ -805,10 +805,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 	conf := config.GetGlobalServerConfig()
 	p.pullBasedSinking = conf.Debug.EnablePullBasedSink
 
-	p.redoDMLMgr, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
-	if err != nil {
-		return err
-	}
+	p.redoDMLMgr = redo.NewDMLManager(p.changefeedID, p.changefeed.Info.Config.Consistent)
 	if p.redoDMLMgr.Enabled() {
 		p.wg.Add(1)
 		go func() {
@@ -1081,7 +1078,7 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 
 	if tableName == nil {
-		log.Warn("failed to get table name for metric")
+		log.Warn("failed to get table name for metric", zap.Any("tableID", tableID))
 		return strconv.Itoa(int(tableID))
 	}
 

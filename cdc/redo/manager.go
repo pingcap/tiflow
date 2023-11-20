@@ -19,9 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
-	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
@@ -62,19 +61,17 @@ func NewDisabledDDLManager() *ddlManager {
 
 // NewDDLManager creates a new ddl Manager.
 func NewDDLManager(
-	ctx context.Context, cfg *config.ConsistentConfig, ddlStartTs model.Ts,
-) (*ddlManager, error) {
-	logManager, err := newLogManager(ctx, cfg, redo.RedoDDLLogFileType)
-	if err != nil {
-		return nil, err
-	}
+	changefeedID model.ChangeFeedID,
+	cfg *config.ConsistentConfig, ddlStartTs model.Ts,
+) *ddlManager {
+	m := newLogManager(changefeedID, cfg, redo.RedoDDLLogFileType)
 	tableID := int64(0)
-	logManager.AddTable(tableID, ddlStartTs)
+	m.AddTable(tableID, ddlStartTs)
 	return &ddlManager{
-		logManager: logManager,
+		logManager: m,
 		// The current fakeTableID is meaningless, find a meaningful id in the future.
 		fakeTableID: tableID,
-	}, nil
+	}
 }
 
 type ddlManager struct {
@@ -111,12 +108,12 @@ type DMLManager interface {
 }
 
 // NewDMLManager creates a new dml Manager.
-func NewDMLManager(ctx context.Context, cfg *config.ConsistentConfig) (*dmlManager, error) {
-	logManager, err := newLogManager(ctx, cfg, redo.RedoRowLogFileType)
-	if err != nil {
-		return nil, err
+func NewDMLManager(
+	changefeedID model.ChangeFeedID, cfg *config.ConsistentConfig,
+) *dmlManager {
+	return &dmlManager{
+		logManager: newLogManager(changefeedID, cfg, redo.RedoRowLogFileType),
 	}
-	return &dmlManager{logManager: logManager}, nil
 }
 
 // NewDisabledDMLManager creates a disabled dml Manager.
@@ -222,28 +219,21 @@ type logManager struct {
 }
 
 func newLogManager(
-	ctx context.Context, cfg *config.ConsistentConfig, logType string,
-) (*logManager, error) {
+	changefeedID model.ChangeFeedID, cfg *config.ConsistentConfig, logType string,
+) *logManager {
 	// return a disabled Manager if no consistent config or normal consistent level
 	if cfg == nil || !redo.IsConsistentEnabled(cfg.Level) {
-		return &logManager{enabled: false}, nil
+		return &logManager{enabled: false}
 	}
 
-	uri, err := storage.ParseRawURL(cfg.Storage)
-	if err != nil {
-		return nil, err
-	}
-	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
-	m := &logManager{
+	return &logManager{
 		enabled: true,
 		cfg: &writer.LogWriterConfig{
-			ConsistentConfig:   *cfg,
-			LogType:            logType,
-			CaptureID:          contextutil.CaptureAddrFromCtx(ctx),
-			ChangeFeedID:       changefeedID,
-			URI:                *uri,
-			UseExternalStorage: redo.IsExternalStorage(uri.Scheme),
-			MaxLogSizeInBytes:  cfg.MaxLogSize * redo.Megabyte,
+			ConsistentConfig:  *cfg,
+			LogType:           logType,
+			CaptureID:         config.GetGlobalServerConfig().AdvertiseAddr,
+			ChangeFeedID:      changefeedID,
+			MaxLogSizeInBytes: cfg.MaxLogSize * redo.Megabyte,
 		},
 		logBuffer: chann.NewDrainableChann[cacheEvents](),
 		metricWriteLogDuration: common.RedoWriteLogDurationHistogram.
@@ -255,15 +245,17 @@ func newLogManager(
 		metricRedoWorkerBusyRatio: common.RedoWorkerBusyRatio.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
-
-	m.writer, err = factory.NewRedoLogWriter(ctx, m.cfg)
-	if err != nil {
-		return nil, err
-	}
-	return m, nil
 }
 
+// Run implements pkg/util.Runnable.
 func (m *logManager) Run(ctx context.Context) error {
+	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
+		failpoint.Return(errors.New("changefeed new redo manager injected error"))
+	})
+	if !m.Enabled() {
+		return nil
+	}
+
 	defer m.close()
 	start := time.Now()
 	w, err := factory.NewRedoLogWriter(ctx, m.cfg)
@@ -281,8 +273,18 @@ func (m *logManager) Run(ctx context.Context) error {
 
 func (m *logManager) getFlushDuration() time.Duration {
 	flushIntervalInMs := m.cfg.FlushIntervalInMs
+	defaultFlushIntervalInMs := redo.DefaultFlushIntervalInMs
 	if m.cfg.LogType == redo.RedoDDLLogFileType {
 		flushIntervalInMs = m.cfg.MetaFlushIntervalInMs
+		defaultFlushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
+	}
+	if flushIntervalInMs < redo.MinFlushIntervalInMs {
+		log.Warn("redo flush interval is too small, use default value",
+			zap.Stringer("namespace", m.cfg.ChangeFeedID),
+			zap.Int("default", defaultFlushIntervalInMs),
+			zap.String("logType", m.cfg.LogType),
+			zap.Int64("interval", flushIntervalInMs))
+		flushIntervalInMs = int64(defaultFlushIntervalInMs)
 	}
 	return time.Duration(flushIntervalInMs) * time.Millisecond
 }
@@ -549,11 +551,13 @@ func (m *logManager) close() {
 	atomic.StoreInt32(&m.closed, 1)
 
 	m.logBuffer.CloseAndDrain()
-	if err := m.writer.Close(); err != nil {
-		log.Error("redo manager fails to close writer",
-			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
-			zap.String("changefeed", m.cfg.ChangeFeedID.ID),
-			zap.Error(err))
+	if m.writer != nil {
+		if err := m.writer.Close(); err != nil && errors.Cause(err) != context.Canceled {
+			log.Error("redo manager fails to close writer",
+				zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+				zap.String("changefeed", m.cfg.ChangeFeedID.ID),
+				zap.Error(err))
+		}
 	}
 	log.Info("redo manager closed",
 		zap.String("namespace", m.cfg.ChangeFeedID.Namespace),

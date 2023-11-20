@@ -105,7 +105,7 @@ func (b *basicScheduler) Schedule(
 			zap.Strings("captureIDs", captureIDs),
 			zap.Int64s("tableIDs", newTables))
 		tasks = append(
-			tasks, newBurstAddTables(checkpointTs, newTables, captureIDs))
+			tasks, newBurstAddTables(b.changefeedID, checkpointTs, newTables, captureIDs))
 	}
 
 	// Build remove table tasks.
@@ -114,7 +114,7 @@ func (b *basicScheduler) Schedule(
 	// Fast path for check whether two sets are identical:
 	// If the length of currentTables and replications are equal,
 	// and for all tables in currentTables have a record in replications.
-	if !tablesLenEqual || !tablesAllFind {
+	if !(tablesLenEqual && tablesAllFind) {
 		// The two sets are not identical. We need to find removed tables.
 		intersectionTable := make(map[model.TableID]struct{}, len(currentTables))
 		for _, tableID := range currentTables {
@@ -131,9 +131,10 @@ func (b *basicScheduler) Schedule(
 				rmTables = append(rmTables, tableID)
 			}
 		}
-		if len(rmTables) > 0 {
-			tasks = append(tasks,
-				newBurstRemoveTables(rmTables, replications, b.changefeedID))
+
+		removeTableTasks := newBurstRemoveTables(rmTables, replications, b.changefeedID)
+		if removeTableTasks != nil {
+			tasks = append(tasks, removeTableTasks)
 		}
 	}
 	return tasks
@@ -141,24 +142,34 @@ func (b *basicScheduler) Schedule(
 
 // newBurstAddTables add each new table to captures in a round-robin way.
 func newBurstAddTables(
+	changefeedID model.ChangeFeedID,
 	checkpointTs model.Ts, newTables []model.TableID, captureIDs []model.CaptureID,
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newTables))
 	for _, tableID := range newTables {
+		targetCapture := captureIDs[idx]
 		tables = append(tables, replication.AddTable{
 			TableID:      tableID,
-			CaptureID:    captureIDs[idx],
+			CaptureID:    targetCapture,
 			CheckpointTs: checkpointTs,
 		})
+		log.Info("schedulerv3: burst add table",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("captureID", targetCapture),
+			zap.Any("tableID", tableID))
+
 		idx++
 		if idx >= len(captureIDs) {
 			idx = 0
 		}
 	}
-	return &replication.ScheduleTask{BurstBalance: &replication.BurstBalance{
-		AddTables: tables,
-	}}
+	return &replication.ScheduleTask{
+		BurstBalance: &replication.BurstBalance{
+			AddTables: tables,
+		},
+	}
 }
 
 func newBurstRemoveTables(
@@ -174,7 +185,8 @@ func newBurstRemoveTables(
 			break
 		}
 		if captureID == "" {
-			log.Warn("schedulerv3: primary or secondary not found for removed table",
+			log.Warn("schedulerv3: primary or secondary not found for removed table,"+
+				"this may happen if the capture shutdown",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
 				zap.Any("table", rep))
@@ -184,8 +196,20 @@ func newBurstRemoveTables(
 			TableID:   tableID,
 			CaptureID: captureID,
 		})
+		log.Info("schedulerv3: burst remove table",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("captureID", captureID),
+			zap.Any("tableID", tableID))
 	}
-	return &replication.ScheduleTask{BurstBalance: &replication.BurstBalance{
-		RemoveTables: tables,
-	}}
+
+	if len(tables) == 0 {
+		return nil
+	}
+
+	return &replication.ScheduleTask{
+		BurstBalance: &replication.BurstBalance{
+			RemoveTables: tables,
+		},
+	}
 }

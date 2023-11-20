@@ -15,6 +15,7 @@ package replication
 
 import (
 	"container/heap"
+	"fmt"
 	"math"
 	"time"
 
@@ -49,10 +50,28 @@ type BurstBalance struct {
 	MoveTables   []MoveTable
 }
 
+func (b BurstBalance) String() string {
+	if len(b.AddTables) != 0 {
+		return fmt.Sprintf("BurstBalance, add tables: %v", b.AddTables)
+	}
+	if len(b.RemoveTables) != 0 {
+		return fmt.Sprintf("BurstBalance, remove tables: %v", b.RemoveTables)
+	}
+	if len(b.MoveTables) != 0 {
+		return fmt.Sprintf("BurstBalance, move tables: %v", b.MoveTables)
+	}
+	return "BurstBalance, no tables"
+}
+
 // MoveTable is a schedule task for moving a table.
 type MoveTable struct {
 	TableID     model.TableID
 	DestCapture model.CaptureID
+}
+
+func (t MoveTable) String() string {
+	return fmt.Sprintf("MoveTable, tableID: %d, dest: %s",
+		t.TableID, t.DestCapture)
 }
 
 // AddTable is a schedule task for adding a table.
@@ -62,10 +81,20 @@ type AddTable struct {
 	CheckpointTs model.Ts
 }
 
+func (t AddTable) String() string {
+	return fmt.Sprintf("AddTable, tableID: %d, capture: %s, checkpointTs: %d",
+		t.TableID, t.CaptureID, t.CheckpointTs)
+}
+
 // RemoveTable is a schedule task for removing a table.
 type RemoveTable struct {
 	TableID   model.TableID
 	CaptureID model.CaptureID
+}
+
+func (t RemoveTable) String() string {
+	return fmt.Sprintf("RemoveTable, tableID: %d, capture: %s",
+		t.TableID, t.CaptureID)
 }
 
 // ScheduleTask is a schedule task that wraps add/move/remove table tasks.
@@ -92,6 +121,22 @@ func (s *ScheduleTask) Name() string {
 	return "unknown"
 }
 
+func (s *ScheduleTask) String() string {
+	if s.MoveTable != nil {
+		return s.MoveTable.String()
+	}
+	if s.AddTable != nil {
+		return s.AddTable.String()
+	}
+	if s.RemoveTable != nil {
+		return s.RemoveTable.String()
+	}
+	if s.BurstBalance != nil {
+		return s.BurstBalance.String()
+	}
+	return ""
+}
+
 // Manager manages replications and running scheduling tasks.
 type Manager struct { //nolint:revive
 	tables map[model.TableID]*ReplicationSet
@@ -100,7 +145,8 @@ type Manager struct { //nolint:revive
 	maxTaskConcurrency int
 
 	changefeedID           model.ChangeFeedID
-	slowestTableID         model.TableID
+	slowestPuller          model.TableID
+	slowestSink            model.TableID
 	slowTableHeap          SetHeap
 	acceptAddTableTask     int
 	acceptRemoveTableTask  int
@@ -527,8 +573,11 @@ func (r *Manager) AdvanceCheckpoint(
 		}
 	}()
 
+	r.slowestPuller = model.TableID(0)
+	r.slowestSink = model.TableID(0)
+	var slowestPullerResolvedTs uint64 = math.MaxUint64
+
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
-	slowestTableID := int64(0)
 	for _, tableID := range currentTables {
 		table, ok := r.tables[tableID]
 		if !ok {
@@ -551,14 +600,18 @@ func (r *Manager) AdvanceCheckpoint(
 		// Find the minimum checkpoint ts and resolved ts.
 		if newCheckpointTs > table.Checkpoint.CheckpointTs {
 			newCheckpointTs = table.Checkpoint.CheckpointTs
-			slowestTableID = tableID
+			r.slowestSink = tableID
 		}
 		if newResolvedTs > table.Checkpoint.ResolvedTs {
 			newResolvedTs = table.Checkpoint.ResolvedTs
 		}
-	}
-	if slowestTableID != 0 {
-		r.slowestTableID = slowestTableID
+		// Find the minimum puller resolved ts.
+		if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
+			if slowestPullerResolvedTs > pullerCkpt.ResolvedTs {
+				slowestPullerResolvedTs = pullerCkpt.ResolvedTs
+				r.slowestPuller = tableID
+			}
+		}
 	}
 
 	// If currentTables is empty, we should advance newResolvedTs to global barrier ts and
@@ -649,9 +702,9 @@ func (r *Manager) CollectMetrics() {
 	cf := r.changefeedID
 	tableGauge.
 		WithLabelValues(cf.Namespace, cf.ID).Set(float64(len(r.tables)))
-	if table, ok := r.tables[r.slowestTableID]; ok {
+	if table, ok := r.tables[r.slowestSink]; ok {
 		slowestTableIDGauge.
-			WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.slowestTableID))
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.slowestSink))
 		slowestTableStateGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.State))
 		phyCkpTs := oracle.ExtractPhysical(table.Checkpoint.CheckpointTs)
@@ -731,6 +784,17 @@ func (r *Manager) CollectMetrics() {
 		tableStateGauge.
 			WithLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String()).
 			Set(float64(counter))
+	}
+
+	if table, ok := r.tables[r.slowestSink]; ok {
+		if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
+			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.ResolvedTs)
+			slowestTablePullerResolvedTs.WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkptTs))
+
+			phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
+			lag := float64(phyCurrentTs-phyCkptTs) / 1e3
+			slowestTablePullerResolvedTsLag.WithLabelValues(cf.Namespace, cf.ID).Set(lag)
+		}
 	}
 }
 

@@ -101,7 +101,8 @@ func TestTableActorInterface(t *testing.T) {
 	require.Equal(t, model.Ts(5), table.ResolvedTs())
 	ctx, cancel := context.WithCancel(context.Background())
 	eg, egCtx := errgroup.WithContext(ctx)
-	table.redoDMLMgr, _ = redo.NewDMLManager(ctx, &config.ConsistentConfig{
+	changefeedID := model.DefaultChangeFeedID("test")
+	table.redoDMLMgr = redo.NewDMLManager(changefeedID, &config.ConsistentConfig{
 		Level:             string(redoCfg.ConsistentLevelEventual),
 		FlushIntervalInMs: redoCfg.MinFlushIntervalInMs,
 		Storage:           fmt.Sprintf("file://tmp/%s", t.TempDir()),

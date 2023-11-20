@@ -216,7 +216,7 @@ func TestParseCfg(t *testing.T) {
 			EnableNewSink: true,
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MaxMemoryPercentage: config.DisableMemoryLimit,
 	}, o.serverConfig)
 }
 
@@ -376,7 +376,7 @@ check-balance-interval = "10s"
 			EnableNewSink: true,
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MaxMemoryPercentage: config.DisableMemoryLimit,
 	}, o.serverConfig)
 }
 
@@ -522,7 +522,7 @@ cert-allowed-cn = ["dd","ee"]
 			EnableNewSink: true,
 		},
 		ClusterID:           "default",
-		MaxMemoryPercentage: config.DefaultMaxMemoryPercentage,
+		MaxMemoryPercentage: config.DisableMemoryLimit,
 	}, o.serverConfig)
 }
 
