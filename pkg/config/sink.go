@@ -122,7 +122,7 @@ type SinkConfig struct {
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
 	// CSVConfig is only available when the downstream is Storage.
 	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
-	// ColumnSelectors is Deprecated.
+
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
 	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
 	SchemaRegistry *string `toml:"schema-registry" json:"schema-registry,omitempty"`
@@ -146,6 +146,9 @@ type SinkConfig struct {
 
 	// DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.
 	DeleteOnlyOutputHandleKeyColumns *bool `toml:"delete-only-output-handle-key-columns" json:"delete-only-output-handle-key-columns,omitempty"`
+
+	// ContentCompatible is only available when the downstream is MQ.
+	ContentCompatible *bool `toml:"content-compatible" json:"content-compatible,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.

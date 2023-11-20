@@ -16,6 +16,7 @@ package capture
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"sync"
 
@@ -30,6 +31,7 @@ import (
 	controllerv2 "github.com/pingcap/tiflow/cdcv2/controller"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
 	msql "github.com/pingcap/tiflow/cdcv2/metadata/sql"
+	ownerv2 "github.com/pingcap/tiflow/cdcv2/owner"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -73,7 +75,7 @@ type captureImpl struct {
 	pdClient        pd.Client
 	pdEndpoints     []string
 	ownerMu         sync.Mutex
-	owner           owner.Owner
+	owner           *ownerv2.Owner
 	controller      controller.Controller
 	upstreamManager *upstream.Manager
 
@@ -183,6 +185,9 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 				return ctrl.Run(ctx)
 			})
 	})
+	g.Go(func() error {
+		return c.owner.Run(ctx)
+	})
 	return errors.Trace(g.Wait())
 }
 
@@ -238,6 +243,8 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
+	c.owner = ownerv2.NewOwner(&c.liveness, c.upstreamManager, c.config.Debug.Scheduler, captureDB, captureDB, c.storage)
+
 	log.Info("capture initialized", zap.Any("capture", c.info))
 	return nil
 }
@@ -319,7 +326,31 @@ func (c *captureImpl) StatusProvider() owner.StatusProvider {
 }
 
 func (c *captureImpl) WriteDebugInfo(ctx context.Context, w io.Writer) {
-	panic("implement me")
+	wait := func(done <-chan error) {
+		var err error
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+		case err = <-done:
+		}
+		if err != nil {
+			log.Warn("write debug info failed", zap.Error(err))
+		}
+	}
+	// Safety: Because we are mainly outputting information about the owner here,
+	// if the owner does not exist or is not set, the information will not be output.
+	o, _ := c.GetOwner()
+	if o != nil {
+		doneOwner := make(chan error, 1)
+		fmt.Fprintf(w, "\n\n*** owner info ***:\n\n")
+		o.WriteDebugInfo(w, doneOwner)
+		// wait the debug info printed
+		wait(doneOwner)
+	}
+
+	doneM := make(chan error, 1)
+	// wait the debug info printed
+	wait(doneM)
 }
 
 func (c *captureImpl) GetUpstreamManager() (*upstream.Manager, error) {
@@ -334,7 +365,7 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 }
 
 func (c *captureImpl) IsReady() bool {
-	panic("implement me")
+	return true
 }
 
 func (c *captureImpl) GetUpstreamInfo(ctx context.Context,

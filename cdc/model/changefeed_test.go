@@ -247,7 +247,7 @@ func TestVerifyAndComplete(t *testing.T) {
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			MemoryQuota:           1073741824,
-			CaseSensitive:         true,
+			CaseSensitive:         false,
 			CheckGCSafePoint:      true,
 			EnableSyncPoint:       util.AddressOf(false),
 			SyncPointInterval:     util.AddressOf(time.Minute * 10),

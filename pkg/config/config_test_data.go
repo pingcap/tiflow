@@ -55,10 +55,11 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
 	"enable-kafka-sink-v2": false,
 	"only-output-updated-columns": false,
 	"delete-only-output-handle-key-columns": false,
+    "content-compatible": false,
     "large-message-handle": {
       "large-message-handle-option": "none",
       "large-message-handle-compression": "",
@@ -71,6 +72,8 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },
@@ -197,7 +200,7 @@ const (
   },
   "sink": {
   	"encoder-concurrency": 32,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -221,6 +224,7 @@ const (
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -306,6 +310,8 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },
@@ -346,7 +352,7 @@ const (
   "sink": {
     "encoder-concurrency": 32,
     "dispatchers": null,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -372,6 +378,7 @@ const (
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -455,6 +462,8 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },

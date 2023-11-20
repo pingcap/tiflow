@@ -101,7 +101,7 @@ var customReplicaConfig = &ReplicaConfig{
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        1024 * 1024 * 1024,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    util.AddressOf(false),
 	SyncPointInterval:  util.AddressOf(JSONDuration{duration: 10 * time.Minute}),
