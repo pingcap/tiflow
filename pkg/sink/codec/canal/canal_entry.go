@@ -82,7 +82,7 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L276-L1147
 // all value will be represented in string type
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L760-L855
-func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.JavaSQLType) (result string, err error) {
+func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (result string, err error) {
 	// value would be nil, if no value insert for the column.
 	if value == nil {
 		return "", nil
@@ -100,20 +100,15 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 	case string:
 		result = v
 	case []byte:
-		//  JavaSQLTypeVARCHAR / JavaSQLTypeCHAR / JavaSQLTypeBLOB / JavaSQLTypeCLOB /
-		// special handle for text and blob
 		// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
-		switch javaType {
-		// for normal text
-		case internal.JavaSQLTypeVARCHAR, internal.JavaSQLTypeCHAR, internal.JavaSQLTypeCLOB:
-			result = string(v)
-		default:
-			// JavaSQLTypeBLOB
+		if isBinary {
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return "", err
 			}
 			result = string(decoded)
+		} else {
+			result = string(v)
 		}
 	default:
 		result = fmt.Sprintf("%v", v)
@@ -130,7 +125,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colInfo rowcodec.ColInf
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err := b.formatValue(c.Value, javaType)
+	value, err := b.formatValue(c.Value, c.Flag.IsBinary())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
