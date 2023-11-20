@@ -25,7 +25,9 @@ import (
 )
 
 //nolint:unused
-type encoder struct{}
+type encoder struct {
+	messages []*common.Message
+}
 
 type builder struct{}
 
@@ -40,26 +42,41 @@ func (b *builder) Build() codec.RowEventEncoder {
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
-//
-//nolint:unused
 func (e *encoder) AppendRowChangedEvent(
-	ctx context.Context, s string, event *model.RowChangedEvent, callback func(),
+	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	// TODO implement me
-	panic("implement me")
+	m := newDMLMessage(event)
+	value, err := json.Marshal(m)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+
+	result := &common.Message{
+		Key:      nil,
+		Value:    value,
+		Ts:       event.CommitTs,
+		Schema:   &event.Table.Schema,
+		Table:    &event.Table.Table,
+		Type:     model.MessageTypeRow,
+		Protocol: config.ProtocolSimple,
+		Callback: callback,
+	}
+	result.IncRowsCount()
+	e.messages = append(e.messages, result)
+	return nil
 }
 
 // Build implement the RowEventEncoder interface
-//
-//nolint:unused
 func (e *encoder) Build() []*common.Message {
-	// TODO implement me
-	panic("implement me")
+	if len(e.messages) == 0 {
+		return nil
+	}
+	result := e.messages
+	e.messages = nil
+	return result
 }
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
-//
-//nolint:unused
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	message := newResolvedMessage(ts)
 	value, err := json.Marshal(message)
@@ -70,8 +87,6 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
-//
-//nolint:unused
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
 	var message *message
 	if event.IsBootstrap {
@@ -80,6 +95,7 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 		message = newDDLMessage(event)
 	}
 	value, err := json.Marshal(message)
+	
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}

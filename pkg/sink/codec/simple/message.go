@@ -14,19 +14,24 @@
 package simple
 
 import (
+	"encoding/base64"
+	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"go.uber.org/zap"
 )
 
 const (
-	defaultVersion = 0
+	defaultVersion = 1
 )
 
 // EventType describes the type of the event.
@@ -256,9 +261,9 @@ type message struct {
 	Type     EventType `json:"type"`
 	CommitTs uint64    `json:"commitTs"`
 	// Data is available for the Insert and Update event.
-	Data map[string]interface{} `json:"data,omitempty"`
+	Data map[string]string `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
-	Old map[string]interface{} `json:"old,omitempty"`
+	Old map[string]string `json:"old,omitempty"`
 	// TableSchema is for the DDL and Bootstrap event.
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
 	// SQL is only for the DDL event.
@@ -301,4 +306,65 @@ func newBootstrapMessage(ddl *model.DDLEvent) *message {
 		Type:        BootstrapType,
 		TableSchema: &tableSchema,
 	}
+}
+
+func newDMLMessage(event *model.RowChangedEvent) *message {
+	m := &message{
+		Version:  defaultVersion,
+		Database: event.Table.Schema,
+		Table:    event.Table.Table,
+		CommitTs: event.CommitTs,
+	}
+	if event.IsInsert() {
+		m.Type = InsertType
+		m.Data = formatColumns(event.Columns)
+	} else if event.IsDelete() {
+		m.Type = DeleteType
+		m.Old = formatColumns(event.PreColumns)
+	} else if event.IsUpdate() {
+		m.Type = UpdateType
+		m.Data = formatColumns(event.Columns)
+		m.Old = formatColumns(event.PreColumns)
+	} else {
+		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
+	}
+
+	return m
+}
+
+func formatColumns(columns []*model.Column) map[string]string {
+	result := make(map[string]string, len(columns))
+	for _, col := range columns {
+		result[col.Name] = formatValue(col.Value, col.Flag.IsBinary())
+	}
+	return result
+}
+
+func formatValue(value interface{}, isBinary bool) string {
+	if value == nil {
+		return ""
+	}
+
+	var result string
+	switch v := value.(type) {
+	case int64:
+		result = strconv.FormatInt(v, 10)
+	case uint64:
+		result = strconv.FormatUint(v, 10)
+	case float32:
+		result = strconv.FormatFloat(float64(v), 'f', -1, 32)
+	case float64:
+		result = strconv.FormatFloat(v, 'f', -1, 64)
+	case string:
+		result = v
+	case []byte:
+		if isBinary {
+			result = base64.StdEncoding.EncodeToString(v)
+		} else {
+			result = string(v)
+		}
+	default:
+		result = fmt.Sprintf("%v", v)
+	}
+	return result
 }
