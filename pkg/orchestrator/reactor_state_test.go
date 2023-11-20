@@ -180,8 +180,9 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							Terminator:          putil.AddressOf(config.CRLF),
-							AdvanceTimeoutInSec: putil.AddressOf(uint(150)), CSVConfig: config.GetDefaultReplicaConfig().Sink.CSVConfig,
+							Terminator:                       putil.AddressOf(config.CRLF),
+							AdvanceTimeoutInSec:              putil.AddressOf(uint(150)),
+							CSVConfig:                        config.GetDefaultReplicaConfig().Sink.CSVConfig,
 							EncoderConcurrency:               config.GetDefaultReplicaConfig().Sink.EncoderConcurrency,
 							DateSeparator:                    config.GetDefaultReplicaConfig().Sink.DateSeparator,
 							EnablePartitionSeparator:         config.GetDefaultReplicaConfig().Sink.EnablePartitionSeparator,
@@ -248,8 +249,9 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
-							Terminator:          putil.AddressOf(config.CRLF),
-							AdvanceTimeoutInSec: putil.AddressOf(uint(150)), EncoderConcurrency: config.GetDefaultReplicaConfig().Sink.EncoderConcurrency,
+							Terminator:                       putil.AddressOf(config.CRLF),
+							AdvanceTimeoutInSec:              putil.AddressOf(uint(150)),
+							EncoderConcurrency:               config.GetDefaultReplicaConfig().Sink.EncoderConcurrency,
 							CSVConfig:                        config.GetDefaultReplicaConfig().Sink.CSVConfig,
 							DateSeparator:                    config.GetDefaultReplicaConfig().Sink.DateSeparator,
 							EnablePartitionSeparator:         config.GetDefaultReplicaConfig().Sink.EnablePartitionSeparator,
