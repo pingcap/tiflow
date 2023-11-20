@@ -1,0 +1,3 @@
+[consistent]
+level = "eventual"
+storage = "file:///tmp/tidb_cdc_test/changefeed_error/redo"

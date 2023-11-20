@@ -504,9 +504,10 @@ func TestRemoveChangefeed(t *testing.T) {
 	info := ctx.ChangefeedVars().Info
 	dir := t.TempDir()
 	info.Config.Consistent = &config.ConsistentConfig{
-		Level:             "eventual",
-		Storage:           filepath.Join("nfs://", dir),
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
+		Level:                 "eventual",
+		Storage:               filepath.Join("nfs://", dir),
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
 	}
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   ctx.ChangefeedVars().ID,

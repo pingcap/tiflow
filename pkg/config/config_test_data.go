@@ -60,6 +60,7 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
     "storage": "",
     "use-file-backend": false
   },
@@ -151,7 +152,8 @@ const (
     "enable-kv-connect-backoff": false
   },
   "cluster-id": "default",
-  "max-memory-percentage": 70
+  "max-memory-percentage": 0,
+  "gc-tuner-memory-threshold": 0
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -212,6 +214,7 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
     "storage": "",
     "use-file-backend": false
   },
@@ -273,6 +276,7 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
     "storage": "",
     "use-file-backend": false
   },

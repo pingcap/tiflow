@@ -589,6 +589,10 @@ func (m *mockRedoMetaManager) Run(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockRedoMetaManager) Running() bool {
+	return true
+}
+
 func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	t.Parallel()
 

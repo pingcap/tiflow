@@ -94,7 +94,7 @@ func GetTopicManagerAndTryCreateTopic(
 	topicCfg *kafka.AutoCreateTopicConfig,
 	adminClient pkafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
-	topicManager := manager.NewKafkaTopicManager(ctx, adminClient, topicCfg)
+	topicManager := manager.NewKafkaTopicManager(ctx, topic, adminClient, topicCfg)
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(topic); err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaCreateTopic, err)
 	}

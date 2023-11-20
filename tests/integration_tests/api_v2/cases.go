@@ -101,7 +101,7 @@ var customReplicaConfig = &ReplicaConfig{
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        1024 * 1024 * 1024,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
@@ -125,11 +125,12 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnablePartitionSeparator: true,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Level:                 "none",
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		Storage:               "",
+		UseFileBackend:        false,
 	},
 }
 
