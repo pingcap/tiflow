@@ -219,6 +219,9 @@ func (ti *TableInfo) initColumnsFlag() {
 		if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
 			flag.SetIsUnsigned()
 		}
+		if mysql.HasZerofillFlag(colInfo.GetFlag()) {
+			flag.SetZeroFill()
+		}
 		ti.ColumnsFlag[colInfo.ID] = flag
 	}
 

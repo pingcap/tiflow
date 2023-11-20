@@ -14,19 +14,28 @@
 package utils
 
 import (
+<<<<<<< HEAD
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
+=======
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // SetBinChsClnFlag set the binary charset flag.
 func SetBinChsClnFlag(ft *types.FieldType) *types.FieldType {
+<<<<<<< HEAD
 	ft.SetCharset(charset.CharsetBin)
 	ft.SetCollate(charset.CollationBin)
 	ft.AddFlag(mysql.BinaryFlag)
+=======
+	types.SetBinChsClnFlag(ft)
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	return ft
 }
 
@@ -36,12 +45,22 @@ func SetUnsigned(ft *types.FieldType) *types.FieldType {
 	return ft
 }
 
+<<<<<<< HEAD
+=======
+// SetFlag set the specific flag to the ft
+func SetFlag(ft *types.FieldType, flag uint) *types.FieldType {
+	ft.SetFlag(flag)
+	return ft
+}
+
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 // SetElems set the elems to the ft
 func SetElems(ft *types.FieldType, elems []string) *types.FieldType {
 	ft.SetElems(elems)
 	return ft
 }
 
+<<<<<<< HEAD
 // when encoding the canal format, for unsigned mysql type, add `unsigned` keyword.
 // it should have the form `t unsigned`, such as `int unsigned`
 func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
@@ -56,4 +75,12 @@ func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
 		return mysqlType + " zerofill"
 	}
 	return mysqlType
+=======
+// NewTextFieldType create a new text field type.
+func NewTextFieldType(tp byte) *types.FieldType {
+	ft := types.NewFieldType(tp)
+	ft.SetCollate(mysql.DefaultCollationName)
+	ft.SetCharset(mysql.DefaultCharset)
+	return ft
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 }
