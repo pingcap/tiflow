@@ -657,6 +657,7 @@ func (s *Syncer) reset() {
 		s.sgk.ResetGroups()
 		s.pessimist.Reset()
 	case config.ShardOptimistic:
+		s.osgk.Reset()
 		s.optimist.Reset()
 	}
 }
