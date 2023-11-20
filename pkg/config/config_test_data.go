@@ -53,7 +53,20 @@ const (
       }
     ],
     "enable-partition-separator": true,
+<<<<<<< HEAD
     "protocol": "open-protocol",
+=======
+    "protocol": "canal-json",
+	"enable-kafka-sink-v2": false,
+	"only-output-updated-columns": false,
+	"delete-only-output-handle-key-columns": false,
+    "content-compatible": false,
+    "large-message-handle": {
+      "large-message-handle-option": "none",
+      "large-message-handle-compression": "",
+      "claim-check-storage-uri": ""
+    },
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
     "advance-timeout-in-sec": 150
   },
   "consistent": {
@@ -177,9 +190,14 @@ const (
     "worker-num": 3
   },
   "sink": {
+<<<<<<< HEAD
   	"encoder-concurrency": 16,
     "dispatchers": null,
     "protocol": "open-protocol",
+=======
+  	"encoder-concurrency": 32,
+    "protocol": "canal-json",
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
     "column-selectors": [
       {
         "matcher": [
@@ -203,6 +221,16 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
+<<<<<<< HEAD
+=======
+    "enable-kafka-sink-v2": true,
+    "only-output-updated-columns": true,
+	"delete-only-output-handle-key-columns": true,
+    "content-compatible": true,
+    "safe-mode": true,
+	"terminator": "\r\n",
+	"transaction-atomicity": "",
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
     "kafka-config": {
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only"
@@ -243,7 +271,7 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "dispatchers": null,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -265,6 +293,14 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
+<<<<<<< HEAD
+=======
+	"enable-kafka-sink-v2": true,
+    "only-output-updated-columns": true,
+	"delete-only-output-handle-key-columns": true,
+    "content-compatible": true,
+    "safe-mode": true,
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
     "kafka-config": {
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only"

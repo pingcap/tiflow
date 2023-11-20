@@ -52,7 +52,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 			require.NoError(t, err)
 
 			ty, hasNext, err := decoder.HasNext()
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeRow, ty)
 

@@ -162,7 +162,7 @@ func newBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	encoder := &BatchEncoder{
 		messages:     &canal.Messages{},
 		callbackBuf:  make([]func(), 0),
-		entryBuilder: newCanalEntryBuilder(),
+		entryBuilder: newCanalEntryBuilder(config),
 
 		config: config,
 	}

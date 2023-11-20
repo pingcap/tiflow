@@ -20,7 +20,13 @@ import (
 	"testing"
 	"time"
 
+<<<<<<< HEAD:cdc/sinkv2/eventsink/mq/mq_dml_sink_test.go
 	"github.com/Shopify/sarama"
+=======
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tidb/util/rowcodec"
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):cdc/sink/dmlsink/mq/mq_dml_sink_test.go
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
@@ -103,7 +109,8 @@ func TestWriteEvents(t *testing.T) {
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
+		ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 	}
 
 	events := make([]*eventsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)

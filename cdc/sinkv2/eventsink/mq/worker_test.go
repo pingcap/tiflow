@@ -19,6 +19,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
@@ -74,7 +77,8 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
+		ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 	}
 	tableStatus := state.TableSinkSinking
 
@@ -359,7 +363,8 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -371,7 +376,8 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -383,7 +389,8 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "cc"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -395,7 +402,8 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aa", Table: "bb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -407,7 +415,8 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -419,7 +428,8 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -499,7 +509,8 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
@@ -511,7 +522,8 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
@@ -523,7 +535,8 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 				Event: &model.RowChangedEvent{
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "cc"}},
+					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
 				},
 				Callback:  func() {},
 				SinkState: &stoppedStatus,

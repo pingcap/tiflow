@@ -19,6 +19,8 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -90,6 +92,10 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
+		}},
+		ColInfos: []rowcodec.ColInfo{{
+			ID: 1,
+			Ft: types.NewFieldType(mysql.TypeVarchar),
 		}},
 	}
 

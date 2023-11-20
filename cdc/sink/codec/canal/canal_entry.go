@@ -25,9 +25,15 @@ import (
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
+=======
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_entry.go
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -43,12 +49,14 @@ const (
 
 type canalEntryBuilder struct {
 	bytesDecoder *encoding.Decoder // default charset is ISO-8859-1
+	config       *common.Config
 }
 
 // newCanalEntryBuilder creates a new canalEntryBuilder
-func newCanalEntryBuilder() *canalEntryBuilder {
+func newCanalEntryBuilder(config *common.Config) *canalEntryBuilder {
 	return &canalEntryBuilder{
 		bytesDecoder: charmap.ISO8859_1.NewDecoder(),
+		config:       config,
 	}
 }
 
@@ -119,9 +127,15 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
 func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
 	mysqlType := getMySQLType(c)
 	javaType, err := getJavaSQLType(c, mysqlType)
+=======
+func (b *canalEntryBuilder) buildColumn(c *model.Column, colInfo rowcodec.ColInfo, colName string, updated bool) (*canal.Column, error) {
+	mysqlType := getMySQLType(colInfo.Ft, c.Flag, b.config.ContentCompatible)
+	javaType, err := getJavaSQLType(c.Value, c.Type, c.Flag)
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_entry.go
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
@@ -146,11 +160,11 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated
 // build the RowData of a canal entry
 func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*canal.RowData, error) {
 	var columns []*canal.Column
-	for _, column := range e.Columns {
+	for idx, column := range e.Columns {
 		if column == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
+		c, err := b.buildColumn(column, e.ColInfos[idx], column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -159,14 +173,14 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 
 	onlyHandleKeyColumns = onlyHandleKeyColumns && e.IsDelete()
 	var preColumns []*canal.Column
-	for _, column := range e.PreColumns {
+	for idx, column := range e.PreColumns {
 		if column == nil {
 			continue
 		}
 		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
-		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
+		c, err := b.buildColumn(column, e.ColInfos[idx], column.Name, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -299,6 +313,7 @@ func isCanalDDL(t canal.EventType) bool {
 	return false
 }
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
 func getJavaSQLType(c *model.Column, mysqlType string) (result internal.JavaSQLType, err error) {
 	javaType := internal.MySQLType2JavaType(c.Type, c.Flag.IsBinary())
 
@@ -310,6 +325,10 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result internal.JavaSQLT
 		return internal.JavaSQLTypeBLOB, nil
 	}
 
+=======
+func getJavaSQLType(value interface{}, tp byte, flag model.ColumnFlagType) (result internal.JavaSQLType, err error) {
+	javaType := internal.MySQLType2JavaType(tp, flag.IsBinary())
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_entry.go
 	// flag `isUnsigned` only for `numerical` and `bit`, `year` data type.
 	if !c.Flag.IsUnsigned() {
 		return javaType, nil
@@ -383,6 +402,7 @@ func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
 	return mysqlType
 }
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
 // when decoding the canal format, remove `unsigned` to get the original `mysql type`.
 func trimUnsignedFromMySQLType(mysqlType string) string {
 	return strings.TrimSuffix(mysqlType, " unsigned")
@@ -405,5 +425,27 @@ func getMySQLType(c *model.Column) string {
 		return strings.Replace(mysqlType, "char", "binary", 1)
 	}
 
+=======
+func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
+	if zerofill &&
+		!strings.HasPrefix(mysqlType, "bit") &&
+		!strings.HasPrefix(mysqlType, "year") {
+		return mysqlType + " zerofill"
+	}
+>>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_entry.go
 	return mysqlType
+}
+
+func getMySQLType(fieldType *types.FieldType, flag model.ColumnFlagType, fullType bool) string {
+	if !fullType {
+		result := types.TypeToStr(fieldType.GetType(), fieldType.GetCharset())
+		result = withUnsigned4MySQLType(result, flag.IsUnsigned())
+		result = withZerofill4MySQLType(result, flag.IsZerofill())
+
+		return result
+	}
+
+	result := fieldType.InfoSchemaStr()
+	result = withZerofill4MySQLType(result, flag.IsZerofill())
+	return result
 }
