@@ -242,8 +242,14 @@ type SinkConfig struct {
 	TxnAtomicity             string            `json:"transaction_atomicity"`
 	EncoderConcurrency       int               `json:"encoder_concurrency"`
 	Terminator               string            `json:"terminator"`
+<<<<<<< HEAD
 	DateSeparator            string            `json:"date_separator"`
 	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
+=======
+	DateSeparator            string            `json:"date_separator,omitempty"`
+	EnablePartitionSeparator *bool             `json:"enable_partition_separator,omitempty"`
+	ContentCompatible        *bool             `json:"content_compatible"`
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 }
 
 // CSVConfig denotes the csv config
@@ -273,11 +279,22 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
+<<<<<<< HEAD
 	Level             string `json:"level"`
 	MaxLogSize        int64  `json:"max_log_size"`
 	FlushIntervalInMs int64  `json:"flush_interval"`
 	Storage           string `json:"storage"`
 	UseFileBackend    bool   `json:"use_file_backend"`
+=======
+	Level                 string `json:"level"`
+	MaxLogSize            int64  `json:"max_log_size"`
+	FlushIntervalInMs     int64  `json:"flush_interval"`
+	MetaFlushIntervalInMs int64  `json:"meta_flush_interval"`
+	EncoderWorkerNum      int    `json:"encoding_worker_num"`
+	FlushWorkerNum        int    `json:"flush_worker_num"`
+	Storage               string `json:"storage"`
+	UseFileBackend        bool   `json:"use_file_backend"`
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

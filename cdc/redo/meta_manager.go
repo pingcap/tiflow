@@ -123,6 +123,14 @@ func (m *metaManager) preStart(ctx context.Context) error {
 	}
 	// "nfs" and "local" scheme are converted to "file" scheme
 	redo.FixLocalScheme(uri)
+<<<<<<< HEAD
+=======
+	// blackhole scheme is converted to "noop" scheme here, so we can use blackhole for testing
+	if redo.IsBlackholeStorage(uri.Scheme) {
+		uri, _ = storage.ParseRawURL("noop://")
+	}
+
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 	extStorage, err := redo.InitExternalStorage(ctx, *uri)
 	if err != nil {
 		return err

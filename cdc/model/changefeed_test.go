@@ -142,15 +142,26 @@ func TestVerifyAndComplete(t *testing.T) {
 	t.Parallel()
 
 	info := &ChangeFeedInfo{
-		SinkURI: "blackhole://",
+		SinkURI: "mysql://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
+<<<<<<< HEAD
 			MemoryQuota:        1073741824,
 			CaseSensitive:      true,
 			EnableOldValue:     true,
 			CheckGCSafePoint:   true,
 			SyncPointInterval:  time.Minute * 10,
 			SyncPointRetention: time.Hour * 24,
+=======
+			MemoryQuota:           1073741824,
+			CaseSensitive:         false,
+			CheckGCSafePoint:      true,
+			EnableSyncPoint:       util.AddressOf(false),
+			SyncPointInterval:     util.AddressOf(time.Minute * 10),
+			SyncPointRetention:    util.AddressOf(time.Hour * 24),
+			BDRMode:               util.AddressOf(false),
+			IgnoreIneligibleTable: false,
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 		},
 	}
 
@@ -160,6 +171,14 @@ func TestVerifyAndComplete(t *testing.T) {
 	marshalConfig1, err := info.Config.Marshal()
 	require.Nil(t, err)
 	defaultConfig := config.GetDefaultReplicaConfig()
+<<<<<<< HEAD
+=======
+	info2 := &ChangeFeedInfo{
+		SinkURI: "mysql://",
+		Config:  defaultConfig,
+	}
+	info2.RmUnusedFields()
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 	marshalConfig2, err := defaultConfig.Marshal()
 	require.Nil(t, err)
 	require.Equal(t, marshalConfig2, marshalConfig1)
