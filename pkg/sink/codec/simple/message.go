@@ -182,7 +182,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	}
 }
 
-func newTableInfo(msg *message) (*model.TableInfo, error) {
+func newTableInfo(msg *message) *model.TableInfo {
 	info := &model.TableInfo{
 		TableName: model.TableName{
 			Schema: msg.Database,
@@ -201,48 +201,18 @@ func newTableInfo(msg *message) (*model.TableInfo, error) {
 		info.Indices = append(info.Indices, index)
 	}
 
-	return info, nil
+	return info
 }
 
-// ToTableInfo converts from TableSchema to TableInfo.
-//func (t *TableSchema) ToTableInfo(msg *message) (*model.TableInfo, error) {
-
-//	for _, col := range t.Columns {
-//		tiCol, err := col.ToTiColumnInfo(t.Indexes)
-//		if err != nil {
-//			return nil, err
-//		}
-//		info.Columns = append(info.Columns, tiCol)
-//	}
-//	for _, idx := range t.Indexes {
-//		tiIdx, err := idx.ToTiIndexInfo()
-//		if err != nil {
-//			return nil, err
-//		}
-//		info.Indices = append(info.Indices, tiIdx)
-//	}
-//
-//	return info, nil
-//}
-
-func newDDLEvent(msg *message) (*model.DDLEvent, error) {
-	info, err :=
+func newDDLEvent(msg *message) *model.DDLEvent {
+	tableInfo := newTableInfo(msg)
+	return &model.DDLEvent{
+		StartTs:   msg.CommitTs,
+		CommitTs:  msg.CommitTs,
+		TableInfo: tableInfo,
+		Query:     msg.SQL,
+	}
 }
-
-
-// ToDDLEvent converts from message to DDLEvent.
-//func (t *TableSchema) ToDDLEvent(msg *message) (*model.DDLEvent, error) {
-//	info, err := t.ToTableInfo(msg)
-//	if err != nil {
-//		return nil, err
-//	}
-//	return &model.DDLEvent{
-//		StartTs:   msg.CommitTs,
-//		CommitTs:  msg.CommitTs,
-//		TableInfo: info,
-//		Query:     msg.SQL,
-//	}, nil
-//}
 
 func buildRowChangedEvent(msg *message) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{

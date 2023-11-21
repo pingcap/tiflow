@@ -96,10 +96,9 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"not found ddl event message")
 	}
-	ddl, err := d.msg.TableSchema.ToDDLEvent(d.msg)
-	if err != nil {
-		return nil, err
-	}
+
+	ddl := newDDLEvent(d.msg)
 	d.msg = nil
+
 	return ddl, nil
 }
