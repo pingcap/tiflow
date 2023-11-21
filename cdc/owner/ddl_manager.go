@@ -198,7 +198,7 @@ func (m *ddlManager) tick(
 	checkpointTs model.Ts,
 	tableCheckpoint map[model.TableName]model.Ts,
 ) ([]model.TableID, *schedulepb.BarrierWithMinTs, error) {
-	// needBootstrap is true when the the downstream is kafka
+	// needBootstrap is true when the downstream is kafka
 	// and the protocol is simple protocol.
 	if m.needBootstrap {
 		ok, err := m.checkAndBootstrap(ctx)
