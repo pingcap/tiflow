@@ -26,6 +26,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
@@ -182,7 +183,7 @@ func newJSONMessageForDML(
 					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
 						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
 				}
-				mysqlTypeMap[col.Name] = getMySQLType(columnInfo, config.ContentCompatible)
+				mysqlTypeMap[col.Name] = utils.GetMySQLType(columnInfo, config.ContentCompatible)
 			}
 		}
 		if emptyColumn {
