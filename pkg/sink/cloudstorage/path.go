@@ -17,7 +17,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -412,6 +415,7 @@ var dateSeparatorDayRegexp *regexp.Regexp
 // RemoveExpiredFiles removes expired files from external storage.
 func RemoveExpiredFiles(
 	ctx context.Context,
+	_ model.ChangeFeedID,
 	storage storage.ExternalStorage,
 	cfg *Config,
 	checkpointTs model.Ts,
@@ -437,5 +441,37 @@ func RemoveExpiredFiles(
 		}
 		return false
 	}, nil)
+	return cnt, err
+}
+
+func RemoveEmptyDirs(
+	ctx context.Context,
+	id model.ChangeFeedID,
+	target string,
+) (uint64, error) {
+	cnt := uint64(0)
+	err := filepath.Walk(target, func(path string, info fs.FileInfo, err error) error {
+		if os.IsNotExist(err) || path == target || info == nil {
+			// if path not exists, we should return nil to continue.
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			files, err := os.ReadDir(path)
+			if err == nil && len(files) == 0 {
+				log.Debug("Deleting empty directory",
+					zap.String("namespace", id.Namespace),
+					zap.String("changeFeedID", id.ID),
+					zap.String("path", path))
+				os.Remove(path)
+				cnt++
+				return filepath.SkipDir
+			}
+		}
+		return nil
+	})
+
 	return cnt, err
 }

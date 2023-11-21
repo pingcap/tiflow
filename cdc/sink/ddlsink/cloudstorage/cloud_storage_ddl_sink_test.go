@@ -159,10 +159,12 @@ func TestCleanupExpiredFiles(t *testing.T) {
 	require.Nil(t, err)
 
 	cnt := 0
-	cleanupJob := func() {
-		cnt++
+	cleanupJobs := []func(){
+		func() {
+			cnt++
+		},
 	}
-	sink, err := newDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig, cleanupJob)
+	sink, err := newDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig, cleanupJobs)
 	require.Nil(t, err)
 
 	_ = sink
