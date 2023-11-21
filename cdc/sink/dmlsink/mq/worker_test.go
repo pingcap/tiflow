@@ -502,8 +502,6 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 }
 
 func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
-	t.Parallel()
-
 	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
