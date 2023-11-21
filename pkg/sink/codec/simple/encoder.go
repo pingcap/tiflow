@@ -35,7 +35,10 @@ type encoder struct {
 func (e *encoder) AppendRowChangedEvent(
 	_ context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	m := newDMLMessage(event)
+	m, err := newDMLMessage(event)
+	if err != nil {
+		return err
+	}
 	value, err := json.Marshal(m)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)

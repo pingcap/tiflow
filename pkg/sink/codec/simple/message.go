@@ -25,8 +25,11 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
+	tiTypes "github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -297,41 +300,86 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 	return msg
 }
 
-func newDMLMessage(event *model.RowChangedEvent) *message {
+func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 	m := &message{
 		Version:  defaultVersion,
 		Database: event.Table.Schema,
 		Table:    event.Table.Table,
 		CommitTs: event.CommitTs,
 	}
+	var err error
 	if event.IsInsert() {
 		m.Type = InsertType
-		m.Data = formatColumns(event.Columns)
+		m.Data, err = formatColumns(event.Columns, event.ColInfos)
+		if err != nil {
+			return nil, err
+		}
 	} else if event.IsDelete() {
 		m.Type = DeleteType
-		m.Old = formatColumns(event.PreColumns)
+		m.Old, err = formatColumns(event.PreColumns, event.ColInfos)
+		if err != nil {
+			return nil, err
+		}
 	} else if event.IsUpdate() {
 		m.Type = UpdateType
-		m.Data = formatColumns(event.Columns)
-		m.Old = formatColumns(event.PreColumns)
+		m.Data, err = formatColumns(event.Columns, event.ColInfos)
+		if err != nil {
+			return nil, err
+		}
+		m.Old, err = formatColumns(event.PreColumns, event.ColInfos)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	return m
+	return m, nil
 }
 
-func formatColumns(columns []*model.Column) map[string]string {
+func formatColumns(
+	columns []*model.Column, columnInfos []rowcodec.ColInfo,
+) (map[string]string, error) {
 	result := make(map[string]string, len(columns))
-	for _, col := range columns {
-		result[col.Name] = formatValue(col.Value, col.Flag.IsBinary())
+	for idx, col := range columns {
+		value, err := formatValue(col.Value, columnInfos[idx].Ft)
+		if err != nil {
+			return nil, err
+		}
+		result[col.Name] = value
 	}
-	return result
+	return result, nil
 }
 
-func formatValue(value interface{}, isBinary bool) string {
+func formatValue(value interface{}, ft *types.FieldType) (string, error) {
 	if value == nil {
-		return ""
+		return "", nil
+	}
+
+	switch ft.GetType() {
+	case mysql.TypeEnum:
+		if v, ok := value.(string); ok {
+			return v, nil
+		}
+		element := ft.GetElems()
+		number := value.(uint64)
+		enumVar, err := tiTypes.ParseEnumValue(element, number)
+		if err != nil {
+			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+		return enumVar.Name, nil
+	case mysql.TypeSet:
+		if v, ok := value.(string); ok {
+			return v, nil
+		}
+		elements := ft.GetElems()
+		number := value.(uint64)
+		setVar, err := tiTypes.ParseSetValue(elements, number)
+		if err != nil {
+			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+		return setVar.Name, nil
+	default:
 	}
 
 	var result string
@@ -347,7 +395,7 @@ func formatValue(value interface{}, isBinary bool) string {
 	case string:
 		result = v
 	case []byte:
-		if isBinary {
+		if mysql.HasBinaryFlag(ft.GetFlag()) {
 			result = base64.StdEncoding.EncodeToString(v)
 		} else {
 			result = string(v)
@@ -355,5 +403,6 @@ func formatValue(value interface{}, isBinary bool) string {
 	default:
 		result = fmt.Sprintf("%v", v)
 	}
-	return result
+
+	return result, nil
 }
