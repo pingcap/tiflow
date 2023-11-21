@@ -64,7 +64,7 @@ func newDDLSink(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	cleanupJob func(),
+	cleanupJobs []func(),
 ) (*DDLSink, error) {
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
@@ -89,10 +89,13 @@ func newDDLSink(ctx context.Context,
 	// Note: It is intended to run the cleanup goroutine in the background.
 	// we don't wait for it to finish since the gourotine would be stuck if
 	// the downstream is abnormal, especially when the downstream is a nfs.
-	if cleanupJob == nil {
-		cleanupJob = d.runCleanup(ctx)
+	if cleanupJobs == nil {
+		cleanupJobs, err = d.runCleanup(ctx, sinkURI)
+		if err != nil {
+			return nil, err
+		}
 	}
-	go d.bgCleanup(ctx, cleanupJob)
+	go d.bgCleanup(ctx, cleanupJobs)
 	return d, nil
 }
 
@@ -158,7 +161,7 @@ func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	return errors.Trace(err)
 }
 
-func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJob func()) {
+func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJobs []func()) {
 	if d.cfg.DateSeparator != config.DateSeparatorDay.String() || d.cfg.FileExpirationDays <= 0 {
 		log.Info("skip cleanup expired files for storage sink",
 			zap.String("namespace", d.id.Namespace),
@@ -169,7 +172,9 @@ func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJob func()) {
 	}
 
 	clenupCron := cron.New()
-	clenupCron.AddFunc(d.cfg.FileCleanupCronSpec, cleanupJob)
+	for _, job := range cleanupJobs {
+		clenupCron.AddFunc(d.cfg.FileCleanupCronSpec, job)
+	}
 	clenupCron.Start()
 	defer clenupCron.Stop()
 	log.Info("start schedule cleanup expired files for storage sink",
@@ -186,9 +191,34 @@ func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJob func()) {
 		zap.Error(ctx.Err()))
 }
 
-func (d *DDLSink) runCleanup(ctx context.Context) func() {
+func (d *DDLSink) runCleanup(ctx context.Context, uri *url.URL) ([]func(), error) {
+	ret := []func(){}
+	if uri.Scheme == "file" || uri.Scheme == "local" || uri.Scheme == "" {
+		ret = append(ret, func() {
+			checkpointTs := d.lastCheckpointTs.Load()
+			start := time.Now()
+			cnt, err := cloudstorage.RemoveEmptyDirs(ctx, d.id, uri.Path)
+			if err != nil {
+				log.Error("failed to remove empty dirs",
+					zap.String("namespace", d.id.Namespace),
+					zap.String("changefeedID", d.id.ID),
+					zap.Uint64("checkpointTs", checkpointTs),
+					zap.Duration("cost", time.Since(start)),
+					zap.Error(err),
+				)
+				return
+			}
+			log.Info("remove empty dirs",
+				zap.String("namespace", d.id.Namespace),
+				zap.String("changefeedID", d.id.ID),
+				zap.Uint64("checkpointTs", checkpointTs),
+				zap.Uint64("count", cnt),
+				zap.Duration("cost", time.Since(start)))
+		})
+	}
+
 	isCleanupRunning := atomic.Bool{}
-	return func() {
+	ret = append(ret, func() {
 		if !isCleanupRunning.CompareAndSwap(false, true) {
 			log.Warn("cleanup expired files is already running, skip this round",
 				zap.String("namespace", d.id.Namespace),
@@ -199,7 +229,7 @@ func (d *DDLSink) runCleanup(ctx context.Context) func() {
 		defer isCleanupRunning.Store(false)
 		start := time.Now()
 		checkpointTs := d.lastCheckpointTs.Load()
-		cnt, err := cloudstorage.RemoveExpiredFiles(ctx, d.storage, d.cfg, checkpointTs)
+		cnt, err := cloudstorage.RemoveExpiredFiles(ctx, d.id, d.storage, d.cfg, checkpointTs)
 		if err != nil {
 			log.Error("failed to remove expired files",
 				zap.String("namespace", d.id.Namespace),
@@ -217,7 +247,8 @@ func (d *DDLSink) runCleanup(ctx context.Context) func() {
 			zap.Uint64("checkpointTs", checkpointTs),
 			zap.Uint64("count", cnt),
 			zap.Duration("cost", time.Since(start)))
-	}
+	})
+	return ret, nil
 }
 
 // Close closes the sink.
