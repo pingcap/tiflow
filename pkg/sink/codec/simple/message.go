@@ -217,7 +217,7 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 	}
 }
 
-func buildRowChangedEvent(msg *message) (*model.RowChangedEvent, error) {
+func buildRowChangedEvent(msg *message) *model.RowChangedEvent {
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
@@ -227,24 +227,16 @@ func buildRowChangedEvent(msg *message) (*model.RowChangedEvent, error) {
 	}
 
 	if msg.Data != nil {
-		columns, err := buildColumns(msg.Data)
-		if err != nil {
-			return nil, err
-		}
-		result.Columns = columns
+		result.Columns = buildColumns(msg.Data)
 	}
 
 	if msg.Old != nil {
-		columns, err := buildColumns(msg.Old)
-		if err != nil {
-			return nil, err
-		}
-		result.PreColumns = columns
+		result.PreColumns = buildColumns(msg.Old)
 	}
-	return result, nil
+	return result
 }
 
-func buildColumns(rawData map[string]string) ([]*model.Column, error) {
+func buildColumns(rawData map[string]string) []*model.Column {
 	result := make([]*model.Column, 0, len(rawData))
 	for name, value := range rawData {
 		col := &model.Column{
@@ -253,7 +245,7 @@ func buildColumns(rawData map[string]string) ([]*model.Column, error) {
 		}
 		result = append(result, col)
 	}
-	return result, nil
+	return result
 }
 
 type message struct {

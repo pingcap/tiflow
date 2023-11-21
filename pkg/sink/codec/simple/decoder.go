@@ -86,10 +86,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"not found row changed event message")
 	}
-	event, err := buildRowChangedEvent(d.msg)
-	if err != nil {
-		return nil, err
-	}
+	event := buildRowChangedEvent(d.msg)
 	d.msg = nil
 	return event, nil
 }
