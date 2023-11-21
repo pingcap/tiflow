@@ -16,15 +16,18 @@ package utils
 import (
 	"strings"
 
+	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // SetBinChsClnFlag set the binary charset flag.
 func SetBinChsClnFlag(ft *types.FieldType) *types.FieldType {
-	types.SetBinChsClnFlag(ft)
+	ft.SetCharset(charset.CharsetBin)
+	ft.SetCollate(charset.CollationBin)
+	ft.AddFlag(mysql.BinaryFlag)
 	return ft
 }
 
@@ -65,4 +68,15 @@ func GetMySQLType(columnInfo *timodel.ColumnInfo, fullType bool) string {
 		return result
 	}
 	return columnInfo.GetTypeDesc()
+}
+
+// ExtractBasicMySQLType return the mysql type
+func ExtractBasicMySQLType(mysqlType string) byte {
+	for i := 0; i < len(mysqlType); i++ {
+		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
+			return types.StrToType(mysqlType[:i])
+		}
+	}
+
+	return types.StrToType(mysqlType)
 }
