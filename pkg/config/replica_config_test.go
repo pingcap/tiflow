@@ -42,7 +42,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = util.AddressOf("open-protocol")
+	conf.Sink.Protocol = util.AddressOf("canal-json")
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -66,6 +66,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
+	conf.Sink.ContentCompatible = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.AdvanceTimeoutInSec = util.AddressOf(uint(150))
 	conf.Sink.KafkaConfig = &KafkaConfig{
@@ -177,7 +178,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = util.AddressOf("open-protocol")
+	conf.Sink.Protocol = util.AddressOf("canal-json")
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
