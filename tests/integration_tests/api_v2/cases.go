@@ -175,7 +175,9 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 		log.Panic("failed to unmarshal response", zap.String("body", string(resp.body)), zap.Error(err))
 	}
 	if !reflect.DeepEqual(cfInfo.Config, defaultReplicaConfig) {
-		log.Panic("config is not equals", zap.Any("add", defaultReplicaConfig), zap.Any("get", cfInfo.Config))
+		log.Panic("config is not equals",
+			zap.Any("add", defaultReplicaConfig),
+			zap.Any("get", cfInfo.Config))
 	}
 
 	// pause changefeed
@@ -223,7 +225,9 @@ func testChangefeed(ctx context.Context, client *CDCRESTClient) error {
 		log.Panic("unmarshal failed", zap.String("body", string(resp.body)), zap.Error(err))
 	}
 	if !reflect.DeepEqual(cf.Config, customReplicaConfig) {
-		log.Panic("config is not equals", zap.Any("update", customReplicaConfig), zap.Any("get", cf.Config))
+		log.Panic("config is not equals",
+			zap.Any("update", customReplicaConfig),
+			zap.Any("get", cf.Config))
 	}
 
 	// list changefeed
