@@ -76,6 +76,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.Equal(t, internal.JavaSQLTypeSMALLINT, javaType)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[3].ID)
+	require.True(t, ok)
 	flag = tableInfo.ColumnsFlag[colInfos[3].ID]
 	mysqlType = getMySQLType(columnInfo, false)
 	require.Equal(t, "mediumint", mysqlType)
@@ -86,6 +87,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	require.Equal(t, internal.JavaSQLTypeINTEGER, javaType)
 
 	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[4].ID)
+	require.True(t, ok)
 	flag = tableInfo.ColumnsFlag[colInfos[4].ID]
 	mysqlType = getMySQLType(columnInfo, false)
 	require.Equal(t, "bigint", mysqlType)
@@ -107,6 +109,7 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 	_, _, colInfos = tableInfo.GetRowColInfos()
 
 	columnInfo, ok = tableInfo.GetColumnInfo(colInfos[0].ID)
+	require.True(t, ok)
 	flag = tableInfo.ColumnsFlag[colInfos[0].ID]
 	mysqlType = getMySQLType(columnInfo, false)
 	require.Equal(t, "int unsigned", mysqlType)
