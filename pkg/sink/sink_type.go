@@ -81,3 +81,21 @@ func IsStorageScheme(scheme string) bool {
 	return scheme == FileScheme || scheme == S3Scheme || scheme == GCSScheme ||
 		scheme == GSScheme || scheme == AzblobScheme || scheme == AzureScheme || scheme == CloudStorageNoopScheme
 }
+<<<<<<< HEAD
+=======
+
+// IsPulsarScheme returns true if the scheme belong to pulsar scheme.
+func IsPulsarScheme(scheme string) bool {
+	return scheme == PulsarScheme || scheme == PulsarSSLScheme
+}
+
+// IsBlackHoleScheme returns true if the scheme belong to blackhole scheme.
+func IsBlackHoleScheme(scheme string) bool {
+	return scheme == BlackHoleScheme
+}
+
+// GetScheme returns the scheme of the url.
+func GetScheme(url *url.URL) string {
+	return strings.ToLower(url.Scheme)
+}
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))

@@ -125,10 +125,26 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
+<<<<<<< HEAD
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+=======
+							Terminator:                       putil.AddressOf(config.CRLF),
+							AdvanceTimeoutInSec:              putil.AddressOf(uint(150)),
+							CSVConfig:                        config.GetDefaultReplicaConfig().Sink.CSVConfig,
+							EncoderConcurrency:               config.GetDefaultReplicaConfig().Sink.EncoderConcurrency,
+							DateSeparator:                    config.GetDefaultReplicaConfig().Sink.DateSeparator,
+							EnablePartitionSeparator:         config.GetDefaultReplicaConfig().Sink.EnablePartitionSeparator,
+							EnableKafkaSinkV2:                config.GetDefaultReplicaConfig().Sink.EnableKafkaSinkV2,
+							OnlyOutputUpdatedColumns:         config.GetDefaultReplicaConfig().Sink.OnlyOutputUpdatedColumns,
+							DeleteOnlyOutputHandleKeyColumns: config.GetDefaultReplicaConfig().Sink.DeleteOnlyOutputHandleKeyColumns,
+							ContentCompatible:                config.GetDefaultReplicaConfig().Sink.ContentCompatible,
+						},
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
@@ -178,10 +194,27 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
+<<<<<<< HEAD
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+=======
+							Terminator:                       putil.AddressOf(config.CRLF),
+							AdvanceTimeoutInSec:              putil.AddressOf(uint(150)),
+							CSVConfig:                        config.GetDefaultReplicaConfig().Sink.CSVConfig,
+							EncoderConcurrency:               config.GetDefaultReplicaConfig().Sink.EncoderConcurrency,
+							DateSeparator:                    config.GetDefaultReplicaConfig().Sink.DateSeparator,
+							EnablePartitionSeparator:         config.GetDefaultReplicaConfig().Sink.EnablePartitionSeparator,
+							EnableKafkaSinkV2:                config.GetDefaultReplicaConfig().Sink.EnableKafkaSinkV2,
+							OnlyOutputUpdatedColumns:         config.GetDefaultReplicaConfig().Sink.OnlyOutputUpdatedColumns,
+							DeleteOnlyOutputHandleKeyColumns: config.GetDefaultReplicaConfig().Sink.DeleteOnlyOutputHandleKeyColumns,
+							ContentCompatible:                config.GetDefaultReplicaConfig().Sink.ContentCompatible,
+						},
+						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
@@ -236,10 +269,27 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Filter:           &config.FilterConfig{Rules: []string{"*.*"}},
 						Mounter:          &config.MounterConfig{WorkerNum: 16},
 						Sink: &config.SinkConfig{
+<<<<<<< HEAD
 							Protocol:            "open-protocol",
 							AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
 						},
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
+=======
+							Terminator:                       putil.AddressOf(config.CRLF),
+							AdvanceTimeoutInSec:              putil.AddressOf(uint(150)),
+							EncoderConcurrency:               config.GetDefaultReplicaConfig().Sink.EncoderConcurrency,
+							CSVConfig:                        config.GetDefaultReplicaConfig().Sink.CSVConfig,
+							DateSeparator:                    config.GetDefaultReplicaConfig().Sink.DateSeparator,
+							EnablePartitionSeparator:         config.GetDefaultReplicaConfig().Sink.EnablePartitionSeparator,
+							EnableKafkaSinkV2:                config.GetDefaultReplicaConfig().Sink.EnableKafkaSinkV2,
+							OnlyOutputUpdatedColumns:         config.GetDefaultReplicaConfig().Sink.OnlyOutputUpdatedColumns,
+							DeleteOnlyOutputHandleKeyColumns: config.GetDefaultReplicaConfig().Sink.DeleteOnlyOutputHandleKeyColumns,
+							ContentCompatible:                config.GetDefaultReplicaConfig().Sink.ContentCompatible,
+						},
+						Consistent: config.GetDefaultReplicaConfig().Consistent,
+						Scheduler:  config.GetDefaultReplicaConfig().Scheduler,
+						Integrity:  config.GetDefaultReplicaConfig().Integrity,
+>>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 					},
