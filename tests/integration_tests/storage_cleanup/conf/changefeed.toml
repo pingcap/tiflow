@@ -18,4 +18,5 @@ include-commit-ts = true
 [sink.cloud-storage-config]
 file-expiration-days = 1
 # Second | Minute | Hour | Dom | Month | DowOptional
+# cleanup every second
 file-cleanup-cron-spec = "* * * * * *"    
