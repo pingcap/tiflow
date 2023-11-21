@@ -100,7 +100,7 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 		}
 	}
 
-	if column.Nullable == false {
+	if column.Nullable {
 		col.AddFlag(mysql.NotNullFlag)
 	}
 
@@ -112,9 +112,9 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 // IndexSchema is the schema of the index.
 type IndexSchema struct {
 	Name     string   `json:"name"`
-	Unique   bool     `json:"unique,omitempty"`
-	Primary  bool     `json:"primary,omitempty"`
-	Nullable bool     `json:"nullable,omitempty"`
+	Unique   bool     `json:"unique"`
+	Primary  bool     `json:"primary"`
+	Nullable bool     `json:"nullable"`
 	Columns  []string `json:"columns"`
 }
 

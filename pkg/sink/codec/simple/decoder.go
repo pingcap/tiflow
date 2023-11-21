@@ -57,10 +57,14 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	if d.msg.Type == WatermarkType {
 		return model.MessageTypeResolved, true, nil
 	}
+	if d.msg.Type == DDLType {
+		return model.MessageTypeDDL, true, nil
+	}
 	if d.msg.Data != nil || d.msg.Old != nil {
 		return model.MessageTypeRow, true, nil
 	}
-	return model.MessageTypeDDL, true, nil
+
+	return model.MessageTypeUnknown, false, nil
 }
 
 // NextResolvedEvent returns the next resolved event if exists
