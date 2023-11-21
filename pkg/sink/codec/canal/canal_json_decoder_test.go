@@ -24,8 +24,7 @@ import (
 )
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
-	t.Parallel()
-
+	insertEvent, _, _ := newLargeEvent4Test(t)
 	ctx := context.Background()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
@@ -37,7 +36,6 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 		require.NoError(t, err)
 		encoder := builder.Build()
 
-		insertEvent, _, _ := newLargeEvent4Test(t)
 		err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, nil)
 		require.NoError(t, err)
 
