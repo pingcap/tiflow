@@ -23,9 +23,9 @@ import (
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -118,8 +118,8 @@ func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (resul
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
-func (b *canalEntryBuilder) buildColumn(c *model.Column, colInfo rowcodec.ColInfo, colName string, updated bool) (*canal.Column, error) {
-	mysqlType := getMySQLType(colInfo.Ft, c.Flag, b.config.ContentCompatible)
+func (b *canalEntryBuilder) buildColumn(c *model.Column, columnInfo *timodel.ColumnInfo, updated bool) (*canal.Column, error) {
+	mysqlType := getMySQLType(columnInfo, b.config.ContentCompatible)
 	javaType, err := getJavaSQLType(c.Value, c.Type, c.Flag)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -132,7 +132,7 @@ func (b *canalEntryBuilder) buildColumn(c *model.Column, colInfo rowcodec.ColInf
 
 	canalColumn := &canal.Column{
 		SqlType:       int32(javaType),
-		Name:          colName,
+		Name:          c.Name,
 		IsKey:         c.Flag.IsPrimaryKey(),
 		Updated:       updated,
 		IsNullPresent: &canal.Column_IsNull{IsNull: c.Value == nil},
@@ -149,7 +149,12 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 		if column == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, e.ColInfos[idx], column.Name, !e.IsDelete())
+		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+		if !ok {
+			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+				"column info not found for column id: %d", e.ColInfos[idx].ID)
+		}
+		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -165,7 +170,12 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
-		c, err := b.buildColumn(column, e.ColInfos[idx], column.Name, !e.IsDelete())
+		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+		if !ok {
+			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+				"column info not found for column id: %d", e.ColInfos[idx].ID)
+		}
+		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -374,24 +384,18 @@ func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
 }
 
 func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
-	if zerofill &&
-		!strings.HasPrefix(mysqlType, "bit") &&
-		!strings.HasPrefix(mysqlType, "year") {
+	if zerofill && !strings.HasPrefix(mysqlType, "year") {
 		return mysqlType + " zerofill"
 	}
 	return mysqlType
 }
 
-func getMySQLType(fieldType *types.FieldType, flag model.ColumnFlagType, fullType bool) string {
+func getMySQLType(columnInfo *timodel.ColumnInfo, fullType bool) string {
 	if !fullType {
-		result := types.TypeToStr(fieldType.GetType(), fieldType.GetCharset())
-		result = withUnsigned4MySQLType(result, flag.IsUnsigned())
-		result = withZerofill4MySQLType(result, flag.IsZerofill())
-
+		result := types.TypeToStr(columnInfo.GetType(), columnInfo.GetCharset())
+		result = withUnsigned4MySQLType(result, mysql.HasUnsignedFlag(columnInfo.GetFlag()))
+		result = withZerofill4MySQLType(result, mysql.HasZerofillFlag(columnInfo.GetFlag()))
 		return result
 	}
-
-	result := fieldType.InfoSchemaStr()
-	result = withZerofill4MySQLType(result, flag.IsZerofill())
-	return result
+	return columnInfo.GetTypeDesc()
 }

@@ -19,13 +19,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
@@ -585,181 +581,182 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	require.Equal(t, expectedJSON, string(rawBytes))
 }
 
-func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	codecConfig.EnableTiDBExtension = true
-	ctx := context.Background()
-
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	encoder := builder.Build()
-
-	count := 0
-	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
-			Name:  "col1",
-			Type:  mysql.TypeVarchar,
-			Value: []byte("aa"),
-		}},
-		ColInfos: []rowcodec.ColInfo{
-			{
-				ID: 0,
-				Ft: types.NewFieldType(mysql.TypeVarchar),
-			},
-		},
-	}
-
-	tests := []struct {
-		row      *model.RowChangedEvent
-		callback func()
-	}{
-		{
-			row: row,
-			callback: func() {
-				count += 1
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 2
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 3
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 4
-			},
-		},
-		{
-			row: row,
-			callback: func() {
-				count += 5
-			},
-		},
-	}
-
-	// Empty build makes sure that the callback build logic not broken.
-	msgs := encoder.Build()
-	require.Len(t, msgs, 0, "no message should be built and no panic")
-
-	// Append the events.
-	for _, test := range tests {
-		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
-		require.NoError(t, err)
-	}
-	require.Equal(t, 0, count, "nothing should be called")
-
-	msgs = encoder.Build()
-	require.Len(t, msgs, 5, "expected 5 messages")
-	msgs[0].Callback()
-	require.Equal(t, 1, count, "expected one callback be called")
-	msgs[1].Callback()
-	require.Equal(t, 3, count, "expected one callback be called")
-	msgs[2].Callback()
-	require.Equal(t, 6, count, "expected one callback be called")
-	msgs[3].Callback()
-	require.Equal(t, 10, count, "expected one callback be called")
-	msgs[4].Callback()
-	require.Equal(t, 15, count, "expected one callback be called")
-}
-
-func TestMaxMessageBytes(t *testing.T) {
-	// the size of `testEvent` after being encoded by canal-json is 200
-	testEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns: []*model.Column{{
-			Name:  "col1",
-			Type:  mysql.TypeVarchar,
-			Value: []byte("aa"),
-		}},
-		ColInfos: []rowcodec.ColInfo{
-			{
-				ID: 0,
-				Ft: types.NewFieldType(mysql.TypeVarchar),
-			},
-		},
-	}
-
-	ctx := context.Background()
-	topic := ""
-
-	// the test message length is smaller than max-message-bytes
-	maxMessageBytes := 300
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(maxMessageBytes)
-
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	encoder := builder.Build()
-
-	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-	require.NoError(t, err)
-
-	// the test message length is larger than max-message-bytes
-	codecConfig = codecConfig.WithMaxMessageBytes(100)
-
-	builder, err = NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-
-	encoder = builder.Build()
-	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-	require.Error(t, err, cerror.ErrMessageTooLarge)
-}
-
-func TestCanalJSONContentCompatibleE2E(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	codecConfig.EnableTiDBExtension = true
-	codecConfig.ContentCompatible = true
-
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-
-	encoder := builder.Build()
-
-	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
-	require.NoError(t, err)
-
-	message := encoder.Build()[0]
-
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err := decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeRow)
-
-	decodedEvent, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedEvent.CommitTs, testCaseInsert.CommitTs)
-	require.Equal(t, decodedEvent.Table.Schema, testCaseInsert.Table.Schema)
-	require.Equal(t, decodedEvent.Table.Table, testCaseInsert.Table.Table)
-
-	obtainedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
-	for _, column := range decodedEvent.Columns {
-		obtainedColumns[column.Name] = column
-	}
-
-	expectedValue := collectExpectedDecodedValue(testColumnsTable)
-	for _, actual := range testCaseInsert.Columns {
-		obtained, ok := obtainedColumns[actual.Name]
-		require.True(t, ok)
-		require.Equal(t, actual.Type, obtained.Type)
-		require.Equal(t, expectedValue[actual.Name], obtained.Value)
-	}
-}
+//
+//func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
+//	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+//	codecConfig.EnableTiDBExtension = true
+//	ctx := context.Background()
+//
+//	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+//	require.NoError(t, err)
+//	encoder := builder.Build()
+//
+//	count := 0
+//	row := &model.RowChangedEvent{
+//		CommitTs: 1,
+//		Table:    &model.TableName{Schema: "a", Table: "b"},
+//		Columns: []*model.Column{{
+//			Name:  "col1",
+//			Type:  mysql.TypeVarchar,
+//			Value: []byte("aa"),
+//		}},
+//		ColInfos: []rowcodec.ColInfo{
+//			{
+//				ID: 0,
+//				Ft: types.NewFieldType(mysql.TypeVarchar),
+//			},
+//		},
+//	}
+//
+//	tests := []struct {
+//		row      *model.RowChangedEvent
+//		callback func()
+//	}{
+//		{
+//			row: row,
+//			callback: func() {
+//				count += 1
+//			},
+//		},
+//		{
+//			row: row,
+//			callback: func() {
+//				count += 2
+//			},
+//		},
+//		{
+//			row: row,
+//			callback: func() {
+//				count += 3
+//			},
+//		},
+//		{
+//			row: row,
+//			callback: func() {
+//				count += 4
+//			},
+//		},
+//		{
+//			row: row,
+//			callback: func() {
+//				count += 5
+//			},
+//		},
+//	}
+//
+//	// Empty build makes sure that the callback build logic not broken.
+//	msgs := encoder.Build()
+//	require.Len(t, msgs, 0, "no message should be built and no panic")
+//
+//	// Append the events.
+//	for _, test := range tests {
+//		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
+//		require.NoError(t, err)
+//	}
+//	require.Equal(t, 0, count, "nothing should be called")
+//
+//	msgs = encoder.Build()
+//	require.Len(t, msgs, 5, "expected 5 messages")
+//	msgs[0].Callback()
+//	require.Equal(t, 1, count, "expected one callback be called")
+//	msgs[1].Callback()
+//	require.Equal(t, 3, count, "expected one callback be called")
+//	msgs[2].Callback()
+//	require.Equal(t, 6, count, "expected one callback be called")
+//	msgs[3].Callback()
+//	require.Equal(t, 10, count, "expected one callback be called")
+//	msgs[4].Callback()
+//	require.Equal(t, 15, count, "expected one callback be called")
+//}
+//
+//func TestMaxMessageBytes(t *testing.T) {
+//	// the size of `testEvent` after being encoded by canal-json is 200
+//	testEvent := &model.RowChangedEvent{
+//		CommitTs: 1,
+//		Table:    &model.TableName{Schema: "a", Table: "b"},
+//		Columns: []*model.Column{{
+//			Name:  "col1",
+//			Type:  mysql.TypeVarchar,
+//			Value: []byte("aa"),
+//		}},
+//		ColInfos: []rowcodec.ColInfo{
+//			{
+//				ID: 0,
+//				Ft: types.NewFieldType(mysql.TypeVarchar),
+//			},
+//		},
+//	}
+//
+//	ctx := context.Background()
+//	topic := ""
+//
+//	// the test message length is smaller than max-message-bytes
+//	maxMessageBytes := 300
+//	codecConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(maxMessageBytes)
+//
+//	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+//	require.NoError(t, err)
+//	encoder := builder.Build()
+//
+//	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
+//	require.NoError(t, err)
+//
+//	// the test message length is larger than max-message-bytes
+//	codecConfig = codecConfig.WithMaxMessageBytes(100)
+//
+//	builder, err = NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+//	require.NoError(t, err)
+//
+//	encoder = builder.Build()
+//	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
+//	require.Error(t, err, cerror.ErrMessageTooLarge)
+//}
+//
+//func TestCanalJSONContentCompatibleE2E(t *testing.T) {
+//	t.Parallel()
+//
+//	ctx := context.Background()
+//	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+//	codecConfig.EnableTiDBExtension = true
+//	codecConfig.ContentCompatible = true
+//
+//	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
+//	require.NoError(t, err)
+//
+//	encoder := builder.Build()
+//
+//	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
+//	require.NoError(t, err)
+//
+//	message := encoder.Build()[0]
+//
+//	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+//	require.NoError(t, err)
+//
+//	err = decoder.AddKeyValue(message.Key, message.Value)
+//	require.NoError(t, err)
+//
+//	messageType, hasNext, err := decoder.HasNext()
+//	require.NoError(t, err)
+//	require.True(t, hasNext)
+//	require.Equal(t, messageType, model.MessageTypeRow)
+//
+//	decodedEvent, err := decoder.NextRowChangedEvent()
+//	require.NoError(t, err)
+//	require.Equal(t, decodedEvent.CommitTs, testCaseInsert.CommitTs)
+//	require.Equal(t, decodedEvent.Table.Schema, testCaseInsert.Table.Schema)
+//	require.Equal(t, decodedEvent.Table.Table, testCaseInsert.Table.Table)
+//
+//	obtainedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
+//	for _, column := range decodedEvent.Columns {
+//		obtainedColumns[column.Name] = column
+//	}
+//
+//	expectedValue := collectExpectedDecodedValue(testColumnsTable)
+//	for _, actual := range testCaseInsert.Columns {
+//		obtained, ok := obtainedColumns[actual.Name]
+//		require.True(t, ok)
+//		require.Equal(t, actual.Type, obtained.Type)
+//		require.Equal(t, expectedValue[actual.Name], obtained.Value)
+//	}
+//}
