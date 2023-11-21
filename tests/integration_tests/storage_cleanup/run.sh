@@ -8,7 +8,6 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
-
 EXIST_FILES=()
 CLEANED_FILES=()
 function generate_single_table_files() {
@@ -23,7 +22,7 @@ function generate_single_table_files() {
 	table_dir=$workdir/$bucket/$schema/$table/$day
 	mkdir -p $table_dir
 	for i in $(seq 1 $file_cnt); do
-	    file=$table_dir/$i.data
+		file=$table_dir/$i.data
 		touch $file
 		if [ "$should_clean" == "true" ]; then
 			CLEANED_FILES+=($file)
@@ -38,8 +37,8 @@ function generate_single_table_files() {
 
 function generate_historic_files() {
 	local target_bucket="storage_test"
-	yesterday=$(date -d "yesterday" +"%Y-%m-%d") # should not be cleaned since file-expiration-days is 1
-	day_before_yesterday=$(date -d "2 days ago" +"%Y-%m-%d") # should be cleaned 
+	yesterday=$(date -d "yesterday" +"%Y-%m-%d")             # should not be cleaned since file-expiration-days is 1
+	day_before_yesterday=$(date -d "2 days ago" +"%Y-%m-%d") # should be cleaned
 
 	# historic files of table in schema.sql
 	generate_single_table_files $WORK_DIR $target_bucket test multi_data_type $yesterday 10 false
