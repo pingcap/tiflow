@@ -18,13 +18,16 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 )
 
 func TestEncodeCheckpoint(t *testing.T) {
 	t.Parallel()
 
-	enc := NewBuilder().Build()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	enc := NewBuilder(codecConfig).Build()
 
 	checkpoint := 23
 	m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
@@ -52,7 +55,9 @@ func TestEncodeDDLEvent(t *testing.T) {
 	 age int, email varchar(255) not null, key idx_name(name), key idx_name_email(name, email))`
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(1, "test", 1, job.BinlogInfo.TableInfo)
-	enc := NewBuilder().Build()
+
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	enc := NewBuilder(codecConfig).Build()
 	ddlEvent := &model.DDLEvent{
 		StartTs:   1,
 		CommitTs:  2,
@@ -92,7 +97,9 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	 age int, email varchar(255) not null, key idx_name(name), key idx_name_email(name, email))`
 	job := helper.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(1, "test", 1, job.BinlogInfo.TableInfo)
-	enc := NewBuilder().Build()
+
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	enc := NewBuilder(codecConfig).Build()
 	ddlEvent := &model.DDLEvent{
 		StartTs:   1,
 		CommitTs:  2,

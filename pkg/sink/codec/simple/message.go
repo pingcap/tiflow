@@ -53,16 +53,19 @@ const (
 	DeleteType EventType = "DELETE"
 )
 
-// ColumnSchema is the schema of the column.
-type ColumnSchema struct {
+// columnSchema is the schema of the column.
+type columnSchema struct {
+	// ID is used to sort all column schema, should not be exposed to the outside.
+	ID       int64       `json:"-"`
 	Name     string      `json:"name"`
 	DataType string      `json:"dataType"`
 	Nullable bool        `json:"nullable"`
 	Default  interface{} `json:"default"`
 }
 
-func newColumnSchema(col *timodel.ColumnInfo) *ColumnSchema {
-	return &ColumnSchema{
+func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
+	return &columnSchema{
+		ID:       col.ID,
 		Name:     col.Name.O,
 		DataType: col.GetTypeDesc(),
 		Nullable: mysql.HasNotNullFlag(col.GetFlag()),
@@ -70,133 +73,107 @@ func newColumnSchema(col *timodel.ColumnInfo) *ColumnSchema {
 	}
 }
 
-// ToTiColumnInfo converts from TableCol to TiDB ColumnInfo.
-func (c *ColumnSchema) ToTiColumnInfo(indexes []*IndexSchema) (*timodel.ColumnInfo, error) {
+func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.ColumnInfo {
 	col := new(timodel.ColumnInfo)
 
-	col.Name = timodel.NewCIStr(c.Name)
-	tp := types.StrToType(strings.ToLower(strings.TrimSuffix(c.DataType, " UNSIGNED")))
+	col.Name = timodel.NewCIStr(column.Name)
+	tp := types.StrToType(strings.ToLower(strings.TrimSuffix(column.DataType, " UNSIGNED")))
 	col.FieldType = *types.NewFieldType(tp)
-	if strings.Contains(c.DataType, "UNSIGNED") {
+	if strings.Contains(column.DataType, "UNSIGNED") {
 		col.AddFlag(mysql.UnsignedFlag)
 	}
-	if strings.Contains(c.DataType, "BLOB") || strings.Contains(c.DataType, "BINARY") {
+	if strings.Contains(column.DataType, "BLOB") || strings.Contains(column.DataType, "BINARY") {
 		col.SetCharset(charset.CharsetBin)
 	} else {
 		col.SetCharset(charset.CharsetUTF8MB4)
 	}
 
-	var primaryKey *IndexSchema
 	for _, index := range indexes {
-		if index.Primary == "true" {
-			primaryKey = index
+		if index.Primary {
+			for _, name := range index.Columns {
+				if name == column.Name {
+					col.AddFlag(mysql.PriKeyFlag)
+					break
+				}
+			}
 			break
 		}
 	}
 
-	// add primary key flag
-	if primaryKey != nil {
-		for _, name := range primaryKey.Columns {
-			if name == c.Name {
-				col.AddFlag(mysql.PriKeyFlag)
-				break
-			}
-		}
-	}
-
-	if c.Nullable == false {
+	if column.Nullable == false {
 		col.AddFlag(mysql.NotNullFlag)
 	}
 
-	col.DefaultValue = c.Default
+	col.DefaultValue = column.Default
 
-	return col, nil
+	return col
 }
 
 // IndexSchema is the schema of the index.
 type IndexSchema struct {
 	Name     string   `json:"name"`
-	Unique   string   `json:"unique,omitempty"`
-	Primary  string   `json:"primary,omitempty"`
-	Nullable string   `json:"nullable,omitempty"`
+	Unique   bool     `json:"unique,omitempty"`
+	Primary  bool     `json:"primary,omitempty"`
+	Nullable bool     `json:"nullable,omitempty"`
 	Columns  []string `json:"columns"`
 }
 
 // FromTiIndexInfo converts from TiDB IndexInfo to Index.
-func (i *IndexSchema) FromTiIndexInfo(index *timodel.IndexInfo, tableInfo *timodel.TableInfo) {
-	i.Name = index.Name.O
-
-	if index.Unique {
-		i.Unique = "true"
-	} else {
-		i.Unique = "false"
-	}
-
-	if index.Primary {
-		i.Primary = "true"
-	} else {
-		i.Primary = "false"
+func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *IndexSchema {
+	indexSchema := &IndexSchema{
+		Name:    index.Name.O,
+		Unique:  index.Unique,
+		Primary: index.Primary,
 	}
 
 	for _, col := range index.Columns {
-		i.Columns = append(i.Columns, col.Name.O)
-	}
-
-	for _, col := range index.Columns {
-		offset := col.Offset
-		colInfo := tableInfo.Columns[offset]
+		indexSchema.Columns = append(indexSchema.Columns, col.Name.O)
+		colInfo := columns[col.Offset]
 		if mysql.HasNotNullFlag(colInfo.GetFlag()) {
-			i.Nullable = "false"
+			indexSchema.Nullable = false
 			break
 		}
 	}
+	return indexSchema
 }
 
-// ToTiIndexInfo converts from Index to TiDB IndexInfo.
-func (i *IndexSchema) ToTiIndexInfo() (*timodel.IndexInfo, error) {
-	index := new(timodel.IndexInfo)
-	index.Columns = make([]*timodel.IndexColumn, 0)
-	for i, col := range i.Columns {
-		index.Columns = append(index.Columns, &timodel.IndexColumn{
+func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
+	indexColumns := make([]*timodel.IndexColumn, len(indexSchema.Columns))
+	for i, col := range indexSchema.Columns {
+		indexColumns[i] = &timodel.IndexColumn{
 			Name:   timodel.NewCIStr(col),
 			Offset: i,
-		})
+		}
 	}
-	if i.Unique == "true" {
-		index.Unique = true
+
+	return &timodel.IndexInfo{
+		Name:    timodel.NewCIStr(indexSchema.Name),
+		Columns: indexColumns,
+		Unique:  indexSchema.Unique,
+		Primary: indexSchema.Primary,
 	}
-	if i.Primary == "true" {
-		index.Primary = true
-	}
-	return index, nil
 }
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
-	Columns []*ColumnSchema `json:"columns"`
+	Columns []*columnSchema `json:"columns"`
 	Indexes []*IndexSchema  `json:"indexes"`
 }
 
 func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
-	tiColumns := make([]*timodel.ColumnInfo, 0, len(tableInfo.Columns))
+	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
-		tiColumns = append(tiColumns, col.Clone())
-	}
-	// sort by column by its id
-	sort.SliceStable(tiColumns, func(i, j int) bool {
-		return int(tiColumns[i].ID) < int(tiColumns[j].ID)
-	})
-
-	columns := make([]*ColumnSchema, 0, len(tiColumns))
-	for _, col := range tiColumns {
 		columns = append(columns, newColumnSchema(col))
 	}
 
+	// sort by column by its id
+	sort.SliceStable(columns, func(i, j int) bool {
+		return int(columns[i].ID) < int(columns[j].ID)
+	})
+
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
-		index := &IndexSchema{}
-		index.FromTiIndexInfo(idx, tableInfo.TableInfo)
-		indexes = append(indexes, index)
+		indexes = append(indexes, newIndexSchema(idx, tableInfo.TableInfo.Columns))
 	}
 
 	return &TableSchema{
@@ -205,8 +182,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	}
 }
 
-// ToTableInfo converts from TableSchema to TableInfo.
-func (t *TableSchema) ToTableInfo(msg *message) (*model.TableInfo, error) {
+func newTableInfo(msg *message) (*model.TableInfo, error) {
 	info := &model.TableInfo{
 		TableName: model.TableName{
 			Schema: msg.Database,
@@ -216,37 +192,57 @@ func (t *TableSchema) ToTableInfo(msg *message) (*model.TableInfo, error) {
 			Name: timodel.NewCIStr(msg.Table),
 		},
 	}
-	for _, col := range t.Columns {
-		tiCol, err := col.ToTiColumnInfo(t.Indexes)
-		if err != nil {
-			return nil, err
-		}
+	for _, col := range msg.TableSchema.Columns {
+		tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
 		info.Columns = append(info.Columns, tiCol)
 	}
-	for _, idx := range t.Indexes {
-		tiIdx, err := idx.ToTiIndexInfo()
-		if err != nil {
-			return nil, err
-		}
-		info.Indices = append(info.Indices, tiIdx)
+	for _, idx := range msg.TableSchema.Indexes {
+		index := newTiIndexInfo(idx)
+		info.Indices = append(info.Indices, index)
 	}
 
 	return info, nil
 }
 
-// ToDDLEvent converts from message to DDLEvent.
-func (t *TableSchema) ToDDLEvent(msg *message) (*model.DDLEvent, error) {
-	info, err := t.ToTableInfo(msg)
-	if err != nil {
-		return nil, err
-	}
-	return &model.DDLEvent{
-		StartTs:   msg.CommitTs,
-		CommitTs:  msg.CommitTs,
-		TableInfo: info,
-		Query:     msg.SQL,
-	}, nil
+// ToTableInfo converts from TableSchema to TableInfo.
+//func (t *TableSchema) ToTableInfo(msg *message) (*model.TableInfo, error) {
+
+//	for _, col := range t.Columns {
+//		tiCol, err := col.ToTiColumnInfo(t.Indexes)
+//		if err != nil {
+//			return nil, err
+//		}
+//		info.Columns = append(info.Columns, tiCol)
+//	}
+//	for _, idx := range t.Indexes {
+//		tiIdx, err := idx.ToTiIndexInfo()
+//		if err != nil {
+//			return nil, err
+//		}
+//		info.Indices = append(info.Indices, tiIdx)
+//	}
+//
+//	return info, nil
+//}
+
+func newDDLEvent(msg *message) (*model.DDLEvent, error) {
+	info, err :=
 }
+
+
+// ToDDLEvent converts from message to DDLEvent.
+//func (t *TableSchema) ToDDLEvent(msg *message) (*model.DDLEvent, error) {
+//	info, err := t.ToTableInfo(msg)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return &model.DDLEvent{
+//		StartTs:   msg.CommitTs,
+//		CommitTs:  msg.CommitTs,
+//		TableInfo: info,
+//		Query:     msg.SQL,
+//	}, nil
+//}
 
 func buildRowChangedEvent(msg *message) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
@@ -325,6 +321,7 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 	}
 	if ddl.IsBootstrap {
 		msg.Type = BootstrapType
+		msg.SQL = ""
 	}
 
 	return msg
