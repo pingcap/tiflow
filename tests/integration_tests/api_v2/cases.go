@@ -21,12 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-<<<<<<< HEAD
 	"github.com/pingcap/tiflow/pkg/redo"
-=======
-	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/util"
->>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 	"go.uber.org/zap"
 )
 
@@ -38,17 +33,10 @@ var customReplicaConfig = &ReplicaConfig{
 	ForceReplicate:        false,
 	IgnoreIneligibleTable: false,
 	CheckGCSafePoint:      false,
-<<<<<<< HEAD
 	EnableSyncPoint:       false,
 	BDRMode:               false,
 	SyncPointInterval:     &JSONDuration{11 * time.Minute},
 	SyncPointRetention:    &JSONDuration{25 * time.Hour},
-=======
-	BDRMode:               util.AddressOf(false),
-	EnableSyncPoint:       util.AddressOf(false),
-	SyncPointInterval:     util.AddressOf(JSONDuration{duration: 10 * time.Minute}),
-	SyncPointRetention:    util.AddressOf(JSONDuration{duration: 24 * time.Hour}),
->>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 	Filter: &FilterConfig{
 		MySQLReplicationRules: &MySQLReplicationRules{
 			DoTables:     []*Table{{"a", "b"}, {"c", "d"}},
@@ -95,7 +83,6 @@ var customReplicaConfig = &ReplicaConfig{
 				[]string{"c"},
 			},
 		},
-<<<<<<< HEAD
 		TxnAtomicity:             "table",
 		EncoderConcurrency:       20,
 		Terminator:               "a",
@@ -108,19 +95,6 @@ var customReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs: 500,
 		Storage:           "local://test",
 		UseFileBackend:    true,
-=======
-		TxnAtomicity: "table",
-		Terminator:   "a",
-		CSVConfig: &CSVConfig{
-			Quote:      string(config.DoubleQuoteChar),
-			Delimiter:  config.Comma,
-			NullString: config.NULL,
-		},
-		DateSeparator:            "day",
-		EncoderConcurrency:       util.AddressOf(32),
-		EnablePartitionSeparator: util.AddressOf(true),
-		ContentCompatible:        util.AddressOf(true),
->>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -130,36 +104,17 @@ var customReplicaConfig = &ReplicaConfig{
 		IntegrityCheckLevel:   "none",
 		CorruptionHandleLevel: "warn",
 	},
-	Consistent: &ConsistentConfig{
-		Level:                 "none",
-		MaxLogSize:            64,
-		FlushIntervalInMs:     2000,
-		MetaFlushIntervalInMs: 200,
-		Storage:               "",
-		UseFileBackend:        false,
-		EncoderWorkerNum:      31,
-		FlushWorkerNum:        18,
-	},
 }
 
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        1024 * 1024 * 1024,
-<<<<<<< HEAD
 	CaseSensitive:      true,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
 	SyncPointInterval:  &JSONDuration{time.Minute * 10},
 	SyncPointRetention: &JSONDuration{time.Hour * 24},
-=======
-	CaseSensitive:      false,
-	CheckGCSafePoint:   true,
-	EnableSyncPoint:    util.AddressOf(false),
-	SyncPointInterval:  util.AddressOf(JSONDuration{duration: 10 * time.Minute}),
-	SyncPointRetention: util.AddressOf(JSONDuration{duration: 24 * time.Hour}),
-	BDRMode:            util.AddressOf(false),
->>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -168,7 +123,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	Sink: &SinkConfig{
 		CSVConfig: &CSVConfig{
-<<<<<<< HEAD
 			Quote:      string("\""),
 			Delimiter:  ",",
 			NullString: "\\N",
@@ -184,17 +138,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 		Storage:           "",
 		UseFileBackend:    false,
-=======
-			Quote:      string(config.DoubleQuoteChar),
-			Delimiter:  config.Comma,
-			NullString: config.NULL,
-		},
-		Terminator:               "\r\n",
-		DateSeparator:            "day",
-		EncoderConcurrency:       util.AddressOf(32),
-		EnablePartitionSeparator: util.AddressOf(true),
-		ContentCompatible:        util.AddressOf(false),
->>>>>>> 68dc49cba0 (redo(ticdc): fix redo balckhole storage issues (#10023))
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -203,16 +146,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 	Integrity: &IntegrityConfig{
 		IntegrityCheckLevel:   "none",
 		CorruptionHandleLevel: "warn",
-	},
-	Consistent: &ConsistentConfig{
-		Level:                 "none",
-		MaxLogSize:            64,
-		FlushIntervalInMs:     2000,
-		MetaFlushIntervalInMs: 200,
-		EncoderWorkerNum:      16,
-		FlushWorkerNum:        8,
-		Storage:               "",
-		UseFileBackend:        false,
 	},
 }
 
