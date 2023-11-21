@@ -20,8 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
@@ -520,14 +518,24 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	defer worker.close()
 	replicatingStatus := state.TableSinkSinking
 	stoppedStatus := state.TableSinkStopping
+
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
+
 	events := []mqEvent{
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
-					CommitTs: 1,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
-					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+					CommitTs:  1,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "aa"}},
+					ColInfos:  colInfo,
 				},
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
@@ -537,10 +545,11 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
-					CommitTs: 2,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
-					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+					CommitTs:  2,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos:  colInfo,
 				},
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
@@ -550,10 +559,11 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
-					CommitTs: 3,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "cc"}},
-					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+					CommitTs:  3,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "cc"}},
+					ColInfos:  colInfo,
 				},
 				Callback:  func() {},
 				SinkState: &stoppedStatus,
