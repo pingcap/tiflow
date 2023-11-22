@@ -644,7 +644,7 @@ func (m *ddlManager) checkAndBootstrap(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	var bootstrapEvents []*model.DDLEvent
+	bootstrapEvents := make([]*model.DDLEvent, 0, len(tables))
 	for _, table := range tables {
 		ddlEvent := &model.DDLEvent{
 			StartTs:     m.startTs,
@@ -665,8 +665,8 @@ func (m *ddlManager) checkAndBootstrap(ctx context.Context) (bool, error) {
 				m.errCh <- err
 				return
 			}
-			atomic.StoreInt32(&m.bootstrapState, int32(bootstrapStateCompleted))
 		}
+		atomic.StoreInt32(&m.bootstrapState, int32(bootstrapStateCompleted))
 	}()
 	return false, nil
 }

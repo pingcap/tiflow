@@ -396,7 +396,8 @@ func (s *ddlSinkImpl) emitBootstrapEvent(ctx context.Context, ddl *model.DDLEven
 		return errors.Trace(err)
 	}
 	// TODO: change this log to debug level after testing complete.
-	log.Info("emit bootstrap event", zap.Any("bootstrapEvent", ddl))
+	log.Info("emit bootstrap event", zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID), zap.Any("bootstrapEvent", ddl))
 	return nil
 }
 
