@@ -19,9 +19,18 @@ import (
 	"testing"
 	"time"
 
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+=======
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/entry"
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -60,7 +69,13 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 }
 
 func TestNonBatchEncode_SendMessages(t *testing.T) {
-	t.Parallel()
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -73,10 +88,24 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 		Partition: 1,
 	}
 	row := &model.RowChangedEvent{
+<<<<<<< HEAD
 		CommitTs: 1,
 		Table:    &model.TableName{Schema: "a", Table: "b"},
+<<<<<<< HEAD
 		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
 		ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+=======
+		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+=======
+		CommitTs:  1,
+		Table:     &model.TableName{Schema: "test", Table: "t"},
+		TableInfo: tableInfo,
+		Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
+		ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 	}
 	tableStatus := state.TableSinkSinking
 
@@ -254,7 +283,13 @@ func TestBatchEncode_Group(t *testing.T) {
 }
 
 func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
-	t.Parallel()
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
 
 	key1 := TopicPartitionKey{
 		Topic:     "test",
@@ -274,9 +309,11 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
-					CommitTs: 1,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					CommitTs:  1,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					ColInfos:  colInfo,
 				},
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
@@ -321,8 +358,6 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 }
 
 func TestBatchEncode_SendMessages(t *testing.T) {
-	t.Parallel()
-
 	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
@@ -341,14 +376,37 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 	defer cancel()
 	worker, p := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
+
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
+
 	events := []mqEvent{
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+=======
+					CommitTs:  1,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "aa"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -358,10 +416,24 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					CommitTs:  2,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -371,10 +443,24 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "cc"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+=======
+					CommitTs:  3,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "cc"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -384,10 +470,24 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aa", Table: "bb"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					CommitTs:  2,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -397,10 +497,24 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					CommitTs:  2,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -410,10 +524,24 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					CommitTs:  3,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -471,8 +599,6 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 }
 
 func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
-	t.Parallel()
-
 	key1 := TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
@@ -487,14 +613,37 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	defer worker.close()
 	replicatingStatus := state.TableSinkSinking
 	stoppedStatus := state.TableSinkStopping
+
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
+
 	events := []mqEvent{
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 1,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+=======
+					CommitTs:  1,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "aa"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
@@ -504,10 +653,24 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 2,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+=======
+					CommitTs:  2,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
@@ -517,10 +680,24 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 		{
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
+<<<<<<< HEAD
 					CommitTs: 3,
 					Table:    &model.TableName{Schema: "a", Table: "b"},
+<<<<<<< HEAD
 					Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "cc"}},
 					ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+=======
+					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+=======
+					CommitTs:  3,
+					Table:     &model.TableName{Schema: "test", Table: "t"},
+					TableInfo: tableInfo,
+					Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "cc"}},
+					ColInfos:  colInfo,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 				},
 				Callback:  func() {},
 				SinkState: &stoppedStatus,

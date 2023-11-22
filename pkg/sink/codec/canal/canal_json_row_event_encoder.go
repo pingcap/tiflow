@@ -176,7 +176,7 @@ func newJSONMessageForDML(
 				columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
 				if !ok {
 					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
-						"column info not found for column id: %d", e.ColInfos[idx].ID)
+						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
 				}
 				mysqlTypeMap[col.Name] = common.GetMySQLType(columnInfo, config.ContentCompatible)
 			}

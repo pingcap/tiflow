@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding/charmap"
@@ -213,17 +214,8 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 	return result, nil
 }
 
-func extractBasicMySQLType(mysqlType string) string {
-	for i := 0; i < len(mysqlType); i++ {
-		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
-			return mysqlType[:i]
-		}
-	}
-	return mysqlType
-}
-
 func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) *model.Column {
-	mysqlType := common.ExtractBasicMySQLType(mysqlTypeStr)
+	mysqlType := utils.ExtractBasicMySQLType(mysqlTypeStr)
 	result := &model.Column{
 		Type:  mysqlType,
 		Name:  name,
@@ -248,7 +240,7 @@ func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) 
 	}
 
 	var err error
-	if isBinaryMySQLType(mysqlTypeStr) {
+	if common.IsBinaryMySQLType(mysqlTypeStr) {
 		// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
 		encoder := charmap.ISO8859_1.NewEncoder()
 		value, err = encoder.String(data)
@@ -293,8 +285,4 @@ func getDDLActionType(query string) timodel.ActionType {
 	}
 
 	return timodel.ActionNone
-}
-
-func isBinaryMySQLType(mysqlType string) bool {
-	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
 }

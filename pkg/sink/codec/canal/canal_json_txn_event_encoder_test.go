@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -36,26 +37,42 @@ func TestBuildCanalJSONTxnEventEncoder(t *testing.T) {
 }
 
 func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
-	t.Parallel()
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
 
 	// the size of `testEvent` after being encoded by canal-json is 200
 	testEvent := &model.SingleTableTxn{
-		Table: &model.TableName{Schema: "a", Table: "b"},
+		Table: &model.TableName{Schema: "test", Table: "t"},
 		Rows: []*model.RowChangedEvent{
 			{
-				CommitTs: 1,
-				Table:    &model.TableName{Schema: "a", Table: "b"},
+				CommitTs:  1,
+				Table:     &model.TableName{Schema: "test", Table: "t"},
+				TableInfo: tableInfo,
 				Columns: []*model.Column{{
 					Name:  "col1",
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
 				}},
+<<<<<<< HEAD
 				ColInfos: []rowcodec.ColInfo{
 					{
 						ID: 1,
 						Ft: types.NewFieldType(mysql.TypeVarchar),
 					},
 				},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+=======
+<<<<<<< HEAD
+=======
+				ColInfos: colInfos,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 			},
 		},
 	}
@@ -75,7 +92,14 @@ func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
 }
 
 func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
-	t.Parallel()
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
 
 	cfg := common.NewConfig(config.ProtocolCanalJSON)
 	encoder := NewJSONTxnEventEncoderBuilder(cfg).Build()
@@ -84,37 +108,55 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 	count := 0
 
 	txn := &model.SingleTableTxn{
-		Table: &model.TableName{Schema: "a", Table: "b"},
+		Table: &model.TableName{Schema: "test", Table: "t"},
 		Rows: []*model.RowChangedEvent{
 			{
-				CommitTs: 1,
-				Table:    &model.TableName{Schema: "a", Table: "b"},
+				CommitTs:  1,
+				Table:     &model.TableName{Schema: "test", Table: "t"},
+				TableInfo: tableInfo,
 				Columns: []*model.Column{{
-					Name:  "col1",
+					Name:  "a",
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
 				}},
+<<<<<<< HEAD
 				ColInfos: []rowcodec.ColInfo{
 					{
 						ID: 1,
 						Ft: types.NewFieldType(mysql.TypeVarchar),
 					},
 				},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+=======
+<<<<<<< HEAD
+=======
+				ColInfos: colInfos,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 			},
 			{
-				CommitTs: 2,
-				Table:    &model.TableName{Schema: "a", Table: "b"},
+				CommitTs:  2,
+				Table:     &model.TableName{Schema: "test", Table: "t"},
+				TableInfo: tableInfo,
 				Columns: []*model.Column{{
-					Name:  "col1",
+					Name:  "a",
 					Type:  mysql.TypeVarchar,
 					Value: []byte("bb"),
 				}},
+<<<<<<< HEAD
 				ColInfos: []rowcodec.ColInfo{
 					{
 						ID: 1,
 						Ft: types.NewFieldType(mysql.TypeVarchar),
 					},
 				},
+||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
+=======
+<<<<<<< HEAD
+=======
+				ColInfos: colInfos,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+>>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 			},
 		},
 	}
