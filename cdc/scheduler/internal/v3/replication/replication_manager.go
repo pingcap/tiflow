@@ -557,9 +557,9 @@ func (r *Manager) AdvanceCheckpoint(
 	currentPDTime time.Time,
 	barrier *schedulepb.BarrierWithMinTs,
 	redoMetaManager redo.MetaManager,
-) (newCheckpointTs, newResolvedTs model.Ts) {
+) (newCheckpointTs, newResolvedTs model.Ts, newLastSyncTime model.Ts) {
 	var redoFlushedResolvedTs model.Ts
-	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs uint64) (uint64, uint64) {
+	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs, newLastSyncTime uint64) (uint64, uint64, uint64) {
 		flushedMeta := redoMetaManager.GetFlushedMeta()
 		redoFlushedResolvedTs = flushedMeta.ResolvedTs
 		log.Debug("owner gets flushed redo meta",
@@ -578,7 +578,7 @@ func (r *Manager) AdvanceCheckpoint(
 		if barrier.GlobalBarrierTs > newResolvedTs {
 			barrier.GlobalBarrierTs = newResolvedTs
 		}
-		return newCheckpointTs, newResolvedTs
+		return newCheckpointTs, newResolvedTs, newLastSyncTime
 	}
 	defer func() {
 		if redoFlushedResolvedTs != 0 && barrier.GlobalBarrierTs > redoFlushedResolvedTs {
@@ -594,7 +594,7 @@ func (r *Manager) AdvanceCheckpoint(
 	r.slowestSink = tablepb.Span{}
 	var slowestPullerResolvedTs uint64 = math.MaxUint64
 
-	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
+	newCheckpointTs, newResolvedTs, newLastSyncTime = math.MaxUint64, math.MaxUint64, 0
 	cannotProceed := false
 	currentTables.Iter(func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool {
 		tableSpanFound, tableHasHole := false, false
@@ -629,6 +629,9 @@ func (r *Manager) AdvanceCheckpoint(
 					newResolvedTs = table.Checkpoint.ResolvedTs
 				}
 
+				if newLastSyncTime < table.Checkpoint.LastSyncTime {
+					newLastSyncTime = table.Checkpoint.LastSyncTime
+				}
 				// Find the minimum puller resolved ts.
 				if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
 					if slowestPullerResolvedTs > pullerCkpt.ResolvedTs {
@@ -664,9 +667,9 @@ func (r *Manager) AdvanceCheckpoint(
 		if redoMetaManager.Enabled() {
 			// If redo is enabled, GlobalBarrierTs should be limited by redo flushed meta.
 			newResolvedTs = barrier.RedoBarrierTs
-			limitBarrierWithRedo(newCheckpointTs, newResolvedTs)
+			limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncTime)
 		}
-		return checkpointCannotProceed, checkpointCannotProceed
+		return checkpointCannotProceed, checkpointCannotProceed, checkpointCannotProceed
 	}
 
 	// If currentTables is empty, we should advance newResolvedTs to global barrier ts and
@@ -714,10 +717,10 @@ func (r *Manager) AdvanceCheckpoint(
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Uint64("newCheckpointTs", newCheckpointTs),
 			zap.Uint64("newResolvedTs", newResolvedTs))
-		return limitBarrierWithRedo(newCheckpointTs, newResolvedTs)
+		return limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncTime)
 	}
 
-	return newCheckpointTs, newResolvedTs
+	return newCheckpointTs, newResolvedTs, newLastSyncTime
 }
 
 func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {

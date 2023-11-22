@@ -366,6 +366,7 @@ func (p *processor) GetTableSpanStatus(span tablepb.Span, collectStat bool) tabl
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: sinkStats.CheckpointTs,
 			ResolvedTs:   sinkStats.ResolvedTs,
+			LastSyncTime: sinkStats.LastSyncTime,
 		},
 		State: state,
 		Stats: stats,

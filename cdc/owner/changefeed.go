@@ -93,6 +93,7 @@ type changefeed struct {
 	barriers         *barriers
 	feedStateManager FeedStateManager
 	resolvedTs       model.Ts
+	lastSyncTime     model.Ts
 
 	// ddl related fields
 	ddlManager  *ddlManager
@@ -272,7 +273,8 @@ func (c *changefeed) Tick(ctx cdcContext.Context,
 		}
 		return nil
 	})
-	checkpointTs, minTableBarrierTs, err := c.tick(ctx, captures)
+	checkpointTs, minTableBarrierTs, maxLastSyncTime, err := c.tick(ctx, captures)
+	c.lastSyncTime = maxLastSyncTime
 
 	// The tick duration is recorded only if changefeed has completed initialization
 	if c.initialized {
@@ -350,50 +352,50 @@ func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context,
 // tick returns the checkpointTs and minTableBarrierTs.
 func (c *changefeed) tick(ctx cdcContext.Context,
 	captures map[model.CaptureID]*model.CaptureInfo,
-) (model.Ts, model.Ts, error) {
+) (model.Ts, model.Ts, model.Ts, error) {
 	adminJobPending := c.feedStateManager.Tick(c.resolvedTs, c.latestStatus, c.latestInfo)
 	preCheckpointTs := c.latestInfo.GetCheckpointTs(c.latestStatus)
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure all changefeeds, no matter whether they are running or not, will be checked.
 	if err := c.checkStaleCheckpointTs(ctx, c.latestInfo, preCheckpointTs); err != nil {
-		return 0, 0, errors.Trace(err)
+		return 0, 0, 0, errors.Trace(err)
 	}
 
 	if !c.feedStateManager.ShouldRunning() {
 		c.isRemoved = c.feedStateManager.ShouldRemoved()
 		c.releaseResources(ctx)
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 
 	if adminJobPending {
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 
 	if err := c.initialize(ctx); err != nil {
-		return 0, 0, errors.Trace(err)
+		return 0, 0, 0, errors.Trace(err)
 	}
 
 	select {
 	case err := <-c.errCh:
-		return 0, 0, errors.Trace(err)
+		return 0, 0, 0, errors.Trace(err)
 	default:
 	}
 
 	if c.redoMetaMgr.Enabled() {
 		if !c.redoMetaMgr.Running() {
-			return 0, 0, nil
+			return 0, 0, 0, nil
 		}
 	}
 
 	// TODO: pass table checkpointTs when we support concurrent process ddl
 	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
 	if err != nil {
-		return 0, 0, errors.Trace(err)
+		return 0, 0, 0, errors.Trace(err)
 	}
 
 	err = c.handleBarrier(ctx, c.latestInfo, c.latestStatus, barrier)
 	if err != nil {
-		return 0, 0, errors.Trace(err)
+		return 0, 0, 0, errors.Trace(err)
 	}
 
 	log.Debug("owner handles barrier",
@@ -409,14 +411,14 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
 		// So we return here.
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 
-	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
+	newCheckpointTs, newResolvedTs, newLastSyncTime, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
 		barrier)
 	if err != nil {
-		return 0, 0, errors.Trace(err)
+		return 0, 0, 0, errors.Trace(err)
 	}
 
 	pdTime := c.upstream.PDClock.CurrentTime()
@@ -430,7 +432,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 			// advance the watermarks for now.
 			c.updateMetrics(currentTs, c.latestStatus.CheckpointTs, c.resolvedTs)
 		}
-		return 0, 0, nil
+		return 0, 0, 0, nil
 	}
 
 	log.Debug("owner prepares to update status",
@@ -463,7 +465,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	c.updateMetrics(currentTs, newCheckpointTs, c.resolvedTs)
 	c.tickDownstreamObserver(ctx)
 
-	return newCheckpointTs, barrier.MinTableBarrierTs, nil
+	return newCheckpointTs, barrier.MinTableBarrierTs, newLastSyncTime, nil
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {

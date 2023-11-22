@@ -218,6 +218,12 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 	return t.tableSink.s.UpdateResolvedTs(ts)
 }
 
+func (t *tableSinkWrapper) getLastSyncTime() uint64 {
+	t.tableSink.RLock()
+	defer t.tableSink.RUnlock()
+	return t.tableSink.s.GetLastSyncTime()
+}
+
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
 	t.tableSink.RLock()
 	defer t.tableSink.RUnlock()

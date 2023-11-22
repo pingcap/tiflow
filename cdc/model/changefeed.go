@@ -629,3 +629,9 @@ type ChangeFeedStatusForAPI struct {
 	ResolvedTs   uint64 `json:"resolved-ts"`
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
+
+type ChangeFeedSyncedStatusForAPI struct {
+	ResolvedTs   uint64 `json:"resolved-ts"`
+	CheckpointTs uint64 `json:"checkpoint-ts"`
+	LastSyncTime uint64 `json:"last-sync-time"`
+}

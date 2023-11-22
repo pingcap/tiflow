@@ -27,6 +27,8 @@ type StatusProvider interface {
 	// GetChangeFeedStatus returns a changefeeds' runtime status.
 	GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error)
 
+	GetChangeFeedSyncedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedSyncedStatusForAPI, error)
+
 	// GetChangeFeedInfo returns a changefeeds' info.
 	GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error)
 
@@ -63,6 +65,8 @@ const (
 	QueryChangefeedInfo
 	// QueryChangeFeedStatuses is the type of query changefeed status
 	QueryChangeFeedStatuses
+	// QueryChangeFeedSyncedStatus is the type of query changefeed synced status
+	QueryChangeFeedSyncedStatus
 )
 
 // Query wraps query command and return results.
@@ -96,6 +100,22 @@ func (p *ownerStatusProvider) GetChangeFeedStatus(ctx context.Context,
 		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID)
 	}
 	return query.Data.(*model.ChangeFeedStatusForAPI), nil
+}
+
+func (p *ownerStatusProvider) GetChangeFeedSyncedStatus(ctx context.Context,
+	changefeedID model.ChangeFeedID,
+) (*model.ChangeFeedSyncedStatusForAPI, error) {
+	query := &Query{
+		Tp:           QueryChangeFeedSyncedStatus,
+		ChangeFeedID: changefeedID,
+	}
+	if err := p.sendQueryToOwner(ctx, query); err != nil {
+		return nil, errors.Trace(err)
+	}
+	if query.Data == nil {
+		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID)
+	}
+	return query.Data.(*model.ChangeFeedSyncedStatusForAPI), nil
 }
 
 func (p *ownerStatusProvider) GetChangeFeedInfo(ctx context.Context,

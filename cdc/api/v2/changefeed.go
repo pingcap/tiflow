@@ -895,6 +895,84 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 	})
 }
 
+func (h *OpenAPIV2) synced(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+	status, err := h.capture.StatusProvider().GetChangeFeedSyncedStatus(
+		ctx,
+		changefeedID,
+	)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	// get pd_now
+	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
+
+	if err := c.BindJSON(&cfg); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	if len(cfg.PDAddrs) == 0 {
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		cfg.PDConfig = getUpstreamPDConfig(up)
+	}
+	credential := cfg.PDConfig.toCredential()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+	defer pdClient.Close()
+	if err != nil {
+		// _ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
+		// return
+		// means pd is offline
+		c.JSON(http.StatusOK, map[string]any{
+			"Synced":       false,
+			"CheckpointTs": status.CheckpointTs,
+			"ResolvedTs":   status.ResolvedTs,
+			"LastSyncTime": status.LastSyncTime,
+			"info":         "xxxxx",
+		})
+		return
+	}
+
+	//TSO 是啥？
+	now, _, _ := pdClient.GetTS(ctx)
+	// get pd_now
+	// 随便写一个先
+	if (now-int64(status.LastSyncTime) > 60*5) && (now-int64(status.CheckpointTs) < 5) {
+		c.JSON(http.StatusOK, map[string]any{
+			"Synced":       true,
+			"CheckpointTs": status.CheckpointTs,
+			"ResolvedTs":   status.ResolvedTs,
+			"LastSyncTime": status.LastSyncTime,
+			"info":         "",
+		})
+	} else {
+		c.JSON(http.StatusOK, map[string]any{
+			"Synced":       false,
+			"CheckpointTs": status.CheckpointTs,
+			"ResolvedTs":   status.ResolvedTs,
+			"LastSyncTime": status.LastSyncTime,
+			"info":         "xxxxx",
+		})
+	}
+
+}
+
 func toAPIModel(
 	info *model.ChangeFeedInfo,
 	resolvedTs uint64,

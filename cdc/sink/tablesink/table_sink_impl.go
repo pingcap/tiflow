@@ -15,6 +15,7 @@ package tablesink
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -31,7 +32,13 @@ var (
 	_ TableSink = (*EventTableSink[*model.SingleTableTxn, *dmlsink.TxnEventAppender])(nil)
 )
 
+type LastSyncTimeRecord struct {
+	sync.Mutex
+	lastSyncTime uint64
+}
+
 // EventTableSink is a table sink that can write events.
+
 type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
 	changefeedID model.ChangeFeedID
 	span         tablepb.Span
@@ -45,6 +52,8 @@ type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	state       state.TableSinkState
+
+	lastSyncTime LastSyncTimeRecord
 
 	// For dataflow metrics.
 	metricsTableSinkTotalRows prometheus.Counter
@@ -69,6 +78,7 @@ func New[E dmlsink.TableEvent, P dmlsink.Appender[E]](
 		eventAppender:             appender,
 		eventBuffer:               make([]E, 0, 1024),
 		state:                     state.TableSinkSinking,
+		lastSyncTime:              LastSyncTimeRecord{lastSyncTime: 0}, // use 0 to initialize lastSyncTime
 		metricsTableSinkTotalRows: totalRowsCounter,
 	}
 }
@@ -115,8 +125,20 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 		}
 		// We have to record the event ID for the callback.
 		ce := &dmlsink.CallbackableEvent[E]{
-			Event:     ev,
-			Callback:  e.progressTracker.addEvent(),
+			Event: ev,
+			Callback: func() {
+				// Due to multi workers will call this callback concurrently,
+				// we need to add lock to protect lastSyncTime
+				// we need make a performance test for it
+				{
+					e.lastSyncTime.Lock()
+					defer e.lastSyncTime.Unlock()
+					if e.lastSyncTime.lastSyncTime < ev.GetCommitTs() {
+						e.lastSyncTime.lastSyncTime = ev.GetCommitTs()
+					}
+				}
+				e.progressTracker.addEvent()
+			},
 			SinkState: &e.state,
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
@@ -138,6 +160,13 @@ func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
 		}
 	}
 	return e.progressTracker.advance()
+}
+
+// GetLastSyncTime returns the lastSyncTime ts of the table sink.
+func (e *EventTableSink[E, P]) GetLastSyncTime() uint64 {
+	e.lastSyncTime.Lock()
+	defer e.lastSyncTime.Unlock()
+	return e.lastSyncTime.lastSyncTime
 }
 
 // Close closes the table sink.
