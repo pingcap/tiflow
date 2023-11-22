@@ -26,6 +26,13 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
+=======
+	"github.com/pingcap/tiflow/pkg/sink/codec"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 	"go.uber.org/zap"
 )
 
@@ -59,7 +66,16 @@ func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 }
 
 func fillColumns(
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 	columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool, builder *canalEntryBuilder,
+=======
+	columns []*model.Column,
+	onlyOutputUpdatedColumn bool,
+	onlyHandleKeyColumn bool,
+	newColumnMap map[string]*model.Column,
+	out *jwriter.Writer,
+	builder *canalEntryBuilder,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 ) error {
 	if len(columns) == 0 {
 		out.RawString("null")
@@ -78,12 +94,16 @@ func fillColumns(
 			} else {
 				out.RawByte(',')
 			}
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 			mysqlType := getMySQLType(col)
 			javaType, err := getJavaSQLType(col, mysqlType)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
 			value, err := builder.formatValue(col.Value, javaType)
+=======
+			value, err := builder.formatValue(col.Value, col.Flag.IsBinary())
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
@@ -112,6 +132,10 @@ func newJSONMessageForDML(
 		onlyHandleKey = true
 	}
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
+=======
+	mysqlTypeMap := make(map[string]string, len(e.Columns))
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 	out := &jwriter.Writer{}
 	out.RawByte('{')
 	{
@@ -198,7 +222,16 @@ func newJSONMessageForDML(
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 				mysqlTypeMap[col.Name] = mysqlType
+=======
+				columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+				if !ok {
+					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
+				}
+				mysqlTypeMap[col.Name] = utils.GetMySQLType(columnInfo, config.ContentCompatible)
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			}
 		}
 		if emptyColumn {
@@ -232,22 +265,46 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 		if err := fillColumns(e.PreColumns, out, onlyHandleKey, builder); err != nil {
+=======
+		if err := fillColumns(
+			e.PreColumns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 		if err := fillColumns(e.Columns, out, onlyHandleKey, builder); err != nil {
+=======
+		if err := fillColumns(
+			e.Columns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			return nil, err
 		}
 	} else if e.IsUpdate() {
 		out.RawString(",\"old\":")
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 		if err := fillColumns(e.PreColumns, out, onlyHandleKey, builder); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
 		if err := fillColumns(e.Columns, out, onlyHandleKey, builder); err != nil {
+=======
+		if err := fillColumns(
+			e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder,
+		); err != nil {
+			return nil, err
+		}
+		out.RawString(",\"data\":")
+		if err := fillColumns(
+			e.Columns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			return nil, err
 		}
 	} else {

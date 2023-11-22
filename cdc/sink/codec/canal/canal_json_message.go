@@ -18,10 +18,15 @@ import (
 	"strings"
 
 	timodel "github.com/pingcap/tidb/parser/model"
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_message.go
 	"github.com/pingcap/tidb/parser/types"
+=======
+	"github.com/pingcap/tidb/parser/mysql"
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_message.go
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	canal "github.com/pingcap/tiflow/proto/canal"
 )
 
@@ -212,6 +217,52 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 	return result, nil
 }
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_message.go
+=======
+func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) *model.Column {
+	mysqlType := utils.ExtractBasicMySQLType(mysqlTypeStr)
+	result := &model.Column{
+		Type:  mysqlType,
+		Name:  name,
+		Value: value,
+	}
+	if result.Value == nil {
+		return result
+	}
+
+	data, ok := value.(string)
+	if !ok {
+		log.Panic("canal-json encoded message should have type in `string`")
+	}
+
+	if mysqlType == mysql.TypeBit || mysqlType == mysql.TypeSet {
+		val, err := strconv.ParseUint(data, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for bit", zap.Any("col", result), zap.Error(err))
+		}
+		result.Value = val
+		return result
+	}
+
+	var err error
+	if isBinaryMySQLType(mysqlTypeStr) {
+		// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
+		encoder := charmap.ISO8859_1.NewEncoder()
+		value, err = encoder.String(data)
+		if err != nil {
+			log.Panic("invalid column value, please report a bug", zap.Any("col", result), zap.Error(err))
+		}
+	}
+
+	result.Value = value
+	return result
+}
+
+func isBinaryMySQLType(mysqlType string) bool {
+	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
+}
+
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_json_message.go
 func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {
 	result := new(model.DDLEvent)
 	// we lost the startTs from kafka message

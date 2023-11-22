@@ -19,13 +19,22 @@ import (
 	"github.com/golang/protobuf/proto"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry_test.go
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
+=======
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry_test.go
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
 )
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry_test.go
 func TestGetMySQLTypeAndJavaSQLType(t *testing.T) {
 	t.Parallel()
 	canalEntryBuilder := newCanalEntryBuilder()
@@ -55,18 +64,43 @@ func TestConvertEntry(t *testing.T) {
 
 func testInsert(t *testing.T) {
 	testCaseInsert := &model.RowChangedEvent{
+=======
+func TestInsert(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(
+		id int primary key,
+		name varchar(32),
+		tiny tinyint unsigned,
+		comment text,
+		bb blob)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
+	event := &model.RowChangedEvent{
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry_test.go
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",
 			Table:  "person",
 		},
+		TableInfo: tableInfo,
 		Columns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
 			{Name: "tiny", Type: mysql.TypeTiny, Value: 255},
 			{Name: "comment", Type: mysql.TypeBlob, Value: []byte("测试")},
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry_test.go
 			{Name: "blob", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
 		},
+=======
+			{Name: "bb", Type: mysql.TypeBlob, Value: []byte("测试blob"), Flag: model.BinaryFlag},
+		},
+		ColInfos: colInfos,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry_test.go
 	}
 
 	builder := newCanalEntryBuilder()
@@ -117,7 +151,7 @@ func testInsert(t *testing.T) {
 			require.Nil(t, err)
 			require.Equal(t, "测试", col.GetValue())
 			require.Equal(t, "text", col.GetMysqlType())
-		case "blob":
+		case "bb":
 			require.Equal(t, int32(internal.JavaSQLTypeBLOB), col.GetSqlType())
 			require.False(t, col.GetIsKey())
 			require.False(t, col.GetIsNull())
@@ -129,13 +163,28 @@ func testInsert(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry_test.go
 func testUpdate(t *testing.T) {
 	testCaseUpdate := &model.RowChangedEvent{
+=======
+func TestUpdate(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(id int primary key, name varchar(32))`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
+	event := &model.RowChangedEvent{
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry_test.go
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
-			Schema: "cdc",
-			Table:  "person",
+			Schema: "test",
+			Table:  "t",
 		},
+		TableInfo: tableInfo,
 		Columns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Bob"},
@@ -144,6 +193,10 @@ func testUpdate(t *testing.T) {
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 2},
 			{Name: "name", Type: mysql.TypeVarchar, Value: "Nancy"},
 		},
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry_test.go
+=======
+		ColInfos: colInfos,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry_test.go
 	}
 	builder := newCanalEntryBuilder()
 	entry, err := builder.fromRowEvent(testCaseUpdate, false)
@@ -206,16 +259,35 @@ func testUpdate(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry_test.go
 func testDelete(t *testing.T) {
 	testCaseDelete := &model.RowChangedEvent{
+=======
+func TestDelete(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(id int primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
+	event := &model.RowChangedEvent{
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry_test.go
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
-			Schema: "cdc",
-			Table:  "person",
+			Schema: "test",
+			Table:  "t",
 		},
+		TableInfo: tableInfo,
 		PreColumns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
 		},
+<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry_test.go
+=======
+		ColInfos: colInfos,
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry_test.go
 	}
 
 	builder := newCanalEntryBuilder()
