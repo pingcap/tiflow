@@ -30,10 +30,10 @@ func TestGetMySQLTypeAndJavaSQLType(t *testing.T) {
 	t.Parallel()
 	canalEntryBuilder := newCanalEntryBuilder()
 	for _, item := range testColumnsTable {
-		obtainedMySQLType := getMySQLType(item.column)
+		obtainedMySQLType := getMySQLType(item.column.Type, item.column.Flag)
 		require.Equal(t, item.expectedMySQLType, obtainedMySQLType)
 
-		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
+		obtainedJavaSQLType, err := getJavaSQLType(item.column.Value, item.column.Type, item.column.Flag)
 		require.Nil(t, err)
 		require.Equal(t, item.expectedJavaSQLType, obtainedJavaSQLType)
 
