@@ -61,6 +61,8 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },
@@ -215,6 +217,8 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },
@@ -277,6 +281,8 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },

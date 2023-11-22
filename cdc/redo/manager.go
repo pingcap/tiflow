@@ -496,7 +496,10 @@ func (m *logManager) bgUpdateLog(ctx context.Context, flushDuration time.Duratio
 	log.Info("redo manager bgUpdateLog is running",
 		zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 		zap.String("changefeed", m.cfg.ChangeFeedID.ID),
-		zap.Duration("flushIntervalInMs", flushDuration))
+		zap.Duration("flushIntervalInMs", flushDuration),
+		zap.Int64("maxLogSize", m.cfg.MaxLogSize),
+		zap.Int("encoderWorkerNum", m.cfg.EncodingWorkerNum),
+		zap.Int("flushWorkerNum", m.cfg.FlushWorkerNum))
 
 	var err error
 	// logErrCh is used to retrieve errors from log flushing goroutines.

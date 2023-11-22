@@ -275,6 +275,8 @@ type ConsistentConfig struct {
 	MaxLogSize            int64  `json:"max_log_size"`
 	FlushIntervalInMs     int64  `json:"flush_interval"`
 	MetaFlushIntervalInMs int64  `json:"meta_flush_interval"`
+	EncodingWorkerNum     int    `json:"encoding_worker_num"`
+	FlushWorkerNum        int    `json:"flush_worker_num"`
 	Storage               string `json:"storage"`
 	UseFileBackend        bool   `json:"use_file_backend"`
 }
