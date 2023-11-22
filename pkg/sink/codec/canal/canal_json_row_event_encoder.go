@@ -26,6 +26,11 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 	"go.uber.org/zap"
 )
 
@@ -56,12 +61,16 @@ func fillColumns(columns []*model.Column, out *jwriter.Writer,
 			} else {
 				out.RawByte(',')
 			}
+<<<<<<< HEAD
 			mysqlType := getMySQLType(col)
 			javaType, err := getJavaSQLType(col, mysqlType)
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
 			value, err := builder.formatValue(col.Value, javaType)
+=======
+			value, err := builder.formatValue(col.Value, col.Flag.IsBinary())
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
@@ -93,6 +102,10 @@ func newJSONMessageForDML(
 		onlyHandleKey = true
 	}
 
+<<<<<<< HEAD
+=======
+	mysqlTypeMap := make(map[string]string, len(e.Columns))
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 	out := &jwriter.Writer{}
 	out.RawByte('{')
 	{
@@ -179,7 +192,16 @@ func newJSONMessageForDML(
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
+<<<<<<< HEAD
 				mysqlTypeMap[col.Name] = mysqlType
+=======
+				columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+				if !ok {
+					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
+				}
+				mysqlTypeMap[col.Name] = utils.GetMySQLType(columnInfo, config.ContentCompatible)
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 			}
 		}
 		if emptyColumn {
@@ -213,13 +235,25 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
+<<<<<<< HEAD
 		if err := fillColumns(e.PreColumns, out, false, onlyHandleKey, nil, builder); err != nil {
+=======
+		if err := fillColumns(
+			e.PreColumns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
+<<<<<<< HEAD
 		if err := fillColumns(e.Columns, out, false, onlyHandleKey, nil, builder); err != nil {
+=======
+		if err := fillColumns(
+			e.Columns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 			return nil, err
 		}
 	} else if e.IsUpdate() {
@@ -231,11 +265,23 @@ func newJSONMessageForDML(
 			}
 		}
 		out.RawString(",\"old\":")
+<<<<<<< HEAD
 		if err := fillColumns(e.PreColumns, out, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, builder); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
 		if err := fillColumns(e.Columns, out, false, onlyHandleKey, nil, builder); err != nil {
+=======
+		if err := fillColumns(
+			e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder,
+		); err != nil {
+			return nil, err
+		}
+		out.RawString(",\"data\":")
+		if err := fillColumns(
+			e.Columns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 			return nil, err
 		}
 	} else {

@@ -14,8 +14,11 @@
 package canal
 
 import (
+	"testing"
+
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
+<<<<<<< HEAD
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 )
@@ -24,6 +27,14 @@ type testColumnTuple struct {
 	column              *model.Column
 	expectedMySQLType   string
 	expectedJavaSQLType internal.JavaSQLType
+=======
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+)
+
+type testColumnTuple struct {
+	column *model.Column
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 
 	// expectedEncodedValue is expected by encoding
 	expectedEncodedValue string
@@ -35,171 +46,273 @@ type testColumnTuple struct {
 var (
 	testColumnsTable = []*testColumnTuple{
 		{
+<<<<<<< HEAD
 			&model.Column{Name: "tinyint", Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Type: mysql.TypeTiny, Value: int64(127)},
 			"tinyint", internal.JavaSQLTypeTINYINT, "127", "127",
+=======
+			&model.Column{Name: "t", Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Type: mysql.TypeTiny, Value: int64(127)},
+			"127", "127",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 
 		{
 			&model.Column{
-				Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127),
+				Name: "tu1", Type: mysql.TypeTiny, Value: uint64(127),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "127", "127",
+=======
+			"127", "127",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 
 		{
 			&model.Column{
-				Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128),
+				Name: "tu2", Type: mysql.TypeTiny, Value: uint64(128),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"tinyint unsigned", internal.JavaSQLTypeSMALLINT, "128", "128",
+=======
+			"128", "128",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 
 		{
 			&model.Column{
-				Name: "tinyint unsigned 3", Type: mysql.TypeTiny, Value: "0",
+				Name: "tu3", Type: mysql.TypeTiny, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "0", "0",
+=======
+			"0", "0",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 
 		{
 			&model.Column{
-				Name: "tinyint unsigned 4", Type: mysql.TypeTiny, Value: nil,
+				Name: "tu4", Type: mysql.TypeTiny, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
+<<<<<<< HEAD
 			"tinyint unsigned", internal.JavaSQLTypeTINYINT, "", nil,
 		},
 
 		{
 			&model.Column{Name: "smallint", Type: mysql.TypeShort, Value: int64(32767)},
 			"smallint", internal.JavaSQLTypeSMALLINT, "32767", "32767",
+=======
+			"", nil,
+		},
+
+		{
+			&model.Column{Name: "s", Type: mysql.TypeShort, Value: int64(32767)},
+			"32767", "32767",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767),
+				Name: "su1", Type: mysql.TypeShort, Value: uint64(32767),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "32767", "32767",
+=======
+			"32767", "32767",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768),
+				Name: "su2", Type: mysql.TypeShort, Value: uint64(32768),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"smallint unsigned", internal.JavaSQLTypeINTEGER, "32768", "32768",
+=======
+			"32768", "32768",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "smallint unsigned 3", Type: mysql.TypeShort, Value: "0",
+				Name: "su3", Type: mysql.TypeShort, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "0", "0",
+=======
+			"0", "0",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "smallint unsigned 4", Type: mysql.TypeShort, Value: nil,
+				Name: "su4", Type: mysql.TypeShort, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
+<<<<<<< HEAD
 			"smallint unsigned", internal.JavaSQLTypeSMALLINT, "", nil,
 		},
 
 		{
 			&model.Column{Name: "mediumint", Type: mysql.TypeInt24, Value: int64(8388607)},
 			"mediumint", internal.JavaSQLTypeINTEGER, "8388607", "8388607",
+=======
+			"", nil,
+		},
+
+		{
+			&model.Column{Name: "m", Type: mysql.TypeInt24, Value: int64(8388607)},
+			"8388607", "8388607",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607),
+				Name: "mu1", Type: mysql.TypeInt24, Value: uint64(8388607),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "8388607", "8388607",
+=======
+			"8388607", "8388607",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608),
+				Name: "mu2", Type: mysql.TypeInt24, Value: uint64(8388608),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "8388608", "8388608",
+=======
+			"8388608", "8388608",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "mediumint unsigned 3", Type: mysql.TypeInt24, Value: "0",
+				Name: "mu3", Type: mysql.TypeInt24, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "0", "0",
+=======
+			"0", "0",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "mediumint unsigned 4", Type: mysql.TypeInt24, Value: nil,
+				Name: "mu4", Type: mysql.TypeInt24, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
+<<<<<<< HEAD
 			"mediumint unsigned", internal.JavaSQLTypeINTEGER, "", nil,
 		},
 
 		{
 			&model.Column{Name: "int", Type: mysql.TypeLong, Value: int64(2147483647)},
 			"int", internal.JavaSQLTypeINTEGER, "2147483647", "2147483647",
+=======
+			"", nil,
+		},
+
+		{
+			&model.Column{Name: "i", Type: mysql.TypeLong, Value: int64(2147483647)},
+			"2147483647", "2147483647",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647),
+				Name: "iu1", Type: mysql.TypeLong, Value: uint64(2147483647),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"int unsigned", internal.JavaSQLTypeINTEGER, "2147483647", "2147483647",
+=======
+			"2147483647", "2147483647",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648),
+				Name: "iu2", Type: mysql.TypeLong, Value: uint64(2147483648),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"int unsigned", internal.JavaSQLTypeBIGINT, "2147483648", "2147483648",
+=======
+			"2147483648", "2147483648",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "int unsigned 3", Type: mysql.TypeLong, Value: "0",
+				Name: "iu3", Type: mysql.TypeLong, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"int unsigned", internal.JavaSQLTypeINTEGER, "0", "0",
+=======
+			"0", "0",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "int unsigned 4", Type: mysql.TypeLong, Value: nil,
+				Name: "iu4", Type: mysql.TypeLong, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
+<<<<<<< HEAD
 			"int unsigned", internal.JavaSQLTypeINTEGER, "", nil,
 		},
 
 		{
 			&model.Column{Name: "bigint", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)},
 			"bigint", internal.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
+=======
+			"", nil,
+		},
+
+		{
+			&model.Column{Name: "bi", Type: mysql.TypeLonglong, Value: int64(9223372036854775807)},
+			"9223372036854775807", "9223372036854775807",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "bigint unsigned", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807),
+				Name: "biu1", Type: mysql.TypeLonglong, Value: uint64(9223372036854775807),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"bigint unsigned", internal.JavaSQLTypeBIGINT, "9223372036854775807", "9223372036854775807",
+=======
+			"9223372036854775807", "9223372036854775807",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "bigint unsigned 2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808),
+				Name: "biu2", Type: mysql.TypeLonglong, Value: uint64(9223372036854775808),
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"bigint unsigned", internal.JavaSQLTypeDECIMAL, "9223372036854775808", "9223372036854775808",
+=======
+			"9223372036854775808", "9223372036854775808",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "bigint unsigned 3", Type: mysql.TypeLonglong, Value: "0",
+				Name: "biu3", Type: mysql.TypeLonglong, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"bigint unsigned", internal.JavaSQLTypeBIGINT, "0", "0",
+=======
+			"0", "0",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "bigint unsigned 4", Type: mysql.TypeLonglong, Value: nil,
+				Name: "biu4", Type: mysql.TypeLonglong, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
+<<<<<<< HEAD
 			"bigint unsigned", internal.JavaSQLTypeBIGINT, "", nil,
 		},
 
@@ -214,6 +327,22 @@ var (
 		{
 			&model.Column{Name: "decimal", Type: mysql.TypeNewDecimal, Value: "2333"},
 			"decimal", internal.JavaSQLTypeDECIMAL, "2333", "2333",
+=======
+			"", nil,
+		},
+
+		{
+			&model.Column{Name: "floatT", Type: mysql.TypeFloat, Value: 3.14},
+			"3.14", "3.14",
+		},
+		{
+			&model.Column{Name: "doubleT", Type: mysql.TypeDouble, Value: 2.71},
+			"2.71", "2.71",
+		},
+		{
+			&model.Column{Name: "decimalT", Type: mysql.TypeNewDecimal, Value: "2333"},
+			"2333", "2333",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 
 		{
@@ -221,52 +350,87 @@ var (
 				Name: "float unsigned", Type: mysql.TypeFloat, Value: 3.14,
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"float unsigned", internal.JavaSQLTypeREAL, "3.14", "3.14",
+=======
+			"3.14", "3.14",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
 				Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71,
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"double unsigned", internal.JavaSQLTypeDOUBLE, "2.71", "2.71",
+=======
+			"2.71", "2.71",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
 				Name: "decimal unsigned", Type: mysql.TypeNewDecimal, Value: "2333",
 				Flag: model.UnsignedFlag,
 			},
+<<<<<<< HEAD
 			"decimal unsigned", internal.JavaSQLTypeDECIMAL, "2333", "2333",
+=======
+			"2333", "2333",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 
 		// for column value type in `[]uint8` and have `BinaryFlag`, expectedEncodedValue is dummy.
 		{
+<<<<<<< HEAD
 			&model.Column{Name: "varchar", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")},
 			"varchar", internal.JavaSQLTypeVARCHAR, "测试Varchar", "测试Varchar",
 		},
 		{
 			&model.Column{Name: "char", Type: mysql.TypeString, Value: []uint8("测试String")},
 			"char", internal.JavaSQLTypeCHAR, "测试String", "测试String",
+=======
+			&model.Column{Name: "varcharT", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")},
+			"测试Varchar", "测试Varchar",
+		},
+		{
+			&model.Column{Name: "charT", Type: mysql.TypeString, Value: []uint8("测试String")},
+			"测试String", "测试String",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "binary", Type: mysql.TypeString, Value: []uint8("测试Binary"),
+				Name: "binaryT", Type: mysql.TypeString, Value: []uint8("测试Binary"),
 				Flag: model.BinaryFlag,
 			},
+<<<<<<< HEAD
 			"binary", internal.JavaSQLTypeBLOB, "测试Binary", "测试Binary",
+=======
+			"测试Binary", "测试Binary",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "varbinary", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
+				Name: "varbinaryT", Type: mysql.TypeVarchar, Value: []uint8("测试varbinary"),
 				Flag: model.BinaryFlag,
 			},
+<<<<<<< HEAD
 			"varbinary", internal.JavaSQLTypeBLOB, "测试varbinary", "测试varbinary",
 		},
 
 		{
 			&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
 			"tinytext", internal.JavaSQLTypeCLOB, "测试Tinytext", "测试Tinytext",
+=======
+			"测试varbinary", "测试varbinary",
+		},
+
+		{
+			&model.Column{Name: "tinytextT", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
+			"测试Tinytext", "测试Tinytext",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
+<<<<<<< HEAD
 			&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")},
 			"text", internal.JavaSQLTypeCLOB, "测试text", "测试text",
 		},
@@ -280,34 +444,59 @@ var (
 		{
 			&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")},
 			"longtext", internal.JavaSQLTypeCLOB, "测试longtext", "测试longtext",
+=======
+			&model.Column{Name: "textT", Type: mysql.TypeBlob, Value: []uint8("测试text")},
+			"测试text", "测试text",
+		},
+		{
+			&model.Column{Name: "mediumtextT", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")},
+			"测试mediumtext", "测试mediumtext",
+		},
+		{
+			&model.Column{Name: "longtextT", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")},
+			"测试longtext", "测试longtext",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 
 		{
 			&model.Column{
-				Name: "tinyblob", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"),
+				Name: "tinyblobT", Type: mysql.TypeTinyBlob, Value: []uint8("测试tinyblob"),
 				Flag: model.BinaryFlag,
 			},
+<<<<<<< HEAD
 			"tinyblob", internal.JavaSQLTypeBLOB, "测试tinyblob", "测试tinyblob",
+=======
+			"测试tinyblob", "测试tinyblob",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "blob", Type: mysql.TypeBlob, Value: []uint8("测试blob"),
+				Name: "blobT", Type: mysql.TypeBlob, Value: []uint8("测试blob"),
 				Flag: model.BinaryFlag,
 			},
+<<<<<<< HEAD
 			"blob", internal.JavaSQLTypeBLOB, "测试blob", "测试blob",
+=======
+			"测试blob", "测试blob",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "mediumblob", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"),
+				Name: "mediumblobT", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumblob"),
 				Flag: model.BinaryFlag,
 			},
+<<<<<<< HEAD
 			"mediumblob", internal.JavaSQLTypeBLOB, "测试mediumblob", "测试mediumblob",
+=======
+			"测试mediumblob", "测试mediumblob",
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "longblob", Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"),
+				Name: "longblobT", Type: mysql.TypeLongBlob, Value: []uint8("测试longblob"),
 				Flag: model.BinaryFlag,
 			},
+<<<<<<< HEAD
 			"longblob", internal.JavaSQLTypeBLOB, "测试longblob", "测试longblob",
 		},
 
@@ -339,19 +528,57 @@ var (
 		{
 			&model.Column{Name: "set", Type: mysql.TypeSet, Value: uint64(3)},
 			"set", internal.JavaSQLTypeBIT, "3", uint64(3),
+=======
+			"测试longblob", "测试longblob",
+		},
+
+		{
+			&model.Column{Name: "dateT", Type: mysql.TypeDate, Value: "2020-02-20"},
+			"2020-02-20", "2020-02-20",
+		},
+		{
+			&model.Column{Name: "datetimeT", Type: mysql.TypeDatetime, Value: "2020-02-20 02:20:20"},
+			"2020-02-20 02:20:20", "2020-02-20 02:20:20",
+		},
+		{
+			&model.Column{Name: "timestampT", Type: mysql.TypeTimestamp, Value: "2020-02-20 10:20:20"},
+			"2020-02-20 10:20:20", "2020-02-20 10:20:20",
+		},
+		{
+			&model.Column{Name: "timeT", Type: mysql.TypeDuration, Value: "02:20:20"},
+			"02:20:20", "02:20:20",
+		},
+		{
+			&model.Column{Name: "yearT", Type: mysql.TypeYear, Value: "2020", Flag: model.UnsignedFlag},
+			"2020", "2020",
+		},
+
+		{
+			&model.Column{Name: "enumT", Type: mysql.TypeEnum, Value: uint64(1)},
+			"1", "1",
+		},
+		{
+			&model.Column{Name: "setT", Type: mysql.TypeSet, Value: uint64(2)},
+			"2", uint64(2),
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "bit", Type: mysql.TypeBit, Value: uint64(65),
+				Name: "bitT", Type: mysql.TypeBit, Value: uint64(65),
 				Flag: model.UnsignedFlag | model.BinaryFlag,
 			},
+<<<<<<< HEAD
 			"bit", internal.JavaSQLTypeBIT, "65", uint64(65),
+=======
+			"65", uint64(65),
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 		},
 		{
 			&model.Column{
-				Name: "json", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}",
+				Name: "jsonT", Type: mysql.TypeJSON, Value: "{\"key1\": \"value1\"}",
 				Flag: model.BinaryFlag,
 			},
+<<<<<<< HEAD
 			"json", internal.JavaSQLTypeVARCHAR, "{\"key1\": \"value1\"}", "{\"key1\": \"value1\"}",
 		},
 	}
@@ -455,6 +682,12 @@ var (
 		PreColumns: testColumns,
 	}
 
+=======
+			"{\"key1\": \"value1\"}", "{\"key1\": \"value1\"}",
+		},
+	}
+
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 	testCaseDDL = &model.DDLEvent{
 		CommitTs: 417318403368288260,
 		TableInfo: &model.TableInfo{
@@ -468,11 +701,19 @@ var (
 )
 
 func collectAllColumns(groups []*testColumnTuple) []*model.Column {
+<<<<<<< HEAD
 	result := make([]*model.Column, 0, len(groups))
 	for _, item := range groups {
 		result = append(result, item.column)
 	}
 	return result
+=======
+	columns := make([]*model.Column, 0, len(groups))
+	for _, item := range groups {
+		columns = append(columns, item.column)
+	}
+	return columns
+>>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 }
 
 func collectExpectedDecodedValue(columns []*testColumnTuple) map[string]interface{} {
@@ -481,4 +722,105 @@ func collectExpectedDecodedValue(columns []*testColumnTuple) map[string]interfac
 		result[item.column.Name] = item.expectedDecodedValue
 	}
 	return result
+}
+
+func newLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(
+    	t tinyint primary key,
+		tu1 tinyint unsigned,
+		tu2 tinyint unsigned,
+		tu3 tinyint unsigned,
+		tu4 tinyint unsigned,
+		s smallint,
+		su1 smallint unsigned,
+		su2 smallint unsigned,
+		su3 smallint unsigned,
+		su4 smallint unsigned,
+		m mediumint,
+		mu1 mediumint unsigned,
+		mu2 mediumint unsigned,
+		mu3 mediumint unsigned,
+		mu4 mediumint unsigned,
+		i int,
+		iu1 int unsigned,
+		iu2 int unsigned,
+		iu3 int unsigned,
+		iu4 int unsigned,
+		bi bigint,
+		biu1 bigint unsigned,
+		biu2 bigint unsigned,
+		biu3 bigint unsigned,
+		biu4 bigint unsigned,
+		floatT float,
+		doubleT double,
+	 	decimalT decimal,
+	 	floatTu float unsigned,
+		doubleTu double unsigned,
+	 	decimalTu decimal unsigned,
+	 	varcharT varchar(255),
+	 	charT char,
+	 	binaryT binary,
+	 	varbinaryT varbinary(255),
+	 	tinytextT tinytext,
+	 	textT text,
+	 	mediumtextT mediumtext,
+	 	longtextT longtext,
+	 	tinyblobT tinyblob,
+	 	blobT blob,
+	 	mediumblobT mediumblob,
+	 	longblobT longblob,
+	 	dateT date,
+	 	datetimeT datetime,
+	 	timestampT timestamp,
+	 	timeT time,
+	 	yearT year,
+	 	enumT enum('a', 'b', 'c'),
+	 	setT set('a', 'b', 'c'),
+	 	bitT bit(4),
+	 	jsonT json)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
+
+	testColumns := collectAllColumns(testColumnsTable)
+
+	insert := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "test",
+			Table:  "t",
+		},
+		TableInfo:  tableInfo,
+		Columns:    testColumns,
+		PreColumns: nil,
+		ColInfos:   colInfo,
+	}
+
+	update := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		TableInfo:  tableInfo,
+		Columns:    testColumns,
+		PreColumns: testColumns,
+		ColInfos:   colInfo,
+	}
+
+	deleteE := &model.RowChangedEvent{
+		CommitTs: 417318403368288260,
+		Table: &model.TableName{
+			Schema: "cdc",
+			Table:  "person",
+		},
+		TableInfo:  tableInfo,
+		Columns:    nil,
+		PreColumns: testColumns,
+		ColInfos:   colInfo,
+	}
+	return insert, update, deleteE
 }
