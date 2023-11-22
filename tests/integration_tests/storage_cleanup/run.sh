@@ -102,9 +102,6 @@ function run() {
 	sleep 20
 	check_file_exists true
 
-	# wait input
-	read -p "Press enter to continue"
-
 	SINK_URI="file://$WORK_DIR/storage_test?flush-interval=5s"
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config=$CUR/conf/changefeed.toml
 	sleep 20

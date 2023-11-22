@@ -166,8 +166,8 @@ func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJobs []func()) {
 		log.Info("skip cleanup expired files for storage sink",
 			zap.String("namespace", d.id.Namespace),
 			zap.String("changefeedID", d.id.ID),
-			zap.String("date-separator", d.cfg.DateSeparator),
-			zap.Int("expired-file-ttl", d.cfg.FileExpirationDays))
+			zap.String("dateSeparator", d.cfg.DateSeparator),
+			zap.Int("expiredFileTTL", d.cfg.FileExpirationDays))
 		return
 	}
 
@@ -180,8 +180,8 @@ func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJobs []func()) {
 	log.Info("start schedule cleanup expired files for storage sink",
 		zap.String("namespace", d.id.Namespace),
 		zap.String("changefeedID", d.id.ID),
-		zap.String("date-separator", d.cfg.DateSeparator),
-		zap.Int("expired-file-ttl", d.cfg.FileExpirationDays))
+		zap.String("dateSeparator", d.cfg.DateSeparator),
+		zap.Int("expiredFileTTL", d.cfg.FileExpirationDays))
 
 	// wait for the context done
 	<-ctx.Done()
