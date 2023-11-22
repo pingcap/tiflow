@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
@@ -201,11 +200,7 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
-		isBinary := isBinaryMySQLType(mysqlTypeStr)
-		mysqlType := types.StrToType(mysqlTypeStr)
-		col := internal.NewColumn(value, mysqlType).
-			ToCanalJSONFormatColumn(name, isBinary)
+		col := canalJSONFormatColumn(value, name, mysqlTypeStr)
 		result = append(result, col)
 	}
 	if len(result) == 0 {

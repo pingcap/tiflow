@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"go.uber.org/zap"
 )
 
@@ -38,21 +37,10 @@ type JSONBatchEncoder struct {
 	config *common.Config
 }
 
-// newJSONRowEventEncoder creates a new JSONRowEventEncoder
-func newJSONRowEventEncoder(config *common.Config) codec.EventBatchEncoder {
-	encoder := &JSONBatchEncoder{
-		builder:  newCanalEntryBuilder(),
-		messages: make([]*common.Message, 0, 1),
-
-		config: config,
-	}
-	return encoder
-}
-
 // newJSONBatchEncoder creates a new JSONBatchEncoder
 func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 	encoder := &JSONBatchEncoder{
-		builder:  newCanalEntryBuilder(),
+		builder:  newCanalEntryBuilder(config),
 		messages: make([]*common.Message, 0, 1),
 		config:   config,
 	}
@@ -79,11 +67,7 @@ func fillColumns(
 			} else {
 				out.RawByte(',')
 			}
-			javaType, ok := javaTypeMap[col.Name]
-			if !ok {
-				return cerror.ErrCanalEncodeFailed.GenWithStack("java type is not found for column %s", col.Name)
-			}
-			value, err := builder.formatValue(col.Value, javaType)
+			value, err := builder.formatValue(col.Value, col.Flag.IsBinary())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
@@ -105,15 +89,12 @@ func newJSONMessageForDML(
 	e *model.RowChangedEvent, config *common.Config, builder *canalEntryBuilder, messageTooLarge bool,
 ) ([]byte, error) {
 	isDelete := e.IsDelete()
-	mysqlTypeMap := make(map[string]string, len(e.Columns))
-
 	onlyHandleKey := messageTooLarge
 	if isDelete && config.DeleteOnlyHandleKeyColumns {
 		onlyHandleKey = true
 	}
 
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
-	javaTypeMap := make(map[string]internal.JavaSQLType, len(e.Columns))
 
 	out := &jwriter.Writer{}
 	out.RawByte('{')
@@ -193,16 +174,19 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
+				javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
-				javaTypeMap[col.Name] = javaType
-				mysqlTypeMap[col.Name] = getMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
+				columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+				if !ok {
+					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
+				}
+				mysqlTypeMap[col.Name] = getMySQLType(columnInfo, config.ContentCompatible)
 			}
 		}
 		if emptyColumn {
