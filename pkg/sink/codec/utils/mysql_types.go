@@ -16,8 +16,9 @@ package utils
 import (
 	"strings"
 
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tiflow/cdc/model"
 )
 
 // WithUnsigned4MySQLType add `unsigned` keyword.
@@ -39,19 +40,24 @@ func WithZerofill4MySQLType(mysqlType string, zerofill bool) string {
 	return mysqlType
 }
 
-// GetMySQLType get the mysql type string.
-func GetMySQLType(
-	fieldType *types.FieldType, flag model.ColumnFlagType, fullType bool,
-) string {
+// GetMySQLType get the mysql type from column info
+func GetMySQLType(columnInfo *timodel.ColumnInfo, fullType bool) string {
 	if !fullType {
-		result := types.TypeToStr(fieldType.GetType(), fieldType.GetCharset())
-		result = WithUnsigned4MySQLType(result, flag.IsUnsigned())
-		result = WithZerofill4MySQLType(result, flag.IsZerofill())
-
+		result := types.TypeToStr(columnInfo.GetType(), columnInfo.GetCharset())
+		result = withUnsigned4MySQLType(result, mysql.HasUnsignedFlag(columnInfo.GetFlag()))
+		result = withZerofill4MySQLType(result, mysql.HasZerofillFlag(columnInfo.GetFlag()))
 		return result
 	}
+	return columnInfo.GetTypeDesc()
+}
 
-	result := fieldType.InfoSchemaStr()
-	result = WithZerofill4MySQLType(result, flag.IsZerofill())
-	return result
+// ExtractBasicMySQLType return the mysql type
+func ExtractBasicMySQLType(mysqlType string) byte {
+	for i := 0; i < len(mysqlType); i++ {
+		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
+			return types.StrToType(mysqlType[:i])
+		}
+	}
+
+	return types.StrToType(mysqlType)
 }

@@ -263,6 +263,8 @@ type message struct {
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
 	// SQL is only for the DDL event.
 	SQL string `json:"sql,omitempty"`
+
+	SchemaVersion int64 `json:"schemaVersion,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {

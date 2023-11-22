@@ -22,8 +22,8 @@ import (
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -81,7 +81,7 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L276-L1147
 // all value will be represented in string type
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L760-L855
-func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.JavaSQLType) (result string, err error) {
+func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (result string, err error) {
 	// value would be nil, if no value insert for the column.
 	if value == nil {
 		return "", nil
@@ -99,20 +99,15 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 	case string:
 		result = v
 	case []byte:
-		//  JavaSQLTypeVARCHAR / JavaSQLTypeCHAR / JavaSQLTypeBLOB / JavaSQLTypeCLOB /
-		// special handle for text and blob
 		// see https://github.com/alibaba/canal/blob/9f6021cf36f78cc8ac853dcf37a1769f359b868b/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L801
-		switch javaType {
-		// for normal text
-		case internal.JavaSQLTypeVARCHAR, internal.JavaSQLTypeCHAR, internal.JavaSQLTypeCLOB:
-			result = string(v)
-		default:
-			// JavaSQLTypeBLOB
+		if isBinary {
 			decoded, err := b.bytesDecoder.Bytes(v)
 			if err != nil {
 				return "", err
 			}
 			result = string(decoded)
+		} else {
+			result = string(v)
 		}
 	default:
 		result = fmt.Sprintf("%v", v)
@@ -122,21 +117,21 @@ func (b *canalEntryBuilder) formatValue(value interface{}, javaType internal.Jav
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
-func (b *canalEntryBuilder) buildColumn(c *model.Column, colInfo rowcodec.ColInfo, colName string, updated bool) (*canal.Column, error) {
-	mysqlType := utils.GetMySQLType(colInfo.Ft, c.Flag, b.config.ContentCompatible)
+func (b *canalEntryBuilder) buildColumn(c *model.Column, columnInfo *timodel.ColumnInfo, updated bool) (*canal.Column, error) {
+	mysqlType := utils.GetMySQLType(columnInfo, b.config.ContentCompatible)
 	javaType, err := getJavaSQLType(c.Value, c.Type, c.Flag)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
-	value, err := b.formatValue(c.Value, javaType)
+	value, err := b.formatValue(c.Value, c.Flag.IsBinary())
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
 	canalColumn := &canal.Column{
 		SqlType:       int32(javaType),
-		Name:          colName,
+		Name:          c.Name,
 		IsKey:         c.Flag.IsPrimaryKey(),
 		Updated:       updated,
 		IsNullPresent: &canal.Column_IsNull{IsNull: c.Value == nil},
@@ -153,7 +148,12 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 		if column == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, e.ColInfos[idx], column.Name, !e.IsDelete())
+		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+		if !ok {
+			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+				"column info not found for column id: %d", e.ColInfos[idx].ID)
+		}
+		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -169,7 +169,12 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
-		c, err := b.buildColumn(column, e.ColInfos[idx], column.Name, !e.IsDelete())
+		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+		if !ok {
+			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+				"column info not found for column id: %d", e.ColInfos[idx].ID)
+		}
+		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
