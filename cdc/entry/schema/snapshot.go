@@ -174,7 +174,7 @@ func NewSnapshotFromMeta(
 				log.Debug("ignore table", zap.String("table", tableInfo.Name.O))
 				continue
 			}
-			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, tableInfo)
+			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,
 				tag:    tag,

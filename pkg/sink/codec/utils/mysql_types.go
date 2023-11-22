@@ -61,3 +61,8 @@ func ExtractBasicMySQLType(mysqlType string) byte {
 
 	return types.StrToType(mysqlType)
 }
+
+// IsBinaryMySQLType return true if the given mysqlType string is a binary type
+func IsBinaryMySQLType(mysqlType string) bool {
+	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
+}

@@ -24,12 +24,12 @@ import (
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	tiTypes "github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"go.uber.org/zap"
 )
 
@@ -78,15 +78,20 @@ func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
 
 func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.ColumnInfo {
 	col := new(timodel.ColumnInfo)
-
 	col.Name = timodel.NewCIStr(column.Name)
-	tp := types.StrToType(strings.ToLower(strings.TrimSuffix(column.DataType, " UNSIGNED")))
+
+	tp := utils.ExtractBasicMySQLType(column.DataType)
 	col.FieldType = *types.NewFieldType(tp)
-	if strings.Contains(column.DataType, "UNSIGNED") {
+	if strings.Contains(column.DataType, "unsigned") {
 		col.AddFlag(mysql.UnsignedFlag)
 	}
-	if strings.Contains(column.DataType, "BLOB") || strings.Contains(column.DataType, "BINARY") {
+	if strings.Contains(column.DataType, "zerofill") {
+		col.AddFlag(mysql.ZerofillFlag)
+	}
+
+	if utils.IsBinaryMySQLType(column.DataType) {
 		col.SetCharset(charset.CharsetBin)
+		types.SetBinChsClnFlag(&col.FieldType)
 	} else {
 		col.SetCharset(charset.CharsetUTF8MB4)
 	}
@@ -217,35 +222,53 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 	}
 }
 
-func buildRowChangedEvent(msg *message) *model.RowChangedEvent {
+func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
 			Schema: msg.Database,
 			Table:  msg.Table,
 		},
+		TableInfo: tableInfo,
 	}
 
-	if msg.Data != nil {
-		result.Columns = buildColumns(msg.Data)
+	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
+	for _, columnInfo := range tableInfo.Columns {
+		fieldTypeMap[columnInfo.Name.O] = &columnInfo.FieldType
 	}
 
-	if msg.Old != nil {
-		result.PreColumns = buildColumns(msg.Old)
+	columns, err := decodeColumns(msg.Data, fieldTypeMap)
+	if err != nil {
+		return nil, err
 	}
-	return result
+	result.Columns = columns
+
+	columns, err = decodeColumns(msg.Old, fieldTypeMap)
+	if err != nil {
+		return nil, err
+	}
+	result.PreColumns = columns
+
+	result.WithHandlePrimaryFlag(tableInfo.GetPrimaryKeyColumnNames())
+
+	return result, nil
 }
 
-func buildColumns(rawData map[string]string) []*model.Column {
+func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*types.FieldType) ([]*model.Column, error) {
 	result := make([]*model.Column, 0, len(rawData))
 	for name, value := range rawData {
-		col := &model.Column{
-			Name:  name,
-			Value: value,
+		fieldType, ok := fieldTypeMap[name]
+		if !ok {
+			log.Error("cannot found the fieldType for the column", zap.String("column", name))
+			return nil, cerror.ErrDecodeFailed.GenWithStack("cannot found the fieldType for the column %s", name)
+		}
+		col, err := decodeColumn(name, value, fieldType)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, col)
 	}
-	return result
+	return result, nil
 }
 
 type message struct {
@@ -256,15 +279,13 @@ type message struct {
 	Type     EventType `json:"type"`
 	CommitTs uint64    `json:"commitTs"`
 	// Data is available for the Insert and Update event.
-	Data map[string]string `json:"data,omitempty"`
+	Data map[string]interface{} `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
-	Old map[string]string `json:"old,omitempty"`
+	Old map[string]interface{} `json:"old,omitempty"`
 	// TableSchema is for the DDL and Bootstrap event.
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
 	// SQL is only for the DDL event.
 	SQL string `json:"sql,omitempty"`
-
-	SchemaVersion int64 `json:"schemaVersion,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
@@ -333,10 +354,10 @@ func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 
 func formatColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo,
-) (map[string]string, error) {
-	result := make(map[string]string, len(columns))
+) (map[string]interface{}, error) {
+	result := make(map[string]interface{}, len(columns))
 	for idx, col := range columns {
-		value, err := formatValue(col.Value, columnInfos[idx].Ft)
+		value, err := encodeValue(col.Value, columnInfos[idx].Ft)
 		if err != nil {
 			return nil, err
 		}
@@ -345,9 +366,9 @@ func formatColumns(
 	return result, nil
 }
 
-func formatValue(value interface{}, ft *types.FieldType) (string, error) {
+func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 	if value == nil {
-		return "", nil
+		return nil, nil
 	}
 
 	switch ft.GetType() {
@@ -357,7 +378,7 @@ func formatValue(value interface{}, ft *types.FieldType) (string, error) {
 		}
 		element := ft.GetElems()
 		number := value.(uint64)
-		enumVar, err := tiTypes.ParseEnumValue(element, number)
+		enumVar, err := types.ParseEnumValue(element, number)
 		if err != nil {
 			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 		}
@@ -368,7 +389,7 @@ func formatValue(value interface{}, ft *types.FieldType) (string, error) {
 		}
 		elements := ft.GetElems()
 		number := value.(uint64)
-		setVar, err := tiTypes.ParseSetValue(elements, number)
+		setVar, err := types.ParseSetValue(elements, number)
 		if err != nil {
 			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 		}
@@ -396,6 +417,32 @@ func formatValue(value interface{}, ft *types.FieldType) (string, error) {
 		}
 	default:
 		result = fmt.Sprintf("%v", v)
+	}
+
+	return result, nil
+}
+
+func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*model.Column, error) {
+	result := &model.Column{
+		Type:  fieldType.GetType(),
+		Name:  name,
+		Value: value,
+	}
+	if value == nil {
+		return result, nil
+	}
+
+	data, ok := value.(string)
+	if !ok {
+		log.Panic("simple encode message should have type in `string`")
+	}
+
+	if mysql.HasBinaryFlag(fieldType.GetFlag()) {
+		v, err := base64.StdEncoding.DecodeString(data)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		result.Value = v
 	}
 
 	return result, nil
