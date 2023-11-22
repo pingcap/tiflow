@@ -587,7 +587,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 
 func (o *ownerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
-	case QueryChangeFeedSyncedStatus:
+	case QueryChangeFeedStatuses:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
 		if !ok {
 			query.Data = nil
@@ -597,7 +597,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		ret.ResolvedTs = cfReactor.resolvedTs
 		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
 		query.Data = ret
-	case QueryChangeFeedStatuses:
+	case QueryChangeFeedSyncedStatus:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
 		if !ok {
 			query.Data = nil
