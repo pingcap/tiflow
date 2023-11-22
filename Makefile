@@ -46,8 +46,10 @@ ifeq ("${ENABLE_FIPS}", "1")
 	BUILD_FLAG = -tags boringcrypto
 	GOEXPERIMENT = GOEXPERIMENT=boringcrypto
 	CGO = 1
+else
+	CGO = 0
 endif
-GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
