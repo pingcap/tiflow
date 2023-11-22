@@ -129,6 +129,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		MaxLogSize:            redo.DefaultMaxLogSize,
 		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
 	},
