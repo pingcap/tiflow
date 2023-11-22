@@ -32,6 +32,7 @@ type ConsistentConfig struct {
 	FlushWorkerNum        int    `toml:"flush-worker-num" json:"flush-worker-num"`
 	Storage               string `toml:"storage" json:"storage"`
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
+	EnableEventCache      bool   `toml:"enable-event-cache" json:"enable-event-cache"`
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.

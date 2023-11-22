@@ -164,18 +164,22 @@ func New(
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
 
-		// Use 3/4 memory quota as redo quota, and 1/2 again for redo cache.
-		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/4*1, "sink")
-		redoQuota := changefeedInfo.Config.MemoryQuota / 4 * 3
-		m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
-		m.eventCache = newRedoEventCache(changefeedID, redoQuota/2*1)
+		if changefeedInfo.Config.Consistent.EnableEventCache {
+			// Use 3/4 memory quota as redo quota, and 1/2 again for redo cache.
+			m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/4*1, "sink")
+			redoQuota := changefeedInfo.Config.MemoryQuota / 4 * 3
+			m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
+			m.eventCache = newRedoEventCache(changefeedID, redoQuota/2*1)
+		} else {
+			m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/2, "sink")
+			m.redoMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/2, "redo")
+		}
 	} else {
 		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
 	}
 
 	m.ready = make(chan struct{})
-
 	return m
 }
 
