@@ -15,14 +15,19 @@ package canal
 
 import (
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	canal "github.com/pingcap/tiflow/proto/canal"
+	"go.uber.org/zap"
+	"golang.org/x/text/encoding/charmap"
 )
 
 const tidbWaterMarkType = "TIDB_WATERMARK"
@@ -212,8 +217,6 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 	return result, nil
 }
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_message.go
-=======
 func extractBasicMySQLType(mysqlType string) string {
 	for i := 0; i < len(mysqlType); i++ {
 		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
@@ -268,7 +271,6 @@ func isBinaryMySQLType(mysqlType string) bool {
 	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
 }
 
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_message.go
 func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {
 	result := new(model.DDLEvent)
 	// we lost the startTs from kafka message
@@ -301,8 +303,4 @@ func getDDLActionType(query string) timodel.ActionType {
 	}
 
 	return timodel.ActionNone
-}
-
-func isBinaryMySQLType(mysqlType string) bool {
-	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
 }

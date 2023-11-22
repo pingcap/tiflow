@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
+	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"go.uber.org/zap"
 )
 
@@ -61,23 +61,6 @@ func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 
 func fillColumns(
 	columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool, builder *canalEntryBuilder,
-=======
-	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
-	"go.uber.org/zap"
-)
-
-func fillColumns(
-	columns []*model.Column,
-	onlyOutputUpdatedColumn bool,
-	onlyHandleKeyColumn bool,
-	newColumnMap map[string]*model.Column,
-	out *jwriter.Writer,
-	builder *canalEntryBuilder,
-	javaTypeMap map[string]internal.JavaSQLType,
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 ) error {
 	if len(columns) == 0 {
 		out.RawString("null")
@@ -96,16 +79,9 @@ func fillColumns(
 			} else {
 				out.RawByte(',')
 			}
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
-			mysqlType := getMySQLType(col)
-			javaType, err := getJavaSQLType(col, mysqlType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-=======
 			javaType, ok := javaTypeMap[col.Name]
 			if !ok {
 				return cerror.ErrCanalEncodeFailed.GenWithStack("java type is not found for column %s", col.Name)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			}
 			value, err := builder.formatValue(col.Value, javaType)
 			if err != nil {
@@ -136,12 +112,9 @@ func newJSONMessageForDML(
 		onlyHandleKey = true
 	}
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
-=======
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
 	javaTypeMap := make(map[string]internal.JavaSQLType, len(e.Columns))
 
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 	out := &jwriter.Writer{}
 	out.RawByte('{')
 	{
@@ -228,12 +201,8 @@ func newJSONMessageForDML(
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
-				mysqlTypeMap[col.Name] = mysqlType
-=======
 				javaTypeMap[col.Name] = javaType
 				mysqlTypeMap[col.Name] = getMySQLType(e.ColInfos[idx].Ft, col.Flag, config.ContentCompatible)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			}
 		}
 		if emptyColumn {
@@ -267,46 +236,22 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 		if err := fillColumns(e.PreColumns, out, onlyHandleKey, builder); err != nil {
-=======
-		if err := fillColumns(
-			e.PreColumns, false, onlyHandleKey, nil, out, builder, javaTypeMap,
-		); err != nil {
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 		if err := fillColumns(e.Columns, out, onlyHandleKey, builder); err != nil {
-=======
-		if err := fillColumns(
-			e.Columns, false, onlyHandleKey, nil, out, builder, javaTypeMap,
-		); err != nil {
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			return nil, err
 		}
 	} else if e.IsUpdate() {
 		out.RawString(",\"old\":")
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 		if err := fillColumns(e.PreColumns, out, onlyHandleKey, builder); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
 		if err := fillColumns(e.Columns, out, onlyHandleKey, builder); err != nil {
-=======
-		if err := fillColumns(
-			e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder, javaTypeMap,
-		); err != nil {
-			return nil, err
-		}
-		out.RawString(",\"data\":")
-		if err := fillColumns(
-			e.Columns, false, onlyHandleKey, nil, out, builder, javaTypeMap,
-		); err != nil {
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 			return nil, err
 		}
 	} else {
@@ -344,33 +289,7 @@ func eventTypeString(e *model.RowChangedEvent) string {
 	return "UPDATE"
 }
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder.go
 func (c *JSONBatchEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
-=======
-// JSONRowEventEncoder encodes row event in JSON format
-type JSONRowEventEncoder struct {
-	builder  *canalEntryBuilder
-	messages []*common.Message
-
-	claimCheck *claimcheck.ClaimCheck
-
-	config *common.Config
-}
-
-// newJSONRowEventEncoder creates a new JSONRowEventEncoder
-func newJSONRowEventEncoder(
-	config *common.Config, claimCheck *claimcheck.ClaimCheck,
-) codec.RowEventEncoder {
-	return &JSONRowEventEncoder{
-		builder:    newCanalEntryBuilder(config),
-		messages:   make([]*common.Message, 0, 1),
-		config:     config,
-		claimCheck: claimCheck,
-	}
-}
-
-func (c *JSONRowEventEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder.go
 	msg := &JSONMessage{
 		ID:            0, // ignored by both Canal Adapter and Flink
 		Schema:        e.TableInfo.TableName.Schema,

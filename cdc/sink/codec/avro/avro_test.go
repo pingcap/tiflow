@@ -25,8 +25,8 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-<<<<<<< HEAD:cdc/sink/codec/avro/avro_test.go
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,15 +88,6 @@ func setElems(ft *types.FieldType, elems []string) *types.FieldType {
 	return ft
 }
 
-=======
-	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
-	"github.com/pingcap/tiflow/pkg/uuid"
-	"github.com/stretchr/testify/require"
-)
-
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/avro/avro_test.go
 type avroTestColumnTuple struct {
 	col            model.Column
 	colInfo        rowcodec.ColInfo
@@ -488,11 +479,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            29,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-<<<<<<< HEAD:cdc/sink/codec/avro/avro_test.go
-			Ft:            setElems(types.NewFieldType(mysql.TypeEnum), []string{"a,", "b"}),
-=======
 			Ft:            utils.SetElems(types.NewFieldType(mysql.TypeEnum), []string{"a", "b"}),
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/avro/avro_test.go
 		},
 		avroSchema{
 			Type:       "string",
@@ -506,11 +493,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            30,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-<<<<<<< HEAD:cdc/sink/codec/avro/avro_test.go
-			Ft:            setElems(types.NewFieldType(mysql.TypeSet), []string{"a,", "b"}),
-=======
 			Ft:            utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b"}),
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/avro/avro_test.go
 		},
 		avroSchema{
 			Type:       "string",

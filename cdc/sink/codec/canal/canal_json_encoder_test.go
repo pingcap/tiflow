@@ -32,14 +32,8 @@ func TestBuildJSONBatchEncoder(t *testing.T) {
 	t.Parallel()
 	cfg := common.NewConfig(config.ProtocolCanalJSON)
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
-	builder := &jsonBatchEncoderBuilder{config: cfg}
+	builder := NewJSONBatchEncoderBuilder(cfg)
 	encoder, ok := builder.Build().(*JSONBatchEncoder)
-=======
-	builder, err := NewJSONRowEventEncoderBuilder(context.Background(), cfg)
-	require.NoError(t, err)
-	encoder, ok := builder.Build().(*JSONRowEventEncoder)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	require.True(t, ok)
 	require.NotNil(t, encoder.config)
 }
@@ -52,16 +46,10 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	})
 	require.NotNil(t, e)
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
-	encoder, ok := e.(*JSONBatchEncoder)
-=======
-	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
+	builder := NewJSONBatchEncoderBuilder(codecConfig)
 
 	encoder, ok := builder.Build().(*JSONRowEventEncoder)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 	require.True(t, ok)
 
 	data, err := newJSONMessageForDML(testCaseInsert, encoder.config, encoder.builder, false)
@@ -186,14 +174,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	})
 	require.NotNil(t, e)
 
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
-	encoder, ok = e.(*JSONBatchEncoder)
-=======
-	builder, err = NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-
-	encoder, ok = builder.Build().(*JSONRowEventEncoder)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
+	encoder, ok = NewJSONBatchEncoderBuilder(codecConfig).Build().(*JSONBatchEncoder)
 	require.True(t, ok)
 	data, err = newJSONMessageForDML(testCaseUpdate, encoder.config, encoder.builder, false)
 	require.Nil(t, err)
@@ -204,148 +185,6 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
-=======
-
-	encoder, ok = builder.Build().(*JSONRowEventEncoder)
-	require.True(t, ok)
-	data, err = newJSONMessageForDML(encoder.builder, testCaseUpdate, encoder.config, false, "")
-	require.NoError(t, err)
-
-	withExtension = &canalJSONMessageWithTiDBExtension{}
-	err = json.Unmarshal(data, withExtension)
-	require.NoError(t, err)
-	require.Equal(t, 0, len(withExtension.JSONMessage.Old[0]))
-
-	require.NotNil(t, withExtension.Extensions)
-	require.Equal(t, testCaseUpdate.CommitTs, withExtension.Extensions.CommitTs)
-}
-
-func TestCanalJSONCompressionE2E(t *testing.T) {
-	t.Parallel()
-
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	codecConfig.EnableTiDBExtension = true
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
-
-	ctx := context.Background()
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	encoder := builder.Build()
-
-	// encode normal row changed event
-	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
-	require.NoError(t, err)
-
-	message := encoder.Build()[0]
-
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err := decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeRow)
-
-	decodedEvent, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedEvent.CommitTs, testCaseInsert.CommitTs)
-	require.Equal(t, decodedEvent.Table.Schema, testCaseInsert.Table.Schema)
-	require.Equal(t, decodedEvent.Table.Table, testCaseInsert.Table.Table)
-
-	// encode DDL event
-	message, err = encoder.EncodeDDLEvent(testCaseDDL)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err = decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeDDL)
-
-	decodedDDL, err := decoder.NextDDLEvent()
-	require.NoError(t, err)
-
-	require.Equal(t, decodedDDL.Query, testCaseDDL.Query)
-	require.Equal(t, decodedDDL.CommitTs, testCaseDDL.CommitTs)
-	require.Equal(t, decodedDDL.TableInfo.TableName.Schema, testCaseDDL.TableInfo.TableName.Schema)
-	require.Equal(t, decodedDDL.TableInfo.TableName.Table, testCaseDDL.TableInfo.TableName.Table)
-
-	// encode checkpoint event
-	waterMark := uint64(2333)
-	message, err = encoder.EncodeCheckpointEvent(waterMark)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err = decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeResolved)
-
-	decodedWatermark, err := decoder.NextResolvedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedWatermark, waterMark)
-}
-
-func TestCanalJSONClaimCheckE2E(t *testing.T) {
-	t.Parallel()
-
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	codecConfig.EnableTiDBExtension = true
-	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
-	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/canal-json-claim-check"
-	codecConfig.MaxMessageBytes = 500
-	ctx := context.Background()
-
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	encoder := builder.Build()
-
-	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
-	require.NoError(t, err)
-
-	// this is a large message, should be delivered to the external storage.
-	claimCheckLocationMessage := encoder.Build()[0]
-
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
-	require.NoError(t, err)
-
-	messageType, ok, err := decoder.HasNext()
-	require.NoError(t, err)
-	require.Equal(t, messageType, model.MessageTypeRow)
-	require.True(t, ok)
-
-	decodedLargeEvent, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-
-	require.Equal(t, testCaseInsert.CommitTs, decodedLargeEvent.CommitTs)
-	require.Equal(t, testCaseInsert.Table, decodedLargeEvent.Table)
-	require.Equal(t, testCaseInsert.PreColumns, decodedLargeEvent.PreColumns)
-
-	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
-	for _, column := range decodedLargeEvent.Columns {
-		decodedColumns[column.Name] = column
-	}
-
-	expectedValue := collectExpectedDecodedValue(testColumnsTable)
-	for _, column := range testCaseInsert.Columns {
-		decodedColumn, ok := decodedColumns[column.Name]
-		require.True(t, ok)
-		require.Equal(t, column.Type, decodedColumn.Type)
-		require.Equal(t, expectedValue[column.Name], decodedColumn.Value)
-	}
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
 }
 
 func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
@@ -541,16 +380,10 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_json_encoder_test.go
-	encoder := &JSONBatchEncoder{
-		builder: newCanalEntryBuilder(),
-=======
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	encoder := &JSONRowEventEncoder{
-		builder: newCanalEntryBuilder(codecConfig),
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_json_row_event_encoder_test.go
-		config:  &common.Config{EnableTiDBExtension: true},
-	}
+
+	builder := NewJSONBatchEncoderBuilder(codecConfig)
+	encoder := builder.Build().(*JSONBatchEncoder)
 	require.NotNil(t, encoder)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
@@ -717,12 +550,10 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.ContentCompatible = true
 
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-
+	builder := NewJSONBatchEncoderBuilder(codecConfig)
 	encoder := builder.Build()
 
-	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
+	err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
 	require.NoError(t, err)
 
 	message := encoder.Build()[0]

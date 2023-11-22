@@ -228,18 +228,7 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	codecConfig := NewConfig(config.ProtocolCanalJSON)
 	err = codecConfig.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-<<<<<<< HEAD:cdc/sink/codec/common/config_test.go
-=======
-	require.Equal(t, true, c.EnableTiDBExtension)
-	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
-	require.True(t, c.OnlyOutputUpdatedColumns)
-	require.True(t, c.AvroEnableWatermark)
 	require.False(t, c.ContentCompatible)
-	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
-	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
-	require.Equal(t, 123, c.MaxMessageBytes)
-	require.Equal(t, 456, c.MaxBatchSize)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/common/config_test.go
 
 	err = codecConfig.Validate()
 	require.NoError(t, err)
@@ -252,38 +241,7 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json"
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
-<<<<<<< HEAD:cdc/sink/codec/common/config_test.go
-=======
-	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
-	replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
-	replicaConfig.Sink.SchemaRegistry = util.AddressOf("abc")
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
-		MaxMessageBytes: aws.Int(123),
-		CodecConfig: &config.CodecConfig{
-			EnableTiDBExtension:            aws.Bool(true),
-			MaxBatchSize:                   aws.Int(456),
-			AvroEnableWatermark:            aws.Bool(true),
-			AvroBigintUnsignedHandlingMode: aws.String("ab"),
-			AvroDecimalHandlingMode:        aws.String("cd"),
-		},
-		LargeMessageHandle: &config.LargeMessageHandleConfig{
-			LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
-		},
-	}
-	c = NewConfig(config.ProtocolAvro)
-	err = c.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	require.Equal(t, true, c.EnableTiDBExtension)
-	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
-	require.True(t, c.OnlyOutputUpdatedColumns)
-	require.True(t, c.AvroEnableWatermark)
 	require.False(t, c.ContentCompatible)
-	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
-	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
-	require.Equal(t, 123, c.MaxMessageBytes)
-	require.Equal(t, 456, c.MaxBatchSize)
-	require.Equal(t, config.LargeMessageHandleOptionHandleKeyOnly, c.LargeMessageHandle.LargeMessageHandleOption)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/common/config_test.go
 
 	codecConfig = NewConfig(config.ProtocolCanal)
 	err = codecConfig.Apply(sinkURI, replicaConfig)
@@ -299,7 +257,6 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	codecConfig = NewConfig(config.ProtocolCanalJSON)
 	err = codecConfig.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
-<<<<<<< HEAD:cdc/sink/codec/common/config_test.go
 	err = codecConfig.Validate()
 	require.NoError(t, err)
 
@@ -367,45 +324,12 @@ func TestKafkaConfigWithoutHandleKey(t *testing.T) {
 	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
 
 	uri := "kafka://127.0.0.1:9092/canal-json?protocol=canal-json"
-=======
-	require.Equal(t, true, c.EnableTiDBExtension)
-	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
-	require.True(t, c.OnlyOutputUpdatedColumns)
-	require.True(t, c.AvroEnableWatermark)
-	require.False(t, c.ContentCompatible)
-	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
-	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
-	require.Equal(t, 123, c.MaxMessageBytes)
-	require.Equal(t, 456, c.MaxBatchSize)
-	require.Equal(t, c.LargeMessageHandle.LargeMessageHandleOption, config.LargeMessageHandleOptionClaimCheck)
-
-	replicaConfig = config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.ContentCompatible = aws.Bool(true)
-	uri = "kafka://127.0.0.1:9092/content-compatible?protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	require.NoError(t, err)
-	c = NewConfig(config.ProtocolCanalJSON)
-	err = c.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	require.True(t, c.ContentCompatible)
-	require.True(t, c.OnlyOutputUpdatedColumns)
-}
-
-func TestApplyConfig4CanalJSON(t *testing.T) {
-	uri := "kafka://127.0.0.1:9092/abc?protocol=canal-json&content-compatible=true"
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/common/config_test.go
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
 	codecConfig := NewConfig(config.ProtocolCanalJSON)
-<<<<<<< HEAD:cdc/sink/codec/common/config_test.go
 	err = codecConfig.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.False(t, codecConfig.LargeMessageHandle.HandleKeyOnly())
-=======
-	err = codecConfig.Apply(sinkURI, config.GetDefaultReplicaConfig())
-	require.NoError(t, err)
 	require.True(t, codecConfig.ContentCompatible)
-	require.True(t, codecConfig.OnlyOutputUpdatedColumns)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/common/config_test.go
 }

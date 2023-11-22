@@ -310,6 +310,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			EnablePartitionSeparator: c.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           c.Sink.FileIndexWidth,
 			AdvanceTimeoutInSec:      c.Sink.AdvanceTimeoutInSec,
+			ContentCompatible:        c.Sink.ContentCompatible,
 		}
 
 		if c.Sink.KafkaConfig != nil {
@@ -332,68 +333,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				LargeMessageHandle:    largeMessageHandle,
 			}
 		}
-<<<<<<< HEAD
-=======
-		var mysqlConfig *config.MySQLConfig
-		if c.Sink.MySQLConfig != nil {
-			mysqlConfig = &config.MySQLConfig{
-				WorkerCount:                  c.Sink.MySQLConfig.WorkerCount,
-				MaxTxnRow:                    c.Sink.MySQLConfig.MaxTxnRow,
-				MaxMultiUpdateRowSize:        c.Sink.MySQLConfig.MaxMultiUpdateRowSize,
-				MaxMultiUpdateRowCount:       c.Sink.MySQLConfig.MaxMultiUpdateRowCount,
-				TiDBTxnMode:                  c.Sink.MySQLConfig.TiDBTxnMode,
-				SSLCa:                        c.Sink.MySQLConfig.SSLCa,
-				SSLCert:                      c.Sink.MySQLConfig.SSLCert,
-				SSLKey:                       c.Sink.MySQLConfig.SSLKey,
-				TimeZone:                     c.Sink.MySQLConfig.TimeZone,
-				WriteTimeout:                 c.Sink.MySQLConfig.WriteTimeout,
-				ReadTimeout:                  c.Sink.MySQLConfig.ReadTimeout,
-				Timeout:                      c.Sink.MySQLConfig.Timeout,
-				EnableBatchDML:               c.Sink.MySQLConfig.EnableBatchDML,
-				EnableMultiStatement:         c.Sink.MySQLConfig.EnableMultiStatement,
-				EnableCachePreparedStatement: c.Sink.MySQLConfig.EnableCachePreparedStatement,
-			}
-		}
-		var cloudStorageConfig *config.CloudStorageConfig
-		if c.Sink.CloudStorageConfig != nil {
-			cloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:    c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:  c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:       c.Sink.CloudStorageConfig.FileSize,
-				OutputColumnID: c.Sink.CloudStorageConfig.OutputColumnID,
-			}
-		}
-
-		res.Sink = &config.SinkConfig{
-			DispatchRules:                    dispatchRules,
-			Protocol:                         c.Sink.Protocol,
-			CSVConfig:                        csvConfig,
-			ColumnSelectors:                  columnSelectors,
-			SchemaRegistry:                   c.Sink.SchemaRegistry,
-			EncoderConcurrency:               c.Sink.EncoderConcurrency,
-			Terminator:                       c.Sink.Terminator,
-			DateSeparator:                    c.Sink.DateSeparator,
-			EnablePartitionSeparator:         c.Sink.EnablePartitionSeparator,
-			FileIndexWidth:                   c.Sink.FileIndexWidth,
-			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
-			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
-			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
-			ContentCompatible:                c.Sink.ContentCompatible,
-			KafkaConfig:                      kafkaConfig,
-			MySQLConfig:                      mysqlConfig,
-			PulsarConfig:                     pulsarConfig,
-			CloudStorageConfig:               cloudStorageConfig,
-			SafeMode:                         c.Sink.SafeMode,
-		}
-
-		if c.Sink.TxnAtomicity != nil {
-			res.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(*c.Sink.TxnAtomicity))
-		}
-		if c.Sink.AdvanceTimeoutInSec != nil {
-			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
-		}
-
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -501,6 +440,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			EnablePartitionSeparator: cloned.Sink.EnablePartitionSeparator,
 			FileIndexWidth:           cloned.Sink.FileIndexWidth,
 			AdvanceTimeoutInSec:      cloned.Sink.AdvanceTimeoutInSec,
+			ContentCompatible:        cloned.Sink.ContentCompatible,
 		}
 
 		if cloned.Sink.KafkaConfig != nil {
@@ -521,137 +461,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				SASLOAuthAudience:     cloned.Sink.KafkaConfig.SASLOAuthAudience,
 				LargeMessageHandle:    largeMessageHandle,
 			}
-<<<<<<< HEAD
-=======
-
-			kafkaConfig = &KafkaConfig{
-				PartitionNum:                 cloned.Sink.KafkaConfig.PartitionNum,
-				ReplicationFactor:            cloned.Sink.KafkaConfig.ReplicationFactor,
-				KafkaVersion:                 cloned.Sink.KafkaConfig.KafkaVersion,
-				MaxMessageBytes:              cloned.Sink.KafkaConfig.MaxMessageBytes,
-				Compression:                  cloned.Sink.KafkaConfig.Compression,
-				KafkaClientID:                cloned.Sink.KafkaConfig.KafkaClientID,
-				AutoCreateTopic:              cloned.Sink.KafkaConfig.AutoCreateTopic,
-				DialTimeout:                  cloned.Sink.KafkaConfig.DialTimeout,
-				WriteTimeout:                 cloned.Sink.KafkaConfig.WriteTimeout,
-				ReadTimeout:                  cloned.Sink.KafkaConfig.ReadTimeout,
-				RequiredAcks:                 cloned.Sink.KafkaConfig.RequiredAcks,
-				SASLUser:                     cloned.Sink.KafkaConfig.SASLUser,
-				SASLPassword:                 cloned.Sink.KafkaConfig.SASLPassword,
-				SASLMechanism:                cloned.Sink.KafkaConfig.SASLMechanism,
-				SASLGssAPIAuthType:           cloned.Sink.KafkaConfig.SASLGssAPIAuthType,
-				SASLGssAPIKeytabPath:         cloned.Sink.KafkaConfig.SASLGssAPIKeytabPath,
-				SASLGssAPIKerberosConfigPath: cloned.Sink.KafkaConfig.SASLGssAPIKerberosConfigPath,
-				SASLGssAPIServiceName:        cloned.Sink.KafkaConfig.SASLGssAPIServiceName,
-				SASLGssAPIUser:               cloned.Sink.KafkaConfig.SASLGssAPIUser,
-				SASLGssAPIPassword:           cloned.Sink.KafkaConfig.SASLGssAPIPassword,
-				SASLGssAPIRealm:              cloned.Sink.KafkaConfig.SASLGssAPIRealm,
-				SASLGssAPIDisablePafxfast:    cloned.Sink.KafkaConfig.SASLGssAPIDisablePafxfast,
-				SASLOAuthClientID:            cloned.Sink.KafkaConfig.SASLOAuthClientID,
-				SASLOAuthClientSecret:        cloned.Sink.KafkaConfig.SASLOAuthClientSecret,
-				SASLOAuthTokenURL:            cloned.Sink.KafkaConfig.SASLOAuthTokenURL,
-				SASLOAuthScopes:              cloned.Sink.KafkaConfig.SASLOAuthScopes,
-				SASLOAuthGrantType:           cloned.Sink.KafkaConfig.SASLOAuthGrantType,
-				SASLOAuthAudience:            cloned.Sink.KafkaConfig.SASLOAuthAudience,
-				EnableTLS:                    cloned.Sink.KafkaConfig.EnableTLS,
-				CA:                           cloned.Sink.KafkaConfig.CA,
-				Cert:                         cloned.Sink.KafkaConfig.Cert,
-				Key:                          cloned.Sink.KafkaConfig.Key,
-				InsecureSkipVerify:           cloned.Sink.KafkaConfig.InsecureSkipVerify,
-				CodecConfig:                  codeConfig,
-				LargeMessageHandle:           largeMessageHandle,
-				GlueSchemaRegistryConfig:     glueSchemaRegistryConfig,
-			}
-		}
-		var mysqlConfig *MySQLConfig
-		if cloned.Sink.MySQLConfig != nil {
-			mysqlConfig = &MySQLConfig{
-				WorkerCount:                  cloned.Sink.MySQLConfig.WorkerCount,
-				MaxTxnRow:                    cloned.Sink.MySQLConfig.MaxTxnRow,
-				MaxMultiUpdateRowSize:        cloned.Sink.MySQLConfig.MaxMultiUpdateRowSize,
-				MaxMultiUpdateRowCount:       cloned.Sink.MySQLConfig.MaxMultiUpdateRowCount,
-				TiDBTxnMode:                  cloned.Sink.MySQLConfig.TiDBTxnMode,
-				SSLCa:                        cloned.Sink.MySQLConfig.SSLCa,
-				SSLCert:                      cloned.Sink.MySQLConfig.SSLCert,
-				SSLKey:                       cloned.Sink.MySQLConfig.SSLKey,
-				TimeZone:                     cloned.Sink.MySQLConfig.TimeZone,
-				WriteTimeout:                 cloned.Sink.MySQLConfig.WriteTimeout,
-				ReadTimeout:                  cloned.Sink.MySQLConfig.ReadTimeout,
-				Timeout:                      cloned.Sink.MySQLConfig.Timeout,
-				EnableBatchDML:               cloned.Sink.MySQLConfig.EnableBatchDML,
-				EnableMultiStatement:         cloned.Sink.MySQLConfig.EnableMultiStatement,
-				EnableCachePreparedStatement: cloned.Sink.MySQLConfig.EnableCachePreparedStatement,
-			}
-		}
-		var pulsarConfig *PulsarConfig
-		if cloned.Sink.PulsarConfig != nil {
-			pulsarConfig = &PulsarConfig{
-				TLSKeyFilePath:          cloned.Sink.PulsarConfig.TLSKeyFilePath,
-				TLSCertificateFile:      cloned.Sink.PulsarConfig.TLSCertificateFile,
-				TLSTrustCertsFilePath:   cloned.Sink.PulsarConfig.TLSTrustCertsFilePath,
-				PulsarProducerCacheSize: cloned.Sink.PulsarConfig.PulsarProducerCacheSize,
-				PulsarVersion:           cloned.Sink.PulsarConfig.PulsarVersion,
-				CompressionType:         (*string)(cloned.Sink.PulsarConfig.CompressionType),
-				AuthenticationToken:     cloned.Sink.PulsarConfig.AuthenticationToken,
-				ConnectionTimeout:       (*int)(cloned.Sink.PulsarConfig.ConnectionTimeout),
-				OperationTimeout:        (*int)(cloned.Sink.PulsarConfig.OperationTimeout),
-				BatchingMaxMessages:     cloned.Sink.PulsarConfig.BatchingMaxMessages,
-				BatchingMaxPublishDelay: (*int)(cloned.Sink.PulsarConfig.BatchingMaxPublishDelay),
-				SendTimeout:             (*int)(cloned.Sink.PulsarConfig.SendTimeout),
-				TokenFromFile:           cloned.Sink.PulsarConfig.TokenFromFile,
-				BasicUserName:           cloned.Sink.PulsarConfig.BasicUserName,
-				BasicPassword:           cloned.Sink.PulsarConfig.BasicPassword,
-				AuthTLSCertificatePath:  cloned.Sink.PulsarConfig.AuthTLSCertificatePath,
-				AuthTLSPrivateKeyPath:   cloned.Sink.PulsarConfig.AuthTLSPrivateKeyPath,
-			}
-			if cloned.Sink.PulsarConfig.OAuth2 != nil {
-				pulsarConfig.OAuth2 = &PulsarOAuth2{
-					OAuth2IssuerURL:  cloned.Sink.PulsarConfig.OAuth2.OAuth2IssuerURL,
-					OAuth2Audience:   cloned.Sink.PulsarConfig.OAuth2.OAuth2Audience,
-					OAuth2PrivateKey: cloned.Sink.PulsarConfig.OAuth2.OAuth2PrivateKey,
-					OAuth2ClientID:   cloned.Sink.PulsarConfig.OAuth2.OAuth2ClientID,
-					OAuth2Scope:      cloned.Sink.PulsarConfig.OAuth2.OAuth2Scope,
-				}
-			}
-		}
-		var cloudStorageConfig *CloudStorageConfig
-		if cloned.Sink.CloudStorageConfig != nil {
-			cloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:    cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:  cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:       cloned.Sink.CloudStorageConfig.FileSize,
-				OutputColumnID: cloned.Sink.CloudStorageConfig.OutputColumnID,
-			}
-		}
-
-		res.Sink = &SinkConfig{
-			Protocol:                         cloned.Sink.Protocol,
-			SchemaRegistry:                   cloned.Sink.SchemaRegistry,
-			DispatchRules:                    dispatchRules,
-			CSVConfig:                        csvConfig,
-			ColumnSelectors:                  columnSelectors,
-			EncoderConcurrency:               cloned.Sink.EncoderConcurrency,
-			Terminator:                       cloned.Sink.Terminator,
-			DateSeparator:                    cloned.Sink.DateSeparator,
-			EnablePartitionSeparator:         cloned.Sink.EnablePartitionSeparator,
-			FileIndexWidth:                   cloned.Sink.FileIndexWidth,
-			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
-			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
-			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
-			ContentCompatible:                cloned.Sink.ContentCompatible,
-			KafkaConfig:                      kafkaConfig,
-			MySQLConfig:                      mysqlConfig,
-			PulsarConfig:                     pulsarConfig,
-			CloudStorageConfig:               cloudStorageConfig,
-			SafeMode:                         cloned.Sink.SafeMode,
-		}
-
-		if cloned.Sink.TxnAtomicity != nil {
-			res.Sink.TxnAtomicity = util.AddressOf(string(*cloned.Sink.TxnAtomicity))
-		}
-		if cloned.Sink.AdvanceTimeoutInSec != nil {
-			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 		}
 	}
 	if cloned.Consistent != nil {
@@ -772,7 +581,6 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-<<<<<<< HEAD
 	Protocol                 string            `json:"protocol"`
 	SchemaRegistry           string            `json:"schema_registry"`
 	CSVConfig                *CSVConfig        `json:"csv"`
@@ -786,6 +594,7 @@ type SinkConfig struct {
 	FileIndexWidth           int               `json:"file_index_width"`
 	KafkaConfig              *KafkaConfig      `json:"kafka_config"`
 	AdvanceTimeoutInSec      uint              `json:"advance_timeout,omitempty"`
+	ContentCompatible        bool              `json:"content_compatible"`
 }
 
 // KafkaConfig represents kafka config for a changefeed.
@@ -800,29 +609,6 @@ type KafkaConfig struct {
 	SASLOAuthAudience     *string  `json:"sasl_oauth_audience,omitempty"`
 
 	LargeMessageHandle *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
-=======
-	Protocol                         *string             `json:"protocol,omitempty"`
-	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
-	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
-	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
-	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
-	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
-	Terminator                       *string             `json:"terminator,omitempty"`
-	DateSeparator                    *string             `json:"date_separator,omitempty"`
-	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
-	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
-	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
-	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
-	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
-	ContentCompatible                *bool               `json:"content_compatible"`
-	SafeMode                         *bool               `json:"safe_mode,omitempty"`
-	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
-	PulsarConfig                     *PulsarConfig       `json:"pulsar_config,omitempty"`
-	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
-	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
-	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 }
 
 // CSVConfig denotes the csv config

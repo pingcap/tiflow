@@ -19,11 +19,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_test_util.go
-	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
-=======
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014)):pkg/sink/codec/canal/canal_test_util.go
 )
 
 type testColumnTuple struct {

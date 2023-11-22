@@ -39,6 +39,7 @@ type Config struct {
 
 	// canal-json only
 	EnableTiDBExtension bool
+	ContentCompatible   bool
 
 	// avro only
 	AvroSchemaRegistry             string
