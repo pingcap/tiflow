@@ -363,6 +363,15 @@ func (t *tableSinkWrapper) doTableSinkClear() {
 	t.tableSink.version = 0
 }
 
+func (t *tableSinkWrapper) checkTableSinkHealth() (err error) {
+	t.tableSink.RLock()
+	defer t.tableSink.RUnlock()
+	if t.tableSink.s != nil {
+		err = t.tableSink.s.CheckHealth()
+	}
+	return
+}
+
 // When the attached sink fail, there can be some events that have already been
 // committed at downstream but we don't know. So we need to update `replicateTs`
 // of the table so that we can re-send those events later.

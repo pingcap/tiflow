@@ -169,25 +169,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// events have been reported. Then we can continue the table
 			// at the checkpoint position.
 			case tablesink.SinkInternalError:
-				task.tableSink.closeAndClearTableSink()
 				// After the table sink is cleared all pending events are sent out or dropped.
 				// So we can re-add the table into sinkMemQuota.
 				w.sinkMemQuota.ClearTable(task.tableSink.span)
-
-				// Restart the table sink based on the checkpoint position.
-				if err := task.tableSink.restart(ctx); err == nil {
-					checkpointTs := task.tableSink.getCheckpointTs()
-					ckpt := checkpointTs.ResolvedMark()
-					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
-					performCallback(lastWrittenPos)
-					log.Info("table sink has been restarted",
-						zap.String("namespace", w.changefeedID.Namespace),
-						zap.String("changefeed", w.changefeedID.ID),
-						zap.Stringer("span", &task.span),
-						zap.Any("lastWrittenPos", lastWrittenPos),
-						zap.String("sinkError", finalErr.Error()))
-					finalErr = err
-				}
+				performCallback(advancer.lastPos)
+				finalErr = nil
 			default:
 			}
 		}
