@@ -19,8 +19,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -39,16 +38,9 @@ func TestBuildJSONBatchEncoder(t *testing.T) {
 }
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
-	t.Parallel()
-	e := newJSONBatchEncoder(&common.Config{
-		EnableTiDBExtension: false,
-		Terminator:          "",
-	})
-	require.NotNil(t, e)
-
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
 	builder := NewJSONBatchEncoderBuilder(codecConfig)
-
 	encoder, ok := builder.Build().(*JSONBatchEncoder)
 	require.True(t, ok)
 
@@ -64,8 +56,8 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "INSERT", jsonMsg.EventType)
 	require.Equal(t, convertToCanalTs(insertEvent.CommitTs), jsonMsg.ExecutionTime)
-	require.Equal(t, "cdc", jsonMsg.Schema)
-	require.Equal(t, "person", jsonMsg.Table)
+	require.Equal(t, "test", jsonMsg.Schema)
+	require.Equal(t, "t", jsonMsg.Table)
 	require.False(t, jsonMsg.IsDDL)
 
 	for _, col := range insertEvent.Columns {
@@ -168,12 +160,6 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 			require.NotContains(t, jsonMsg.MySQLType, col.Name)
 		}
 	}
-
-	e = newJSONBatchEncoder(&common.Config{
-		EnableTiDBExtension: true,
-		Terminator:          "",
-	})
-	require.NotNil(t, e)
 
 	encoder, ok = NewJSONBatchEncoderBuilder(codecConfig).Build().(*JSONBatchEncoder)
 	require.True(t, ok)
@@ -384,6 +370,7 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	t.Parallel()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
 
 	builder := NewJSONBatchEncoderBuilder(codecConfig)
 	encoder := builder.Build().(*JSONBatchEncoder)
@@ -423,6 +410,15 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 }
 
 func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	encoder := newJSONBatchEncoder(&common.Config{
 		EnableTiDBExtension: true,
 		Terminator:          "",
@@ -433,19 +429,15 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 	count := 0
 
 	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		CommitTs:  1,
+		Table:     &model.TableName{Schema: "test", Table: "t"},
+		TableInfo: tableInfo,
 		Columns: []*model.Column{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-		ColInfos: []rowcodec.ColInfo{
-			{
-				ID: 0,
-				Ft: types.NewFieldType(mysql.TypeVarchar),
-			},
-		},
+		ColInfos: colInfos,
 	}
 
 	tests := []struct {
@@ -510,21 +502,26 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 }
 
 func TestMaxMessageBytes(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	// the size of `testEvent` after being encoded by canal-json is 200
 	testEvent := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		CommitTs:  1,
+		Table:     &model.TableName{Schema: "test", Table: "t"},
+		TableInfo: tableInfo,
 		Columns: []*model.Column{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-		ColInfos: []rowcodec.ColInfo{
-			{
-				ID: 0,
-				Ft: types.NewFieldType(mysql.TypeVarchar),
-			},
-		},
+		ColInfos: colInfos,
 	}
 
 	ctx := context.Background()

@@ -97,13 +97,11 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 		codecConfig.EnableTiDBExtension = encodeEnable
 		codecConfig.LargeMessageHandle = config.NewDefaultLargeMessageHandleConfig()
-		encoder := &JSONBatchEncoder{
-			builder: newCanalEntryBuilder(codecConfig),
-		}
+		encoder := newJSONBatchEncoder(codecConfig)
 		require.NotNil(t, encoder)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, result)
 
 		for _, decodeEnable := range []bool{false, true} {
