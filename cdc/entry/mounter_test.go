@@ -11,9 +11,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build intest
-// +build intest
-
 package entry
 
 import (
@@ -25,7 +22,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	ticonfig "github.com/pingcap/tidb/config"
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/executor"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -34,9 +30,6 @@ import (
 	"github.com/pingcap/tidb/parser/ast"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/testkit"
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -48,6 +41,7 @@ import (
 	codecCommon "github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/testkit"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -267,19 +261,9 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	delApproximateBytes [][]int
 },
 ) {
-	store, err := mockstore.NewMockStore()
-	require.Nil(t, err)
-	defer store.Close() //nolint:errcheck
-	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
-		// we can update the tidb config here
-	})
-	session.SetSchemaLease(0)
-	session.DisableStats4Test()
-	domain, err := session.BootstrapSession(store)
-	require.Nil(t, err)
-	defer domain.Close()
-	domain.SetStatsUpdating(true)
-	tk := testkit.NewTestKit(t, store)
+	tk := testkit.New(t)
+	defer tk.Close()
+
 	tk.MustExec("set @@tidb_enable_clustered_index=1;")
 	tk.MustExec("use test;")
 
@@ -287,7 +271,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	jobs, err := getAllHistoryDDLJob(store, f)
+	jobs, err := getAllHistoryDDLJob(tk.Storage(), f)
 	require.Nil(t, err)
 
 	scheamStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
@@ -309,7 +293,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 		tk.MustExec(insertSQL, params...)
 	}
 
-	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	config := config.GetDefaultReplicaConfig()
@@ -323,7 +307,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	// [TODO] check size and readd rowBytes
 	mountAndCheckRowInTable := func(tableID int64, _ []int, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		var rows int
-		walkTableSpanInStore(t, store, tableID, func(key []byte, value []byte) {
+		walkTableSpanInStore(t, tk.Storage(), tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
 			row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
 			require.Nil(t, err)
@@ -1020,13 +1004,12 @@ func TestGetDefaultZeroValue(t *testing.T) {
 }
 
 func TestE2ERowLevelChecksum(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
-	tk := helper.Tk()
 	// upstream TiDB enable checksum functionality
 	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
-	helper.Tk().MustExec("use test")
+	tk.MustExec("use test")
 
 	// changefeed enable checksum functionality
 	replicaConfig := config.GetDefaultReplicaConfig()
@@ -1034,11 +1017,11 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	filter, err := filter.NewFilter(replicaConfig, "")
 	require.NoError(t, err)
 
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(t, err)
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := NewSchemaStorage(tk.GetCurrentMeta(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 	require.NotNil(t, schemaStorage)
@@ -1101,7 +1084,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
    description text CHARACTER SET gbk,
    image tinyblob
 );`
-	job := helper.DDL2Job(createTableSQL)
+	job := tk.DDL2Job(createTableSQL)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1137,7 +1120,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 );`
 	tk.MustExec(insertDataSQL)
 
-	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	key, value := getLastKeyValueInStore(t, tk.Storage(), tableInfo.ID)
 	rawKV := &model.RawKVEntry{
 		OpType:  model.OpTypePut,
 		Key:     key,
@@ -1193,30 +1176,28 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 }
 
 func TestDecodeRowEnableChecksum(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	tk := helper.Tk()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
-	helper.Tk().MustExec("use test")
+	tk.MustExec("use test")
 
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	filter, err := filter.NewFilter(replicaConfig, "")
 	require.NoError(t, err)
 
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(t, err)
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := NewSchemaStorage(tk.GetCurrentMeta(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 	require.NotNil(t, schemaStorage)
 
 	createTableDDL := "create table t (id int primary key, a int)"
-	job := helper.DDL2Job(createTableDDL)
+	job := tk.DDL2Job(createTableDDL)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1234,7 +1215,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	tk.Session().GetSessionVars().EnableRowLevelChecksum = false
 	tk.MustExec("insert into t values (1, 10)")
 
-	key, value := getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	key, value := getLastKeyValueInStore(t, tk.Storage(), tableInfo.ID)
 	rawKV := &model.RawKVEntry{
 		OpType:  model.OpTypePut,
 		Key:     key,
@@ -1253,7 +1234,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	tk.Session().GetSessionVars().EnableRowLevelChecksum = true
 	tk.MustExec("insert into t values (2, 20)")
 
-	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	key, value = getLastKeyValueInStore(t, tk.Storage(), tableInfo.ID)
 	rawKV = &model.RawKVEntry{
 		OpType:  model.OpTypePut,
 		Key:     key,
@@ -1273,11 +1254,11 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 
 	// row with 2 checksum
 	tk.MustExec("insert into t values (3, 30)")
-	job = helper.DDL2Job("alter table t change column a a varchar(10)")
+	job = tk.DDL2Job("alter table t change column a a varchar(10)")
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
-	key, value = getLastKeyValueInStore(t, helper.Storage(), tableInfo.ID)
+	key, value = getLastKeyValueInStore(t, tk.Storage(), tableInfo.ID)
 	rawKV = &model.RawKVEntry{
 		OpType:  model.OpTypePut,
 		Key:     key,
@@ -1317,21 +1298,21 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, cerror.ErrCorruptedDataMutation)
 
-	job = helper.DDL2Job("drop table t")
+	job = tk.DDL2Job("drop table t")
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 }
 
 func TestDecodeRow(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
-	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")
-	helper.Tk().MustExec("use test;")
+	tk.MustExec("set @@tidb_enable_clustered_index=1;")
+	tk.MustExec("use test;")
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
 
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(t, err)
 
 	cfg := config.GetDefaultReplicaConfig()
@@ -1339,13 +1320,13 @@ func TestDecodeRow(t *testing.T) {
 	filter, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := NewSchemaStorage(tk.GetCurrentMeta(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 
 	// apply ddl to schemaStorage
 	ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
-	job := helper.DDL2Job(ddl)
+	job := tk.DDL2Job(ddl)
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 
@@ -1355,12 +1336,12 @@ func TestDecodeRow(t *testing.T) {
 
 	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
 
-	helper.Tk().MustExec(`insert into student values(1, "dongmen", 20, "male")`)
-	helper.Tk().MustExec(`update student set age = 27 where id = 1`)
+	tk.MustExec(`insert into student values(1, "dongmen", 20, "male")`)
+	tk.MustExec(`update student set age = 27 where id = 1`)
 
 	ctx := context.Background()
 	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) {
-		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+		walkTableSpanInStore(t, tk.Storage(), tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
 
 			row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
@@ -1393,7 +1374,7 @@ func TestDecodeRow(t *testing.T) {
 	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 	decodeAndCheckRowInTable(tableInfo.ID, toRawKV)
 
-	job = helper.DDL2Job("drop table student")
+	job = tk.DDL2Job("drop table student")
 	err = schemaStorage.HandleDDLJob(job)
 	require.NoError(t, err)
 }
@@ -1401,9 +1382,9 @@ func TestDecodeRow(t *testing.T) {
 // TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
 // if this event should be filter out by filter.
 func TestDecodeEventIgnoreRow(t *testing.T) {
-	helper := NewSchemaTestHelper(t)
-	defer helper.Close()
-	helper.Tk().MustExec("use test;")
+	tk := testkit.New(t)
+	defer tk.Close()
+	tk.MustExec("use test;")
 
 	ddls := []string{
 		"create table test.student(id int primary key, name char(50), age int, gender char(10))",
@@ -1417,15 +1398,15 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	cfg.Filter.Rules = []string{"test.student", "test.computer"}
 	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
-	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	ver, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := NewSchemaStorage(tk.GetCurrentMeta(),
 		ver.Ver, false, cfID, util.RoleTester, f)
 	require.Nil(t, err)
 	// apply ddl to schemaStorage
 	for _, ddl := range ddls {
-		job := helper.DDL2Job(ddl)
+		job := tk.DDL2Job(ddl)
 		err = schemaStorage.HandleDDLJob(job)
 		require.Nil(t, err)
 	}
@@ -1475,13 +1456,13 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 		} else {
 			tables = append(tables, tc.table)
 		}
-		helper.tk.MustExec(insertSQL, tc.columns...)
+		tk.MustExec(insertSQL, tc.columns...)
 	}
 	ctx := context.Background()
 
 	decodeAndCheckRowInTable := func(tableID int64, f func(key []byte, value []byte) *model.RawKVEntry) int {
 		var rows int
-		walkTableSpanInStore(t, helper.Storage(), tableID, func(key []byte, value []byte) {
+		walkTableSpanInStore(t, tk.Storage(), tableID, func(key []byte, value []byte) {
 			rawKV := f(key, value)
 			pEvent := model.NewPolymorphicEvent(rawKV)
 			err := mounter.DecodeEvent(ctx, pEvent)

@@ -32,8 +32,8 @@ import (
 )
 
 type TestKit struct {
+	*testkit.TestKit
 	t       *testing.T
-	tk      *testkit.TestKit
 	storage kv.Storage
 	domain  *domain.Domain
 }
@@ -53,7 +53,7 @@ func New(t *testing.T) *TestKit {
 	tk := testkit.NewTestKit(t, store)
 	return &TestKit{
 		t:       t,
-		tk:      tk,
+		TestKit: tk,
 		storage: store,
 		domain:  domain,
 	}
@@ -61,7 +61,7 @@ func New(t *testing.T) *TestKit {
 
 // DDL2Job executes the DDL stmt and returns the DDL job
 func (s *TestKit) DDL2Job(ddl string) *model.Job {
-	s.tk.MustExec(ddl)
+	s.MustExec(ddl)
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, 1)
@@ -113,7 +113,7 @@ func (s *TestKit) DDL2Job(ddl string) *model.Job {
 // multiple jobs will be generated after executing these two types of
 // DDL statements.
 func (s *TestKit) DDL2Jobs(ddl string, jobCnt int) []*model.Job {
-	s.tk.MustExec(ddl)
+	s.MustExec(ddl)
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), jobCnt)
 	require.Nil(s.t, err)
 	require.Len(s.t, jobs, jobCnt)
@@ -129,11 +129,6 @@ func (s *TestKit) DDL2Jobs(ddl string, jobCnt int) []*model.Job {
 // Storage returns the tikv storage
 func (s *TestKit) Storage() kv.Storage {
 	return s.storage
-}
-
-// Tk returns the TestKit
-func (s *TestKit) Tk() *testkit.TestKit {
-	return s.tk
 }
 
 // GetCurrentMeta return the current meta snapshot
