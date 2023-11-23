@@ -67,6 +67,7 @@ func newSinkWorker(
 }
 
 func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask) error {
+	failpoint.Inject("SinkWorkerTaskHandlePause", func() { <-ctx.Done() })
 	for {
 		select {
 		case <-ctx.Done():
@@ -170,9 +171,9 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// events have been reported. Then we can continue the table
 			// at the checkpoint position.
 			case tablesink.SinkInternalError:
-				task.tableSink.closeAndClearTableSink()
 				// After the table sink is cleared all pending events are sent out or dropped.
 				// So we can re-add the table into sinkMemQuota.
+<<<<<<< HEAD
 				w.sinkMemQuota.ClearTable(task.tableSink.tableID)
 
 				// Restart the table sink based on the checkpoint position.
@@ -189,6 +190,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 						zap.String("sinkError", finalErr.Error()))
 					finalErr = err
 				}
+=======
+				w.sinkMemQuota.ClearTable(task.tableSink.span)
+				performCallback(advancer.lastPos)
+				finalErr = nil
+>>>>>>> f35b76a1fe (sink(cdc): always handle sink failures for cases with sync-point enabled (#10132))
 			default:
 			}
 		}
