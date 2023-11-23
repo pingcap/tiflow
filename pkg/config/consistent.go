@@ -32,7 +32,11 @@ type ConsistentConfig struct {
 	FlushWorkerNum        int    `toml:"flush-worker-num" json:"flush-worker-num"`
 	Storage               string `toml:"storage" json:"storage"`
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
-	EnableEventCache      bool   `toml:"enable-event-cache" json:"enable-event-cache"`
+	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 will be used for redo events.
+	MemoryQuotaPercentage uint64 `toml:"memory-quota-percentage" json:"memory-quota-percentage"`
+	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 * EventCachePercentage / 100
+	// will be used for redo cache.
+	EventCachePercentage uint64 `toml:"event-cache-percentage" json:"event-cache-percentage"`
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.

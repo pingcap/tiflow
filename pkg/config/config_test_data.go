@@ -76,7 +76,8 @@ const (
     "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false,
-    "enable-event-cache": false
+    "memory-quota-percentage": 50,
+    "event-cache-percentage": 0
   },
   "scheduler": {
     "enable-table-across-nodes": false,
@@ -315,7 +316,8 @@ const (
     "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false,
-    "enable-event-cache": false
+    "memory-quota-percentage": 50,
+    "event-cache-percentage": 0
   },
   "scheduler": {
     "enable-table-across-nodes": true,
@@ -468,7 +470,8 @@ const (
     "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false,
-    "enable-event-cache": false
+    "memory-quota-percentage": 50,
+    "event-cache-percentage": 0
   },
   "scheduler": {
     "enable-table-across-nodes": true,
