@@ -186,7 +186,7 @@ func newJSONMessageForDML(
 					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
 						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
 				}
-				mysqlTypeMap[col.Name] = getMySQLType(columnInfo, config.ContentCompatible)
+				mysqlTypeMap[col.Name] = common.GetMySQLType(columnInfo, config.ContentCompatible)
 			}
 		}
 		if emptyColumn {
