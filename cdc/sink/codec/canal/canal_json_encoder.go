@@ -89,12 +89,12 @@ func newJSONMessageForDML(
 	e *model.RowChangedEvent, config *common.Config, builder *canalEntryBuilder, messageTooLarge bool,
 ) ([]byte, error) {
 	isDelete := e.IsDelete()
+	mysqlTypeMap := make(map[string]string, len(e.Columns))
+
 	onlyHandleKey := messageTooLarge
 	if isDelete && config.DeleteOnlyHandleKeyColumns {
 		onlyHandleKey = true
 	}
-
-	mysqlTypeMap := make(map[string]string, len(e.Columns))
 
 	out := &jwriter.Writer{}
 	out.RawByte('{')
