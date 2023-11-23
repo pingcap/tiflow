@@ -49,7 +49,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	builder := NewJSONBatchEncoderBuilder(codecConfig)
 
-	encoder, ok := builder.Build().(*JSONRowEventEncoder)
+	encoder, ok := builder.Build().(*JSONBatchEncoder)
 	require.True(t, ok)
 
 	data, err := newJSONMessageForDML(testCaseInsert, encoder.config, encoder.builder, false)
@@ -168,7 +168,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		}
 	}
 
-	e = newJSONRowEventEncoder(&common.Config{
+	e = newJSONBatchEncoder(&common.Config{
 		EnableTiDBExtension: true,
 		Terminator:          "",
 	})
@@ -194,7 +194,7 @@ func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
 	codecConfig.MaxMessageBytes = 500
-	encoder := newJSONRowEventEncoder(codecConfig)
+	encoder := newJSONBatchEncoder(codecConfig)
 
 	err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, func() {})
 	require.NoError(t, err)
@@ -222,7 +222,7 @@ func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	t.Parallel()
 
-	encoder, ok := newJSONRowEventEncoder(&common.Config{}).(*JSONBatchEncoder)
+	encoder, ok := newJSONBatchEncoder(&common.Config{}).(*JSONBatchEncoder)
 	require.True(t, ok)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
@@ -237,7 +237,7 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	require.Equal(t, testCaseDDL.Query, msg.Query)
 	require.Equal(t, "CREATE", msg.EventType)
 
-	encoder, ok = newJSONRowEventEncoder(&common.Config{
+	encoder, ok = newJSONBatchEncoder(&common.Config{
 		EnableTiDBExtension: true,
 	}).(*JSONBatchEncoder)
 	require.True(t, ok)

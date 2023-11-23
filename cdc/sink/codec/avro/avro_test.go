@@ -72,22 +72,6 @@ func teardownEncoderAndSchemaRegistry() {
 	stopHTTPInterceptForTestingRegistry()
 }
 
-func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
-	types.SetBinChsClnFlag(ft)
-	return ft
-}
-
-//nolint:unparam
-func setFlag(ft *types.FieldType, flag uint) *types.FieldType {
-	ft.SetFlag(flag)
-	return ft
-}
-
-func setElems(ft *types.FieldType, elems []string) *types.FieldType {
-	ft.SetElems(elems)
-	return ft
-}
-
 type avroTestColumnTuple struct {
 	col            model.Column
 	colInfo        rowcodec.ColInfo
