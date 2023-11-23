@@ -172,6 +172,23 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, updateEvent.CommitTs, withExtension.Extensions.CommitTs)
+
+	codecConfig = common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.ContentCompatible = true
+	encoder, ok = NewJSONBatchEncoderBuilder(codecConfig).Build().(*JSONBatchEncoder)
+	require.True(t, ok)
+
+	data, err = newJSONMessageForDML(updateEvent, encoder.config, encoder.builder, false)
+	require.NoError(t, err)
+
+	withExtension = &canalJSONMessageWithTiDBExtension{}
+	err = json.Unmarshal(data, withExtension)
+	require.Nil(t, err)
+	require.Equal(t, 0, len(withExtension.JSONMessage.Old[0]))
+
+	require.NotNil(t, withExtension.Extensions)
+	require.Equal(t, updateEvent.CommitTs, withExtension.Extensions.CommitTs)
 }
 
 func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
