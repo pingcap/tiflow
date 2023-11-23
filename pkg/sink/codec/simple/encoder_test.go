@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/testkit"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,7 +50,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 	sql := `create table test.test(id int primary key, name varchar(255) not null,
 	 age int, email varchar(255) not null, key idx_name(name), key idx_name_email(name, email))`
-	job := helper.DDL2Job(sql)
+	job := tk.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(1, "test", 1, job.BinlogInfo.TableInfo)
 	enc := NewBuilder().Build()
 	ddlEvent := &model.DDLEvent{
@@ -89,7 +90,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 
 	sql := `create table test.test(id int primary key, name varchar(255) not null,
 	 age int, email varchar(255) not null, key idx_name(name), key idx_name_email(name, email))`
-	job := helper.DDL2Job(sql)
+	job := tk.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(1, "test", 1, job.BinlogInfo.TableInfo)
 	enc := NewBuilder().Build()
 	ddlEvent := &model.DDLEvent{

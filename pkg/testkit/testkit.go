@@ -14,9 +14,11 @@
 package testkit
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
@@ -24,13 +26,18 @@ import (
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tidb/meta"
-	"github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
+	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -41,10 +48,13 @@ type TestKit struct {
 	t       *testing.T
 	storage kv.Storage
 	domain  *domain.Domain
+
+	schemaStorage entry.SchemaStorage
+	mounter       entry.Mounter
 }
 
 // New return a new testkit
-func New(t *testing.T) *TestKit {
+func New(t *testing.T, replicaConfig *config.ReplicaConfig) *TestKit {
 	store, err := mockstore.NewMockStore()
 	require.NoError(t, err)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
@@ -56,16 +66,78 @@ func New(t *testing.T) *TestKit {
 	require.NoError(t, err)
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
+
+	filter, err := filter.NewFilter(replicaConfig, "")
+	require.NoError(t, err)
+
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-testkit")
+
+	meta := meta.NewSnapshotMeta(store.GetSnapshot(ver))
+	schemaStorage, err := entry.NewSchemaStorage(
+		meta, ver.Ver, replicaConfig.ForceReplicate,
+		changefeedID, util.RoleTester, filter)
+	require.NoError(t, err)
+
+	mounter := entry.NewMounter(schemaStorage, changefeedID, time.Local,
+		filter, replicaConfig.Integrity)
+
 	return &TestKit{
-		t:       t,
-		TestKit: tk,
-		storage: store,
-		domain:  domain,
+		t:             t,
+		TestKit:       tk,
+		storage:       store,
+		domain:        domain,
+		schemaStorage: schemaStorage,
+		mounter:       mounter,
 	}
 }
 
+func (tk *TestKit) DML2Event(dml string, schema, table string) *model.RowChangedEvent {
+	tk.MustExec(dml)
+
+	tableID, ok := tk.schemaStorage.GetLastSnapshot().TableIDByName(schema, table)
+	require.True(tk.t, ok)
+
+	key, value := tk.getLastKeyValue(tableID)
+
+	ts := tk.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		// todo: assume the operation is put at the moment, can we infer it from the DML ?
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: nil,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := tk.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(tk.t, err)
+	return polymorphicEvent.Row
+}
+
+func (tk *TestKit) getLastKeyValue(tableID int64) (key, value []byte) {
+	txn, err := tk.storage.Begin()
+	require.NoError(tk.t, err)
+	defer txn.Rollback() //nolint:errcheck
+
+	start, end := spanz.GetTableRange(tableID)
+	iter, err := txn.Iter(start, end)
+	require.NoError(tk.t, err)
+	defer iter.Close()
+	for iter.Valid() {
+		key = iter.Key()
+		value = iter.Value()
+		err = iter.Next()
+		require.NoError(tk.t, err)
+	}
+	return key, value
+}
+
 // DDL2Job executes the DDL stmt and returns the DDL job
-func (tk *TestKit) DDL2Job(ddl string) *model.Job {
+func (tk *TestKit) DDL2Job(ddl string) *timodel.Job {
 	tk.MustExec(ddl)
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(tk.GetCurrentMeta(), 1)
 	require.Nil(tk.t, err)
@@ -73,9 +145,9 @@ func (tk *TestKit) DDL2Job(ddl string) *model.Job {
 	// Set State from Synced to Done.
 	// Because jobs are put to history queue after TiDB alter its state from
 	// Done to Synced.
-	jobs[0].State = model.JobStateDone
+	jobs[0].State = timodel.JobStateDone
 	res := jobs[0]
-	if res.Type != model.ActionRenameTables {
+	if res.Type != timodel.ActionRenameTables {
 		return res
 	}
 
@@ -93,13 +165,13 @@ func (tk *TestKit) DDL2Job(ddl string) *model.Job {
 	for i := 0; i < tableNum; i++ {
 		oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
 	}
-	newTableNames := make([]model.CIStr, tableNum)
+	newTableNames := make([]timodel.CIStr, tableNum)
 	for i := 0; i < tableNum; i++ {
 		newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
 	}
-	oldSchemaNames := make([]model.CIStr, tableNum)
+	oldSchemaNames := make([]timodel.CIStr, tableNum)
 	for i := 0; i < tableNum; i++ {
-		oldSchemaNames[i] = model.NewCIStr(schema)
+		oldSchemaNames[i] = timodel.NewCIStr(schema)
 	}
 	newSchemaIDs := oldSchemaIDs
 
@@ -110,6 +182,14 @@ func (tk *TestKit) DDL2Job(ddl string) *model.Job {
 	rawArgs, err := json.Marshal(args)
 	require.NoError(tk.t, err)
 	res.RawArgs = rawArgs
+
+	err = tk.schemaStorage.HandleDDLJob(res)
+	require.NoError(tk.t, err)
+
+	ver, err := tk.storage.CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(tk.t, err)
+	tk.schemaStorage.AdvanceResolvedTs(ver.Ver)
+
 	return res
 }
 
@@ -117,7 +197,7 @@ func (tk *TestKit) DDL2Job(ddl string) *model.Job {
 // It is mainly used for "DROP TABLE" and "DROP VIEW" statement because
 // multiple jobs will be generated after executing these two types of
 // DDL statements.
-func (tk *TestKit) DDL2Jobs(ddl string, jobCnt int) []*model.Job {
+func (tk *TestKit) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 	tk.MustExec(ddl)
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(tk.GetCurrentMeta(), jobCnt)
 	require.Nil(tk.t, err)
@@ -126,7 +206,7 @@ func (tk *TestKit) DDL2Jobs(ddl string, jobCnt int) []*model.Job {
 	// Because jobs are put to history queue after TiDB alter its state from
 	// Done to Synced.
 	for i := range jobs {
-		jobs[i].State = model.JobStateDone
+		jobs[i].State = timodel.JobStateDone
 	}
 	return jobs
 }
@@ -149,7 +229,7 @@ func (tk *TestKit) Close() {
 	tk.storage.Close() //nolint:errcheck
 }
 
-func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*model.Job, error) {
+func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*timodel.Job, error) {
 	s, err := session.CreateSession(tk.storage)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -168,7 +248,7 @@ func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*model.Job, error) {
 	txnMeta := meta.NewMeta(txn)
 
 	jobs, err := tiddl.GetAllHistoryDDLJobs(txnMeta)
-	res := make([]*model.Job, 0)
+	res := make([]*timodel.Job, 0)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -182,7 +262,7 @@ func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*model.Job, error) {
 		// Set State from Synced to Done.
 		// Because jobs are put to history queue after TiDB alter its state from
 		// Done to Synced.
-		jobs[i].State = model.JobStateDone
+		jobs[i].State = timodel.JobStateDone
 		res = append(res, job)
 	}
 	return jobs, nil
