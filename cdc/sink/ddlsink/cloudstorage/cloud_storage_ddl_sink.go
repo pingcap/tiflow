@@ -46,6 +46,7 @@ type DDLSink struct {
 	statistics *metrics.Statistics
 	storage    storage.ExternalStorage
 	cfg        *cloudstorage.Config
+	cron       *cron.Cron
 
 	lastCheckpointTs         atomic.Uint64
 	lastSendCheckpointTsTime time.Time
@@ -70,7 +71,7 @@ func newDDLSink(ctx context.Context,
 	cfg := cloudstorage.NewConfig()
 	err := cfg.Apply(ctx, sinkURI, replicaConfig)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 
 	storage, err := util.GetExternalStorageFromURI(ctx, sinkURI.String())
@@ -86,16 +87,13 @@ func newDDLSink(ctx context.Context,
 		lastSendCheckpointTsTime: time.Now(),
 	}
 
+	if err := d.initCron(ctx, sinkURI, cleanupJobs); err != nil {
+		return nil, errors.Trace(err)
+	}
 	// Note: It is intended to run the cleanup goroutine in the background.
 	// we don't wait for it to finish since the gourotine would be stuck if
 	// the downstream is abnormal, especially when the downstream is a nfs.
-	if cleanupJobs == nil {
-		cleanupJobs, err = d.runCleanup(ctx, sinkURI)
-		if err != nil {
-			return nil, err
-		}
-	}
-	go d.bgCleanup(ctx, cleanupJobs)
+	go d.bgCleanup(ctx)
 	return d, nil
 }
 
@@ -161,7 +159,27 @@ func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	return errors.Trace(err)
 }
 
-func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJobs []func()) {
+func (d *DDLSink) initCron(
+	ctx context.Context, sinkURI *url.URL, cleanupJobs []func(),
+) (err error) {
+	if cleanupJobs == nil {
+		cleanupJobs, err = d.genCleanupJob(ctx, sinkURI)
+		if err != nil {
+			return err
+		}
+	}
+
+	d.cron = cron.New()
+	for _, job := range cleanupJobs {
+		err = d.cron.AddFunc(d.cfg.FileCleanupCronSpec, job)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *DDLSink) bgCleanup(ctx context.Context) {
 	if d.cfg.DateSeparator != config.DateSeparatorDay.String() || d.cfg.FileExpirationDays <= 0 {
 		log.Info("skip cleanup expired files for storage sink",
 			zap.String("namespace", d.id.Namespace),
@@ -171,12 +189,8 @@ func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJobs []func()) {
 		return
 	}
 
-	clenupCron := cron.New()
-	for _, job := range cleanupJobs {
-		clenupCron.AddFunc(d.cfg.FileCleanupCronSpec, job)
-	}
-	clenupCron.Start()
-	defer clenupCron.Stop()
+	d.cron.Start()
+	defer d.cron.Stop()
 	log.Info("start schedule cleanup expired files for storage sink",
 		zap.String("namespace", d.id.Namespace),
 		zap.String("changefeedID", d.id.ID),
@@ -191,7 +205,7 @@ func (d *DDLSink) bgCleanup(ctx context.Context, cleanupJobs []func()) {
 		zap.Error(ctx.Err()))
 }
 
-func (d *DDLSink) runCleanup(ctx context.Context, uri *url.URL) ([]func(), error) {
+func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) ([]func(), error) {
 	ret := []func(){}
 	if uri.Scheme == "file" || uri.Scheme == "local" || uri.Scheme == "" {
 		ret = append(ret, func() {
