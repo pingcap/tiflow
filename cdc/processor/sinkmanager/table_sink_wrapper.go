@@ -166,6 +166,11 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 			break
 		}
 	}
+	if model.NewResolvedTs(startTs).Greater(t.tableSink.checkpointTs) {
+		t.tableSink.checkpointTs = model.NewResolvedTs(startTs)
+		t.tableSink.resolvedTs = model.NewResolvedTs(startTs)
+		t.tableSink.advanced = time.Now()
+	}
 	t.state.Store(tablepb.TableStateReplicating)
 	return nil
 }
