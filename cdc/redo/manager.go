@@ -362,7 +362,10 @@ func (m *logManager) GetResolvedTs(tableID model.TableID) model.Ts {
 func (m *logManager) AddTable(tableID model.TableID, startTs uint64) {
 	_, loaded := m.rtsMap.LoadOrStore(tableID, &statefulRts{flushed: startTs, unflushed: startTs})
 	if loaded {
-		log.Warn("add duplicated table in redo log manager", zap.Int64("tableID", tableID))
+		log.Warn("add duplicated table in redo log manager",
+			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+			zap.String("changefeed", m.cfg.ChangeFeedID.ID),
+			zap.Int64("tableID", tableID))
 		return
 	}
 }
@@ -370,7 +373,10 @@ func (m *logManager) AddTable(tableID model.TableID, startTs uint64) {
 // RemoveTable removes a table from redo log manager
 func (m *logManager) RemoveTable(tableID model.TableID) {
 	if _, ok := m.rtsMap.LoadAndDelete(tableID); !ok {
-		log.Warn("remove a table not maintained in redo log manager", zap.Int64("tableID", tableID))
+		log.Warn("remove a table not maintained in redo log manager",
+			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+			zap.String("changefeed", m.cfg.ChangeFeedID.ID),
+			zap.Int64("tableID", tableID))
 		return
 	}
 }
@@ -397,6 +403,8 @@ func (m *logManager) postFlush(tableRtsMap map[model.TableID]model.Ts) {
 			changed := value.(*statefulRts).checkAndSetFlushed(flushed)
 			if !changed {
 				log.Debug("flush redo with regressed resolved ts",
+					zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+					zap.String("changefeed", m.cfg.ChangeFeedID.ID),
 					zap.Int64("tableID", tableID),
 					zap.Uint64("flushed", flushed),
 					zap.Uint64("current", value.(*statefulRts).getFlushed()))
@@ -413,12 +421,15 @@ func (m *logManager) flushLog(
 		*workTimeSlice += time.Since(start)
 	}()
 	if !atomic.CompareAndSwapInt64(&m.flushing, 0, 1) {
-		log.Debug("Fail to update flush flag, " +
-			"the previous flush operation hasn't finished yet")
+		log.Debug("Fail to update flush flag, "+
+			"the previous flush operation hasn't finished yet",
+			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+			zap.String("changefeed", m.cfg.ChangeFeedID.ID))
 		if time.Since(m.lastFlushTime) > redo.FlushWarnDuration {
 			log.Warn("flushLog blocking too long, the redo manager may be stuck",
-				zap.Duration("duration", time.Since(m.lastFlushTime)),
-				zap.Any("changfeed", m.cfg.ChangeFeedID))
+				zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
+				zap.String("changefeed", m.cfg.ChangeFeedID.ID),
+				zap.Duration("duration", time.Since(m.lastFlushTime)))
 		}
 		return
 	}
