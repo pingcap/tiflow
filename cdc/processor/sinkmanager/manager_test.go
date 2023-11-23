@@ -374,8 +374,6 @@ func TestSinkManagerNeedsStuckCheck(t *testing.T) {
 }
 
 func TestSinkManagerRestartTableSinks(t *testing.T) {
-	t.Parallel()
-
 	failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause", "return")
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause")
 
