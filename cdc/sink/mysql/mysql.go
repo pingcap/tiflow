@@ -689,10 +689,10 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 		failpoint.Inject("MySQLSinkHangLongTime", func() {
 			time.Sleep(time.Hour)
 		})
-		err := s.statistics.RecordBatchExecution(func() (int, error) {
+		err := s.statistics.RecordBatchExecution(func() (int, int64, error) {
 			tx, err := s.db.BeginTx(pctx, nil)
 			if err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.params.changefeedID, "BEGIN", dmls.rowCount)
 			}
@@ -709,7 +709,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 							start, s.params.changefeedID, query, dmls.rowCount)
 					}
 					cancelFunc()
-					return 0, logDMLTxnErr(
+					return 0, 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, query, dmls.rowCount)
 				}
@@ -724,7 +724,7 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 						log.Warn("failed to rollback txn", zap.Error(err))
 					}
 					cancelFunc()
-					return 0, logDMLTxnErr(
+					return 0, 0, logDMLTxnErr(
 						cerror.WrapError(cerror.ErrMySQLTxnError, err),
 						start, s.params.changefeedID, dmls.markSQL, dmls.rowCount)
 				}
@@ -732,11 +732,11 @@ func (s *mysqlSink) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDM
 			}
 
 			if err = tx.Commit(); err != nil {
-				return 0, logDMLTxnErr(
+				return 0, 0, logDMLTxnErr(
 					cerror.WrapError(cerror.ErrMySQLTxnError, err),
 					start, s.params.changefeedID, "COMMIT", dmls.rowCount)
 			}
-			return dmls.rowCount, nil
+			return dmls.rowCount, 0, nil
 		})
 		if err != nil {
 			return errors.Trace(err)
@@ -1039,6 +1039,7 @@ func (s *mysqlSink) prepareDMLs(txns []*model.SingleTableTxn, replicaID uint64, 
 				sql, value := s.batchSingleTxnDmls(txn.Rows, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)
+
 				continue
 			}
 		}

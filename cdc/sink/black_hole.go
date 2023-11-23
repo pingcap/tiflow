@@ -67,12 +67,12 @@ func (b *blackHoleSink) FlushRowChangedEvents(
 		}, nil
 	}
 	log.Debug("BlockHoleSink: FlushRowChangedEvents", zap.Uint64("resolvedTs", resolved.Ts))
-	err := b.statistics.RecordBatchExecution(func() (int, error) {
+	err := b.statistics.RecordBatchExecution(func() (int, int64, error) {
 		// TODO: add some random replication latency
 		accumulated := atomic.LoadUint64(&b.accumulated)
 		lastAccumulated := atomic.SwapUint64(&b.lastAccumulated, accumulated)
 		batchSize := accumulated - lastAccumulated
-		return int(batchSize), nil
+		return int(batchSize), int64(batchSize), nil
 	})
 	b.statistics.PrintStatus(ctx)
 	atomic.StoreUint64(&b.flushing, 0)
