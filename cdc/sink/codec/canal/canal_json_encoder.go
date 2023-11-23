@@ -14,6 +14,7 @@
 package canal
 
 import (
+	"bytes"
 	"context"
 	"time"
 
@@ -48,7 +49,12 @@ func newJSONBatchEncoder(config *common.Config) codec.EventBatchEncoder {
 }
 
 func fillColumns(
-	columns []*model.Column, out *jwriter.Writer, onlyHandleKeyColumns bool, builder *canalEntryBuilder,
+	columns []*model.Column,
+	out *jwriter.Writer,
+	onlyHandleKeyColumns bool,
+	onlyUpdatedColumns bool,
+	builder *canalEntryBuilder,
+	newColsMap map[string]*model.Column,
 ) error {
 	if len(columns) == 0 {
 		out.RawString("null")
@@ -60,6 +66,9 @@ func fillColumns(
 	for _, col := range columns {
 		if col != nil {
 			if onlyHandleKeyColumns && !col.Flag.IsHandleKey() {
+				continue
+			}
+			if onlyUpdatedColumns && shouldIgnoreColumn(col, newColsMap) {
 				continue
 			}
 			if isFirst {
@@ -220,22 +229,29 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.PreColumns, out, onlyHandleKey, builder); err != nil {
+		if err := fillColumns(e.PreColumns, out, onlyHandleKey, false, builder, nil); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, out, onlyHandleKey, builder); err != nil {
+		if err := fillColumns(e.Columns, out, onlyHandleKey, false, builder, nil); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
+		var newColsMap map[string]*model.Column
+		if config.ContentCompatible {
+			newColsMap = make(map[string]*model.Column, len(e.Columns))
+			for _, col := range e.Columns {
+				newColsMap[col.Name] = col
+			}
+		}
 		out.RawString(",\"old\":")
-		if err := fillColumns(e.PreColumns, out, onlyHandleKey, builder); err != nil {
+		if err := fillColumns(e.PreColumns, out, onlyHandleKey, config.ContentCompatible, builder, newColsMap); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, out, onlyHandleKey, builder); err != nil {
+		if err := fillColumns(e.Columns, out, onlyHandleKey, false, builder, nil); err != nil {
 			return nil, err
 		}
 	} else {
@@ -412,4 +428,36 @@ func NewJSONBatchEncoderBuilder(config *common.Config) codec.EncoderBuilder {
 // Build a `JSONBatchEncoder`
 func (b *jsonBatchEncoderBuilder) Build() codec.EventBatchEncoder {
 	return newJSONBatchEncoder(b.config)
+}
+
+func shouldIgnoreColumn(col *model.Column,
+	newColumnMap map[string]*model.Column,
+) bool {
+	newCol, ok := newColumnMap[col.Name]
+	if ok && newCol != nil {
+		// sql type is not equal
+		if newCol.Type != col.Type {
+			return false
+		}
+		// value equal
+		if isColumnValueEqual(newCol.Value, col.Value) {
+			return true
+		}
+	}
+	return false
+}
+
+func isColumnValueEqual(preValue, updatedValue interface{}) bool {
+	if preValue == nil || updatedValue == nil {
+		return preValue == updatedValue
+	}
+
+	preValueBytes, ok1 := preValue.([]byte)
+	updatedValueBytes, ok2 := updatedValue.([]byte)
+	if ok1 && ok2 {
+		return bytes.Equal(preValueBytes, updatedValueBytes)
+	}
+	// mounter use the same table info to parse the value,
+	// the value type should be the same
+	return preValue == updatedValue
 }
