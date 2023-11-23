@@ -58,7 +58,7 @@ const (
 type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
-	LastSyncTime model.Ts
+	LastSyncedTs model.Ts
 	BarrierTs    model.Ts
 }
 
@@ -141,7 +141,6 @@ func New(
 	redoDMLMgr redo.DMLManager,
 	sourceManager *sourcemanager.SourceManager,
 ) *SinkManager {
-
 	m := &SinkManager{
 		changefeedID:   changefeedID,
 		changefeedInfo: changefeedInfo,
@@ -963,7 +962,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
-	lastSyncTime := tableSink.getLastSyncTime()
+	lastSyncedTs := tableSink.getLastSyncedTs()
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
@@ -1006,7 +1005,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	return TableStats{
 		CheckpointTs: checkpointTs.ResolvedMark(),
 		ResolvedTs:   resolvedTs,
-		LastSyncTime: lastSyncTime,
+		LastSyncedTs: lastSyncedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
 	}
 }

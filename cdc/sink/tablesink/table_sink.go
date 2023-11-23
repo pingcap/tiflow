@@ -32,9 +32,11 @@ type TableSink interface {
 	// For example, calculating the current progress from the statistics of the table sink.
 	// This is a thread-safe method.
 	GetCheckpointTs() model.ResolvedTs
-	// GetLastSyncTime returns the lastSyncTime  of table sink.
+	// GetLastSyncedTs returns the last synced ts of table sink.
+	// the last synced ts means the biggest committs of the events
+	// that have been flushed to the downstream.
 	// This is a thread-safe method.
-	GetLastSyncTime() uint64
+	GetLastSyncedTs() model.Ts // 先全部用这个吧，最后再看是否合适
 	// Close closes the table sink.
 	// After it returns, no more events will be sent out from this capture.
 	Close()

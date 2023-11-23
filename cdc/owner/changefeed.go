@@ -90,10 +90,11 @@ type changefeed struct {
 	scheduler scheduler.Scheduler
 	// barriers will be created when a changefeed is initialized
 	// and will be destroyed when a changefeed is closed.
-	barriers         *barriers
-	feedStateManager FeedStateManager
-	resolvedTs       model.Ts
-	lastSyncTime     model.Ts
+	barriers                *barriers
+	feedStateManager        FeedStateManager
+	resolvedTs              model.Ts
+	lastSyncedTs            model.Ts
+	pullerIngressResolvedTs model.Ts // record the latest min puller ingress resolved ts of all pullers
 
 	// ddl related fields
 	ddlManager  *ddlManager
@@ -413,18 +414,28 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 		return 0, 0, nil
 	}
 
-	newCheckpointTs, newResolvedTs, newLastSyncTime, err := c.scheduler.Tick(
+	newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
 		barrier)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
-	if c.lastSyncTime > newLastSyncTime {
-		c.lastSyncTime = newLastSyncTime
-	} else {
-		log.Warn("lastSyncTime should not be greater than newLastSyncTime",
-			zap.Uint64("c.lastSyncTime", c.lastSyncTime),
-			zap.Uint64("newLastSyncTime", newLastSyncTime))
+	if c.lastSyncedTs < newLastSyncedTs {
+		c.lastSyncedTs = newLastSyncedTs
+	} else if c.lastSyncedTs > newLastSyncedTs {
+		log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
+			zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
+			zap.Uint64("newLastSyncedTs", newLastSyncedTs))
+	}
+
+	if newPullerIngressResolvedTs != scheduler.CheckpointCannotProceed {
+		if newPullerIngressResolvedTs > c.pullerIngressResolvedTs {
+			c.pullerIngressResolvedTs = newPullerIngressResolvedTs
+		} else if newPullerIngressResolvedTs < c.pullerIngressResolvedTs {
+			log.Warn("the newPullerIngressResolvedTs should not be smaller than c.PullerIngressResolvedTs",
+				zap.Uint64("c.pullerIngressResolvedTs", c.pullerIngressResolvedTs),
+				zap.Uint64("newPullerIngressResolvedTs", newPullerIngressResolvedTs))
+		}
 	}
 
 	pdTime := c.upstream.PDClock.CurrentTime()
@@ -507,6 +518,20 @@ LOOP2:
 	checkpointTs := c.latestStatus.CheckpointTs
 	if c.resolvedTs == 0 {
 		c.resolvedTs = checkpointTs
+	}
+
+	if c.lastSyncedTs == 0 {
+		// Set LastSyncedTs with current pd time when do initialize.
+
+		// we don't save lastSyncedTs in etcd because we want to reduce the number of etcd write.
+		// Based on the assumption that owner will not be replaced frequently,
+		// and we only change owners when oom or some panic happens,
+		// use pd time to initialize lastSyncedTs can work well enough.
+		// Even if there are no more data send into ticdc after changing owner,
+		// we just need to wait synced-check-time to reach synced = true.
+		// We regard the situation never happens that owner is replaced frequently and then leading to
+		// lastSyncedTs always increase even if there are no more data send into ticdc.
+		c.lastSyncedTs = uint64(oracle.GetPhysical(c.upstream.PDClock.CurrentTime()))
 	}
 	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
 

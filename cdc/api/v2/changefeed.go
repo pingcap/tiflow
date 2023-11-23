@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -935,42 +936,63 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	defer cancel()
 	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	defer pdClient.Close()
-	if err != nil {
-		// _ = c.Error(cerror.WrapError(cerror.ErrAPIGetPDClientFailed, err))
-		// return
-		// means pd is offline
-		c.JSON(http.StatusOK, map[string]any{
-			"Synced":       false,
-			"CheckpointTs": status.CheckpointTs,
-			"ResolvedTs":   status.ResolvedTs,
-			"LastSyncTime": status.LastSyncTime,
-			"info":         "xxxxx",
-		})
-		return
-	}
 
-	//TSO 是啥？
-	now, _, _ := pdClient.GetTS(ctx)
-	// get pd_now
-	// 随便写一个先
-	if (now-int64(status.LastSyncTime) > 60*5) && (now-int64(status.CheckpointTs) < 5) {
+	if err != nil { // pd 不可用
+		var message string
+		if (status.PullerIngressResolvedTs - status.CheckpointTs) > (5*1000)<<18 { // 5s
+			message = fmt.Sprintf("we get pd client failed with err is %s. Besides the data is not finish syncing", terror.Message(err))
+		} else {
+			message = fmt.Sprintf("we get pd client failed with err is %s. "+
+				"You can check the pd first, and if pd is available, means we don't finish sync data. "+
+				"If pd is not available, please check the whether we satisfy the condition that"+
+				"The time difference from lastSyncedTs to the current time from the time zone of pd is greater than 5 min"+
+				"If it's satisfied, means the data syncing is totally finished", err)
+		}
 		c.JSON(http.StatusOK, map[string]any{
-			"Synced":       true,
-			"CheckpointTs": status.CheckpointTs,
-			"ResolvedTs":   status.ResolvedTs,
-			"LastSyncTime": status.LastSyncTime,
-			"info":         "",
-		})
-	} else {
-		c.JSON(http.StatusOK, map[string]any{
-			"Synced":       false,
-			"CheckpointTs": status.CheckpointTs,
-			"ResolvedTs":   status.ResolvedTs,
-			"LastSyncTime": status.LastSyncTime,
-			"info":         "xxxxx",
+			"Synced":            false,
+			"Sink-CheckpointTs": status.CheckpointTs,
+			"Puller-ResolvedTs": status.PullerIngressResolvedTs,
+			"LastSyncedTs":      status.LastSyncedTs,
+			"info":              message,
 		})
 	}
 
+	physical, logical, _ := pdClient.GetTS(ctx)
+	now := oracle.ComposeTS(physical, logical)
+
+	if (now-status.LastSyncedTs > (5*60*1000)<<18) && (now-status.CheckpointTs < (5*1000)<<18) { // 达到 synced 严格条件
+		c.JSON(http.StatusOK, map[string]any{
+			"Synced":            true,
+			"Sink-CheckpointTs": status.CheckpointTs,
+			"Puller-ResolvedTs": status.PullerIngressResolvedTs,
+			"LastSyncedTs":      status.LastSyncedTs,
+			"info":              "Data syncing is finished",
+		})
+	} else if now-status.LastSyncedTs > (5*60*1000)<<18 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
+		var message string
+		if (status.PullerIngressResolvedTs - status.CheckpointTs) > (5*1000)<<18 { // 5s
+			message = fmt.Sprintf("Please check whether pd is health and tikv region is all available. " +
+				"If pd is not health or tikv region is not available, the data syncing is finished. " +
+				" Otherwise the data syncing is not finished, please wait")
+		} else {
+			message = fmt.Sprintf("The data syncing is not finished, please wait")
+		}
+		c.JSON(http.StatusOK, map[string]any{
+			"Synced":            false,
+			"Sink-CheckpointTs": status.CheckpointTs,
+			"Puller-ResolvedTs": status.PullerIngressResolvedTs,
+			"LastSyncedTs":      status.LastSyncedTs,
+			"info":              message,
+		})
+	} else { // lastSyncedTs 条件达到
+		c.JSON(http.StatusOK, map[string]any{
+			"Synced":            false,
+			"Sink-CheckpointTs": status.CheckpointTs,
+			"Puller-ResolvedTs": status.PullerIngressResolvedTs,
+			"LastSyncedTs":      status.LastSyncedTs,
+			"info":              "The data syncing is not finished, please wait",
+		})
+	}
 }
 
 func toAPIModel(

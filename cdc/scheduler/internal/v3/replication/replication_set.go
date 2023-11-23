@@ -1021,8 +1021,8 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
 	}
 
-	if r.Checkpoint.LastSyncTime < checkpoint.LastSyncTime {
-		r.Checkpoint.LastSyncTime = checkpoint.LastSyncTime
+	if r.Checkpoint.LastSyncedTs < checkpoint.LastSyncedTs {
+		r.Checkpoint.LastSyncedTs = checkpoint.LastSyncedTs
 	}
 	r.Stats = stats
 }

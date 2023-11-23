@@ -32,9 +32,12 @@ var (
 	_ TableSink = (*EventTableSink[*model.SingleTableTxn, *dmlsink.TxnEventAppender])(nil)
 )
 
-type LastSyncTimeRecord struct {
+// LastSyncedTsRecord is used to record the last synced ts of table sink with lock
+// lastSyncedTs means the biggest committs of the events
+// that have been flushed to the downstream.
+type LastSyncedTsRecord struct {
 	sync.Mutex
-	lastSyncTime uint64
+	lastSyncedTs model.Ts
 }
 
 // EventTableSink is a table sink that can write events.
@@ -53,7 +56,7 @@ type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
 	eventBuffer []E
 	state       state.TableSinkState
 
-	lastSyncTime LastSyncTimeRecord
+	lastSyncedTs LastSyncedTsRecord
 
 	// For dataflow metrics.
 	metricsTableSinkTotalRows prometheus.Counter
@@ -78,7 +81,7 @@ func New[E dmlsink.TableEvent, P dmlsink.Appender[E]](
 		eventAppender:             appender,
 		eventBuffer:               make([]E, 0, 1024),
 		state:                     state.TableSinkSinking,
-		lastSyncTime:              LastSyncTimeRecord{lastSyncTime: 0}, // use 0 to initialize lastSyncTime
+		lastSyncedTs:              LastSyncedTsRecord{lastSyncedTs: 0},
 		metricsTableSinkTotalRows: totalRowsCounter,
 	}
 }
@@ -124,20 +127,21 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 			return SinkInternalError{err}
 		}
 		// We have to record the event ID for the callback.
+		postEventFlushFunc := e.progressTracker.addEvent()
 		ce := &dmlsink.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
 				// Due to multi workers will call this callback concurrently,
-				// we need to add lock to protect lastSyncTime
+				// we need to add lock to protect lastSyncedTs
 				// we need make a performance test for it
 				{
-					e.lastSyncTime.Lock()
-					defer e.lastSyncTime.Unlock()
-					if e.lastSyncTime.lastSyncTime < ev.GetCommitTs() {
-						e.lastSyncTime.lastSyncTime = ev.GetCommitTs()
+					e.lastSyncedTs.Lock()
+					defer e.lastSyncedTs.Unlock()
+					if e.lastSyncedTs.lastSyncedTs < ev.GetCommitTs() {
+						e.lastSyncedTs.lastSyncedTs = ev.GetCommitTs()
 					}
 				}
-				e.progressTracker.addEvent()
+				postEventFlushFunc()
 			},
 			SinkState: &e.state,
 		}
@@ -162,11 +166,13 @@ func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
 	return e.progressTracker.advance()
 }
 
-// GetLastSyncTime returns the lastSyncTime ts of the table sink.
-func (e *EventTableSink[E, P]) GetLastSyncTime() uint64 {
-	e.lastSyncTime.Lock()
-	defer e.lastSyncTime.Unlock()
-	return e.lastSyncTime.lastSyncTime
+// GetLastSyncedTs returns the last synced ts of table sink.
+// lastSyncedTs means the biggest committs of all the events
+// that have been flushed to the downstream.
+func (e *EventTableSink[E, P]) GetLastSyncedTs() model.Ts {
+	e.lastSyncedTs.Lock()
+	defer e.lastSyncedTs.Unlock()
+	return e.lastSyncedTs.lastSyncedTs
 }
 
 // Close closes the table sink.

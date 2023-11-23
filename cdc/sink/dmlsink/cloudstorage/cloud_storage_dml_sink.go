@@ -224,7 +224,6 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 		if txn.GetTableSinkState() != state.TableSinkSinking {
 			// The table where the event comes from is in stopping, so it's safe
 			// to drop the event directly.
-			// 这个状态是在干嘛的？
 			txn.Callback()
 			continue
 		}

@@ -557,9 +557,11 @@ func (r *Manager) AdvanceCheckpoint(
 	currentPDTime time.Time,
 	barrier *schedulepb.BarrierWithMinTs,
 	redoMetaManager redo.MetaManager,
-) (newCheckpointTs, newResolvedTs model.Ts, newLastSyncTime model.Ts) {
+) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs model.Ts) {
 	var redoFlushedResolvedTs model.Ts
-	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs, newLastSyncTime uint64) (uint64, uint64, uint64) {
+	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs, newLastSyncedTs,
+		newPullerIngressResolvedTs uint64,
+	) (uint64, uint64, uint64, uint64) {
 		flushedMeta := redoMetaManager.GetFlushedMeta()
 		redoFlushedResolvedTs = flushedMeta.ResolvedTs
 		log.Debug("owner gets flushed redo meta",
@@ -578,7 +580,7 @@ func (r *Manager) AdvanceCheckpoint(
 		if barrier.GlobalBarrierTs > newResolvedTs {
 			barrier.GlobalBarrierTs = newResolvedTs
 		}
-		return newCheckpointTs, newResolvedTs, newLastSyncTime
+		return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs
 	}
 	defer func() {
 		if redoFlushedResolvedTs != 0 && barrier.GlobalBarrierTs > redoFlushedResolvedTs {
@@ -594,7 +596,9 @@ func (r *Manager) AdvanceCheckpoint(
 	r.slowestSink = tablepb.Span{}
 	var slowestPullerResolvedTs uint64 = math.MaxUint64
 
-	newCheckpointTs, newResolvedTs, newLastSyncTime = math.MaxUint64, math.MaxUint64, 0
+	// newPullerIngressResolvedTs to record the min ingress resolved ts of all pullers
+	newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs = math.MaxUint64, math.MaxUint64, 0, math.MaxUint64
+
 	cannotProceed := false
 	currentTables.Iter(func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool {
 		tableSpanFound, tableHasHole := false, false
@@ -629,8 +633,9 @@ func (r *Manager) AdvanceCheckpoint(
 					newResolvedTs = table.Checkpoint.ResolvedTs
 				}
 
-				if newLastSyncTime < table.Checkpoint.LastSyncTime {
-					newLastSyncTime = table.Checkpoint.LastSyncTime
+				// Find the max lastSyncedTs of all tables.
+				if newLastSyncedTs < table.Checkpoint.LastSyncedTs {
+					newLastSyncedTs = table.Checkpoint.LastSyncedTs
 				}
 				// Find the minimum puller resolved ts.
 				if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
@@ -639,6 +644,14 @@ func (r *Manager) AdvanceCheckpoint(
 						r.slowestPuller = span
 					}
 				}
+
+				// Find the minimum puller ingress resolved ts.
+				if pullerIngressCkpt, ok := table.Stats.StageCheckpoints["puller-ingress"]; ok {
+					if newPullerIngressResolvedTs > pullerIngressCkpt.ResolvedTs {
+						newPullerIngressResolvedTs = pullerIngressCkpt.ResolvedTs
+					}
+				}
+
 				return true
 			})
 		if !tableSpanFound || !tableSpanStartFound || !tableSpanEndFound || tableHasHole {
@@ -667,9 +680,9 @@ func (r *Manager) AdvanceCheckpoint(
 		if redoMetaManager.Enabled() {
 			// If redo is enabled, GlobalBarrierTs should be limited by redo flushed meta.
 			newResolvedTs = barrier.RedoBarrierTs
-			limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncTime)
+			limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs)
 		}
-		return checkpointCannotProceed, checkpointCannotProceed, checkpointCannotProceed
+		return checkpointCannotProceed, checkpointCannotProceed, checkpointCannotProceed, checkpointCannotProceed
 	}
 
 	// If currentTables is empty, we should advance newResolvedTs to global barrier ts and
@@ -717,10 +730,10 @@ func (r *Manager) AdvanceCheckpoint(
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Uint64("newCheckpointTs", newCheckpointTs),
 			zap.Uint64("newResolvedTs", newResolvedTs))
-		return limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncTime)
+		return limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs)
 	}
 
-	return newCheckpointTs, newResolvedTs, newLastSyncTime
+	return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs
 }
 
 func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
