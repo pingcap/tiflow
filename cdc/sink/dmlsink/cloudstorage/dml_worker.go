@@ -230,23 +230,24 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 	var callbacks []func()
 	buf := bytes.NewBuffer(make([]byte, 0, task.size))
 	rowsCnt := 0
+	bytesCnt := int64(0)
 	for _, msg := range task.msgs {
-		d.metricWriteBytes.Add(float64(len(msg.Value)))
+		bytesCnt += int64(len(msg.Value))
 		rowsCnt += msg.GetRowsCount()
 		buf.Write(msg.Value)
 		callbacks = append(callbacks, msg.Callback)
 	}
 
-	if err := d.statistics.RecordBatchExecution(func() (int, error) {
+	if err := d.statistics.RecordBatchExecution(func() (int, int64, error) {
 		if d.config.FlushConcurrency <= 1 {
-			return rowsCnt, d.storage.WriteFile(ctx, path, buf.Bytes())
+			return rowsCnt, bytesCnt, d.storage.WriteFile(ctx, path, buf.Bytes())
 		}
 
 		writer, inErr := d.storage.Create(ctx, path, &storage.WriterOption{
 			Concurrency: d.config.FlushConcurrency,
 		})
 		if inErr != nil {
-			return 0, inErr
+			return 0, 0, inErr
 		}
 
 		defer func() {
@@ -263,13 +264,14 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 			}
 		}()
 		if _, inErr = writer.Write(ctx, buf.Bytes()); inErr != nil {
-			return 0, inErr
+			return 0, 0, inErr
 		}
-		return rowsCnt, nil
+		return rowsCnt, bytesCnt, nil
 	}); err != nil {
 		return err
 	}
 
+	d.metricWriteBytes.Add(float64(bytesCnt))
 	d.metricFileCount.Add(1)
 	for _, cb := range callbacks {
 		if cb != nil {
