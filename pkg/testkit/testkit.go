@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/config"
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
@@ -25,10 +26,14 @@ import (
 	"github.com/pingcap/tidb/meta"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/session"
+	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
 )
 
 type TestKit struct {
@@ -60,11 +65,11 @@ func New(t *testing.T) *TestKit {
 }
 
 // DDL2Job executes the DDL stmt and returns the DDL job
-func (s *TestKit) DDL2Job(ddl string) *model.Job {
-	s.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
-	require.Nil(s.t, err)
-	require.Len(s.t, jobs, 1)
+func (tk *TestKit) DDL2Job(ddl string) *model.Job {
+	tk.MustExec(ddl)
+	jobs, err := tiddl.GetLastNHistoryDDLJobs(tk.GetCurrentMeta(), 1)
+	require.Nil(tk.t, err)
+	require.Len(tk.t, jobs, 1)
 	// Set State from Synced to Done.
 	// Because jobs are put to history queue after TiDB alter its state from
 	// Done to Synced.
@@ -103,7 +108,7 @@ func (s *TestKit) DDL2Job(ddl string) *model.Job {
 		newTableNames, oldTableIDs, oldSchemaNames,
 	}
 	rawArgs, err := json.Marshal(args)
-	require.NoError(s.t, err)
+	require.NoError(tk.t, err)
 	res.RawArgs = rawArgs
 	return res
 }
@@ -112,11 +117,11 @@ func (s *TestKit) DDL2Job(ddl string) *model.Job {
 // It is mainly used for "DROP TABLE" and "DROP VIEW" statement because
 // multiple jobs will be generated after executing these two types of
 // DDL statements.
-func (s *TestKit) DDL2Jobs(ddl string, jobCnt int) []*model.Job {
-	s.MustExec(ddl)
-	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), jobCnt)
-	require.Nil(s.t, err)
-	require.Len(s.t, jobs, jobCnt)
+func (tk *TestKit) DDL2Jobs(ddl string, jobCnt int) []*model.Job {
+	tk.MustExec(ddl)
+	jobs, err := tiddl.GetLastNHistoryDDLJobs(tk.GetCurrentMeta(), jobCnt)
+	require.Nil(tk.t, err)
+	require.Len(tk.t, jobs, jobCnt)
 	// Set State from Synced to Done.
 	// Because jobs are put to history queue after TiDB alter its state from
 	// Done to Synced.
@@ -127,19 +132,58 @@ func (s *TestKit) DDL2Jobs(ddl string, jobCnt int) []*model.Job {
 }
 
 // Storage returns the tikv storage
-func (s *TestKit) Storage() kv.Storage {
-	return s.storage
+func (tk *TestKit) Storage() kv.Storage {
+	return tk.storage
 }
 
 // GetCurrentMeta return the current meta snapshot
-func (s *TestKit) GetCurrentMeta() *meta.Meta {
-	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(s.t, err)
-	return meta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
+func (tk *TestKit) GetCurrentMeta() *meta.Meta {
+	ver, err := tk.storage.CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(tk.t, err)
+	return meta.NewSnapshotMeta(tk.storage.GetSnapshot(ver))
 }
 
 // Close closes the helper
-func (s *TestKit) Close() {
-	s.domain.Close()
-	s.storage.Close() //nolint:errcheck
+func (tk *TestKit) Close() {
+	tk.domain.Close()
+	tk.storage.Close() //nolint:errcheck
+}
+
+func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*model.Job, error) {
+	s, err := session.CreateSession(tk.storage)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if s != nil {
+		defer s.Close()
+	}
+
+	store := domain.GetDomain(s.(sessionctx.Context)).Store()
+	txn, err := store.Begin()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	defer txn.Rollback() //nolint:errcheck
+	txnMeta := meta.NewMeta(txn)
+
+	jobs, err := tiddl.GetAllHistoryDDLJobs(txnMeta)
+	res := make([]*model.Job, 0)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	for i, job := range jobs {
+		ignoreSchema := f.ShouldIgnoreSchema(job.SchemaName)
+		ignoreTable := f.ShouldIgnoreTable(job.SchemaName, job.TableName)
+		if ignoreSchema || ignoreTable {
+			log.Info("Ignore ddl job", zap.Stringer("job", job))
+			continue
+		}
+		// Set State from Synced to Done.
+		// Because jobs are put to history queue after TiDB alter its state from
+		// Done to Synced.
+		jobs[i].State = model.JobStateDone
+		res = append(res, job)
+	}
+	return jobs, nil
 }

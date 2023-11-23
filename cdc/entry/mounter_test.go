@@ -271,7 +271,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	jobs, err := getAllHistoryDDLJob(tk.Storage(), f)
+	jobs, err := tk.GetAllHistoryDDLJob(f)
 	require.Nil(t, err)
 
 	scheamStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
@@ -1713,8 +1713,6 @@ func TestNewDMRowChange(t *testing.T) {
 }
 
 func TestFormatColVal(t *testing.T) {
-	t.Parallel()
-
 	ftTypeFloatNotNull := types.NewFieldType(mysql.TypeFloat)
 	ftTypeFloatNotNull.SetFlag(mysql.NotNullFlag)
 	col := &timodel.ColumnInfo{FieldType: *ftTypeFloatNotNull}
