@@ -18,25 +18,18 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/tidb/parser/model"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
 	"github.com/pingcap/tidb/types"
-=======
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry.go
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/internal"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
-=======
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry.go
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
@@ -123,15 +116,9 @@ func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (resul
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
-func (b *canalEntryBuilder) buildColumn(c *model.Column, colName string, updated bool) (*canal.Column, error) {
-	mysqlType := getMySQLType(c)
-	javaType, err := getJavaSQLType(c, mysqlType)
-=======
 func (b *canalEntryBuilder) buildColumn(c *model.Column, columnInfo *timodel.ColumnInfo, updated bool) (*canal.Column, error) {
 	mysqlType := utils.GetMySQLType(columnInfo, b.config.ContentCompatible)
 	javaType, err := getJavaSQLType(c.Value, c.Type, c.Flag)
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry.go
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
@@ -160,16 +147,12 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 		if column == nil {
 			continue
 		}
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
-		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
-=======
 		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
 		if !ok {
 			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
 				"column info not found for column id: %d", e.ColInfos[idx].ID)
 		}
 		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry.go
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -185,16 +168,12 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
-		c, err := b.buildColumn(column, column.Name, !e.IsDelete())
-=======
 		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
 		if !ok {
 			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
 				"column info not found for column id: %d", e.ColInfos[idx].ID)
 		}
 		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry.go
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -401,7 +380,6 @@ func getJavaSQLType(c *model.Column, mysqlType string) (result internal.JavaSQLT
 
 	return javaType, nil
 }
-<<<<<<< HEAD:cdc/sink/codec/canal/canal_entry.go
 
 // when encoding the canal format, for unsigned mysql type, add `unsigned` keyword.
 // it should have the form `t unsigned`, such as `int unsigned`
@@ -436,5 +414,3 @@ func getMySQLType(c *model.Column) string {
 
 	return mysqlType
 }
-=======
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123)):pkg/sink/codec/canal/canal_entry.go
