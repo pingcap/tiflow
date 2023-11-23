@@ -270,6 +270,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               c.Consistent.Storage,
 			UseFileBackend:        c.Consistent.UseFileBackend,
+			MemoryQuotaPercentage: c.Consistent.MemoryQuotaPercentage,
+			EventCachePercentage:  c.Consistent.EventCachePercentage,
 		}
 	}
 	if c.Sink != nil {
@@ -757,6 +759,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               cloned.Consistent.Storage,
 			UseFileBackend:        cloned.Consistent.UseFileBackend,
+			MemoryQuotaPercentage: cloned.Consistent.MemoryQuotaPercentage,
+			EventCachePercentage:  cloned.Consistent.EventCachePercentage,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -953,6 +957,8 @@ type ConsistentConfig struct {
 	FlushWorkerNum        int    `json:"flush_worker_num"`
 	Storage               string `json:"storage,omitempty"`
 	UseFileBackend        bool   `json:"use_file_backend"`
+	MemoryQuotaPercentage uint64 `json:"memory_quota_percentage"`
+	EventCachePercentage  uint64 `json:"event_cache_percentage"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

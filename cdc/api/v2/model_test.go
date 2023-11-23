@@ -69,6 +69,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
+		MemoryQuotaPercentage: 50,
+		EventCachePercentage:  0,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
