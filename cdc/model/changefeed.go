@@ -353,6 +353,10 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 		)
 		return
 	}
+	// blackhole is for testing purpose, no need to remove fields
+	if sink.IsBlackHoleScheme(uri.Scheme) {
+		return
+	}
 	if !sink.IsMQScheme(uri.Scheme) {
 		info.rmMQOnlyFields()
 	} else {
@@ -386,6 +390,7 @@ func (info *ChangeFeedInfo) rmMQOnlyFields() {
 	info.Config.Sink.EnableKafkaSinkV2 = nil
 	info.Config.Sink.OnlyOutputUpdatedColumns = nil
 	info.Config.Sink.DeleteOnlyOutputHandleKeyColumns = nil
+	info.Config.Sink.ContentCompatible = nil
 	info.Config.Sink.KafkaConfig = nil
 }
 
