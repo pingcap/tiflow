@@ -33,7 +33,7 @@ import (
 var dummyChangeFeedID = model.DefaultChangeFeedID("dummy_changefeed")
 
 func TestAllPhysicalTables(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -91,7 +91,7 @@ func TestAllPhysicalTables(t *testing.T) {
 }
 
 func TestAllTables(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -130,7 +130,7 @@ func TestAllTables(t *testing.T) {
 }
 
 func TestIsIneligibleTableID(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -188,7 +188,7 @@ func compareEvents(t *testing.T, e1, e2 *model.DDLEvent) {
 }
 
 func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -263,7 +263,7 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
@@ -391,7 +391,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
@@ -494,7 +494,7 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
@@ -615,7 +615,7 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 }
 
 func TestBuildIgnoredDDLJob(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)

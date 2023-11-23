@@ -314,7 +314,7 @@ func TestChangefeedHandleError(t *testing.T) {
 }
 
 func TestExecDDL(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.
@@ -399,7 +399,7 @@ func TestExecDDL(t *testing.T) {
 }
 
 func TestEmitCheckpointTs(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.

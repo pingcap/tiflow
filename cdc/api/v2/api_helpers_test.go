@@ -30,7 +30,7 @@ import (
 func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctx := context.Background()
 	pdClient := &mockPDClient{}
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	helper.Tk().MustExec("use test;")
 	storage := helper.Storage()
 	ctrl := mock_controller.NewMockController(gomock.NewController(t))
@@ -111,7 +111,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 		Config: config.GetDefaultReplicaConfig(),
 	}
 	oldUpInfo := &model.UpstreamInfo{}
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	helper.Tk().MustExec("use test;")
 	storage := helper.Storage()
 	h := &APIV2HelpersImpl{}

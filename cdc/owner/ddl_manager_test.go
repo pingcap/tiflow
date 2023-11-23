@@ -158,7 +158,7 @@ func TestGetSnapshotTs(t *testing.T) {
 }
 
 func TestExecRenameTablesDDL(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	dm := createDDLManagerForTest(t)
@@ -258,7 +258,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 }
 
 func TestExecDropTablesDDL(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	dm := createDDLManagerForTest(t)
@@ -322,7 +322,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 }
 
 func TestExecDropViewsDDL(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	dm := createDDLManagerForTest(t)

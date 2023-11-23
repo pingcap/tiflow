@@ -92,7 +92,7 @@ func TestNewColumnSelector(t *testing.T) {
 }
 
 func TestVerifyTables(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	sql := `create table test.t1(
@@ -262,7 +262,7 @@ func TestVerifyTablesColumnFilteredInDispatcher(t *testing.T) {
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, config.ProtocolDefault, "default", "default")
 	require.NoError(t, err)
 
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b int, c int)`

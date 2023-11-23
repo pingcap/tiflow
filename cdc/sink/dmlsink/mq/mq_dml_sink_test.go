@@ -80,7 +80,7 @@ func TestWriteEvents(t *testing.T) {
 	require.NotNil(t, s)
 	defer s.Close()
 
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`

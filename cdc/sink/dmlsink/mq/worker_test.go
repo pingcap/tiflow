@@ -62,7 +62,7 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 }
 
 func TestNonBatchEncode_SendMessages(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
@@ -263,7 +263,7 @@ func TestBatchEncode_Group(t *testing.T) {
 }
 
 func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
@@ -357,7 +357,7 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 	worker, p := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
 
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
@@ -516,7 +516,7 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	replicatingStatus := state.TableSinkSinking
 	stoppedStatus := state.TableSinkStopping
 
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
