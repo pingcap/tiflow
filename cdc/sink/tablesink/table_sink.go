@@ -36,7 +36,7 @@ type TableSink interface {
 	// the last synced ts means the biggest committs of the events
 	// that have been flushed to the downstream.
 	// This is a thread-safe method.
-	GetLastSyncedTs() model.Ts // 先全部用这个吧，最后再看是否合适
+	GetLastSyncedTs() model.Ts
 	// Close closes the table sink.
 	// After it returns, no more events will be sent out from this capture.
 	Close()

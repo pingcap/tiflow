@@ -38,6 +38,9 @@ type mockEventSink struct {
 
 func (m *mockEventSink) WriteEvents(rows ...*dmlsink.TxnCallbackableEvent) error {
 	m.events = append(m.events, rows...)
+	// for _, event := range rows {
+	// 	event.Callback()
+	// }
 	return nil
 }
 
@@ -247,6 +250,7 @@ func TestGetCheckpointTs(t *testing.T) {
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(0), "lastSyncedTs should be not updated")
 
 	// One event will be flushed.
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(101))
@@ -254,11 +258,13 @@ func TestGetCheckpointTs(t *testing.T) {
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
 	sink.acknowledge(101)
 	require.Equal(t, model.NewResolvedTs(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(101), "lastSyncedTs should be the same as the flushed event")
 
 	// Flush all events.
 	err = tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(101), "lastSyncedTs should be not updated")
 
 	// Only acknowledge some events.
 	sink.acknowledge(102)
@@ -268,10 +274,12 @@ func TestGetCheckpointTs(t *testing.T) {
 		tb.GetCheckpointTs(),
 		"checkpointTs should still be 101",
 	)
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(102), "lastSyncedTs should be updated")
 
 	// Ack all events.
 	sink.acknowledge(105)
 	require.Equal(t, model.NewResolvedTs(105), tb.GetCheckpointTs(), "checkpointTs should be 105")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(105), "lastSyncedTs should be updated")
 }
 
 func TestClose(t *testing.T) {
@@ -404,4 +412,5 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	currentTs := tb.GetCheckpointTs()
 	sink.acknowledge(105)
 	require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(105), "lastSyncedTs should not change")
 }

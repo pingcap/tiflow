@@ -40,6 +40,12 @@ type LastSyncedTsRecord struct {
 	lastSyncedTs model.Ts
 }
 
+func (r *LastSyncedTsRecord) getLastSyncedTs() model.Ts {
+	r.Lock()
+	defer r.Unlock()
+	return r.lastSyncedTs
+}
+
 // EventTableSink is a table sink that can write events.
 
 type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
@@ -128,6 +134,7 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 		}
 		// We have to record the event ID for the callback.
 		postEventFlushFunc := e.progressTracker.addEvent()
+		evCommitTs := ev.GetCommitTs()
 		ce := &dmlsink.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
@@ -137,8 +144,9 @@ func (e *EventTableSink[E, P]) UpdateResolvedTs(resolvedTs model.ResolvedTs) err
 				{
 					e.lastSyncedTs.Lock()
 					defer e.lastSyncedTs.Unlock()
-					if e.lastSyncedTs.lastSyncedTs < ev.GetCommitTs() {
-						e.lastSyncedTs.lastSyncedTs = ev.GetCommitTs()
+
+					if e.lastSyncedTs.lastSyncedTs < evCommitTs {
+						e.lastSyncedTs.lastSyncedTs = evCommitTs
 					}
 				}
 				postEventFlushFunc()
@@ -170,9 +178,7 @@ func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
 // lastSyncedTs means the biggest committs of all the events
 // that have been flushed to the downstream.
 func (e *EventTableSink[E, P]) GetLastSyncedTs() model.Ts {
-	e.lastSyncedTs.Lock()
-	defer e.lastSyncedTs.Unlock()
-	return e.lastSyncedTs.lastSyncedTs
+	return e.lastSyncedTs.getLastSyncedTs()
 }
 
 // Close closes the table sink.
