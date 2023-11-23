@@ -218,12 +218,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	}
 
 	// Case 2: the table meta path is not empty.
-	if schemaFileCnt != 0 {
-		if lastVersion == 0 {
-			log.Panic("no table schema file found in an non-empty meta path",
-				zap.Any("versionedTableName", table),
-				zap.Uint32("checksum", checksum))
-		}
+	if schemaFileCnt != 0 && lastVersion != 0 {
 		f.versionMap[table] = lastVersion
 		return nil
 	}
