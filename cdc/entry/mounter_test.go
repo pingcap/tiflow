@@ -261,7 +261,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	delApproximateBytes [][]int
 },
 ) {
-	tk := testkit.New(t)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	tk := testkit.New(t, replicaConfig)
 	defer tk.Close()
 
 	tk.MustExec("set @@tidb_enable_clustered_index=1;")
@@ -269,7 +270,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	tk.MustExec(tc.createTableDDL)
 
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(replicaConfig, "")
 	require.Nil(t, err)
 	jobs, err := tk.GetAllHistoryDDLJob(f)
 	require.Nil(t, err)
@@ -296,11 +297,10 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ver, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
-	config := config.GetDefaultReplicaConfig()
-	filter, err := filter.NewFilter(config, "")
+	filter, err := filter.NewFilter(replicaConfig, "")
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
-		model.DefaultChangeFeedID("c1"), time.UTC, filter, config.Integrity).(*mounter)
+		model.DefaultChangeFeedID("c1"), time.UTC, filter, replicaConfig.Integrity).(*mounter)
 	mounter.tz = time.Local
 	ctx := context.Background()
 
@@ -1004,16 +1004,17 @@ func TestGetDefaultZeroValue(t *testing.T) {
 }
 
 func TestE2ERowLevelChecksum(t *testing.T) {
-	tk := testkit.New(t)
+	// changefeed enable checksum functionality
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+
+	tk := testkit.New(t, replicaConfig)
 	defer tk.Close()
 
 	// upstream TiDB enable checksum functionality
 	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
 	tk.MustExec("use test")
 
-	// changefeed enable checksum functionality
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	filter, err := filter.NewFilter(replicaConfig, "")
 	require.NoError(t, err)
 
@@ -1176,14 +1177,15 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 }
 
 func TestDecodeRowEnableChecksum(t *testing.T) {
-	tk := testkit.New(t)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+
+	tk := testkit.New(t, replicaConfig)
 	defer tk.Close()
 
 	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
 	tk.MustExec("use test")
 
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	filter, err := filter.NewFilter(replicaConfig, "")
 	require.NoError(t, err)
 
@@ -1304,7 +1306,9 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 }
 
 func TestDecodeRow(t *testing.T) {
-	tk := testkit.New(t)
+	replicaConfig := config.GetDefaultReplicaConfig()
+
+	tk := testkit.New(t, replicaConfig)
 	defer tk.Close()
 
 	tk.MustExec("set @@tidb_enable_clustered_index=1;")
@@ -1315,9 +1319,7 @@ func TestDecodeRow(t *testing.T) {
 	ver, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(t, err)
 
-	cfg := config.GetDefaultReplicaConfig()
-
-	filter, err := filter.NewFilter(cfg, "")
+	filter, err := filter.NewFilter(replicaConfig, "")
 	require.NoError(t, err)
 
 	schemaStorage, err := NewSchemaStorage(tk.GetCurrentMeta(),
@@ -1382,7 +1384,10 @@ func TestDecodeRow(t *testing.T) {
 // TestDecodeEventIgnoreRow tests a PolymorphicEvent.Row is nil
 // if this event should be filter out by filter.
 func TestDecodeEventIgnoreRow(t *testing.T) {
-	tk := testkit.New(t)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Filter.Rules = []string{"test.student", "test.computer"}
+
+	tk := testkit.New(t, replicaConfig)
 	defer tk.Close()
 	tk.MustExec("use test;")
 
@@ -1394,9 +1399,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	cfID := model.DefaultChangeFeedID("changefeed-test-ignore-event")
 
-	cfg := config.GetDefaultReplicaConfig()
-	cfg.Filter.Rules = []string{"test.student", "test.computer"}
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(replicaConfig, "")
 	require.Nil(t, err)
 	ver, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
