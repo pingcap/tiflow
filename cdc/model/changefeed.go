@@ -589,6 +589,7 @@ func (info *ChangeFeedInfo) DownstreamType() (DownstreamType, error) {
 	return Unknown, nil
 }
 
+// NeedSendBootstrapEvent returns true if the changefeed need to send bootstrap event.
 func (info *ChangeFeedInfo) NeedSendBootstrapEvent() (bool, error) {
 	downStreamType, err := info.DownstreamType()
 	if err != nil {
