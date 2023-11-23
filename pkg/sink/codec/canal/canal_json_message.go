@@ -21,9 +21,9 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding/charmap"
@@ -213,19 +213,8 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 	return result, nil
 }
 
-func extractBasicMySQLType(mysqlType string) string {
-	for i := 0; i < len(mysqlType); i++ {
-		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
-			return mysqlType[:i]
-		}
-	}
-	return mysqlType
-}
-
 func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) *model.Column {
-	mysqlTypeStr = extractBasicMySQLType(mysqlTypeStr)
-	mysqlType := types.StrToType(mysqlTypeStr)
-
+	mysqlType := utils.ExtractBasicMySQLType(mysqlTypeStr)
 	result := &model.Column{
 		Type:  mysqlType,
 		Name:  name,
