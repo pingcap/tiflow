@@ -372,3 +372,47 @@ func TestSinkManagerNeedsStuckCheck(t *testing.T) {
 
 	require.False(t, manager.needsStuckCheck())
 }
+
+func TestSinkManagerRestartTableSinks(t *testing.T) {
+	t.Parallel()
+
+	failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause", "return")
+	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/SinkWorkerTaskHandlePause")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 16)
+	changefeedInfo := getChangefeedInfo()
+	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.ChangeFeedID{}, changefeedInfo, errCh)
+	defer func() {
+		cancel()
+		manager.Close()
+	}()
+
+	span := tablepb.Span{TableID: 1}
+	manager.AddTable(span, 1, 100)
+	require.Nil(t, manager.StartTable(span, 2))
+	table, exists := manager.tableSinks.Load(span)
+	require.True(t, exists)
+
+	table.(*tableSinkWrapper).updateReceivedSorterResolvedTs(4)
+	table.(*tableSinkWrapper).updateBarrierTs(4)
+	select {
+	case task := <-manager.sinkTaskChan:
+		require.Equal(t, engine.Position{StartTs: 0, CommitTs: 3}, task.lowerBound)
+		task.callback(engine.Position{StartTs: 3, CommitTs: 4})
+	case <-time.After(2 * time.Second):
+		panic("should always get a sink task")
+	}
+
+	// With the failpoint blackhole/WriteEventsFail enabled, sink manager should restarts
+	// the table sink at its checkpoint.
+	failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/dmlsink/blackhole/WriteEventsFail", "1*return")
+	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/dmlsink/blackhole/WriteEventsFail")
+	select {
+	case task := <-manager.sinkTaskChan:
+		require.Equal(t, engine.Position{StartTs: 2, CommitTs: 2}, task.lowerBound)
+		task.callback(engine.Position{StartTs: 3, CommitTs: 4})
+	case <-time.After(2 * time.Second):
+		panic("should always get a sink task")
+	}
+}

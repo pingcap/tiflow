@@ -96,6 +96,7 @@ func newSinkWorker(
 }
 
 func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask) error {
+	failpoint.Inject("SinkWorkerTaskHandlePause", func() { <-ctx.Done() })
 	for {
 		select {
 		case <-ctx.Done():
