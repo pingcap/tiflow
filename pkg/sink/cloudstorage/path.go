@@ -223,9 +223,9 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 		return nil
 	}
 
-	// Case 3: the table meta path is empty, which only happens when the table is
-	// existed before changefeed started. We need to write schema file to external
-	// storage.
+	// Case 3: the table meta path is empty, which happens when:
+	//  a. the table is existed before changefeed started. We need to write schema file to external storage.
+	//  b. the schema file is deleted by the consumer. We write schema file to external storage too.
 	encodedDetail, err := def.MarshalWithQuery()
 	if err != nil {
 		return err
