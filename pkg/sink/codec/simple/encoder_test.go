@@ -16,8 +16,8 @@ package simple
 import (
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/testkit"
 	"github.com/stretchr/testify/require"
 )
 
@@ -45,7 +45,7 @@ func TestEncodeCheckpoint(t *testing.T) {
 }
 
 func TestEncodeDDLEvent(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t)
 	defer tk.Close()
 
 	sql := `create table test.test(id int primary key, name varchar(255) not null,
@@ -85,7 +85,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 }
 
 func TestEncodeBootstrapEvent(t *testing.T) {
-	tk := testkit.New(t)
+	tk := entry.NewTestKit(t)
 	defer tk.Close()
 
 	sql := `create table test.test(id int primary key, name varchar(255) not null,

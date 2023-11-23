@@ -41,7 +41,6 @@ import (
 	codecCommon "github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
-	"github.com/pingcap/tiflow/pkg/testkit"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -262,7 +261,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 },
 ) {
 	replicaConfig := config.GetDefaultReplicaConfig()
-	tk := testkit.New(t, replicaConfig)
+	tk := NewTestKit(t, replicaConfig)
 	defer tk.Close()
 
 	tk.MustExec("set @@tidb_enable_clustered_index=1;")
@@ -1008,7 +1007,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 
-	tk := testkit.New(t, replicaConfig)
+	tk := NewTestKit(t, replicaConfig)
 	defer tk.Close()
 
 	// upstream TiDB enable checksum functionality
@@ -1180,7 +1179,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 
-	tk := testkit.New(t, replicaConfig)
+	tk := NewTestKit(t, replicaConfig)
 	defer tk.Close()
 
 	tk.MustExec("set global tidb_enable_row_level_checksum = 1")
@@ -1308,7 +1307,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 func TestDecodeRow(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 
-	tk := testkit.New(t, replicaConfig)
+	tk := NewTestKit(t, replicaConfig)
 	defer tk.Close()
 
 	tk.MustExec("set @@tidb_enable_clustered_index=1;")
@@ -1336,7 +1335,7 @@ func TestDecodeRow(t *testing.T) {
 
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, replicaConfig.Integrity).(*mounter)
 
 	tk.MustExec(`insert into student values(1, "dongmen", 20, "male")`)
 	tk.MustExec(`update student set age = 27 where id = 1`)
@@ -1387,7 +1386,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Filter.Rules = []string{"test.student", "test.computer"}
 
-	tk := testkit.New(t, replicaConfig)
+	tk := NewTestKit(t, replicaConfig)
 	defer tk.Close()
 	tk.MustExec("use test;")
 
@@ -1416,7 +1415,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	ts := schemaStorage.GetLastSnapshot().CurrentTs()
 	schemaStorage.AdvanceResolvedTs(ver.Ver)
-	mounter := NewMounter(schemaStorage, cfID, time.Local, f, cfg.Integrity).(*mounter)
+	mounter := NewMounter(schemaStorage, cfID, time.Local, f, replicaConfig.Integrity).(*mounter)
 
 	type testCase struct {
 		schema  string

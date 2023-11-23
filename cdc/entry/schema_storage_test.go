@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
-	"github.com/pingcap/tiflow/pkg/testkit"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
@@ -658,7 +657,7 @@ func TestMultiVersionStorage(t *testing.T) {
 }
 
 func TestCreateSnapFromMeta(t *testing.T) {
-	tk := testkit.New(t)
+	tk := NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	tk.MustExec("create database test2")
@@ -686,7 +685,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 }
 
 func TestExplicitTables(t *testing.T) {
-	tk := testkit.New(t)
+	tk := NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	ver1, err := tk.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(t, err)
@@ -828,7 +827,7 @@ func TestSchemaStorage(t *testing.T) {
 	}}
 
 	testOneGroup := func(tc []string) {
-		tk := testkit.New(t)
+		tk := NewTestKit(t, config.GetDefaultReplicaConfig())
 		defer tk.Close()
 		tk.MustExec("set global tidb_enable_clustered_index = 'int_only';")
 		for _, ddlSQL := range tc {
@@ -874,7 +873,7 @@ func TestSchemaStorage(t *testing.T) {
 // 2. If the table has not null unique key, the handleKey is the first column of the unique key.
 // 3. If the table has no primary key and no not null unique key, it has no handleKey.
 func TestHandleKey(t *testing.T) {
-	tk := testkit.New(t)
+	tk := NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 	tk.MustExec("create database test2")
 	tk.MustExec("create table test.simple_test1 (id bigint primary key)")
@@ -921,7 +920,7 @@ func TestHandleKey(t *testing.T) {
 }
 
 func TestGetPrimaryKey(t *testing.T) {
-	tk := testkit.New(t)
+	tk := NewTestKit(t, config.GetDefaultReplicaConfig())
 	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b int)`

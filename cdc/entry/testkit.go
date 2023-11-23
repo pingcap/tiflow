@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package testkit
+package entry
 
 import (
 	"context"
@@ -25,13 +25,12 @@ import (
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta"
+	timeta "github.com/pingcap/tidb/meta"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -49,12 +48,12 @@ type TestKit struct {
 	storage kv.Storage
 	domain  *domain.Domain
 
-	schemaStorage entry.SchemaStorage
-	mounter       entry.Mounter
+	schemaStorage SchemaStorage
+	mounter       Mounter
 }
 
-// New return a new testkit
-func New(t *testing.T, replicaConfig *config.ReplicaConfig) *TestKit {
+// NewTestKit return a new testkit
+func NewTestKit(t *testing.T, replicaConfig *config.ReplicaConfig) *TestKit {
 	store, err := mockstore.NewMockStore()
 	require.NoError(t, err)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
@@ -75,13 +74,13 @@ func New(t *testing.T, replicaConfig *config.ReplicaConfig) *TestKit {
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-testkit")
 
-	meta := meta.NewSnapshotMeta(store.GetSnapshot(ver))
-	schemaStorage, err := entry.NewSchemaStorage(
+	meta := timeta.NewSnapshotMeta(store.GetSnapshot(ver))
+	schemaStorage, err := NewSchemaStorage(
 		meta, ver.Ver, replicaConfig.ForceReplicate,
 		changefeedID, util.RoleTester, filter)
 	require.NoError(t, err)
 
-	mounter := entry.NewMounter(schemaStorage, changefeedID, time.Local,
+	mounter := NewMounter(schemaStorage, changefeedID, time.Local,
 		filter, replicaConfig.Integrity)
 
 	return &TestKit{
@@ -217,10 +216,10 @@ func (tk *TestKit) Storage() kv.Storage {
 }
 
 // GetCurrentMeta return the current meta snapshot
-func (tk *TestKit) GetCurrentMeta() *meta.Meta {
+func (tk *TestKit) GetCurrentMeta() *timeta.Meta {
 	ver, err := tk.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(tk.t, err)
-	return meta.NewSnapshotMeta(tk.storage.GetSnapshot(ver))
+	return timeta.NewSnapshotMeta(tk.storage.GetSnapshot(ver))
 }
 
 // Close closes the helper
@@ -245,7 +244,7 @@ func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*timodel.Job, error) 
 		return nil, errors.Trace(err)
 	}
 	defer txn.Rollback() //nolint:errcheck
-	txnMeta := meta.NewMeta(txn)
+	txnMeta := timeta.NewMeta(txn)
 
 	jobs, err := tiddl.GetAllHistoryDDLJobs(txnMeta)
 	res := make([]*timodel.Job, 0)
