@@ -19,19 +19,19 @@ import (
 	"github.com/golang/protobuf/proto"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/testkit"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
 )
 
 func TestInsert(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(
 		id int primary key,
@@ -39,7 +39,7 @@ func TestInsert(t *testing.T) {
 		tiny tinyint unsigned,
 		comment text,
 		bb blob)`
-	job := helper.DDL2Job(sql)
+	job := tk.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
@@ -123,11 +123,11 @@ func TestInsert(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(id int primary key, name varchar(32))`
-	job := helper.DDL2Job(sql)
+	job := tk.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	_, _, colInfos := tableInfo.GetRowColInfos()
@@ -212,11 +212,11 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(id int primary key)`
-	job := helper.DDL2Job(sql)
+	job := tk.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 
 	_, _, colInfos := tableInfo.GetRowColInfos()

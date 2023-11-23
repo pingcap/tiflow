@@ -19,7 +19,6 @@ package columnselector
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -93,8 +92,8 @@ func TestNewColumnSelector(t *testing.T) {
 }
 
 func TestVerifyTables(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1(
     	a int primary key,
@@ -263,8 +262,8 @@ func TestVerifyTablesColumnFilteredInDispatcher(t *testing.T) {
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, config.ProtocolDefault, "default", "default")
 	require.NoError(t, err)
 
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b int, c int)`
 	job := helper.DDL2Job(sql)

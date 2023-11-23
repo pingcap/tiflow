@@ -27,7 +27,7 @@ import (
 
 func TestShouldSkipDMLBasic(t *testing.T) {
 	helper := newTestHelper(t)
-	defer helper.close()
+	defer tk.Close()
 	helper.getTk().MustExec("use test;")
 
 	type innerCase struct {
@@ -355,7 +355,7 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 // are as expected.
 func TestShouldSkipDMLError(t *testing.T) {
 	helper := newTestHelper(t)
-	defer helper.close()
+	defer tk.Close()
 	helper.getTk().MustExec("use test;")
 
 	type innerCase struct {
@@ -472,7 +472,7 @@ func TestShouldSkipDMLError(t *testing.T) {
 // the filter will works as expected.
 func TestShouldSkipDMLTableUpdated(t *testing.T) {
 	helper := newTestHelper(t)
-	defer helper.close()
+	defer tk.Close()
 	helper.getTk().MustExec("use test;")
 
 	type innerCase struct {
@@ -668,7 +668,7 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 
 func TestVerify(t *testing.T) {
 	helper := newTestHelper(t)
-	defer helper.close()
+	defer tk.Close()
 	helper.getTk().MustExec("use test;")
 
 	type testCase struct {

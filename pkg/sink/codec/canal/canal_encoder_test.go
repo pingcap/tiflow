@@ -19,7 +19,6 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -93,8 +92,8 @@ var (
 )
 
 func TestCanalBatchEncoder(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(10) primary key)`
 	job := helper.DDL2Job(sql)
@@ -151,8 +150,8 @@ func TestCanalBatchEncoder(t *testing.T) {
 }
 
 func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(10) primary key)`
 	job := helper.DDL2Job(sql)

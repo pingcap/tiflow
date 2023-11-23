@@ -18,8 +18,8 @@ import (
 
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/testkit"
 )
 
 type testColumnTuple struct {
@@ -383,8 +383,8 @@ func collectExpectedDecodedValue(columns []*testColumnTuple) map[string]interfac
 }
 
 func newLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(
     	t tinyint primary key,
@@ -439,7 +439,7 @@ func newLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChanged
 	 	setT set('a', 'b', 'c'),
 	 	bitT bit(4),
 	 	jsonT json)`
-	job := helper.DDL2Job(sql)
+	job := tk.DDL2Job(sql)
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 	_, _, colInfo := tableInfo.GetRowColInfos()
 

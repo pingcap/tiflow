@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -581,8 +580,8 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 }
 
 func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
 	job := helper.DDL2Job(sql)
@@ -673,8 +672,8 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 }
 
 func TestMaxMessageBytes(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
 	job := helper.DDL2Job(sql)

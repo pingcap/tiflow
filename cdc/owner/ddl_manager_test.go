@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
@@ -159,8 +158,8 @@ func TestGetSnapshotTs(t *testing.T) {
 }
 
 func TestExecRenameTablesDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	dm := createDDLManagerForTest(t)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
@@ -259,8 +258,8 @@ func TestExecRenameTablesDDL(t *testing.T) {
 }
 
 func TestExecDropTablesDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	dm := createDDLManagerForTest(t)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
@@ -323,8 +322,8 @@ func TestExecDropTablesDDL(t *testing.T) {
 }
 
 func TestExecDropViewsDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
 	dm := createDDLManagerForTest(t)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)

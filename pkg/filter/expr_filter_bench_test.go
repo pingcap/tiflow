@@ -38,7 +38,7 @@ func BenchmarkSkipDML(b *testing.B) {
 	t := &testing.T{}
 	helper := newTestHelper(t)
 
-	defer helper.close()
+	defer tk.Close()
 	helper.getTk().MustExec("use test;")
 	ddl := "create table test.student(id int primary key, name char(50), age int, gender char(10))"
 	tableInfo := helper.execDDL(ddl)

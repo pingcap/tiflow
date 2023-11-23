@@ -154,7 +154,7 @@ func TestHandleRenameTable(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
 	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
-	defer helper.Close()
+	defer tk.Close()
 
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
 	cfg := config.GetDefaultReplicaConfig()
@@ -380,7 +380,7 @@ func TestHandleJob(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
 	ddlJobPuller, helper := newMockDDLJobPuller(t, mockPuller, true)
-	defer helper.Close()
+	defer tk.Close()
 
 	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
 	cfg := config.GetDefaultReplicaConfig()

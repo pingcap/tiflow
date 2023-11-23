@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -63,8 +62,8 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 }
 
 func TestNonBatchEncode_SendMessages(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
 	job := helper.DDL2Job(sql)
@@ -264,8 +263,8 @@ func TestBatchEncode_Group(t *testing.T) {
 }
 
 func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
 	job := helper.DDL2Job(sql)
@@ -358,8 +357,8 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 	worker, p := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
 
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
 	job := helper.DDL2Job(sql)
@@ -517,8 +516,8 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	replicatingStatus := state.TableSinkSinking
 	stoppedStatus := state.TableSinkStopping
 
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
 	job := helper.DDL2Job(sql)

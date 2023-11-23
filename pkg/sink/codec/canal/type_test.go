@@ -16,7 +16,6 @@ package canal
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
@@ -24,8 +23,8 @@ import (
 )
 
 func TestGetMySQLType4IntTypes(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1 (
     	a int primary key,
@@ -388,8 +387,8 @@ func TestGetMySQLType4IntTypes(t *testing.T) {
 }
 
 func TestGetMySQLType4FloatType(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1(
 		a int primary key,
@@ -504,8 +503,8 @@ func TestGetMySQLType4FloatType(t *testing.T) {
 }
 
 func TestGetMySQLType4Decimal(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b decimal, c numeric)`
 	job := helper.DDL2Job(sql)
@@ -577,8 +576,8 @@ func TestGetMySQLType4Decimal(t *testing.T) {
 }
 
 func TestGetMySQLType4TimeTypes(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b time, c time(3))`
 	job := helper.DDL2Job(sql)
@@ -694,8 +693,8 @@ func TestGetMySQLType4TimeTypes(t *testing.T) {
 }
 
 func TestGetMySQLType4Char(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a int primary key, b char, c char(123))`
 	job := helper.DDL2Job(sql)
@@ -740,8 +739,8 @@ func TestGetMySQLType4Char(t *testing.T) {
 }
 
 func TestGetMySQLType4TextTypes(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b text, c tinytext, d mediumtext, e longtext)`
 	job := helper.DDL2Job(sql)
@@ -795,8 +794,8 @@ func TestGetMySQLType4TextTypes(t *testing.T) {
 }
 
 func TestGetMySQLType4BinaryType(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b binary, c binary(10))`
 	job := helper.DDL2Job(sql)
@@ -841,8 +840,8 @@ func TestGetMySQLType4BinaryType(t *testing.T) {
 }
 
 func TestGetMySQLType4BlobType(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b blob, c tinyblob, d mediumblob, e longblob)`
 	job := helper.DDL2Job(sql)
@@ -896,8 +895,8 @@ func TestGetMySQLType4BlobType(t *testing.T) {
 }
 
 func TestGetMySQLType4EnumAndSet(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a int primary key, b enum('a', 'b', 'c'), c set('a', 'b', 'c'))`
 	job := helper.DDL2Job(sql)
@@ -933,8 +932,8 @@ func TestGetMySQLType4EnumAndSet(t *testing.T) {
 }
 
 func TestGetMySQLType4JSON(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a int primary key, b json)`
 	job := helper.DDL2Job(sql)

@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -81,8 +80,8 @@ func TestWriteEvents(t *testing.T) {
 	require.NotNil(t, s)
 	defer s.Close()
 
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	sql := `create table test.t(a varchar(255) primary key)`
 	job := helper.DDL2Job(sql)

@@ -314,8 +314,8 @@ func TestChangefeedHandleError(t *testing.T) {
 }
 
 func TestExecDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.
 	helper.DDL2Job("create database test0")
@@ -399,8 +399,8 @@ func TestExecDDL(t *testing.T) {
 }
 
 func TestEmitCheckpointTs(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.
 	helper.DDL2Job("create database test0")

@@ -23,7 +23,6 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -34,8 +33,8 @@ import (
 var dummyChangeFeedID = model.DefaultChangeFeedID("dummy_changefeed")
 
 func TestAllPhysicalTables(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
@@ -92,8 +91,8 @@ func TestAllPhysicalTables(t *testing.T) {
 }
 
 func TestAllTables(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
@@ -131,8 +130,8 @@ func TestAllTables(t *testing.T) {
 }
 
 func TestIsIneligibleTableID(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
@@ -189,8 +188,8 @@ func compareEvents(t *testing.T, e1, e2 *model.DDLEvent) {
 }
 
 func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
@@ -264,8 +263,8 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -392,8 +391,8 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -495,8 +494,8 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 }
 
 func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
@@ -616,8 +615,8 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 }
 
 func TestBuildIgnoredDDLJob(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
+	tk := testkit.New(t)
+	defer tk.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
