@@ -63,6 +63,15 @@ var (
 			Name:      "execution_error",
 			Help:      "Total count of execution errors.",
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
+
+	// ExecWriteBytesGauge records the total number of bytes written by sink.
+	TotalWriteBytesCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sinkv2",
+			Name:      "write_bytes_total",
+			Help:      "Total number of bytes written by sink",
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 )
 
 // InitMetrics registers all metrics in this file.
@@ -71,6 +80,7 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecDDLHistogram)
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)
+	registry.MustRegister(TotalWriteBytesCounter)
 
 	txn.InitMetrics(registry)
 	mq.InitMetrics(registry)

@@ -38,6 +38,7 @@ func NewStatistics(ctx context.Context, sinkType sink.Type) *Statistics {
 	statistics.metricExecBatchHis = ExecBatchHistogram.WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricRowSizeHis = LargeRowSizeHistogram.WithLabelValues(namespcae, changefeedID, s)
 	statistics.metricExecErrCnt = ExecutionErrorCounter.WithLabelValues(namespcae, changefeedID, s)
+	statistics.metricTotalWriteBytesCnt = TotalWriteBytesCounter.WithLabelValues(namespcae, changefeedID, s)
 	return statistics
 }
 
@@ -56,6 +57,8 @@ type Statistics struct {
 	metricRowSizeHis prometheus.Observer
 	// Counter for sink error.
 	metricExecErrCnt prometheus.Counter
+	// Counter for total bytes of DML.
+	metricTotalWriteBytesCnt prometheus.Counter
 }
 
 // ObserveRows stats all received `RowChangedEvent`s.
@@ -70,13 +73,14 @@ func (b *Statistics) ObserveRows(rows ...*model.RowChangedEvent) {
 }
 
 // RecordBatchExecution stats batch executors which return (batchRowCount, error).
-func (b *Statistics) RecordBatchExecution(executor func() (int, error)) error {
-	batchSize, err := executor()
+func (b *Statistics) RecordBatchExecution(executor func() (int, int64, error)) error {
+	batchSize, batchWriteBytes, err := executor()
 	if err != nil {
 		b.metricExecErrCnt.Inc()
 		return err
 	}
 	b.metricExecBatchHis.Observe(float64(batchSize))
+	b.metricTotalWriteBytesCnt.Add(float64(batchWriteBytes))
 	return nil
 }
 

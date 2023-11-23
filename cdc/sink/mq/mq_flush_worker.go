@@ -169,16 +169,18 @@ func (w *flushWorker) asyncSend(
 			}
 		}
 
-		err := w.statistics.RecordBatchExecution(func() (int, error) {
+		err := w.statistics.RecordBatchExecution(func() (int, int64, error) {
 			thisBatchSize := 0
+			thisBatchBytesCnt := 0
 			for _, message := range w.encoder.Build() {
 				err := w.producer.AsyncSendMessage(ctx, key.Topic, key.Partition, message)
 				if err != nil {
-					return 0, err
+					return 0, 0, err
 				}
 				thisBatchSize += message.GetRowsCount()
+				thisBatchBytesCnt += message.Length()
 			}
-			return thisBatchSize, nil
+			return thisBatchSize, int64(thisBatchBytesCnt), nil
 		})
 		if err != nil {
 			return err
