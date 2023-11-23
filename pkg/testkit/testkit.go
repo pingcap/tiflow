@@ -1,4 +1,4 @@
-// Copyright 2021 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package entry
+package testkit
 
 import (
 	"encoding/json"
@@ -22,8 +22,8 @@ import (
 	tiddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/domain"
 	"github.com/pingcap/tidb/kv"
-	timeta "github.com/pingcap/tidb/meta"
-	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/meta"
+	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
@@ -31,28 +31,27 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-// SchemaTestHelper is a test helper for schema which creates an internal tidb instance to generate DDL jobs with meta information
-type SchemaTestHelper struct {
+type TestKit struct {
 	t       *testing.T
 	tk      *testkit.TestKit
 	storage kv.Storage
 	domain  *domain.Domain
 }
 
-// NewSchemaTestHelper creates a SchemaTestHelper
-func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
+// New return a new testkit
+func New(t *testing.T) *TestKit {
 	store, err := mockstore.NewMockStore()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
 	})
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
-	return &SchemaTestHelper{
+	return &TestKit{
 		t:       t,
 		tk:      tk,
 		storage: store,
@@ -61,7 +60,7 @@ func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
 }
 
 // DDL2Job executes the DDL stmt and returns the DDL job
-func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
+func (s *TestKit) DDL2Job(ddl string) *model.Job {
 	s.tk.MustExec(ddl)
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
 	require.Nil(s.t, err)
@@ -69,9 +68,9 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	// Set State from Synced to Done.
 	// Because jobs are put to history queue after TiDB alter its state from
 	// Done to Synced.
-	jobs[0].State = timodel.JobStateDone
+	jobs[0].State = model.JobStateDone
 	res := jobs[0]
-	if res.Type != timodel.ActionRenameTables {
+	if res.Type != model.ActionRenameTables {
 		return res
 	}
 
@@ -89,13 +88,13 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	for i := 0; i < tableNum; i++ {
 		oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
 	}
-	newTableNames := make([]timodel.CIStr, tableNum)
+	newTableNames := make([]model.CIStr, tableNum)
 	for i := 0; i < tableNum; i++ {
 		newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
 	}
-	oldSchemaNames := make([]timodel.CIStr, tableNum)
+	oldSchemaNames := make([]model.CIStr, tableNum)
 	for i := 0; i < tableNum; i++ {
-		oldSchemaNames[i] = timodel.NewCIStr(schema)
+		oldSchemaNames[i] = model.NewCIStr(schema)
 	}
 	newSchemaIDs := oldSchemaIDs
 
@@ -113,7 +112,7 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 // It is mainly used for "DROP TABLE" and "DROP VIEW" statement because
 // multiple jobs will be generated after executing these two types of
 // DDL statements.
-func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
+func (s *TestKit) DDL2Jobs(ddl string, jobCnt int) []*model.Job {
 	s.tk.MustExec(ddl)
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), jobCnt)
 	require.Nil(s.t, err)
@@ -122,30 +121,30 @@ func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 	// Because jobs are put to history queue after TiDB alter its state from
 	// Done to Synced.
 	for i := range jobs {
-		jobs[i].State = timodel.JobStateDone
+		jobs[i].State = model.JobStateDone
 	}
 	return jobs
 }
 
 // Storage returns the tikv storage
-func (s *SchemaTestHelper) Storage() kv.Storage {
+func (s *TestKit) Storage() kv.Storage {
 	return s.storage
 }
 
 // Tk returns the TestKit
-func (s *SchemaTestHelper) Tk() *testkit.TestKit {
+func (s *TestKit) Tk() *testkit.TestKit {
 	return s.tk
 }
 
 // GetCurrentMeta return the current meta snapshot
-func (s *SchemaTestHelper) GetCurrentMeta() *timeta.Meta {
+func (s *TestKit) GetCurrentMeta() *meta.Meta {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(s.t, err)
-	return timeta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
+	return meta.NewSnapshotMeta(s.storage.GetSnapshot(ver))
 }
 
 // Close closes the helper
-func (s *SchemaTestHelper) Close() {
+func (s *TestKit) Close() {
 	s.domain.Close()
 	s.storage.Close() //nolint:errcheck
 }
