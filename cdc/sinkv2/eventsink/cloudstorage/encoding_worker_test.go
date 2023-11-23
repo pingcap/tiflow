@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -132,8 +133,6 @@ func TestEncodeEvents(t *testing.T) {
 }
 
 func TestEncodingWorkerRun(t *testing.T) {
-	t.Parallel()
-
 	encodingWorker, msgCh, encodedCh := testEncodingWorker(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -143,19 +142,27 @@ func TestEncodingWorkerRun(t *testing.T) {
 		return defragmenter.run(egCtx)
 	})
 
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.table1(c1 int primary key, c2 varchar(255))`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfos := tableInfo.GetRowColInfos()
+
 	table := model.TableName{
 		Schema:  "test",
 		Table:   "table1",
 		TableID: 100,
 	}
 	event := &model.SingleTableTxn{
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema:  "test",
-				Table:   "table1",
-				TableID: 100,
-			},
+		Table: &model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 100,
 		},
+		TableInfo: tableInfo,
 		Rows: []*model.RowChangedEvent{
 			{
 				Table: &model.TableName{
@@ -163,10 +170,12 @@ func TestEncodingWorkerRun(t *testing.T) {
 					Table:   "table1",
 					TableID: 100,
 				},
+				TableInfo: tableInfo,
 				Columns: []*model.Column{
 					{Name: "c1", Value: 100},
 					{Name: "c2", Value: "hello world"},
 				},
+				ColInfos: colInfos,
 			},
 		},
 	}
