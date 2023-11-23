@@ -22,8 +22,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/mq/dmlproducer"
@@ -79,7 +78,13 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 }
 
 func TestWriteEvents(t *testing.T) {
-	t.Parallel()
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -104,10 +109,11 @@ func TestWriteEvents(t *testing.T) {
 
 	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
-		ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
+		CommitTs:  1,
+		Table:     &model.TableName{Schema: "test", Table: "t"},
+		TableInfo: tableInfo,
+		Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "aa"}},
+		ColInfos:  colInfo,
 	}
 
 	events := make([]*eventsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)
