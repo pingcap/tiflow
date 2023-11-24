@@ -210,7 +210,6 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		EnablePartitionSeparator: true,
 		Protocol:                 "open-protocol",
 		AdvanceTimeoutInSec:      config.DefaultAdvanceTimeoutInSec,
-		ContentCompatible:        false,
 	}, cfg.Sink)
 }
 
@@ -240,7 +239,6 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
 		AdvanceTimeoutInSec: config.DefaultAdvanceTimeoutInSec,
-		ContentCompatible:   false,
 	}, cfg.Sink)
 }
 

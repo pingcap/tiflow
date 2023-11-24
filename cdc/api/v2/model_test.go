@@ -54,7 +54,6 @@ var defaultAPIConfig = &ReplicaConfig{
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		AdvanceTimeoutInSec:      config.DefaultAdvanceTimeoutInSec,
-		ContentCompatible:        false,
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
