@@ -33,8 +33,6 @@ import (
 )
 
 func TestDeframenter(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	eg, egCtx := errgroup.WithContext(ctx)
 

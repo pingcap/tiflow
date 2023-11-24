@@ -68,7 +68,7 @@ func TestDMLWorkerRun(t *testing.T) {
 	parentDir := t.TempDir()
 	d := testDMLWorker(ctx, t, parentDir)
 	fragCh := d.inputCh
-	table1Dir := path.Join(parentDir, "test/table1/99")
+	table1Dir := path.Join(parentDir, fmt.Sprintf("test/table1/%d", tableInfo.Version))
 
 	for i := 0; i < 5; i++ {
 		frag := eventFragment{
