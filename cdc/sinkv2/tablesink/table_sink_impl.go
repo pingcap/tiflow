@@ -158,6 +158,14 @@ func (e *EventTableSink[E]) AsyncClose() bool {
 	return false
 }
 
+// CheckHealth checks whether the associated sink backend is healthy or not.
+func (e *EventTableSink[E]) CheckHealth() error {
+	if err := e.backendSink.WriteEvents(); err != nil {
+		return SinkInternalError{err}
+	}
+	return nil
+}
+
 func (e *EventTableSink[E]) freeze() {
 	// Notice: We have to set the state to stopping first,
 	// otherwise the progressTracker may be advanced incorrectly.
