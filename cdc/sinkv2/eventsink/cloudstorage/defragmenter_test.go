@@ -20,9 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -96,24 +93,9 @@ func TestDeframenter(t *testing.T) {
 						{Name: "c1", Value: j + 1},
 						{Name: "c2", Value: "hello world"},
 					},
-					ColInfos: []rowcodec.ColInfo{
-						{
-							ID:            1,
-							IsPKHandle:    false,
-							VirtualGenCol: false,
-							Ft:            types.NewFieldType(mysql.TypeLong),
-						},
-						{
-							ID:            2,
-							IsPKHandle:    false,
-							VirtualGenCol: false,
-							Ft:            types.NewFieldType(mysql.TypeString),
-						},
-					},
 				}
 				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
-				err = encoder.AppendRowChangedEvent(ctx, "", row, nil)
-				require.NoError(t, err)
+				encoder.AppendRowChangedEvent(ctx, "", row, nil)
 			}
 			frag.encodedMsgs = encoder.Build()
 
