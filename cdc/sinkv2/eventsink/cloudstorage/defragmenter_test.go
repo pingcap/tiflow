@@ -51,7 +51,7 @@ func TestDeframenter(t *testing.T) {
 	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCanalJSON,
+	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCsv,
 		config.GetDefaultReplicaConfig(), config.DefaultMaxMessageBytes)
 	require.Nil(t, err)
 	encoderBuilder, err := builder.NewEventBatchEncoderBuilder(ctx, encoderConfig)
