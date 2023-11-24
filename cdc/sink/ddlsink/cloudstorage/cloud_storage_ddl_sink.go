@@ -65,7 +65,7 @@ func newDDLSink(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
-	cleanupJobs []func(),
+	cleanupJobs []func(), /* only for test */
 ) (*DDLSink, error) {
 	// create cloud storage config and then apply the params of sinkURI to it.
 	cfg := cloudstorage.NewConfig()
@@ -163,10 +163,7 @@ func (d *DDLSink) initCron(
 	ctx context.Context, sinkURI *url.URL, cleanupJobs []func(),
 ) (err error) {
 	if cleanupJobs == nil {
-		cleanupJobs, err = d.genCleanupJob(ctx, sinkURI)
-		if err != nil {
-			return err
-		}
+		cleanupJobs = d.genCleanupJob(ctx, sinkURI)
 	}
 
 	d.cron = cron.New()
@@ -205,10 +202,20 @@ func (d *DDLSink) bgCleanup(ctx context.Context) {
 		zap.Error(ctx.Err()))
 }
 
-func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) ([]func(), error) {
+func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) []func() {
 	ret := []func(){}
-	if uri.Scheme == "file" || uri.Scheme == "local" || uri.Scheme == "" {
+
+	isLocal := uri.Scheme == "file" || uri.Scheme == "local" || uri.Scheme == ""
+	isRemoveEmptyDirsRuning := atomic.Bool{}
+	if isLocal {
 		ret = append(ret, func() {
+			if !isRemoveEmptyDirsRuning.CompareAndSwap(false, true) {
+				log.Warn("remove empty dirs is already running, skip this round",
+					zap.String("namespace", d.id.Namespace),
+					zap.String("changefeedID", d.id.ID))
+				return
+			}
+
 			checkpointTs := d.lastCheckpointTs.Load()
 			start := time.Now()
 			cnt, err := cloudstorage.RemoveEmptyDirs(ctx, d.id, uri.Path)
@@ -254,7 +261,6 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) ([]func(), er
 			)
 			return
 		}
-
 		log.Info("remove expired files",
 			zap.String("namespace", d.id.Namespace),
 			zap.String("changefeedID", d.id.ID),
@@ -262,7 +268,7 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) ([]func(), er
 			zap.Uint64("count", cnt),
 			zap.Duration("cost", time.Since(start)))
 	})
-	return ret, nil
+	return ret
 }
 
 // Close closes the sink.

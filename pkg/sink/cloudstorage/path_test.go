@@ -351,6 +351,7 @@ func TestRemoveExpiredFilesWithoutPartition(t *testing.T) {
 	}
 	cfg := NewConfig()
 	err = cfg.Apply(ctx, sinkURI, replicaConfig)
+	require.NoError(t, err)
 
 	// generate some expired files
 	filesWithoutPartition := []string{

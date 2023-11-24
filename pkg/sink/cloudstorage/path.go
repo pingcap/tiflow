@@ -444,6 +444,7 @@ func RemoveExpiredFiles(
 	return cnt, err
 }
 
+// RemoveEmptyDirs removes empty directories from external storage.
 func RemoveEmptyDirs(
 	ctx context.Context,
 	id model.ChangeFeedID,
