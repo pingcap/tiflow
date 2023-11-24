@@ -322,12 +322,13 @@ func TestUpdateChangefeed(t *testing.T) {
 	mockCapture.EXPECT().IsOwner().Return(true).AnyTimes()
 
 	// case 1 invalid id
-	invalidID := "#Invalid_"
+	invalidID := "_Invalid_"
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), update.method,
 		fmt.Sprintf(update.url, invalidID), nil)
 	router.ServeHTTP(w, req)
 	respErr := model.HTTPError{}
+	t.Logf("body: %s", w.Body.String())
 	err := json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
