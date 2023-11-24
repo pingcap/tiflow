@@ -64,7 +64,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnablePartitionSeparator: true,
 		TiDBSourceID:             1,
 		AdvanceTimeoutInSec:      DefaultAdvanceTimeoutInSec,
-		ContentCompatible:        false,
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",

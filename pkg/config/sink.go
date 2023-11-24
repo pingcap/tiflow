@@ -133,9 +133,6 @@ type SinkConfig struct {
 
 	KafkaConfig *KafkaConfig `toml:"kafka-config" json:"kafka-config,omitempty"`
 
-	// ContentCompatible is only available when the downstream is MQ.
-	ContentCompatible bool `toml:"content-compatible" json:"content-compatible,omitempty"`
-
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
