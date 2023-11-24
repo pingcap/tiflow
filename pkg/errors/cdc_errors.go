@@ -411,6 +411,10 @@ var (
 		"csv decode failed",
 		errors.RFCCodeText("CDC:ErrCSVDecodeFailed"),
 	)
+	ErrDebeziumEncodeFailed = errors.Normalize(
+		"debezium encode failed",
+		errors.RFCCodeText("CDC:ErrDebeziumEncodeFailed"),
+	)
 	ErrStorageSinkInvalidConfig = errors.Normalize(
 		"storage sink config invalid",
 		errors.RFCCodeText("CDC:ErrStorageSinkInvalidConfig"),

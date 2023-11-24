@@ -16,6 +16,7 @@ package common
 import (
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/imdario/mergo"
@@ -70,6 +71,9 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
+
+	// Currently only Debezium protocol is aware of the time zone
+	TimeZone *time.Location
 }
 
 // NewConfig return a Config for codec
@@ -91,6 +95,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
+
+		TimeZone: time.Local,
 	}
 }
 
