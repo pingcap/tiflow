@@ -20,7 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tiflow/cdc/entry"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -33,6 +35,8 @@ import (
 )
 
 func TestDeframenter(t *testing.T) {
+	t.Parallel()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	eg, egCtx := errgroup.WithContext(ctx)
 
@@ -62,21 +66,16 @@ func TestDeframenter(t *testing.T) {
 		seqNumbers[i], seqNumbers[j] = seqNumbers[j], seqNumbers[i]
 	})
 
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-
-	sql := `create table test.table1(c1 int primary key, c2 varchar(255))`
-	job := helper.DDL2Job(sql)
-	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
-
-	_, _, colInfo := tableInfo.GetRowColInfos()
-
 	for i := 0; i < txnCnt; i++ {
 		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
 				versionedTable: cloudstorage.VersionedTableName{
-					TableNameWithPhysicTableID: tableInfo.TableName,
+					TableNameWithPhysicTableID: model.TableName{
+						Schema:  "test",
+						Table:   "table1",
+						TableID: 100,
+					},
 				},
 				seqNumber: seq,
 				event: &eventsink.TxnCallbackableEvent{
@@ -88,13 +87,29 @@ func TestDeframenter(t *testing.T) {
 			n := 1 + rand.Intn(1000)
 			for j := 0; j < n; j++ {
 				row := &model.RowChangedEvent{
-					Table:     &tableInfo.TableName,
-					TableInfo: tableInfo,
+					Table: &model.TableName{
+						Schema:  "test",
+						Table:   "table1",
+						TableID: 100,
+					},
 					Columns: []*model.Column{
 						{Name: "c1", Value: j + 1},
 						{Name: "c2", Value: "hello world"},
 					},
-					ColInfos: colInfo,
+					ColInfos: []rowcodec.ColInfo{
+						{
+							ID:            1,
+							IsPKHandle:    false,
+							VirtualGenCol: false,
+							Ft:            types.NewFieldType(mysql.TypeLong),
+						},
+						{
+							ID:            2,
+							IsPKHandle:    false,
+							VirtualGenCol: false,
+							Ft:            types.NewFieldType(mysql.TypeString),
+						},
+					},
 				}
 				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
 				err = encoder.AppendRowChangedEvent(ctx, "", row, nil)
