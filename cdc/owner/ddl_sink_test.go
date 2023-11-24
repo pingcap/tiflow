@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/stretchr/testify/require"
@@ -65,7 +66,10 @@ func (m *mockSink) GetDDL() *model.DDLEvent {
 
 func newDDLSink4Test(reportErr func(err error), reportWarn func(err error)) (DDLSink, *mockSink) {
 	mockSink := &mockSink{}
-	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"), &model.ChangeFeedInfo{}, reportErr, reportWarn)
+	ddlSink := newDDLSink(model.DefaultChangeFeedID("changefeed-test"),
+		&model.ChangeFeedInfo{
+			Config: config.GetDefaultReplicaConfig(),
+		}, reportErr, reportWarn)
 	ddlSink.(*ddlSinkImpl).sinkInitHandler = func(ctx context.Context, s *ddlSinkImpl) error {
 		s.sinkV1 = mockSink
 		return nil
@@ -487,6 +491,9 @@ func TestAddSpecialComment(t *testing.T) {
 	}
 
 	s := &ddlSinkImpl{}
+	s.info = &model.ChangeFeedInfo{
+		Config: config.GetDefaultReplicaConfig(),
+	}
 	for _, ca := range testCase {
 		re, err := s.addSpecialComment(ca.event)
 		require.Nil(t, err)
