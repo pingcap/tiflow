@@ -54,7 +54,6 @@ const (
     ],
     "enable-partition-separator": true,
     "protocol": "canal-json",
-    "content-compatible": false,
     "advance-timeout-in-sec": 150
   },
   "consistent": {
@@ -204,7 +203,6 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "content-compatible": true,
     "kafka-config": {
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only"
@@ -267,7 +265,6 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "content-compatible": true,
     "kafka-config": {
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only"

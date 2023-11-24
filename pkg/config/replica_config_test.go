@@ -57,7 +57,6 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
 	conf.Sink.AdvanceTimeoutInSec = DefaultAdvanceTimeoutInSec
-	conf.Sink.ContentCompatible = true
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		LargeMessageHandle: &LargeMessageHandleConfig{
 			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
