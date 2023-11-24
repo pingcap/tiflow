@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/builder"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -63,16 +64,21 @@ func TestDeframenter(t *testing.T) {
 		seqNumbers[i], seqNumbers[j] = seqNumbers[j], seqNumbers[i]
 	})
 
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.table1(c1 int primary key, c2 varchar(255))`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfo := tableInfo.GetRowColInfos()
+
 	for i := 0; i < txnCnt; i++ {
 		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
 				versionedTable: cloudstorage.VersionedTableName{
-					TableNameWithPhysicTableID: model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
-					},
+					TableNameWithPhysicTableID: tableInfo.TableName,
 				},
 				seqNumber: seq,
 				event: &eventsink.TxnCallbackableEvent{
@@ -84,18 +90,16 @@ func TestDeframenter(t *testing.T) {
 			n := 1 + rand.Intn(1000)
 			for j := 0; j < n; j++ {
 				row := &model.RowChangedEvent{
-					Table: &model.TableName{
-						Schema:  "test",
-						Table:   "table1",
-						TableID: 100,
-					},
+					Table: &tableInfo.TableName,
 					Columns: []*model.Column{
 						{Name: "c1", Value: j + 1},
 						{Name: "c2", Value: "hello world"},
 					},
+					ColInfos: colInfo,
 				}
 				frag.event.Event.Rows = append(frag.event.Event.Rows, row)
-				encoder.AppendRowChangedEvent(ctx, "", row, nil)
+				err = encoder.AppendRowChangedEvent(ctx, "", row, nil)
+				require.NoError(t, err)
 			}
 			frag.encodedMsgs = encoder.Build()
 

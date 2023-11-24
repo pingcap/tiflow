@@ -24,16 +24,12 @@ import (
 )
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := newJSONBatchEncoder(&common.Config{
-			EnableTiDBExtension: encodeEnable,
-			Terminator:          config.CRLF,
-			MaxMessageBytes:     config.DefaultMaxMessageBytes,
-		})
+		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+		codecConfig.EnableTiDBExtension = encodeEnable
+		encoder := newJSONBatchEncoder(codecConfig)
 		require.NotNil(t, encoder)
 
 		insertEvent, _, _ := newLargeEvent4Test(t)

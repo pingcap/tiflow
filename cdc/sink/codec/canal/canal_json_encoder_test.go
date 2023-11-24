@@ -192,8 +192,6 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 }
 
 func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
-	t.Parallel()
-
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
@@ -258,12 +256,8 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 }
 
 func TestBatching(t *testing.T) {
-	t.Parallel()
-	encoder := newJSONBatchEncoder(&common.Config{
-		EnableTiDBExtension: false,
-		Terminator:          "",
-		MaxMessageBytes:     config.DefaultMaxMessageBytes,
-	})
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	encoder := newJSONBatchEncoder(codecConfig)
 	require.NotNil(t, encoder)
 
 	_, updateEvent, _ := newLargeEvent4Test(t)
@@ -560,8 +554,6 @@ func TestMaxMessageBytes(t *testing.T) {
 }
 
 func TestCanalJSONContentCompatibleE2E(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
