@@ -88,7 +88,8 @@ func TestDeframenter(t *testing.T) {
 			n := 1 + rand.Intn(1000)
 			for j := 0; j < n; j++ {
 				row := &model.RowChangedEvent{
-					Table: &tableInfo.TableName,
+					Table:     &tableInfo.TableName,
+					TableInfo: tableInfo,
 					Columns: []*model.Column{
 						{Name: "c1", Value: j + 1},
 						{Name: "c2", Value: "hello world"},
