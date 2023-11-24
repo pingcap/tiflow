@@ -131,6 +131,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
+						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -184,6 +185,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
+						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -242,6 +244,7 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
+						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -332,6 +335,7 @@ func TestPatchInfo(t *testing.T) {
 			Consistent: defaultConfig.Consistent,
 			ChangefeedErrorStuckDuration: config.
 				GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
+			SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -350,6 +354,7 @@ func TestPatchInfo(t *testing.T) {
 			Consistent: defaultConfig.Consistent,
 			ChangefeedErrorStuckDuration: config.
 				GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
+			SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
