@@ -53,7 +53,7 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "advance-timeout-in-sec": 150
   },
   "consistent": {
@@ -182,7 +182,7 @@ const (
   "sink": {
   	"encoder-concurrency": 16,
     "dispatchers": null,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -249,7 +249,7 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "dispatchers": null,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [

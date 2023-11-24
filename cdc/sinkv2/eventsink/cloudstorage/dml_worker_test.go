@@ -21,9 +21,7 @@ import (
 	"testing"
 	"time"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/codec/common"
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink"
@@ -57,38 +55,27 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 }
 
 func TestDMLWorkerRun(t *testing.T) {
-	t.Parallel()
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.table1(c1 int primary key, c2 varchar(255))`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+
+	_, _, colInfo := tableInfo.GetRowColInfos()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	parentDir := t.TempDir()
 	d := testDMLWorker(ctx, t, parentDir)
 	fragCh := d.inputCh
-	table1Dir := path.Join(parentDir, "test/table1/99")
-	// assume table1 and table2 are dispatched to the same DML worker
-	table1 := model.TableName{
-		Schema:  "test",
-		Table:   "table1",
-		TableID: 100,
-	}
-	tableInfo := &model.TableInfo{
-		TableName: model.TableName{
-			Schema:  "test",
-			Table:   "table1",
-			TableID: 100,
-		},
-		Version: 99,
-		TableInfo: &timodel.TableInfo{
-			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: timodel.NewCIStr("name"), FieldType: *types.NewFieldType(mysql.TypeLong)},
-			},
-		},
-	}
+	table1Dir := path.Join(parentDir, fmt.Sprintf("test/table1/%d", tableInfo.Version))
+
 	for i := 0; i < 5; i++ {
 		frag := eventFragment{
 			seqNumber: uint64(i),
 			versionedTable: cloudstorage.VersionedTableName{
-				TableNameWithPhysicTableID: table1,
-				TableInfoVersion:           99,
+				TableNameWithPhysicTableID: tableInfo.TableName,
+				TableInfoVersion:           tableInfo.Version,
 			},
 			event: &eventsink.TxnCallbackableEvent{
 				Event: &model.SingleTableTxn{
@@ -104,6 +91,7 @@ func TestDMLWorkerRun(t *testing.T) {
 								{Name: "c1", Value: 100},
 								{Name: "c2", Value: "hello world"},
 							},
+							ColInfos: colInfo,
 						},
 					},
 				},

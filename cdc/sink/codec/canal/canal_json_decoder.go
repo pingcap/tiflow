@@ -102,7 +102,6 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, err
 	}
 	b.msg = msg
-
 	return b.msg.messageType(), true, nil
 }
 

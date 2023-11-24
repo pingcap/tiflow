@@ -228,6 +228,7 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	codecConfig := NewConfig(config.ProtocolCanalJSON)
 	err = codecConfig.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
+	require.False(t, codecConfig.ContentCompatible)
 
 	err = codecConfig.Validate()
 	require.NoError(t, err)
@@ -240,6 +241,7 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json"
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
+	require.False(t, codecConfig.ContentCompatible)
 
 	codecConfig = NewConfig(config.ProtocolCanal)
 	err = codecConfig.Apply(sinkURI, replicaConfig)
@@ -329,4 +331,22 @@ func TestKafkaConfigWithoutHandleKey(t *testing.T) {
 	err = codecConfig.Apply(sinkURI, replicaConfig)
 	require.NoError(t, err)
 	require.False(t, codecConfig.LargeMessageHandle.HandleKeyOnly())
+	require.False(t, codecConfig.ContentCompatible)
+}
+
+func TestCanalJSONEnableContentCompatible(t *testing.T) {
+	t.Parallel()
+
+	// handle-key-only not enabled, always no error
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{}
+
+	uri := "kafka://127.0.0.1:9092/canal-json?protocol=canal-json&content-compatible=true"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolCanalJSON)
+	err = codecConfig.Apply(sinkURI, replicaConfig)
+	require.NoError(t, err)
+	require.True(t, codecConfig.ContentCompatible)
 }

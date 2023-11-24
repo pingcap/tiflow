@@ -39,6 +39,7 @@ type Config struct {
 
 	// canal-json only
 	EnableTiDBExtension bool
+	ContentCompatible   bool
 
 	// avro only
 	AvroSchemaRegistry             string
@@ -76,6 +77,7 @@ func NewConfig(protocol config.Protocol) *Config {
 const (
 	codecOPTEnableTiDBExtension            = "enable-tidb-extension"
 	codecOPTMaxBatchSize                   = "max-batch-size"
+	codecContentCompatible                 = "content-compatible"
 	codecOPTMaxMessageBytes                = "max-message-bytes"
 	codecOPTAvroDecimalHandlingMode        = "avro-decimal-handling-mode"
 	codecOPTAvroBigintUnsignedHandlingMode = "avro-bigint-unsigned-handling-mode"
@@ -118,6 +120,14 @@ func (c *Config) Apply(sinkURI *url.URL, config *config.ReplicaConfig) error {
 			return err
 		}
 		c.MaxMessageBytes = a
+	}
+
+	if s := params.Get(codecContentCompatible); s != "" {
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		c.ContentCompatible = b
 	}
 
 	if s := params.Get(codecOPTAvroDecimalHandlingMode); s != "" {

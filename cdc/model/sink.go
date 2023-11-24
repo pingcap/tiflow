@@ -76,7 +76,19 @@ const (
 	NullableFlag
 	// UnsignedFlag means the column stores an unsigned integer
 	UnsignedFlag
+	// ZerofillFlag means the column is zerofill
+	ZerofillFlag
 )
+
+// SetZeroFill sets ZerofillFlag
+func (b *ColumnFlagType) SetZeroFill() {
+	(*util.Flag)(b).Add(util.Flag(ZerofillFlag))
+}
+
+// IsZerofill shows whether ZerofillFlag is set
+func (b *ColumnFlagType) IsZerofill() bool {
+	return (*util.Flag)(b).HasAll(util.Flag(ZerofillFlag))
+}
 
 // SetIsBinary sets BinaryFlag
 func (b *ColumnFlagType) SetIsBinary() {

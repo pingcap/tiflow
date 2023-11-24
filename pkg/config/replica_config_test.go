@@ -39,7 +39,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = "open-protocol"
+	conf.Sink.Protocol = "canal-json"
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -57,7 +57,6 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
 	conf.Sink.AdvanceTimeoutInSec = DefaultAdvanceTimeoutInSec
-
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		LargeMessageHandle: &LargeMessageHandleConfig{
 			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
@@ -97,7 +96,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = "open-protocol"
+	conf.Sink.Protocol = "canal-json"
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},

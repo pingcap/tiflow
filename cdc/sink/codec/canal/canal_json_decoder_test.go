@@ -24,19 +24,16 @@ import (
 )
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
-	t.Parallel()
-
 	ctx := context.Background()
 	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := newJSONBatchEncoder(&common.Config{
-			EnableTiDBExtension: encodeEnable,
-			Terminator:          config.CRLF,
-			MaxMessageBytes:     config.DefaultMaxMessageBytes,
-		})
+		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+		codecConfig.EnableTiDBExtension = encodeEnable
+		encoder := newJSONBatchEncoder(codecConfig)
 		require.NotNil(t, encoder)
 
-		err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, nil)
+		insertEvent, _, _ := newLargeEvent4Test(t)
+		err := encoder.AppendRowChangedEvent(context.Background(), "", insertEvent, nil)
 		require.Nil(t, err)
 
 		messages := encoder.Build()
@@ -52,16 +49,16 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 			require.NoError(t, err)
 
 			ty, hasNext, err := decoder.HasNext()
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeRow, ty)
 
 			consumed, err := decoder.NextRowChangedEvent()
 			require.Nil(t, err)
 
-			require.Equal(t, testCaseInsert.Table, consumed.Table)
+			require.Equal(t, insertEvent.Table, consumed.Table)
 			if encodeEnable && decodeEnable {
-				require.Equal(t, testCaseInsert.CommitTs, consumed.CommitTs)
+				require.Equal(t, insertEvent.CommitTs, consumed.CommitTs)
 			} else {
 				require.Equal(t, uint64(0), consumed.CommitTs)
 			}
@@ -71,7 +68,7 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 				require.True(t, ok)
 				require.Equal(t, expected, col.Value)
 
-				for _, item := range testCaseInsert.Columns {
+				for _, item := range insertEvent.Columns {
 					if item.Name == col.Name {
 						require.Equal(t, item.Type, col.Type)
 					}
@@ -93,17 +90,14 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 
 	ctx := context.Background()
 	for _, encodeEnable := range []bool{false, true} {
-		encoder := &JSONBatchEncoder{
-			builder: newCanalEntryBuilder(),
-			config: &common.Config{
-				EnableTiDBExtension: encodeEnable,
-				LargeMessageHandle:  config.NewDefaultLargeMessageHandleConfig(),
-			},
-		}
+		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+		codecConfig.EnableTiDBExtension = encodeEnable
+		codecConfig.LargeMessageHandle = config.NewDefaultLargeMessageHandleConfig()
+		encoder := newJSONBatchEncoder(codecConfig)
 		require.NotNil(t, encoder)
 
 		result, err := encoder.EncodeDDLEvent(testCaseDDL)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.NotNil(t, result)
 
 		for _, decodeEnable := range []bool{false, true} {
