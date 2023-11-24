@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -158,10 +159,10 @@ func TestCleanupExpiredFiles(t *testing.T) {
 	err = replicaConfig.ValidateAndAdjust(sinkURI)
 	require.Nil(t, err)
 
-	cnt := 0
+	cnt := atomic.Int64{}
 	cleanupJobs := []func(){
 		func() {
-			cnt++
+			cnt.Add(1)
 		},
 	}
 	sink, err := newDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig, cleanupJobs)
@@ -169,5 +170,5 @@ func TestCleanupExpiredFiles(t *testing.T) {
 
 	_ = sink
 	time.Sleep(3 * time.Second)
-	require.LessOrEqual(t, 1, cnt)
+	require.LessOrEqual(t, int64(1), cnt.Load())
 }
