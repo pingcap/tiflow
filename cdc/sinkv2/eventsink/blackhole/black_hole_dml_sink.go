@@ -35,14 +35,7 @@ func New() *Sink {
 }
 
 // WriteEvents log the events.
-<<<<<<< HEAD:cdc/sinkv2/eventsink/blackhole/black_hole_dml_sink.go
-func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) error {
-	for _, row := range rows {
-		// NOTE: don't change the log, some tests depend on it.
-		log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row.Event))
-		row.Callback()
-=======
-func (s *DMLSink) WriteEvents(rows ...*dmlsink.CallbackableEvent[*model.RowChangedEvent]) (err error) {
+func (s *Sink) WriteEvents(rows ...*eventsink.CallbackableEvent[*model.RowChangedEvent]) (err error) {
 	failpoint.Inject("WriteEventsFail", func() { err = errors.New("InjectedErrorForWriteEventsFail") })
 	if err == nil {
 		for _, row := range rows {
@@ -50,7 +43,6 @@ func (s *DMLSink) WriteEvents(rows ...*dmlsink.CallbackableEvent[*model.RowChang
 			log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row.Event))
 			row.Callback()
 		}
->>>>>>> f35b76a1fe (sink(cdc): always handle sink failures for cases with sync-point enabled (#10132)):cdc/sink/dmlsink/blackhole/black_hole_dml_sink.go
 	}
 	return
 }

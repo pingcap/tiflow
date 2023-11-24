@@ -556,7 +556,7 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 						ckpt := tableSink.getCheckpointTs().ResolvedMark()
 						lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
 						p := &progress{
-							span:              tableSink.span,
+							tableID:           tableSink.tableID,
 							nextLowerBoundPos: lastWrittenPos.Next(),
 							version:           slowestTableProgress.version,
 						}
@@ -564,7 +564,7 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 						log.Info("table sink has been restarted",
 							zap.String("namespace", m.changefeedID.Namespace),
 							zap.String("changefeed", m.changefeedID.ID),
-							zap.Stringer("span", &tableSink.span),
+							zap.Int64("tableID", tableSink.tableID),
 							zap.Any("lastWrittenPos", lastWrittenPos),
 							zap.String("sinkError", sinkErr.Error()))
 					} else {
@@ -572,7 +572,7 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 						log.Warn("table sink restart fail",
 							zap.String("namespace", m.changefeedID.Namespace),
 							zap.String("changefeed", m.changefeedID.ID),
-							zap.Stringer("span", &tableSink.span),
+							zap.Int64("tableID", tableSink.tableID),
 							zap.String("sinkError", sinkErr.Error()),
 							zap.Error(restartErr))
 					}

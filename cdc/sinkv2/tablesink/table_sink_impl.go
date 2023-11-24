@@ -158,19 +158,15 @@ func (e *EventTableSink[E]) AsyncClose() bool {
 	return false
 }
 
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl.go
-func (e *EventTableSink[E]) freeze() {
-=======
 // CheckHealth checks whether the associated sink backend is healthy or not.
-func (e *EventTableSink[E, P]) CheckHealth() error {
+func (e *EventTableSink[E]) CheckHealth() error {
 	if err := e.backendSink.WriteEvents(); err != nil {
 		return SinkInternalError{err}
 	}
 	return nil
 }
 
-func (e *EventTableSink[E, P]) freeze() {
->>>>>>> f35b76a1fe (sink(cdc): always handle sink failures for cases with sync-point enabled (#10132)):cdc/sink/tablesink/table_sink_impl.go
+func (e *EventTableSink[E]) freeze() {
 	// Notice: We have to set the state to stopping first,
 	// otherwise the progressTracker may be advanced incorrectly.
 	// For example, if we do not freeze it and set the state to stooping

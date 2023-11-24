@@ -388,16 +388,15 @@ func TestSinkManagerRestartTableSinks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 16)
 	changefeedInfo := getChangefeedInfo()
-	manager, _, _ := CreateManagerWithMemEngine(t, ctx, model.ChangeFeedID{}, changefeedInfo, errCh)
+	manager, _ := createManagerWithMemEngine(t, ctx, model.ChangeFeedID{}, changefeedInfo, errCh)
 	defer func() {
 		cancel()
 		manager.Close()
 	}()
 
-	span := tablepb.Span{TableID: 1}
-	manager.AddTable(span, 1, 100)
-	require.Nil(t, manager.StartTable(span, 2))
-	table, exists := manager.tableSinks.Load(span)
+	manager.AddTable(1, 1, 100)
+	require.Nil(t, manager.StartTable(1, 2))
+	table, exists := manager.tableSinks.Load(model.TableID(1))
 	require.True(t, exists)
 
 	table.(*tableSinkWrapper).updateReceivedSorterResolvedTs(4)
@@ -412,8 +411,8 @@ func TestSinkManagerRestartTableSinks(t *testing.T) {
 
 	// With the failpoint blackhole/WriteEventsFail enabled, sink manager should restarts
 	// the table sink at its checkpoint.
-	failpoint.Enable("github.com/pingcap/tiflow/cdc/sink/dmlsink/blackhole/WriteEventsFail", "1*return")
-	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/dmlsink/blackhole/WriteEventsFail")
+	failpoint.Enable("github.com/pingcap/tiflow/cdc/sinkv2/eventsink/blackhole/WriteEventsFail", "1*return")
+	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sinkv2/eventsink/blackhole/WriteEventsFail")
 	select {
 	case task := <-manager.sinkTaskChan:
 		require.Equal(t, engine.Position{StartTs: 2, CommitTs: 2}, task.lowerBound)
