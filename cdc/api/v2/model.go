@@ -339,11 +339,13 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 
 		if c.Sink.CloudStorageConfig != nil {
 			res.Sink.CloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:      c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:    c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:         c.Sink.CloudStorageConfig.FileSize,
-				FlushConcurrency: c.Sink.CloudStorageConfig.FlushConcurrency,
-				OutputColumnID:   c.Sink.CloudStorageConfig.OutputColumnID,
+				WorkerCount:         c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            c.Sink.CloudStorageConfig.FileSize,
+				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
 			}
 		}
 	}
@@ -478,11 +480,13 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 
 		if cloned.Sink.CloudStorageConfig != nil {
 			res.Sink.CloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:      cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:    cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:         cloned.Sink.CloudStorageConfig.FileSize,
-				FlushConcurrency: cloned.Sink.CloudStorageConfig.FlushConcurrency,
-				OutputColumnID:   cloned.Sink.CloudStorageConfig.OutputColumnID,
+				WorkerCount:         cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            cloned.Sink.CloudStorageConfig.FileSize,
+				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
 			}
 		}
 	}
@@ -638,11 +642,13 @@ type KafkaConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount      *int    `json:"worker_count,omitempty"`
-	FlushInterval    *string `json:"flush_interval,omitempty"`
-	FileSize         *int    `json:"file_size,omitempty"`
-	FlushConcurrency *int    `json:"flush_concurrency,omitempty"`
-	OutputColumnID   *bool   `json:"output_column_id,omitempty"`
+	WorkerCount         *int    `json:"worker_count,omitempty"`
+	FlushInterval       *string `json:"flush_interval,omitempty"`
+	FileSize            *int    `json:"file_size,omitempty"`
+	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
+	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
+	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
+	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
 }
 
 // CSVConfig denotes the csv config
