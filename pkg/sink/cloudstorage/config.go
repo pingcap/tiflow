@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	psink "github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -39,6 +40,12 @@ const (
 	minFlushInterval = 2 * time.Second
 	// the upper limit of flush-interval.
 	maxFlushInterval = 10 * time.Minute
+	// defaultFlushConcurrency is the default value of flush-concurrency.
+	defaultFlushConcurrency = 1
+	// the lower limit of flush-concurrency.
+	minFlushConcurrency = 1
+	// the upper limit of flush-concurrency.
+	maxFlushConcurrency = 512
 	// defaultFileSize is the default value of file-size.
 	defaultFileSize = 64 * 1024 * 1024
 	// the lower limit of file size
@@ -55,6 +62,8 @@ type Config struct {
 	FileIndexWidth           int
 	DateSeparator            string
 	EnablePartitionSeparator bool
+	OutputColumnID           bool
+	FlushConcurrency         int
 }
 
 // NewConfig returns the default cloud storage sink config.
@@ -98,9 +107,16 @@ func (c *Config) Apply(
 	c.DateSeparator = replicaConfig.Sink.DateSeparator
 	c.EnablePartitionSeparator = replicaConfig.Sink.EnablePartitionSeparator
 	c.FileIndexWidth = replicaConfig.Sink.FileIndexWidth
+	if replicaConfig.Sink.CloudStorageConfig != nil {
+		c.OutputColumnID = util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.OutputColumnID)
+		c.FlushConcurrency = util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.FlushConcurrency)
+	}
 
 	if c.FileIndexWidth < config.MinFileIndexWidth || c.FileIndexWidth > config.MaxFileIndexWidth {
 		c.FileIndexWidth = config.DefaultFileIndexWidth
+	}
+	if c.FlushConcurrency < minFlushConcurrency || c.FlushConcurrency > maxFlushConcurrency {
+		c.FlushConcurrency = defaultFlushConcurrency
 	}
 
 	return nil

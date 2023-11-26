@@ -31,6 +31,7 @@ func TestConfigApply(t *testing.T) {
 	expected.FileIndexWidth = config.DefaultFileIndexWidth
 	expected.DateSeparator = config.DateSeparatorNone.String()
 	expected.EnablePartitionSeparator = true
+	expected.FlushConcurrency = 1
 	uri := "s3://bucket/prefix?worker-count=32&flush-interval=10s&file-size=16777216&protocol=csv"
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
