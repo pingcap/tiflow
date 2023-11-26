@@ -251,6 +251,22 @@ func (d *DateSeparator) FromString(separator string) error {
 	return nil
 }
 
+// GetPattern returns the pattern of the date separator.
+func (d DateSeparator) GetPattern() string {
+	switch d {
+	case DateSeparatorNone:
+		return ""
+	case DateSeparatorYear:
+		return `\d{4}`
+	case DateSeparatorMonth:
+		return `\d{4}-\d{2}`
+	case DateSeparatorDay:
+		return `\d{4}-\d{2}-\d{2}`
+	default:
+		return ""
+	}
+}
+
 func (d DateSeparator) String() string {
 	switch d {
 	case DateSeparatorNone:
@@ -367,6 +383,10 @@ type CloudStorageConfig struct {
 	WorkerCount   *int    `toml:"worker-count" json:"worker-count,omitempty"`
 	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
 	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
+
+	OutputColumnID      *bool   `toml:"output-column-id" json:"output-column-id,omitempty"`
+	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
+	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
