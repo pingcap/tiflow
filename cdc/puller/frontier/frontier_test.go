@@ -391,3 +391,19 @@ func TestMinMaxWithRegionSplitMerge(t *testing.T) {
 	f.Forward(8, tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}, 5)
 	require.Equal(t, uint64(5), f.Frontier())
 }
+
+func TestForwardSuperRanges(t *testing.T) {
+	t.Parallel()
+
+	af := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("f")}
+	ax := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("x")}
+	az := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("z")}
+	f := NewFrontier(3, af)
+	require.Equal(t, uint64(3), f.Frontier())
+
+	f.Forward(100, az, 4)
+	require.Equal(t, uint64(4), f.Frontier())
+
+	f.Forward(200, ax, 5)
+	require.Equal(t, uint64(5), f.Frontier())
+}
