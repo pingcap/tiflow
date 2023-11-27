@@ -193,11 +193,11 @@ func (s *extStorageWithTimeout) WalkDir(
 
 // Create opens a file writer by path. path is relative path to storage base path
 func (s *extStorageWithTimeout) Create(
-	ctx context.Context, path string,
+	ctx context.Context, path string, option *storage.WriterOption,
 ) (storage.ExternalFileWriter, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.Create(ctx, path)
+	return s.ExternalStorage.Create(ctx, path, option)
 }
 
 // Rename file name from oldFileName to newFileName
