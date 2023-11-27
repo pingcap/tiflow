@@ -72,7 +72,7 @@ const (
 	// don't need to force reload region anymore.
 	regionScheduleReload = false
 
-	resolveLockMinInterval = 20 * time.Second
+	resolveLockMinInterval = 10 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
