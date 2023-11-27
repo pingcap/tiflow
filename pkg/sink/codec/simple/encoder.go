@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
-//nolint:unused
 type encoder struct {
 	config *common.Config
 
