@@ -939,7 +939,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 
 	if err != nil { // pd 不可用
 		var message string
-		if (status.PullerIngressResolvedTs - status.CheckpointTs) > (5*1000)<<18 { // 5s
+		if (status.PullerResolvedTs - status.CheckpointTs) > (5*1000)<<18 { // 5s
 			message = fmt.Sprintf("we get pd client failed with err is %s. Besides the data is not finish syncing", terror.Message(err))
 		} else {
 			message = fmt.Sprintf("we get pd client failed with err is %s. "+
@@ -951,7 +951,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		c.JSON(http.StatusOK, map[string]any{
 			"Synced":            false,
 			"Sink-CheckpointTs": status.CheckpointTs,
-			"Puller-ResolvedTs": status.PullerIngressResolvedTs,
+			"Puller-ResolvedTs": status.PullerResolvedTs,
 			"LastSyncedTs":      status.LastSyncedTs,
 			"info":              message,
 		})
@@ -964,13 +964,13 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		c.JSON(http.StatusOK, map[string]any{
 			"Synced":            true,
 			"Sink-CheckpointTs": status.CheckpointTs,
-			"Puller-ResolvedTs": status.PullerIngressResolvedTs,
+			"Puller-ResolvedTs": status.PullerResolvedTs,
 			"LastSyncedTs":      status.LastSyncedTs,
 			"info":              "Data syncing is finished",
 		})
 	} else if now-status.LastSyncedTs > (5*60*1000)<<18 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
 		var message string
-		if (status.PullerIngressResolvedTs - status.CheckpointTs) > (5*1000)<<18 { // 5s
+		if (status.PullerResolvedTs - status.CheckpointTs) > (5*1000)<<18 { // 5s
 			message = fmt.Sprintf("Please check whether pd is health and tikv region is all available. " +
 				"If pd is not health or tikv region is not available, the data syncing is finished. " +
 				" Otherwise the data syncing is not finished, please wait")
@@ -980,7 +980,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		c.JSON(http.StatusOK, map[string]any{
 			"Synced":            false,
 			"Sink-CheckpointTs": status.CheckpointTs,
-			"Puller-ResolvedTs": status.PullerIngressResolvedTs,
+			"Puller-ResolvedTs": status.PullerResolvedTs,
 			"LastSyncedTs":      status.LastSyncedTs,
 			"info":              message,
 		})
@@ -988,7 +988,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		c.JSON(http.StatusOK, map[string]any{
 			"Synced":            false,
 			"Sink-CheckpointTs": status.CheckpointTs,
-			"Puller-ResolvedTs": status.PullerIngressResolvedTs,
+			"Puller-ResolvedTs": status.PullerResolvedTs,
 			"LastSyncedTs":      status.LastSyncedTs,
 			"info":              "The data syncing is not finished, please wait",
 		})

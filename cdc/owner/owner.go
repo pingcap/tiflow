@@ -607,7 +607,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		ret.ResolvedTs = cfReactor.resolvedTs
 		ret.LastSyncedTs = cfReactor.lastSyncedTs
 		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
-		ret.PullerIngressResolvedTs = cfReactor.pullerIngressResolvedTs
+		ret.PullerResolvedTs = cfReactor.pullerResolvedTs
 		query.Data = ret
 	case QueryChangefeedInfo:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]

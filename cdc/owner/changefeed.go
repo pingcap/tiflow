@@ -90,11 +90,16 @@ type changefeed struct {
 	scheduler scheduler.Scheduler
 	// barriers will be created when a changefeed is initialized
 	// and will be destroyed when a changefeed is closed.
-	barriers                *barriers
-	feedStateManager        FeedStateManager
-	resolvedTs              model.Ts
-	lastSyncedTs            model.Ts
-	pullerIngressResolvedTs model.Ts // record the latest min puller ingress resolved ts of all pullers
+	barriers         *barriers
+	feedStateManager FeedStateManager
+	resolvedTs       model.Ts
+
+	// lastSyncedTs is the lastest resolvedTs that has been synced to downstream.
+	// pullerResolvedTs is the minimum resolvedTs of all pullers.
+	// we don't need to initialize lastSyncedTs and pullerResolvedTs specially
+	// because it will be updated in tick.
+	lastSyncedTs     model.Ts
+	pullerResolvedTs model.Ts
 
 	// ddl related fields
 	ddlManager  *ddlManager
@@ -414,7 +419,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 		return 0, 0, nil
 	}
 
-	newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs, err := c.scheduler.Tick(
+	newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
 		barrier)
 	if err != nil {
@@ -428,13 +433,13 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 			zap.Uint64("newLastSyncedTs", newLastSyncedTs))
 	}
 
-	if newPullerIngressResolvedTs != scheduler.CheckpointCannotProceed {
-		if newPullerIngressResolvedTs > c.pullerIngressResolvedTs {
-			c.pullerIngressResolvedTs = newPullerIngressResolvedTs
-		} else if newPullerIngressResolvedTs < c.pullerIngressResolvedTs {
-			log.Warn("the newPullerIngressResolvedTs should not be smaller than c.PullerIngressResolvedTs",
-				zap.Uint64("c.pullerIngressResolvedTs", c.pullerIngressResolvedTs),
-				zap.Uint64("newPullerIngressResolvedTs", newPullerIngressResolvedTs))
+	if newPullerResolvedTs != scheduler.CheckpointCannotProceed {
+		if newPullerResolvedTs > c.pullerResolvedTs {
+			c.pullerResolvedTs = newPullerResolvedTs
+		} else if newPullerResolvedTs < c.pullerResolvedTs {
+			log.Warn("the newPullerResolvedTs should not be smaller than c.pullerResolvedTs",
+				zap.Uint64("c.pullerResolvedTs", c.pullerResolvedTs),
+				zap.Uint64("newPullerResolvedTs", newPullerResolvedTs))
 		}
 	}
 
@@ -533,6 +538,7 @@ LOOP2:
 		// lastSyncedTs always increase even if there are no more data send into ticdc.
 		c.lastSyncedTs = uint64(oracle.GetPhysical(c.upstream.PDClock.CurrentTime()))
 	}
+
 	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {

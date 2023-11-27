@@ -126,7 +126,7 @@ func (c *coordinator) Tick(
 	// All captures that are alive according to the latest Etcd states.
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 	barrier *schedulepb.BarrierWithMinTs,
-) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs model.Ts, err error) {
+) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs model.Ts, err error) {
 	startTime := time.Now()
 	defer func() {
 		costTime := time.Since(startTime)
@@ -272,7 +272,7 @@ func (c *coordinator) poll(
 	currentTables []model.TableID,
 	aliveCaptures map[model.CaptureID]*model.CaptureInfo,
 	barrier *schedulepb.BarrierWithMinTs,
-) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs model.Ts, err error) {
+) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs model.Ts, err error) {
 	c.maybeCollectMetrics()
 	if c.compat.UpdateCaptureInfo(aliveCaptures) {
 		spanReplicationEnabled := c.compat.CheckSpanReplicationEnabled()
@@ -310,13 +310,13 @@ func (c *coordinator) poll(
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
 		newCheckpointTs, newResolvedTs, newLastSyncedTs,
-			newPullerIngressResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
+			newPullerResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
 		// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
 		// when redo is enabled
 		msgs = c.captureM.Tick(c.replicationM.ReplicationSets(),
 			c.schedulerM.DrainingTarget(), barrier.Barrier)
 		msgBuf = append(msgBuf, msgs...)
-		return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs, c.sendMsgs(ctx, msgBuf)
+		return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs, c.sendMsgs(ctx, msgBuf)
 	}
 
 	// Handle capture membership changes.
@@ -346,7 +346,7 @@ func (c *coordinator) poll(
 
 	// Checkpoint calculation
 	newCheckpointTs, newResolvedTs, newLastSyncedTs,
-		newPullerIngressResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
+		newPullerResolvedTs = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
 
 	// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
 	// when redo is enabled
@@ -360,7 +360,7 @@ func (c *coordinator) poll(
 		return checkpointCannotProceed, checkpointCannotProceed, checkpointCannotProceed, checkpointCannotProceed, errors.Trace(err)
 	}
 
-	return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs, nil
+	return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs, nil
 }
 
 func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, error) {

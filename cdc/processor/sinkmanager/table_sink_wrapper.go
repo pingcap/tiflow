@@ -58,6 +58,7 @@ type tableSinkWrapper struct {
 		advanced     time.Time
 		resolvedTs   model.ResolvedTs
 		checkpointTs model.ResolvedTs
+		lastSyncedTs model.Ts
 	}
 
 	// state used to control the lifecycle of the table.
@@ -221,7 +222,10 @@ func (t *tableSinkWrapper) updateResolvedTs(ts model.ResolvedTs) error {
 func (t *tableSinkWrapper) getLastSyncedTs() uint64 {
 	t.tableSink.RLock()
 	defer t.tableSink.RUnlock()
-	return t.tableSink.s.GetLastSyncedTs()
+	if t.tableSink.s != nil {
+		return t.tableSink.s.GetLastSyncedTs()
+	}
+	return t.tableSink.lastSyncedTs
 }
 
 func (t *tableSinkWrapper) getCheckpointTs() model.ResolvedTs {
@@ -363,6 +367,7 @@ func (t *tableSinkWrapper) doTableSinkClear() {
 		t.tableSink.checkpointTs = checkpointTs
 	}
 	t.tableSink.resolvedTs = checkpointTs
+	t.tableSink.lastSyncedTs = t.tableSink.s.GetLastSyncedTs()
 	t.tableSink.advanced = time.Now()
 	t.tableSink.innerMu.Unlock()
 	t.tableSink.s = nil

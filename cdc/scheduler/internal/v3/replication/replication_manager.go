@@ -557,10 +557,10 @@ func (r *Manager) AdvanceCheckpoint(
 	currentPDTime time.Time,
 	barrier *schedulepb.BarrierWithMinTs,
 	redoMetaManager redo.MetaManager,
-) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs model.Ts) {
+) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs model.Ts) {
 	var redoFlushedResolvedTs model.Ts
 	limitBarrierWithRedo := func(newCheckpointTs, newResolvedTs, newLastSyncedTs,
-		newPullerIngressResolvedTs uint64,
+		newPullerResolvedTs uint64,
 	) (uint64, uint64, uint64, uint64) {
 		flushedMeta := redoMetaManager.GetFlushedMeta()
 		redoFlushedResolvedTs = flushedMeta.ResolvedTs
@@ -580,7 +580,7 @@ func (r *Manager) AdvanceCheckpoint(
 		if barrier.GlobalBarrierTs > newResolvedTs {
 			barrier.GlobalBarrierTs = newResolvedTs
 		}
-		return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs
+		return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs
 	}
 	defer func() {
 		if redoFlushedResolvedTs != 0 && barrier.GlobalBarrierTs > redoFlushedResolvedTs {
@@ -596,8 +596,7 @@ func (r *Manager) AdvanceCheckpoint(
 	r.slowestSink = tablepb.Span{}
 	var slowestPullerResolvedTs uint64 = math.MaxUint64
 
-	// newPullerIngressResolvedTs to record the min ingress resolved ts of all pullers
-	newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs = math.MaxUint64, math.MaxUint64, 0, math.MaxUint64
+	newCheckpointTs, newResolvedTs, newLastSyncedTs = math.MaxUint64, math.MaxUint64, 0
 
 	cannotProceed := false
 	currentTables.Iter(func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool {
@@ -645,13 +644,6 @@ func (r *Manager) AdvanceCheckpoint(
 					}
 				}
 
-				// Find the minimum puller ingress resolved ts.
-				if pullerIngressCkpt, ok := table.Stats.StageCheckpoints["puller-ingress"]; ok {
-					if newPullerIngressResolvedTs > pullerIngressCkpt.ResolvedTs {
-						newPullerIngressResolvedTs = pullerIngressCkpt.ResolvedTs
-					}
-				}
-
 				return true
 			})
 		if !tableSpanFound || !tableSpanStartFound || !tableSpanEndFound || tableHasHole {
@@ -680,7 +672,7 @@ func (r *Manager) AdvanceCheckpoint(
 		if redoMetaManager.Enabled() {
 			// If redo is enabled, GlobalBarrierTs should be limited by redo flushed meta.
 			newResolvedTs = barrier.RedoBarrierTs
-			limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs)
+			limitBarrierWithRedo(newCheckpointTs, newResolvedTs, checkpointCannotProceed, checkpointCannotProceed)
 		}
 		return checkpointCannotProceed, checkpointCannotProceed, checkpointCannotProceed, checkpointCannotProceed
 	}
@@ -730,10 +722,10 @@ func (r *Manager) AdvanceCheckpoint(
 			zap.String("changefeed", r.changefeedID.ID),
 			zap.Uint64("newCheckpointTs", newCheckpointTs),
 			zap.Uint64("newResolvedTs", newResolvedTs))
-		return limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs)
+		return limitBarrierWithRedo(newCheckpointTs, newResolvedTs, newLastSyncedTs, slowestPullerResolvedTs)
 	}
 
-	return newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerIngressResolvedTs
+	return newCheckpointTs, newResolvedTs, newLastSyncedTs, slowestPullerResolvedTs
 }
 
 func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
