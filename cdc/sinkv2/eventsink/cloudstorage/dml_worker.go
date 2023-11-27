@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -28,6 +27,7 @@ import (
 	mcloudstorage "github.com/pingcap/tiflow/cdc/sinkv2/metrics/cloudstorage"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -237,10 +237,33 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 		callbacks = append(callbacks, msg.Callback)
 	}
 
-	if err := d.statistics.RecordBatchExecution(func() (int, error) {
-		err := d.storage.WriteFile(ctx, path, buf.Bytes())
-		if err != nil {
-			return 0, err
+	if err := d.statistics.RecordBatchExecution(func() (_ int, inErr error) {
+		if d.config.FlushConcurrency <= 1 {
+			return rowsCnt, d.storage.WriteFile(ctx, path, buf.Bytes())
+		}
+
+		writer, inErr := d.storage.Create(ctx, path, &storage.WriterOption{
+			Concurrency: d.config.FlushConcurrency,
+		})
+		if inErr != nil {
+			return 0, inErr
+		}
+
+		defer func() {
+			closeErr := writer.Close(ctx)
+			if inErr != nil {
+				log.Error("failed to close writer", zap.Error(closeErr),
+					zap.Int("workerID", d.id),
+					zap.Any("table", task.tableInfo.TableName),
+					zap.String("namespace", d.changeFeedID.Namespace),
+					zap.String("changefeed", d.changeFeedID.ID))
+				if inErr == nil {
+					inErr = closeErr
+				}
+			}
+		}()
+		if _, inErr = writer.Write(ctx, buf.Bytes()); inErr != nil {
+			return 0, inErr
 		}
 		return rowsCnt, nil
 	}); err != nil {
