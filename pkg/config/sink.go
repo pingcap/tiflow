@@ -224,7 +224,8 @@ func (c *CSVConfig) validateAndAdjust() error {
 		}
 	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains more than one character"))
+			errors.New("csv config delimiter contains more than one character, note that escape "+
+				"sequences can only be used in double quotes in toml configuration items."))
 	}
 
 	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {

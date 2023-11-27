@@ -752,6 +752,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cleanupMetrics()
 	c.schema = nil
 	c.barriers = nil
+	c.resolvedTs = 0
 	c.initialized = false
 	c.isReleased = true
 
