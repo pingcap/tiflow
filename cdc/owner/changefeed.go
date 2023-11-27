@@ -652,6 +652,11 @@ LOOP2:
 		return errors.Trace(err)
 	}
 
+	needSendBootstrapEvent, err := c.latestInfo.NeedSendBootstrapEvent()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
@@ -663,6 +668,7 @@ LOOP2:
 		c.redoMetaMgr,
 		downstreamType,
 		util.GetOrZero(c.latestInfo.Config.BDRMode),
+		needSendBootstrapEvent,
 	)
 
 	// create scheduler
