@@ -50,6 +50,7 @@ type TestKit struct {
 
 	schemaStorage SchemaStorage
 	mounter       Mounter
+	filter        filter.Filter
 }
 
 // NewTestKit return a new testkit
@@ -88,6 +89,7 @@ func NewTestKit(t *testing.T, replicaConfig *config.ReplicaConfig) *TestKit {
 		TestKit:       tk,
 		storage:       store,
 		domain:        domain,
+		filter:        filter,
 		schemaStorage: schemaStorage,
 		mounter:       mounter,
 	}
@@ -95,10 +97,8 @@ func NewTestKit(t *testing.T, replicaConfig *config.ReplicaConfig) *TestKit {
 
 func (tk *TestKit) DML2Event(dml string, schema, table string) *model.RowChangedEvent {
 	tk.MustExec(dml)
-
 	tableID, ok := tk.schemaStorage.GetLastSnapshot().TableIDByName(schema, table)
 	require.True(tk.t, ok)
-
 	key, value := tk.getLastKeyValue(tableID)
 
 	ts := tk.schemaStorage.GetLastSnapshot().CurrentTs()
@@ -135,61 +135,62 @@ func (tk *TestKit) getLastKeyValue(tableID int64) (key, value []byte) {
 	return key, value
 }
 
-// DDL2Job executes the DDL stmt and returns the DDL job
-func (tk *TestKit) DDL2Job(ddl string) *timodel.Job {
+// DDL2TableInfo executes the DDL stmt and returns the DDL job
+func (tk *TestKit) DDL2TableInfo(ddl string) *model.TableInfo {
 	tk.MustExec(ddl)
 	jobs, err := tiddl.GetLastNHistoryDDLJobs(tk.GetCurrentMeta(), 1)
-	require.Nil(tk.t, err)
+	require.NoError(tk.t, err)
 	require.Len(tk.t, jobs, 1)
 	// Set State from Synced to Done.
 	// Because jobs are put to history queue after TiDB alter its state from
 	// Done to Synced.
 	jobs[0].State = timodel.JobStateDone
 	res := jobs[0]
-	if res.Type != timodel.ActionRenameTables {
-		return res
-	}
+	if res.Type == timodel.ActionRenameTables {
+		// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
+		// so we manually construct `job.RawArgs` to do the workaround.
+		// we assume the old schema name is same as the new schema name here.
+		// for example, "ALTER TABLE RENAME test.t1 TO test.t1, test.t2 to test.t22", schema name is "test"
+		schema := strings.Split(strings.Split(strings.Split(res.Query, ",")[1], " ")[1], ".")[0]
+		tableNum := len(res.BinlogInfo.MultipleTableInfos)
+		oldSchemaIDs := make([]int64, tableNum)
+		for i := 0; i < tableNum; i++ {
+			oldSchemaIDs[i] = res.SchemaID
+		}
+		oldTableIDs := make([]int64, tableNum)
+		for i := 0; i < tableNum; i++ {
+			oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
+		}
+		newTableNames := make([]timodel.CIStr, tableNum)
+		for i := 0; i < tableNum; i++ {
+			newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
+		}
+		oldSchemaNames := make([]timodel.CIStr, tableNum)
+		for i := 0; i < tableNum; i++ {
+			oldSchemaNames[i] = timodel.NewCIStr(schema)
+		}
+		newSchemaIDs := oldSchemaIDs
 
-	// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
-	// so we manually construct `job.RawArgs` to do the workaround.
-	// we assume the old schema name is same as the new schema name here.
-	// for example, "ALTER TABLE RENAME test.t1 TO test.t1, test.t2 to test.t22", schema name is "test"
-	schema := strings.Split(strings.Split(strings.Split(res.Query, ",")[1], " ")[1], ".")[0]
-	tableNum := len(res.BinlogInfo.MultipleTableInfos)
-	oldSchemaIDs := make([]int64, tableNum)
-	for i := 0; i < tableNum; i++ {
-		oldSchemaIDs[i] = res.SchemaID
-	}
-	oldTableIDs := make([]int64, tableNum)
-	for i := 0; i < tableNum; i++ {
-		oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
-	}
-	newTableNames := make([]timodel.CIStr, tableNum)
-	for i := 0; i < tableNum; i++ {
-		newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
-	}
-	oldSchemaNames := make([]timodel.CIStr, tableNum)
-	for i := 0; i < tableNum; i++ {
-		oldSchemaNames[i] = timodel.NewCIStr(schema)
-	}
-	newSchemaIDs := oldSchemaIDs
+		args := []interface{}{
+			oldSchemaIDs, newSchemaIDs,
+			newTableNames, oldTableIDs, oldSchemaNames,
+		}
+		rawArgs, err := json.Marshal(args)
+		require.NoError(tk.t, err)
+		res.RawArgs = rawArgs
 
-	args := []interface{}{
-		oldSchemaIDs, newSchemaIDs,
-		newTableNames, oldTableIDs, oldSchemaNames,
+		err = tk.schemaStorage.HandleDDLJob(res)
+		require.NoError(tk.t, err)
 	}
-	rawArgs, err := json.Marshal(args)
-	require.NoError(tk.t, err)
-	res.RawArgs = rawArgs
-
-	err = tk.schemaStorage.HandleDDLJob(res)
-	require.NoError(tk.t, err)
 
 	ver, err := tk.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(tk.t, err)
 	tk.schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	return res
+	tableInfo, ok := tk.schemaStorage.GetLastSnapshot().TableByName(res.SchemaName, res.TableName)
+	require.True(tk.t, ok)
+
+	return tableInfo
 }
 
 // DDL2Jobs executes the DDL statement and return the corresponding DDL jobs.
@@ -210,25 +211,7 @@ func (tk *TestKit) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 	return jobs
 }
 
-// Storage returns the tikv storage
-func (tk *TestKit) Storage() kv.Storage {
-	return tk.storage
-}
-
-// GetCurrentMeta return the current meta snapshot
-func (tk *TestKit) GetCurrentMeta() *timeta.Meta {
-	ver, err := tk.storage.CurrentVersion(oracle.GlobalTxnScope)
-	require.Nil(tk.t, err)
-	return timeta.NewSnapshotMeta(tk.storage.GetSnapshot(ver))
-}
-
-// Close closes the helper
-func (tk *TestKit) Close() {
-	tk.domain.Close()
-	tk.storage.Close() //nolint:errcheck
-}
-
-func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*timodel.Job, error) {
+func (tk *TestKit) GetAllHistoryDDLJob() ([]*timodel.Job, error) {
 	s, err := session.CreateSession(tk.storage)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -252,8 +235,8 @@ func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*timodel.Job, error) 
 		return nil, errors.Trace(err)
 	}
 	for i, job := range jobs {
-		ignoreSchema := f.ShouldIgnoreSchema(job.SchemaName)
-		ignoreTable := f.ShouldIgnoreTable(job.SchemaName, job.TableName)
+		ignoreSchema := tk.filter.ShouldIgnoreSchema(job.SchemaName)
+		ignoreTable := tk.filter.ShouldIgnoreTable(job.SchemaName, job.TableName)
 		if ignoreSchema || ignoreTable {
 			log.Info("Ignore ddl job", zap.Stringer("job", job))
 			continue
@@ -265,4 +248,22 @@ func (tk *TestKit) GetAllHistoryDDLJob(f filter.Filter) ([]*timodel.Job, error) 
 		res = append(res, job)
 	}
 	return jobs, nil
+}
+
+// Storage returns the tikv storage
+func (tk *TestKit) Storage() kv.Storage {
+	return tk.storage
+}
+
+// GetCurrentMeta return the current meta snapshot
+func (tk *TestKit) GetCurrentMeta() *timeta.Meta {
+	ver, err := tk.storage.CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(tk.t, err)
+	return timeta.NewSnapshotMeta(tk.storage.GetSnapshot(ver))
+}
+
+// Close closes the helper
+func (tk *TestKit) Close() {
+	tk.domain.Close()
+	tk.storage.Close() //nolint:errcheck
 }
