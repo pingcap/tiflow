@@ -173,7 +173,7 @@ func TestStrictDecodeInvalidFile(t *testing.T) {
 func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	err := StrictDecodeFile("changefeed.toml", "cdc", &cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.True(t, cfg.CaseSensitive)
 	require.Equal(t, &config.FilterConfig{
@@ -188,7 +188,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	require.NoError(t, err)
 
 	err = cfg.ValidateAndAdjust(sinkURL)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
 		EncoderConcurrency: 16,
 		DispatchRules: []*config.DispatchRule{

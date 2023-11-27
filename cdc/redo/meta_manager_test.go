@@ -51,17 +51,18 @@ func TestInitAndWriteMeta(t *testing.T) {
 		{CheckpointTs: 8, ResolvedTs: 9},
 		{CheckpointTs: 9, ResolvedTs: 11},
 	}
-	toReomoveFiles := []string{}
+
+	var toRemoveFiles []string
 	for _, meta := range metas {
 		data, err := meta.MarshalMsg(nil)
 		require.NoError(t, err)
 		metaName := getMetafileName(captureID, changefeedID, uuid.NewGenerator())
 		err = extStorage.WriteFile(ctx, metaName, data)
 		require.NoError(t, err)
-		toReomoveFiles = append(toReomoveFiles, metaName)
+		toRemoveFiles = append(toRemoveFiles, metaName)
 	}
-	// err = extStorage.WriteFile(ctx, getDeletedChangefeedMarker(changefeedID), []byte{})
-	notRemoveFiles := []string{}
+
+	var notRemoveFiles []string
 	require.NoError(t, err)
 	for i := 0; i < 10; i++ {
 		fileName := "dummy" + getChangefeedMatcher(changefeedID) + strconv.Itoa(i)
@@ -72,16 +73,30 @@ func TestInitAndWriteMeta(t *testing.T) {
 
 	startTs := uint64(10)
 	cfg := &config.ConsistentConfig{
-		Level:             string(redo.ConsistentLevelEventual),
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           uri.String(),
-		FlushIntervalInMs: redo.MinFlushIntervalInMs,
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               uri.String(),
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
-	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
-	require.NoError(t, err)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, uint64(11), m.metaResolvedTs.getFlushed())
-	for _, fileName := range toReomoveFiles {
+	m := NewMetaManager(changefeedID, cfg, startTs)
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return m.Run(ctx)
+	})
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaCheckpointTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return uint64(11) == m.metaResolvedTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
+	for _, fileName := range toRemoveFiles {
 		ret, err := extStorage.FileExists(ctx, fileName)
 		require.NoError(t, err)
 		require.False(t, ret, "file %s should be removed", fileName)
@@ -92,7 +107,10 @@ func TestInitAndWriteMeta(t *testing.T) {
 		require.True(t, ret, "file %s should not be removed", fileName)
 	}
 
-	testWriteMeta(t, m)
+	testWriteMeta(ctx, t, m)
+
+	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
 func TestPreCleanupAndWriteMeta(t *testing.T) {
@@ -115,7 +133,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		{CheckpointTs: 9, ResolvedTs: 11},
 		{CheckpointTs: 11, ResolvedTs: 12},
 	}
-	toRemoveFiles := []string{}
+	var toRemoveFiles []string
 	for _, meta := range metas {
 		data, err := meta.MarshalMsg(nil)
 		require.NoError(t, err)
@@ -136,29 +154,44 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 
 	startTs := uint64(10)
 	cfg := &config.ConsistentConfig{
-		Level:             string(redo.ConsistentLevelEventual),
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           uri.String(),
-		FlushIntervalInMs: redo.MinFlushIntervalInMs,
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               uri.String(),
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
-	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
-	require.NoError(t, err)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
+	m := NewMetaManager(changefeedID, cfg, startTs)
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		return m.Run(ctx)
+	})
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaCheckpointTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaResolvedTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
 	for _, fileName := range toRemoveFiles {
 		ret, err := extStorage.FileExists(ctx, fileName)
 		require.NoError(t, err)
 		require.False(t, ret, "file %s should be removed", fileName)
 	}
-	testWriteMeta(t, m)
+	testWriteMeta(ctx, t, m)
+
+	cancel()
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
-func testWriteMeta(t *testing.T, m *metaManager) {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	checkMeta := func(targetCkpts, targetRts uint64) {
+func testWriteMeta(ctx context.Context, t *testing.T, m *metaManager) {
+	checkMeta := func(targetCheckpointTs, targetResolvedTs uint64) {
 		var checkpointTs, resolvedTs uint64
-		metas := []*common.LogMeta{}
+		var metas []*common.LogMeta
 		cnt := 0
 		m.extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
 			if !strings.HasSuffix(path, redo.MetaEXT) {
@@ -175,14 +208,10 @@ func testWriteMeta(t *testing.T, m *metaManager) {
 		})
 		require.Equal(t, 1, cnt)
 		common.ParseMeta(metas, &checkpointTs, &resolvedTs)
-		require.Equal(t, targetCkpts, checkpointTs)
-		require.Equal(t, targetRts, resolvedTs)
+		require.Equal(t, targetCheckpointTs, checkpointTs)
+		require.Equal(t, targetResolvedTs, resolvedTs)
 	}
 
-	eg := errgroup.Group{}
-	eg.Go(func() error {
-		return m.Run(ctx)
-	})
 	// test both regressed
 	meta := m.GetFlushedMeta()
 	m.UpdateMeta(1, 2)
@@ -208,9 +237,6 @@ func testWriteMeta(t *testing.T, m *metaManager) {
 		return m.metaCheckpointTs.getFlushed() == 16
 	}, time.Second, 50*time.Millisecond)
 	checkMeta(16, 21)
-
-	cancel()
-	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }
 
 func TestGCAndCleanup(t *testing.T) {
@@ -267,20 +293,29 @@ func TestGCAndCleanup(t *testing.T) {
 
 	startTs := uint64(3)
 	cfg := &config.ConsistentConfig{
-		Level:             string(redo.ConsistentLevelEventual),
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		Storage:           uri.String(),
-		FlushIntervalInMs: redo.MinFlushIntervalInMs,
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               uri.String(),
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
-	m, err := NewMetaManagerWithInit(ctx, cfg, startTs)
-	require.NoError(t, err)
-	require.Equal(t, startTs, m.metaCheckpointTs.getFlushed())
-	require.Equal(t, startTs, m.metaResolvedTs.getFlushed())
+	m := NewMetaManager(changefeedID, cfg, startTs)
 
-	eg := errgroup.Group{}
+	var eg errgroup.Group
 	eg.Go(func() error {
 		return m.Run(ctx)
 	})
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaCheckpointTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
+	require.Eventually(t, func() bool {
+		return startTs == m.metaResolvedTs.getFlushed()
+	}, time.Second, 50*time.Millisecond)
+
 	checkGC(startTs)
 
 	for i := startTs; i <= uint64(maxCommitTs); i++ {
@@ -291,12 +326,14 @@ func TestGCAndCleanup(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
 
-	m.Cleanup(ctx)
-	ret, err := extStorage.FileExists(ctx, getDeletedChangefeedMarker(changefeedID))
+	clenupCtx, clenupCancel := context.WithCancel(context.Background())
+	defer clenupCancel()
+	m.Cleanup(clenupCtx)
+	ret, err := extStorage.FileExists(clenupCtx, getDeletedChangefeedMarker(changefeedID))
 	require.NoError(t, err)
 	require.True(t, ret)
 	cnt := 0
-	extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
+	extStorage.WalkDir(clenupCtx, nil, func(path string, size int64) error {
 		cnt++
 		return nil
 	})

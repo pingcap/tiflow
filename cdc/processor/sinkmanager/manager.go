@@ -540,13 +540,50 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
 			upperBound := m.getUpperBound(tableSink.getUpperBoundTs())
-			// The table has no available progress.
-			if lowerBound.Compare(upperBound) >= 0 {
+
+			if !tableSink.initTableSink() {
+				// The table hasn't been attached to a sink.
 				m.sinkProgressHeap.push(slowestTableProgress)
 				continue
 			}
-			// The table hasn't been attached to a sink.
-			if !tableSink.initTableSink() {
+
+			if sinkErr := tableSink.checkTableSinkHealth(); sinkErr != nil {
+				switch errors.Cause(sinkErr).(type) {
+				case tablesink.SinkInternalError:
+					tableSink.closeAndClearTableSink()
+					if restartErr := tableSink.restart(ctx); restartErr == nil {
+						// Restart the table sink based on the checkpoint position.
+						ckpt := tableSink.getCheckpointTs().ResolvedMark()
+						lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+						p := &progress{
+							tableID:           tableSink.tableID,
+							nextLowerBoundPos: lastWrittenPos.Next(),
+							version:           slowestTableProgress.version,
+						}
+						m.sinkProgressHeap.push(p)
+						log.Info("table sink has been restarted",
+							zap.String("namespace", m.changefeedID.Namespace),
+							zap.String("changefeed", m.changefeedID.ID),
+							zap.Int64("tableID", tableSink.tableID),
+							zap.Any("lastWrittenPos", lastWrittenPos),
+							zap.String("sinkError", sinkErr.Error()))
+					} else {
+						m.sinkProgressHeap.push(slowestTableProgress)
+						log.Warn("table sink restart fail",
+							zap.String("namespace", m.changefeedID.Namespace),
+							zap.String("changefeed", m.changefeedID.ID),
+							zap.Int64("tableID", tableSink.tableID),
+							zap.String("sinkError", sinkErr.Error()),
+							zap.Error(restartErr))
+					}
+				default:
+					return sinkErr
+				}
+				continue
+			}
+
+			// The table has no available progress.
+			if lowerBound.Compare(upperBound) >= 0 {
 				m.sinkProgressHeap.push(slowestTableProgress)
 				continue
 			}

@@ -53,16 +53,21 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "advance-timeout-in-sec": 150
   },
   "consistent": {
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
-  }
+  },
+  "changefeed-error-stuck-duration": 1800000000000,
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 }`
 
 	testCfgTestServerConfigMarshal = `{
@@ -150,7 +155,8 @@ const (
     "enable-kv-connect-backoff": false
   },
   "cluster-id": "default",
-  "max-memory-percentage": 70
+  "max-memory-percentage": 0,
+  "gc-tuner-memory-threshold": 0
 }`
 
 	testCfgTestReplicaConfigMarshal1 = `{
@@ -176,7 +182,7 @@ const (
   "sink": {
   	"encoder-concurrency": 16,
     "dispatchers": null,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -211,9 +217,14 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
-  }
+  },
+  "changefeed-error-stuck-duration": 1800000000000,
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -238,7 +249,7 @@ const (
   "sink": {
     "encoder-concurrency": 16,
     "dispatchers": null,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -271,8 +282,13 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
-  }
+  },
+  "changefeed-error-stuck-duration": 1800000000000,
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 }`
 )

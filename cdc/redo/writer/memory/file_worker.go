@@ -103,7 +103,7 @@ func newFileWorkerGroup(
 	opts ...writer.Option,
 ) *fileWorkerGroup {
 	if workerNum <= 0 {
-		workerNum = defaultFlushWorkerNum
+		workerNum = redo.DefaultFlushWorkerNum
 	}
 
 	op := &writer.LogWriterOptions{}
@@ -138,7 +138,7 @@ func (f *fileWorkerGroup) Run(
 ) (err error) {
 	defer func() {
 		f.close()
-		if err != nil {
+		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Warn("redo file workers closed with error", zap.Error(err))
 		}
 	}()

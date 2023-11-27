@@ -131,7 +131,8 @@ type SinkConfig struct {
 	EnablePartitionSeparator bool              `toml:"enable-partition-separator" json:"enable-partition-separator"`
 	FileIndexWidth           int               `toml:"file-index-digit,omitempty" json:"file-index-digit,omitempty"`
 
-	KafkaConfig *KafkaConfig `toml:"kafka-config" json:"kafka-config,omitempty"`
+	KafkaConfig        *KafkaConfig        `toml:"kafka-config" json:"kafka-config,omitempty"`
+	CloudStorageConfig *CloudStorageConfig `toml:"cloud-storage-config" json:"cloud-storage-config,omitempty"`
 
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
@@ -251,6 +252,22 @@ func (d *DateSeparator) FromString(separator string) error {
 	}
 
 	return nil
+}
+
+// GetPattern returns the pattern of the date separator.
+func (d DateSeparator) GetPattern() string {
+	switch d {
+	case DateSeparatorNone:
+		return ""
+	case DateSeparatorYear:
+		return `\d{4}`
+	case DateSeparatorMonth:
+		return `\d{4}-\d{2}`
+	case DateSeparatorDay:
+		return `\d{4}-\d{2}-\d{2}`
+	default:
+		return ""
+	}
 }
 
 func (d DateSeparator) String() string {
@@ -541,4 +558,16 @@ func (c *LargeMessageHandleConfig) Disabled() bool {
 		return true
 	}
 	return c.LargeMessageHandleOption == LargeMessageHandleOptionNone
+}
+
+// CloudStorageConfig represents a cloud storage sink configuration
+type CloudStorageConfig struct {
+	WorkerCount   *int    `toml:"worker-count" json:"worker-count,omitempty"`
+	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
+	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
+
+	FlushConcurrency    *int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
+	OutputColumnID      *bool   `toml:"output-column-id" json:"output-column-id,omitempty"`
+	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
+	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
 }

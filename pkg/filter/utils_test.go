@@ -14,12 +14,14 @@
 package filter
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/parser"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	tifilter "github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -171,5 +173,63 @@ func TestDDLToTypeSpecialDDL(t *testing.T) {
 			require.NoError(t, err)
 		}
 		require.Equal(t, c.evenType, et, "case%v", c.ddl)
+	}
+}
+
+func TestToDDLEventWithSQLMode(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name    string
+		query   string
+		jobTp   timodel.ActionType
+		sqlMode string // sql mode
+		expect  bf.EventType
+		errMsg  string
+	}{
+		{
+			name:    "create table",
+			query:   "create table t1(id int primary key)",
+			jobTp:   timodel.ActionCreateTable,
+			sqlMode: config.GetDefaultReplicaConfig().SQLMode,
+			expect:  bf.CreateTable,
+		},
+		{
+			name:    "drop table",
+			query:   "drop table t1",
+			jobTp:   timodel.ActionDropTable,
+			sqlMode: config.GetDefaultReplicaConfig().SQLMode,
+			expect:  bf.DropTable,
+		},
+		{ // "" in table name or column name are not supported when sqlMode is set to ANSI_QUOTES
+			name:    "create table 2",
+			query:   `create table "t1" ("id" int primary key)`,
+			jobTp:   timodel.ActionCreateTable,
+			sqlMode: config.GetDefaultReplicaConfig().SQLMode,
+			expect:  bf.CreateTable,
+			errMsg:  "ErrConvertDDLToEventTypeFailed",
+		},
+		{ // "" in table name or column name are supported when sqlMode is set to ANSI_QUOTES
+			name:    "create table 3",
+			query:   `create table "t1" ("id" int primary key)`,
+			jobTp:   timodel.ActionCreateTable,
+			sqlMode: fmt.Sprint(config.GetDefaultReplicaConfig().SQLMode + ",ANSI_QUOTES"),
+			expect:  bf.CreateTable,
+		},
+	}
+	for _, c := range cases {
+		innerCase := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			p := parser.New()
+			mode, err := mysql.GetSQLMode(innerCase.sqlMode)
+			require.NoError(t, err)
+			p.SetSQLMode(mode)
+			tp, err := ddlToEventType(p, innerCase.query, innerCase.jobTp)
+			if innerCase.errMsg != "" {
+				require.Contains(t, err.Error(), innerCase.errMsg, innerCase.name)
+			} else {
+				require.Equal(t, innerCase.expect, tp)
+			}
+		})
 	}
 }

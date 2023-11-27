@@ -311,22 +311,24 @@ func TestUpdateChangefeed(t *testing.T) {
 	t.Parallel()
 	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
-	cp := mock_capture.NewMockCapture(gomock.NewController(t))
-	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	mockCapture := mock_capture.NewMockCapture(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(mockCapture, helpers)
 	router := newRouter(apiV2)
 
 	statusProvider := &mockStatusProvider{}
-	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
+
+	mockCapture.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	mockCapture.EXPECT().IsReady().Return(true).AnyTimes()
+	mockCapture.EXPECT().IsOwner().Return(true).AnyTimes()
 
 	// case 1 invalid id
-	invalidID := "#Invalid_"
+	invalidID := "_Invalid_"
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequestWithContext(context.Background(), update.method,
 		fmt.Sprintf(update.url, invalidID), nil)
 	router.ServeHTTP(w, req)
 	respErr := model.HTTPError{}
+	t.Logf("body: %s", w.Body.String())
 	err := json.NewDecoder(w.Body).Decode(&respErr)
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
@@ -372,7 +374,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
 		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	mockCapture.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -389,7 +391,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	etcdClient.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(1)), gomock.Any()).
 		Return(nil, nil).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
+	mockCapture.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -426,6 +428,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		createTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
+	mockCapture.EXPECT().GetUpstreamManager().Return(nil, nil).AnyTimes()
 	helpers.EXPECT().
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
@@ -445,6 +448,7 @@ func TestUpdateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	// case 7: update transaction failed
+	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	helpers.EXPECT().
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
@@ -468,6 +472,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
+	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	etcdClient.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
@@ -484,6 +489,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
+	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	etcdClient.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)

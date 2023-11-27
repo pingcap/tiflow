@@ -1231,3 +1231,51 @@ func genUpperBoundGetter(commitTs model.Ts) func(_ model.Ts) engine.Position {
 		}
 	}
 }
+
+func (suite *workerSuite) TestHandleTaskWithCache() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(2, 4, 1),
+		genPolymorphicEvent(2, 4, 1),
+		genPolymorphicResolvedEvent(4),
+	}
+	w, e := createWorker(model.ChangeFeedID{}, 0, true, 1)
+	w.eventCache = newRedoEventCache(model.ChangeFeedID{}, 1024*1024)
+	appender := w.eventCache.maybeCreateAppender(1, engine.Position{StartTs: 1, CommitTs: 3})
+	appender.pushBatch(
+		[]*model.RowChangedEvent{events[0].Row, events[1].Row},
+		uint64(0), engine.Position{StartTs: 2, CommitTs: 4},
+	)
+	defer w.sinkMemQuota.Close()
+	addEventsToSortEngine(suite.T(), events, e, 1)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(model.ChangeFeedID{}, 1)
+	defer sink.Close()
+
+	chShouldBeClosed := make(chan struct{}, 1)
+	callback := func(lastWrittenPos engine.Position) {
+		require.Equal(suite.T(), engine.Position{StartTs: 2, CommitTs: 4}, lastWrittenPos)
+		close(chShouldBeClosed)
+	}
+	taskChan <- &sinkTask{
+		tableID:       1,
+		lowerBound:    engine.Position{StartTs: 1, CommitTs: 3},
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return true },
+	}
+
+	<-chShouldBeClosed
+	cancel()
+	wg.Wait()
+}

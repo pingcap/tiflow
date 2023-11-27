@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
@@ -33,12 +34,19 @@ const (
 	// minSyncPointInterval is the minimum of SyncPointInterval can be set.
 	minSyncPointInterval = time.Second * 30
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
-	minSyncPointRetention = time.Hour * 1
+	minSyncPointRetention           = time.Hour * 1
+	minChangeFeedErrorStuckDuration = time.Minute * 30
+	// The default SQL Mode of TiDB: "ONLY_FULL_GROUP_BY,
+	// STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,
+	// NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+	// Note: The SQL Mode of TiDB is not the same as ORACLE.
+	// If you want to use the same SQL Mode as ORACLE, you need to add "ORACLE" to the SQL Mode.
+	defaultSQLMode = mysql.DefaultSQLMode
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
@@ -65,12 +73,17 @@ var defaultReplicaConfig = &ReplicaConfig{
 		AdvanceTimeoutInSec:      DefaultAdvanceTimeoutInSec,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Level:                 "none",
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		Storage:               "",
+		UseFileBackend:        false,
 	},
+	ChangefeedErrorStuckDuration: time.Minute * 30,
+	SQLMode:                      defaultSQLMode,
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -103,13 +116,15 @@ type replicaConfig struct {
 	// BDR(Bidirectional Replication) is a feature that allows users to
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.
-	BDRMode            bool              `toml:"bdr-mode" json:"bdr-mode"`
-	SyncPointInterval  time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
-	SyncPointRetention time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
-	Filter             *FilterConfig     `toml:"filter" json:"filter"`
-	Mounter            *MounterConfig    `toml:"mounter" json:"mounter"`
-	Sink               *SinkConfig       `toml:"sink" json:"sink"`
-	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
+	BDRMode                      bool              `toml:"bdr-mode" json:"bdr-mode"`
+	SyncPointInterval            time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
+	SyncPointRetention           time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
+	Filter                       *FilterConfig     `toml:"filter" json:"filter"`
+	Mounter                      *MounterConfig    `toml:"mounter" json:"mounter"`
+	Sink                         *SinkConfig       `toml:"sink" json:"sink"`
+	Consistent                   *ConsistentConfig `toml:"consistent" json:"consistent"`
+	ChangefeedErrorStuckDuration time.Duration     `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	SQLMode                      string            `toml:"sql-mode" json:"sql-mode,omitempty"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -207,6 +222,14 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 	}
 	if c.MemoryQuota == uint64(0) {
 		c.FixMemoryQuota()
+	}
+
+	if c.ChangefeedErrorStuckDuration < minChangeFeedErrorStuckDuration {
+		return cerror.ErrInvalidReplicaConfig.
+			FastGenByArgs(
+				fmt.Sprintf("The ChangefeedErrorStuckDuration:%f must be larger than %f Seconds",
+					c.ChangefeedErrorStuckDuration.Seconds(),
+					minChangeFeedErrorStuckDuration.Seconds()))
 	}
 
 	return nil

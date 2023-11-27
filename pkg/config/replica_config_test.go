@@ -39,7 +39,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = "open-protocol"
+	conf.Sink.Protocol = "canal-json"
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -57,7 +57,6 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.DateSeparator = "month"
 	conf.Sink.EnablePartitionSeparator = true
 	conf.Sink.AdvanceTimeoutInSec = DefaultAdvanceTimeoutInSec
-
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		LargeMessageHandle: &LargeMessageHandleConfig{
 			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
@@ -97,7 +96,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = "open-protocol"
+	conf.Sink.Protocol = "canal-json"
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
@@ -181,6 +180,17 @@ func TestValidateAndAdjust(t *testing.T) {
 
 	cfg.Sink.EncoderConcurrency = -1
 	require.Error(t, cfg.ValidateAndAdjust(sinkURL))
+
+	// changefeed error stuck duration is less than 30 minutes
+	cfg = GetDefaultReplicaConfig()
+	duration := minChangeFeedErrorStuckDuration - time.Second*1
+	cfg.ChangefeedErrorStuckDuration = duration
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "The ChangefeedErrorStuckDuration")
+	duration = minChangeFeedErrorStuckDuration
+	cfg.ChangefeedErrorStuckDuration = duration
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 }
 
 func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {

@@ -189,6 +189,9 @@ type ReplicaConfig struct {
 	Mounter    *MounterConfig    `json:"mounter"`
 	Sink       *SinkConfig       `json:"sink"`
 	Consistent *ConsistentConfig `json:"consistent"`
+
+	ChangefeedErrorStuckDuration *JSONDuration `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
+	SQLMode                      string        `json:"sql_mode,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -206,12 +209,17 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
+	res.SQLMode = c.SQLMode
 	if c.SyncPointInterval != nil {
 		res.SyncPointInterval = c.SyncPointInterval.duration
 	}
 	if c.SyncPointRetention != nil {
 		res.SyncPointRetention = c.SyncPointRetention.duration
 	}
+	if c.ChangefeedErrorStuckDuration != nil {
+		res.ChangefeedErrorStuckDuration = c.ChangefeedErrorStuckDuration.duration
+	}
+
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
@@ -255,11 +263,14 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	}
 	if c.Consistent != nil {
 		res.Consistent = &config.ConsistentConfig{
-			Level:             c.Consistent.Level,
-			MaxLogSize:        c.Consistent.MaxLogSize,
-			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
-			Storage:           c.Consistent.Storage,
-			UseFileBackend:    c.Consistent.UseFileBackend,
+			Level:                 c.Consistent.Level,
+			MaxLogSize:            c.Consistent.MaxLogSize,
+			FlushIntervalInMs:     c.Consistent.FlushIntervalInMs,
+			MetaFlushIntervalInMs: c.Consistent.MetaFlushIntervalInMs,
+			EncodingWorkerNum:     c.Consistent.EncodingWorkerNum,
+			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
+			Storage:               c.Consistent.Storage,
+			UseFileBackend:        c.Consistent.UseFileBackend,
 		}
 	}
 	if c.Sink != nil {
@@ -325,6 +336,18 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				LargeMessageHandle:    largeMessageHandle,
 			}
 		}
+
+		if c.Sink.CloudStorageConfig != nil {
+			res.Sink.CloudStorageConfig = &config.CloudStorageConfig{
+				WorkerCount:         c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            c.Sink.CloudStorageConfig.FileSize,
+				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+			}
+		}
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -338,16 +361,18 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	cloned := c.Clone()
 	res := &ReplicaConfig{
-		MemoryQuota:           cloned.MemoryQuota,
-		CaseSensitive:         cloned.CaseSensitive,
-		EnableOldValue:        cloned.EnableOldValue,
-		ForceReplicate:        cloned.ForceReplicate,
-		IgnoreIneligibleTable: false,
-		CheckGCSafePoint:      cloned.CheckGCSafePoint,
-		EnableSyncPoint:       cloned.EnableSyncPoint,
-		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
-		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
-		BDRMode:               cloned.BDRMode,
+		MemoryQuota:                  cloned.MemoryQuota,
+		CaseSensitive:                cloned.CaseSensitive,
+		EnableOldValue:               cloned.EnableOldValue,
+		ForceReplicate:               cloned.ForceReplicate,
+		IgnoreIneligibleTable:        false,
+		CheckGCSafePoint:             cloned.CheckGCSafePoint,
+		EnableSyncPoint:              cloned.EnableSyncPoint,
+		SyncPointInterval:            &JSONDuration{cloned.SyncPointInterval},
+		SyncPointRetention:           &JSONDuration{cloned.SyncPointRetention},
+		BDRMode:                      cloned.BDRMode,
+		ChangefeedErrorStuckDuration: &JSONDuration{cloned.ChangefeedErrorStuckDuration},
+		SQLMode:                      cloned.SQLMode,
 	}
 
 	if cloned.Filter != nil {
@@ -452,14 +477,29 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				LargeMessageHandle:    largeMessageHandle,
 			}
 		}
+
+		if cloned.Sink.CloudStorageConfig != nil {
+			res.Sink.CloudStorageConfig = &CloudStorageConfig{
+				WorkerCount:         cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            cloned.Sink.CloudStorageConfig.FileSize,
+				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+			}
+		}
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
-			Level:             cloned.Consistent.Level,
-			MaxLogSize:        cloned.Consistent.MaxLogSize,
-			FlushIntervalInMs: cloned.Consistent.FlushIntervalInMs,
-			Storage:           cloned.Consistent.Storage,
-			UseFileBackend:    cloned.Consistent.UseFileBackend,
+			Level:                 cloned.Consistent.Level,
+			MaxLogSize:            cloned.Consistent.MaxLogSize,
+			FlushIntervalInMs:     cloned.Consistent.FlushIntervalInMs,
+			MetaFlushIntervalInMs: cloned.Consistent.MetaFlushIntervalInMs,
+			EncodingWorkerNum:     c.Consistent.EncodingWorkerNum,
+			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
+			Storage:               cloned.Consistent.Storage,
+			UseFileBackend:        cloned.Consistent.UseFileBackend,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -570,19 +610,20 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 string            `json:"protocol"`
-	SchemaRegistry           string            `json:"schema_registry"`
-	CSVConfig                *CSVConfig        `json:"csv"`
-	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity             string            `json:"transaction_atomicity"`
-	EncoderConcurrency       int               `json:"encoder_concurrency"`
-	Terminator               string            `json:"terminator"`
-	DateSeparator            string            `json:"date_separator"`
-	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
-	FileIndexWidth           int               `json:"file_index_width"`
-	KafkaConfig              *KafkaConfig      `json:"kafka_config"`
-	AdvanceTimeoutInSec      uint              `json:"advance_timeout,omitempty"`
+	Protocol                 string              `json:"protocol"`
+	SchemaRegistry           string              `json:"schema_registry"`
+	CSVConfig                *CSVConfig          `json:"csv"`
+	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors          []*ColumnSelector   `json:"column_selectors"`
+	TxnAtomicity             string              `json:"transaction_atomicity"`
+	EncoderConcurrency       int                 `json:"encoder_concurrency"`
+	Terminator               string              `json:"terminator"`
+	DateSeparator            string              `json:"date_separator"`
+	EnablePartitionSeparator bool                `json:"enable_partition_separator"`
+	FileIndexWidth           int                 `json:"file_index_width"`
+	KafkaConfig              *KafkaConfig        `json:"kafka_config"`
+	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	AdvanceTimeoutInSec      uint                `json:"advance_timeout,omitempty"`
 }
 
 // KafkaConfig represents kafka config for a changefeed.
@@ -597,6 +638,17 @@ type KafkaConfig struct {
 	SASLOAuthAudience     *string  `json:"sasl_oauth_audience,omitempty"`
 
 	LargeMessageHandle *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+}
+
+// CloudStorageConfig represents a cloud storage sink configuration
+type CloudStorageConfig struct {
+	WorkerCount         *int    `json:"worker_count,omitempty"`
+	FlushInterval       *string `json:"flush_interval,omitempty"`
+	FileSize            *int    `json:"file_size,omitempty"`
+	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
+	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
+	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
+	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -627,11 +679,14 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-	Level             string `json:"level"`
-	MaxLogSize        int64  `json:"max_log_size"`
-	FlushIntervalInMs int64  `json:"flush_interval"`
-	Storage           string `json:"storage"`
-	UseFileBackend    bool   `json:"use_file_backend"`
+	Level                 string `json:"level,omitempty"`
+	MaxLogSize            int64  `json:"max_log_size"`
+	FlushIntervalInMs     int64  `json:"flush_interval"`
+	MetaFlushIntervalInMs int64  `json:"meta_flush_interval"`
+	EncodingWorkerNum     int    `json:"encoding_worker_num"`
+	FlushWorkerNum        int    `json:"flush_worker_num"`
+	Storage               string `json:"storage,omitempty"`
+	UseFileBackend        bool   `json:"use_file_backend"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

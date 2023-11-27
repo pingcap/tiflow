@@ -30,7 +30,7 @@ import (
 // note: this is api published default value, not change it
 var defaultAPIConfig = &ReplicaConfig{
 	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
@@ -56,12 +56,18 @@ var defaultAPIConfig = &ReplicaConfig{
 		AdvanceTimeoutInSec:      config.DefaultAdvanceTimeoutInSec,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        64,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Level:                 "none",
+		MaxLogSize:            64,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		Storage:               "",
+		UseFileBackend:        false,
 	},
+	ChangefeedErrorStuckDuration: &JSONDuration{config.
+		GetDefaultReplicaConfig().ChangefeedErrorStuckDuration},
+	SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 }
 
 func TestDefaultReplicaConfig(t *testing.T) {

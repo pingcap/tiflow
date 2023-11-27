@@ -1755,13 +1755,22 @@ var doc = `{
         "v2.ConsistentConfig": {
             "type": "object",
             "properties": {
+                "encoding_worker_num": {
+                    "type": "integer"
+                },
                 "flush_interval": {
+                    "type": "integer"
+                },
+                "flush_worker_num": {
                     "type": "integer"
                 },
                 "level": {
                     "type": "string"
                 },
                 "max_log_size": {
+                    "type": "integer"
+                },
+                "meta_flush_interval": {
                     "type": "integer"
                 },
                 "storage": {
