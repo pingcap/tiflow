@@ -336,6 +336,18 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				LargeMessageHandle:    largeMessageHandle,
 			}
 		}
+
+		if c.Sink.CloudStorageConfig != nil {
+			res.Sink.CloudStorageConfig = &config.CloudStorageConfig{
+				WorkerCount:         c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            c.Sink.CloudStorageConfig.FileSize,
+				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+			}
+		}
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -465,6 +477,18 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				LargeMessageHandle:    largeMessageHandle,
 			}
 		}
+
+		if cloned.Sink.CloudStorageConfig != nil {
+			res.Sink.CloudStorageConfig = &CloudStorageConfig{
+				WorkerCount:         cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            cloned.Sink.CloudStorageConfig.FileSize,
+				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+			}
+		}
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
@@ -586,19 +610,20 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 string            `json:"protocol"`
-	SchemaRegistry           string            `json:"schema_registry"`
-	CSVConfig                *CSVConfig        `json:"csv"`
-	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector `json:"column_selectors"`
-	TxnAtomicity             string            `json:"transaction_atomicity"`
-	EncoderConcurrency       int               `json:"encoder_concurrency"`
-	Terminator               string            `json:"terminator"`
-	DateSeparator            string            `json:"date_separator"`
-	EnablePartitionSeparator bool              `json:"enable_partition_separator"`
-	FileIndexWidth           int               `json:"file_index_width"`
-	KafkaConfig              *KafkaConfig      `json:"kafka_config"`
-	AdvanceTimeoutInSec      uint              `json:"advance_timeout,omitempty"`
+	Protocol                 string              `json:"protocol"`
+	SchemaRegistry           string              `json:"schema_registry"`
+	CSVConfig                *CSVConfig          `json:"csv"`
+	DispatchRules            []*DispatchRule     `json:"dispatchers,omitempty"`
+	ColumnSelectors          []*ColumnSelector   `json:"column_selectors"`
+	TxnAtomicity             string              `json:"transaction_atomicity"`
+	EncoderConcurrency       int                 `json:"encoder_concurrency"`
+	Terminator               string              `json:"terminator"`
+	DateSeparator            string              `json:"date_separator"`
+	EnablePartitionSeparator bool                `json:"enable_partition_separator"`
+	FileIndexWidth           int                 `json:"file_index_width"`
+	KafkaConfig              *KafkaConfig        `json:"kafka_config"`
+	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
+	AdvanceTimeoutInSec      uint                `json:"advance_timeout,omitempty"`
 }
 
 // KafkaConfig represents kafka config for a changefeed.
@@ -613,6 +638,17 @@ type KafkaConfig struct {
 	SASLOAuthAudience     *string  `json:"sasl_oauth_audience,omitempty"`
 
 	LargeMessageHandle *LargeMessageHandleConfig `json:"large_message_handle,omitempty"`
+}
+
+// CloudStorageConfig represents a cloud storage sink configuration
+type CloudStorageConfig struct {
+	WorkerCount         *int    `json:"worker_count,omitempty"`
+	FlushInterval       *string `json:"flush_interval,omitempty"`
+	FileSize            *int    `json:"file_size,omitempty"`
+	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
+	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
+	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
+	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
 }
 
 // CSVConfig denotes the csv config

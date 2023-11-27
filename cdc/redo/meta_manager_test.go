@@ -326,12 +326,14 @@ func TestGCAndCleanup(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
 
-	m.Cleanup(ctx)
-	ret, err := extStorage.FileExists(ctx, getDeletedChangefeedMarker(changefeedID))
+	clenupCtx, clenupCancel := context.WithCancel(context.Background())
+	defer clenupCancel()
+	m.Cleanup(clenupCtx)
+	ret, err := extStorage.FileExists(clenupCtx, getDeletedChangefeedMarker(changefeedID))
 	require.NoError(t, err)
 	require.True(t, ret)
 	cnt := 0
-	extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
+	extStorage.WalkDir(clenupCtx, nil, func(path string, size int64) error {
 		cnt++
 		return nil
 	})
