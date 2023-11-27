@@ -26,9 +26,9 @@ import (
 )
 
 func TestShouldSkipDMLBasic(t *testing.T) {
-	helper := newTestHelper(t)
-	defer tk.Close()
-	helper.getTk().MustExec("use test;")
+	tk := newTestHelper(t)
+	defer tk.close()
+	tk.getTk().MustExec("use test;")
 
 	type innerCase struct {
 		schema string
@@ -323,7 +323,7 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 	})
 
 	for _, tc := range testCases {
-		tableInfo := helper.execDDL(tc.ddl)
+		tableInfo := tk.execDDL(tc.ddl)
 		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
@@ -355,7 +355,7 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 // are as expected.
 func TestShouldSkipDMLError(t *testing.T) {
 	helper := newTestHelper(t)
-	defer tk.Close()
+	defer helper.close()
 	helper.getTk().MustExec("use test;")
 
 	type innerCase struct {
@@ -472,7 +472,7 @@ func TestShouldSkipDMLError(t *testing.T) {
 // the filter will works as expected.
 func TestShouldSkipDMLTableUpdated(t *testing.T) {
 	helper := newTestHelper(t)
-	defer tk.Close()
+	defer helper.close()
 	helper.getTk().MustExec("use test;")
 
 	type innerCase struct {
@@ -668,7 +668,7 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 
 func TestVerify(t *testing.T) {
 	helper := newTestHelper(t)
-	defer tk.Close()
+	defer helper.close()
 	helper.getTk().MustExec("use test;")
 
 	type testCase struct {

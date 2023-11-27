@@ -318,15 +318,15 @@ func TestExecDDL(t *testing.T) {
 	defer tk.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.
-	helper.DDL2Job("create database test0")
-	job := helper.DDL2Job("create table test0.table0(id int primary key)")
+	tk.DDL2Job("create database test0")
+	job := tk.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
 	ctx := cdcContext.NewContext4Test(context.Background(), true)
 	ctx.ChangefeedVars().Info.StartTs = startTs
 
 	cf, captures, tester, state := createChangefeed4Test(ctx, t)
-	cf.upstream.KVStorage = helper.Storage()
+	cf.upstream.KVStorage = tk.Storage()
 	defer cf.Close(ctx)
 	tickTwoTime := func() {
 		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
@@ -345,7 +345,7 @@ func TestExecDDL(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableIDs, 1)
 
-	job = helper.DDL2Job("drop table test0.table0")
+	job = tk.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow up
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs
@@ -367,7 +367,7 @@ func TestExecDDL(t *testing.T) {
 	require.Equal(t, mockDDLPuller.resolvedTs, state.Status.CheckpointTs)
 
 	// handle create database
-	job = helper.DDL2Job("create database test1")
+	job = tk.DDL2Job("create database test1")
 	mockDDLPuller.resolvedTs += 1000
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
@@ -382,7 +382,7 @@ func TestExecDDL(t *testing.T) {
 	require.Equal(t, state.Status.CheckpointTs, mockDDLPuller.resolvedTs)
 
 	// handle create table
-	job = helper.DDL2Job("create table test1.test1(id int primary key)")
+	job = tk.DDL2Job("create table test1.test1(id int primary key)")
 	mockDDLPuller.resolvedTs += 1000
 	job.BinlogInfo.FinishedTS = mockDDLPuller.resolvedTs
 	mockDDLPuller.ddlQueue = append(mockDDLPuller.ddlQueue, job)
@@ -403,15 +403,15 @@ func TestEmitCheckpointTs(t *testing.T) {
 	defer tk.Close()
 	// Creates a table, which will be deleted at the start-ts of the changefeed.
 	// It is expected that the changefeed DOES NOT replicate this table.
-	helper.DDL2Job("create database test0")
-	job := helper.DDL2Job("create table test0.table0(id int primary key)")
+	tk.DDL2Job("create database test0")
+	job := tk.DDL2Job("create table test0.table0(id int primary key)")
 	startTs := job.BinlogInfo.FinishedTS + 1000
 
 	ctx := cdcContext.NewContext4Test(context.Background(), true)
 	ctx.ChangefeedVars().Info.StartTs = startTs
 
 	cf, captures, tester, state := createChangefeed4Test(ctx, t)
-	cf.upstream.KVStorage = helper.Storage()
+	cf.upstream.KVStorage = tk.Storage()
 
 	defer cf.Close(ctx)
 	tickThreeTime := func() {
@@ -440,7 +440,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	require.Equal(t, ts, startTs)
 	require.Len(t, names, 1)
 
-	job = helper.DDL2Job("drop table test0.table0")
+	job = tk.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow up
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs + 1000

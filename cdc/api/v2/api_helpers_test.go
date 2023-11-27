@@ -20,6 +20,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -31,8 +32,8 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctx := context.Background()
 	pdClient := &mockPDClient{}
 	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
-	helper.Tk().MustExec("use test;")
-	storage := helper.Storage()
+	tk.MustExec("use test;")
+	storage := tk.Storage()
 	ctrl := mock_controller.NewMockController(gomock.NewController(t))
 	cfg := &ChangefeedConfig{}
 	h := &APIV2HelpersImpl{}
@@ -112,8 +113,8 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	}
 	oldUpInfo := &model.UpstreamInfo{}
 	tk := entry.NewTestKit(t, config.GetDefaultReplicaConfig())
-	helper.Tk().MustExec("use test;")
-	storage := helper.Storage()
+	tk.MustExec("use test;")
+	storage := tk.Storage()
 	h := &APIV2HelpersImpl{}
 	newCfInfo, newUpInfo, err := h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.NotNil(t, err)
