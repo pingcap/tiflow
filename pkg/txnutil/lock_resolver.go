@@ -147,15 +147,5 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		}
 		bo = tikv.NewGcResolveLockMaxBackoffer(ctx)
 	}
-<<<<<<< HEAD
-	log.Info("resolve lock successfully",
-		zap.Uint64("regionID", regionID),
-		zap.Int("lockCount", lockCount),
-		zap.Uint64("maxVersion", maxVersion),
-		zap.String("namespace", r.changefeed.Namespace),
-		zap.String("changefeed", r.changefeed.ID),
-		zap.Any("role", r.role))
-=======
->>>>>>> 69c180af98 (kv-client(cdc): add more logs to help debug slow regions (#9981))
 	return nil
 }
