@@ -197,7 +197,8 @@ func newTableInfo(msg *message) *model.TableInfo {
 			Table:  msg.Table,
 		},
 		TableInfo: &timodel.TableInfo{
-			Name: timodel.NewCIStr(msg.Table),
+			Name:     timodel.NewCIStr(msg.Table),
+			UpdateTS: msg.SchemaVersion,
 		},
 	}
 	for _, col := range msg.TableSchema.Columns {
@@ -286,6 +287,8 @@ type message struct {
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
 	// SQL is only for the DDL event.
 	SQL string `json:"sql,omitempty"`
+	// SchemaVersion is for the DDL, Bootstrap and DML event.
+	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
@@ -299,13 +302,14 @@ func newResolvedMessage(ts uint64) *message {
 func newDDLMessage(ddl *model.DDLEvent) *message {
 	tableSchema := newTableSchema(ddl.TableInfo)
 	msg := &message{
-		Version:     defaultVersion,
-		Database:    ddl.TableInfo.TableName.Schema,
-		Table:       ddl.TableInfo.TableName.Table,
-		Type:        DDLType,
-		CommitTs:    ddl.CommitTs,
-		SQL:         ddl.Query,
-		TableSchema: tableSchema,
+		Version:       defaultVersion,
+		Database:      ddl.TableInfo.TableName.Schema,
+		Table:         ddl.TableInfo.TableName.Table,
+		Type:          DDLType,
+		CommitTs:      ddl.CommitTs,
+		SQL:           ddl.Query,
+		TableSchema:   tableSchema,
+		SchemaVersion: ddl.TableInfo.UpdateTS,
 	}
 	if ddl.IsBootstrap {
 		msg.Type = BootstrapType
@@ -317,10 +321,11 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 
 func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 	m := &message{
-		Version:  defaultVersion,
-		Database: event.Table.Schema,
-		Table:    event.Table.Table,
-		CommitTs: event.CommitTs,
+		Version:       defaultVersion,
+		Database:      event.Table.Schema,
+		Table:         event.Table.Table,
+		CommitTs:      event.CommitTs,
+		SchemaVersion: event.TableInfo.UpdateTS,
 	}
 	var err error
 	if event.IsInsert() {
