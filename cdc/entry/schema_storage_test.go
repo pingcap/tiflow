@@ -837,7 +837,7 @@ func TestSchemaStorage(t *testing.T) {
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.NoError(t, err)
 
-		jobs, err := tk.GetAllHistoryDDLJob(f)
+		jobs, err := tk.GetAllHistoryDDLJob()
 		require.NoError(t, err)
 
 		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
@@ -924,16 +924,17 @@ func TestGetPrimaryKey(t *testing.T) {
 	defer tk.Close()
 
 	sql := `create table test.t1(a int primary key, b int)`
-	job := tk.DDL2Job(sql)
-	tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+	tableInfo := tk.DDL2TableInfo(sql)
+	//tableInfo := model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
 
 	names := tableInfo.GetPrimaryKeyColumnNames()
 	require.Len(t, names, 1)
 	require.Containsf(t, names, "a", "names: %v", names)
 
 	sql = `create table test.t2(a int, b int, c int, primary key(a, b))`
-	job = tk.DDL2Job(sql)
-	tableInfo = model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+	//job = tk.DDL2Job(sql)
+	//tableInfo = model.WrapTableInfo(0, "test", 0, job.BinlogInfo.TableInfo)
+	tableInfo = tk.DDL2TableInfo(sql)
 
 	names = tableInfo.GetPrimaryKeyColumnNames()
 	require.Len(t, names, 2)

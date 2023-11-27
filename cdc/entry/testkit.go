@@ -95,21 +95,84 @@ func NewTestKit(t *testing.T, replicaConfig *config.ReplicaConfig) *TestKit {
 	}
 }
 
+func (tk *TestKit) GetAllEventsByTable(schema, table string) []*model.RowChangedEvent {
+	tableInfo, ok := tk.schemaStorage.GetLastSnapshot().TableByName(schema, table)
+	require.True(tk.t, ok)
+
+	var tableIDs []int64
+	tableIDs = append(tableIDs, tableInfo.ID)
+	partitionInfo := tableInfo.GetPartitionInfo()
+	if partitionInfo != nil {
+		for _, partition := range partitionInfo.Definitions {
+			tableIDs = append(tableIDs, partition.ID)
+		}
+	}
+
+	result := make([]*model.RowChangedEvent, 0)
+	for _, tableID := range tableIDs {
+		tk.iterKeyValue(tableID, func(key []byte, value []byte) {
+			ts := tk.schemaStorage.GetLastSnapshot().CurrentTs()
+			rawKV := &model.RawKVEntry{
+				OpType:   model.OpTypePut,
+				Key:      key,
+				Value:    value,
+				OldValue: nil,
+				StartTs:  ts - 1,
+				CRTs:     ts + 1,
+			}
+			polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+			err := tk.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+			require.NoError(tk.t, err)
+			result = append(result, polymorphicEvent.Row)
+		})
+	}
+	return result
+}
+
 func (tk *TestKit) DML2Event(dml string, schema, table string) *model.RowChangedEvent {
 	tk.MustExec(dml)
-	tableID, ok := tk.schemaStorage.GetLastSnapshot().TableIDByName(schema, table)
-	require.True(tk.t, ok)
-	key, value := tk.getLastKeyValue(tableID)
 
+	tableInfo, ok := tk.schemaStorage.GetLastSnapshot().TableByName(schema, table)
+	require.True(tk.t, ok)
+
+	//	if partitionInfo == nil {
+	//		return mountAndCheckRowInTable(tableInfo.ID, rowsBytes[0], f)
+	//	}
+	//	var rows int
+	//	for i, p := range partitionInfo.Definitions {
+	//		rows += mountAndCheckRowInTable(p.ID, rowsBytes[i], f)
+	//	}
+
+	key, value := tk.getLastKeyValue(tableInfo.ID)
 	ts := tk.schemaStorage.GetLastSnapshot().CurrentTs()
 	rawKV := &model.RawKVEntry{
-		// todo: assume the operation is put at the moment, can we infer it from the DML ?
 		OpType:   model.OpTypePut,
 		Key:      key,
 		Value:    value,
 		OldValue: nil,
 		StartTs:  ts - 1,
 		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := tk.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(tk.t, err)
+	return polymorphicEvent.Row
+}
+
+func (tk *TestKit) DeleteDML2Event(deleteDML string, schema, table string) *model.RowChangedEvent {
+	tk.MustExec(deleteDML)
+	tableID, ok := tk.schemaStorage.GetLastSnapshot().TableIDByName(schema, table)
+	require.True(tk.t, ok)
+	key, value := tk.getLastKeyValue(tableID)
+
+	ts := tk.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypeDelete,
+		Key:      key,
+		Value:    value,
+		OldValue: nil,
+		StartTs:  ts - 1,
+		CRTs:     ts,
 	}
 	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
 	err := tk.mounter.DecodeEvent(context.Background(), polymorphicEvent)
@@ -133,6 +196,22 @@ func (tk *TestKit) getLastKeyValue(tableID int64) (key, value []byte) {
 		require.NoError(tk.t, err)
 	}
 	return key, value
+}
+
+func (tk *TestKit) iterKeyValue(tableID int64, f func(key []byte, value []byte)) {
+	txn, err := tk.storage.Begin()
+	require.NoError(tk.t, err)
+	defer txn.Rollback() //nolint:errcheck
+
+	startKey, endKey := spanz.GetTableRange(tableID)
+	iter, err := txn.Iter(startKey, endKey)
+	require.NoError(tk.t, err)
+	defer iter.Close()
+	for iter.Valid() {
+		f(iter.Key(), iter.Value())
+		err = iter.Next()
+		require.NoError(tk.t, err)
+	}
 }
 
 // DDL2TableInfo executes the DDL stmt and returns the DDL job
@@ -178,10 +257,10 @@ func (tk *TestKit) DDL2TableInfo(ddl string) *model.TableInfo {
 		rawArgs, err := json.Marshal(args)
 		require.NoError(tk.t, err)
 		res.RawArgs = rawArgs
-
-		err = tk.schemaStorage.HandleDDLJob(res)
-		require.NoError(tk.t, err)
 	}
+
+	err = tk.schemaStorage.HandleDDLJob(res)
+	require.NoError(tk.t, err)
 
 	ver, err := tk.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(tk.t, err)
