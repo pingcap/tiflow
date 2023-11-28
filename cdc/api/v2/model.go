@@ -1011,6 +1011,15 @@ type ChangeFeedInfo struct {
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
 }
 
+type SyncedStatus struct {
+	Synced           bool   `json:"synced"`
+	SinkCheckpointTs string `json:"sink_checkpoint_ts"`
+	PullerResolvedTs string `json:"puller_resolved_ts"`
+	LastSyncedTs     string `json:"last_synced_ts"`
+	NowTs            string `json:"now_ts"`
+	Info             string `json:"info"`
+}
+
 // RunningError represents some running error from cdc components,
 // such as processor.
 type RunningError struct {

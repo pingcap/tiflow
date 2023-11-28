@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
@@ -961,6 +962,217 @@ func TestPauseChangefeed(t *testing.T) {
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "{}", w.Body.String())
+}
+
+func TestChangefeedSynced(t *testing.T) {
+	syncedInfo := testCase{url: "/api/v2/changefeeds/%s/synced?namespace=abc", method: "GET"}
+	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
+	cp := mock_capture.NewMockCapture(gomock.NewController(t))
+	owner := mock_owner.NewMockOwner(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	router := newRouter(apiV2)
+
+	statusProvider := &mockStatusProvider{}
+
+	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	cp.EXPECT().IsReady().Return(true).AnyTimes()
+	cp.EXPECT().IsController().Return(true).AnyTimes()
+	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+
+	pdClient := &mockPDClient{}
+	mockUpManager := upstream.NewManager4Test(pdClient)
+	cp.EXPECT().GetUpstreamManager().Return(mockUpManager, nil).AnyTimes()
+
+	{
+		// case 1: invalid changefeed id
+		w := httptest.NewRecorder()
+		invalidID := "@^Invalid"
+		req, _ := http.NewRequestWithContext(context.Background(),
+			syncedInfo.method, fmt.Sprintf(syncedInfo.url, invalidID), nil)
+		router.ServeHTTP(w, req)
+		respErr := model.HTTPError{}
+		err := json.NewDecoder(w.Body).Decode(&respErr)
+		require.Nil(t, err)
+		require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
+	}
+
+	{
+		// case 2: not existed changefeed id
+		validID := changeFeedID.ID
+		statusProvider.err = cerrors.ErrChangeFeedNotExists.GenWithStackByArgs(validID)
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(context.Background(), syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID), nil)
+		router.ServeHTTP(w, req)
+		respErr := model.HTTPError{}
+		err := json.NewDecoder(w.Body).Decode(&respErr)
+		require.Nil(t, err)
+		require.Contains(t, respErr.Code, "ErrChangeFeedNotExists")
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	}
+
+	{
+		validID := changeFeedID.ID
+		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
+		statusProvider.err = nil
+		statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
+		// case3: pd is offline，resolvedTs - checkpointTs > 5s
+		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153217279,
+			LastSyncedTs:     1701153217279,
+			PullerResolvedTs: 1701153227279,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "1970-01-01 08:00:00", resp.NowTs)
+		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, "+
+			"please recheck. Besides the data is not finish syncing", resp.Info)
+	}
+
+	{
+		validID := changeFeedID.ID
+		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
+		statusProvider.err = nil
+		statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
+		// case4: pd is offline，resolvedTs - checkpointTs < 5s
+		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153217279,
+			LastSyncedTs:     1701153217279,
+			PullerResolvedTs: 1701153217479,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "1970-01-01 08:00:00", resp.NowTs)
+		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck. "+
+			"You can check the pd first, and if pd is available, means we don't finish sync data. "+
+			"If pd is not available, please check the whether we satisfy the condition that"+
+			"The time difference from lastSyncedTs to the current time from the time zone of pd is greater than 5 min"+
+			"If it's satisfied, means the data syncing is totally finished", resp.Info)
+	}
+
+	helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(pdClient, nil).AnyTimes()
+	pdClient.logicTime = 1000
+	pdClient.timestamp = 1701153217279
+	statusProvider.err = nil
+	validID := changeFeedID.ID
+	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
+
+	{
+		// case5: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs < 5s
+		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153217209,
+			LastSyncedTs:     1701152217279,
+			PullerResolvedTs: 1701153217229,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, true, resp.Synced)
+		require.Equal(t, "2023-11-28 14:33:37", resp.NowTs)
+		require.Equal(t, "Data syncing is finished", resp.Info)
+	}
+
+	{
+		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 5s, resolvedTs - checkpointTs < 5s
+		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153211279,
+			LastSyncedTs:     1701152217279,
+			PullerResolvedTs: 1701153211379,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "Please check whether pd is health and tikv region is all available. "+
+			"If pd is not health or tikv region is not available, the data syncing is finished. "+
+			" Otherwise the data syncing is not finished, please wait", resp.Info)
+	}
+
+	{
+		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 5s, resolvedTs - checkpointTs > 5s
+		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153211279,
+			LastSyncedTs:     1701152217279,
+			PullerResolvedTs: 1701153218279,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "The data syncing is not finished, please wait", resp.Info)
+	}
+
+	{
+		// case8: pdTs - lastSyncedTs < 5min
+		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+			CheckpointTs:     1701153217279,
+			LastSyncedTs:     1701153213279,
+			PullerResolvedTs: 1701153217279,
+		}
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequestWithContext(
+			context.Background(),
+			syncedInfo.method,
+			fmt.Sprintf(syncedInfo.url, validID),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp := SyncedStatus{}
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, false, resp.Synced)
+		require.Equal(t, "The data syncing is not finished, please wait", resp.Info)
+	}
 }
 
 func TestHasRunningImport(t *testing.T) {

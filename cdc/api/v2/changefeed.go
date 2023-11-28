@@ -896,6 +896,12 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 	})
 }
 
+func transformerTime(timestamp int64) string {
+	location := time.Local
+	tm := time.Unix((timestamp / 1000), 0).In(location)
+	return tm.Format("2006-01-02 15:04:05")
+}
+
 func (h *OpenAPIV2) synced(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -906,6 +912,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
+
 	status, err := h.capture.StatusProvider().GetChangeFeedSyncedStatus(
 		ctx,
 		changefeedID,
@@ -915,13 +922,14 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		return
 	}
 
+	log.Info("synced status", zap.Any("status", status))
 	// get pd_now
 	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 
-	if err := c.BindJSON(&cfg); err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
+	// if err := c.BindJSON(&cfg); err != nil {
+	// 	_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+	// 	return
+	// }
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
@@ -934,63 +942,69 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-	defer pdClient.Close()
 
+	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	if err != nil { // pd 不可用
 		var message string
-		if (status.PullerResolvedTs - status.CheckpointTs) > (5*1000)<<18 { // 5s
-			message = fmt.Sprintf("we get pd client failed with err is %s. Besides the data is not finish syncing", terror.Message(err))
+		if (status.PullerResolvedTs - status.CheckpointTs) > 5*1000 { // 5s
+			message = fmt.Sprintf("%s. Besides the data is not finish syncing", terror.Message(err))
 		} else {
-			message = fmt.Sprintf("we get pd client failed with err is %s. "+
-				"You can check the pd first, and if pd is available, means we don't finish sync data. "+
+			message = fmt.Sprintf("%s. You can check the pd first, and if pd is available, means we don't finish sync data. "+
 				"If pd is not available, please check the whether we satisfy the condition that"+
 				"The time difference from lastSyncedTs to the current time from the time zone of pd is greater than 5 min"+
 				"If it's satisfied, means the data syncing is totally finished", err)
 		}
-		c.JSON(http.StatusOK, map[string]any{
-			"Synced":            false,
-			"Sink-CheckpointTs": status.CheckpointTs,
-			"Puller-ResolvedTs": status.PullerResolvedTs,
-			"LastSyncedTs":      status.LastSyncedTs,
-			"info":              message,
+		c.JSON(http.StatusOK, SyncedStatus{
+			Synced:           false,
+			SinkCheckpointTs: transformerTime(status.CheckpointTs),
+			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
+			LastSyncedTs:     transformerTime(status.LastSyncedTs),
+			NowTs:            transformerTime(0),
+			Info:             message,
 		})
+		return
 	}
+	defer pdClient.Close()
 
-	physical, logical, _ := pdClient.GetTS(ctx)
-	now := oracle.ComposeTS(physical, logical)
+	physical_now, _, _ := pdClient.GetTS(ctx)
 
-	if (now-status.LastSyncedTs > (5*60*1000)<<18) && (now-status.CheckpointTs < (5*1000)<<18) { // 达到 synced 严格条件
-		c.JSON(http.StatusOK, map[string]any{
-			"Synced":            true,
-			"Sink-CheckpointTs": status.CheckpointTs,
-			"Puller-ResolvedTs": status.PullerResolvedTs,
-			"LastSyncedTs":      status.LastSyncedTs,
-			"info":              "Data syncing is finished",
+	log.Info("time info", zap.Int64("physical", physical_now), zap.Int64("checkpointTs", status.CheckpointTs),
+		zap.Int64("pullerResolvedTs", status.PullerResolvedTs), zap.Int64("LastSyncedTs", status.LastSyncedTs))
+
+	if (physical_now-status.LastSyncedTs > 5*60*1000) && (physical_now-status.CheckpointTs < 5*1000) { // 达到 synced 严格条件
+		c.JSON(http.StatusOK, SyncedStatus{
+			Synced:           true,
+			SinkCheckpointTs: transformerTime(status.CheckpointTs),
+			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
+			LastSyncedTs:     transformerTime(status.LastSyncedTs),
+			NowTs:            transformerTime(physical_now),
+			Info:             "Data syncing is finished",
 		})
-	} else if now-status.LastSyncedTs > (5*60*1000)<<18 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
+	} else if physical_now-status.LastSyncedTs > 5*60*1000 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
 		var message string
-		if (status.PullerResolvedTs - status.CheckpointTs) > (5*1000)<<18 { // 5s
+		if (status.PullerResolvedTs - status.CheckpointTs) < 5*1000 { // 5s
 			message = fmt.Sprintf("Please check whether pd is health and tikv region is all available. " +
 				"If pd is not health or tikv region is not available, the data syncing is finished. " +
 				" Otherwise the data syncing is not finished, please wait")
 		} else {
 			message = fmt.Sprintf("The data syncing is not finished, please wait")
 		}
-		c.JSON(http.StatusOK, map[string]any{
-			"Synced":            false,
-			"Sink-CheckpointTs": status.CheckpointTs,
-			"Puller-ResolvedTs": status.PullerResolvedTs,
-			"LastSyncedTs":      status.LastSyncedTs,
-			"info":              message,
+		c.JSON(http.StatusOK, SyncedStatus{
+			Synced:           false,
+			SinkCheckpointTs: transformerTime(status.CheckpointTs),
+			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
+			LastSyncedTs:     transformerTime(status.LastSyncedTs),
+			NowTs:            transformerTime(physical_now),
+			Info:             message,
 		})
-	} else { // lastSyncedTs 条件达到
-		c.JSON(http.StatusOK, map[string]any{
-			"Synced":            false,
-			"Sink-CheckpointTs": status.CheckpointTs,
-			"Puller-ResolvedTs": status.PullerResolvedTs,
-			"LastSyncedTs":      status.LastSyncedTs,
-			"info":              "The data syncing is not finished, please wait",
+	} else { // lastSyncedTs 条件未达到
+		c.JSON(http.StatusOK, SyncedStatus{
+			Synced:           false,
+			SinkCheckpointTs: transformerTime(status.CheckpointTs),
+			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
+			LastSyncedTs:     transformerTime(status.LastSyncedTs),
+			NowTs:            transformerTime(physical_now),
+			Info:             "The data syncing is not finished, please wait",
 		})
 	}
 }
