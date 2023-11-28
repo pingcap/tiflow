@@ -71,7 +71,7 @@ func (e *polymorphicRedoEvent) encode() (err error) {
 	redoLog := e.event.ToRedoLog()
 	e.commitTs = redoLog.GetCommitTs()
 
-	rawData, err := codec.MarshalRedoLog(redoLog, nil)
+	rawData, err := codec.MarshalRedoLog(redoLog)
 	if err != nil {
 		return err
 	}

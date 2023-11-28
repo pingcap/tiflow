@@ -125,7 +125,7 @@ func TestV1toV2(t *testing.T) {
 	rv2Gen.RedoRow.Row.Columns[0].Value = []byte{}
 	rv2Gen.RedoRow.Row.PreColumns[0].Value = []byte{}
 
-	msg1, err = MarshalRedoLog(rv2Gen, nil)
+	msg1, err = MarshalRedoLog(rv2Gen)
 	require.Nil(t, err)
 	rv2Gen, msg1, err = UnmarshalRedoLog(msg1)
 	require.Nil(t, err)
@@ -183,8 +183,11 @@ func TestRowRedoConvert(t *testing.T) {
 		IndexColumns: [][]int{{1, 3}},
 	}
 
-	redoLog := &model.RedoLog{RedoRow: model.RedoRowChangedEvent{Row: row}}
-	data, err := MarshalRedoLog(redoLog, nil)
+	redoLog := &model.RedoLog{
+		RedoRow: model.RedoRowChangedEvent{Row: row},
+		Type:    model.RedoLogTypeRow,
+	}
+	data, err := MarshalRedoLog(redoLog)
 	require.Nil(t, err)
 
 	redoLog2, data, err := UnmarshalRedoLog(data)
@@ -223,8 +226,11 @@ func TestRowRedoConvertWithEmptySlice(t *testing.T) {
 		IndexColumns: [][]int{{1}},
 	}
 
-	redoLog := &model.RedoLog{RedoRow: model.RedoRowChangedEvent{Row: row}}
-	data, err := MarshalRedoLog(redoLog, nil)
+	redoLog := &model.RedoLog{
+		RedoRow: model.RedoRowChangedEvent{Row: row},
+		Type:    model.RedoLogTypeRow,
+	}
+	data, err := MarshalRedoLog(redoLog)
 	require.Nil(t, err)
 
 	redoLog2, data, err := UnmarshalRedoLog(data)
@@ -245,7 +251,7 @@ func TestDDLRedoConvert(t *testing.T) {
 	}
 
 	redoLog := &model.RedoLog{RedoDDL: model.RedoDDLEvent{DDL: ddl}}
-	data, err := MarshalRedoLog(redoLog, nil)
+	data, err := MarshalRedoLog(redoLog)
 	require.Nil(t, err)
 
 	redoLog2, data, err := UnmarshalRedoLog(data)

@@ -272,7 +272,7 @@ func sortAndWriteFile(
 			// If the commitTs is equal or less than startTs, we should skip this log.
 			continue
 		}
-		data, err := codec.MarshalRedoLog(item, nil)
+		data, err := codec.MarshalRedoLog(item)
 		if err != nil {
 			return cerror.WrapError(cerror.ErrMarshalFailed, err)
 		}

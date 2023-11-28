@@ -19,6 +19,8 @@ import (
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	codecv1 "github.com/pingcap/tiflow/cdc/model/codec/v1"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/proto/redo"
 	"github.com/tinylib/msgp/msgp"
 )
 
@@ -27,7 +29,8 @@ const (
 	versionPrefixLength int = 2
 	versionFieldLength  int = 2
 
-	latestVersion uint16 = 2
+	msgpLatestVersion uint16 = 3
+	pbVersion         uint16 = 4
 )
 
 // NOTE: why we need this?
@@ -139,10 +142,94 @@ func UnmarshalRedoLog(bts []byte) (r *model.RedoLog, o []byte, err error) {
 	} else {
 		bts = bts[versionPrefixLength:]
 		version, bts := decodeVersion(bts)
-		if version == latestVersion {
+		if version == msgpLatestVersion {
 			r = new(model.RedoLog)
 			if o, err = r.UnmarshalMsg(bts); err != nil {
 				return
+			}
+			postUnmarshal(r)
+		} else if version == pbVersion {
+			pbr := new(redo.RedoLog)
+			if err = pbr.Unmarshal(bts); err != nil {
+				return
+			}
+			r = new(model.RedoLog)
+			if pbr.Type == redo.Type_DDL {
+				r.Type = model.RedoLogTypeDDL
+				r.RedoDDL = model.RedoDDLEvent{
+					DDL: &model.DDLEvent{
+						StartTs:  pbr.Ddl.StartTs,
+						CommitTs: pbr.Ddl.CommitTs,
+						Query:    pbr.Ddl.Query,
+					},
+					Type: byte(pbr.Ddl.Type),
+					TableName: model.TableName{
+						Schema:      pbr.Ddl.TableName.Schema,
+						Table:       pbr.Ddl.TableName.Table,
+						TableID:     pbr.Ddl.TableName.TableId,
+						IsPartition: pbr.Ddl.TableName.IsPartition,
+					},
+				}
+			} else {
+				r.Type = model.RedoLogTypeRow
+
+				colsFunc := func(redoCols []*redo.RedoColumn) []*model.Column {
+					if len(redoCols) == 0 {
+						return nil
+					}
+					cols := make([]*model.Column, 0, len(redoCols))
+					for _, c := range redoCols {
+						cols = append(cols, &model.Column{
+							Name:    c.Name,
+							Type:    byte(c.Type),
+							Charset: c.Charset,
+							Flag:    model.ColumnFlagType(c.Flag),
+						})
+					}
+					return cols
+				}
+				idxIds := make([][]int, 0, len(pbr.Row.Row.IndexIds))
+				for _, ids := range pbr.Row.Row.IndexIds {
+					idx := make([]int, 0, len(ids.Value))
+					for _, id := range ids.Value {
+						idx = append(idx, int(id))
+					}
+					idxIds = append(idxIds, idx)
+				}
+
+				colsValueFunx := func(redoCols []*redo.RedoColumn) []model.RedoColumn {
+					if len(redoCols) == 0 {
+						return nil
+					}
+					cols := make([]model.RedoColumn, 0, len(redoCols))
+					for _, c := range redoCols {
+						value, _, _ := msgp.ReadIntfBytes(c.Value)
+						cols = append(cols, model.RedoColumn{
+							Value:             value,
+							ValueIsEmptyBytes: c.ValueIsEmptyBytes,
+							Flag:              c.Flag,
+						})
+					}
+					return cols
+				}
+
+				r.RedoRow = model.RedoRowChangedEvent{
+					Row: &model.RowChangedEvent{
+						StartTs:  pbr.Row.Row.StartTs,
+						CommitTs: pbr.Row.Row.CommitTs,
+						Table: &model.TableName{
+							Schema:      pbr.Row.Row.Table.Schema,
+							Table:       pbr.Row.Row.Table.Table,
+							TableID:     pbr.Row.Row.Table.TableId,
+							IsPartition: pbr.Row.Row.Table.IsPartition,
+						},
+						Columns:      colsFunc(pbr.Row.Columns),
+						PreColumns:   colsFunc(pbr.Row.Columns),
+						IndexColumns: idxIds,
+					},
+					Columns:    colsValueFunx(pbr.Row.Columns),
+					PreColumns: colsValueFunx(pbr.Row.Columns),
+				}
 			}
 			postUnmarshal(r)
 		} else {
@@ -153,30 +240,85 @@ func UnmarshalRedoLog(bts []byte) (r *model.RedoLog, o []byte, err error) {
 }
 
 // MarshalRedoLog marshals a RedoLog into bytes.
-func MarshalRedoLog(r *model.RedoLog, b []byte) (o []byte, err error) {
+func MarshalRedoLog(r *model.RedoLog) ([]byte, error) {
 	preMarshal(r)
+	colsCovertFunc := func(rawCols []*model.Column) []*redo.RedoColumn {
+		cols := make([]*redo.RedoColumn, len(rawCols))
+		for i, col := range rawCols {
+			if col == nil {
+				continue
+			}
+			v, _ := msgp.AppendIntf(nil, col.Value)
+			valueIsEmptyBytes := false
+			switch v := col.Value.(type) {
+			case []byte:
+				if len(v) == 0 {
+					valueIsEmptyBytes = true
+				}
+			}
+			cols[i] = &redo.RedoColumn{
+				Name:              col.Name,
+				Type:              int32(col.Type),
+				Charset:           col.Charset,
+				Collation:         col.Collation,
+				Flag:              uint64(col.Flag),
+				Value:             v,
+				ValueIsEmptyBytes: valueIsEmptyBytes,
+			}
+		}
+		return cols
+	}
+	rlog := &redo.RedoLog{}
+	if r.Type == model.RedoLogTypeRow {
+		index := make([]*redo.IntArr, len(r.RedoRow.Row.IndexColumns))
+		for i, idx := range r.RedoRow.Row.IndexColumns {
+			idex32 := make([]int32, len(idx))
+			for j, id := range idx {
+				idex32[j] = int32(id)
+			}
+			index[i] = &redo.IntArr{
+				Value: idex32,
+			}
+		}
+		rlog.Row = &redo.RedoRowChangedEvent{
+			Row: &redo.RowChangedEvent{
+				CommitTs: r.RedoRow.Row.CommitTs,
+				StartTs:  r.RedoRow.Row.StartTs,
+				Table: &redo.TableName{
+					Schema:      r.RedoRow.Row.Table.Schema,
+					Table:       r.RedoRow.Row.Table.Table,
+					TableId:     r.RedoRow.Row.Table.TableID,
+					IsPartition: r.RedoRow.Row.Table.IsPartition,
+				},
+				IndexIds: index,
+			},
+			PreColumns: colsCovertFunc(r.RedoRow.Row.PreColumns),
+			Columns:    colsCovertFunc(r.RedoRow.Row.Columns),
+		}
+		rlog.Type = redo.Type_DML
+	} else {
+		rlog.Type = redo.Type_DDL
+		rlog.Ddl = &redo.RedoDDLEvent{
+			Type:     int32(r.RedoDDL.Type),
+			CommitTs: r.RedoDDL.DDL.CommitTs,
+			StartTs:  r.RedoDDL.DDL.StartTs,
+			Query:    r.RedoDDL.DDL.Query,
+			TableName: &redo.TableName{
+				Schema:      r.RedoDDL.TableName.Schema,
+				Table:       r.RedoDDL.TableName.Table,
+				TableId:     r.RedoDDL.TableName.TableID,
+				IsPartition: r.RedoDDL.TableName.IsPartition,
+			},
+		}
+	}
+	o, err := rlog.Marshal()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var b []byte
 	b = append(b, versionPrefix[:]...)
-	b = binary.BigEndian.AppendUint16(b, latestVersion)
-	o, err = r.MarshalMsg(b)
-	return
-}
-
-// MarshalRowAsRedoLog converts a RowChangedEvent into RedoLog, and then marshals it.
-func MarshalRowAsRedoLog(r *model.RowChangedEvent, b []byte) (o []byte, err error) {
-	log := &model.RedoLog{
-		RedoRow: model.RedoRowChangedEvent{Row: r},
-		Type:    model.RedoLogTypeRow,
-	}
-	return MarshalRedoLog(log, b)
-}
-
-// MarshalDDLAsRedoLog converts a DDLEvent into RedoLog, and then marshals it.
-func MarshalDDLAsRedoLog(d *model.DDLEvent, b []byte) (o []byte, err error) {
-	log := &model.RedoLog{
-		RedoDDL: model.RedoDDLEvent{DDL: d},
-		Type:    model.RedoLogTypeDDL,
-	}
-	return MarshalRedoLog(log, b)
+	b = binary.BigEndian.AppendUint16(b, pbVersion)
+	return append(b, o...), nil
 }
 
 func decodeVersion(bts []byte) (uint16, []byte) {

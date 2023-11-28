@@ -1,0 +1,69 @@
+// Copyright 2023 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redo;
+
+message RedoLog {
+  RedoRowChangedEvent row = 1;
+  RedoDDLEvent ddl = 2;
+  Type type = 3;
+}
+
+message RedoRowChangedEvent{
+  RowChangedEvent     row = 1;
+  repeated  RedoColumn  pre_columns = 2;
+  repeated RedoColumn    columns = 3;
+}
+
+message RowChangedEvent  {
+  uint64 start_ts = 1;
+  uint64 commit_ts = 2;
+  TableName table = 3;
+  repeated IntArr index_ids = 4;
+}
+
+message IntArr {
+  repeated int32 value = 1;
+}
+
+message TableName  {
+  string schema = 1;
+  string table = 2;
+  int64 table_id = 3;
+  bool is_partition = 4;
+}
+
+message RedoColumn {
+  string   name = 1;
+  int32    type = 2;
+  string charset = 3;
+  string collation = 4;
+  uint64 flag = 5;
+  bytes value = 6;
+  bool value_is_empty_bytes = 7;
+}
+
+message RedoDDLEvent {
+  int32 type = 1;
+  uint64 start_ts = 2;
+  uint64 commit_ts = 3;
+  string query = 4;
+  TableName tableName = 5;
+}
+
+enum Type {
+  DDL = 0;
+  DML = 1;
+}

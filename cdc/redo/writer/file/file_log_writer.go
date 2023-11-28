@@ -83,7 +83,7 @@ func (l *logWriter) WriteEvents(ctx context.Context, events ...writer.RedoEvent)
 		}
 
 		rl := event.ToRedoLog()
-		data, err := codec.MarshalRedoLog(rl, nil)
+		data, err := codec.MarshalRedoLog(rl)
 		if err != nil {
 			return errors.WrapError(errors.ErrMarshalFailed, err)
 		}

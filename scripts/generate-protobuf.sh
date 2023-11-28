@@ -53,6 +53,7 @@ for tool in $PROTOC $GO $GO_GRPC $GOGO_FASTER $GRPC_GATEWAY $GRPC_GATEWAY_V2 $OP
 	fi
 done
 
+generate ./proto/redo ./proto/RedoMsg.proto
 generate ./proto/canal ./proto/EntryProtocol.proto
 generate ./proto/canal ./proto/CanalProtocol.proto
 generate ./proto/benchmark ./proto/CraftBenchmark.proto

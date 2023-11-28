@@ -53,7 +53,7 @@ func genLogFile(
 		for ts := maxCommitTs; ts >= minCommitTs; ts-- {
 			event := &model.RowChangedEvent{CommitTs: ts}
 			log := event.ToRedoLog()
-			rawData, err := codec.MarshalRedoLog(log, nil)
+			rawData, err := codec.MarshalRedoLog(log)
 			require.Nil(t, err)
 			_, err = w.Write(rawData)
 			require.Nil(t, err)
@@ -64,7 +64,7 @@ func genLogFile(
 			TableInfo: &model.TableInfo{},
 		}
 		log := event.ToRedoLog()
-		rawData, err := codec.MarshalRedoLog(log, nil)
+		rawData, err := codec.MarshalRedoLog(log)
 		require.Nil(t, err)
 		_, err = w.Write(rawData)
 		require.Nil(t, err)
