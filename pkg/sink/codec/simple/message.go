@@ -299,16 +299,29 @@ func newResolvedMessage(ts uint64) *message {
 }
 
 func newDDLMessage(ddl *model.DDLEvent) *message {
-	tableSchema := newTableSchema(ddl.TableInfo)
+	var (
+		database      string
+		table         string
+		schema        *TableSchema
+		schemaVersion uint64
+	)
+	// the tableInfo maybe nil if the DDL is `drop database`
+	if ddl.TableInfo != nil {
+		schema = newTableSchema(ddl.TableInfo)
+		database = ddl.TableInfo.TableName.Schema
+		table = ddl.TableInfo.TableName.Table
+		schemaVersion = ddl.TableInfo.UpdateTS
+	}
+
 	msg := &message{
 		Version:       defaultVersion,
-		Database:      ddl.TableInfo.TableName.Schema,
-		Table:         ddl.TableInfo.TableName.Table,
+		Database:      database,
+		Table:         table,
 		Type:          DDLType,
 		CommitTs:      ddl.CommitTs,
 		SQL:           ddl.Query,
-		TableSchema:   tableSchema,
-		SchemaVersion: ddl.TableInfo.UpdateTS,
+		TableSchema:   schema,
+		SchemaVersion: schemaVersion,
 	}
 	if ddl.IsBootstrap {
 		msg.Type = BootstrapType
