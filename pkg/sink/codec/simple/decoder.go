@@ -89,7 +89,7 @@ func (d *decoder) NextResolvedEvent() (uint64, error) {
 func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	if d.msg == nil || (d.msg.Data == nil && d.msg.Old == nil) {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
-			"not found row changed event message")
+			"invalid row changed event message")
 	}
 
 	tableInfo := d.memo.Read(d.msg.Database, d.msg.Table, d.msg.SchemaVersion)
