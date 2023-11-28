@@ -270,21 +270,18 @@ func TestGCAndCleanup(t *testing.T) {
 	}
 
 	// write some log files
-	require.NoError(t, err)
 	maxCommitTs := 20
 	for i := 1; i <= maxCommitTs; i++ {
 		for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
 			// fileName with different captureID and maxCommitTs
 			curCaptureID := fmt.Sprintf("%s%d", captureID, i%10)
-			maxCommitTs := i
 			fileName := fmt.Sprintf(redo.RedoLogFileFormatV1, curCaptureID, changefeedID.ID,
-				logType, maxCommitTs, uuid.NewGenerator().NewString(), redo.LogEXT)
+				logType, i, uuid.NewGenerator().NewString(), redo.LogEXT)
 			err := extStorage.WriteFile(ctx, fileName, []byte{})
 			require.NoError(t, err)
 		}
 	}
 
-	startTs := uint64(3)
 	cfg := &config.ConsistentConfig{
 		Level:                 string(redo.ConsistentLevelEventual),
 		MaxLogSize:            redo.DefaultMaxLogSize,
@@ -294,6 +291,8 @@ func TestGCAndCleanup(t *testing.T) {
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
+
+	startTs := uint64(3)
 	m := NewMetaManager(changefeedID, cfg, startTs)
 
 	var eg errgroup.Group
