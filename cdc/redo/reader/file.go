@@ -210,10 +210,7 @@ func isLZ4Compressed(data []byte) bool {
 		return false
 	}
 	magicNumber := []byte{0x04, 0x22, 0x4D, 0x18}
-	if bytes.Equal(data[:4], magicNumber) {
-		return true
-	}
-	return false
+	return bytes.Equal(data[:4], magicNumber)
 }
 
 func decompressLZ4Reader(compressedData []byte) ([]byte, error) {
