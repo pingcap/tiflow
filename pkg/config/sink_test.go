@@ -364,7 +364,8 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 				Quote:     "'",
 				Delimiter: "FEF",
 			},
-			wantErr: "csv config delimiter contains more than two characters",
+			wantErr: "csv config delimiter contains more than two character, note that escape " +
+				"sequences can only be used in double quotes in toml configuration items.",
 		},
 		{
 			name: "delimiter and quote are same",
