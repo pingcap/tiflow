@@ -38,17 +38,22 @@ import (
 )
 
 func TestRequestedStreamRequestedRegions(t *testing.T) {
-	stream := &requestedStream{streamID: 100, requests: chann.NewAutoDrainChann[singleRegionInfo]()}
-	defer stream.requests.CloseAndDrain()
-	stream.requestedRegions.m = make(map[SubscriptionID]map[uint64]*regionFeedState)
+	stream := newRequestedStream(100)
 
 	require.Nil(t, stream.getState(1, 2))
 	require.Nil(t, stream.takeState(1, 2))
 
-	stream.setState(1, 2, &regionFeedState{sri: singleRegionInfo{requestedTable: &requestedTable{}}})
+	stream.setState(1, 2, &regionFeedState{})
 	require.NotNil(t, stream.getState(1, 2))
 	require.NotNil(t, stream.takeState(1, 2))
 	require.Nil(t, stream.getState(1, 2))
+	require.Equal(t, 0, len(stream.requestedRegions.m))
+
+	stream.setState(1, 2, &regionFeedState{})
+	require.NotNil(t, stream.getState(1, 2))
+	require.NotNil(t, stream.takeState(1, 2))
+	require.Nil(t, stream.getState(1, 2))
+	require.Equal(t, 0, len(stream.requestedRegions.m))
 }
 
 func TestRequestedTable(t *testing.T) {

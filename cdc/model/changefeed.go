@@ -334,6 +334,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.ChangefeedErrorStuckDuration == nil {
 		info.Config.ChangefeedErrorStuckDuration = defaultConfig.ChangefeedErrorStuckDuration
 	}
+	if info.Config.SQLMode == "" {
+		info.Config.SQLMode = defaultConfig.SQLMode
+	}
 	info.RmUnusedFields()
 }
 
@@ -348,6 +351,10 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 			zap.Error(err),
 			zap.Any("sinkUri", info.SinkURI),
 		)
+		return
+	}
+	// blackhole is for testing purpose, no need to remove fields
+	if sink.IsBlackHoleScheme(uri.Scheme) {
 		return
 	}
 	if !sink.IsMQScheme(uri.Scheme) {
@@ -383,6 +390,7 @@ func (info *ChangeFeedInfo) rmMQOnlyFields() {
 	info.Config.Sink.EnableKafkaSinkV2 = nil
 	info.Config.Sink.OnlyOutputUpdatedColumns = nil
 	info.Config.Sink.DeleteOnlyOutputHandleKeyColumns = nil
+	info.Config.Sink.ContentCompatible = nil
 	info.Config.Sink.KafkaConfig = nil
 }
 
@@ -579,6 +587,24 @@ func (info *ChangeFeedInfo) DownstreamType() (DownstreamType, error) {
 		return Storage, nil
 	}
 	return Unknown, nil
+}
+
+// NeedSendBootstrapEvent returns true if the changefeed need to send bootstrap event.
+func (info *ChangeFeedInfo) NeedSendBootstrapEvent() (bool, error) {
+	downStreamType, err := info.DownstreamType()
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if downStreamType != MQ {
+		return false, nil
+	}
+	if info.Config.Sink.Protocol == nil {
+		return false, nil
+	}
+	if *info.Config.Sink.Protocol == config.ProtocolSimple.String() {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (info *ChangeFeedInfo) fixMemoryQuota() {

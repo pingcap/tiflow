@@ -15,21 +15,40 @@ package simple
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
 //nolint:unused
-type encoder struct{}
+type encoder struct {
+	cfg *common.Config
+}
 
-type builder struct{}
+type builder struct {
+	cfg *common.Config
+}
 
 // NewBuilder returns a new builder
-func NewBuilder() *builder {
-	// TODO implement me
-	panic("implement me")
+func NewBuilder(cfg *common.Config) *builder {
+	return &builder{
+		cfg: cfg,
+	}
 }
+
+// Build implement the RowEventEncoderBuilder interface
+func (b *builder) Build() codec.RowEventEncoder {
+	return &encoder{
+		cfg: b.cfg,
+	}
+}
+
+// CleanMetrics implement the RowEventEncoderBuilder interface
+func (b *builder) CleanMetrics() {}
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
 //
@@ -53,14 +72,27 @@ func (e *encoder) Build() []*common.Message {
 //
 //nolint:unused
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	// TODO implement me
-	panic("implement me")
+	message := newResolvedMessage(ts)
+	value, err := json.Marshal(message)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+	return common.NewResolvedMsg(config.ProtocolSimple, nil, value, ts), nil
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 //
 //nolint:unused
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	// TODO implement me
-	panic("implement me")
+	var message *message
+	if event.IsBootstrap {
+		message = newBootstrapMessage(event)
+	} else {
+		message = newDDLMessage(event)
+	}
+	value, err := json.Marshal(message)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+	return common.NewDDLMsg(config.ProtocolSimple, nil, value, event), nil
 }

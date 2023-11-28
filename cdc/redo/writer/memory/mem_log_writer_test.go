@@ -61,7 +61,7 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 		LogType:            redo.RedoDDLLogFileType,
 		CaptureID:          "test-capture",
 		ChangeFeedID:       model.DefaultChangeFeedID("test-changefeed"),
-		URI:                *uri,
+		URI:                uri,
 		UseExternalStorage: true,
 		MaxLogSizeInBytes:  10 * redo.Megabyte,
 	}

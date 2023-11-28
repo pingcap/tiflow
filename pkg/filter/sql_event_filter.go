@@ -14,6 +14,7 @@
 package filter
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -21,6 +22,7 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/parser"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
 	tfilter "github.com/pingcap/tidb/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -107,9 +109,17 @@ type sqlEventFilter struct {
 	rules     []*sqlEventRule
 }
 
-func newSQLEventFilter(cfg *config.FilterConfig) (*sqlEventFilter, error) {
+func newSQLEventFilter(cfg *config.FilterConfig, sqlMode string) (*sqlEventFilter, error) {
+	p := parser.New()
+	mode, err := mysql.GetSQLMode(sqlMode)
+	if err != nil {
+		log.Error("failed to get sql mode", zap.Error(err))
+		return nil, cerror.ErrInvalidReplicaConfig.FastGenByArgs(fmt.Sprintf("invalid sqlMode %s", sqlMode))
+	}
+	p.SetSQLMode(mode)
+
 	res := &sqlEventFilter{
-		ddlParser: parser.New(),
+		ddlParser: p,
 	}
 	for _, rule := range cfg.EventFilters {
 		if err := res.addRule(rule); err != nil {

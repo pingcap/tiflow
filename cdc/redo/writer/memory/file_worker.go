@@ -103,7 +103,7 @@ func newFileWorkerGroup(
 	opts ...writer.Option,
 ) *fileWorkerGroup {
 	if workerNum <= 0 {
-		workerNum = defaultFlushWorkerNum
+		workerNum = redo.DefaultFlushWorkerNum
 	}
 
 	op := &writer.LogWriterOptions{}
@@ -138,8 +138,11 @@ func (f *fileWorkerGroup) Run(
 ) (err error) {
 	defer func() {
 		f.close()
-		if err != nil {
-			log.Warn("redo file workers closed with error", zap.Error(err))
+		if err != nil && errors.Cause(err) != context.Canceled {
+			log.Warn("redo file workers closed with error",
+				zap.String("namespace", f.cfg.ChangeFeedID.Namespace),
+				zap.String("changefeed", f.cfg.ChangeFeedID.ID),
+				zap.Error(err))
 		}
 	}()
 
@@ -152,7 +155,10 @@ func (f *fileWorkerGroup) Run(
 			return f.bgFlushFileCache(egCtx)
 		})
 	}
-	log.Info("redo file workers started", zap.Int("workerNum", f.workerNum))
+	log.Info("redo file workers started",
+		zap.String("namespace", f.cfg.ChangeFeedID.Namespace),
+		zap.String("changefeed", f.cfg.ChangeFeedID.ID),
+		zap.Int("workerNum", f.workerNum))
 	return eg.Wait()
 }
 

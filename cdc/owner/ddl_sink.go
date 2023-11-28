@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/format"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -53,6 +54,7 @@ type DDLSink interface {
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error)
+	emitBootstrapEvent(ctx context.Context, ddl *model.DDLEvent) error
 	emitSyncPoint(ctx context.Context, checkpointTs uint64) error
 	// close the ddlsink, cancel running goroutine.
 	close(ctx context.Context) error
@@ -383,6 +385,22 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 	return false, nil
 }
 
+// emitBootstrapEvent sent bootstrap event to downstream.
+// It is a synchronous operation.
+func (s *ddlSinkImpl) emitBootstrapEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	if !ddl.IsBootstrap {
+		return nil
+	}
+	err := s.sink.WriteDDLEvent(ctx, ddl)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// TODO: change this log to debug level after testing complete.
+	log.Info("emit bootstrap event", zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID), zap.Any("bootstrapEvent", ddl))
+	return nil
+}
+
 func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) (err error) {
 	if checkpointTs == s.lastSyncPoint {
 		return nil
@@ -426,7 +444,18 @@ func (s *ddlSinkImpl) close(ctx context.Context) (err error) {
 
 // addSpecialComment translate tidb feature to comment
 func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
-	stms, _, err := parser.New().Parse(ddl.Query, ddl.Charset, ddl.Collate)
+	p := parser.New()
+	// We need to use the correct SQL mode to parse the DDL query.
+	// Otherwise, the parser may fail to parse the DDL query.
+	// For example, it is needed to parse the following DDL query:
+	//  `alter table "t" add column "c" int default 1;`
+	// by adding `ANSI_QUOTES` to the SQL mode.
+	mode, err := mysql.GetSQLMode(s.info.Config.SQLMode)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	p.SetSQLMode(mode)
+	stms, _, err := p.Parse(ddl.Query, ddl.Charset, ddl.Collate)
 	if err != nil {
 		return "", errors.Trace(err)
 	}

@@ -55,10 +55,11 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
 	"enable-kafka-sink-v2": false,
 	"only-output-updated-columns": false,
 	"delete-only-output-handle-key-columns": false,
+    "content-compatible": false,
     "large-message-handle": {
       "large-message-handle-option": "none",
       "large-message-handle-compression": "",
@@ -70,6 +71,9 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },
@@ -81,7 +85,8 @@ const (
     "integrity-check-level": "none",
     "corruption-handle-level": "warn"
  },
-  "changefeed-error-stuck-duration": 1800000000000
+  "changefeed-error-stuck-duration": 1800000000000,
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 }`
 
 	testCfgTestServerConfigMarshal = `{
@@ -195,7 +200,7 @@ const (
   },
   "sink": {
   	"encoder-concurrency": 32,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -219,6 +224,7 @@ const (
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -303,6 +309,9 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },
@@ -317,7 +326,8 @@ const (
     "integrity-check-level": "none",
     "corruption-handle-level": "warn"
   },
-  "changefeed-error-stuck-duration": 1800000000000
+  "changefeed-error-stuck-duration": 1800000000000,
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -342,7 +352,7 @@ const (
   "sink": {
     "encoder-concurrency": 32,
     "dispatchers": null,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -368,6 +378,7 @@ const (
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -450,6 +461,9 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
+    "meta-flush-interval": 200,
+    "encoding-worker-num": 16,
+    "flush-worker-num": 8,
     "storage": "",
     "use-file-backend": false
   },
@@ -462,6 +476,7 @@ const (
     "integrity-check-level": "none",
     "corruption-handle-level": "warn"
   },
-  "changefeed-error-stuck-duration": 1800000000000
+  "changefeed-error-stuck-duration": 1800000000000,
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
 }`
 )

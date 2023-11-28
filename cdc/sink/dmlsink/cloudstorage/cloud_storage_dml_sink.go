@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -36,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	putil "github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -80,7 +82,7 @@ type DMLSink struct {
 	alive struct {
 		sync.RWMutex
 		// msgCh is a channel to hold eventFragment.
-		msgCh  chan eventFragment
+		msgCh  *chann.DrainableChann[eventFragment]
 		isDead bool
 	}
 
@@ -142,7 +144,7 @@ func NewDMLSink(ctx context.Context,
 		cancel:          wgCancel,
 		dead:            make(chan struct{}),
 	}
-	s.alive.msgCh = make(chan eventFragment, defaultChannelSize)
+	s.alive.msgCh = chann.NewAutoDrainChann[eventFragment]()
 
 	encodedCh := make(chan eventFragment, defaultChannelSize)
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
@@ -150,7 +152,7 @@ func NewDMLSink(ctx context.Context,
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh, encodedCh)
+		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedCh)
 	}
 	// create defragmenter.
 	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
@@ -170,7 +172,7 @@ func NewDMLSink(ctx context.Context,
 
 		s.alive.Lock()
 		s.alive.isDead = true
-		close(s.alive.msgCh)
+		s.alive.msgCh.CloseAndDrain()
 		s.alive.Unlock()
 		close(s.dead)
 
@@ -209,6 +211,11 @@ func (s *DMLSink) run(ctx context.Context) error {
 		})
 	}
 
+	log.Info("dml worker started", zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.Int("workerCount", len(s.workers)),
+		zap.Any("config", s.workers[0].config))
+
 	return eg.Wait()
 }
 
@@ -236,7 +243,7 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 
 		s.statistics.ObserveRows(txn.Event.Rows...)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
-		s.alive.msgCh <- eventFragment{
+		s.alive.msgCh.In() <- eventFragment{
 			seqNumber:      seq,
 			versionedTable: tbl,
 			event:          txn,

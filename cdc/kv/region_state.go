@@ -16,7 +16,6 @@ package kv
 import (
 	"runtime"
 	"sync"
-	"sync/atomic"
 
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -67,13 +66,12 @@ type regionFeedState struct {
 	// stopped: some error happens.
 	// removed: the region is returned into the pending list,
 	//   will be re-resolved and re-scheduled later.
-	state atomic.Uint32
-
-	// All region errors should be handled in region workers.
-	// `err` is used to retrieve errors generated outside.
-	err struct {
-		sync.Mutex
-		e error
+	state struct {
+		sync.RWMutex
+		v uint32
+		// All region errors should be handled in region workers.
+		// `err` is used to retrieve errors generated outside.
+		err error
 	}
 }
 
@@ -90,30 +88,36 @@ func (s *regionFeedState) start() {
 
 // mark regionFeedState as stopped with the given error if possible.
 func (s *regionFeedState) markStopped(err error) {
-	if s.state.CompareAndSwap(stateNormal, stateStopped) {
-		if err != nil {
-			s.err.Lock()
-			defer s.err.Unlock()
-			s.err.e = err
-		}
+	s.state.Lock()
+	defer s.state.Unlock()
+	if s.state.v == stateNormal {
+		s.state.v = stateStopped
+		s.state.err = err
 	}
 }
 
 // mark regionFeedState as removed if possible.
 func (s *regionFeedState) markRemoved() (changed bool) {
-	return s.state.CompareAndSwap(stateStopped, stateRemoved)
+	s.state.Lock()
+	defer s.state.Unlock()
+	if s.state.v == stateStopped {
+		s.state.v = stateRemoved
+		changed = true
+	}
+	return
 }
 
 func (s *regionFeedState) isStale() bool {
-	state := s.state.Load()
-	return state == stateStopped || state == stateRemoved
+	s.state.RLock()
+	defer s.state.RUnlock()
+	return s.state.v == stateStopped || s.state.v == stateRemoved
 }
 
 func (s *regionFeedState) takeError() (err error) {
-	s.err.Lock()
-	defer s.err.Unlock()
-	err = s.err.e
-	s.err.e = nil
+	s.state.Lock()
+	defer s.state.Unlock()
+	err = s.state.err
+	s.state.err = nil
 	return
 }
 
