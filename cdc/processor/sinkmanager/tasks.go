@@ -40,7 +40,7 @@ var (
 
 	// Sink manager schedules table tasks based on lag. Limit the max task range
 	// can be helpful to reduce changefeed latency for large initial data.
-	maxTaskTimeRange = 10 * time.Minute
+	maxTaskTimeRange = 30 * time.Minute
 )
 
 // Used to record the progress of the table.
