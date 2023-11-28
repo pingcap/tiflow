@@ -125,6 +125,7 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	return ddl, nil
 }
 
+// TableInfoProvider is used to store and read table info
 type TableInfoProvider interface {
 	Write(info *model.TableInfo)
 	Read(schema, table string, version uint64) *model.TableInfo
