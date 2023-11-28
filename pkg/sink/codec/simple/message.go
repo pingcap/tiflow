@@ -139,7 +139,6 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 		colInfo := columns[col.Offset]
 		if mysql.HasNotNullFlag(colInfo.GetFlag()) {
 			indexSchema.Nullable = false
-			break
 		}
 	}
 	return indexSchema
