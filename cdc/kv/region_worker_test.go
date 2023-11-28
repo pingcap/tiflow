@@ -49,7 +49,11 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 	for i := 0; i < regionCount; i++ {
 		regionID := uint64(1000 + i)
 		regionIDs[i] = regionID
-		rsm.setState(regionID, &regionFeedState{requestID: uint64(i + 1), lastResolvedTs: uint64(1000)})
+
+		state := &regionFeedState{requestID: uint64(i + 1)}
+		state.sri.lockedRange = &regionspan.LockedRange{}
+		state.updateResolvedTs(1000)
+		rsm.setState(regionID, state)
 	}
 
 	var wg sync.WaitGroup
@@ -91,8 +95,8 @@ func TestRegionStateManagerThreadSafe(t *testing.T) {
 	for _, regionID := range regionIDs {
 		s, ok := rsm.getState(regionID)
 		require.True(t, ok)
-		require.Greater(t, s.lastResolvedTs, uint64(1000))
-		totalResolvedTs += s.lastResolvedTs
+		require.Greater(t, s.getLastResolvedTs(), uint64(1000))
+		totalResolvedTs += s.getLastResolvedTs()
 	}
 }
 
@@ -152,7 +156,8 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 	state := newRegionFeedState(newSingleRegionInfo(
 		tikv.RegionVerID{},
 		regionspan.ToComparableSpan(span),
-		0, &tikv.RPCContext{}), 0)
+		&tikv.RPCContext{}), 0)
+	state.sri.lockedRange = &regionspan.LockedRange{}
 	state.start()
 	worker := newRegionWorker(ctx, model.ChangeFeedID{}, s, "")
 	require.Equal(t, 2, cap(worker.outputCh))
@@ -269,28 +274,30 @@ func TestRegionWorkerHandleResolvedTs(t *testing.T) {
 	s1 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(1, 1, 1),
 	}, 1)
-	s1.initialized.Store(true)
-	s1.lastResolvedTs = 9
+	s1.sri.lockedRange = &regionspan.LockedRange{}
+	s1.setInitialized()
+	s1.updateResolvedTs(9)
 
 	s2 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(2, 2, 2),
 	}, 2)
-	s2.initialized.Store(true)
-	s2.lastResolvedTs = 11
+	s2.sri.lockedRange = &regionspan.LockedRange{}
+	s2.setInitialized()
+	s2.updateResolvedTs(11)
 
 	s3 := newRegionFeedState(singleRegionInfo{
 		verID: tikv.NewRegionVerID(3, 3, 3),
 	}, 3)
-	s3.initialized.Store(false)
-	s3.lastResolvedTs = 8
+	s3.sri.lockedRange = &regionspan.LockedRange{}
+	s3.updateResolvedTs(8)
 	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
 		resolvedTs: 10,
 		regions:    []*regionFeedState{s1, s2, s3},
 	})
 	require.Nil(t, err)
-	require.Equal(t, uint64(10), s1.lastResolvedTs)
-	require.Equal(t, uint64(11), s2.lastResolvedTs)
-	require.Equal(t, uint64(8), s3.lastResolvedTs)
+	require.Equal(t, uint64(10), s1.getLastResolvedTs())
+	require.Equal(t, uint64(11), s2.getLastResolvedTs())
+	require.Equal(t, uint64(8), s3.getLastResolvedTs())
 
 	re := <-w.rtsUpdateCh
 	require.Equal(t, uint64(10), re.resolvedTs)
@@ -307,11 +314,14 @@ func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 	ctx := context.Background()
 	s := createFakeEventFeedSession()
 	s.eventCh = make(chan model.RegionFeedEvent, 2)
-	s1 := newRegionFeedState(singleRegionInfo{
-		verID:      tikv.RegionVerID{},
-		resolvedTs: 9,
-		rpcCtx:     &tikv.RPCContext{},
-	}, 0)
+	span := regionspan.Span{Start: []byte{}, End: regionspan.UpperBoundKey}
+	s1 := newRegionFeedState(newSingleRegionInfo(
+		tikv.RegionVerID{},
+		regionspan.ToComparableSpan(span),
+		&tikv.RPCContext{}),
+		0)
+	s1.sri.lockedRange = &regionspan.LockedRange{}
+	s1.sri.lockedRange.CheckpointTs.Store(9)
 	s1.start()
 	w := newRegionWorker(ctx, model.ChangeFeedID{}, s, "")
 
@@ -320,7 +330,7 @@ func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 		regions:    []*regionFeedState{s1},
 	})
 	require.Nil(t, err)
-	require.Equal(t, uint64(9), s1.lastResolvedTs)
+	require.Equal(t, uint64(9), s1.getLastResolvedTs())
 
 	timer := time.NewTimer(time.Second)
 	select {
