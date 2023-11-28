@@ -167,7 +167,7 @@ type TableSchema struct {
 	Indexes []*IndexSchema  `json:"indexes"`
 }
 
-func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
+func newTableSchema(tableInfo *timodel.TableInfo) *TableSchema {
 	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		columns = append(columns, newColumnSchema(col))
@@ -180,7 +180,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
-		indexes = append(indexes, newIndexSchema(idx, tableInfo.TableInfo.Columns))
+		indexes = append(indexes, newIndexSchema(idx, tableInfo.Columns))
 	}
 
 	return &TableSchema{
@@ -306,8 +306,8 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 		schemaVersion uint64
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
-	if ddl.TableInfo != nil {
-		schema = newTableSchema(ddl.TableInfo)
+	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
+		schema = newTableSchema(ddl.TableInfo.TableInfo)
 		database = ddl.TableInfo.TableName.Schema
 		table = ddl.TableInfo.TableName.Table
 		schemaVersion = ddl.TableInfo.UpdateTS
