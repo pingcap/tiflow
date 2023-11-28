@@ -20,6 +20,7 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"net/url"
@@ -29,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pierrec/lz4/v4"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -203,6 +205,28 @@ func selectDownLoadFile(
 	return files, nil
 }
 
+func isLZ4Compressed(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	magicNumber := []byte{0x04, 0x22, 0x4D, 0x18}
+	if bytes.Equal(data[:4], magicNumber) {
+		return true
+	}
+	return false
+}
+
+func decompressLZ4Reader(compressedData []byte) ([]byte, error) {
+	var decompressedBuffer bytes.Buffer
+	reader := lz4.NewReader(bytes.NewReader(compressedData))
+	_, err := io.Copy(&decompressedBuffer, reader)
+	if err != nil {
+		fmt.Printf("Decompression error: %v\n", err)
+		return nil, err
+	}
+	return decompressedBuffer.Bytes(), nil
+}
+
 func readAllFromBuffer(buf []byte) (logHeap, error) {
 	r := &reader{
 		br: bytes.NewReader(buf),
@@ -250,6 +274,12 @@ func sortAndWriteFile(
 	if len(fileContent) == 0 {
 		log.Warn("download file is empty", zap.String("file", fileName))
 		return nil
+	}
+	// it's lz4 compressed, decompress it
+	if isLZ4Compressed(fileContent) {
+		if fileContent, err = decompressLZ4Reader(fileContent); err != nil {
+			return err
+		}
 	}
 
 	// sort data
