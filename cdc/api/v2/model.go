@@ -438,6 +438,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
 				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
 				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
+				EncodingWorkerNum:   c.Sink.CloudStorageConfig.EncodingWorkerNum,
 			}
 		}
 
@@ -722,6 +723,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
 				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
 				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
+				EncodingWorkerNum:   cloned.Sink.CloudStorageConfig.EncodingWorkerNum,
 			}
 		}
 
@@ -1211,6 +1213,7 @@ type CloudStorageConfig struct {
 	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
 	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
 	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
+	EncodingWorkerNum   *int    `json:"encoding_worker_num,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc

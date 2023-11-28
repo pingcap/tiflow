@@ -42,8 +42,7 @@ import (
 )
 
 const (
-	defaultEncodingConcurrency = 8
-	defaultChannelSize         = 1024
+	defaultChannelSize = 1024
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -138,7 +137,7 @@ func NewDMLSink(ctx context.Context,
 	s := &DMLSink{
 		changefeedID:    changefeedID,
 		scheme:          strings.ToLower(sinkURI.Scheme),
-		encodingWorkers: make([]*encodingWorker, defaultEncodingConcurrency),
+		encodingWorkers: make([]*encodingWorker, cfg.EncodingWorkerNum),
 		workers:         make([]*dmlWorker, cfg.WorkerCount),
 		statistics:      metrics.NewStatistics(wgCtx, changefeedID, sink.TxnSink),
 		cancel:          wgCancel,
@@ -150,7 +149,7 @@ func NewDMLSink(ctx context.Context,
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
 
 	// create a group of encoding workers.
-	for i := 0; i < defaultEncodingConcurrency; i++ {
+	for i := 0; i < cfg.EncodingWorkerNum; i++ {
 		encoder := encoderBuilder.Build()
 		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedCh)
 	}
@@ -191,7 +190,7 @@ func (s *DMLSink) run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	// run the encoding workers.
-	for i := 0; i < defaultEncodingConcurrency; i++ {
+	for i := 0; i < len(s.encodingWorkers); i++ {
 		encodingWorker := s.encodingWorkers[i]
 		eg.Go(func() error {
 			return encodingWorker.run(ctx)

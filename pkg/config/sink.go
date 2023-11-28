@@ -598,6 +598,7 @@ type CloudStorageConfig struct {
 	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
 	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
 	FlushConcurrency    *int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
+	EncodingWorkerNum   *int    `toml:"encoding-worker-num" json:"encoding-worker-num,omitempty"`
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
