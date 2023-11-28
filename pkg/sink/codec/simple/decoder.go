@@ -16,8 +16,10 @@ package simple
 import (
 	"encoding/json"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"go.uber.org/zap"
 )
 
 type decoder struct {
@@ -146,9 +148,18 @@ func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
 
 	entry, ok := m.memo[key]
 	if ok && entry.UpdateTS >= info.UpdateTS {
+		log.Warn("table info not stored, since the updateTs is stale",
+			zap.String("schema", info.TableName.Schema),
+			zap.String("table", info.TableName.Table),
+			zap.Uint64("oldUpdateTs", entry.UpdateTS),
+			zap.Uint64("updateTs", info.UpdateTS))
 		return
 	}
 	m.memo[key] = info
+	log.Info("table info stored",
+		zap.String("schema", info.TableName.Schema),
+		zap.String("table", info.TableName.Table),
+		zap.Uint64("updateTs", info.UpdateTS))
 }
 
 func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *model.TableInfo {
