@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/aws/aws-sdk-go/aws"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
@@ -33,7 +34,7 @@ const (
 )
 
 // newPulsarConfig set config
-func newPulsarConfig(t *testing.T) (*pulsarConfig.Config, *url.URL) {
+func newPulsarConfig(t *testing.T) (*config.PulsarConfig, *url.URL) {
 	sinkURL := "pulsar://127.0.0.1:6650/persistent://public/default/test?" +
 		"protocol=canal-json&pulsar-version=v2.10.0&enable-tidb-extension=true&" +
 		"authentication-token=eyJhbcGcixxxxxxxxxxxxxx"
@@ -43,7 +44,7 @@ func newPulsarConfig(t *testing.T) (*pulsarConfig.Config, *url.URL) {
 	replicaConfig := config.GetDefaultReplicaConfig()
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 	require.NoError(t, err)
-	c, err := pulsarConfig.NewPulsarConfig(sinkURI)
+	c, err := pulsarConfig.NewPulsarConfig(sinkURI, replicaConfig.Sink.PulsarConfig)
 	require.NoError(t, err)
 	return c, sinkURI
 }
@@ -52,11 +53,11 @@ func newPulsarConfig(t *testing.T) (*pulsarConfig.Config, *url.URL) {
 func TestNewPulsarDDLSink(t *testing.T) {
 	t.Parallel()
 
-	cfg, sinkURI := newPulsarConfig(t)
+	_, sinkURI := newPulsarConfig(t)
 	changefeedID := model.DefaultChangeFeedID("test")
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink = &config.SinkConfig{
-		Protocol: str2Pointer(cfg.Protocol.String()),
+		Protocol: aws.String("canal-json"),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -102,11 +103,11 @@ func TestNewPulsarDDLSink(t *testing.T) {
 func TestPulsarDDLSinkNewSuccess(t *testing.T) {
 	t.Parallel()
 
-	cfg, sinkURI := newPulsarConfig(t)
+	_, sinkURI := newPulsarConfig(t)
 	changefeedID := model.DefaultChangeFeedID("test")
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink = &config.SinkConfig{
-		Protocol: str2Pointer(cfg.Protocol.String()),
+		Protocol: aws.String("canal-json"),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,11 +123,11 @@ func TestPulsarDDLSinkNewSuccess(t *testing.T) {
 func TestPulsarWriteDDLEventToZeroPartition(t *testing.T) {
 	t.Parallel()
 
-	cfg, sinkURI := newPulsarConfig(t)
+	_, sinkURI := newPulsarConfig(t)
 	changefeedID := model.DefaultChangeFeedID("test")
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Sink = &config.SinkConfig{
-		Protocol: str2Pointer(cfg.Protocol.String()),
+		Protocol: aws.String("canal-json"),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

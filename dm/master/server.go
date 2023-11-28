@@ -3218,3 +3218,92 @@ func genValidationWorkerErrorResp(req *workerrpc.Request, err error, logMsg, wor
 		return nil
 	}
 }
+
+func (s *Server) UpdateValidation(ctx context.Context, req *pb.UpdateValidationRequest) (*pb.UpdateValidationResponse, error) {
+	var (
+		resp2 *pb.UpdateValidationResponse
+		err   error
+	)
+	shouldRet := s.sharedLogic(ctx, req, &resp2, &err)
+	if shouldRet {
+		return resp2, err
+	}
+	resp := &pb.UpdateValidationResponse{
+		Result: false,
+	}
+	subTaskCfgs := s.scheduler.GetSubTaskCfgsByTaskAndSource(req.TaskName, req.Sources)
+	if len(subTaskCfgs) == 0 {
+		if len(req.Sources) > 0 {
+			resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s` and sources `%v`",
+				req.TaskName, req.Sources)
+		} else {
+			resp.Msg = fmt.Sprintf("cannot get subtask by task name `%s`", req.TaskName)
+		}
+		return resp, nil
+	}
+
+	workerReq := workerrpc.Request{
+		Type: workerrpc.CmdUpdateValidation,
+		UpdateValidation: &pb.UpdateValidationWorkerRequest{
+			TaskName:   req.TaskName,
+			BinlogPos:  req.BinlogPos,
+			BinlogGTID: req.BinlogGTID,
+		},
+	}
+
+	sourcesLen := 0
+	for _, subTaskCfg := range subTaskCfgs {
+		sourcesLen += len(subTaskCfg)
+	}
+	workerRespCh := make(chan *pb.CommonWorkerResponse, sourcesLen)
+	var wg sync.WaitGroup
+	for _, subTaskCfg := range subTaskCfgs {
+		for sourceID := range subTaskCfg {
+			wg.Add(1)
+			go func(source string) {
+				defer wg.Done()
+				sourceCfg := s.scheduler.GetSourceCfgByID(source)
+				// can't directly use subtaskCfg here, because it will be overwritten by sourceCfg
+				if sourceCfg.EnableGTID {
+					if len(req.BinlogGTID) == 0 {
+						workerRespCh <- errorCommonWorkerResponse(fmt.Sprintf("source %s didn't specify cutover-binlog-gtid when enableGTID is true", source), source, "")
+						return
+					}
+				} else if len(req.BinlogPos) == 0 {
+					workerRespCh <- errorCommonWorkerResponse(fmt.Sprintf("source %s didn't specify cutover-binlog-pos when enableGTID is false", source), source, "")
+					return
+				}
+				worker := s.scheduler.GetWorkerBySource(source)
+				if worker == nil {
+					workerRespCh <- errorCommonWorkerResponse(fmt.Sprintf("source %s relevant worker-client not found", source), source, "")
+					return
+				}
+				var workerResp *pb.CommonWorkerResponse
+				resp, err := worker.SendRequest(ctx, &workerReq, s.cfg.RPCTimeout)
+				if err != nil {
+					workerResp = errorCommonWorkerResponse(err.Error(), source, worker.BaseInfo().Name)
+				} else {
+					workerResp = resp.UpdateValidation
+				}
+				workerResp.Source = source
+				workerRespCh <- workerResp
+			}(sourceID)
+		}
+	}
+	wg.Wait()
+
+	workerResps := make([]*pb.CommonWorkerResponse, 0, sourcesLen)
+	for len(workerRespCh) > 0 {
+		workerResp := <-workerRespCh
+		workerResps = append(workerResps, workerResp)
+	}
+
+	sort.Slice(workerResps, func(i, j int) bool {
+		return workerResps[i].Source < workerResps[j].Source
+	})
+
+	return &pb.UpdateValidationResponse{
+		Result:  true,
+		Sources: workerResps,
+	}, nil
+}

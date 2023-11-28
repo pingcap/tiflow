@@ -1,0 +1,4 @@
+[sink.kafka-config.large-message-handle]
+large-message-handle-compression = "snappy"
+large-message-handle-option = "claim-check"
+claim-check-storage-uri = "file:///tmp/canal-json-claim-check"

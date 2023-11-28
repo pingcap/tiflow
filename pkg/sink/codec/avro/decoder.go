@@ -40,7 +40,7 @@ type decoder struct {
 	topic  string
 	sc     *stmtctx.StatementContext
 
-	schemaM *SchemaManager
+	schemaM SchemaManager
 
 	key   []byte
 	value []byte
@@ -49,7 +49,7 @@ type decoder struct {
 // NewDecoder return an avro decoder
 func NewDecoder(
 	config *common.Config,
-	schemaM *SchemaManager,
+	schemaM SchemaManager,
 	topic string,
 	tz *time.Location,
 ) codec.RowEventDecoder {
@@ -80,7 +80,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeRow, true, nil
 	}
 	if len(d.value) < 1 {
-		return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs(d.value)
 	}
 	switch d.value[0] {
 	case magicByte:
@@ -90,7 +90,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	case checkpointByte:
 		return model.MessageTypeResolved, true, nil
 	}
-	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
+	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs(d.value)
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
@@ -376,22 +376,66 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 // return the schema ID and the encoded binary data
 // schemaID can be used to fetch the corresponding schema from schema registry,
 // which should be used to decode the binary data.
-func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
+func extractConfluentSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	if len(data) < 5 {
-		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return 0, nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("an avro message using confluent schema registry should have at least 5 bytes")
 	}
 	if data[0] != magicByte {
-		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return 0, nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("magic byte is not match, it should be 0")
 	}
-	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
+	id, err := getConfluentSchemaIDFromHeader(data[0:5])
+	if err != nil {
+		return 0, nil, errors.Trace(err)
+	}
+	return int(id), data[5:], nil
+}
+
+func extractGlueSchemaIDAndBinaryData(data []byte) (string, []byte, error) {
+	if len(data) < 18 {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("an avro message using glue schema registry should have at least 18 bytes")
+	}
+	if data[0] != headerVersionByte {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("header version byte is not match, it should be %d", headerVersionByte)
+	}
+	if data[1] != compressionDefaultByte {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("compression byte is not match, it should be %d", compressionDefaultByte)
+	}
+	id, err := getGlueSchemaIDFromHeader(data[0:18])
+	if err != nil {
+		return "", nil, errors.Trace(err)
+	}
+	return id, data[18:], nil
 }
 
 func decodeRawBytes(
-	ctx context.Context, schemaM *SchemaManager, data []byte, topic string,
+	ctx context.Context, schemaM SchemaManager, data []byte, topic string,
 ) (map[string]interface{}, map[string]interface{}, error) {
-	schemaID, binary, err := extractSchemaIDAndBinaryData(data)
-	if err != nil {
-		return nil, nil, err
+	var schemaID schemaID
+	var binary []byte
+	var err error
+	var cid int
+	var gid string
+
+	switch schemaM.RegistryType() {
+	case common.SchemaRegistryTypeConfluent:
+		cid, binary, err = extractConfluentSchemaIDAndBinaryData(data)
+		if err != nil {
+			return nil, nil, err
+		}
+		schemaID.confluentSchemaID = cid
+	case common.SchemaRegistryTypeGlue:
+		gid, binary, err = extractGlueSchemaIDAndBinaryData(data)
+		if err != nil {
+			return nil, nil, err
+		}
+		schemaID.glueSchemaID = gid
+	default:
+		return nil, nil, errors.New("unknown schema registry type")
 	}
 
 	codec, err := schemaM.Lookup(ctx, topic, schemaID)

@@ -17,10 +17,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -29,6 +33,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
+	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -192,27 +198,28 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	_, checksum := mustParseSchemaName(tblSchemaFile)
 	schemaFileCnt := 0
 	lastVersion := uint64(0)
-	prefix := fmt.Sprintf(tableSchemaPrefix+"schema_", def.Schema, def.Table)
+	subDir := fmt.Sprintf(tableSchemaPrefix, def.Schema, def.Table)
 	checksumSuffix := fmt.Sprintf("%010d.json", checksum)
-	err = f.storage.WalkDir(ctx, &storage.WalkOption{ObjPrefix: prefix},
-		func(path string, _ int64) error {
-			schemaFileCnt++
-			if !strings.HasSuffix(path, checksumSuffix) {
-				return nil
-			}
-			version, parsedChecksum := mustParseSchemaName(path)
-			if parsedChecksum != checksum {
-				// TODO: parsedChecksum should be ignored, remove this panic
-				// after the new path protocol is verified.
-				log.Panic("invalid schema file name",
-					zap.String("path", path), zap.Any("checksum", checksum))
-			}
-			if version > lastVersion {
-				lastVersion = version
-			}
+	err = f.storage.WalkDir(ctx, &storage.WalkOption{
+		SubDir:    subDir, /* use subDir to prevent walk the whole storage */
+		ObjPrefix: subDir + "schema_",
+	}, func(path string, _ int64) error {
+		schemaFileCnt++
+		if !strings.HasSuffix(path, checksumSuffix) {
 			return nil
-		},
-	)
+		}
+		version, parsedChecksum := mustParseSchemaName(path)
+		if parsedChecksum != checksum {
+			// TODO: parsedChecksum should be ignored, remove this panic
+			// after the new path protocol is verified.
+			log.Panic("invalid schema file name",
+				zap.String("path", path), zap.Any("checksum", checksum))
+		}
+		if version > lastVersion {
+			lastVersion = version
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -220,7 +227,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	// Case 2: the table meta path is not empty.
 	if schemaFileCnt != 0 {
 		if lastVersion == 0 {
-			log.Panic("no table schema file found in an non-empty meta path",
+			log.Warn("no table schema file found in an non-empty meta path",
 				zap.Any("versionedTableName", table),
 				zap.Uint32("checksum", checksum))
 		}
@@ -228,9 +235,9 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 		return nil
 	}
 
-	// Case 3: the table meta path is empty, which only happens when the table is
-	// existed before changefeed started. We need to write schema file to external
-	// storage.
+	// Case 3: the table meta path is empty, which happens when:
+	//  a. the table is existed before changefeed started. We need to write schema file to external storage.
+	//  b. the schema file is deleted by the consumer. We write schema file to external storage too.
 	encodedDetail, err := def.MarshalWithQuery()
 	if err != nil {
 		return err
@@ -359,7 +366,7 @@ func (f *FilePathGenerator) getNextFileIdxFromIndexFile(
 	}
 
 	if lastFileExists {
-		fileReader, err := f.storage.Open(ctx, lastFilePath)
+		fileReader, err := f.storage.Open(ctx, lastFilePath, nil)
 		if err != nil {
 			return 0, err
 		}
@@ -401,4 +408,71 @@ func (f *FilePathGenerator) fetchIndexFromFileName(fileName string) (uint64, err
 	}
 
 	return fileIdx, nil
+}
+
+var dateSeparatorDayRegexp *regexp.Regexp
+
+// RemoveExpiredFiles removes expired files from external storage.
+func RemoveExpiredFiles(
+	ctx context.Context,
+	_ model.ChangeFeedID,
+	storage storage.ExternalStorage,
+	cfg *Config,
+	checkpointTs model.Ts,
+) (uint64, error) {
+	if cfg.DateSeparator != config.DateSeparatorDay.String() {
+		return 0, nil
+	}
+	if dateSeparatorDayRegexp == nil {
+		dateSeparatorDayRegexp = regexp.MustCompile(config.DateSeparatorDay.GetPattern())
+	}
+
+	ttl := time.Duration(cfg.FileExpirationDays) * time.Hour * 24
+	currTime := oracle.GetTimeFromTS(checkpointTs).Add(-ttl)
+	expiredDate := currTime.Format("2006-01-02")
+
+	cnt := uint64(0)
+	err := util.RemoveFilesIf(ctx, storage, func(path string) bool {
+		// the path is like: <schema>/<table>/<tableVersion>/<partitionID>/<date>/CDC{num}.extension
+		match := dateSeparatorDayRegexp.FindString(path)
+		if match != "" && match < expiredDate {
+			cnt++
+			return true
+		}
+		return false
+	}, nil)
+	return cnt, err
+}
+
+// RemoveEmptyDirs removes empty directories from external storage.
+func RemoveEmptyDirs(
+	ctx context.Context,
+	id model.ChangeFeedID,
+	target string,
+) (uint64, error) {
+	cnt := uint64(0)
+	err := filepath.Walk(target, func(path string, info fs.FileInfo, err error) error {
+		if os.IsNotExist(err) || path == target || info == nil {
+			// if path not exists, we should return nil to continue.
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			files, err := os.ReadDir(path)
+			if err == nil && len(files) == 0 {
+				log.Debug("Deleting empty directory",
+					zap.String("namespace", id.Namespace),
+					zap.String("changeFeedID", id.ID),
+					zap.String("path", path))
+				os.Remove(path)
+				cnt++
+				return filepath.SkipDir
+			}
+		}
+		return nil
+	})
+
+	return cnt, err
 }

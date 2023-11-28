@@ -10,7 +10,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	model "github.com/pingcap/tiflow/cdc/model"
-	orchestrator "github.com/pingcap/tiflow/pkg/orchestrator"
 )
 
 // MockController is a mock of Controller interface.
@@ -46,6 +45,20 @@ func (m *MockController) AsyncStop() {
 func (mr *MockControllerMockRecorder) AsyncStop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncStop", reflect.TypeOf((*MockController)(nil).AsyncStop))
+}
+
+// CreateChangefeed mocks base method.
+func (m *MockController) CreateChangefeed(arg0 context.Context, arg1 *model.UpstreamInfo, arg2 *model.ChangeFeedInfo) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateChangefeed", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateChangefeed indicates an expected call of CreateChangefeed.
+func (mr *MockControllerMockRecorder) CreateChangefeed(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChangefeed", reflect.TypeOf((*MockController)(nil).CreateChangefeed), arg0, arg1, arg2)
 }
 
 // GetAllChangeFeedCheckpointTs mocks base method.
@@ -135,19 +148,4 @@ func (m *MockController) IsChangefeedExists(ctx context.Context, id model.Change
 func (mr *MockControllerMockRecorder) IsChangefeedExists(ctx, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsChangefeedExists", reflect.TypeOf((*MockController)(nil).IsChangefeedExists), ctx, id)
-}
-
-// Tick mocks base method.
-func (m *MockController) Tick(ctx context.Context, state orchestrator.ReactorState) (orchestrator.ReactorState, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tick", ctx, state)
-	ret0, _ := ret[0].(orchestrator.ReactorState)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Tick indicates an expected call of Tick.
-func (mr *MockControllerMockRecorder) Tick(ctx, state interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tick", reflect.TypeOf((*MockController)(nil).Tick), ctx, state)
 }

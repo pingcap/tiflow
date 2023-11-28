@@ -36,50 +36,101 @@ const (
 	// To avoid thunderherd, a random factor is also added.
 	defaultBackoffInitInterval        = 10 * time.Second
 	defaultBackoffMaxInterval         = 10 * time.Minute
-	defaultBackoffMaxElapsedTime      = 30 * time.Minute
 	defaultBackoffRandomizationFactor = 0.1
 	defaultBackoffMultiplier          = 2.0
-
-	// If all states recorded in window are 'normal', it can be assumed that the changefeed
-	// is running steady. And then if we enter a state other than normal at next tick,
-	// the backoff must be reset.
-	defaultStateWindowSize = 512
 )
+
+// FeedStateManager manages the life cycle of a changefeed, currently it is responsible for:
+// 1. Handle admin jobs
+// 2. Handle errors
+// 3. Handle warnings
+// 4. Control the status of a changefeed
+type FeedStateManager interface {
+	// PushAdminJob pushed an admin job to the admin job queue
+	PushAdminJob(job *model.AdminJob)
+	// Tick is the main logic of the FeedStateManager, it will be called periodically
+	// resolvedTs is the resolvedTs of the changefeed
+	// returns true if there is a pending admin job, if so changefeed should not run the tick logic
+	Tick(resolvedTs model.Ts, status *model.ChangeFeedStatus, info *model.ChangeFeedInfo) (adminJobPending bool)
+	// HandleError is called an error occurs in Changefeed.Tick
+	HandleError(errs ...*model.RunningError)
+	// HandleWarning is called a warning occurs in Changefeed.Tick
+	HandleWarning(warnings ...*model.RunningError)
+	// ShouldRunning returns if the changefeed should be running
+	ShouldRunning() bool
+	// ShouldRemoved returns if the changefeed should be removed
+	ShouldRemoved() bool
+	// MarkFinished is call when a changefeed is finished
+	MarkFinished()
+}
 
 // feedStateManager manages the ReactorState of a changefeed
 // when an error or an admin job occurs, the feedStateManager is responsible for controlling the ReactorState
 type feedStateManager struct {
-	upstream        *upstream.Upstream
-	state           *orchestrator.ChangefeedReactorState
+	upstream *upstream.Upstream
+	state    *orchestrator.ChangefeedReactorState
+
 	shouldBeRunning bool
 	// Based on shouldBeRunning = false
 	// shouldBeRemoved = true means the changefeed is removed
 	// shouldBeRemoved = false means the changefeed is paused
 	shouldBeRemoved bool
 
-	adminJobQueue         []*model.AdminJob
-	stateHistory          [defaultStateWindowSize]model.FeedState
-	lastErrorRetryTime    time.Time                   // time of last error for a changefeed
-	lastRetryCheckpointTs model.Ts                    // checkpoint ts of last retry
-	backoffInterval       time.Duration               // the interval for restarting a changefeed in 'error' state
-	errBackoff            *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
+	adminJobQueue                 []*model.AdminJob
+	isRetrying                    bool
+	lastErrorRetryTime            time.Time                   // time of last error for a changefeed
+	lastErrorRetryCheckpointTs    model.Ts                    // checkpoint ts of last retry
+	lastWarningReportCheckpointTs model.Ts                    // checkpoint ts of last warning report
+	backoffInterval               time.Duration               // the interval for restarting a changefeed in 'error' state
+	errBackoff                    *backoff.ExponentialBackOff // an exponential backoff for restarting a changefeed
+
+	// resolvedTs and initCheckpointTs is for checking whether resolved timestamp
+	// has been advanced or not.
+	resolvedTs           model.Ts
+	checkpointTs         model.Ts
+	checkpointTsAdvanced time.Time
+
+	changefeedErrorStuckDuration time.Duration
 }
 
 // newFeedStateManager creates feedStateManager and initialize the exponential backoff
-func newFeedStateManager(up *upstream.Upstream) *feedStateManager {
-	f := new(feedStateManager)
-	f.upstream = up
+func newFeedStateManager(up *upstream.Upstream,
+	state *orchestrator.ChangefeedReactorState,
+) *feedStateManager {
+	m := new(feedStateManager)
+	m.upstream = up
+	m.state = state
 
-	f.errBackoff = backoff.NewExponentialBackOff()
-	f.errBackoff.InitialInterval = defaultBackoffInitInterval
-	f.errBackoff.MaxInterval = defaultBackoffMaxInterval
-	f.errBackoff.Multiplier = defaultBackoffMultiplier
-	f.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
+	m.errBackoff = backoff.NewExponentialBackOff()
+	m.errBackoff.InitialInterval = defaultBackoffInitInterval
+	m.errBackoff.MaxInterval = defaultBackoffMaxInterval
+	m.errBackoff.Multiplier = defaultBackoffMultiplier
+	m.errBackoff.RandomizationFactor = defaultBackoffRandomizationFactor
 	// backoff will stop once the defaultBackoffMaxElapsedTime has elapsed.
-	f.errBackoff.MaxElapsedTime = defaultBackoffMaxElapsedTime
+	m.errBackoff.MaxElapsedTime = *state.Info.Config.ChangefeedErrorStuckDuration
+	m.changefeedErrorStuckDuration = *state.Info.Config.ChangefeedErrorStuckDuration
 
-	f.resetErrRetry()
-	return f
+	m.resetErrRetry()
+	m.isRetrying = false
+	return m
+}
+
+func (m *feedStateManager) shouldRetry() bool {
+	// changefeed should not retry within [m.lastErrorRetryTime, m.lastErrorRetryTime + m.backoffInterval).
+	return time.Since(m.lastErrorRetryTime) >= m.backoffInterval
+}
+
+func (m *feedStateManager) shouldFailWhenRetry() bool {
+	// retry the changefeed
+	m.backoffInterval = m.errBackoff.NextBackOff()
+	// NextBackOff() will return -1 once the MaxElapsedTime has elapsed,
+	// set the changefeed to failed state.
+	if m.backoffInterval == m.errBackoff.Stop {
+		return true
+	}
+
+	m.lastErrorRetryTime = time.Now()
+	return false
 }
 
 // resetErrRetry reset the error retry related fields
@@ -89,35 +140,28 @@ func (m *feedStateManager) resetErrRetry() {
 	m.lastErrorRetryTime = time.Unix(0, 0)
 }
 
-// isChangefeedStable check if there are states other than 'normal' in this sliding window.
-func (m *feedStateManager) isChangefeedStable() bool {
-	for _, val := range m.stateHistory {
-		if val != model.StateNormal {
-			return false
+func (m *feedStateManager) Tick(resolvedTs model.Ts,
+	status *model.ChangeFeedStatus, info *model.ChangeFeedInfo,
+) (adminJobPending bool) {
+	m.checkAndInitLastRetryCheckpointTs(status)
+
+	if status != nil {
+		if m.checkpointTs < status.CheckpointTs {
+			m.checkpointTs = status.CheckpointTs
+			m.checkpointTsAdvanced = time.Now()
+		}
+		if m.resolvedTs < resolvedTs {
+			m.resolvedTs = resolvedTs
+		}
+		if m.checkpointTs >= m.resolvedTs {
+			m.checkpointTsAdvanced = time.Now()
 		}
 	}
 
-	return true
-}
-
-// shiftStateWindow shift the sliding window
-func (m *feedStateManager) shiftStateWindow(state model.FeedState) {
-	for i := 0; i < defaultStateWindowSize-1; i++ {
-		m.stateHistory[i] = m.stateHistory[i+1]
-	}
-
-	m.stateHistory[defaultStateWindowSize-1] = state
-}
-
-func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adminJobPending bool) {
-	m.shiftStateWindow(state.Info.State)
-	m.checkAndInitLastRetryCheckpointTs(state.Status)
-
-	m.state = state
 	m.shouldBeRunning = true
 	defer func() {
 		if !m.shouldBeRunning {
-			m.cleanUpTaskPositions()
+			m.cleanUp()
 		}
 	}()
 
@@ -128,7 +172,7 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 		return
 	}
 
-	switch m.state.Info.State {
+	switch info.State {
 	case model.StateUnInitialized:
 		m.patchState(model.StateNormal)
 		return
@@ -140,53 +184,48 @@ func (m *feedStateManager) Tick(state *orchestrator.ChangefeedReactorState) (adm
 		m.shouldBeRunning = false
 		return
 	case model.StatePending:
-		if time.Since(m.lastErrorRetryTime) < m.backoffInterval {
+		if !m.shouldRetry() {
 			m.shouldBeRunning = false
 			return
 		}
-		// retry the changefeed
-		oldBackoffInterval := m.backoffInterval
-		m.backoffInterval = m.errBackoff.NextBackOff()
-		// NextBackOff() will return -1 once the MaxElapsedTime has elapsed,
-		// set the changefeed to failed state.
-		if m.backoffInterval == m.errBackoff.Stop {
-			log.Warn("The changefeed won't be restarted "+
-				"as it has been experiencing failures for "+
+
+		if m.shouldFailWhenRetry() {
+			log.Error("The changefeed won't be restarted as it has been experiencing failures for "+
 				"an extended duration",
-				zap.Duration(
-					"maxElapsedTime",
-					m.errBackoff.MaxElapsedTime,
-				),
+				zap.Duration("maxElapsedTime", m.errBackoff.MaxElapsedTime),
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.Time("lastRetryTime", m.lastErrorRetryTime),
+				zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs),
 			)
 			m.shouldBeRunning = false
 			m.patchState(model.StateFailed)
 			return
 		}
 
-		m.lastErrorRetryTime = time.Now()
-		if m.state.Status != nil {
-			m.lastRetryCheckpointTs = m.state.Status.CheckpointTs
-		}
+		// retry the changefeed
 		m.shouldBeRunning = true
+		if status != nil {
+			m.lastErrorRetryCheckpointTs = m.state.Status.CheckpointTs
+		}
 		m.patchState(model.StateWarning)
 		log.Info("changefeed retry backoff interval is elapsed,"+
 			"chengefeed will be restarted",
 			zap.String("namespace", m.state.ID.Namespace),
 			zap.String("changefeed", m.state.ID.ID),
 			zap.Time("lastErrorRetryTime", m.lastErrorRetryTime),
-			zap.Duration("lastRetryInterval", oldBackoffInterval),
 			zap.Duration("nextRetryInterval", m.backoffInterval))
 	case model.StateNormal, model.StateWarning:
 		m.checkAndChangeState()
 		errs := m.errorsReportedByProcessors()
-		m.handleError(errs...)
+		m.HandleError(errs...)
 		// only handle warnings when there are no errors
 		// otherwise, the warnings will cover the errors
 		if len(errs) == 0 {
 			// warning are come from processors' sink component
 			// they ere not fatal errors, so we don't need to stop the changefeed
 			warnings := m.warningsReportedByProcessors()
-			m.handleWarning(warnings...)
+			m.HandleWarning(warnings...)
 		}
 	}
 	return
@@ -283,6 +322,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.shouldBeRunning = true
 		// when the changefeed is manually resumed, we must reset the backoff
 		m.resetErrRetry()
+		m.isRetrying = false
 		jobsPending = true
 		m.patchState(model.StateNormal)
 
@@ -415,12 +455,15 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 	})
 }
 
-func (m *feedStateManager) cleanUpTaskPositions() {
+func (m *feedStateManager) cleanUp() {
 	for captureID := range m.state.TaskPositions {
 		m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
 			return nil, position != nil, nil
 		})
 	}
+	m.checkpointTs = 0
+	m.checkpointTsAdvanced = time.Time{}
+	m.resolvedTs = 0
 }
 
 func (m *feedStateManager) errorsReportedByProcessors() []*model.RunningError {
@@ -488,7 +531,7 @@ func (m *feedStateManager) warningsReportedByProcessors() []*model.RunningError 
 	return result
 }
 
-func (m *feedStateManager) handleError(errs ...*model.RunningError) {
+func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 	if len(errs) == 0 {
 		return
 	}
@@ -496,7 +539,7 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 	// and no need to patch other error to the changefeed info
 	for _, err := range errs {
 		if cerrors.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(err.Code)) ||
-			err.IsChangefeedUnRetryableError() {
+			err.ShouldFailChangefeed() {
 			m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 				if info == nil {
 					return nil, false, nil
@@ -545,23 +588,44 @@ func (m *feedStateManager) handleError(errs ...*model.RunningError) {
 			info.Error = lastError
 			return info, true, nil
 		})
-	}
 
-	// If we enter into an abnormal state 'pending' for this changefeed now
-	// but haven't seen abnormal states in a sliding window (512 ticks),
-	// it can be assumed that this changefeed meets a sudden change from a stable condition.
-	// So we can reset the exponential backoff and re-backoff from the InitialInterval.
-	// TODO: this detection policy should be added into unit test.
-	if m.isChangefeedStable() {
-		m.resetErrRetry()
+		// The errBackoff needs to be reset before the first retry.
+		if !m.isRetrying {
+			m.resetErrRetry()
+			m.isRetrying = true
+		}
 	}
 }
 
-func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
+func (m *feedStateManager) HandleWarning(errs ...*model.RunningError) {
 	if len(errs) == 0 {
 		return
 	}
 	lastError := errs[len(errs)-1]
+
+	if m.state.Status != nil {
+		currTime := m.upstream.PDClock.CurrentTime()
+		ckptTime := oracle.GetTimeFromTS(m.state.Status.CheckpointTs)
+		m.lastWarningReportCheckpointTs = m.state.Status.CheckpointTs
+
+		checkpointTsStuck := time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration
+		if checkpointTsStuck {
+			log.Info("changefeed retry on warning for a very long time and does not resume, "+
+				"it will be failed", zap.String("changefeed", m.state.ID.ID),
+				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
+				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
+			)
+			code, _ := cerrors.RFCCode(cerrors.ErrChangefeedUnretryable)
+			m.HandleError(&model.RunningError{
+				Time:    lastError.Time,
+				Addr:    lastError.Addr,
+				Code:    string(code),
+				Message: lastError.Message,
+			})
+			return
+		}
+	}
+
 	m.patchState(model.StateWarning)
 	m.state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		if info == nil {
@@ -590,15 +654,17 @@ func (m *feedStateManager) checkAndChangeState() {
 		return
 	}
 	if m.state.Info.State == model.StateWarning &&
-		m.state.Status.CheckpointTs > m.lastRetryCheckpointTs {
+		m.state.Status.CheckpointTs > m.lastErrorRetryCheckpointTs &&
+		m.state.Status.CheckpointTs > m.lastWarningReportCheckpointTs {
 		log.Info("changefeed is recovered from warning state,"+
 			"its checkpointTs is greater than lastRetryCheckpointTs,"+
 			"it will be changed to normal state",
 			zap.String("changefeed", m.state.ID.String()),
 			zap.String("namespace", m.state.ID.Namespace),
 			zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
-			zap.Uint64("lastRetryCheckpointTs", m.lastRetryCheckpointTs))
+			zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs))
 		m.patchState(model.StateNormal)
+		m.isRetrying = false
 	}
 }
 
@@ -606,9 +672,10 @@ func (m *feedStateManager) checkAndChangeState() {
 // It the owner is changed, the lastRetryCheckpointTs will be reset to 0, and we should init
 // it to the checkpointTs of the changefeed when the changefeed is ticked at the first time.
 func (m *feedStateManager) checkAndInitLastRetryCheckpointTs(status *model.ChangeFeedStatus) {
-	if status == nil || m.lastRetryCheckpointTs != 0 {
+	if status == nil || m.lastErrorRetryCheckpointTs != 0 {
 		return
 	}
-	m.lastRetryCheckpointTs = status.CheckpointTs
-	log.Info("init lastRetryCheckpointTs", zap.Uint64("lastRetryCheckpointTs", m.lastRetryCheckpointTs))
+	m.lastWarningReportCheckpointTs = status.CheckpointTs
+	m.lastErrorRetryCheckpointTs = status.CheckpointTs
+	log.Info("init lastRetryCheckpointTs", zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs))
 }

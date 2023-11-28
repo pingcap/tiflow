@@ -21,6 +21,7 @@ import (
 	"math"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/btree"
 	"github.com/pingcap/log"
@@ -139,12 +140,6 @@ func (e *rangeLockEntry) String() string {
 		len(e.waiters))
 }
 
-var currentID uint64 = 0
-
-func allocID() uint64 {
-	return atomic.AddUint64(&currentID, 1)
-}
-
 // RegionRangeLock is specifically used for kv client to manage exclusive region ranges. Acquiring lock will be blocked
 // if part of its range is already locked. It also manages checkpoint ts of all ranges. The ranges are marked by a
 // version number, which should comes from the Region's Epoch version. The version is used to compare which range is
@@ -159,14 +154,17 @@ type RegionRangeLock struct {
 	rangeCheckpointTs *rangeTsMap
 	rangeLock         *btree.BTreeG[*rangeLockEntry]
 	regionIDLock      map[uint64]*rangeLockEntry
+	stopped           bool
+	refCount          uint64
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
 func NewRegionRangeLock(
+	id uint64,
 	startKey, endKey []byte, startTs uint64, changefeedLogInfo string,
 ) *RegionRangeLock {
 	return &RegionRangeLock{
-		id:                allocID(),
+		id:                id,
 		totalSpan:         tablepb.Span{StartKey: startKey, EndKey: endKey},
 		changefeedLogInfo: changefeedLogInfo,
 		rangeCheckpointTs: newRangeTsMap(startKey, endKey, startTs),
@@ -213,6 +211,9 @@ func (l *RegionRangeLock) getOverlappedEntries(startKey, endKey []byte, regionID
 func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, version uint64) (LockRangeResult, []<-chan interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.stopped {
+		return LockRangeResult{Status: LockRangeStatusCancel}, nil
+	}
 
 	overlappingEntries := l.getOverlappedEntries(startKey, endKey, regionID)
 
@@ -225,6 +226,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			version:  version,
 		}
 		newEntry.state.CheckpointTs.Store(checkpointTs)
+		newEntry.state.Created = time.Now()
 		l.rangeLock.ReplaceOrInsert(newEntry)
 		l.regionIDLock[regionID] = newEntry
 
@@ -236,6 +238,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)))
 
+		l.refCount += 1
 		return LockRangeResult{
 			Status:       LockRangeStatusSuccess,
 			CheckpointTs: checkpointTs,
@@ -346,10 +349,11 @@ func (l *RegionRangeLock) LockRange(
 }
 
 // UnlockRange unlocks a range and update checkpointTs of the range to specified value.
+// If it returns true it means it is stopped and all ranges are unlocked correctly.
 func (l *RegionRangeLock) UnlockRange(
 	startKey, endKey []byte, regionID, version uint64,
 	checkpointTs ...uint64,
-) {
+) (drained bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -378,6 +382,8 @@ func (l *RegionRangeLock) UnlockRange(
 			zap.String("regionIDLockEntry", l.regionIDLock[regionID].String()))
 	}
 	delete(l.regionIDLock, regionID)
+	l.refCount -= 1
+	drained = l.stopped && l.refCount == 0
 
 	if entry.version != version || !bytes.Equal(entry.endKey, endKey) {
 		log.Panic("unlocking region doesn't match the locked region",
@@ -411,6 +417,22 @@ func (l *RegionRangeLock) UnlockRange(
 		zap.Uint64("checkpointTs", newCheckpointTs),
 		zap.String("startKey", hex.EncodeToString(startKey)),
 		zap.String("endKey", hex.EncodeToString(endKey)))
+	return
+}
+
+// RefCount returns how many ranges are locked.
+func (l *RegionRangeLock) RefCount() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.refCount
+}
+
+// Stop stops the instance.
+func (l *RegionRangeLock) Stop() (drained bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.stopped = true
+	return l.stopped && l.refCount == 0
 }
 
 const (
@@ -448,48 +470,59 @@ type LockRangeResult struct {
 type LockedRange struct {
 	CheckpointTs atomic.Uint64
 	Initialzied  atomic.Bool
+	Created      time.Time
 }
 
-// CheckLockedRanges do some checks.
-func (l *RegionRangeLock) CheckLockedRanges() (r CheckLockedRangesResult) {
+// CollectLockedRangeAttrs collects locked range attributes.
+func (l *RegionRangeLock) CollectLockedRangeAttrs(
+	action func(regionID uint64, state *LockedRange),
+) (r CollectedLockedRangeAttrs) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
 	r.FastestRegion.CheckpointTs = 0
 	r.SlowestRegion.CheckpointTs = math.MaxUint64
 
 	lastEnd := l.totalSpan.StartKey
-	l.rangeLock.AscendGreaterOrEqual(&rangeLockEntry{startKey: nil}, func(item *rangeLockEntry) bool {
-		r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, item.startKey) < 0
+	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
+		if action != nil {
+			action(item.regionID, &item.state)
+		}
+		if spanz.EndCompare(lastEnd, item.startKey) < 0 {
+			r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: item.startKey})
+		}
 		ckpt := item.state.CheckpointTs.Load()
 		if ckpt > r.FastestRegion.CheckpointTs {
+			r.FastestRegion.RegionID = item.regionID
 			r.FastestRegion.CheckpointTs = ckpt
 			r.FastestRegion.Initialized = item.state.Initialzied.Load()
-			r.FastestRegion.RegionID = item.regionID
+			r.FastestRegion.Created = item.state.Created
 		}
 		if ckpt < r.SlowestRegion.CheckpointTs {
+			r.SlowestRegion.RegionID = item.regionID
 			r.SlowestRegion.CheckpointTs = ckpt
 			r.SlowestRegion.Initialized = item.state.Initialzied.Load()
-			r.SlowestRegion.RegionID = item.regionID
+			r.SlowestRegion.Created = item.state.Created
 		}
 		lastEnd = item.endKey
 		return true
 	})
-	r.HoleExists = r.HoleExists || spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0
-
+	if spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0 {
+		r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: l.totalSpan.EndKey})
+	}
 	return
 }
 
-// CheckLockedRangesResult returns by `RegionRangeLock.CheckLockedRanges`.
-type CheckLockedRangesResult struct {
-	HoleExists    bool
-	FastestRegion LockedRangeValue
-	SlowestRegion LockedRangeValue
+// CollectedLockedRangeAttrs returns by `RegionRangeLock.CollectedLockedRangeAttrs`.
+type CollectedLockedRangeAttrs struct {
+	Holes         []tablepb.Span
+	FastestRegion LockedRangeAttrs
+	SlowestRegion LockedRangeAttrs
 }
 
-// LockedRangeValue is like `LockedRange`.
-type LockedRangeValue struct {
+// LockedRangeAttrs is like `LockedRange`, but only contains some read-only attributes.
+type LockedRangeAttrs struct {
 	RegionID     uint64
 	CheckpointTs uint64
 	Initialized  bool
+	Created      time.Time
 }

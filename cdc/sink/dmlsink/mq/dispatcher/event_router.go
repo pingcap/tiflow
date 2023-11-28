@@ -23,55 +23,16 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher/topic"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
-
-// DDLDispatchRule is the dispatch rule for DDL event.
-type DDLDispatchRule int
-
-const (
-	// PartitionAll means the DDL event will be broadcast to all the partitions.
-	PartitionAll DDLDispatchRule = -1
-	// PartitionZero means the DDL event will be dispatched to partition 0.
-	// NOTICE: Only for canal and canal-json protocol.
-	PartitionZero = 0
-)
-
-type partitionDispatchRule int
-
-const (
-	partitionDispatchRuleDefault partitionDispatchRule = iota
-	partitionDispatchRuleTS
-	partitionDispatchRuleTable
-	partitionDispatchRuleIndexValue
-)
-
-func (r *partitionDispatchRule) fromString(rule string) {
-	switch strings.ToLower(rule) {
-	case "default":
-		*r = partitionDispatchRuleDefault
-	case "ts":
-		*r = partitionDispatchRuleTS
-	case "table":
-		*r = partitionDispatchRuleTable
-	case "rowid":
-		*r = partitionDispatchRuleIndexValue
-		log.Warn("rowid is deprecated, please use index-value instead.")
-	case "index-value":
-		*r = partitionDispatchRuleIndexValue
-	default:
-		*r = partitionDispatchRuleDefault
-		log.Warn("the partition dispatch rule is not default/ts/table/index-value," +
-			" use the default rule instead.")
-	}
-}
 
 // EventRouter is a router, it determines which topic and which partition
 // an event should be dispatched to.
 type EventRouter struct {
 	defaultTopic string
-	rules        []struct {
+
+	rules []struct {
 		partitionDispatcher partition.Dispatcher
 		topicDispatcher     topic.Dispatcher
 		filter.Filter
@@ -79,7 +40,9 @@ type EventRouter struct {
 }
 
 // NewEventRouter creates a new EventRouter.
-func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRouter, error) {
+func NewEventRouter(
+	cfg *config.ReplicaConfig, protocol config.Protocol, defaultTopic, scheme string,
+) (*EventRouter, error) {
 	// If an event does not match any dispatching rules in the config file,
 	// it will be dispatched by the default partition dispatcher and
 	// static topic dispatcher because it matches *.* rule.
@@ -88,6 +51,7 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 		PartitionRule: "default",
 		TopicRule:     "",
 	})
+
 	rules := make([]struct {
 		partitionDispatcher partition.Dispatcher
 		topicDispatcher     topic.Dispatcher
@@ -103,8 +67,10 @@ func NewEventRouter(cfg *config.ReplicaConfig, defaultTopic string) (*EventRoute
 			f = filter.CaseInsensitive(f)
 		}
 
-		d := getPartitionDispatcher(ruleConfig, cfg.EnableOldValue)
-		t, err := getTopicDispatcher(ruleConfig, defaultTopic, util.GetOrZero(cfg.Sink.Protocol))
+		d := getPartitionDispatcher(
+			ruleConfig.PartitionRule, scheme, ruleConfig.IndexName, ruleConfig.Columns,
+		)
+		t, err := getTopicDispatcher(ruleConfig.TopicRule, defaultTopic, protocol, scheme)
 		if err != nil {
 			return nil, err
 		}
@@ -152,25 +118,45 @@ func (s *EventRouter) GetTopicForDDL(ddl *model.DDLEvent) string {
 func (s *EventRouter) GetPartitionForRowChange(
 	row *model.RowChangedEvent,
 	partitionNum int32,
-) int32 {
-	_, partitionDispatcher := s.matchDispatcher(
-		row.Table.Schema, row.Table.Table,
-	)
-
-	return partitionDispatcher.DispatchRowChangedEvent(
-		row, partitionNum,
-	)
+) (int32, string, error) {
+	return s.GetPartitionDispatcher(row.Table.Schema, row.Table.Table).
+		DispatchRowChangedEvent(row, partitionNum)
 }
 
-// GetDLLDispatchRuleByProtocol returns the DDL
-// distribution rule according to the protocol.
-func (s *EventRouter) GetDLLDispatchRuleByProtocol(
-	protocol config.Protocol,
-) DDLDispatchRule {
-	if protocol == config.ProtocolCanal || protocol == config.ProtocolCanalJSON {
-		return PartitionZero
+// GetPartitionDispatcher returns the partition dispatcher for a specific table.
+func (s *EventRouter) GetPartitionDispatcher(schema, table string) partition.Dispatcher {
+	_, partitionDispatcher := s.matchDispatcher(schema, table)
+	return partitionDispatcher
+}
+
+// VerifyTables return error if any one table route rule is invalid.
+func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
+	for _, table := range infos {
+		_, partitionDispatcher := s.matchDispatcher(table.TableName.Schema, table.TableName.Table)
+		switch v := partitionDispatcher.(type) {
+		case *partition.IndexValueDispatcher:
+			index := table.GetIndex(v.IndexName)
+			if index == nil {
+				return cerror.ErrDispatcherFailed.GenWithStack(
+					"index not found when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+			}
+			// only allow the unique index to be set.
+			// For the non-unique index, if any column belongs to the index is updated,
+			// the event is not split, it may cause incorrect data consumption.
+			if !index.Unique {
+				return cerror.ErrDispatcherFailed.GenWithStack(
+					"index is not unique when verify the table, table: %v, index: %s", table.TableName, v.IndexName)
+			}
+		case *partition.ColumnsDispatcher:
+			_, ok := table.OffsetsByNames(v.Columns)
+			if !ok {
+				return cerror.ErrDispatcherFailed.GenWithStack(
+					"columns not found when verify the table, table: %v, columns: %v", table.TableName, v.Columns)
+			}
+		default:
+		}
 	}
-	return PartitionAll
+	return nil
 }
 
 // GetActiveTopics returns a list of the corresponding topics
@@ -224,60 +210,65 @@ func (s *EventRouter) matchDispatcher(
 
 // getPartitionDispatcher returns the partition dispatcher for a specific partition rule.
 func getPartitionDispatcher(
-	ruleConfig *config.DispatchRule, enableOldValue bool,
+	rule string, scheme string, indexName string, columns []string,
 ) partition.Dispatcher {
-	var (
-		d    partition.Dispatcher
-		rule partitionDispatchRule
-	)
-	rule.fromString(ruleConfig.PartitionRule)
-	switch rule {
-	case partitionDispatchRuleIndexValue:
-		if enableOldValue {
-			log.Warn("This index-value distribution mode " +
-				"does not guarantee row-level orderliness when " +
-				"switching on the old value, so please use caution!")
-		}
-		d = partition.NewIndexValueDispatcher()
-	case partitionDispatchRuleTS:
-		d = partition.NewTsDispatcher()
-	case partitionDispatchRuleTable:
-		d = partition.NewTableDispatcher()
-	case partitionDispatchRuleDefault:
-		d = partition.NewDefaultDispatcher(enableOldValue)
+	switch strings.ToLower(rule) {
+	case "default":
+		return partition.NewDefaultDispatcher()
+	case "ts":
+		return partition.NewTsDispatcher()
+	case "table":
+		return partition.NewTableDispatcher()
+	case "index-value":
+		return partition.NewIndexValueDispatcher(indexName)
+	case "rowid":
+		log.Warn("rowid is deprecated, index-value is used as the partition dispatcher.")
+		return partition.NewIndexValueDispatcher(indexName)
+	case "columns":
+		return partition.NewColumnsDispatcher(columns)
+	default:
 	}
 
-	return d
+	if sink.IsPulsarScheme(scheme) {
+		return partition.NewKeyDispatcher(rule)
+	}
+
+	log.Warn("the partition dispatch rule is not default/ts/table/index-value/columns," +
+		" use the default rule instead.")
+	return partition.NewDefaultDispatcher()
 }
 
 // getTopicDispatcher returns the topic dispatcher for a specific topic rule (aka topic expression).
 func getTopicDispatcher(
-	ruleConfig *config.DispatchRule, defaultTopic string, protocol string,
+	rule string, defaultTopic string, protocol config.Protocol, schema string,
 ) (topic.Dispatcher, error) {
-	if ruleConfig.TopicRule == "" {
+	if rule == "" {
 		return topic.NewStaticTopicDispatcher(defaultTopic), nil
 	}
 
+	if topic.IsHardCode(rule) {
+		return topic.NewStaticTopicDispatcher(rule), nil
+	}
+
 	// check if this rule is a valid topic expression
-	topicExpr := topic.Expression(ruleConfig.TopicRule)
-
-	if protocol != "" {
-		p, err := config.ParseSinkProtocolFromString(protocol)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
-		}
-
-		if p == config.ProtocolAvro {
-			err := topicExpr.ValidateForAvro()
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			err := topicExpr.Validate()
-			if err != nil {
-				return nil, err
-			}
-		}
+	topicExpr := topic.Expression(rule)
+	err := validateTopicExpression(topicExpr, schema, protocol)
+	if err != nil {
+		return nil, err
 	}
 	return topic.NewDynamicTopicDispatcher(topicExpr), nil
+}
+
+func validateTopicExpression(expr topic.Expression, scheme string, protocol config.Protocol) error {
+	if sink.IsPulsarScheme(scheme) {
+		return expr.PulsarValidate()
+	}
+
+	switch protocol {
+	case config.ProtocolAvro:
+		return expr.ValidateForAvro()
+	default:
+	}
+
+	return expr.Validate()
 }

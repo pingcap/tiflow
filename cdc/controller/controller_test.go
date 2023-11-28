@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -45,7 +46,7 @@ func createController4Test(ctx cdcContext.Context,
 	}
 
 	m := upstream.NewManager4Test(pdClient)
-	o := NewController(m, &model.CaptureInfo{}).(*controllerImpl)
+	o := NewController(m, &model.CaptureInfo{}, nil).(*controllerImpl)
 
 	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
@@ -65,7 +66,7 @@ func createController4Test(ctx cdcContext.Context,
 func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
 	m := upstream.NewManager4Test(mockPDClient)
-	o := NewController(m, &model.CaptureInfo{}).(*controllerImpl)
+	o := NewController(m, &model.CaptureInfo{}, nil).(*controllerImpl)
 	ctx := cdcContext.NewBackendContext4Test(true)
 	ctx, cancel := cdcContext.WithCancel(ctx)
 	defer cancel()
@@ -86,7 +87,6 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient.UpdateServiceGCSafePointFunc = func(
 		ctx context.Context, serviceID string, ttl int64, safePoint uint64,
 	) (uint64, error) {
-		t.Fatal("must not update")
 		return 0, nil
 	}
 	changefeedID1 := model.DefaultChangeFeedID("test-changefeed1")
@@ -183,6 +183,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	expectMinTsMap := make(map[uint64]uint64)
 	expectForceUpdateMap := make(map[uint64]interface{})
 	o := &controllerImpl{changefeeds: make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState)}
+	o.upstreamManager = upstream.NewManager4Test(nil)
 
 	stateMap := []model.FeedState{
 		model.StateNormal, model.StateStopped,
@@ -245,6 +246,20 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
 
 	require.Equal(t, expectMinTsMap, minCheckpoinTsMap)
+	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
+}
+
+func TestCalculateGCSafepointTsNoChangefeed(t *testing.T) {
+	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
+	expectForceUpdateMap := make(map[uint64]interface{})
+	o := &controllerImpl{changefeeds: make(map[model.ChangeFeedID]*orchestrator.ChangefeedReactorState)}
+	o.upstreamManager = upstream.NewManager4Test(nil)
+	up, err := o.upstreamManager.GetDefaultUpstream()
+	require.Nil(t, err)
+	up.PDClock = pdutil.NewClock4Test()
+
+	minCheckpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
+	require.Equal(t, 1, len(minCheckpoinTsMap))
 	require.Equal(t, expectForceUpdateMap, forceUpdateMap)
 }
 

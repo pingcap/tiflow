@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	tidbddl "github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/parser"
 	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
@@ -49,6 +50,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
@@ -216,15 +218,31 @@ type Syncer struct {
 		isQueryEvent  bool
 	}
 
+	cutOverLocation atomic.Pointer[binlog.Location]
+
 	handleJobFunc func(*job) (bool, error)
 	flushSeq      int64
 
 	// `lower_case_table_names` setting of upstream db
 	SourceTableNamesFlavor conn.LowerCaseTableNamesFlavor
 
-	tsOffset                  atomic.Int64    // time offset between upstream and syncer, DM's timestamp - MySQL's timestamp
-	secondsBehindMaster       atomic.Int64    // current task delay second behind upstream
-	workerJobTSArray          []*atomic.Int64 // worker's sync job TS array, note that idx=0 is skip idx and idx=1 is ddl idx,sql worker job idx=(queue id + 2)
+	// time difference between upstream and DM nodes: time of DM - time of upstream.
+	// we use this to calculate replication lag more accurately when clock is not synced
+	// on either upstream or DM nodes.
+	tsOffset atomic.Int64
+	// this field measures the time difference in seconds between current time of DM and
+	// the minimal timestamp of currently processing binlog events.
+	// this lag will consider time difference between upstream and DM nodes
+	secondsBehindMaster atomic.Int64
+	// stores the last job TS(binlog event timestamp) of each worker,
+	// if there's no active job, the corresponding worker's TS is reset to 0.
+	// since DML worker runs jobs in batch, the TS is the TS of the first job in the batch.
+	// We account for skipped events too, if the distance between up and downstream is long,
+	// and there's no interested binlog event in between, we can have a decreasing lag.
+	// 	- 0 is for skip jobs
+	// 	- 1 is ddl worker
+	// 	- 2+ is for DML worker job idx=(queue id + 2)
+	workerJobTSArray          []*atomic.Int64
 	lastCheckpointFlushedTime time.Time
 
 	firstMeetBinlogTS *int64
@@ -607,6 +625,10 @@ func (s *Syncer) reset() {
 	if s.streamerController != nil {
 		s.streamerController.Close()
 	}
+	s.secondsBehindMaster.Store(0)
+	for _, jobTS := range s.workerJobTSArray {
+		jobTS.Store(0)
+	}
 	// create new job chans
 	s.newJobChans()
 	s.checkpoint.DiscardPendingSnapshots()
@@ -631,6 +653,7 @@ func (s *Syncer) reset() {
 		s.sgk.ResetGroups()
 		s.pessimist.Reset()
 	case config.ShardOptimistic:
+		s.osgk.Reset()
 		s.optimist.Reset()
 	}
 }
@@ -769,6 +792,9 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 
 // getTableInfo returns a table info for sourceTable, it should not be modified by caller.
 func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error) {
+	if s.schemaTracker == nil {
+		return nil, terror.ErrSchemaTrackerIsClosed.New("schema tracker not init")
+	}
 	ti, err := s.schemaTracker.GetTableInfo(sourceTable)
 	if err == nil {
 		return ti, nil
@@ -792,6 +818,45 @@ func (s *Syncer) getTableInfo(tctx *tcontext.Context, sourceTable, targetTable *
 		return nil, terror.ErrSchemaTrackerCannotGetTable.Delegate(err, sourceTable)
 	}
 	return ti, nil
+}
+
+// getDBInfoFromDownstream tries to track the db info from the downstream. It will not overwrite existing table.
+func (s *Syncer) getDBInfoFromDownstream(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error) {
+	// TODO: Switch to use the HTTP interface to retrieve the TableInfo directly if HTTP port is available
+	// use parser for downstream.
+	parser2, err := dbconn.GetParserForConn(tctx, s.ddlDBConn)
+	if err != nil {
+		return nil, terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+
+	createSQL, err := dbconn.GetSchemaCreateSQL(tctx, s.ddlDBConn, targetTable.Schema)
+	if err != nil {
+		return nil, terror.ErrSchemaTrackerCannotFetchDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+
+	createNode, err := parser2.ParseOneStmt(createSQL, "", "")
+	if err != nil {
+		return nil, terror.ErrSchemaTrackerCannotParseDownstreamTable.Delegate(err, targetTable, sourceTable)
+	}
+	stmt := createNode.(*ast.CreateDatabaseStmt)
+
+	// we only consider explicit charset/collate, if not found, fallback to default charset/collate.
+	charsetOpt := ast.CharsetOpt{}
+	for _, val := range stmt.Options {
+		switch val.Tp {
+		case ast.DatabaseOptionCharset:
+			charsetOpt.Chs = val.Value
+		case ast.DatabaseOptionCollate:
+			charsetOpt.Col = val.Value
+		}
+	}
+
+	chs, coll, err := tidbddl.ResolveCharsetCollation(nil, charsetOpt)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	return &model.DBInfo{Name: stmt.Name, Charset: chs, Collate: coll}, nil
 }
 
 // trackTableInfoFromDownstream tries to track the table info from the downstream. It will not overwrite existing table.
@@ -880,7 +945,7 @@ func (s *Syncer) calcReplicationLag(headerTS int64) int64 {
 
 // updateReplicationJobTS store job TS, it is called after every batch dml job / one skip job / one ddl job is added and committed.
 func (s *Syncer) updateReplicationJobTS(job *job, jobIdx int) {
-	// when job is nil mean no job in this bucket, need do reset this bucket job ts to 0
+	// when job is nil mean no job in this bucket, need to reset this bucket job ts to 0
 	if job == nil {
 		s.workerJobTSArray[jobIdx].Store(0)
 	} else {
@@ -1050,7 +1115,12 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	skipCheckFlush := false
 	defer func() {
 		if !skipCheckFlush && err == nil {
-			err = s.flushIfOutdated()
+			if cutoverLocation := s.cutOverLocation.Load(); cutoverLocation != nil && binlog.CompareLocation(*cutoverLocation, job.currentLocation, s.cfg.EnableGTID) <= 0 {
+				err = s.flushJobs()
+				s.cutOverLocation.Store(nil)
+			} else {
+				err = s.flushIfOutdated()
+			}
 		}
 	}()
 
@@ -2868,8 +2938,18 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 		return nil, err
 	}
 
-	affectedTbls := make(map[string]map[string]struct{})
 	for _, sql := range qec.splitDDLs {
+		sqls, err := s.ddlWorker.processOneDDL(qec, sql)
+		if err != nil {
+			s.tctx.L().Warn("processOneDDL failed", zap.Error(err))
+			qec.appliedDDLs = append(qec.appliedDDLs, sql)
+		} else {
+			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
+		}
+	}
+
+	affectedTbls := make(map[string]map[string]struct{})
+	for _, sql := range qec.appliedDDLs {
 		ddlInfo, err := s.ddlWorker.genDDLInfo(qec, sql)
 		if err != nil {
 			return nil, err
@@ -3425,7 +3505,7 @@ func (s *Syncer) adjustGlobalPointGTID(tctx *tcontext.Context) (bool, error) {
 	// 2. location already has GTID position
 	// 3. location is totally new, has no position info
 	// 4. location is too early thus not a COMMIT location, which happens when it's reset by other logic
-	if !s.cfg.EnableGTID || location.GTIDSetStr() != "" || location.Position.Name == "" || location.Position.Pos == 4 {
+	if !s.cfg.EnableGTID || !gtid.CheckGTIDSetEmpty(location.GetGTID()) || location.Position.Name == "" || location.Position.Pos == 4 {
 		return false, nil
 	}
 	// set enableGTID to false for new streamerController

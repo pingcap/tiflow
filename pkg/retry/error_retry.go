@@ -14,6 +14,7 @@
 package retry
 
 import (
+	"math"
 	"math/rand"
 	"time"
 
@@ -49,6 +50,14 @@ func NewDefaultErrorRetry() *ErrorRetry {
 		defaultBackoffMaxInS)
 }
 
+// NewInfiniteErrorRetry creates a new ErrorRetry with infinite duration.
+func NewInfiniteErrorRetry() *ErrorRetry {
+	return NewErrorRetry(time.Duration(math.MaxInt64),
+		defaultErrGCInterval,
+		defaultBackoffBaseInS,
+		defaultBackoffMaxInS)
+}
+
 // NewErrorRetry creates a new ErrorRetry.
 func NewErrorRetry(
 	maxRetryDuration time.Duration,
@@ -71,7 +80,7 @@ func (r *ErrorRetry) GetRetryBackoff(err error) (time.Duration, error) {
 	// it means the last error is retry success, and the sink is running well for some time
 	if r.lastInternalError == nil ||
 		time.Since(r.lastErrorRetryTime) >= r.errGCInterval {
-		log.Info("reset firstRetryTime",
+		log.Debug("reset firstRetryTime",
 			zap.Time("lastErrorRetryTime", r.lastErrorRetryTime),
 			zap.Time("now", time.Now()))
 		r.firstRetryTime = time.Now()
@@ -79,7 +88,7 @@ func (r *ErrorRetry) GetRetryBackoff(err error) (time.Duration, error) {
 
 	// return an unretryable error if retry time is exhausted
 	if time.Since(r.firstRetryTime) >= r.maxRetryDuration {
-		log.Error("error retry exhausted",
+		log.Debug("error retry exhausted",
 			zap.Time("firstRetryTime", r.firstRetryTime),
 			zap.Time("lastErrorRetryTime", r.lastErrorRetryTime),
 			zap.Time("now", time.Now()))

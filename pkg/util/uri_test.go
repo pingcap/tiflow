@@ -88,3 +88,49 @@ func TestMaskSinkURI(t *testing.T) {
 		require.Equal(t, tt.masked, maskedURI)
 	}
 }
+
+func TestMaskSensitiveDataInURI(t *testing.T) {
+	tests := []struct {
+		uri    string
+		masked string
+	}{
+		{
+			"mysql://root:123456@127.0.0.1:3306/?time-zone=c",
+			"mysql://root:xxxxx@127.0.0.1:3306/?time-zone=c",
+		},
+		{
+			"mysql://root:123456@127.0.0.1:3306/?access_key=c",
+			"mysql://root:xxxxx@127.0.0.1:3306/?access_key=xxxxx",
+		},
+		{
+			"mysql://root:123456@127.0.0.1:3306/?secret_access_key=c",
+			"mysql://root:xxxxx@127.0.0.1:3306/?secret_access_key=xxxxx",
+		},
+		{
+			"mysql://root:123456@127.0.0.1:3306/?client_secret=c",
+			"mysql://root:xxxxx@127.0.0.1:3306/?client_secret=xxxxx",
+		},
+		{
+			"",
+			"",
+		},
+		{
+			"abc",
+			"abc",
+		},
+	}
+	for _, q := range sensitiveQueryParameterNames {
+		tests = append(tests, struct {
+			uri    string
+			masked string
+		}{
+			"kafka://127.0.0.1:9093/cdc?" + q + "=verysecure",
+			"kafka://127.0.0.1:9093/cdc?" + q + "=xxxxx",
+		})
+	}
+
+	for _, tt := range tests {
+		maskedURI := MaskSensitiveDataInURI(tt.uri)
+		require.Equal(t, tt.masked, maskedURI)
+	}
+}

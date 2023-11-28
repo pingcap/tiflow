@@ -31,8 +31,7 @@ import (
 // note: this is api published default value, not change it
 var defaultAPIConfig = &ReplicaConfig{
 	MemoryQuota:        config.DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
-	EnableOldValue:     true,
+	CaseSensitive:      false,
 	CheckGCSafePoint:   true,
 	BDRMode:            util.AddressOf(false),
 	EnableSyncPoint:    util.AddressOf(false),
@@ -51,21 +50,25 @@ var defaultAPIConfig = &ReplicaConfig{
 			NullString:           config.NULL,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
-		EncoderConcurrency:               util.AddressOf(16),
+		EncoderConcurrency:               util.AddressOf(config.DefaultEncoderGroupConcurrency),
 		Terminator:                       util.AddressOf(config.CRLF),
 		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
 		EnablePartitionSeparator:         util.AddressOf(true),
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        64,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Level:                 "none",
+		MaxLogSize:            64,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		Storage:               "",
+		UseFileBackend:        false,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
@@ -79,6 +82,9 @@ var defaultAPIConfig = &ReplicaConfig{
 		IntegrityCheckLevel:   config.GetDefaultReplicaConfig().Integrity.IntegrityCheckLevel,
 		CorruptionHandleLevel: config.GetDefaultReplicaConfig().Integrity.CorruptionHandleLevel,
 	},
+	ChangefeedErrorStuckDuration: &JSONDuration{*config.
+		GetDefaultReplicaConfig().ChangefeedErrorStuckDuration},
+	SQLMode: config.GetDefaultReplicaConfig().SQLMode,
 }
 
 func TestDefaultReplicaConfig(t *testing.T) {
@@ -95,7 +101,6 @@ func TestDefaultReplicaConfig(t *testing.T) {
 
 func TestToAPIReplicaConfig(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
-	cfg.EnableOldValue = false
 	cfg.CheckGCSafePoint = false
 	cfg.Sink = &config.SinkConfig{
 		DispatchRules: []*config.DispatchRule{

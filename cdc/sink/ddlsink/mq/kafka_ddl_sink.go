@@ -88,23 +88,24 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, topic)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, topic, sinkURI.Scheme)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, options.MaxMessageBytes)
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, protocol, replicaConfig, options.MaxMessageBytes)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, changefeedID, encoderConfig)
+	encoderBuilder, err := builder.NewRowEventEncoderBuilder(ctx, encoderConfig)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
 	start := time.Now()
-	log.Info("Try to create a DDL sink producer", zap.Any("options", options))
+	log.Info("Try to create a DDL sink producer",
+		zap.String("changefeed", changefeedID.String()))
 	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)

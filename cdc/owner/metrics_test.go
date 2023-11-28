@@ -23,5 +23,7 @@ func TestLagBucket(t *testing.T) {
 	buckets := lagBucket()
 	require.Equal(t, 40, len(buckets))
 	require.Equal(t, 0.5, buckets[0])
-	require.Equal(t, float64(20480), buckets[39])
+	require.Equal(t, 1.0, buckets[1])
+	require.Equal(t, 21.0, buckets[30])
+	require.Equal(t, float64(10752), buckets[39])
 }

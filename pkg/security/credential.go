@@ -16,6 +16,8 @@ package security
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"database/sql/driver"
+	"encoding/json"
 	"encoding/pem"
 	"os"
 	"strings"
@@ -32,6 +34,21 @@ type Credential struct {
 	CertPath      string   `toml:"cert-path" json:"cert-path"`
 	KeyPath       string   `toml:"key-path" json:"key-path"`
 	CertAllowedCN []string `toml:"cert-allowed-cn" json:"cert-allowed-cn"`
+}
+
+// Value implements the driver.Valuer interface
+func (s Credential) Value() (driver.Value, error) {
+	return json.Marshal(s)
+}
+
+// Scan implements the sql.Scanner interface
+func (s *Credential) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return json.Unmarshal(b, s)
 }
 
 // IsTLSEnabled checks whether TLS is enabled or not.

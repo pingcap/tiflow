@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
@@ -127,7 +128,8 @@ func (suite *tableSinkWorkerSuite) createWorker(
 	ctx context.Context, memQuota uint64, splitTxn bool,
 ) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
-	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
+	// Only sourcemanager.FetcyByTable is used, so NewForTest is fine.
+	sm := sourcemanager.NewForTest(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
 		&entry.MockMountGroup{}, sortEngine, false)
 	go func() { sm.Run(ctx) }()
 
@@ -137,7 +139,7 @@ func (suite *tableSinkWorkerSuite) createWorker(
 	quota.ForceAcquire(testEventSize)
 	quota.AddTable(suite.testSpan)
 
-	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil, splitTxn, false), sortEngine
+	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil, splitTxn), sortEngine
 }
 
 func (suite *tableSinkWorkerSuite) addEventsToSortEngine(
@@ -533,7 +535,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 	receivedEvents := sink.GetEvents()
 	receivedEvents[0].Callback()
 	require.Len(suite.T(), sink.GetEvents(), 1, "No more events should be sent to sink")
-	checkpointTs, _, _ := wrapper.getCheckpointTs()
+	checkpointTs := wrapper.getCheckpointTs()
 	require.Equal(suite.T(), uint64(4), checkpointTs.ResolvedMark())
 }
 
@@ -579,7 +581,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 		isCanceled:    func() bool { return false },
 	}
 	require.Eventually(suite.T(), func() bool {
-		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		checkpointTs := wrapper.getCheckpointTs()
 		return checkpointTs.ResolvedMark() == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
 	cancel()
@@ -637,7 +639,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	require.Equal(suite.T(), uint64(3), batchID.Load())
 	sink.AckAllEvents()
 	require.Eventually(suite.T(), func() bool {
-		checkpointTs, _, _ := wrapper.getCheckpointTs()
+		checkpointTs := wrapper.getCheckpointTs()
 		return checkpointTs.ResolvedMark() == 2
 	}, 5*time.Second, 10*time.Millisecond)
 
@@ -664,4 +666,146 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	wg.Wait()
 	require.Equal(suite.T(), uint64(5), batchID.Load(), "The batchID should be 5, "+
 		"because the first task has 3 events, the second task has 1 event")
+}
+
+func (suite *tableSinkWorkerSuite) TestFetchFromCacheWithFailure() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
+	}
+	// Only for three events.
+	eventSize := uint64(testEventSize * 3)
+	w, e := suite.createWorker(ctx, eventSize, true)
+	w.eventCache = newRedoEventCache(suite.testChangefeedID, 1024*1024)
+	defer w.sinkMemQuota.Close()
+	suite.addEventsToSortEngine(events, e)
+
+	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/TableSinkWorkerFetchFromCache", "return")
+	defer func() {
+		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/TableSinkWorkerFetchFromCache")
+	}()
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	defer sink.Close()
+
+	chShouldBeClosed := make(chan struct{}, 1)
+	callback := func(lastWritePos engine.Position) {
+		close(chShouldBeClosed)
+	}
+	taskChan <- &sinkTask{
+		span:          suite.testSpan,
+		lowerBound:    genLowerBound(),
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return false },
+	}
+
+	<-chShouldBeClosed
+	cancel()
+	wg.Wait()
+}
+
+// When starts to handle a task, advancer.lastPos should be set to a correct position.
+// Otherwise if advancer.lastPos isn't updated during scanning, callback will get an
+// invalid `advancer.lastPos`.
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
+	}
+	w, e := suite.createWorker(ctx, 0, true)
+	defer w.sinkMemQuota.Close()
+	suite.addEventsToSortEngine(events, e)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	defer sink.Close()
+
+	chShouldBeClosed := make(chan struct{}, 1)
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), genLowerBound().Prev(), lastWritePos)
+		close(chShouldBeClosed)
+	}
+	taskChan <- &sinkTask{
+		span:          suite.testSpan,
+		lowerBound:    genLowerBound(),
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return true },
+	}
+
+	<-chShouldBeClosed
+	cancel()
+	wg.Wait()
+}
+
+func (suite *tableSinkWorkerSuite) TestHandleTaskWithCache() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(2, 4, suite.testSpan),
+		genPolymorphicEvent(2, 4, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
+	}
+	w, e := suite.createWorker(ctx, 0, true)
+	w.eventCache = newRedoEventCache(suite.testChangefeedID, 1024*1024)
+	appender := w.eventCache.maybeCreateAppender(suite.testSpan, engine.Position{StartTs: 1, CommitTs: 3})
+	appender.pushBatch(
+		[]*model.RowChangedEvent{events[0].Row, events[1].Row},
+		uint64(0), engine.Position{StartTs: 2, CommitTs: 4},
+	)
+	defer w.sinkMemQuota.Close()
+	suite.addEventsToSortEngine(events, e)
+
+	taskChan := make(chan *sinkTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	defer sink.Close()
+
+	chShouldBeClosed := make(chan struct{}, 1)
+	callback := func(lastWrittenPos engine.Position) {
+		require.Equal(suite.T(), engine.Position{StartTs: 2, CommitTs: 4}, lastWrittenPos)
+		close(chShouldBeClosed)
+	}
+	taskChan <- &sinkTask{
+		span:          suite.testSpan,
+		lowerBound:    engine.Position{StartTs: 1, CommitTs: 3},
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return true },
+	}
+
+	<-chShouldBeClosed
+	cancel()
+	wg.Wait()
 }

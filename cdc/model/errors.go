@@ -14,6 +14,8 @@
 package model
 
 import (
+	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -28,7 +30,22 @@ type RunningError struct {
 	Message string    `json:"message"`
 }
 
-// IsChangefeedUnRetryableError return true if a running error contains a changefeed not retry error.
-func (r RunningError) IsChangefeedUnRetryableError() bool {
-	return cerror.IsChangefeedUnRetryableError(errors.New(r.Message + r.Code))
+// ShouldFailChangefeed return true if a running error contains a changefeed not retry error.
+func (e RunningError) ShouldFailChangefeed() bool {
+	return cerror.ShouldFailChangefeed(errors.New(e.Message + e.Code))
+}
+
+// Value implements the driver.Valuer interface
+func (e RunningError) Value() (driver.Value, error) {
+	return json.Marshal(e)
+}
+
+// Scan implements the sql.Scanner interface
+func (e *RunningError) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return json.Unmarshal(b, e)
 }

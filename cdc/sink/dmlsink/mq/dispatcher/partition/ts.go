@@ -13,7 +13,11 @@
 
 package partition
 
-import "github.com/pingcap/tiflow/cdc/model"
+import (
+	"fmt"
+
+	"github.com/pingcap/tiflow/cdc/model"
+)
 
 // TsDispatcher is a partition dispatcher which dispatch events based on ts.
 type TsDispatcher struct{}
@@ -25,6 +29,6 @@ func NewTsDispatcher() *TsDispatcher {
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (t *TsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
-	return int32(row.CommitTs % uint64(partitionNum))
+func (t *TsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string, error) {
+	return int32(row.CommitTs % uint64(partitionNum)), fmt.Sprintf("%d", row.CommitTs), nil
 }

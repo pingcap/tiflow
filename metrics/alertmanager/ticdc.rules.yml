@@ -51,6 +51,18 @@ groups:
       value: '{{ $value }}'
       summary: cdc owner checkpoint delay more than 10 minutes
 
+  - alert: cdc_resolvedts_high_delay
+    expr: ticdc_owner_resolved_ts_lag > 300
+    for: 1m
+    labels:
+      env: ENV_LABELS_ENV
+      level: critical
+      expr: ticdc_owner_resolved_ts_lag > 300
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
+      value: '{{ $value }}'
+      summary: cdc owner resolved ts delay more than 5 minutes
+
   - alert: ticdc_sink_execution_error
     expr: changes(ticdc_sink_execution_error[1m]) > 0
     for: 1m
@@ -111,3 +123,15 @@ groups:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values: {{ $value }}'
       value: '{{ $value }}'
       summary: tikv cdc scan duration seconds more than 10 min
+
+  - alert: ticdc_memory_abnormal
+    expr: go_memstats_heap_alloc_bytes{job="ticdc"} > 1e+10
+    for: 1m
+    labels:
+      env: ENV_LABELS_ENV
+      level: warning
+      expr: go_memstats_heap_alloc_bytes{job="ticdc"} > 1e+10
+    annotations:
+      description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, values:{{ $value }}'
+      value: '{{ $value }}'
+      summary: TiCDC heap memory usage is over 10 GB

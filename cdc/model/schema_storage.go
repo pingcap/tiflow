@@ -315,3 +315,74 @@ func (ti *TableInfo) IsIndexUnique(indexInfo *model.IndexInfo) bool {
 func (ti *TableInfo) Clone() *TableInfo {
 	return WrapTableInfo(ti.SchemaID, ti.TableName.Schema, ti.Version, ti.TableInfo.Clone())
 }
+
+// GetIndex return the corresponding index by the given name.
+func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
+	for _, index := range ti.Indices {
+		if index != nil && index.Name.O == name {
+			return index
+		}
+	}
+	return nil
+}
+
+// IndexByName returns the index columns and offsets of the corresponding index by name
+func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
+	index := ti.GetIndex(name)
+	if index == nil {
+		return nil, nil, false
+	}
+	names := make([]string, 0, len(index.Columns))
+	offset := make([]int, 0, len(index.Columns))
+	for _, col := range index.Columns {
+		names = append(names, col.Name.O)
+		offset = append(offset, col.Offset)
+	}
+	return names, offset, true
+}
+
+// OffsetsByNames returns the column offsets of the corresponding columns by names
+// If any column does not exist, return false
+func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
+	// todo: optimize it
+	columnOffsets := make(map[string]int, len(ti.Columns))
+	for _, col := range ti.Columns {
+		if col != nil {
+			columnOffsets[col.Name.O] = col.Offset
+		}
+	}
+
+	result := make([]int, 0, len(names))
+	for _, col := range names {
+		offset, ok := columnOffsets[col]
+		if !ok {
+			return nil, false
+		}
+		result = append(result, offset)
+	}
+
+	return result, true
+}
+
+// GetPrimaryKeyColumnNames returns the primary key column names
+func (ti *TableInfo) GetPrimaryKeyColumnNames() map[string]struct{} {
+	result := make(map[string]struct{})
+	for _, index := range ti.Indices {
+		if index.Primary {
+			for _, col := range index.Columns {
+				result[col.Name.O] = struct{}{}
+			}
+			return result
+		}
+	}
+
+	for _, columnsOffsets := range ti.IndexColumnsOffset {
+		for _, offset := range columnsOffsets {
+			columnInfo := ti.Columns[offset]
+			if mysql.HasPriKeyFlag(columnInfo.FieldType.GetFlag()) {
+				result[columnInfo.Name.O] = struct{}{}
+			}
+		}
+	}
+	return result
+}

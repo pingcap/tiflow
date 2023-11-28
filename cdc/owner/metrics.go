@@ -159,6 +159,6 @@ func InitMetrics(registry *prometheus.Registry) {
 func lagBucket() []float64 {
 	buckets := prometheus.LinearBuckets(0.5, 0.5, 20)
 	buckets = append(buckets, prometheus.LinearBuckets(11, 1, 10)...)
-	buckets = append(buckets, prometheus.ExponentialBuckets(40, 2, 10)...)
+	buckets = append(buckets, prometheus.ExponentialBuckets(21, 2, 10)...)
 	return buckets
 }

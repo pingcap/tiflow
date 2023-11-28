@@ -80,3 +80,37 @@ func MaskSinkURI(uri string) (string, error) {
 	}
 	return uriParsed.Redacted(), nil
 }
+
+var sensitiveQueryParameterNames = []string{
+	"password",
+	"passwd",
+	"pwd",
+	"access",
+	"token",
+	"secret",
+	"key",
+	"signature",
+	"credential",
+	"private",
+	"client",
+}
+
+// MaskSensitiveDataInURI returns an uri that sensitive infos has been masked.
+func MaskSensitiveDataInURI(uri string) string {
+	uriParsed, err := url.Parse(uri)
+	if err != nil {
+		log.Error("failed to parse sink URI", zap.Error(err))
+		return ""
+	}
+	queries := uriParsed.Query()
+	for key := range queries {
+		lower := strings.ToLower(key)
+		for _, secretKey := range sensitiveQueryParameterNames {
+			if strings.Contains(lower, secretKey) {
+				queries.Set(key, "xxxxx")
+			}
+		}
+	}
+	uriParsed.RawQuery = queries.Encode()
+	return uriParsed.Redacted()
+}

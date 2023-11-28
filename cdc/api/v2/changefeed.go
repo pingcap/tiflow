@@ -15,7 +15,9 @@ package v2
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -23,16 +25,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
@@ -135,12 +139,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CAPath:        cfg.CAPath,
 		CertAllowedCN: cfg.CertAllowedCN,
 	}
-	infoStr, err := info.Marshal()
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
 
 	// cannot create changefeed if there are running lightning/restore tasks
 	tlsCfg, err := credential.ToTLSConfig()
@@ -164,10 +162,9 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
+	err = ctrl.CreateChangefeed(ctx,
 		upstreamInfo,
-		info,
-		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
+		info)
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(err)
@@ -176,7 +173,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
-		zap.String("changefeed", infoStr))
+		zap.String("changefeed", info.String()))
 	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
 		nil, true))
@@ -345,9 +342,20 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	uri, err := url.Parse(cfg.SinkURI)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	scheme := uri.Scheme
+	topic := strings.TrimFunc(uri.Path, func(r rune) bool {
+		return r == '/'
+	})
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
+	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
+
 	ineligibleTables, eligibleTables, err := h.helpers.
-		getVerfiedTables(replicaCfg, kvStore, cfg.StartTs)
+		getVerifiedTables(replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -399,6 +407,12 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
+	owner, err := h.capture.GetOwner()
+	if err != nil {
+		_ = c.Error(errors.Trace(err))
+		return
+	}
+
 	oldCfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
@@ -424,7 +438,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 
 	oldCfInfo.Namespace = changefeedID.Namespace
 	oldCfInfo.ID = changefeedID.ID
-	OldUpInfo, err := h.capture.GetEtcdClient().GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
+	OldUpInfo, err := h.capture.GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
 		oldCfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)
@@ -446,26 +460,31 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", oldCfInfo.String()),
 		zap.Any("upstreamInfo", OldUpInfo))
 
-	var pdAddrs []string
-	var credentials *security.Credential
-	if OldUpInfo != nil {
-		pdAddrs = strings.Split(OldUpInfo.PDEndpoints, ",")
-		credentials = &security.Credential{
-			CAPath:        OldUpInfo.CAPath,
-			CertPath:      OldUpInfo.CertPath,
-			KeyPath:       OldUpInfo.KeyPath,
-			CertAllowedCN: OldUpInfo.CertAllowedCN,
-		}
-	}
-	if len(updateCfConfig.PDAddrs) != 0 {
-		pdAddrs = updateCfConfig.PDAddrs
-		credentials = updateCfConfig.PDConfig.toCredential()
+	upManager, err := h.capture.GetUpstreamManager()
+	if err != nil {
+		_ = c.Error(err)
+		return
 	}
 
-	storage, err := h.helpers.createTiStore(pdAddrs, credentials)
-	if err != nil {
-		_ = c.Error(errors.Trace(err))
+	var storage tidbkv.Storage
+	// if PDAddrs is not empty, use it to create a new kvstore
+	// Note: upManager is nil in some unit test cases
+	if len(updateCfConfig.PDAddrs) != 0 || upManager == nil {
+		pdAddrs := updateCfConfig.PDAddrs
+		credentials := updateCfConfig.PDConfig.toCredential()
+		storage, err = h.helpers.createTiStore(pdAddrs, credentials)
+		if err != nil {
+			_ = c.Error(errors.Trace(err))
+		}
+	} else { // get the upstream of the changefeed to get the kvstore
+		up, ok := upManager.Get(oldCfInfo.UpstreamID)
+		if !ok {
+			_ = c.Error(errors.New(fmt.Sprintf("upstream %d not found", oldCfInfo.UpstreamID)))
+			return
+		}
+		storage = up.KVStorage
 	}
+
 	newCfInfo, newUpInfo, err := h.helpers.verifyUpdateChangefeedConfig(ctx,
 		updateCfConfig, oldCfInfo, OldUpInfo, storage, cfStatus.CheckpointTs)
 	if err != nil {
@@ -477,7 +496,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", newCfInfo.String()),
 		zap.Any("upstreamInfo", newUpInfo))
 
-	err = h.capture.GetEtcdClient().
+	err = owner.
 		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
@@ -719,24 +738,26 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		return
 	}
 
+	var pdClient pd.Client
+	// if PDAddrs is empty, use the default pdClient
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
 			_ = c.Error(err)
 			return
 		}
-		cfg.PDConfig = getUpstreamPDConfig(up)
+		pdClient = up.PDClient
+	} else {
+		credential := cfg.PDConfig.toCredential()
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+		if err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+			return
+		}
+		defer pdClient.Close()
 	}
-	credential := cfg.PDConfig.toCredential()
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-	if err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
-	defer pdClient.Close()
 
 	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,

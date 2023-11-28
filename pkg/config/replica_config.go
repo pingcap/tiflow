@@ -14,6 +14,7 @@
 package config
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -35,13 +37,19 @@ const (
 	// minSyncPointInterval is the minimum of SyncPointInterval can be set.
 	minSyncPointInterval = time.Second * 30
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
-	minSyncPointRetention = time.Hour * 1
+	minSyncPointRetention           = time.Hour * 1
+	minChangeFeedErrorStuckDuration = time.Minute * 30
+	// The default SQL Mode of TiDB: "ONLY_FULL_GROUP_BY,
+	// STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,
+	// NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+	// Note: The SQL Mode of TiDB is not the same as ORACLE.
+	// If you want to use the same SQL Mode as ORACLE, you need to add "ORACLE" to the SQL Mode.
+	defaultSQLMode = mysql.DefaultSQLMode
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
-	EnableOldValue:     true,
+	CaseSensitive:      false,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    util.AddressOf(false),
 	SyncPointInterval:  util.AddressOf(10 * time.Minute),
@@ -60,22 +68,26 @@ var defaultReplicaConfig = &ReplicaConfig{
 			NullString:           NULL,
 			BinaryEncodingMethod: BinaryEncodingBase64,
 		},
-		EncoderConcurrency:               util.AddressOf(16),
+		EncoderConcurrency:               util.AddressOf(DefaultEncoderGroupConcurrency),
 		Terminator:                       util.AddressOf(CRLF),
 		DateSeparator:                    util.AddressOf(DateSeparatorDay.String()),
 		EnablePartitionSeparator:         util.AddressOf(true),
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
 		TiDBSourceID:                     1,
-		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Level:                 "none",
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		Storage:               "",
+		UseFileBackend:        false,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -86,6 +98,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		IntegrityCheckLevel:   integrity.CheckLevelNone,
 		CorruptionHandleLevel: integrity.CorruptionHandleLevelWarn,
 	},
+	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
+	SQLMode:                      defaultSQLMode,
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -111,7 +125,6 @@ type ReplicaConfig replicaConfig
 type replicaConfig struct {
 	MemoryQuota      uint64 `toml:"memory-quota" json:"memory-quota"`
 	CaseSensitive    bool   `toml:"case-sensitive" json:"case-sensitive"`
-	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
 	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	// EnableSyncPoint is only available when the downstream is a Database.
@@ -136,7 +149,30 @@ type replicaConfig struct {
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
 	// Integrity is only available when the downstream is MQ.
-	Integrity *integrity.Config `toml:"integrity" json:"integrity"`
+	Integrity                    *integrity.Config `toml:"integrity" json:"integrity"`
+	ChangefeedErrorStuckDuration *time.Duration    `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	SQLMode                      string            `toml:"sql-mode" json:"sql-mode"`
+}
+
+// Value implements the driver.Valuer interface
+func (c ReplicaConfig) Value() (driver.Value, error) {
+	cfg, err := c.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: refactor the meaningless type conversion.
+	return []byte(cfg), nil
+}
+
+// Scan implements the sql.Scanner interface
+func (c *ReplicaConfig) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return c.UnmarshalJSON(b)
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
@@ -201,11 +237,6 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err != nil {
 			return err
 		}
-
-		err = c.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-		if err != nil {
-			return err
-		}
 	}
 
 	if c.Consistent != nil {
@@ -239,6 +270,11 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 	}
 	if c.Scheduler == nil {
 		c.FixScheduler(false)
+	} else {
+		err := c.Scheduler.Validate()
+		if err != nil {
+			return err
+		}
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
@@ -258,6 +294,22 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		if err := c.Integrity.Validate(); err != nil {
 			return err
 		}
+
+		if c.Integrity.Enabled() && len(c.Sink.ColumnSelectors) != 0 {
+			log.Error("it's not allowed to enable the integrity check and column selector at the same time")
+			return cerror.ErrInvalidReplicaConfig.GenWithStack(
+				"integrity check enabled and column selector set, not allowed")
+
+		}
+	}
+
+	if c.ChangefeedErrorStuckDuration != nil &&
+		*c.ChangefeedErrorStuckDuration < minChangeFeedErrorStuckDuration {
+		return cerror.ErrInvalidReplicaConfig.
+			FastGenByArgs(
+				fmt.Sprintf("The ChangefeedErrorStuckDuration:%f must be larger than %f Seconds",
+					c.ChangefeedErrorStuckDuration.Seconds(),
+					minChangeFeedErrorStuckDuration.Seconds()))
 	}
 
 	return nil
@@ -288,50 +340,12 @@ func isSinkCompatibleWithSpanReplication(u *url.URL) bool {
 		(strings.Contains(u.Scheme, "kafka") || strings.Contains(u.Scheme, "blackhole"))
 }
 
-// AdjustEnableOldValue adjust the old value configuration by the sink scheme and encoding protocol
-func (c *ReplicaConfig) AdjustEnableOldValue(scheme, protocol string) {
-	if sink.IsMySQLCompatibleScheme(scheme) {
-		return
+// MaskSensitiveData masks sensitive data in ReplicaConfig
+func (c *ReplicaConfig) MaskSensitiveData() {
+	if c.Sink != nil {
+		c.Sink.MaskSensitiveData()
 	}
-
-	if c.EnableOldValue {
-		_, ok := ForceDisableOldValueProtocols[protocol]
-		if ok {
-			log.Warn("Attempting to replicate with old value enabled, but the specified protocol must disable old value. "+
-				"CDC will disable old value and continue.", zap.String("protocol", protocol))
-			c.EnableOldValue = false
-		}
-		return
+	if c.Consistent != nil {
+		c.Consistent.MaskSensitiveData()
 	}
-
-	_, ok := ForceEnableOldValueProtocols[protocol]
-	if ok {
-		log.Warn("Attempting to replicate with old value disabled, but the specified protocol must enable old value. "+
-			"CDC will enable old value and continue.", zap.String("protocol", protocol))
-		c.EnableOldValue = true
-	}
-}
-
-func (c *ReplicaConfig) adjustEnableOldValueAndVerifyForceReplicate(sinkURI *url.URL) error {
-	scheme := strings.ToLower(sinkURI.Scheme)
-	protocol := sinkURI.Query().Get(ProtocolKey)
-	if protocol != "" {
-		c.Sink.Protocol = util.AddressOf(protocol)
-	}
-	protocol = util.GetOrZero(c.Sink.Protocol)
-	c.AdjustEnableOldValue(scheme, protocol)
-
-	if !c.ForceReplicate {
-		return nil
-	}
-
-	// MySQL Sink require the old value feature must be enabled to allow delete event send to downstream.
-	if sink.IsMySQLCompatibleScheme(scheme) {
-		if !c.EnableOldValue {
-			log.Error("force replicate, old value feature is disabled for the changefeed using mysql sink")
-			return cerror.ErrIncompatibleConfig.GenWithStackByArgs()
-		}
-	}
-
-	return nil
 }

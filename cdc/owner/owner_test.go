@@ -74,16 +74,19 @@ func newOwner4Test(
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error),
 	pdClient pd.Client,
+	etcdClient etcd.CDCEtcdClient,
 ) Owner {
 	m := upstream.NewManager4Test(pdClient)
-	o := NewOwner(m, config.NewDefaultSchedulerConfig()).(*ownerImpl)
+	o := NewOwner(m, config.NewDefaultSchedulerConfig(), etcdClient).(*ownerImpl)
 	o.newChangefeed = func(
 		id model.ChangeFeedID,
-		state *orchestrator.ChangefeedReactorState,
+		cfInfo *model.ChangeFeedInfo,
+		cfStatus *model.ChangeFeedStatus,
+		cfstateManager FeedStateManager,
 		up *upstream.Upstream,
 		cfg *config.SchedulerConfig,
 	) *changefeed {
-		return newChangefeed4Test(id, state, up, newDDLPuller, newSink,
+		return newChangefeed4Test(id, cfInfo, cfStatus, cfstateManager, up, newDDLPuller, newSink,
 			newScheduler, newDownstreamObserver)
 	}
 	return o
@@ -128,6 +131,7 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 			return observer.NewDummyObserver(), nil
 		},
 		pdClient,
+		nil,
 	)
 	o := owner.(*ownerImpl)
 	o.upstreamManager = upstream.NewManager4Test(pdClient)
@@ -421,11 +425,20 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	ctx1, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 
-	var errIn error
 	var infos map[model.ChangeFeedID]*model.ChangeFeedInfo
 	done := make(chan struct{})
 	go func() {
-		infos, errIn = statusProvider.GetAllChangeFeedInfo(ctx1)
+		info1, err := statusProvider.GetChangeFeedInfo(ctx1, cf1)
+		require.Nil(t, err)
+		info2, err := statusProvider.GetChangeFeedInfo(ctx1, cf2)
+		require.Nil(t, err)
+		info3, err := statusProvider.GetChangeFeedInfo(ctx1, cf3)
+		require.Nil(t, err)
+		infos = map[model.ChangeFeedID]*model.ChangeFeedInfo{
+			cf1: info1,
+			cf2: info2,
+			cf3: info3,
+		}
 		done <- struct{}{}
 	}()
 
@@ -443,7 +456,6 @@ WorkLoop:
 			require.Nil(t, err)
 		}
 	}
-	require.Nil(t, errIn)
 	require.NotNil(t, infos[cf1])
 	require.NotNil(t, infos[cf2])
 	require.NotNil(t, infos[cf3])
@@ -483,11 +495,13 @@ func TestAsyncStop(t *testing.T) {
 func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 	t.Parallel()
 
+	state := &orchestrator.ChangefeedReactorState{
+		Info: &model.ChangeFeedInfo{State: model.StateNormal},
+	}
 	cf := &changefeed{
-		scheduler: nil, // scheduler is not set.
-		state: &orchestrator.ChangefeedReactorState{
-			Info: &model.ChangeFeedInfo{State: model.StateNormal},
-		},
+		scheduler:    nil, // scheduler is not set.
+		latestStatus: state.Status,
+		latestInfo:   state.Info,
 	}
 
 	pdClient := &gc.MockPDClient{}
@@ -522,7 +536,7 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 	require.Nil(t, <-done)
 
 	// Only count changefeed that is normal.
-	cf.state.Info.State = model.StateStopped
+	state.Info.State = model.StateStopped
 	query = &scheduler.Query{CaptureID: "test"}
 	done = make(chan error, 1)
 	o.handleDrainCaptures(ctx, query, done)
@@ -565,19 +579,19 @@ func TestIsHealthyWithAbnormalChangefeeds(t *testing.T) {
 	require.True(t, query.Data.(bool))
 
 	// state is not normal
-	cf.state = &orchestrator.ChangefeedReactorState{
+	state := &orchestrator.ChangefeedReactorState{
 		Info: &model.ChangeFeedInfo{State: model.StateStopped},
 	}
+	cf.latestInfo = state.Info
+	cf.latestStatus = state.Status
 	err = o.handleQueries(query)
 	require.NoError(t, err)
 	require.True(t, query.Data.(bool))
 
 	// 2 changefeeds, another is normal, and scheduler initialized.
 	o.changefeeds[model.ChangeFeedID{ID: "2"}] = &changefeed{
-		state: &orchestrator.ChangefeedReactorState{
-			Info: &model.ChangeFeedInfo{State: model.StateNormal},
-		},
-		scheduler: &healthScheduler{init: true},
+		latestInfo: &model.ChangeFeedInfo{State: model.StateNormal},
+		scheduler:  &healthScheduler{init: true},
 	}
 	err = o.handleQueries(query)
 	require.NoError(t, err)
@@ -622,10 +636,8 @@ func TestIsHealthy(t *testing.T) {
 
 	// changefeed in normal, but the scheduler is not set, Unhealthy.
 	cf := &changefeed{
-		state: &orchestrator.ChangefeedReactorState{
-			Info: &model.ChangeFeedInfo{State: model.StateNormal},
-		},
-		scheduler: nil, // scheduler is not set.
+		latestInfo: &model.ChangeFeedInfo{State: model.StateNormal},
+		scheduler:  nil, // scheduler is not set.
 	}
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = cf
 	o.changefeedTicked = true
@@ -648,10 +660,8 @@ func TestIsHealthy(t *testing.T) {
 
 	// Unhealthy, there is another changefeed is not initialized.
 	o.changefeeds[model.ChangeFeedID{ID: "1"}] = &changefeed{
-		state: &orchestrator.ChangefeedReactorState{
-			Info: &model.ChangeFeedInfo{State: model.StateNormal},
-		},
-		scheduler: &healthScheduler{init: false},
+		latestInfo: &model.ChangeFeedInfo{State: model.StateNormal},
+		scheduler:  &healthScheduler{init: false},
 	}
 	o.changefeedTicked = true
 	err = o.handleQueries(query)

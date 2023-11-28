@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
+	capturev2 "github.com/pingcap/tiflow/cdcv2/capture"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -39,18 +40,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/tcpserver"
-	"github.com/pingcap/tiflow/pkg/util"
 	p2pProto "github.com/pingcap/tiflow/proto/p2p"
 	pd "github.com/tikv/pd/client"
-	"go.etcd.io/etcd/client/pkg/v3/logutil"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/net/netutil"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -61,6 +57,8 @@ const (
 	maxHTTPConnection = 1000
 	// httpConnectionTimeout is used to limit a connection max alive time of http server.
 	httpConnectionTimeout = 10 * time.Minute
+	// maxGcTunerMemory is used to limit the max memory usage of cdc server. if the memory is larger than it, gc tuner will be disabled
+	maxGcTunerMemory = 512 * 1024 * 1024 * 1024
 )
 
 // Server is the interface for the TiCDC server
@@ -78,11 +76,15 @@ type Server interface {
 // TODO: we need to make server more unit testable and add more test cases.
 // Especially we need to decouple the HTTPServer out of server.
 type server struct {
-	capture           capture.Capture
-	tcpServer         tcpserver.TCPServer
-	grpcService       *p2p.ServerWrapper
-	statusServer      *http.Server
-	etcdClient        etcd.CDCEtcdClient
+	capture      capture.Capture
+	tcpServer    tcpserver.TCPServer
+	grpcService  *p2p.ServerWrapper
+	statusServer *http.Server
+	etcdClient   etcd.CDCEtcdClient
+	// pdClient is the default upstream PD client.
+	// The PD acts as a metadata management service for TiCDC.
+	pdClient          pd.Client
+	pdAPIClient       pdutil.PDAPIClient
 	pdEndpoints       []string
 	sortEngineFactory *factory.SortEngineFactory
 }
@@ -125,35 +127,21 @@ func New(pdEndpoints []string) (*server, error) {
 func (s *server) prepare(ctx context.Context) error {
 	conf := config.GetGlobalServerConfig()
 
-	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	tlsConfig, err := conf.Security.ToTLSConfig()
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	logConfig := logutil.DefaultZapLoggerConfig
-	logConfig.Level = zap.NewAtomicLevelAt(zapcore.ErrorLevel)
-
-	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
-	// we do not pass a `context` to the etcd client,
-	// to prevent it's cancelled when the server is closing.
-	// For example, when the non-owner node goes offline,
-	// it would resign the campaign key which was put by call `campaign`,
-	// if this is not done due to the passed context cancelled,
-	// the key will be kept for the lease TTL, which is 10 seconds,
-	// then cause the new owner cannot be elected immediately after the old owner offline.
-	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
-	etcdCli, err := clientv3.New(clientv3.Config{
-		Endpoints:        s.pdEndpoints,
-		TLS:              tlsConfig,
-		LogConfig:        &logConfig,
-		DialTimeout:      5 * time.Second,
-		AutoSyncInterval: 30 * time.Second,
-		DialOptions: []grpc.DialOption{
+	grpcTLSOption, err := conf.Security.ToGRPCDialOption()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("create pd client", zap.Strings("endpoints", s.pdEndpoints))
+	s.pdClient, err = pd.NewClientWithContext(
+		ctx, s.pdEndpoints, conf.Security.PDSecurityOption(),
+		// the default `timeout` is 3s, maybe too small if the pd is busy,
+		// set to 10s to avoid frequent timeout.
+		pd.WithCustomTimeoutOption(10*time.Second),
+		pd.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
@@ -165,12 +153,24 @@ func (s *server) prepare(ctx context.Context) error {
 				},
 				MinConnectTimeout: 3 * time.Second,
 			}),
-			grpc.WithKeepaliveParams(keepalive.ClientParameters{
-				Time:    10 * time.Second,
-				Timeout: 20 * time.Second,
-			}),
-		},
-	})
+		))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.pdAPIClient, err = pdutil.NewPDAPIClient(s.pdClient, conf.Security)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
+	// we do not pass a `context` to create a the etcd client,
+	// to prevent it's cancelled when the server is closing.
+	// For example, when the non-owner node goes offline,
+	// it would resign the campaign key which was put by call `campaign`,
+	// if this is not done due to the passed context cancelled,
+	// the key will be kept for the lease TTL, which is 10 seconds,
+	// then cause the new owner cannot be elected immediately after the old owner offline.
+	// see https://github.com/etcd-io/etcd/blob/525d53bd41/client/v3/concurrency/election.go#L98
+	etcdCli, err := etcd.CreateRawEtcdClient(tlsConfig, grpcTLSOption, s.pdEndpoints...)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -181,39 +181,52 @@ func (s *server) prepare(ctx context.Context) error {
 	}
 	s.etcdClient = cdcEtcdClient
 
+	// Collect all endpoints from pd here to make the server more robust.
+	// Because in some scenarios, the deployer may only provide one pd endpoint,
+	// this will cause the TiCDC server to fail to restart when some pd node is down.
+	allPDEndpoints, err := s.pdAPIClient.CollectMemberEndpoints(ctx)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	s.pdEndpoints = append(s.pdEndpoints, allPDEndpoints...)
+
 	err = s.initDir(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	s.createSortEngineFactory()
+	s.setMemoryLimit()
 
-	if err := s.setMemoryLimit(); err != nil {
-		return errors.Trace(err)
+	if conf.Debug.CDCV2.Enable {
+		s.capture = capturev2.NewCapture(s.pdEndpoints, cdcEtcdClient,
+			s.grpcService, s.sortEngineFactory, s.pdClient)
+	} else {
+		s.capture = capture.NewCapture(s.pdEndpoints, cdcEtcdClient,
+			s.grpcService, s.sortEngineFactory, s.pdClient)
 	}
-
-	s.capture = capture.NewCapture(
-		s.pdEndpoints, cdcEtcdClient, s.grpcService, s.sortEngineFactory)
-
 	return nil
 }
 
-func (s *server) setMemoryLimit() error {
+func (s *server) setMemoryLimit() {
 	conf := config.GetGlobalServerConfig()
-	totalMemory, err := util.GetMemoryLimit()
-	if err != nil {
-		return errors.Trace(err)
+	if conf.GcTunerMemoryThreshold > maxGcTunerMemory {
+		// If total memory is larger than 512GB, we will not set memory limit.
+		// Because the memory limit is not accurate, and it is not necessary to set memory limit.
+		log.Info("total memory is larger than 512GB, skip setting memory limit",
+			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
+			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
+		)
+		return
 	}
-	if conf.MaxMemoryPercentage > 0 {
-		goMemLimit := totalMemory * uint64(conf.MaxMemoryPercentage) / 100
+	if conf.GcTunerMemoryThreshold > 0 {
 		gctuner.EnableGOGCTuner.Store(true)
-		gctuner.Tuning(goMemLimit)
+		gctuner.Tuning(conf.GcTunerMemoryThreshold)
 		log.Info("enable gctuner, set memory limit",
-			zap.Uint64("bytes", goMemLimit),
-			zap.String("memory", humanize.IBytes(goMemLimit)),
+			zap.Uint64("bytes", conf.GcTunerMemoryThreshold),
+			zap.String("memory", humanize.IBytes(conf.GcTunerMemoryThreshold)),
 		)
 	}
-	return nil
 }
 
 func (s *server) createSortEngineFactory() {
@@ -289,18 +302,7 @@ func (s *server) startStatusHTTP(lis net.Listener) error {
 	return nil
 }
 
-func (s *server) etcdHealthChecker(ctx context.Context) error {
-	conf := config.GetGlobalServerConfig()
-	grpcClient, err := pd.NewClientWithContext(ctx, s.pdEndpoints, conf.Security.PDSecurityOption())
-	if err != nil {
-		return errors.Trace(err)
-	}
-	pc, err := pdutil.NewPDAPIClient(grpcClient, conf.Security)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	defer pc.Close()
-
+func (s *server) upstreamPDHealthChecker(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second * 3)
 	defer ticker.Stop()
 
@@ -309,7 +311,7 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			endpoints, err := pc.CollectMemberEndpoints(ctx)
+			endpoints, err := s.pdAPIClient.CollectMemberEndpoints(ctx)
 			if err != nil {
 				log.Warn("etcd health check: cannot collect all members", zap.Error(err))
 				continue
@@ -317,7 +319,7 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 			for _, endpoint := range endpoints {
 				start := time.Now()
 				ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				if err := pc.Healthy(ctx, endpoint); err != nil {
+				if err := s.pdAPIClient.Healthy(ctx, endpoint); err != nil {
 					log.Warn("etcd health check error",
 						zap.String("endpoint", endpoint), zap.Error(err))
 				}
@@ -338,6 +340,7 @@ func (s *server) etcdHealthChecker(ctx context.Context) error {
 func (s *server) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	defer s.pdAPIClient.Close()
 
 	eg, egCtx := errgroup.WithContext(ctx)
 
@@ -346,7 +349,7 @@ func (s *server) run(ctx context.Context) (err error) {
 	})
 
 	eg.Go(func() error {
-		return s.etcdHealthChecker(egCtx)
+		return s.upstreamPDHealthChecker(egCtx)
 	})
 
 	eg.Go(func() error {
@@ -375,6 +378,11 @@ func (s *server) run(ctx context.Context) (err error) {
 // Drain removes tables in the current TiCDC instance.
 // It's part of graceful shutdown, should be called before Close.
 func (s *server) Drain() <-chan struct{} {
+	if s.capture == nil {
+		done := make(chan struct{})
+		close(done)
+		return done
+	}
 	return s.capture.Drain()
 }
 
@@ -400,6 +408,10 @@ func (s *server) Close() {
 			log.Error("close tcp server", zap.Error(err))
 		}
 		s.tcpServer = nil
+	}
+
+	if s.pdClient != nil {
+		s.pdClient.Close()
 	}
 }
 

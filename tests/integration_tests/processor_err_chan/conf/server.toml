@@ -1,0 +1,2 @@
+[kv-client]
+enable-multiplexing = false

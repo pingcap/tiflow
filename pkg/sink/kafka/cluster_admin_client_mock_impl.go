@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -38,7 +38,7 @@ const (
 	// default to 1048576, identical to kafka broker's `message.max.bytes` and topic's `max.message.bytes`
 	// see: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
 	// see: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
-	defaultMaxMessageBytes = "1048576"
+	defaultMaxMessageBytes = "1048588"
 
 	// defaultMinInsyncReplicas specifies the default `min.insync.replicas` for broker and topic.
 	defaultMinInsyncReplicas = "1"

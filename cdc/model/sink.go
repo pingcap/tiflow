@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
@@ -271,7 +272,7 @@ func (r *RedoLog) GetCommitTs() Ts {
 }
 
 // TrySplitAndSortUpdateEvent redo log do nothing
-func (r *RedoLog) TrySplitAndSortUpdateEvent() error {
+func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string) error {
 	return nil
 }
 
@@ -379,7 +380,7 @@ func (r *RowChangedEvent) GetCommitTs() uint64 {
 }
 
 // TrySplitAndSortUpdateEvent do nothing
-func (r *RowChangedEvent) TrySplitAndSortUpdateEvent() error {
+func (r *RowChangedEvent) TrySplitAndSortUpdateEvent(_ string) error {
 	return nil
 }
 
@@ -603,20 +604,26 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 			continue
 		}
 		if firstCol.Flag.IsPrimaryKey() {
-			indexInfo.Primary = true
 			indexInfo.Unique = true
 		}
 		if firstCol.Flag.IsUniqueKey() {
 			indexInfo.Unique = true
 		}
 
+		isPrimary := true
 		for _, offset := range colOffsets {
-			col := ret.Columns[offset]
+			col := columns[offset]
+			// When only all columns in the index are primary key, then the index is primary key.
+			if col == nil || !col.Flag.IsPrimaryKey() {
+				isPrimary = false
+			}
 
+			tiCol := ret.Columns[offset]
 			indexCol := &model.IndexColumn{}
-			indexCol.Name = col.Name
+			indexCol.Name = tiCol.Name
 			indexCol.Offset = offset
 			indexInfo.Columns = append(indexInfo.Columns, indexCol)
+			indexInfo.Primary = isPrimary
 		}
 
 		// TODO: revert the "all column set index related flag" to "only the
@@ -682,6 +689,7 @@ type DDLEvent struct {
 	Done         atomic.Bool      `msg:"-"`
 	Charset      string           `msg:"-"`
 	Collate      string           `msg:"-"`
+	IsBootstrap  bool             `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job
@@ -767,8 +775,8 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 }
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
-func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
-	if len(t.Rows) < 2 {
+func (t *SingleTableTxn) TrySplitAndSortUpdateEvent(scheme string) error {
+	if !t.shouldSplitUpdateEvent(scheme) {
 		return nil
 	}
 	newRows, err := trySplitAndSortUpdateEvent(t.Rows)
@@ -777,6 +785,22 @@ func (t *SingleTableTxn) TrySplitAndSortUpdateEvent() error {
 	}
 	t.Rows = newRows
 	return nil
+}
+
+// Whether split a single update event into delete and insert events？
+//
+// For the MySQL Sink, there is no need to split a single unique key changed update event, this
+// is also to keep the backward compatibility, the same behavior as before.
+//
+// For the Kafka and Storage sink, always split a single unique key changed update event, since:
+// 1. Avro and CSV does not output the previous column values for the update event, so it would
+// cause consumer missing data if the unique key changed event is not split.
+// 2. Index-Value Dispatcher cannot work correctly if the unique key changed event isn't split.
+func (t *SingleTableTxn) shouldSplitUpdateEvent(sinkScheme string) bool {
+	if len(t.Rows) < 2 && sink.IsMySQLCompatibleScheme(sinkScheme) {
+		return false
+	}
+	return true
 }
 
 // trySplitAndSortUpdateEvent try to split update events if unique key is updated

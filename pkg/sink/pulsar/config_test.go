@@ -19,10 +19,21 @@ import (
 	"time"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPulsarConfig(t *testing.T) {
+	p := &config.PulsarConfig{
+		CompressionType:         (*config.PulsarCompressionType)(aws.String("lz4")),
+		ConnectionTimeout:       (*config.TimeSec)(aws.Int(defaultConnectionTimeout)),
+		OperationTimeout:        (*config.TimeSec)(aws.Int(998)),
+		BatchingMaxMessages:     aws.Uint(defaultBatchingMaxSize),
+		BatchingMaxPublishDelay: (*config.TimeMill)(aws.Int(defaultBatchingMaxPublishDelay)),
+		SendTimeout:             (*config.TimeSec)(aws.Int(123)),
+	}
+
 	// Define test cases
 	tests := []struct {
 		name    string
@@ -49,8 +60,11 @@ func TestPulsarConfig(t *testing.T) {
 				t.Fatalf("Failed to parse sinkURI: %v", err)
 			}
 
+			replicaConfig := config.GetDefaultReplicaConfig()
+
+			replicaConfig.Sink.PulsarConfig = p
 			// Call function under test
-			config, err := NewPulsarConfig(sink)
+			config, err := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 
 			// Assert error value
 			if tt.wantErr {
@@ -61,13 +75,13 @@ func TestPulsarConfig(t *testing.T) {
 
 			// If no error is expected, assert config values
 			if !tt.wantErr {
-				assert.Equal(t, config.CompressionType, pulsar.LZ4)
-				assert.Equal(t, config.URL, "pulsar://127.0.0.1:6650")
-				assert.Equal(t, config.ConnectionTimeout, defaultConnectionTimeout)
-				assert.Equal(t, config.OperationTimeout, 998*time.Second)
-				assert.Equal(t, config.BatchingMaxMessages, defaultBatchingMaxSize)
-				assert.Equal(t, config.BatchingMaxPublishDelay, defaultBatchingMaxPublishDelay)
-				assert.Equal(t, config.SendTimeout, 123*time.Second)
+				assert.Equal(t, config.CompressionType.Value(), pulsar.LZ4)
+				assert.Equal(t, config.BrokerURL, "pulsar://127.0.0.1:6650")
+				assert.Equal(t, config.ConnectionTimeout.Duration(), defaultConnectionTimeout*time.Second)
+				assert.Equal(t, config.OperationTimeout.Duration(), 998*time.Second)
+				assert.Equal(t, *config.BatchingMaxMessages, defaultBatchingMaxSize)
+				assert.Equal(t, config.BatchingMaxPublishDelay.Duration(), defaultBatchingMaxPublishDelay*time.Millisecond)
+				assert.Equal(t, config.SendTimeout.Duration(), 123*time.Second)
 			}
 		})
 	}
@@ -75,25 +89,30 @@ func TestPulsarConfig(t *testing.T) {
 
 func TestGetBrokerURL(t *testing.T) {
 	sink, _ := url.Parse("pulsar://localhost:6650/test")
-	config, _ := NewPulsarConfig(sink)
 
-	assert.Equal(t, config.GetBrokerURL(), "pulsar://localhost:6650")
+	replicaConfig := config.GetDefaultReplicaConfig()
+	config, _ := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
+
+	assert.Equal(t, config.BrokerURL, "pulsar://localhost:6650")
 }
 
 func TestGetSinkURI(t *testing.T) {
 	sink, _ := url.Parse("pulsar://127.0.0.1:6650/persistent://tenant/namespace/test-topic" +
 		"?max-message-bytes=5000&compression=lz4")
-	config, _ := NewPulsarConfig(sink)
 
-	assert.Equal(t, config.GetSinkURI(), sink)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	config, _ := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
+
+	assert.Equal(t, config.SinkURI, sink)
 }
 
 func TestGetDefaultTopicName(t *testing.T) {
 	sink, _ := url.Parse("pulsar://localhost:6650/test")
-	config, _ := NewPulsarConfig(sink)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	config, _ := NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 	assert.Equal(t, config.GetDefaultTopicName(), "test")
 
 	sink, _ = url.Parse("pulsar://127.0.0.1:6650/persistent://tenant/namespace/test-topic")
-	config, _ = NewPulsarConfig(sink)
+	config, _ = NewPulsarConfig(sink, replicaConfig.Sink.PulsarConfig)
 	assert.Equal(t, config.GetDefaultTopicName(), "persistent://tenant/namespace/test-topic")
 }

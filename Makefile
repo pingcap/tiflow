@@ -58,7 +58,14 @@ else ifeq (${OS}, "darwin")
 	CGO := 1
 endif
 
-GOBUILD  := CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+BUILD_FLAG =
+GOEXPERIMENT=
+ifeq ("${ENABLE_FIPS}", "1")
+	BUILD_FLAG = -tags boringcrypto
+	GOEXPERIMENT = GOEXPERIMENT=boringcrypto
+	CGO = 1
+endif
+GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race --tags=intest
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
@@ -72,7 +79,9 @@ DM_PACKAGE_LIST := go list github.com/pingcap/tiflow/dm/... | grep -vE 'pb|pbmoc
 PACKAGES := $$($(PACKAGE_LIST))
 PACKAGES_TICDC := $$($(PACKAGE_LIST_WITHOUT_DM_ENGINE))
 DM_PACKAGES := $$($(DM_PACKAGE_LIST))
-ENGINE_PACKAGE_LIST := go list github.com/pingcap/tiflow/engine/... | grep -vE 'pb|proto|engine/test/e2e'
+# NOTE: ignore engine/framework because of a race in testify. See #9619
+# ENGINE_PACKAGE_LIST := go list github.com/pingcap/tiflow/engine/... | grep -vE 'pb|proto|engine/test/e2e'
+ENGINE_PACKAGE_LIST := go list github.com/pingcap/tiflow/engine/... | grep -vE "pb|proto|engine/test/e2e|engine/framework$$"
 ENGINE_PACKAGES := $$($(ENGINE_PACKAGE_LIST))
 FILES := $$(find . -name '*.go' -type f | grep -vE 'vendor|_gen|proto|pb\.go|pb\.gw\.go|_mock.go')
 TEST_FILES := $$(find . -name '*_test.go' -type f | grep -vE 'vendor|kv_gen|integration|testing_utils')
@@ -92,7 +101,7 @@ MAKE_FILES = $(shell find . \( -name 'Makefile' -o -name '*.mk' \) -print)
 
 RELEASE_VERSION =
 ifeq ($(RELEASE_VERSION),)
-	RELEASE_VERSION := v7.2.0-master
+	RELEASE_VERSION := v7.6.0-master
 	release_version_regex := ^v[0-9]\..*$$
 	release_branch_regex := "^release-[0-9]\.[0-9].*$$|^HEAD$$|^.*/*tags/v[0-9]\.[0-9]\..*$$"
 	ifneq ($(shell git rev-parse --abbrev-ref HEAD | grep -E $(release_branch_regex)),)
@@ -153,7 +162,7 @@ build-cdc-with-failpoint: ## Build cdc with failpoint enabled.
 	$(FAILPOINT_DISABLE)
 
 cdc:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
 
 kafka_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go
@@ -161,13 +170,23 @@ kafka_consumer:
 storage_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_storage_consumer ./cmd/storage-consumer/main.go
 
-kafka_consumer_image: 
+pulsar_consumer:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_pulsar_consumer ./cmd/pulsar-consumer/main.go
+
+kafka_consumer_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	DOCKER_BUILDKIT=1 docker build -f ./deployments/ticdc/docker/kafka-consumer.Dockerfile . -t ticdc:kafka-consumer  --platform linux/amd64
 
-storage_consumer_image: 
+storage_consumer_image:
 	@which docker || (echo "docker not found in ${PATH}"; exit 1)
 	DOCKER_BUILDKIT=1 docker build -f ./deployments/ticdc/docker/storage-consumer.Dockerfile . -t ticdc:storage-consumer  --platform linux/amd64
+
+pulsar_consumer_image:
+	@which docker || (echo "docker not found in ${PATH}"; exit 1)
+	DOCKER_BUILDKIT=1 docker build -f ./deployments/ticdc/docker/pulsar-consumer.Dockerfile . -t ticdc:pulsar-consumer  --platform linux/amd64
+
+filter_helper:
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_filter_helper ./cmd/filter-helper/main.go
 
 install:
 	go install ./...
@@ -210,7 +229,7 @@ check_third_party_binary:
 	@which bin/minio
 	@which bin/bin/schema-registry-start
 
-integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer
+integration_test_build: check_failpoint_ctl storage_consumer kafka_consumer pulsar_consumer
 	$(FAILPOINT_ENABLE)
 	$(GOTEST) -ldflags '$(LDFLAGS)' -c -cover -covermode=atomic \
 		-coverpkg=github.com/pingcap/tiflow/... \
@@ -242,6 +261,9 @@ integration_test_kafka: check_third_party_binary
 
 integration_test_storage:
 	tests/integration_tests/run.sh storage "$(CASE)" "$(START_AT)"
+
+integration_test_pulsar:
+	tests/integration_tests/run.sh pulsar "$(CASE)" "$(START_AT)"
 
 kafka_docker_integration_test: ## Run TiCDC Kafka all integration tests in Docker.
 kafka_docker_integration_test: clean_integration_test_containers
@@ -326,13 +348,13 @@ check-static: tools/bin/golangci-lint
 	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
 
 check: check-copyright generate_mock go-generate fmt check-static tidy terror_check errdoc \
-	check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec check-makefiles \
-	check_cdc_integration_test check_dm_integration_test check_engine_integration_test 
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width check-makefiles \
+	check_cdc_integration_test check_dm_integration_test check_engine_integration_test
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 fast_check: check-copyright fmt check-static tidy terror_check errdoc \
-	check-merge-conflicts check-ticdc-dashboard check-diff-line-width swagger-spec check-makefiles \
-	check_cdc_integration_test check_dm_integration_test check_engine_integration_test 
+	check-merge-conflicts check-ticdc-dashboard check-diff-line-width check-makefiles \
+	check_cdc_integration_test check_dm_integration_test check_engine_integration_test
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
 
 integration_test_coverage: tools/bin/gocovmerge tools/bin/goveralls
@@ -351,10 +373,7 @@ unit_test_coverage:
 
 data-flow-diagram: docs/data-flow.dot
 	dot -Tsvg docs/data-flow.dot > docs/data-flow.svg
-
-swagger-spec: tools/bin/swag
-	tools/bin/swag init --exclude dm,engine --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
-
+	
 generate_mock: ## Generate mock code.
 generate_mock: tools/bin/mockgen
 	scripts/generate-mock.sh

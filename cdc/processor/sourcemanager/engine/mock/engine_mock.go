@@ -187,6 +187,21 @@ func (mr *MockSortEngineMockRecorder) RemoveTable(span interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTable", reflect.TypeOf((*MockSortEngine)(nil).RemoveTable), span)
 }
 
+// SlotsAndHasher mocks base method.
+func (m *MockSortEngine) SlotsAndHasher() (int, func(tablepb.Span, int) int) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SlotsAndHasher")
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(func(tablepb.Span, int) int)
+	return ret0, ret1
+}
+
+// SlotsAndHasher indicates an expected call of SlotsAndHasher.
+func (mr *MockSortEngineMockRecorder) SlotsAndHasher() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotsAndHasher", reflect.TypeOf((*MockSortEngine)(nil).SlotsAndHasher))
+}
+
 // MockEventIterator is a mock of EventIterator interface.
 type MockEventIterator struct {
 	ctrl     *gomock.Controller

@@ -61,7 +61,8 @@ func (suite *redoLogWorkerSuite) createWorker(
 	ctx context.Context, memQuota uint64,
 ) (*redoWorker, engine.SortEngine, *mockRedoDMLManager) {
 	sortEngine := memory.New(context.Background())
-	sm := sourcemanager.New(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
+	// Only sourcemanager.FetcyByTable is used, so NewForTest is fine.
+	sm := sourcemanager.NewForTest(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
 		&entry.MockMountGroup{}, sortEngine, false)
 	go func() { _ = sm.Run(ctx) }()
 
@@ -74,7 +75,7 @@ func (suite *redoLogWorkerSuite) createWorker(
 	eventCache := newRedoEventCache(suite.testChangefeedID, 1024)
 
 	return newRedoWorker(suite.testChangefeedID, sm, quota,
-		redoDMLManager, eventCache, false), sortEngine, redoDMLManager
+		redoDMLManager, eventCache), sortEngine, redoDMLManager
 }
 
 func (suite *redoLogWorkerSuite) addEventsToSortEngine(
@@ -280,6 +281,50 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceIfNoWorkloa
 	require.Eventually(suite.T(), func() bool {
 		return m.GetResolvedTs(suite.testSpan) == 4
 	}, 5*time.Second, 10*time.Millisecond, "Directly advance resolved mark to 4")
+	cancel()
+	wg.Wait()
+}
+
+// When starts to handle a task, advancer.lastPos should be set to a correct position.
+// Otherwise if advancer.lastPos isn't updated during scanning, callback will get an
+// invalid `advancer.lastPos`.
+func (suite *redoLogWorkerSuite) TestHandleTaskWithoutMemory() {
+	ctx, cancel := context.WithCancel(context.Background())
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(1, 3, suite.testSpan),
+		genPolymorphicResolvedEvent(4),
+	}
+	w, e, _ := suite.createWorker(ctx, 0)
+	defer w.memQuota.Close()
+	suite.addEventsToSortEngine(events, e)
+
+	taskChan := make(chan *redoTask)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := w.handleTasks(ctx, taskChan)
+		require.Equal(suite.T(), context.Canceled, err)
+	}()
+
+	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	defer sink.Close()
+
+	chShouldBeClosed := make(chan struct{}, 1)
+	callback := func(lastWritePos engine.Position) {
+		require.Equal(suite.T(), genLowerBound().Prev(), lastWritePos)
+		close(chShouldBeClosed)
+	}
+	taskChan <- &redoTask{
+		span:          suite.testSpan,
+		lowerBound:    genLowerBound(),
+		getUpperBound: genUpperBoundGetter(4),
+		tableSink:     wrapper,
+		callback:      callback,
+		isCanceled:    func() bool { return true },
+	}
+
+	<-chShouldBeClosed
 	cancel()
 	wg.Wait()
 }

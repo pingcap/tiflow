@@ -17,10 +17,12 @@ import (
 	"context"
 	"math"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -35,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	putil "github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -65,6 +68,7 @@ type eventFragment struct {
 // It will send the events to cloud storage systems.
 type DMLSink struct {
 	changefeedID model.ChangeFeedID
+	scheme       string
 	// last sequence number
 	lastSeqNum uint64
 	// encodingWorkers defines a group of workers for encoding events.
@@ -78,7 +82,7 @@ type DMLSink struct {
 	alive struct {
 		sync.RWMutex
 		// msgCh is a channel to hold eventFragment.
-		msgCh  chan eventFragment
+		msgCh  *chann.DrainableChann[eventFragment]
 		isDead bool
 	}
 
@@ -121,7 +125,7 @@ func NewDMLSink(ctx context.Context,
 	ext := util.GetFileExtension(protocol)
 	// the last param maxMsgBytes is mainly to limit the size of a single message for
 	// batch protocols in mq scenario. In cloud storage sink, we just set it to max int.
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, protocol, replicaConfig, math.MaxInt)
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, protocol, replicaConfig, math.MaxInt)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -133,13 +137,14 @@ func NewDMLSink(ctx context.Context,
 	wgCtx, wgCancel := context.WithCancel(ctx)
 	s := &DMLSink{
 		changefeedID:    changefeedID,
+		scheme:          strings.ToLower(sinkURI.Scheme),
 		encodingWorkers: make([]*encodingWorker, defaultEncodingConcurrency),
 		workers:         make([]*dmlWorker, cfg.WorkerCount),
 		statistics:      metrics.NewStatistics(wgCtx, changefeedID, sink.TxnSink),
 		cancel:          wgCancel,
 		dead:            make(chan struct{}),
 	}
-	s.alive.msgCh = make(chan eventFragment, defaultChannelSize)
+	s.alive.msgCh = chann.NewAutoDrainChann[eventFragment]()
 
 	encodedCh := make(chan eventFragment, defaultChannelSize)
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
@@ -147,7 +152,7 @@ func NewDMLSink(ctx context.Context,
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh, encodedCh)
+		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedCh)
 	}
 	// create defragmenter.
 	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
@@ -167,7 +172,7 @@ func NewDMLSink(ctx context.Context,
 
 		s.alive.Lock()
 		s.alive.isDead = true
-		close(s.alive.msgCh)
+		s.alive.msgCh.CloseAndDrain()
 		s.alive.Unlock()
 		close(s.dead)
 
@@ -206,6 +211,11 @@ func (s *DMLSink) run(ctx context.Context) error {
 		})
 	}
 
+	log.Info("dml worker started", zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.Int("workerCount", len(s.workers)),
+		zap.Any("config", s.workers[0].config))
+
 	return eg.Wait()
 }
 
@@ -233,7 +243,7 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 
 		s.statistics.ObserveRows(txn.Event.Rows...)
 		// emit a TxnCallbackableEvent encoupled with a sequence number starting from one.
-		s.alive.msgCh <- eventFragment{
+		s.alive.msgCh.In() <- eventFragment{
 			seqNumber:      seq,
 			versionedTable: tbl,
 			event:          txn,
@@ -266,4 +276,9 @@ func (s *DMLSink) Close() {
 // Dead checks whether it's dead or not.
 func (s *DMLSink) Dead() <-chan struct{} {
 	return s.dead
+}
+
+// Scheme returns the sink scheme.
+func (s *DMLSink) Scheme() string {
+	return s.scheme
 }

@@ -114,7 +114,7 @@ func TestChangefeedFastFailError(t *testing.T) {
 	require.Equal(t, false, IsChangefeedGCFastFailErrorCode(rfcCode))
 }
 
-func TestIsChangefeedUnRetryableError(t *testing.T) {
+func TestShouldFailChangefeed(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		err      error
@@ -171,8 +171,14 @@ func TestIsChangefeedUnRetryableError(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		require.Equal(t, c.expected, IsChangefeedUnRetryableError(c.err))
+		require.Equal(t, c.expected, ShouldFailChangefeed(c.err))
 	}
+
+	var code errors.RFCErrorCode
+	var ok bool
+	code, ok = RFCCode(ErrChangefeedUnretryable)
+	require.True(t, ok)
+	require.True(t, ShouldFailChangefeed(errors.New(string(code))))
 }
 
 func TestIsCliUnprintableError(t *testing.T) {

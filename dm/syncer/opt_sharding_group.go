@@ -233,3 +233,11 @@ func (k *OptShardingGroupKeeper) RemoveSchema(schema string) {
 		}
 	}
 }
+
+// Reset resets the keeper.
+func (k *OptShardingGroupKeeper) Reset() {
+	k.Lock()
+	defer k.Unlock()
+	k.groups = make(map[string]*OptShardingGroup)
+	k.shardingReSyncs = make(map[string]binlog.Location)
+}

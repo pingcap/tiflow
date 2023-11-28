@@ -8,6 +8,11 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 
 db_name=$TEST_NAME
 
+function get_gtid_executed() {
+	gtid_executed=$(echo "show master status;" | MYSQL_PWD=123456 mysql -uroot -h$1 -P$2 | awk 'FNR == 2 {print $3}')
+	echo $gtid_executed
+}
+
 function prepare_dm_and_source() {
 	cleanup_process $*
 	cleanup_data $db_name
@@ -719,6 +724,79 @@ function test_dup_autopk() {
 		"new\/ignored\/resolved: 0\/0\/0" 2
 }
 
+function test_update_validator() {
+	# backup it, will change it in the following case
+	cp $cur/conf/dm-task-standalone.yaml $cur/conf/dm-task-standalone.yaml.bak
+	cp $cur/conf/source1.yaml $cur/conf/source1.yaml.bak
+
+	trap restore_on_case_exit EXIT
+	# clear fail point
+	export GO_FAILPOINTS=""
+	cp $cur/conf/source1.yaml.bak $cur/conf/source1.yaml
+	sed -i 's/enable-gtid: false/enable-gtid: 'true'/g' $cur/conf/source1.yaml
+	sed -i 's/enable-relay: false/enable-relay: 'true'/g' $cur/conf/source1.yaml
+	run_sql_source1 "flush binary logs"
+	sleep 1
+	run_sql_source1 "purge binary logs before now()"
+	prepare_dm_and_source
+	dmctl_start_task_standalone $cur/conf/dm-task-standalone-long-interval.yaml --remove-meta
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"config source $SOURCE_ID1" \
+		"enable-gtid: true" 1 \
+		"enable-relay: true" 1
+	run_sql_source1 "insert into $db_name.t1(id, name) values(2,'b'), (3, 'c')"
+	run_sql_source1 "delete from $db_name.t1 where id=1"
+	# check validator before start, should pass
+	# validate pass
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 2\/0\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 2\/0\/1" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"cutoverBinlogGtid\": \"\"" 1
+	gtid_executed=($(get_gtid_executed $MYSQL_HOST1 $MYSQL_PORT1))
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test -s $SOURCE_ID1 --cutover-binlog-gtid $gtid_executed" \
+		"\"result\": true" 2
+	sleep 3
+	# after 3 seconds, cutoverBinlogGtid should also not change
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"cutoverBinlogGtid\": \"$gtid_executed\"" 1
+	trigger_checkpoint_flush
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 2\/0\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1
+	# set gtid_executed again, should be triggered by dml event
+	gtid_executed=($(get_gtid_executed $MYSQL_HOST1 $MYSQL_PORT1))
+	extracted_number=$(echo "$gtid_executed" | grep -Eo '[0-9]+$')
+	incremented_number=$((extracted_number + 1))
+	gtid_cutover=$(echo "$gtid_executed" | sed "s/${extracted_number}$/${incremented_number}/")
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"validation update test -s $SOURCE_ID1 --cutover-binlog-gtid $gtid_cutover" \
+		"\"result\": true" 2
+	run_sql_source1 "insert into $db_name.t1(id, name) values (4, 'c')"
+	# directly sleep without flush, can cutover by itself
+	sleep 1.5
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"synced\": true" 1
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"processedRowsStatus\": \"insert\/update\/delete: 3\/0\/1\"" 1 \
+		"pendingRowsStatus\": \"insert\/update\/delete: 0\/0\/0" 1 \
+		"new\/ignored\/resolved: 0\/0\/0" 1 \
+		"\"cutoverBinlogGtid\": \"\"" 1
+}
+
 run_standalone $*
 validate_table_with_different_pk
 test_unsupported_table_status
@@ -726,6 +804,7 @@ stopped_validator_fail_over
 test_data_filter
 test_validation_syncer_stopped
 test_dup_autopk
+test_update_validator
 cleanup_process $*
 cleanup_data $db_name
 cleanup_data_upstream $db_name

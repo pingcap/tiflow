@@ -178,7 +178,8 @@ func TestCreateChangefeed(t *testing.T) {
 	helpers.EXPECT().
 		getEtcdClient(gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
 	helpers.EXPECT().
@@ -201,8 +202,8 @@ func TestCreateChangefeed(t *testing.T) {
 				SinkURI:    cfg.SinkURI,
 			}, nil
 		}).AnyTimes()
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	ctrl.EXPECT().
+		CreateChangefeed(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrPDEtcdAPIError).Times(1)
 
 	cfConfig.SinkURI = mysqlSink
@@ -222,8 +223,8 @@ func TestCreateChangefeed(t *testing.T) {
 	helpers.EXPECT().
 		getEtcdClient(gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	ctrl.EXPECT().
+		CreateChangefeed(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 	w = httptest.NewRecorder()
@@ -333,14 +334,16 @@ func TestUpdateChangefeed(t *testing.T) {
 	t.Parallel()
 	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
 	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
-	cp := mock_capture.NewMockCapture(gomock.NewController(t))
-	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
+	mockOwner := mock_owner.NewMockOwner(gomock.NewController(t))
+	mockCapture := mock_capture.NewMockCapture(gomock.NewController(t))
+	apiV2 := NewOpenAPIV2ForTest(mockCapture, helpers)
 	router := newRouter(apiV2)
 
 	statusProvider := &mockStatusProvider{}
-	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
-	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsController().Return(true).AnyTimes()
+	mockCapture.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
+	mockCapture.EXPECT().IsReady().Return(true).AnyTimes()
+	mockCapture.EXPECT().IsController().Return(true).AnyTimes()
+	mockCapture.EXPECT().GetOwner().Return(mockOwner, nil).AnyTimes()
 
 	// case 1 invalid id
 	invalidID := "Invalid_#"
@@ -390,11 +393,9 @@ func TestUpdateChangefeed(t *testing.T) {
 	// case 4: changefeed stopped, but get upstream failed: not found
 	oldCfInfo.UpstreamID = 100
 	oldCfInfo.State = "stopped"
-	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
-	etcdClient.EXPECT().
+	mockCapture.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(100)), gomock.Any()).
 		Return(nil, cerrors.ErrUpstreamNotFound).Times(1)
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -408,10 +409,9 @@ func TestUpdateChangefeed(t *testing.T) {
 
 	// case 5: json failed
 	oldCfInfo.UpstreamID = 1
-	etcdClient.EXPECT().
+	mockCapture.EXPECT().
 		GetUpstreamInfo(gomock.Any(), gomock.Eq(uint64(1)), gomock.Any()).
 		Return(nil, nil).AnyTimes()
-	cp.EXPECT().GetEtcdClient().Return(etcdClient).AnyTimes()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,
@@ -448,6 +448,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		createTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
+	mockCapture.EXPECT().GetUpstreamManager().Return(nil, nil).AnyTimes()
 	helpers.EXPECT().
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
@@ -467,11 +468,12 @@ func TestUpdateChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code)
 
 	// case 7: update transaction failed
+	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	helpers.EXPECT().
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
 		Times(1)
-	etcdClient.EXPECT().
+	mockOwner.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrEtcdAPIError).Times(1)
 
@@ -490,7 +492,8 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
-	etcdClient.EXPECT().
+	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
+	mockOwner.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 
@@ -506,7 +509,8 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(oldCfInfo, &model.UpstreamInfo{}, nil).
 		Times(1)
-	etcdClient.EXPECT().
+	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
+	mockOwner.EXPECT().
 		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 
@@ -658,12 +662,13 @@ func TestVerifyTable(t *testing.T) {
 	require.Nil(t, err)
 	require.Contains(t, respErr.Code, "ErrNewStore")
 
-	// case 3: getVerfiedTables failed
+	// case 3: getVerifiedTables failed
 	helpers.EXPECT().
 		createTiStore(gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, cerrors.ErrFilterRuleInvalid).
 		Times(1)
 
@@ -684,7 +689,8 @@ func TestVerifyTable(t *testing.T) {
 	ineligible := []model.TableName{
 		{Schema: "test", Table: "invalidTable"},
 	}
-	helpers.EXPECT().getVerfiedTables(gomock.Any(), gomock.Any(), gomock.Any()).
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(eligible, ineligible, nil)
 
 	w = httptest.NewRecorder()

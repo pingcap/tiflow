@@ -179,8 +179,6 @@ func TestCleanData(t *testing.T) {
 
 	span := spanz.TableIDToComparableSpan(1)
 	s.AddTable(span, 0)
-	require.Panics(t, func() {
-		s.CleanByTable(spanz.TableIDToComparableSpan(2), engine.Position{})
-	})
+	require.NoError(t, s.CleanByTable(spanz.TableIDToComparableSpan(2), engine.Position{}))
 	require.Nil(t, s.CleanByTable(span, engine.Position{}))
 }

@@ -89,6 +89,15 @@ func TestValidateTxnAtomicity(t *testing.T) {
 				"&protocol=open-protocol",
 			expectedErr: "invalid level atomicity is not supported by kafka scheme",
 		},
+		{
+			sinkURI: "pulsar://127.0.0.1:6550?transaction-atomicity=invalid" +
+				"&protocol=open-protocol",
+			expectedErr: "invalid level atomicity is not supported by pulsar scheme",
+		},
+		{
+			sinkURI:        "pulsar://127.0.0.1:6550/test?protocol=canal-json",
+			shouldSplitTxn: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -129,6 +138,20 @@ func TestValidateProtocol(t *testing.T) {
 			},
 			sinkURI: "kafka://127.0.0.1:9092",
 			result:  "default",
+		},
+		{
+			sinkConfig: &SinkConfig{
+				Protocol: util.AddressOf("default"),
+			},
+			sinkURI: "pulsar://127.0.0.1:6650",
+			result:  "default",
+		},
+		{
+			sinkConfig: &SinkConfig{
+				Protocol: util.AddressOf("canal-json"),
+			},
+			sinkURI: "pulsar://127.0.0.1:6650/test?protocol=canal-json",
+			result:  "canal-json",
 		},
 	}
 	for _, c := range testCases {
@@ -325,6 +348,14 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 				Delimiter: "\r",
 			},
 			wantErr: "csv config delimiter contains line break characters",
+		},
+		{
+			name: "delimiter contains more than one character",
+			config: &CSVConfig{
+				Quote:     "'",
+				Delimiter: "\r\t",
+			},
+			wantErr: "csv config delimiter contains more than one character",
 		},
 		{
 			name: "delimiter and quote are same",

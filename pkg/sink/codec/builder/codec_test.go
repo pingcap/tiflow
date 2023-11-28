@@ -72,14 +72,17 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 		if len(cs) == 0 {
 			continue
 		}
-		config := &common.Config{
-			MaxMessageBytes: 8192,
-			MaxBatchSize:    64,
-		}
-		craftEncoder := craft.NewBatchEncoder(config)
+
+		codecConfig := common.NewConfig(config.ProtocolCraft)
+		codecConfig.MaxMessageBytes = 8192
+		codecConfig.MaxBatchSize = 64
+
+		craftEncoder := craft.NewBatchEncoder(codecConfig)
 		craftMessages := encodeRowCase(t, craftEncoder, cs)
 
-		jsonEncoder := open.NewBatchEncoder(config)
+		builder, err := open.NewBatchEncoderBuilder(context.Background(), codecConfig)
+		require.NoError(t, err)
+		jsonEncoder := builder.Build()
 		jsonMessages := encodeRowCase(t, jsonEncoder, cs)
 
 		protobuf1Messages := codecEncodeRowChangedPB1ToMessage(cs)
@@ -226,18 +229,22 @@ func codecEncodeRowCase(encoder codec.RowEventEncoder,
 }
 
 func init() {
-	var err error
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.MaxMessageBytes = 8192
+	codecConfig.MaxBatchSize = 64
 
-	config := &common.Config{
-		MaxMessageBytes: 8192,
-		MaxBatchSize:    64,
-	}
-	encoder := craft.NewBatchEncoder(config)
+	var err error
+	encoder := craft.NewBatchEncoder(codecConfig)
 	if codecCraftEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
 
-	encoder = open.NewBatchEncoder(config)
+	builder, err := open.NewBatchEncoderBuilder(context.Background(), codecConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	encoder = builder.Build()
 	if codecJSONEncodedRowChanges, err = codecEncodeRowCase(encoder, codecBenchmarkRowChanges); err != nil {
 		panic(err)
 	}
@@ -246,23 +253,24 @@ func init() {
 }
 
 func BenchmarkCraftEncoding(b *testing.B) {
-	config := &common.Config{
-		MaxMessageBytes: 8192,
-		MaxBatchSize:    64,
-	}
+	codecConfig := common.NewConfig(config.ProtocolCraft)
+	codecConfig.MaxMessageBytes = 8192
+	codecConfig.MaxBatchSize = 64
 	allocator := craft.NewSliceAllocator(128)
-	encoder := craft.NewBatchEncoderWithAllocator(allocator, config)
+	encoder := craft.NewBatchEncoderWithAllocator(allocator, codecConfig)
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}
 }
 
 func BenchmarkJsonEncoding(b *testing.B) {
-	config := &common.Config{
-		MaxMessageBytes: 8192,
-		MaxBatchSize:    64,
-	}
-	encoder := open.NewBatchEncoder(config)
+	codecConfig := common.NewConfig(config.ProtocolCraft)
+	codecConfig.MaxMessageBytes = 8192
+	codecConfig.MaxBatchSize = 64
+
+	builder, err := open.NewBatchEncoderBuilder(context.Background(), codecConfig)
+	require.NoError(b, err)
+	encoder := builder.Build()
 	for i := 0; i < b.N; i++ {
 		_, _ = codecEncodeRowCase(encoder, codecBenchmarkRowChanges)
 	}

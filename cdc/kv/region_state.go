@@ -16,8 +16,6 @@ package kv
 import (
 	"runtime"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -27,6 +25,10 @@ import (
 const (
 	minRegionStateBucket = 4
 	maxRegionStateBucket = 16
+
+	stateNormal  uint32 = 0
+	stateStopped uint32 = 1
+	stateRemoved uint32 = 2
 )
 
 type singleRegionInfo struct {
@@ -34,8 +36,8 @@ type singleRegionInfo struct {
 	span   tablepb.Span
 	rpcCtx *tikv.RPCContext
 
-	lockedRange *regionlock.LockedRange
-	createTime  time.Time
+	requestedTable *requestedTable
+	lockedRange    *regionlock.LockedRange
 }
 
 func newSingleRegionInfo(
@@ -44,10 +46,9 @@ func newSingleRegionInfo(
 	rpcCtx *tikv.RPCContext,
 ) singleRegionInfo {
 	return singleRegionInfo{
-		verID:      verID,
-		span:       span,
-		rpcCtx:     rpcCtx,
-		createTime: time.Now(),
+		verID:  verID,
+		span:   span,
+		rpcCtx: rpcCtx,
 	}
 }
 
@@ -56,12 +57,22 @@ func (s singleRegionInfo) resolvedTs() uint64 {
 }
 
 type regionFeedState struct {
-	sri           singleRegionInfo
-	requestID     uint64
-	matcher       *matcher
-	startFeedTime time.Time
+	sri       singleRegionInfo
+	requestID uint64
+	matcher   *matcher
 
-	stopped atomic.Bool
+	// Transform: normal -> stopped -> removed.
+	// normal: the region is in replicating.
+	// stopped: some error happens.
+	// removed: the region is returned into the pending list,
+	//   will be re-resolved and re-scheduled later.
+	state struct {
+		sync.RWMutex
+		v uint32
+		// All region errors should be handled in region workers.
+		// `err` is used to retrieve errors generated outside.
+		err error
+	}
 }
 
 func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState {
@@ -72,16 +83,42 @@ func newRegionFeedState(sri singleRegionInfo, requestID uint64) *regionFeedState
 }
 
 func (s *regionFeedState) start() {
-	s.startFeedTime = time.Now()
 	s.matcher = newMatcher()
 }
 
-func (s *regionFeedState) markStopped() {
-	s.stopped.Store(true)
+// mark regionFeedState as stopped with the given error if possible.
+func (s *regionFeedState) markStopped(err error) {
+	s.state.Lock()
+	defer s.state.Unlock()
+	if s.state.v == stateNormal {
+		s.state.v = stateStopped
+		s.state.err = err
+	}
 }
 
-func (s *regionFeedState) isStopped() bool {
-	return s.stopped.Load()
+// mark regionFeedState as removed if possible.
+func (s *regionFeedState) markRemoved() (changed bool) {
+	s.state.Lock()
+	defer s.state.Unlock()
+	if s.state.v == stateStopped {
+		s.state.v = stateRemoved
+		changed = true
+	}
+	return
+}
+
+func (s *regionFeedState) isStale() bool {
+	s.state.RLock()
+	defer s.state.RUnlock()
+	return s.state.v == stateStopped || s.state.v == stateRemoved
+}
+
+func (s *regionFeedState) takeError() (err error) {
+	s.state.Lock()
+	defer s.state.Unlock()
+	err = s.state.err
+	s.state.err = nil
+	return
 }
 
 func (s *regionFeedState) isInitialized() bool {
@@ -102,12 +139,18 @@ func (s *regionFeedState) getLastResolvedTs() uint64 {
 
 // updateResolvedTs update the resolved ts of the current region feed
 func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
-	checkpointTs := &s.sri.lockedRange.CheckpointTs
+	state := s.sri.lockedRange
 	for {
-		last := checkpointTs.Load()
-		if last >= resolvedTs || checkpointTs.CompareAndSwap(last, resolvedTs) {
+		last := state.CheckpointTs.Load()
+		if last > resolvedTs {
 			return
 		}
+		if state.CheckpointTs.CompareAndSwap(last, resolvedTs) {
+			break
+		}
+	}
+	if s.sri.requestedTable != nil {
+		s.sri.requestedTable.postUpdateRegionResolvedTs(s.sri.verID.GetID(), state)
 	}
 }
 
@@ -115,8 +158,8 @@ func (s *regionFeedState) getRegionInfo() singleRegionInfo {
 	return s.sri
 }
 
-func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, time.Time, string) {
-	return s.sri.verID.GetID(), s.sri.span, s.startFeedTime, s.sri.rpcCtx.Addr
+func (s *regionFeedState) getRegionMeta() (uint64, tablepb.Span, string) {
+	return s.sri.verID.GetID(), s.sri.span, s.sri.rpcCtx.Addr
 }
 
 type syncRegionFeedStateMap struct {

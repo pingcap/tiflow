@@ -205,7 +205,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		}
 		return nil, nil
 	}()
-	if err != nil && !cerror.IsChangefeedUnRetryableError(err) {
+	if err != nil && !cerror.ShouldFailChangefeed(err) {
 		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
 		snap.PrintStatus(log.Error)
 	}
@@ -496,11 +496,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		preRawCols  []types.Datum
 		preChecksum uint32
 	)
-	// Since we now always use old value internally,
-	// we need to control the output(sink will use the PreColumns field to determine whether to output old value).
-	// Normally old value is output when only enableOldValue is on,
-	// but for the Delete event, when the old value feature is off,
-	// the HandleKey column needs to be included as well. So we need to do the following filtering.
 	if row.PreRowExist {
 		// FIXME(leoppro): using pre table info to mounter pre column datum
 		// the pre column and current column in one event may using different table info
