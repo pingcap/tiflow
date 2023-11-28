@@ -33,7 +33,7 @@ var (
 )
 
 // LastSyncedTsRecord is used to record the last synced ts of table sink with lock
-// lastSyncedTs means the biggest committs of the events
+// lastSyncedTs means the biggest commits of the events
 // that have been flushed to the downstream.
 type LastSyncedTsRecord struct {
 	sync.Mutex
@@ -175,7 +175,7 @@ func (e *EventTableSink[E, P]) GetCheckpointTs() model.ResolvedTs {
 }
 
 // GetLastSyncedTs returns the last synced ts of table sink.
-// lastSyncedTs means the biggest committs of all the events
+// lastSyncedTs means the biggest commits of all the events
 // that have been flushed to the downstream.
 func (e *EventTableSink[E, P]) GetLastSyncedTs() model.Ts {
 	return e.lastSyncedTs.getLastSyncedTs()

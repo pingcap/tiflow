@@ -630,6 +630,7 @@ type ChangeFeedStatusForAPI struct {
 	CheckpointTs uint64 `json:"checkpoint-ts"`
 }
 
+// ChangeFeedSyncedStatusForAPI uses to transfer the synced status of changefeed for API.
 type ChangeFeedSyncedStatusForAPI struct {
 	CheckpointTs     int64 `json:"checkpoint-ts"`
 	LastSyncedTs     int64 `json:"last-sync-time"`

@@ -1011,6 +1011,7 @@ type ChangeFeedInfo struct {
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
 }
 
+// SyncedStatus describes the detail of a changefeed's synced status
 type SyncedStatus struct {
 	Synced           bool   `json:"synced"`
 	SinkCheckpointTs string `json:"sink_checkpoint_ts"`

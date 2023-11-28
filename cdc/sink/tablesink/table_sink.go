@@ -33,7 +33,7 @@ type TableSink interface {
 	// This is a thread-safe method.
 	GetCheckpointTs() model.ResolvedTs
 	// GetLastSyncedTs returns the last synced ts of table sink.
-	// the last synced ts means the biggest committs of the events
+	// the last synced ts means the biggest commits of the events
 	// that have been flushed to the downstream.
 	// This is a thread-safe method.
 	GetLastSyncedTs() model.Ts

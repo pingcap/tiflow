@@ -966,35 +966,35 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	}
 	defer pdClient.Close()
 
-	physical_now, _, _ := pdClient.GetTS(ctx)
+	physicalNow, _, _ := pdClient.GetTS(ctx)
 
-	log.Info("time info", zap.Int64("physical", physical_now), zap.Int64("checkpointTs", status.CheckpointTs),
+	log.Info("time info", zap.Int64("physical", physicalNow), zap.Int64("checkpointTs", status.CheckpointTs),
 		zap.Int64("pullerResolvedTs", status.PullerResolvedTs), zap.Int64("LastSyncedTs", status.LastSyncedTs))
 
-	if (physical_now-status.LastSyncedTs > 5*60*1000) && (physical_now-status.CheckpointTs < 5*1000) { // 达到 synced 严格条件
+	if (physicalNow-status.LastSyncedTs > 5*60*1000) && (physicalNow-status.CheckpointTs < 5*1000) { // 达到 synced 严格条件
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           true,
 			SinkCheckpointTs: transformerTime(status.CheckpointTs),
 			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
 			LastSyncedTs:     transformerTime(status.LastSyncedTs),
-			NowTs:            transformerTime(physical_now),
+			NowTs:            transformerTime(physicalNow),
 			Info:             "Data syncing is finished",
 		})
-	} else if physical_now-status.LastSyncedTs > 5*60*1000 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
+	} else if physicalNow-status.LastSyncedTs > 5*60*1000 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
 		var message string
 		if (status.PullerResolvedTs - status.CheckpointTs) < 5*1000 { // 5s
 			message = fmt.Sprintf("Please check whether pd is health and tikv region is all available. " +
 				"If pd is not health or tikv region is not available, the data syncing is finished. " +
 				" Otherwise the data syncing is not finished, please wait")
 		} else {
-			message = fmt.Sprintf("The data syncing is not finished, please wait")
+			message = "The data syncing is not finished, please wait"
 		}
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
 			SinkCheckpointTs: transformerTime(status.CheckpointTs),
 			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
 			LastSyncedTs:     transformerTime(status.LastSyncedTs),
-			NowTs:            transformerTime(physical_now),
+			NowTs:            transformerTime(physicalNow),
 			Info:             message,
 		})
 	} else { // lastSyncedTs 条件未达到
@@ -1003,7 +1003,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			SinkCheckpointTs: transformerTime(status.CheckpointTs),
 			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
 			LastSyncedTs:     transformerTime(status.LastSyncedTs),
-			NowTs:            transformerTime(physical_now),
+			NowTs:            transformerTime(physicalNow),
 			Info:             "The data syncing is not finished, please wait",
 		})
 	}
