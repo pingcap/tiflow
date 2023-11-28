@@ -37,7 +37,7 @@ func TestValidateAndAdjustBound(t *testing.T) {
 				StartTs:  439333515018895365,
 				CommitTs: 439333515018895366,
 			},
-			taskTimeRange: 10 * time.Second,
+			taskTimeRange: 60 * time.Minute,
 			expectAdjust:  true,
 		},
 		{
