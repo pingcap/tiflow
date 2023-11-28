@@ -256,7 +256,7 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowC
 }
 
 func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*types.FieldType) ([]*model.Column, error) {
-	result := make([]*model.Column, 0, len(rawData))
+	var result []*model.Column
 	for name, value := range rawData {
 		fieldType, ok := fieldTypeMap[name]
 		if !ok {

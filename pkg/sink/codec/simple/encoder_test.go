@@ -14,6 +14,7 @@
 package simple
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -51,20 +52,17 @@ func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
-	sql := `create table test.test(id int primary key, name varchar(255) not null,
-	 age int, email varchar(255) not null, key idx_name(name), key idx_name_email(name, email))`
-	job := helper.DDL2Job(sql)
-	tableInfo := model.WrapTableInfo(1, "test", 1, job.BinlogInfo.TableInfo)
+	sql := `create table test.t(
+    	id int primary key,
+    	name varchar(255) not null,
+    	age int,
+    	email varchar(255) not null,
+    	key idx_name(name),
+    	key idx_name_email(name, email))`
+	ddlEvent := helper.DDL2Event(sql)
 
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	enc := NewBuilder(codecConfig).Build()
-	ddlEvent := &model.DDLEvent{
-		StartTs:   1,
-		CommitTs:  2,
-		TableInfo: tableInfo,
-		Query:     sql,
-		Type:      job.Type,
-	}
 
 	m, err := enc.EncodeDDLEvent(ddlEvent)
 	require.NoError(t, err)
@@ -88,30 +86,51 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
 	require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
 
-	entry := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
+	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
-	require.NotNil(t, entry)
+	require.NotNil(t, item)
+
+	sql = `insert into test.t values (1, "jack", 23, "jack@abc.com")`
+	row := helper.DML2Event(sql, "test", "t")
+
+	err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
+	require.NoError(t, err)
+
+	messages := enc.Build()
+	require.Len(t, messages, 1)
+
+	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err = dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeRow, messageType)
+
+	decodedRow, err := dec.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.Equal(t, decodedRow.CommitTs, row.CommitTs)
+	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
+	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
+	require.Nil(t, decodedRow.PreColumns)
 }
 
 func TestEncodeBootstrapEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
-	sql := `create table test.test(id int primary key, name varchar(255) not null,
-	 age int, email varchar(255) not null, key idx_name(name), key idx_name_email(name, email))`
-	job := helper.DDL2Job(sql)
-	tableInfo := model.WrapTableInfo(1, "test", 1, job.BinlogInfo.TableInfo)
+	sql := `create table test.t(
+    	id int primary key,
+    	name varchar(255) not null,
+    	age int,
+    	email varchar(255) not null,
+    	key idx_name(name),
+    	key idx_name_email(name, email))`
+	ddlEvent := helper.DDL2Event(sql)
+	ddlEvent.IsBootstrap = true
 
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	enc := NewBuilder(codecConfig).Build()
-	ddlEvent := &model.DDLEvent{
-		StartTs:   1,
-		CommitTs:  2,
-		TableInfo: tableInfo,
-		Query:     sql,
-		Type:      job.Type,
-	}
-	ddlEvent.IsBootstrap = true
 
 	m, err := enc.EncodeDDLEvent(ddlEvent)
 	require.NoError(t, err)
@@ -136,7 +155,31 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
 	require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
 
-	entry := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
+	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
-	require.NotNil(t, entry)
+	require.NotNil(t, item)
+
+	sql = `insert into test.t values (1, "jack", 23, "jack@abc.com")`
+	row := helper.DML2Event(sql, "test", "t")
+
+	err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
+	require.NoError(t, err)
+
+	messages := enc.Build()
+	require.Len(t, messages, 1)
+
+	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err = dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeRow, messageType)
+
+	decodedRow, err := dec.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.Equal(t, decodedRow.CommitTs, row.CommitTs)
+	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
+	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
+	require.Nil(t, decodedRow.PreColumns)
 }

@@ -32,6 +32,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	ctx := context.Background()
 	pdClient := &mockPDClient{}
 	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
 	helper.Tk().MustExec("use test;")
 	storage := helper.Storage()
 	ctrl := mock_controller.NewMockController(gomock.NewController(t))
