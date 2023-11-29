@@ -3075,10 +3075,15 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				setFirstErr(err)
 				continue
 			}
-			s.saveTablePoint(
-				&filter.Table{Schema: db, Name: stmtNode.(*ast.CreateTableStmt).Table.Name.O},
-				s.getFlushedGlobalPoint(),
-			)
+			switch v := stmtNode.(type) {
+			case *ast.CreateTableStmt:
+				s.saveTablePoint(
+					&filter.Table{Schema: db, Name: stmtNode.(*ast.CreateTableStmt).Table.Name.O},
+					s.getFlushedGlobalPoint(),
+				)
+			default:
+				logger.Warn("ignoring statement", zap.String("type", fmt.Sprintf("%T", v)))
+			}
 		}
 	}
 	return firstErr
