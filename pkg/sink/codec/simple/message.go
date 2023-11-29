@@ -513,12 +513,6 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 		result.Value = val
-	case mysql.TypeLonglong:
-		val, err := strconv.ParseUint(data, 10, 64)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-		result.Value = val
 	case mysql.TypeFloat:
 		val, err := strconv.ParseFloat(data, 32)
 		if err != nil {
