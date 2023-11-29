@@ -242,11 +242,12 @@ func (f *fileWorkerGroup) newFileCache(event *polymorphicRedoEvent) error {
 	bufPtr := f.pool.Get().(*[]byte)
 	buf := *bufPtr
 	buf = buf[:0]
-	bufferWriter := bytes.NewBuffer(buf)
 	var (
 		wr     io.Writer
 		closer io.Closer
 	)
+	bufferWriter := bytes.NewBuffer(buf)
+	wr = bufferWriter
 	if f.cfg.Compression == "lz4" {
 		wr = lz4.NewWriter(bufferWriter)
 		closer = wr.(io.Closer)
