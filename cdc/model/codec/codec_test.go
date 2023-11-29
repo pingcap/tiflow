@@ -161,7 +161,7 @@ func TestRowRedoConvert(t *testing.T) {
 			Type:    mysql.TypeTinyBlob,
 			Charset: charset.CharsetGBK,
 			Value:   []byte("你好"),
-		}, nil},
+		}},
 		Columns: []*model.Column{{
 			Name:  "a1",
 			Type:  mysql.TypeLong,
@@ -181,7 +181,7 @@ func TestRowRedoConvert(t *testing.T) {
 			Type:    mysql.TypeTinyBlob,
 			Charset: charset.CharsetGBK,
 			Value:   []byte("世界"),
-		}, nil},
+		}},
 		IndexColumns: [][]int{{1, 3}},
 	}
 
