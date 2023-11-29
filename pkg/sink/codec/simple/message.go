@@ -200,13 +200,16 @@ func newTableInfo(msg *message) *model.TableInfo {
 			UpdateTS: msg.SchemaVersion,
 		},
 	}
-	for _, col := range msg.TableSchema.Columns {
-		tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
-		info.Columns = append(info.Columns, tiCol)
-	}
-	for _, idx := range msg.TableSchema.Indexes {
-		index := newTiIndexInfo(idx)
-		info.Indices = append(info.Indices, index)
+
+	if msg.TableSchema != nil {
+		for _, col := range msg.TableSchema.Columns {
+			tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
+			info.Columns = append(info.Columns, tiCol)
+		}
+		for _, idx := range msg.TableSchema.Indexes {
+			index := newTiIndexInfo(idx)
+			info.Indices = append(info.Indices, index)
+		}
 	}
 
 	return info
