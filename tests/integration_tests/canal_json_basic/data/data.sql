@@ -231,7 +231,7 @@ values ('b', 'b,c', b'1000001', '{
   "key3": "123"
 }');
 
-update tp_other set c_enum = 'c' where c_set = 'b, c';
+update tp_other set c_enum = 'c' where c_set = 'b,c';
 
 -- gbk dmls
 CREATE TABLE cs_gbk (

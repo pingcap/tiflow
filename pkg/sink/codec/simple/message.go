@@ -457,6 +457,18 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		log.Panic("simple encode message should have type in `string`")
 	}
 
+	switch fieldType.GetType() {
+	case mysql.TypeBit, mysql.TypeSet:
+		val, err := strconv.ParseUint(data, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for bit or set",
+				zap.String("name", name), zap.Any("value", val),
+				zap.Any("type", fieldType.GetType()), zap.Error(err))
+		}
+		result.Value = val
+		return result, nil
+	}
+
 	if mysql.HasBinaryFlag(fieldType.GetFlag()) {
 		v, err := base64.StdEncoding.DecodeString(data)
 		if err != nil {
