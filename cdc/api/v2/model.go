@@ -919,7 +919,7 @@ type CSVConfig struct {
 	NullString           string `json:"null"`
 	IncludeCommitTs      bool   `json:"include_commit_ts"`
 	BinaryEncodingMethod string `json:"binary_encoding_method"`
-	EnableOldValue       bool   `json:"enable_old_value"`
+	OutputOldValue       bool   `json:"output_old_value"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config

@@ -795,7 +795,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					Terminator:      "\n",
 					NullString:      "\\N",
 					IncludeCommitTs: true,
-					EnableOldValue:  true,
+					OutputOldValue:  true,
 				},
 				opType:     operationUpdate,
 				tableName:  "table2",

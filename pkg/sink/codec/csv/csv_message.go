@@ -102,7 +102,7 @@ func newCSVMessage(config *common.Config) *csvMessage {
 // Col5-n: one or more columns that represent the data to be changed.
 func (c *csvMessage) encode() []byte {
 	strBuilder := new(strings.Builder)
-	if c.opType == operationUpdate && c.config.EnableOldValue && len(c.preColumns) != 0 {
+	if c.opType == operationUpdate && c.config.OutputOldValue && len(c.preColumns) != 0 {
 		// Encode the old value first as a dedicated row.
 		c.encodeMeta("D", strBuilder)
 		c.encodeColumns(c.preColumns, strBuilder)
@@ -377,7 +377,7 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 		} else {
 			// This is a update operation.
 			csvMsg.opType = operationUpdate
-			if csvConfig.EnableOldValue {
+			if csvConfig.OutputOldValue {
 				if len(e.PreColumns) != len(e.Columns) {
 					return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed,
 						fmt.Errorf("the column length of preColumns %d doesn't equal to that of columns %d",

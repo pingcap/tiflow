@@ -70,7 +70,7 @@ type Config struct {
 	IncludeCommitTs      bool
 	Terminator           string
 	BinaryEncodingMethod string
-	EnableOldValue       bool
+	OutputOldValue       bool
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
@@ -192,7 +192,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
-			c.EnableOldValue = replicaConfig.Sink.CSVConfig.EnableOldValue
+			c.OutputOldValue = replicaConfig.Sink.CSVConfig.OutputOldValue
 		}
 		if replicaConfig.Sink.KafkaConfig != nil && replicaConfig.Sink.KafkaConfig.LargeMessageHandle != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
