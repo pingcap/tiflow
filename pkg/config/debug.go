@@ -54,8 +54,9 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	return nil
 }
 
+// PullerConfig represents config for puller
 type PullerConfig struct {
-	// RegionScanLimit is the limit of regions to scan concurrently.
+	// EnableResolvedTsStuckDetection is used to enable resolved ts stuck detection.
 	EnableResolvedTsStuckDetection bool `toml:"enable-resolved-ts-stuck-detection" json:"enable-resolved-ts-stuck-detection"`
 	// ResolvedTsStuckInterval is the interval of checking resolved ts stuck.
 	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
