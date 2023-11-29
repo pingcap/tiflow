@@ -64,6 +64,7 @@ func TestV1toV2(t *testing.T) {
 				Type:     timodel.ActionCreateTable,
 			},
 		},
+		Type: codecv1.RedoLogType(1),
 	}
 
 	rv2 = &model.RedoLog{
@@ -100,6 +101,7 @@ func TestV1toV2(t *testing.T) {
 				Type:     timodel.ActionCreateTable,
 			},
 		},
+		Type: model.RedoLogTypeRow,
 	}
 
 	// Unmarshal from v1, []byte{} will be transformed into "".

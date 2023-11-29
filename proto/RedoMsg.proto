@@ -23,8 +23,8 @@ message RedoLog {
 
 message RedoRowChangedEvent{
   RowChangedEvent     row = 1;
-  repeated  RedoColumn  pre_columns = 2;
-  repeated RedoColumn    columns = 3;
+  repeated  RedoColumn pre_columns = 2;
+  repeated  RedoColumn columns = 3;
 }
 
 message RowChangedEvent  {
