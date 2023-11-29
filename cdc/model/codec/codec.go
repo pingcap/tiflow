@@ -213,16 +213,20 @@ func UnmarshalRedoLog(bts []byte) (r *model.RedoLog, o []byte, err error) {
 					return cols
 				}
 
+				var tableInfo *model.TableName
+				if pbr.Row.Row.Table != nil {
+					tableInfo = &model.TableName{
+						Schema:      pbr.Row.Row.Table.Schema,
+						Table:       pbr.Row.Row.Table.Table,
+						TableID:     pbr.Row.Row.Table.TableId,
+						IsPartition: pbr.Row.Row.Table.IsPartition,
+					}
+				}
 				r.RedoRow = model.RedoRowChangedEvent{
 					Row: &model.RowChangedEvent{
-						StartTs:  pbr.Row.Row.StartTs,
-						CommitTs: pbr.Row.Row.CommitTs,
-						Table: &model.TableName{
-							Schema:      pbr.Row.Row.Table.Schema,
-							Table:       pbr.Row.Row.Table.Table,
-							TableID:     pbr.Row.Row.Table.TableId,
-							IsPartition: pbr.Row.Row.Table.IsPartition,
-						},
+						StartTs:      pbr.Row.Row.StartTs,
+						CommitTs:     pbr.Row.Row.CommitTs,
+						Table:        tableInfo,
 						Columns:      colsFunc(pbr.Row.Columns),
 						PreColumns:   colsFunc(pbr.Row.PreColumns),
 						IndexColumns: idxIds,
