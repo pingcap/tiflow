@@ -119,6 +119,26 @@ func newAgent(
 		return result, nil
 	}
 
+	var ownerCaptureInfo *model.CaptureInfo
+	_, captures, err := etcdClient.GetCaptures(ctx)
+	for _, captureInfo := range captures {
+		if captureInfo.ID == ownerCaptureID {
+			ownerCaptureInfo = captureInfo
+			break
+		}
+	}
+	if ownerCaptureInfo == nil {
+		log.Info("schedulerv3: no owner found. We will wait for an owner to contact us.",
+			zap.String("namespace", changeFeedID.Namespace),
+			zap.String("changefeed", changeFeedID.ID),
+			zap.Error(err))
+		return result, nil
+	}
+
+	result.compat.UpdateCaptureInfo(map[model.CaptureID]*model.CaptureInfo{
+		ownerCaptureID: ownerCaptureInfo,
+	})
+
 	log.Info("schedulerv3: agent owner found",
 		zap.String("ownerCaptureID", ownerCaptureID),
 		zap.String("captureID", captureID),

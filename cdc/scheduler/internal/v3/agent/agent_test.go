@@ -86,7 +86,9 @@ func TestNewAgent(t *testing.T) {
 	tableExector := newMockTableExecutor()
 
 	// owner and revision found successfully
-	me.EXPECT().GetOwnerID(gomock.Any()).Return("owneID", nil).Times(1)
+	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
+	me.EXPECT().GetCaptures(
+		gomock.Any()).Return(int64(0), []*model.CaptureInfo{{ID: "ownerID"}}, nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).Return(int64(2333), nil).Times(1)
 	a, err := newAgent(
 		context.Background(), "capture-test", &liveness, changefeed, me, tableExector, 0)
@@ -110,6 +112,8 @@ func TestNewAgent(t *testing.T) {
 
 	// owner found, get revision failed.
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
+	me.EXPECT().GetCaptures(
+		gomock.Any()).Return(int64(0), []*model.CaptureInfo{{ID: "ownerID"}}, nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
 		Return(int64(0), cerror.ErrPDEtcdAPIError).Times(1)
 	a, err = newAgent(
@@ -118,6 +122,8 @@ func TestNewAgent(t *testing.T) {
 	require.Nil(t, a)
 
 	me.EXPECT().GetOwnerID(gomock.Any()).Return("ownerID", nil).Times(1)
+	me.EXPECT().GetCaptures(
+		gomock.Any()).Return(int64(0), []*model.CaptureInfo{{ID: "ownerID"}}, nil).Times(1)
 	me.EXPECT().GetOwnerRevision(gomock.Any(), gomock.Any()).
 		Return(int64(0), cerror.ErrOwnerNotFound).Times(1)
 	a, err = newAgent(
