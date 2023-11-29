@@ -507,9 +507,14 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 				zap.Any("type", fieldType.GetType()), zap.Error(err))
 		}
 		result.Value = val
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong,
-		mysql.TypeLonglong, mysql.TypeInt24:
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24:
 		val, err := strconv.ParseInt(data, 10, 64)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		result.Value = val
+	case mysql.TypeLonglong:
+		val, err := strconv.ParseUint(data, 10, 64)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
