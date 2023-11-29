@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
@@ -163,6 +164,8 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
+	Charset string          `json:"charset"`
+	Collate string          `json:"collate"`
 	Columns []*columnSchema `json:"columns"`
 	Indexes []*IndexSchema  `json:"indexes"`
 }
@@ -184,6 +187,8 @@ func newTableSchema(tableInfo *timodel.TableInfo) *TableSchema {
 	}
 
 	return &TableSchema{
+		Charset: tableInfo.Charset,
+		Collate: tableInfo.Collate,
 		Columns: columns,
 		Indexes: indexes,
 	}
@@ -202,6 +207,8 @@ func newTableInfo(msg *message) *model.TableInfo {
 	}
 
 	if msg.TableSchema != nil {
+		info.TableInfo.Charset = msg.TableSchema.Charset
+		info.TableInfo.Collate = msg.TableSchema.Collate
 		for _, col := range msg.TableSchema.Columns {
 			tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
 			info.Columns = append(info.Columns, tiCol)
@@ -281,6 +288,7 @@ type message struct {
 	Table    string    `json:"table,omitempty"`
 	Type     EventType `json:"type"`
 	CommitTs uint64    `json:"commitTs"`
+	BuildTs  int64     `json:"buildTs"`
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
@@ -298,6 +306,7 @@ func newResolvedMessage(ts uint64) *message {
 		Version:  defaultVersion,
 		Type:     WatermarkType,
 		CommitTs: ts,
+		BuildTs:  time.Now().UnixMilli(),
 	}
 }
 
@@ -322,6 +331,7 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 		Table:         table,
 		Type:          DDLType,
 		CommitTs:      ddl.CommitTs,
+		BuildTs:       time.Now().UnixMilli(),
 		SQL:           ddl.Query,
 		TableSchema:   schema,
 		SchemaVersion: schemaVersion,
@@ -340,6 +350,7 @@ func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 		Database:      event.Table.Schema,
 		Table:         event.Table.Table,
 		CommitTs:      event.CommitTs,
+		BuildTs:       time.Now().UnixMilli(),
 		SchemaVersion: event.TableInfo.UpdateTS,
 	}
 	var err error

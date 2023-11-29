@@ -42,6 +42,7 @@ func TestEncodeCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeResolved, messageType)
+	require.NotEqual(t, 0, dec.msg.BuildTs)
 
 	ts, err := dec.NextResolvedEvent()
 	require.NoError(t, err)
@@ -75,6 +76,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeDDL, messageType)
+	require.NotEqual(t, 0, dec.msg.BuildTs)
 
 	event, err := dec.NextDDLEvent()
 	require.NoError(t, err)
@@ -85,6 +87,8 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.Equal(t, ddlEvent.Query, event.Query)
 	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
 	require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
+	require.Equal(t, ddlEvent.TableInfo.Charset, event.TableInfo.Charset)
+	require.Equal(t, ddlEvent.TableInfo.Collate, event.TableInfo.Collate)
 
 	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
@@ -106,6 +110,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, messageType)
+	require.NotEqual(t, 0, dec.msg.BuildTs)
 
 	decodedRow, err := dec.NextRowChangedEvent()
 	require.NoError(t, err)
@@ -113,6 +118,8 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
 	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
 	require.Nil(t, decodedRow.PreColumns)
+	require.Equal(t, decodedRow.TableInfo.Charset, row.TableInfo.Charset)
+	require.Equal(t, decodedRow.TableInfo.Collate, row.TableInfo.Collate)
 }
 
 func TestEncodeBootstrapEvent(t *testing.T) {
@@ -143,6 +150,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeDDL, messageType)
+	require.NotEqual(t, 0, dec.msg.BuildTs)
 
 	event, err := dec.NextDDLEvent()
 	require.NoError(t, err)
@@ -154,6 +162,8 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	require.Equal(t, "", event.Query)
 	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
 	require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
+	require.Equal(t, ddlEvent.TableInfo.Charset, event.TableInfo.Charset)
+	require.Equal(t, ddlEvent.TableInfo.Collate, event.TableInfo.Collate)
 
 	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
@@ -175,6 +185,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, hasNext)
 	require.Equal(t, model.MessageTypeRow, messageType)
+	require.NotEqual(t, 0, dec.msg.BuildTs)
 
 	decodedRow, err := dec.NextRowChangedEvent()
 	require.NoError(t, err)
@@ -182,4 +193,6 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
 	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
 	require.Nil(t, decodedRow.PreColumns)
+	require.Equal(t, decodedRow.TableInfo.Charset, row.TableInfo.Charset)
+	require.Equal(t, decodedRow.TableInfo.Collate, row.TableInfo.Collate)
 }
