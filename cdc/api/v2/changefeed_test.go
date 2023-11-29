@@ -1011,11 +1011,15 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, w.Code)
 	}
 
+	validID := changeFeedID.ID
+	cfInfo := &model.ChangeFeedInfo{
+		ID: validID,
+	}
+	statusProvider.err = nil
+	statusProvider.changefeedInfo = cfInfo
 	{
-		validID := changeFeedID.ID
+
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
-		statusProvider.err = nil
-		statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
 		// case3: pd is offline，resolvedTs - checkpointTs > 5s
 		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279,
@@ -1037,14 +1041,11 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Equal(t, false, resp.Synced)
 		require.Equal(t, "1970-01-01 08:00:00", resp.NowTs)
 		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, "+
-			"please recheck. Besides the data is not finish syncing", resp.Info)
+			"please recheck: [pd] failed to get cluster id. Besides the data is not finish syncing", resp.Info)
 	}
 
 	{
-		validID := changeFeedID.ID
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
-		statusProvider.err = nil
-		statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
 		// case4: pd is offline，resolvedTs - checkpointTs < 5s
 		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279,
@@ -1065,20 +1066,16 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, false, resp.Synced)
 		require.Equal(t, "1970-01-01 08:00:00", resp.NowTs)
-		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck. "+
+		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck: [pd] failed to get cluster id. "+
 			"You can check the pd first, and if pd is available, means we don't finish sync data. "+
-			"If pd is not available, please check the whether we satisfy the condition that"+
-			"The time difference from lastSyncedTs to the current time from the time zone of pd is greater than 5 min"+
+			"If pd is not available, please check the whether we satisfy the condition that "+
+			"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than 300 secs. "+
 			"If it's satisfied, means the data syncing is totally finished", resp.Info)
 	}
 
 	helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(pdClient, nil).AnyTimes()
 	pdClient.logicTime = 1000
 	pdClient.timestamp = 1701153217279
-	statusProvider.err = nil
-	validID := changeFeedID.ID
-	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
-
 	{
 		// case5: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs < 5s
 		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{

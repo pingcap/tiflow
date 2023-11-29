@@ -103,6 +103,15 @@ type ChangefeedCommonInfo struct {
 	RunningError   *model.RunningError `json:"error"`
 }
 
+// SyncedStatusConfig represents synced check interval config for a changefeed
+type SyncedStatusConfig struct {
+	// The minimum interval between the latest synced ts and now required to reach synced state
+	SyncedCheckInterval int64 `json:"synced-check-interval"`
+	// The maximum interval between latest checkpoint ts and now or
+	// between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
+	CheckpointInterval int64 `json:"checkpoint-interval"`
+}
+
 // MarshalJSON marshal changefeed common info to json
 // we need to set feed state to normal if it is uninitialized and pending to warning
 // to hide the detail of uninitialized and pending state from user
@@ -195,6 +204,7 @@ type ReplicaConfig struct {
 	Integrity                    *IntegrityConfig           `json:"integrity"`
 	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty"`
 	SQLMode                      string                     `json:"sql_mode,omitempty"`
+	SyncedStatus                 *SyncedStatusConfig        `json:"synced_status,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -488,6 +498,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	if c.ChangefeedErrorStuckDuration != nil {
 		res.ChangefeedErrorStuckDuration = &c.ChangefeedErrorStuckDuration.duration
 	}
+	if c.SyncedStatus != nil {
+		res.SyncedStatus = &config.SyncedStatusConfig{
+			SyncedCheckInterval: c.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  c.SyncedStatus.CheckpointInterval,
+		}
+	}
 	return res
 }
 
@@ -780,6 +796,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.ChangefeedErrorStuckDuration != nil {
 		res.ChangefeedErrorStuckDuration = &JSONDuration{*cloned.ChangefeedErrorStuckDuration}
+	}
+	if cloned.SyncedStatus != nil {
+		res.SyncedStatus = &SyncedStatusConfig{
+			SyncedCheckInterval: cloned.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  cloned.SyncedStatus.CheckpointInterval,
+		}
 	}
 	return res
 }

@@ -608,6 +608,14 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		ret.LastSyncedTs = oracle.ExtractPhysical(cfReactor.lastSyncedTs)
 		ret.CheckpointTs = oracle.ExtractPhysical(cfReactor.latestStatus.CheckpointTs)
 		ret.PullerResolvedTs = oracle.ExtractPhysical(cfReactor.pullerResolvedTs)
+
+		if cfReactor.latestInfo == nil {
+			ret.CheckpointInterval = 0
+			ret.SyncedCheckInterval = 0
+		} else {
+			ret.CheckpointInterval = cfReactor.latestInfo.Config.SyncedStatus.CheckpointInterval
+			ret.SyncedCheckInterval = cfReactor.latestInfo.Config.SyncedStatus.SyncedCheckInterval
+		}
 		query.Data = ret
 	case QueryChangefeedInfo:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]

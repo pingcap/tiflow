@@ -922,14 +922,14 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		return
 	}
 
-	log.Info("synced status", zap.Any("status", status))
-	// get pd_now
-	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
+	log.Info("Get changefeed synced status:", zap.Any("status", status))
 
-	// if err := c.BindJSON(&cfg); err != nil {
-	// 	_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-	// 	return
-	// }
+	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
+	if (status.SyncedCheckInterval != 0) && (status.CheckpointInterval != 0) {
+		cfg.ReplicaConfig.SyncedStatus.CheckpointInterval = status.CheckpointInterval
+		cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval = status.SyncedCheckInterval
+	}
+
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
@@ -946,13 +946,13 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	if err != nil { // pd 不可用
 		var message string
-		if (status.PullerResolvedTs - status.CheckpointTs) > 5*1000 { // 5s
+		if (status.PullerResolvedTs - status.CheckpointTs) > cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 { // 5s
 			message = fmt.Sprintf("%s. Besides the data is not finish syncing", terror.Message(err))
 		} else {
 			message = fmt.Sprintf("%s. You can check the pd first, and if pd is available, means we don't finish sync data. "+
-				"If pd is not available, please check the whether we satisfy the condition that"+
-				"The time difference from lastSyncedTs to the current time from the time zone of pd is greater than 5 min"+
-				"If it's satisfied, means the data syncing is totally finished", err)
+				"If pd is not available, please check the whether we satisfy the condition that "+
+				"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than %v secs. "+
+				"If it's satisfied, means the data syncing is totally finished", err, cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval)
 		}
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
@@ -969,9 +969,12 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	physicalNow, _, _ := pdClient.GetTS(ctx)
 
 	log.Info("time info", zap.Int64("physical", physicalNow), zap.Int64("checkpointTs", status.CheckpointTs),
-		zap.Int64("pullerResolvedTs", status.PullerResolvedTs), zap.Int64("LastSyncedTs", status.LastSyncedTs))
+		zap.Int64("pullerResolvedTs", status.PullerResolvedTs), zap.Int64("LastSyncedTs", status.LastSyncedTs),
+		zap.Int64("SyncedCheckInterval", cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval),
+		zap.Int64("CheckpointInterval", cfg.ReplicaConfig.SyncedStatus.CheckpointInterval))
 
-	if (physicalNow-status.LastSyncedTs > 5*60*1000) && (physicalNow-status.CheckpointTs < 5*1000) { // 达到 synced 严格条件
+	if (physicalNow-status.LastSyncedTs > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000) &&
+		(physicalNow-status.CheckpointTs < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000) { // 达到 synced 严格条件
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           true,
 			SinkCheckpointTs: transformerTime(status.CheckpointTs),
@@ -980,9 +983,9 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			NowTs:            transformerTime(physicalNow),
 			Info:             "Data syncing is finished",
 		})
-	} else if physicalNow-status.LastSyncedTs > 5*60*1000 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
+	} else if physicalNow-status.LastSyncedTs > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
 		var message string
-		if (status.PullerResolvedTs - status.CheckpointTs) < 5*1000 { // 5s
+		if (status.PullerResolvedTs - status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 { // 5s
 			message = fmt.Sprintf("Please check whether pd is health and tikv region is all available. " +
 				"If pd is not health or tikv region is not available, the data syncing is finished. " +
 				" Otherwise the data syncing is not finished, please wait")
