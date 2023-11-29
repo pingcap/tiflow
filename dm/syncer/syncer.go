@@ -2441,6 +2441,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if needContinue {
 				continue
 			}
+		case *replication.TableMapEvent:
+			s.tctx.L().Info("unhandled TableMap event",
+				zap.String("schema", string(ev.Schema)),
+				zap.String("table", string(ev.Table)),
+			)
+		case *replication.FormatDescriptionEvent:
+			s.tctx.L().Info("unhandled FormatDescription event")
 		default:
 			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
 		}
