@@ -148,7 +148,7 @@ type IndexSchema struct {
 	Columns  []string `json:"columns"`
 }
 
-// FromTiIndexInfo converts from TiDB IndexInfo to Index.
+// newIndexSchema converts from TiDB IndexInfo to IndexSchema.
 func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *IndexSchema {
 	indexSchema := &IndexSchema{
 		Name:    index.Name.O,
