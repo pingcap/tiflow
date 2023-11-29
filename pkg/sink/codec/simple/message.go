@@ -90,6 +90,27 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 		col.AddFlag(mysql.ZerofillFlag)
 	}
 
+	switch col.FieldType.GetType() {
+	case mysql.TypeEnum:
+		dataType := strings.TrimPrefix(column.DataType, "enum(")
+		dataType = strings.TrimSuffix(dataType, ")")
+		elements := strings.Split(dataType, ",")
+		col.FieldType.SetElems(elements)
+		for idx, ele := range elements {
+			ele = strings.Trim(ele, "'")
+			col.FieldType.SetElem(idx, ele)
+		}
+	case mysql.TypeSet:
+		dataType := strings.TrimPrefix(column.DataType, "set(")
+		dataType = strings.TrimSuffix(dataType, ")")
+		elements := strings.Split(dataType, ",")
+		col.FieldType.SetElems(elements)
+		for idx, ele := range elements {
+			ele = strings.Trim(ele, "'")
+			col.FieldType.SetElem(idx, ele)
+		}
+	}
+
 	if utils.IsBinaryMySQLType(column.DataType) {
 		col.SetCharset(charset.CharsetBin)
 		types.SetBinChsClnFlag(&col.FieldType)
@@ -468,24 +489,58 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		log.Panic("simple encode message should have type in `string`")
 	}
 
-	switch fieldType.GetType() {
-	case mysql.TypeBit, mysql.TypeSet:
-		val, err := strconv.ParseUint(data, 10, 64)
-		if err != nil {
-			log.Panic("invalid column value for bit or set",
-				zap.String("name", name), zap.Any("value", val),
-				zap.Any("type", fieldType.GetType()), zap.Error(err))
-		}
-		result.Value = val
-		return result, nil
-	}
-
 	if mysql.HasBinaryFlag(fieldType.GetFlag()) {
 		v, err := base64.StdEncoding.DecodeString(data)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 		result.Value = v
+		return result, nil
+	}
+
+	switch fieldType.GetType() {
+	case mysql.TypeBit:
+		val, err := strconv.ParseUint(data, 10, 64)
+		if err != nil {
+			log.Panic("invalid column value for bit or set",
+				zap.String("name", name), zap.Any("data", data),
+				zap.Any("type", fieldType.GetType()), zap.Error(err))
+		}
+		result.Value = val
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong,
+		mysql.TypeLonglong, mysql.TypeInt24:
+		val, err := strconv.ParseInt(data, 10, 64)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		result.Value = val
+	case mysql.TypeFloat:
+		val, err := strconv.ParseFloat(data, 32)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		result.Value = val
+	case mysql.TypeDouble:
+		val, err := strconv.ParseFloat(data, 64)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		result.Value = val
+	case mysql.TypeEnum:
+		element := fieldType.GetElems()
+		enumVar, err := types.ParseEnumName(element, data, fieldType.GetCharset())
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		result.Value = enumVar.Value
+	case mysql.TypeSet:
+		elements := fieldType.GetElems()
+		setVar, err := types.ParseSetName(elements, data, fieldType.GetCharset())
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		result.Value = setVar.Value
+	default:
 	}
 
 	return result, nil

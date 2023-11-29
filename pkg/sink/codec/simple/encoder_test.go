@@ -122,6 +122,72 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.Equal(t, decodedRow.TableInfo.Collate, row.TableInfo.Collate)
 }
 
+func TestEncoderOtherTypes(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	enc := NewBuilder(codecConfig).Build()
+
+	sql := `create table test.t(
+    	a int primary key auto_increment,
+    	b enum('a', 'b', 'c'),
+    	c set('a', 'b', 'c'),
+    	d bit(64),
+    	e json)`
+	ddlEvent := helper.DDL2Event(sql)
+
+	m, err := enc.EncodeDDLEvent(ddlEvent)
+	require.NoError(t, err)
+
+	dec := NewDecoder()
+	err = dec.AddKeyValue(m.Key, m.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err := dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeDDL, messageType)
+
+	_, err = dec.NextDDLEvent()
+	require.NoError(t, err)
+
+	//sql = `insert into test.t values()`
+	sql = `insert into test.t(b, c, d, e) values ('a', 'a,b', b'1000001', '{
+		  "key1": "value1",
+		  "key2": "value2"
+		}');`
+	row := helper.DML2Event(sql, "test", "t")
+
+	err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
+	require.NoError(t, err)
+
+	messages := enc.Build()
+	require.Len(t, messages, 1)
+
+	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err = dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeRow, messageType)
+
+	decodedRow, err := dec.NextRowChangedEvent()
+	require.NoError(t, err)
+
+	decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+	for _, column := range decodedRow.Columns {
+		decodedColumns[column.Name] = column
+	}
+
+	for _, expected := range row.Columns {
+		decoded, ok := decodedColumns[expected.Name]
+		require.True(t, ok)
+		require.Equal(t, expected.Value, decoded.Value)
+	}
+}
+
 func TestEncodeBootstrapEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
