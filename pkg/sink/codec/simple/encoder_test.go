@@ -152,8 +152,7 @@ func TestEncoderOtherTypes(t *testing.T) {
 	_, err = dec.NextDDLEvent()
 	require.NoError(t, err)
 
-	//sql = `insert into test.t values()`
-	sql = `insert into test.t(b, c, d, e) values ('a', 'a,b', b'1000001', '{
+	sql = `insert into test.t() values (1, 'a', 'a,b', b'1000001', '{
 		  "key1": "value1",
 		  "key2": "value2"
 		}');`
