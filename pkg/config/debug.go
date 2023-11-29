@@ -31,6 +31,9 @@ type DebugConfig struct {
 
 	// CDCV2 enables ticdc version 2 implementation with new metastore
 	CDCV2 *CDCV2 `toml:"cdc-v2" json:"cdc-v2"`
+
+	// Puller is the configuration of the puller.
+	Puller *PullerConfig `toml:"puller" json:"puller"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration
@@ -49,4 +52,11 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	}
 
 	return nil
+}
+
+type PullerConfig struct {
+	// RegionScanLimit is the limit of regions to scan concurrently.
+	EnableResolvedTsStuckDetection bool `toml:"enable-resolved-ts-stuck-detection" json:"enable-resolved-ts-stuck-detection"`
+	// ResolvedTsStuckInterval is the interval of checking resolved ts stuck.
+	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
 }
