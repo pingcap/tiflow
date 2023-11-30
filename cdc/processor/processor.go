@@ -710,10 +710,7 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		ddlStartTs = checkpointTs - 1
 	}
 
-	meta, err := kv.GetSnapshotMeta(p.upstream.KVStorage, ddlStartTs)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	meta := kv.GetSnapshotMeta(p.upstream.KVStorage, ddlStartTs)
 	f, err := filter.NewFilter(p.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)

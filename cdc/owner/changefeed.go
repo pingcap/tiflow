@@ -331,11 +331,10 @@ func (c *changefeed) handleWarning(err error) {
 	})
 }
 
-func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context,
-	cfInfo *model.ChangeFeedInfo,
-	checkpointTs uint64,
+func (c *changefeed) checkStaleCheckpointTs(
+	ctx cdcContext.Context, checkpointTs uint64,
 ) error {
-	if cfInfo.NeedBlockGC() {
+	if c.latestInfo.NeedBlockGC() {
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrStartTsBeforeGC.FastGen("InjectChangefeedFastFailError")
 		})
@@ -355,7 +354,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	preCheckpointTs := c.latestInfo.GetCheckpointTs(c.latestStatus)
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure all changefeeds, no matter whether they are running or not, will be checked.
-	if err := c.checkStaleCheckpointTs(ctx, c.latestInfo, preCheckpointTs); err != nil {
+	if err := c.checkStaleCheckpointTs(ctx, preCheckpointTs); err != nil {
 		return 0, 0, errors.Trace(err)
 	}
 
@@ -568,7 +567,7 @@ LOOP2:
 	}
 	c.barriers.Update(finishBarrier, c.latestInfo.GetTargetTs())
 
-	filter, err := filter.NewFilter(c.latestInfo.Config, "")
+	f, err := filter.NewFilter(c.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -577,7 +576,7 @@ LOOP2:
 		ddlStartTs,
 		c.latestInfo.Config,
 		c.id,
-		filter)
+		f)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -609,7 +608,7 @@ LOOP2:
 		c.upstream, ddlStartTs,
 		c.id,
 		c.schema,
-		filter)
+		f)
 	if err != nil {
 		return errors.Trace(err)
 	}
