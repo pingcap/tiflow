@@ -577,7 +577,7 @@ func NewDDLJobPuller(
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
-) (DDLJobPuller, error) {
+) DDLJobPuller {
 	pdCli := up.PDClient
 	regionCache := up.RegionCache
 	kvStorage := up.KVStorage
@@ -629,7 +629,7 @@ func NewDDLJobPuller(
 		)
 	}
 
-	return jobPuller, nil
+	return jobPuller
 }
 
 // DDLPuller is the interface for DDL Puller, used by owner only.
@@ -666,21 +666,14 @@ func NewDDLPuller(ctx context.Context,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
-) (DDLPuller, error) {
-	var (
-		puller DDLJobPuller
-		err    error
-	)
-
+) DDLPuller {
+	var puller DDLJobPuller
 	// storage can be nil only in the test
 	if up.KVStorage != nil {
 		changefeed.ID += "_owner_ddl_puller"
-		puller, err = NewDDLJobPuller(
+		puller = NewDDLJobPuller(
 			ctx, up, startTs, config.GetGlobalServerConfig(),
 			changefeed, schemaStorage, filter)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
 	}
 
 	return &ddlPullerImpl{
@@ -689,7 +682,7 @@ func NewDDLPuller(ctx context.Context,
 		cancel:       func() {},
 		clock:        clock.New(),
 		changefeedID: changefeed,
-	}, nil
+	}
 }
 
 func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {

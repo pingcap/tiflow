@@ -211,14 +211,13 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		state.Info, state.Status, newFeedStateManager(up, state), up,
 		// new ddl puller
 		func(ctx context.Context,
-			replicaConfig *config.ReplicaConfig,
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,
 			schemaStorage entry.SchemaStorage,
 			filter filter.Filter,
-		) (puller.DDLPuller, error) {
-			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}, nil
+		) puller.DDLPuller {
+			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}
 		},
 		// new ddl ddlSink
 		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {

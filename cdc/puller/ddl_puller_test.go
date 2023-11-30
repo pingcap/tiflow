@@ -609,13 +609,12 @@ func TestDDLPuller(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p, err := NewDDLPuller(
+	p := NewDDLPuller(
 		ctx, ctx.ChangefeedVars().Info.Config,
 		up, startTs,
 		ctx.ChangefeedVars().ID,
 		schemaStorage,
 		f)
-	require.Nil(t, err)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
 	var wg sync.WaitGroup
@@ -739,13 +738,12 @@ func TestResolvedTsStuck(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p, err := NewDDLPuller(
+	p := NewDDLPuller(
 		ctx, ctx.ChangefeedVars().Info.Config,
 		up, startTs,
 		ctx.ChangefeedVars().ID,
 		schemaStorage,
 		f)
-	require.Nil(t, err)
 
 	mockClock := clock.NewMock()
 	p.(*ddlPullerImpl).clock = mockClock

@@ -141,7 +141,7 @@ type changefeed struct {
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
 		filter filter.Filter,
-	) (puller.DDLPuller, error)
+	) puller.DDLPuller
 
 	newSink func(
 		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
@@ -213,7 +213,7 @@ func newChangefeed4Test(
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
 		filter filter.Filter,
-	) (puller.DDLPuller, error),
+	) puller.DDLPuller,
 	newSink func(
 		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
 		reportError func(err error), reportWarning func(err error),
@@ -601,15 +601,7 @@ LOOP2:
 	})
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
-		c.upstream, ddlStartTs,
-		c.id,
-		c.schema,
-		f)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, f)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
