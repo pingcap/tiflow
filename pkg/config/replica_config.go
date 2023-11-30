@@ -81,6 +81,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
+		Compression:           "",
 	},
 	ChangefeedErrorStuckDuration: time.Minute * 30,
 	SQLMode:                      defaultSQLMode,
