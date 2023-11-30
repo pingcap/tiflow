@@ -95,7 +95,7 @@ func TestBrokerOpenNewStorage(t *testing.T) {
 	cli.AssertExpectations(t)
 	cli.ExpectedCalls = nil
 
-	f, err := hdl.BrExternalStorage().Create(context.Background(), "1.txt")
+	f, err := hdl.BrExternalStorage().Create(context.Background(), "1.txt", nil)
 	require.NoError(t, err)
 
 	err = f.Close(context.Background())
@@ -163,7 +163,7 @@ func TestBrokerOpenExistingStorage(t *testing.T) {
 
 	cli.AssertExpectations(t)
 
-	f, err := hdl.BrExternalStorage().Create(context.Background(), "1.txt")
+	f, err := hdl.BrExternalStorage().Create(context.Background(), "1.txt", nil)
 	require.NoError(t, err)
 
 	err = f.Close(context.Background())
