@@ -382,8 +382,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 		}
 	}
 
-	// TODO: pass table checkpointTs when we support concurrent process ddl
-	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
+	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}

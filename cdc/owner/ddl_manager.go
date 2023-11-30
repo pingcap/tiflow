@@ -160,8 +160,8 @@ func newDDLManager(
 	bdrMode bool,
 	needSendBootstrapEvent bool,
 ) *ddlManager {
-	log.Info("create ddl manager",
-		zap.String("namaspace", changefeedID.Namespace),
+	log.Info("owner create ddl manager",
+		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("checkpointTs", checkpointTs),
@@ -200,7 +200,6 @@ func newDDLManager(
 func (m *ddlManager) tick(
 	ctx context.Context,
 	checkpointTs model.Ts,
-	tableCheckpoint map[model.TableName]model.Ts,
 ) ([]model.TableID, *schedulepb.BarrierWithMinTs, error) {
 	if m.needSendBootstrapEvent {
 		ok, err := m.checkAndBootstrap(ctx)
@@ -213,7 +212,7 @@ func (m *ddlManager) tick(
 	}
 
 	m.justSentDDL = nil
-	m.updateCheckpointTs(checkpointTs, tableCheckpoint)
+	m.checkpointTs = checkpointTs
 
 	currentTables, err := m.allTables(ctx)
 	if err != nil {
@@ -237,49 +236,51 @@ func (m *ddlManager) tick(
 			break
 		}
 
-		if job != nil && job.BinlogInfo != nil {
-			log.Info("handle a ddl job",
-				zap.String("namespace", m.changfeedID.Namespace),
-				zap.String("ID", m.changfeedID.ID),
-				zap.Int64("tableID", job.TableID),
-				zap.Int64("jobID", job.ID),
-				zap.String("query", job.Query),
-				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			)
-			events, err := m.schema.BuildDDLEvents(ctx, job)
-			if err != nil {
-				return nil, nil, err
-			}
+		if job.BinlogInfo == nil {
+			continue
+		}
 
-			for _, event := range events {
-				// TODO: find a better place to do this check
-				// check if the ddl event is belong to an ineligible table.
-				// If so, we should ignore it.
-				if !filter.IsSchemaDDL(event.Type) {
-					ignore, err := m.schema.
-						IsIneligibleTable(ctx, event.TableInfo.TableName.TableID, event.CommitTs)
-					if err != nil {
-						return nil, nil, errors.Trace(err)
-					}
-					if ignore {
-						log.Warn("ignore the DDL event of ineligible table",
-							zap.String("changefeed", m.changfeedID.ID), zap.Any("ddl", event))
-						continue
-					}
+		log.Info("handle a ddl job",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("ID", m.changfeedID.ID),
+			zap.Int64("tableID", job.TableID),
+			zap.Int64("jobID", job.ID),
+			zap.String("query", job.Query),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+		)
+		events, err := m.schema.BuildDDLEvents(ctx, job)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		for _, event := range events {
+			// TODO: find a better place to do this check
+			// check if the ddl event is belong to an ineligible table.
+			// If so, we should ignore it.
+			if !filter.IsSchemaDDL(event.Type) {
+				ignore, err := m.schema.
+					IsIneligibleTable(ctx, event.TableInfo.TableName.TableID, event.CommitTs)
+				if err != nil {
+					return nil, nil, errors.Trace(err)
 				}
-
-				tableName := event.TableInfo.TableName
-				// Add all valid DDL events to the pendingDDLs.
-				m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
+				if ignore {
+					log.Warn("ignore the DDL event of ineligible table",
+						zap.String("changefeed", m.changfeedID.ID), zap.Any("ddl", event))
+					continue
+				}
 			}
 
-			// Send DDL events to redo log.
-			if m.redoDDLManager.Enabled() {
-				for _, event := range events {
-					err := m.redoDDLManager.EmitDDLEvent(ctx, event)
-					if err != nil {
-						return nil, nil, err
-					}
+			tableName := event.TableInfo.TableName
+			// Add all valid DDL events to the pendingDDLs.
+			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
+		}
+
+		// Send DDL events to redo log.
+		if m.redoDDLManager.Enabled() {
+			for _, event := range events {
+				err := m.redoDDLManager.EmitDDLEvent(ctx, event)
+				if err != nil {
+					return nil, nil, err
 				}
 			}
 		}
@@ -447,24 +448,6 @@ func (m *ddlManager) getNextDDL() *model.DDLEvent {
 	return res
 }
 
-// updateCheckpointTs updates ddlHandler's tableCheckpoint and checkpointTs.
-func (m *ddlManager) updateCheckpointTs(checkpointTs model.Ts,
-	tableCheckpoint map[model.TableName]model.Ts,
-) {
-	m.checkpointTs = checkpointTs
-	// update tableCheckpoint
-	for table, ts := range tableCheckpoint {
-		m.tableCheckpoint[table] = ts
-	}
-
-	// gc tableCheckpoint
-	for table := range m.tableCheckpoint {
-		if _, ok := tableCheckpoint[table]; !ok {
-			delete(m.tableCheckpoint, table)
-		}
-	}
-}
-
 // getAllTableNextDDL returns the next DDL of all tables.
 func (m *ddlManager) getAllTableNextDDL() []*model.DDLEvent {
 	res := make([]*model.DDLEvent, 0, 1)
@@ -542,46 +525,43 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 // allTables returns all tables in the schema that
 // less or equal than the checkpointTs.
 func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) {
-	if m.tableInfoCache != nil {
-		return m.tableInfoCache, nil
+	if m.tableInfoCache == nil {
+		ts := m.getSnapshotTs()
+		tableInfoCache, err := m.schema.AllTables(ctx, ts)
+		if err != nil {
+			return nil, err
+		}
+		m.tableInfoCache = tableInfoCache
+		log.Debug("changefeed current tables updated",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
+			zap.Uint64("checkpointTs", m.checkpointTs),
+			zap.Uint64("snapshotTs", ts),
+			zap.Any("tables", m.tableInfoCache),
+		)
 	}
-	var err error
 
-	ts := m.getSnapshotTs()
-	m.tableInfoCache, err = m.schema.AllTables(ctx, ts)
-	if err != nil {
-		return nil, err
-	}
-	log.Debug("changefeed current tables updated",
-		zap.String("namespace", m.changfeedID.Namespace),
-		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("checkpointTs", m.checkpointTs),
-		zap.Uint64("snapshotTs", ts),
-		zap.Any("tables", m.tableInfoCache),
-	)
 	return m.tableInfoCache, nil
 }
 
 // allPhysicalTables returns all table ids in the schema
 // that less or equal than the checkpointTs.
 func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, error) {
-	if m.physicalTablesCache != nil {
-		return m.physicalTablesCache, nil
+	if m.physicalTablesCache == nil {
+		ts := m.getSnapshotTs()
+		cache, err := m.schema.AllPhysicalTables(ctx, ts)
+		if err != nil {
+			return nil, err
+		}
+		log.Debug("changefeed physical tables updated",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
+			zap.Uint64("checkpointTs", m.checkpointTs),
+			zap.Uint64("snapshotTs", ts),
+			zap.Any("tables", m.physicalTablesCache),
+		)
+		m.physicalTablesCache = cache
 	}
-	var err error
-
-	ts := m.getSnapshotTs()
-	m.physicalTablesCache, err = m.schema.AllPhysicalTables(ctx, ts)
-	if err != nil {
-		return nil, err
-	}
-	log.Debug("changefeed physical tables updated",
-		zap.String("namespace", m.changfeedID.Namespace),
-		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("checkpointTs", m.checkpointTs),
-		zap.Uint64("snapshotTs", ts),
-		zap.Any("tables", m.physicalTablesCache),
-	)
 	return m.physicalTablesCache, nil
 }
 
