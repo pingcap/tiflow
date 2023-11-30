@@ -1,3 +1,16 @@
+// Copyright 2024 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package debezium
 
 import (
@@ -6,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pingcap/tidb/parser/mysql"
@@ -74,7 +86,9 @@ type debeziumMsgSource struct {
 }
 
 type Codec struct {
-	config *common.Config
+	config    *common.Config
+	clusterID string
+	nowFunc   func() time.Time
 }
 
 // See https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-data-types
@@ -178,17 +192,15 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 				col.Name))
 	case mysql.TypeDate, mysql.TypeNewDate:
 		if v, ok := col.Value.(string); ok {
-			if v == "0000-00-00" {
+			t, err := time.Parse("2006-01-02", v)
+			if err != nil {
+				// For example, time may be invalid like 1000-00-00
+				// return nil, nil
 				if mysql.HasNotNullFlag(ft.GetFlag()) {
 					return 0, nil
 				} else {
 					return nil, nil
 				}
-			}
-			t, err := time.Parse("2006-01-02", v)
-			if err != nil {
-				// For example, time may be invalid like 1000-00-00
-				return nil, nil
 			}
 			return t.Unix() / 60 / 60 / 24, nil
 		}
@@ -205,18 +217,14 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 
 		// TODO: For Default Value = CURRENT_TIMESTAMP, the result is incorrect.
 		if v, ok := col.Value.(string); ok {
-			if strings.HasPrefix(v, "0000-00-00") {
+			t, err := time.Parse("2006-01-02 15:04:05.999999", v)
+			if err != nil {
+				// For example, time may be 1000-00-00
 				if mysql.HasNotNullFlag(ft.GetFlag()) {
 					return 0, nil
 				} else {
 					return nil, nil
 				}
-			}
-
-			t, err := time.Parse("2006-01-02 15:04:05.999999", v)
-			if err != nil {
-				// For example, time may be 1000-00-00
-				return nil, nil
 			}
 			if ft.GetDecimal() <= 3 {
 				return t.UnixMilli(), nil
@@ -241,14 +249,14 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 		// > the server by default. If this fails, it must be specified explicitly by the database
 		// > connectionTimeZone MySQL configuration option.
 		if v, ok := col.Value.(string); ok {
-			// In cdc/entry/codec.go/unflatten, TIMESTAMP types are formatted
-			// in a timezone comes from config.GetGlobalServerConfig().TZ
-			// So here we must parse it in the same time zone,
-			// and then output in UTC as Debezium requires.
 			t, err := time.ParseInLocation("2006-01-02 15:04:05.999999", v, c.config.TimeZone)
 			if err != nil {
 				// For example, time may be invalid like 1000-00-00
-				return nil, nil
+				if mysql.HasNotNullFlag(ft.GetFlag()) {
+					t = time.Unix(0, 0)
+				} else {
+					return nil, nil
+				}
 			}
 
 			str := t.UTC().Format("2006-01-02T15:04:05")
@@ -287,9 +295,26 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 				"unexpected column value type %T for time column %s",
 				col.Value,
 				col.Name))
-	default:
-		return col.Value, nil
+	case mysql.TypeLonglong:
+		if col.Flag.IsUnsigned() {
+			// Handle with BIGINT UNSIGNED.
+			// Debezium always produce INT64 instead of UINT64 for BIGINT.
+			if v, ok := col.Value.(uint64); ok {
+				return int64(v), nil
+			}
+			return nil, cerror.WrapError(
+				cerror.ErrDebeziumEncodeFailed,
+				errors.Errorf(
+					"unexpected column value type %T for unsigned bigint column %s",
+					col.Value,
+					col.Name))
+		}
+
+		// Note: Although Debezium's doc claims to use INT32 for INT, but it
+		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
+		// So we only handle with TypeLonglong here.
 	}
+	return col.Value, nil
 }
 
 func (c *Codec) rowChangeToDebeziumMsg(e *model.RowChangedEvent) (*debeziumDataChangeMsg, error) {
@@ -298,7 +323,7 @@ func (c *Codec) rowChangeToDebeziumMsg(e *model.RowChangedEvent) (*debeziumDataC
 	source := &debeziumMsgSource{
 		Version:   "2.4.0.Final",
 		Connector: "TiCDC",
-		Name:      "", // TODO
+		Name:      c.clusterID,
 		TsMs:      commitTime.UnixMilli(),
 		Snapshot:  false,
 		Db:        e.Table.Schema,
@@ -312,12 +337,12 @@ func (c *Codec) rowChangeToDebeziumMsg(e *model.RowChangedEvent) (*debeziumDataC
 		Query:     nil,
 
 		CommitTs:  e.CommitTs,
-		ClusterID: "", // TODO
+		ClusterID: c.clusterID,
 	}
 
 	payload := &debeziumDataChangeMsgPayload{
 		Source:      source,
-		TsMs:        time.Now().UnixMilli(),
+		TsMs:        c.nowFunc().UnixMilli(),
 		Transaction: nil,
 	}
 

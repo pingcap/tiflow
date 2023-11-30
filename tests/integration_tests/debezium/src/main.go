@@ -36,7 +36,7 @@ const (
 
 func prepareDBConn(kind Kind, connString string) *DBHelper {
 	db := NewDBHelper(kind)
-	db.MustOpen(connString, *dbName)
+	db.MustOpen(connString, "")
 	return db
 }
 

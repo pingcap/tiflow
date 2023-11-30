@@ -74,33 +74,6 @@ CREATE TABLE dbz_102_charsettest (
 ) ENGINE=InnoDB AUTO_INCREMENT=2001 DEFAULT CHARSET=utf8;
 INSERT INTO dbz_102_charsettest VALUES (default, "产品");
 
--- DBZ-114 handle zero-value dates
-CREATE TABLE dbz_114_zerovaluetest (
-  c1 DATE,
-  c2 TIME(2),
-  c3 DATETIME(2),
-  c4 TIMESTAMP(2),
-  PK INT PRIMARY KEY
-);
-INSERT IGNORE INTO dbz_114_zerovaluetest VALUES ('0000-00-00', '00:00:00.000', '0000-00-00 00:00:00.000', '0000-00-00 00:00:00.000', 1);
-INSERT IGNORE INTO dbz_114_zerovaluetest VALUES ('0001-00-00', '00:01:00.000', '0001-00-00 00:00:00.000', '0001-00-00 00:00:00.000', 2);
-
--- DBZ-1318 handle zero-value dates in when zero dates allowed
-CREATE TABLE dbz_1318_zerovaluetest (
-  c1 DATE,
-  c2 TIME(2),
-  c3 DATETIME(2),
-  c4 TIMESTAMP(2),
-  nnc1 DATE NOT NULL,
-  nnc2 TIME(2) NOT NULL,
-  nnc3 DATETIME(2) NOT NULL,
-  PK INT PRIMARY KEY
-);
-set sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
-INSERT IGNORE INTO dbz_1318_zerovaluetest VALUES ('0000-00-00', '00:00:00.000', '0000-00-00 00:00:00.000', '0000-00-00 00:00:00.000', '0000-00-00', '00:00:00.000', '0000-00-00 00:00:00.000', 1);
-INSERT IGNORE INTO dbz_1318_zerovaluetest VALUES ('0001-00-00', '00:01:00.000', '0000-00-00 14:02:10.000', '0000-00-00 14:02:10.000', '0001-00-00', '00:01:00.000', '0000-00-00 14:02:10.000', 2);
-set sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
-
 -- DBZ-123 handle bit values, including bit field literals
 CREATE TABLE dbz_123_bitvaluetest (
   c1 BIT,
@@ -127,9 +100,6 @@ VALUES (default,"Sally","Thomas","sally.thomas@acme.com"),
        (default,"Edward","Walker","ed@walker.com"),
        (default,"Anne","Kretchmar","annek@noanswer.org");
 
-CREATE TABLE dbz_104_customers LIKE connector_test.customers;
-INSERT INTO dbz_104_customers SELECT * FROM connector_test.customers;
-
 -- DBZ-147 handle decimal value
 CREATE TABLE dbz_147_decimalvalues (
   pk_column int auto_increment NOT NULL,
@@ -138,24 +108,6 @@ CREATE TABLE dbz_147_decimalvalues (
 );
 INSERT INTO dbz_147_decimalvalues (pk_column, decimal_value)
 VALUES(default, 12345.67);
-
-/*
--- DBZ-162 handle function declarations with newline characters
-CREATE FUNCTION fnDbz162( p_creditLimit DOUBLE ) RETURNS VARCHAR(10)
-    DETERMINISTIC
-BEGIN
- DECLARE lvl VARCHAR(10)$$
- IF p_creditLimit > 50000 THEN
-   SET lvl = 'PLATINUM'$$
- ELSEIF (p_creditLimit <= 50000 AND p_creditLimit >= 10000) THEN
-   SET lvl = 'GOLD'$$
- ELSEIF p_creditLimit < 10000 THEN
-   SET lvl = 'SILVER'$$
- END IF$$
- RETURN (lvl)$$
-END$$
-;
-*/
 
 -- DBZ-195 handle numeric values
 CREATE TABLE dbz_195_numvalues (

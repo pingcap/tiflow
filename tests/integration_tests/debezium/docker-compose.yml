@@ -45,12 +45,21 @@ services:
       - CONFIG_STORAGE_TOPIC=my_connect_configs
       - OFFSET_STORAGE_TOPIC=my_connect_offsets
       - STATUS_STORAGE_TOPIC=my_connect_statuses
-  # watcher: # For Debug Purpose
-  #   restart: always
-  #   image: quay.io/debezium/kafka:2.4
-  #   depends_on:
-  #     - kafka
-  #   command: watch-topic -a -k output_debezium
-  #   environment:
-  #     - ZOOKEEPER_CONNECT=zookeeper:2181
-  #     - KAFKA_BROKER=kafka:9092
+  watcher_dbz: # For Debug Purpose
+    restart: always
+    image: quay.io/debezium/kafka:2.4
+    depends_on:
+      - kafka
+    command: watch-topic -a -k output_debezium
+    environment:
+      - ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_BROKER=kafka:9092
+  watcher_ticdc: # For Debug Purpose
+    restart: always
+    image: quay.io/debezium/kafka:2.4
+    depends_on:
+      - kafka
+    command: watch-topic -a -k output_ticdc
+    environment:
+      - ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_BROKER=kafka:9092

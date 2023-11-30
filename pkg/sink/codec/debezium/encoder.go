@@ -1,4 +1,4 @@
-// Copyright 2023 PingCAP, Inc.
+// Copyright 2024 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -100,14 +101,16 @@ func (d *BatchEncoder) reset() {
 }
 
 // newBatchEncoder creates a new Debezium BatchEncoder.
-func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
+func newBatchEncoder(c *common.Config) codec.RowEventEncoder {
 	batch := &BatchEncoder{
 		keyBuf:      &bytes.Buffer{},
 		valueBuf:    &bytes.Buffer{},
 		callbackBuf: make([]func(), 0),
-		config:      config,
+		config:      c,
 		codec: &Codec{
-			config: config,
+			config:    c,
+			clusterID: config.GetGlobalServerConfig().ClusterID,
+			nowFunc:   time.Now,
 		},
 	}
 	batch.reset()
