@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/debezium"
 	"github.com/pingcap/tiflow/pkg/sink/codec/maxwell"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
+	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 )
 
 // NewRowEventEncoderBuilder returns an RowEventEncoderBuilder
@@ -49,6 +50,8 @@ func NewRowEventEncoderBuilder(
 		return craft.NewBatchEncoderBuilder(cfg), nil
 	case config.ProtocolDebezium:
 		return debezium.NewBatchEncoderBuilder(cfg), nil
+	case config.ProtocolSimple:
+		return simple.NewBuilder(cfg), nil
 	default:
 		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(cfg.Protocol)
 	}

@@ -63,6 +63,9 @@ type Processor interface {
 	// It can be called in etcd ticks, so it should never be blocked.
 	// Tick Returns: error and warnings. error will be propagated to the owner, and warnings will be record.
 	Tick(cdcContext.Context, *model.ChangeFeedInfo, *model.ChangeFeedStatus) (error, error)
+
+	// Close closes the processor.
+	Close() error
 }
 
 var _ Processor = (*processor)(nil)
@@ -605,10 +608,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.latestInfo.Config.Sink.TiDBSourceID = sourceID
 
-	p.redo.r, err = redo.NewDMLManager(prcCtx, p.changefeedID, p.latestInfo.Config.Consistent)
-	if err != nil {
-		return err
-	}
+	p.redo.r = redo.NewDMLManager(p.changefeedID, p.latestInfo.Config.Consistent)
 	p.redo.name = "RedoManager"
 	p.redo.changefeedID = p.changefeedID
 	p.redo.spawn(prcCtx)
@@ -751,6 +751,8 @@ func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 		globalBarrierTs = schemaResolvedTs
 	}
 	log.Debug("update barrierTs",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
 		zap.Any("tableBarriers", barrier.GetTableBarriers()),
 		zap.Uint64("globalBarrierTs", globalBarrierTs))
 
@@ -773,7 +775,10 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 		retry.WithIsRetryableErr(cerror.IsRetryableError))
 
 	if tableName == nil {
-		log.Warn("failed to get table name for metric", zap.Any("tableID", tableID))
+		log.Warn("failed to get table name for metric",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Any("tableID", tableID))
 		return strconv.Itoa(int(tableID))
 	}
 
@@ -861,7 +866,10 @@ func (p *processor) Close() error {
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID))
 		if err := p.agent.Close(); err != nil {
-			log.Warn("close agent meet error", zap.Error(err))
+			log.Warn("close agent meet error",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.Error(err))
 		}
 		log.Info("Processor closed agent successfully",
 			zap.String("namespace", p.changefeedID.Namespace),

@@ -17,14 +17,20 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func testFilePathGenerator(ctx context.Context, t *testing.T, dir string) *FilePathGenerator {
@@ -274,4 +280,138 @@ func TestIsSchemaFile(t *testing.T) {
 		require.Equal(t, tt.expect, IsSchemaFile(tt.path),
 			"testCase: %s, path: %v", tt.name, tt.path)
 	}
+}
+
+func TestCheckOrWriteSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	f := testFilePathGenerator(ctx, t, dir)
+
+	var columns []*timodel.ColumnInfo
+	ft := types.NewFieldType(mysql.TypeLong)
+	ft.SetFlag(mysql.PriKeyFlag | mysql.NotNullFlag)
+	col := &timodel.ColumnInfo{
+		Name:         timodel.NewCIStr("Id"),
+		FieldType:    *ft,
+		DefaultValue: 10,
+	}
+	columns = append(columns, col)
+	tableInfo := &model.TableInfo{
+		TableInfo: &timodel.TableInfo{Columns: columns},
+		Version:   100,
+		TableName: model.TableName{
+			Schema:  "test",
+			Table:   "table1",
+			TableID: 20,
+		},
+	}
+
+	table := VersionedTableName{
+		TableNameWithPhysicTableID: tableInfo.TableName,
+		TableInfoVersion:           tableInfo.Version,
+	}
+
+	err := f.CheckOrWriteSchema(ctx, table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, tableInfo.Version, f.versionMap[table])
+
+	// test only table version changed, schema file should be reused
+	table.TableInfoVersion = 101
+	err = f.CheckOrWriteSchema(ctx, table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, tableInfo.Version, f.versionMap[table])
+
+	dir = filepath.Join(dir, "test/table1/meta")
+	cnt, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(cnt))
+}
+
+func TestRemoveExpiredFilesWithoutPartition(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	uri := fmt.Sprintf("file:///%s?flush-interval=2s", dir)
+	storage, err := util.GetExternalStorageFromURI(ctx, uri)
+	require.NoError(t, err)
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.DateSeparator = util.AddressOf(config.DateSeparatorDay.String())
+	replicaConfig.Sink.Protocol = util.AddressOf(config.ProtocolCsv.String())
+	replicaConfig.Sink.FileIndexWidth = util.AddressOf(6)
+	replicaConfig.Sink.CloudStorageConfig = &config.CloudStorageConfig{
+		FileExpirationDays:  util.AddressOf(1),
+		FileCleanupCronSpec: util.AddressOf("* * * * * *"),
+	}
+	cfg := NewConfig()
+	err = cfg.Apply(ctx, sinkURI, replicaConfig)
+	require.NoError(t, err)
+
+	// generate some expired files
+	filesWithoutPartition := []string{
+		// schma1-table1
+		"schema1/table1/5/2021-01-01/CDC000001.csv",
+		"schema1/table1/5/2021-01-01/CDC000002.csv",
+		"schema1/table1/5/2021-01-01/CDC000003.csv",
+		"schema1/table1/5/2021-01-01/" + defaultIndexFileName, // index
+		"schema1/table1/meta/schema_5_20210101.json",          // schema should never be cleaned
+		// schma1-table2
+		"schema1/table2/5/2021-01-01/CDC000001.csv",
+		"schema1/table2/5/2021-01-01/CDC000002.csv",
+		"schema1/table2/5/2021-01-01/CDC000003.csv",
+		"schema1/table2/5/2021-01-01/" + defaultIndexFileName, // index
+		"schema1/table2/meta/schema_5_20210101.json",          // schema should never be cleaned
+	}
+	for _, file := range filesWithoutPartition {
+		err := storage.WriteFile(ctx, file, []byte("test"))
+		require.NoError(t, err)
+	}
+
+	filesWithPartition := []string{
+		// schma1-table1
+		"schema1/table1/400200133/12/2021-01-01/20210101/CDC000001.csv",
+		"schema1/table1/400200133/12/2021-01-01/20210101/CDC000002.csv",
+		"schema1/table1/400200133/12/2021-01-01/20210101/CDC000003.csv",
+		"schema1/table1/400200133/12/2021-01-01/20210101/" + defaultIndexFileName, // index
+		"schema1/table1/meta/schema_5_20210101.json",                              // schema should never be cleaned
+		// schma2-table1
+		"schema2/table1/400200150/12/2021-01-01/20210101/CDC000001.csv",
+		"schema2/table1/400200150/12/2021-01-01/20210101/CDC000002.csv",
+		"schema2/table1/400200150/12/2021-01-01/20210101/CDC000003.csv",
+		"schema2/table1/400200150/12/2021-01-01/20210101/" + defaultIndexFileName, // index
+		"schema2/table1/meta/schema_5_20210101.json",                              // schema should never be cleaned
+	}
+	for _, file := range filesWithPartition {
+		err := storage.WriteFile(ctx, file, []byte("test"))
+		require.NoError(t, err)
+	}
+
+	filesNotExpired := []string{
+		// schma1-table1
+		"schema1/table1/5/2021-01-02/CDC000001.csv",
+		"schema1/table1/5/2021-01-02/CDC000002.csv",
+		"schema1/table1/5/2021-01-02/CDC000003.csv",
+		"schema1/table1/5/2021-01-02/" + defaultIndexFileName, // index
+		// schma1-table2
+		"schema1/table2/5/2021-01-02/CDC000001.csv",
+		"schema1/table2/5/2021-01-02/CDC000002.csv",
+		"schema1/table2/5/2021-01-02/CDC000003.csv",
+		"schema1/table2/5/2021-01-02/" + defaultIndexFileName, // index
+	}
+	for _, file := range filesNotExpired {
+		err := storage.WriteFile(ctx, file, []byte("test"))
+		require.NoError(t, err)
+	}
+
+	currTime := time.Date(2021, 1, 3, 0, 0, 0, 0, time.UTC)
+	checkpointTs := oracle.GoTimeToTS(currTime)
+	cnt, err := RemoveExpiredFiles(ctx, model.ChangeFeedID{}, storage, cfg, checkpointTs)
+	require.NoError(t, err)
+	require.Equal(t, uint64(16), cnt)
 }

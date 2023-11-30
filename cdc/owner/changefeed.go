@@ -57,6 +57,12 @@ type Changefeed interface {
 	Tick(cdcContext.Context, *model.ChangeFeedInfo,
 		*model.ChangeFeedStatus,
 		map[model.CaptureID]*model.CaptureInfo) (model.Ts, model.Ts)
+
+	// Close closes the changefeed.
+	Close(ctx cdcContext.Context)
+
+	// GetScheduler returns the scheduler of this changefeed.
+	GetScheduler() scheduler.Scheduler
 }
 
 var _ Changefeed = (*changefeed)(nil)
@@ -159,6 +165,10 @@ type changefeed struct {
 	// The latest changefeed info and status from meta storage. they are updated in every Tick.
 	latestInfo   *model.ChangeFeedInfo
 	latestStatus *model.ChangeFeedStatus
+}
+
+func (c *changefeed) GetScheduler() scheduler.Scheduler {
+	return c.scheduler
 }
 
 // NewChangefeed creates a new changefeed.
@@ -367,6 +377,12 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	case err := <-c.errCh:
 		return 0, 0, errors.Trace(err)
 	default:
+	}
+
+	if c.redoMetaMgr.Enabled() {
+		if !c.redoMetaMgr.Running() {
+			return 0, 0, nil
+		}
 	}
 
 	// TODO: pass table checkpointTs when we support concurrent process ddl
@@ -610,13 +626,7 @@ LOOP2:
 	}
 	c.observerLastTick = atomic.NewTime(time.Time{})
 
-	c.redoDDLMgr, err = redo.NewDDLManager(cancelCtx, c.id, c.latestInfo.Config.Consistent, ddlStartTs)
-	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
-		err = errors.New("changefeed new redo manager injected error")
-	})
-	if err != nil {
-		return err
-	}
+	c.redoDDLMgr = redo.NewDDLManager(c.id, c.latestInfo.Config.Consistent, ddlStartTs)
 	if c.redoDDLMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -625,12 +635,7 @@ LOOP2:
 		}()
 	}
 
-	c.redoMetaMgr, err = redo.NewMetaManagerWithInit(cancelCtx,
-		c.id,
-		c.latestInfo.Config.Consistent, checkpointTs)
-	if err != nil {
-		return err
-	}
+	c.redoMetaMgr = redo.NewMetaManager(c.id, c.latestInfo.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
 		c.wg.Add(1)
 		go func() {
@@ -647,6 +652,11 @@ LOOP2:
 		return errors.Trace(err)
 	}
 
+	needSendBootstrapEvent, err := c.latestInfo.NeedSendBootstrapEvent()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
@@ -658,6 +668,7 @@ LOOP2:
 		c.redoMetaMgr,
 		downstreamType,
 		util.GetOrZero(c.latestInfo.Config.BDRMode),
+		needSendBootstrapEvent,
 	)
 
 	// create scheduler
@@ -747,6 +758,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cleanupMetrics()
 	c.schema = nil
 	c.barriers = nil
+	c.resolvedTs = 0
 	c.initialized = false
 	c.isReleased = true
 
@@ -798,15 +810,7 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context) {
 		}
 		// when removing a paused changefeed, the redo manager is nil, create a new one
 		if c.redoMetaMgr == nil {
-			redoMetaMgr, err := redo.NewMetaManager(ctx, c.id, cfInfo.Config.Consistent)
-			if err != nil {
-				log.Info("owner creates redo manager for clean fail",
-					zap.String("namespace", c.id.Namespace),
-					zap.String("changefeed", c.id.ID),
-					zap.Error(err))
-				return
-			}
-			c.redoMetaMgr = redoMetaMgr
+			c.redoMetaMgr = redo.NewMetaManager(c.id, cfInfo.Config.Consistent, 0)
 		}
 		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {

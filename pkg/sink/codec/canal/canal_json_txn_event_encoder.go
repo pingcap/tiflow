@@ -97,7 +97,7 @@ func (j *JSONTxnEventEncoder) Build() []*common.Message {
 // newJSONTxnEventEncoder creates a new JSONTxnEventEncoder
 func newJSONTxnEventEncoder(config *common.Config) codec.TxnEventEncoder {
 	encoder := &JSONTxnEventEncoder{
-		builder:    newCanalEntryBuilder(),
+		builder:    newCanalEntryBuilder(config),
 		valueBuf:   &bytes.Buffer{},
 		terminator: []byte(config.Terminator),
 

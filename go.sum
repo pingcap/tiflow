@@ -1047,8 +1047,8 @@ github.com/pingcap/sysutil v1.0.1-0.20230407040306-fb007c5aff21/go.mod h1:QYnjfA
 github.com/pingcap/tidb v1.1.0-beta.0.20220511160835-98c31070d958/go.mod h1:luW4sIZoLHY3bCWuKqyqk2QgMvF+/M7nWOXf/me0+fY=
 github.com/pingcap/tidb v1.1.0-beta.0.20231010115255-ec2731b8f539 h1:Pw+tqB5BeNxn8uRQh6XZgU/MmdaSQiXtioStsxiu7M4=
 github.com/pingcap/tidb v1.1.0-beta.0.20231010115255-ec2731b8f539/go.mod h1:K9GzvaQZ9ht52B81kDXqvtW8p5rkQmP8rgJ8AW8yXCo=
-github.com/pingcap/tidb-tools v0.0.0-20231010140451-6189b1bea2fd h1:0BfNSfxiQgTD+YA4a3dmb7zR7nyVMOZB4qknn1y8t9s=
-github.com/pingcap/tidb-tools v0.0.0-20231010140451-6189b1bea2fd/go.mod h1:Awem9vQiEdvfdGLEbO6HWjR1jh2vFOCjKkwZdoHXfVI=
+github.com/pingcap/tidb-tools v0.0.0-20231031074420-a020d2cdfc5a h1:9MXDt1cSyG8eLDZj0dv1NZrT86BKjU8KxPalIS7KQRQ=
+github.com/pingcap/tidb-tools v0.0.0-20231031074420-a020d2cdfc5a/go.mod h1:Awem9vQiEdvfdGLEbO6HWjR1jh2vFOCjKkwZdoHXfVI=
 github.com/pingcap/tidb/parser v0.0.0-20211011031125-9b13dc409c5e/go.mod h1:e1MGCA9Sg3T8jid8PKAEq5eYVuMMCq4n8gJ+Kqp4Plg=
 github.com/pingcap/tidb/parser v0.0.0-20220511160835-98c31070d958/go.mod h1:ElJiub4lRy6UZDb+0JHDkGEdr6aOli+ykhyej7VCLoI=
 github.com/pingcap/tidb/parser v0.0.0-20231010115255-ec2731b8f539 h1:q9m7W3fJRAgmIwRckzxxrqWX/QRuQrXnVJSc5do1New=
@@ -1122,6 +1122,8 @@ github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJ
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
 github.com/rivo/uniseg v0.4.4 h1:8TfxU8dW6PdqD27gjM8MVNuicgxIjxpm4K7x4jp8sis=
 github.com/rivo/uniseg v0.4.4/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
+github.com/robfig/cron v1.2.0 h1:ZjScXvvxeQ63Dbyxy76Fj3AT3Ut0aKsyd2/tl3DTMuQ=
+github.com/robfig/cron v1.2.0/go.mod h1:JGuDeoQd7Z6yL4zQhZ3OPEVHB7fL6Ka6skscFHfmt2k=
 github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
 github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=

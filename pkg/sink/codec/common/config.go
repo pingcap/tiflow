@@ -61,6 +61,9 @@ type Config struct {
 	// exposed to the outside users.
 	AvroEnableWatermark bool
 
+	// canal-json only
+	ContentCompatible bool
+
 	// for sinking to cloud storage
 	Delimiter            string
 	Quote                string
@@ -133,6 +136,7 @@ type urlConfig struct {
 
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
+	ContentCompatible        *bool  `form:"content-compatible"`
 }
 
 // Apply fill the Config
@@ -216,6 +220,14 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
 	}
+
+	if c.Protocol == config.ProtocolCanalJSON {
+		c.ContentCompatible = util.GetOrZero(urlParameter.ContentCompatible)
+		if c.ContentCompatible {
+			c.OnlyOutputUpdatedColumns = true
+		}
+	}
+
 	return nil
 }
 
@@ -227,6 +239,10 @@ func mergeConfig(
 	if replicaConfig.Sink != nil {
 		dest.AvroSchemaRegistry = util.GetOrZero(replicaConfig.Sink.SchemaRegistry)
 		dest.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
+		dest.ContentCompatible = replicaConfig.Sink.ContentCompatible
+		if util.GetOrZero(dest.ContentCompatible) {
+			dest.OnlyOutputUpdatedColumns = util.AddressOf(true)
+		}
 		if replicaConfig.Sink.KafkaConfig != nil {
 			dest.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
 			if replicaConfig.Sink.KafkaConfig.CodecConfig != nil {

@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite'
 import WindiCSS from 'vite-plugin-windicss'
-import { i18nextScanner } from 'vite-plugin-i18next-scanner'
 import tsConfigPath from 'vite-tsconfig-paths'
-import { reactRouterPlugin } from 'vite-plugin-next-react-router'
 import reactPlugin from '@vitejs/plugin-react'
 import { visualizer } from 'rollup-plugin-visualizer'
 
-import { dependencies } from './package.json'
+import { reactRouterPlugin } from './plugins/vite-plugin-next-react-router'
+import { i18nextScanner } from './plugins/vite-plugin-i18next-scanner'
+import packageJson from './package.json'
 
 function renderChunks(deps) {
   let chunks = {}
@@ -49,7 +49,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ['react', 'react-router-dom', 'react-dom'],
-          ...renderChunks(dependencies),
+          ...renderChunks(packageJson.dependencies),
         },
       },
     },

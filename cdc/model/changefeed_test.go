@@ -243,14 +243,17 @@ func TestVerifyAndComplete(t *testing.T) {
 	t.Parallel()
 
 	info := &ChangeFeedInfo{
-		SinkURI: "blackhole://",
+		SinkURI: "mysql://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
-			MemoryQuota:        1073741824,
-			CaseSensitive:      true,
-			CheckGCSafePoint:   true,
-			SyncPointInterval:  util.AddressOf(time.Minute * 10),
-			SyncPointRetention: util.AddressOf(time.Hour * 24),
+			MemoryQuota:           1073741824,
+			CaseSensitive:         false,
+			CheckGCSafePoint:      true,
+			EnableSyncPoint:       util.AddressOf(false),
+			SyncPointInterval:     util.AddressOf(time.Minute * 10),
+			SyncPointRetention:    util.AddressOf(time.Hour * 24),
+			BDRMode:               util.AddressOf(false),
+			IgnoreIneligibleTable: false,
 		},
 	}
 
@@ -261,7 +264,7 @@ func TestVerifyAndComplete(t *testing.T) {
 	require.Nil(t, err)
 	defaultConfig := config.GetDefaultReplicaConfig()
 	info2 := &ChangeFeedInfo{
-		SinkURI: "blackhole://",
+		SinkURI: "mysql://",
 		Config:  defaultConfig,
 	}
 	info2.RmUnusedFields()

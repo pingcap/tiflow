@@ -181,6 +181,11 @@ error = '''
 Codec invalid config
 '''
 
+["CDC:ErrColumnSelectorFailed"]
+error = '''
+column selector failed
+'''
+
 ["CDC:ErrCompressionFailed"]
 error = '''
 Compression failed

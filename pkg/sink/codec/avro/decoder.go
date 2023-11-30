@@ -80,7 +80,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeRow, true, nil
 	}
 	if len(d.value) < 1 {
-		return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs(d.value)
 	}
 	switch d.value[0] {
 	case magicByte:
@@ -90,7 +90,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	case checkpointByte:
 		return model.MessageTypeResolved, true, nil
 	}
-	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
+	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs(d.value)
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
