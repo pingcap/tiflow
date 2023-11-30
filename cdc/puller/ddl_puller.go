@@ -577,18 +577,11 @@ func NewDDLJobPuller(
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
-	isOwner bool,
 ) (DDLJobPuller, error) {
 	pdCli := up.PDClient
 	regionCache := up.RegionCache
 	kvStorage := up.KVStorage
 	pdClock := up.PDClock
-
-	if isOwner {
-		changefeed.ID += "_owner_ddl_puller"
-	} else {
-		changefeed.ID += "_processor_ddl_puller"
-	}
 
 	spans := spanz.GetAllDDLSpan()
 	for i := range spans {
@@ -668,23 +661,23 @@ type ddlPullerImpl struct {
 
 // NewDDLPuller return a puller for DDL Event
 func NewDDLPuller(ctx context.Context,
-	replicaConfig *config.ReplicaConfig,
 	up *upstream.Upstream,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
 ) (DDLPuller, error) {
-	var puller DDLJobPuller
-	var err error
+	var (
+		puller DDLJobPuller
+		err    error
+	)
 
 	// storage can be nil only in the test
 	if up.KVStorage != nil {
+		changefeed.ID += "_owner_ddl_puller"
 		puller, err = NewDDLJobPuller(
 			ctx, up, startTs, config.GetGlobalServerConfig(),
-			changefeed, schemaStorage, filter,
-			true, /* isOwner */
-		)
+			changefeed, schemaStorage, filter)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}

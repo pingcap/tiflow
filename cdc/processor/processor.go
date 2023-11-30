@@ -722,10 +722,10 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	}
 
 	serverCfg := config.GetGlobalServerConfig()
+
+	changefeedID := model.DefaultChangeFeedID(p.changefeedID.ID + "_processor_ddl_puller")
 	ddlPuller, err := puller.NewDDLJobPuller(
-		ctx, p.upstream, ddlStartTs,
-		serverCfg, p.changefeedID, schemaStorage,
-		f, false, /* isOwner */
+		ctx, p.upstream, ddlStartTs, serverCfg, changefeedID, schemaStorage, f,
 	)
 	if err != nil {
 		return errors.Trace(err)
