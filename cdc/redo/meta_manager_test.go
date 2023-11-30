@@ -270,7 +270,6 @@ func TestGCAndCleanup(t *testing.T) {
 	}
 
 	// write some log files
-	require.NoError(t, err)
 	maxCommitTs := 20
 	for i := 1; i <= maxCommitTs; i++ {
 		for _, logType := range []string{redo.RedoRowLogFileType, redo.RedoDDLLogFileType} {
@@ -294,6 +293,7 @@ func TestGCAndCleanup(t *testing.T) {
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
+
 	m := NewMetaManager(changefeedID, cfg, startTs)
 
 	var eg errgroup.Group

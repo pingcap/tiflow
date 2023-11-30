@@ -55,6 +55,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
+	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
@@ -628,6 +629,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			return cerror.Trace(err)
 		}
 		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic, c.tz)
+	case config.ProtocolSimple:
+		decoder = simple.NewDecoder()
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}
