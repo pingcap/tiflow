@@ -207,7 +207,7 @@ func (m *ddlManager) tick(
 		if err != nil {
 			return nil, nil, err
 		}
-		if !ok {
+		if !finished {
 			return nil, m.barrier(), nil
 		}
 	}
