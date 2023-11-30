@@ -176,7 +176,11 @@ func fetchAllCDCRecords(reader *kafka.Reader, kind Kind) []map[string]any {
 		waitTimeout := time.Millisecond * 500
 		if len(records) == 0 {
 			// Wait a bit longer for the first record
-			waitTimeout = 5 * time.Second
+			if kind == KindMySQL {
+				waitTimeout = 3 * time.Second
+			} else if kind == KindTiDB {
+				waitTimeout = 10 * time.Second
+			}
 		}
 
 		obj, err := fetchNextCDCRecord(reader, kind, waitTimeout)
