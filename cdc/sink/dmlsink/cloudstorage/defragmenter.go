@@ -14,7 +14,10 @@ package cloudstorage
 
 import (
 	"context"
+	"time"
 
+	"github.com/pingcap/tiflow/cdc/model"
+	mcloudstorage "github.com/pingcap/tiflow/cdc/sink/metrics/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/hash"
@@ -23,32 +26,46 @@ import (
 // defragmenter is used to handle event fragments which can be registered
 // out of order.
 type defragmenter struct {
-	lastWritten uint64
-	future      map[uint64]eventFragment
-	inputCh     <-chan eventFragment
-	outputChs   []*chann.DrainableChann[eventFragment]
-	hasher      *hash.PositionInertia
+	changeFeedID model.ChangeFeedID
+	lastWritten  uint64
+	future       map[uint64]eventFragment
+	inputCh      <-chan eventFragment
+	outputChs    []*chann.DrainableChann[eventFragment]
+	hasher       *hash.PositionInertia
 }
 
 func newDefragmenter(
+	changeFeedID model.ChangeFeedID,
 	inputCh <-chan eventFragment,
 	outputChs []*chann.DrainableChann[eventFragment],
 ) *defragmenter {
 	return &defragmenter{
-		future:    make(map[uint64]eventFragment),
-		inputCh:   inputCh,
-		outputChs: outputChs,
-		hasher:    hash.NewPositionInertia(),
+		changeFeedID: changeFeedID,
+		future:       make(map[uint64]eventFragment),
+		inputCh:      inputCh,
+		outputChs:    outputChs,
+		hasher:       hash.NewPositionInertia(),
 	}
 }
 
 func (d *defragmenter) run(ctx context.Context) error {
 	defer d.close()
+	metricEncoderOutputChanSize := mcloudstorage.EncoderOutputChanSizeGauge.WithLabelValues(
+		d.changeFeedID.Namespace, d.changeFeedID.ID)
+	metricDMLWorkerInputChanSize := mcloudstorage.DMLWorkerInputChanSizeGauge.WithLabelValues(
+		d.changeFeedID.Namespace, d.changeFeedID.ID)
+
+	ticker := time.NewTicker(10 * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
 			d.future = nil
 			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			metricEncoderOutputChanSize.Set(float64(len(d.inputCh)))
+			for _, ch := range d.outputChs {
+				metricDMLWorkerInputChanSize.Set(float64(ch.Len()))
+			}
 		case frag, ok := <-d.inputCh:
 			if !ok {
 				return nil

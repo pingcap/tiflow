@@ -63,6 +63,32 @@ var (
 			Name:      "cloud_storage_worker_busy_ratio",
 			Help:      "Busy ratio (X ms in 1s) for cloud storage sink dml worker.",
 		}, []string{"namespace", "changefeed", "id"})
+
+	// EncoderGroupInputChanSizeGauge tracks the size of input channel of encoder group.
+	EncoderInputChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "cloud_storage_encoder_input_chan_size",
+			Help:      "The size of input channel of encoder in cloud storage sink",
+		}, []string{"namespace", "changefeed"})
+
+	// EncoderGroupOutputChanSizeGauge tracks the size of output channel of encoder group
+	EncoderOutputChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "cloud_storage_encoder_output_chan_size",
+			Help:      "The size of output channel of encoder in cloud storage sink",
+		}, []string{"namespace", "changefeed"})
+
+	DMLWorkerInputChanSizeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "cloud_storage_dml_worker_input_chan_size",
+			Help:      "The size of input channel of dml worker in cloud storage sink",
+		}, []string{"namespace", "changefeed"})
 )
 
 // InitMetrics registers all metrics in this file.

@@ -42,7 +42,7 @@ func TestDeframenter(t *testing.T) {
 
 	inputCh := make(chan eventFragment)
 	outputCh := chann.NewAutoDrainChann[eventFragment]()
-	defrag := newDefragmenter(inputCh, []*chann.DrainableChann[eventFragment]{outputCh})
+	defrag := newDefragmenter(model.ChangeFeedID{}, inputCh, []*chann.DrainableChann[eventFragment]{outputCh})
 	eg.Go(func() error {
 		return defrag.run(egCtx)
 	})

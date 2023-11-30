@@ -15,13 +15,14 @@ package cloudstorage
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	mcloudstorage "github.com/pingcap/tiflow/cdc/sink/metrics/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 // encodingWorker denotes the worker responsible for encoding RowChangedEvents
@@ -56,25 +57,28 @@ func (w *encodingWorker) run(ctx context.Context) error {
 		zap.String("namespace", w.changeFeedID.Namespace),
 		zap.String("changefeed", w.changeFeedID.ID))
 
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case frag, ok := <-w.inputCh:
-				if !ok || atomic.LoadUint64(&w.isClosed) == 1 {
-					return nil
-				}
-				err := w.encodeEvents(frag)
-				if err != nil {
-					return errors.Trace(err)
-				}
+	metric := mcloudstorage.EncoderInputChanSizeGauge.WithLabelValues(
+		w.changeFeedID.Namespace, w.changeFeedID.ID)
+	defer mcloudstorage.EncoderInputChanSizeGauge.DeleteLabelValues(
+		w.changeFeedID.Namespace, w.changeFeedID.ID)
+
+	ticker := time.NewTicker(20 * time.Second)
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.Trace(ctx.Err())
+		case <-ticker.C:
+			metric.Set(float64(len(w.inputCh)))
+		case frag, ok := <-w.inputCh:
+			if !ok || atomic.LoadUint64(&w.isClosed) == 1 {
+				return nil
+			}
+			err := w.encodeEvents(frag)
+			if err != nil {
+				return errors.Trace(err)
 			}
 		}
-	})
-
-	return eg.Wait()
+	}
 }
 
 func (w *encodingWorker) encodeEvents(frag eventFragment) error {
