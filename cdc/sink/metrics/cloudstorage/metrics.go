@@ -36,10 +36,40 @@ var (
 		Name:      "cloud_storage_file_count",
 		Help:      "Total number of files managed by a cloud storage sink",
 	}, []string{"namespace", "changefeed"})
+
+	// CloudStorageWriteDurationHistogram records the latency distributions of writeLog.
+	CloudStorageWriteDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "cloud_storage_write_duration_seconds",
+		Help:      "The latency distributions of write storage by a cloud storage sink",
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
+	}, []string{"namespace", "changefeed"})
+
+	// CloudStorageFlushDurationHistogram records the latency distributions of flushLog.
+	CloudStorageFlushDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "cloud_storage_flush_duration_seconds",
+		Help:      "The latency distributions of flush storage by a cloud storage sink",
+		Buckets:   prometheus.ExponentialBuckets(0.001, 2.0, 13),
+	}, []string{"namespace", "changefeed"})
+
+	// CloudStorageWorkerBusyRatio records the busy ratio of CloudStorage bgUpdateLog worker.
+	CloudStorageWorkerBusyRatioCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: subsystem,
+			Name:      "cloud_storage_worker_busy_ratio",
+			Help:      "Busy ratio (X ms in 1s) for cloud storage sink dml worker.",
+		}, []string{"namespace", "changefeed", "id"})
 )
 
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(CloudStorageWriteBytesGauge)
 	registry.MustRegister(CloudStorageFileCountGauge)
+	registry.MustRegister(CloudStorageWriteDurationHistogram)
+	registry.MustRegister(CloudStorageFlushDurationHistogram)
+	registry.MustRegister(CloudStorageWorkerBusyRatioCounter)
 }

@@ -688,6 +688,11 @@ LOOP2:
 		return errors.Trace(err)
 	}
 
+	needSendBootstrapEvent, err := c.latestInfo.NeedSendBootstrapEvent()
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
@@ -699,6 +704,7 @@ LOOP2:
 		c.redoMetaMgr,
 		downstreamType,
 		util.GetOrZero(c.latestInfo.Config.BDRMode),
+		needSendBootstrapEvent,
 	)
 
 	// create scheduler
@@ -788,6 +794,7 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 	c.cleanupMetrics()
 	c.schema = nil
 	c.barriers = nil
+	c.resolvedTs = 0
 	c.initialized = false
 	c.isReleased = true
 

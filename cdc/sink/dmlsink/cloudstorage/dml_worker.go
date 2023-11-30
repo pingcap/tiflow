@@ -16,10 +16,10 @@ import (
 	"bytes"
 	"context"
 	"path"
+	"strconv"
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -27,6 +27,7 @@ import (
 	mcloudstorage "github.com/pingcap/tiflow/cdc/sink/metrics/cloudstorage"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/prometheus/client_golang/prometheus"
@@ -42,13 +43,16 @@ type dmlWorker struct {
 	storage      storage.ExternalStorage
 	config       *cloudstorage.Config
 	// flushNotifyCh is used to notify that several tables can be flushed.
-	flushNotifyCh     chan dmlTask
-	inputCh           *chann.DrainableChann[eventFragment]
-	isClosed          uint64
-	statistics        *metrics.Statistics
-	filePathGenerator *cloudstorage.FilePathGenerator
-	metricWriteBytes  prometheus.Gauge
-	metricFileCount   prometheus.Gauge
+	flushNotifyCh          chan dmlTask
+	inputCh                *chann.DrainableChann[eventFragment]
+	isClosed               uint64
+	statistics             *metrics.Statistics
+	filePathGenerator      *cloudstorage.FilePathGenerator
+	metricWriteBytes       prometheus.Gauge
+	metricFileCount        prometheus.Gauge
+	metricWriteDuration    prometheus.Observer
+	metricFlushDuration    prometheus.Observer
+	metricsWorkerBusyRatio prometheus.Counter
 }
 
 // dmlTask defines a task containing the tables to be flushed.
@@ -119,6 +123,12 @@ func newDMLWorker(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricFileCount: mcloudstorage.CloudStorageFileCountGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricWriteDuration: mcloudstorage.CloudStorageWriteDurationHistogram.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricFlushDuration: mcloudstorage.CloudStorageFlushDurationHistogram.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricsWorkerBusyRatio: mcloudstorage.CloudStorageWorkerBusyRatioCounter.
+			WithLabelValues(changefeedID.Namespace, changefeedID.ID, strconv.Itoa(id)),
 	}
 
 	return d
@@ -145,14 +155,25 @@ func (d *dmlWorker) run(ctx context.Context) error {
 // flushMessages flush messages from active tables to cloud storage.
 // active means that a table has events since last flushing.
 func (d *dmlWorker) flushMessages(ctx context.Context) error {
+	var flushTimeSlice, totalTimeSlice time.Duration
+	overseerTicker := time.NewTicker(d.config.FlushInterval * 2)
+	defer overseerTicker.Stop()
+	startToWork := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
+		case now := <-overseerTicker.C:
+			totalTimeSlice = now.Sub(startToWork)
+			busyRatio := flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000
+			d.metricsWorkerBusyRatio.Add(busyRatio)
+			startToWork = now
+			flushTimeSlice = 0
 		case task := <-d.flushNotifyCh:
 			if atomic.LoadUint64(&d.isClosed) == 1 {
 				return nil
 			}
+			start := time.Now()
 			for table, task := range task.tasks {
 				if len(task.msgs) == 0 {
 					continue
@@ -217,12 +238,15 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 					zap.String("path", dataFilePath),
 				)
 			}
+			flushTimeSlice += time.Since(start)
 		}
 	}
 }
 
 func (d *dmlWorker) writeIndexFile(ctx context.Context, path, content string) error {
+	start := time.Now()
 	err := d.storage.WriteFile(ctx, path, []byte(content))
+	d.metricFlushDuration.Observe(time.Since(start).Seconds())
 	return err
 }
 
@@ -230,23 +254,51 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 	var callbacks []func()
 	buf := bytes.NewBuffer(make([]byte, 0, task.size))
 	rowsCnt := 0
+	bytesCnt := int64(0)
 	for _, msg := range task.msgs {
-		d.metricWriteBytes.Add(float64(len(msg.Value)))
+		bytesCnt += int64(len(msg.Value))
 		rowsCnt += msg.GetRowsCount()
 		buf.Write(msg.Value)
 		callbacks = append(callbacks, msg.Callback)
 	}
 
-	if err := d.statistics.RecordBatchExecution(func() (int, error) {
-		err := d.storage.WriteFile(ctx, path, buf.Bytes())
-		if err != nil {
-			return 0, err
+	if err := d.statistics.RecordBatchExecution(func() (int, int64, error) {
+		start := time.Now()
+		defer d.metricFlushDuration.Observe(time.Since(start).Seconds())
+
+		if d.config.FlushConcurrency <= 1 {
+			return rowsCnt, bytesCnt, d.storage.WriteFile(ctx, path, buf.Bytes())
 		}
-		return rowsCnt, nil
+
+		writer, inErr := d.storage.Create(ctx, path, &storage.WriterOption{
+			Concurrency: d.config.FlushConcurrency,
+		})
+		if inErr != nil {
+			return 0, 0, inErr
+		}
+
+		defer func() {
+			closeErr := writer.Close(ctx)
+			if inErr != nil {
+				log.Error("failed to close writer", zap.Error(closeErr),
+					zap.Int("workerID", d.id),
+					zap.Any("table", task.tableInfo.TableName),
+					zap.String("namespace", d.changeFeedID.Namespace),
+					zap.String("changefeed", d.changeFeedID.ID))
+				if inErr == nil {
+					inErr = closeErr
+				}
+			}
+		}()
+		if _, inErr = writer.Write(ctx, buf.Bytes()); inErr != nil {
+			return 0, 0, inErr
+		}
+		return rowsCnt, bytesCnt, nil
 	}); err != nil {
 		return err
 	}
 
+	d.metricWriteBytes.Add(float64(bytesCnt))
 	d.metricFileCount.Add(1)
 	for _, cb := range callbacks {
 		if cb != nil {

@@ -75,6 +75,7 @@ require (
 	github.com/prometheus/client_model v0.4.0
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
+	github.com/robfig/cron v1.2.0
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
 	github.com/shirou/gopsutil/v3 v3.23.5
 	github.com/shopspring/decimal v1.3.0
