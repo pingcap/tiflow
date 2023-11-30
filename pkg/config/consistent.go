@@ -34,6 +34,7 @@ type ConsistentConfig struct {
 	Storage               string `toml:"storage" json:"storage"`
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
 	Compression           string `toml:"compression" json:"compression"`
+	GCIntervalInMs        int64  `toml:"gc-interval" json:"gc-interval"`
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.
@@ -53,6 +54,14 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
 			fmt.Sprintf("The consistent.flush-interval:%d must be equal or greater than %d",
 				c.FlushIntervalInMs, redo.MinFlushIntervalInMs))
+	}
+	if c.GCIntervalInMs == 0 {
+		c.GCIntervalInMs = int64(redo.DefaultGCIntervalInMs)
+	}
+	if c.GCIntervalInMs < int64(redo.MinGCIntervalInMs) {
+		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
+			fmt.Sprintf("The consistent.gc-interval:%d must be equal or greater than %d",
+				c.GCIntervalInMs, redo.MinGCIntervalInMs))
 	}
 
 	if c.MetaFlushIntervalInMs == 0 {
