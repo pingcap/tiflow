@@ -1331,7 +1331,7 @@ func (s *eventFeedSession) getStreamCancel(storeAddr string) (cancel context.Can
 }
 
 func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
@@ -1342,6 +1342,12 @@ func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
 
 		currTime := s.client.pdClock.CurrentTime()
 		attr := s.rangeLock.CollectLockedRangeAttrs(nil)
+		log.Info("event feed starts to check locked regions",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID),
+			zap.Int64("tableID", s.tableID),
+			zap.String("tableName", s.tableName))
+
 		if attr.SlowestRegion.Initialized {
 			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
 			if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
