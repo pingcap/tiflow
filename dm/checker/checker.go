@@ -46,6 +46,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -350,7 +351,20 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			return err
 		}
 
-		builder, err := restore.NewPrecheckItemBuilderFromConfig(c.tctx.Context(), lCfg)
+		pdClient, err := pd.NewClientWithContext(
+			ctx, []string{lCfg.TiDB.PdAddr}, pd.SecurityOption{
+				CAPath:       lCfg.Security.CAPath,
+				CertPath:     lCfg.Security.CertPath,
+				KeyPath:      lCfg.Security.KeyPath,
+				SSLCABytes:   lCfg.Security.CABytes,
+				SSLCertBytes: lCfg.Security.CertBytes,
+				SSLKEYBytes:  lCfg.Security.KeyBytes,
+			})
+		if err != nil {
+			return err
+		}
+
+		builder, err := restore.NewPrecheckItemBuilderFromConfig(c.tctx.Context(), lCfg, pdClient)
 		if err != nil {
 			return err
 		}
