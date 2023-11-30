@@ -57,8 +57,10 @@ function run_normal_case_and_unavailable_pd() {
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
+    config_path=$1
+
 	SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/conf/changefeed.toml"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/$config_path"
 
     # case 1: test in available cluster
 	synced_status=`curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced`
@@ -116,26 +118,6 @@ function run_normal_case_and_unavailable_pd() {
         exit 1
     fi
 
-    # make failpoint to block checkpoint-ts
-    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/ChangefeedOwnerDontUpdateCheckpoint=return("")'
-    sleep 20 # wait enough time for pass checkpoint-check-interval
-    synced_status=`curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced`
-    status=$(echo $synced_status | jq '.synced')
-    if [ $status != false ]; then
-        echo "synced status isn't correct"
-        exit 1
-    fi
-    info=$(echo $synced_status | jq -r '.info')
-    target_message="Please check whether pd is health and tikv region is all available. \
-If pd is not health or tikv region is not available, the data syncing is finished. \
-Otherwise the data syncing is not finished, please wait"
-    if [ "$info" != "$target_message" ]; then
-        echo "synced status info is not correct"
-        exit 1
-    fi
-
-    export GO_FAILPOINTS=''
-
     #========== 
     # case 2: test with unavailable pd 
     kill_pd
@@ -172,8 +154,10 @@ function run_case_with_unavailable_tikv() {
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
+    config_path=$1
+
 	SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/conf/changefeed.toml"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/$config_path"
 
     # case 3: test in unavailable tikv cluster
     run_sql "USE TEST;Create table t1(a int primary key, b int);insert into t1 values(1,2);insert into t1 values(2,3);"
@@ -228,9 +212,11 @@ function run_case_with_unavailable_tidb() {
 
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+    
+    config_path=$1
 
 	SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/conf/changefeed.toml"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/$config_path"
 
     # case 3: test in unavailable tikv cluster
     run_sql "USE TEST;Create table t1(a int primary key, b int);insert into t1 values(1,2);insert into t1 values(2,3);"
@@ -287,8 +273,10 @@ function run_case_with_failpoint() {
     start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
+    config_path=$1
+
 	SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
-	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/conf/changefeed.toml"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/$config_path"
 
     sleep 20 # wait enough time for pass checkpoint-check-interval
     synced_status=`curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced`
@@ -313,11 +301,17 @@ Otherwise the data syncing is not finished, please wait"
 }
 
 
-
 trap stop_tidb_cluster EXIT
-run_normal_case_and_unavailable_pd $*
-run_case_with_unavailable_tikv $*
-run_case_with_unavailable_tidb $*
-run_case_with_failpoint $*
+run_normal_case_and_unavailable_pd "conf/changefeed.toml"
+run_case_with_unavailable_tikv "conf/changefeed.toml"
+run_case_with_unavailable_tidb "conf/changefeed.toml"
+run_case_with_failpoint "conf/changefeed.toml"
+
+# enable redo
+run_normal_case_and_unavailable_pd "conf/changefeed-redo.toml"
+run_case_with_unavailable_tikv "conf/changefeed-redo.toml"
+run_case_with_unavailable_tidb "conf/changefeed-redo.toml"
+run_case_with_failpoint "conf/changefeed-redo.toml"
+
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
