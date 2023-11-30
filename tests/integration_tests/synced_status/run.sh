@@ -2,10 +2,11 @@
 
 # [DISCRIPTION]:
 #   This test is related to 
-#   It will test the sync status request of cdc server in the following scenarios:(including both enable redo and disable redo)
+#   It will test the sync status request of cdc server in the following scenarios:
 #   1. The sync status request of cdc server when the upstream cluster is available
 #      1.1 pdNow - lastSyncedTs > threshold, pdNow - checkpointTs < threshold
 #      1.2 pdNow - lastSyncedTs < threshold
+#      1.3 pdNow - lastSyncedTs > threshold, pdNow - checkpointTs < threshold, resolvedTs - checkpointTs > threshold
 #   2. The sync status request of cdc server when the upstream pd is unavailable
 #      2.1 resolvedTs - checkpointTs < threshold
 #   3. The sync status request of cdc server when the upstream tikv is unavailable
@@ -115,6 +116,25 @@ function run_normal_case_and_unavailable_pd() {
         exit 1
     fi
 
+    # make failpoint to block checkpoint-ts
+    export GO_FAILPOINTS='github.com/pingcap/ticdc/cdc/owner/ChangefeedOwnerDontUpdateCheckpoint=return("")'
+    sleep 20 # wait enough time for pass checkpoint-check-interval
+    synced_status=`curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced`
+    status=$(echo $synced_status | jq '.synced')
+    if [ $status != false ]; then
+        echo "synced status isn't correct"
+        exit 1
+    fi
+    info=$(echo $synced_status | jq -r '.info')
+    target_message="Please check whether pd is health and tikv region is all available. \
+If pd is not health or tikv region is not available, the data syncing is finished. \
+Otherwise the data syncing is not finished, please wait"
+    if [ "$info" != "$target_message" ]; then
+        echo "synced status info is not correct"
+        exit 1
+    fi
+
+    export GO_FAILPOINTS=''
 
     #========== 
     # case 2: test with unavailable pd 
@@ -254,11 +274,50 @@ function run_case_with_unavailable_tidb() {
     stop_tidb_cluster
 }
 
+function run_case_with_failpoint() {
+	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
+
+	start_tidb_cluster --workdir $WORK_DIR
+
+	cd $WORK_DIR
+
+    # make failpoint to block checkpoint-ts
+    export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/ChangefeedOwnerDontUpdateCheckpoint=return(true)'
+
+    start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
+	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+
+	SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
+	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1" --config="$CUR/conf/changefeed.toml"
+
+    sleep 20 # wait enough time for pass checkpoint-check-interval
+    synced_status=`curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced`
+    status=$(echo $synced_status | jq '.synced')
+    if [ $status != false ]; then
+        echo "synced status isn't correct"
+        exit 1
+    fi
+    info=$(echo $synced_status | jq -r '.info')
+    target_message="Please check whether pd is health and tikv region is all available. \
+If pd is not health or tikv region is not available, the data syncing is finished. \
+Otherwise the data syncing is not finished, please wait"
+    if [ "$info" != "$target_message" ]; then
+        echo "synced status info is not correct"
+        exit 1
+    fi
+
+    export GO_FAILPOINTS=''
+
+	cleanup_process $CDC_BINARY
+    stop_tidb_cluster
+}
+
 
 
 trap stop_tidb_cluster EXIT
 run_normal_case_and_unavailable_pd $*
 run_case_with_unavailable_tikv $*
 run_case_with_unavailable_tidb $*
+run_case_with_failpoint $*
 check_logs $WORK_DIR
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"
