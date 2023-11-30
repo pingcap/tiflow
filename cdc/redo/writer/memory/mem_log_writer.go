@@ -58,16 +58,16 @@ func NewLogWriter(
 	eg, ctx := errgroup.WithContext(ctx)
 	lwCtx, lwCancel := context.WithCancel(ctx)
 	lw := &memoryLogWriter{
-		cfg:    cfg,
-		eg:     eg,
-		cancel: lwCancel,
+		cfg:           cfg,
+		encodeWorkers: newEncodingWorkerGroup(cfg),
+		fileWorkers:   newFileWorkerGroup(cfg, cfg.FlushWorkerNum, extStorage, opts...),
+		eg:            eg,
+		cancel:        lwCancel,
 	}
 
-	lw.encodeWorkers = newEncodingWorkerGroup(cfg)
 	eg.Go(func() error {
 		return lw.encodeWorkers.Run(lwCtx)
 	})
-	lw.fileWorkers = newFileWorkerGroup(cfg, cfg.FlushWorkerNum, extStorage, opts...)
 	eg.Go(func() error {
 		return lw.fileWorkers.Run(lwCtx, lw.encodeWorkers.outputCh)
 	})
