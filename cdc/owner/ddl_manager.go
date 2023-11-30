@@ -203,7 +203,7 @@ func (m *ddlManager) tick(
 	tableCheckpoint map[model.TableName]model.Ts,
 ) ([]model.TableID, *schedulepb.BarrierWithMinTs, error) {
 	if m.needSendBootstrapEvent {
-		ok, err := m.checkAndBootstrap(ctx)
+		finished, err := m.checkAndBootstrap(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
