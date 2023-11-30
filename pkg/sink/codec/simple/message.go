@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
@@ -70,6 +69,10 @@ type columnSchema struct {
 type dataType struct {
 	// MySQLType represent the basic mysql type
 	MySQLType string `json:"mysqlType"`
+
+	Charset string `json:"charset"`
+	Collate string `json:"collate"`
+
 	// length represent size of bytes of the field
 	Length int `json:"length,omitempty"`
 	// Decimal represent decimal length of the field
@@ -84,6 +87,8 @@ type dataType struct {
 func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
 	tp := dataType{
 		MySQLType: types.TypeToStr(col.GetType(), col.GetCharset()),
+		Charset:   col.GetCharset(),
+		Collate:   col.GetCollate(),
 		Length:    col.GetFlen(),
 		Decimal:   col.GetDecimal(),
 		Elements:  col.GetElems(),
@@ -104,6 +109,8 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 	col.Name = timodel.NewCIStr(column.Name)
 
 	col.FieldType = *types.NewFieldType(types.StrToType(column.DataType.MySQLType))
+	col.SetCharset(column.DataType.Charset)
+	col.SetCollate(column.DataType.Collate)
 	if column.DataType.Unsigned {
 		col.AddFlag(mysql.UnsignedFlag)
 	}
@@ -115,11 +122,7 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 	col.SetElems(column.DataType.Elements)
 
 	if utils.IsBinaryMySQLType(column.DataType.MySQLType) {
-		col.SetCharset(charset.CharsetBin)
-		col.SetCollate(charset.CollationBin)
 		col.AddFlag(mysql.BinaryFlag)
-	} else {
-		col.SetCharset(charset.CharsetUTF8MB4)
 	}
 
 	for _, index := range indexes {
@@ -189,8 +192,6 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
-	Charset string          `json:"charset"`
-	Collate string          `json:"collate"`
 	Columns []*columnSchema `json:"columns"`
 	Indexes []*IndexSchema  `json:"indexes"`
 }
@@ -212,8 +213,6 @@ func newTableSchema(tableInfo *timodel.TableInfo) *TableSchema {
 	}
 
 	return &TableSchema{
-		Charset: tableInfo.Charset,
-		Collate: tableInfo.Collate,
 		Columns: columns,
 		Indexes: indexes,
 	}
@@ -232,8 +231,6 @@ func newTableInfo(msg *message) *model.TableInfo {
 	}
 
 	if msg.TableSchema != nil {
-		info.TableInfo.Charset = msg.TableSchema.Charset
-		info.TableInfo.Collate = msg.TableSchema.Collate
 		for _, col := range msg.TableSchema.Columns {
 			tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
 			info.Columns = append(info.Columns, tiCol)
@@ -480,9 +477,11 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 
 func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*model.Column, error) {
 	result := &model.Column{
-		Type:  fieldType.GetType(),
-		Name:  name,
-		Value: value,
+		Type:      fieldType.GetType(),
+		Charset:   fieldType.GetCharset(),
+		Collation: fieldType.GetCollate(),
+		Name:      name,
+		Value:     value,
 	}
 	if value == nil {
 		return result, nil

@@ -87,8 +87,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.Equal(t, ddlEvent.Query, event.Query)
 	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
 	require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
-	require.Equal(t, ddlEvent.TableInfo.Charset, event.TableInfo.Charset)
-	require.Equal(t, ddlEvent.TableInfo.Collate, event.TableInfo.Collate)
 
 	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
@@ -118,8 +116,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
 	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
 	require.Nil(t, decodedRow.PreColumns)
-	require.Equal(t, decodedRow.TableInfo.Charset, row.TableInfo.Charset)
-	require.Equal(t, decodedRow.TableInfo.Collate, row.TableInfo.Collate)
 }
 
 func TestEncoderOtherTypes(t *testing.T) {
@@ -184,6 +180,8 @@ func TestEncoderOtherTypes(t *testing.T) {
 		decoded, ok := decodedColumns[expected.Name]
 		require.True(t, ok)
 		require.Equal(t, expected.Value, decoded.Value)
+		require.Equal(t, expected.Charset, decoded.Charset)
+		require.Equal(t, expected.Collation, decoded.Collation)
 	}
 }
 
@@ -227,8 +225,6 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	require.Equal(t, "", event.Query)
 	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
 	require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
-	require.Equal(t, ddlEvent.TableInfo.Charset, event.TableInfo.Charset)
-	require.Equal(t, ddlEvent.TableInfo.Collate, event.TableInfo.Collate)
 
 	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
@@ -258,6 +254,4 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
 	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
 	require.Nil(t, decodedRow.PreColumns)
-	require.Equal(t, decodedRow.TableInfo.Charset, row.TableInfo.Charset)
-	require.Equal(t, decodedRow.TableInfo.Collate, row.TableInfo.Collate)
 }
