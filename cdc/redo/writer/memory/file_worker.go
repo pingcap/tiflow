@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -248,7 +249,7 @@ func (f *fileWorkerGroup) newFileCache(event *polymorphicRedoEvent) error {
 	)
 	bufferWriter := bytes.NewBuffer(buf)
 	wr = bufferWriter
-	if f.cfg.Compression == "lz4" {
+	if f.cfg.Compression == compression.LZ4 {
 		wr = lz4.NewWriter(bufferWriter)
 		closer = wr.(io.Closer)
 	}

@@ -20,7 +20,6 @@ import (
 	"container/heap"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 	"net/url"
@@ -30,7 +29,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pierrec/lz4/v4"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -38,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/redo/writer/file"
+	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/zap"
@@ -53,6 +52,9 @@ const (
 	// the memory used is defaultWorkerNum * defaultMaxLogSize (64 * megabyte) total
 	defaultWorkerNum = 16
 )
+
+// lz4MagicNumber is the magic number of lz4 compressed data
+var lz4MagicNumber = []byte{0x04, 0x22, 0x4D, 0x18}
 
 type fileReader interface {
 	io.Closer
@@ -209,19 +211,7 @@ func isLZ4Compressed(data []byte) bool {
 	if len(data) < 4 {
 		return false
 	}
-	magicNumber := []byte{0x04, 0x22, 0x4D, 0x18}
-	return bytes.Equal(data[:4], magicNumber)
-}
-
-func decompressLZ4Reader(compressedData []byte) ([]byte, error) {
-	var decompressedBuffer bytes.Buffer
-	reader := lz4.NewReader(bytes.NewReader(compressedData))
-	_, err := io.Copy(&decompressedBuffer, reader)
-	if err != nil {
-		fmt.Printf("Decompression error: %v\n", err)
-		return nil, err
-	}
-	return decompressedBuffer.Bytes(), nil
+	return bytes.Equal(data[:4], lz4MagicNumber)
 }
 
 func readAllFromBuffer(buf []byte) (logHeap, error) {
@@ -274,7 +264,7 @@ func sortAndWriteFile(
 	}
 	// it's lz4 compressed, decompress it
 	if isLZ4Compressed(fileContent) {
-		if fileContent, err = decompressLZ4Reader(fileContent); err != nil {
+		if fileContent, err = compression.Decode(compression.LZ4, fileContent); err != nil {
 			return err
 		}
 	}
