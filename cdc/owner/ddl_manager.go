@@ -208,7 +208,7 @@ func (m *ddlManager) tick(
 			return nil, nil, err
 		}
 		if !finished {
-			return nil, m.barrier(), nil
+			return nil, schedulepb.NewBarrierWithMinTs(checkpointTs), nil
 		}
 	}
 
