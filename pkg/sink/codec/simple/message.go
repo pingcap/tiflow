@@ -18,14 +18,14 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/parser/charset"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/parser/types"
+	tiTypes "github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -62,16 +62,38 @@ type columnSchema struct {
 	// ID is used to sort all column schema, should not be exposed to the outside.
 	ID       int64       `json:"-"`
 	Name     string      `json:"name"`
-	DataType string      `json:"dataType"`
+	DataType dataType    `json:"dataType"`
 	Nullable bool        `json:"nullable"`
 	Default  interface{} `json:"default"`
 }
 
+type dataType struct {
+	// MySQLType represent the basic mysql type
+	MySQLType string `json:"mysqlType"`
+	// length represent size of bytes of the field
+	Length int `json:"length,omitempty"`
+	// Decimal represent decimal length of the field
+	Decimal int `json:"decimal,omitempty"`
+	// Elements represent the element list for enum and set type.
+	Elements []string `json:"elements,omitempty"`
+
+	Unsigned bool `json:"unsigned,omitempty"`
+	Zerofill bool `json:"zerofill,omitempty"`
+}
+
 func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
+	tp := dataType{
+		MySQLType: types.TypeToStr(col.GetType(), col.GetCharset()),
+		Length:    col.GetFlen(),
+		Decimal:   col.GetDecimal(),
+		Elements:  col.GetElems(),
+		Unsigned:  mysql.HasUnsignedFlag(col.GetFlag()),
+		Zerofill:  mysql.HasZerofillFlag(col.GetFlag()),
+	}
 	return &columnSchema{
 		ID:       col.ID,
 		Name:     col.Name.O,
-		DataType: col.GetTypeDesc(),
+		DataType: tp,
 		Nullable: mysql.HasNotNullFlag(col.GetFlag()),
 		Default:  entry.GetDDLDefaultDefinition(col),
 	}
@@ -81,39 +103,21 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 	col := new(timodel.ColumnInfo)
 	col.Name = timodel.NewCIStr(column.Name)
 
-	tp := utils.ExtractBasicMySQLType(column.DataType)
-	col.FieldType = *types.NewFieldType(tp)
-	if strings.Contains(column.DataType, "unsigned") {
+	col.FieldType = *types.NewFieldType(types.StrToType(column.DataType.MySQLType))
+	if column.DataType.Unsigned {
 		col.AddFlag(mysql.UnsignedFlag)
 	}
-	if strings.Contains(column.DataType, "zerofill") {
+	if column.DataType.Zerofill {
 		col.AddFlag(mysql.ZerofillFlag)
 	}
+	col.SetFlen(column.DataType.Length)
+	col.SetDecimal(column.DataType.Decimal)
+	col.SetElems(column.DataType.Elements)
 
-	switch col.FieldType.GetType() {
-	case mysql.TypeEnum:
-		dataType := strings.TrimPrefix(column.DataType, "enum(")
-		dataType = strings.TrimSuffix(dataType, ")")
-		elements := strings.Split(dataType, ",")
-		col.FieldType.SetElems(elements)
-		for idx, ele := range elements {
-			ele = strings.Trim(ele, "'")
-			col.FieldType.SetElem(idx, ele)
-		}
-	case mysql.TypeSet:
-		dataType := strings.TrimPrefix(column.DataType, "set(")
-		dataType = strings.TrimSuffix(dataType, ")")
-		elements := strings.Split(dataType, ",")
-		col.FieldType.SetElems(elements)
-		for idx, ele := range elements {
-			ele = strings.Trim(ele, "'")
-			col.FieldType.SetElem(idx, ele)
-		}
-	}
-
-	if utils.IsBinaryMySQLType(column.DataType) {
+	if utils.IsBinaryMySQLType(column.DataType.MySQLType) {
 		col.SetCharset(charset.CharsetBin)
-		types.SetBinChsClnFlag(&col.FieldType)
+		col.SetCollate(charset.CollationBin)
+		col.AddFlag(mysql.BinaryFlag)
 	} else {
 		col.SetCharset(charset.CharsetUTF8MB4)
 	}
@@ -430,7 +434,7 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 		}
 		element := ft.GetElems()
 		number := value.(uint64)
-		enumVar, err := types.ParseEnumValue(element, number)
+		enumVar, err := tiTypes.ParseEnumValue(element, number)
 		if err != nil {
 			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 		}
@@ -441,7 +445,7 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 		}
 		elements := ft.GetElems()
 		number := value.(uint64)
-		setVar, err := types.ParseSetValue(elements, number)
+		setVar, err := tiTypes.ParseSetValue(elements, number)
 		if err != nil {
 			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 		}
@@ -527,14 +531,14 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		result.Value = val
 	case mysql.TypeEnum:
 		element := fieldType.GetElems()
-		enumVar, err := types.ParseEnumName(element, data, fieldType.GetCharset())
+		enumVar, err := tiTypes.ParseEnumName(element, data, fieldType.GetCharset())
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 		result.Value = enumVar.Value
 	case mysql.TypeSet:
 		elements := fieldType.GetElems()
-		setVar, err := types.ParseSetName(elements, data, fieldType.GetCharset())
+		setVar, err := tiTypes.ParseSetName(elements, data, fieldType.GetCharset())
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
