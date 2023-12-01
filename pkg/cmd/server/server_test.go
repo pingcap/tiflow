@@ -203,6 +203,10 @@ func TestParseCfg(t *testing.T) {
 				Enable:          false,
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -346,6 +350,10 @@ check-balance-interval = "10s"
 				Enable:          false,
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -481,6 +489,10 @@ cert-allowed-cn = ["dd","ee"]
 				Enable:          false,
 				MetaStoreConfig: config.MetaStoreConfiguration{},
 			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -542,6 +554,10 @@ unknown3 = 3
 		CDCV2: &config.CDCV2{
 			Enable:          false,
 			MetaStoreConfig: config.MetaStoreConfiguration{},
+		},
+		Puller: &config.PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
 		},
 	}, o.serverConfig.Debug)
 }
