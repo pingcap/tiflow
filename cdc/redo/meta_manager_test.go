@@ -79,6 +79,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 	m := NewMetaManager(changefeedID, cfg, startTs)
 
@@ -160,6 +161,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 	m := NewMetaManager(changefeedID, cfg, startTs)
 
@@ -292,7 +294,7 @@ func TestGCAndCleanup(t *testing.T) {
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
-		GCIntervalInMs:        int64(redo.MinGCIntervalInMs),
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 
 	m := NewMetaManager(changefeedID, cfg, startTs)

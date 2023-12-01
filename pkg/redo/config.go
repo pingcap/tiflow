@@ -30,8 +30,6 @@ import (
 var (
 	// DefaultGCIntervalInMs defines GC interval in meta manager, which can be changed in tests.
 	DefaultGCIntervalInMs = 5000 // 5 seconds
-	// MinGCIntervalInMs defines the minimum GC interval in meta manager.
-	MinGCIntervalInMs = 10 // 10 milliseconds
 	// DefaultMaxLogSize is the default max size of log file
 	DefaultMaxLogSize = int64(64)
 )
@@ -50,6 +48,9 @@ const (
 	DefaultMetaFlushIntervalInMs = 200
 	// MinFlushIntervalInMs is the minimum flush interval for redo log.
 	MinFlushIntervalInMs = 50
+
+	// MinGCIntervalInMs defines the minimum GC interval in meta manager.
+	MinGCIntervalInMs = 10 // 10 milliseconds
 
 	// DefaultEncodingWorkerNum is the default number of encoding workers.
 	DefaultEncodingWorkerNum = 16
