@@ -14,6 +14,7 @@
 package debezium
 
 import (
+	"bytes"
 	"math"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
+	"github.com/thanhpk/randstr"
 )
 
 func TestEncodeInsert(t *testing.T) {
@@ -49,7 +51,8 @@ func TestEncodeInsert(t *testing.T) {
 		}},
 	}
 
-	data, err := codec.EncodeRowChangedEvent(e)
+	buf := bytes.NewBuffer(nil)
+	err := codec.EncodeRowChangedEvent(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `{
 		"payload": {
@@ -79,7 +82,7 @@ func TestEncodeInsert(t *testing.T) {
 			"ts_ms": 1701326309000,
 			"transaction": null
 		}
-	}`, string(data))
+	}`, string(buf.Bytes()))
 }
 
 func TestEncodeUpdate(t *testing.T) {
@@ -108,7 +111,8 @@ func TestEncodeUpdate(t *testing.T) {
 		}},
 	}
 
-	data, err := codec.EncodeRowChangedEvent(e)
+	buf := bytes.NewBuffer(nil)
+	err := codec.EncodeRowChangedEvent(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `{
 		"payload": {
@@ -140,7 +144,7 @@ func TestEncodeUpdate(t *testing.T) {
 			"ts_ms": 1701326309000,
 			"transaction": null
 		}
-	}`, string(data))
+	}`, string(buf.Bytes()))
 }
 
 func TestEncodeDelete(t *testing.T) {
@@ -165,7 +169,8 @@ func TestEncodeDelete(t *testing.T) {
 		}},
 	}
 
-	data, err := codec.EncodeRowChangedEvent(e)
+	buf := bytes.NewBuffer(nil)
+	err := codec.EncodeRowChangedEvent(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `{
 		"payload": {
@@ -195,7 +200,7 @@ func TestEncodeDelete(t *testing.T) {
 			"ts_ms": 1701326309000,
 			"transaction": null
 		}
-	}`, string(data))
+	}`, string(buf.Bytes()))
 }
 
 func TestEncodeDataTypes(t *testing.T) {
@@ -302,7 +307,8 @@ func TestEncodeDataTypes(t *testing.T) {
 		}},
 	}
 
-	data, err := codec.EncodeRowChangedEvent(e)
+	buf := bytes.NewBuffer(nil)
+	err := codec.EncodeRowChangedEvent(e, buf)
 	require.Nil(t, err)
 	require.JSONEq(t, `{
 		"payload": {
@@ -342,5 +348,98 @@ func TestEncodeDataTypes(t *testing.T) {
 			"ts_ms": 1701326309000,
 			"transaction": null
 		}
-	}`, string(data))
+	}`, string(buf.Bytes()))
+}
+
+func BenchmarkEncodeOneTinyColumn(b *testing.B) {
+	codec := &Codec{
+		config:    common.NewConfig(config.ProtocolDebezium),
+		clusterID: "test-cluster",
+		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
+	}
+
+	e := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		Columns: []*model.Column{{
+			Name:  "tiny",
+			Value: int64(10), Type: mysql.TypeTiny,
+		}},
+		ColInfos: []rowcodec.ColInfo{{
+			ID:            1,
+			IsPKHandle:    false,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeTiny),
+		}},
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		buf.Reset()
+		codec.EncodeRowChangedEvent(e, buf)
+	}
+}
+
+func BenchmarkEncodeLargeText(b *testing.B) {
+	codec := &Codec{
+		config:    common.NewConfig(config.ProtocolDebezium),
+		clusterID: "test-cluster",
+		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
+	}
+
+	e := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		Columns: []*model.Column{{
+			Name:  "str",
+			Value: []byte(randstr.String(1024)), Type: mysql.TypeVarchar,
+		}},
+		ColInfos: []rowcodec.ColInfo{{
+			ID:            1,
+			IsPKHandle:    false,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeVarchar),
+		}},
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		buf.Reset()
+		codec.EncodeRowChangedEvent(e, buf)
+	}
+}
+
+func BenchmarkEncodeLargeBinary(b *testing.B) {
+	codec := &Codec{
+		config:    common.NewConfig(config.ProtocolDebezium),
+		clusterID: "test-cluster",
+		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
+	}
+
+	e := &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "test", Table: "table1"},
+		Columns: []*model.Column{{
+			Name:  "bin",
+			Value: []byte(randstr.String(1024)), Type: mysql.TypeVarchar, Flag: model.BinaryFlag,
+		}},
+		ColInfos: []rowcodec.ColInfo{{
+			ID:            1,
+			IsPKHandle:    false,
+			VirtualGenCol: false,
+			Ft:            types.NewFieldType(mysql.TypeVarchar),
+		}},
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		buf.Reset()
+		codec.EncodeRowChangedEvent(e, buf)
+	}
 }

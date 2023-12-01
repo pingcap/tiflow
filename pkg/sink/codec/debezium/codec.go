@@ -14,20 +14,23 @@
 package debezium
 
 import (
-	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
+	_ "github.com/goccy/go-json"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/util/hack"
+	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/pd/pkg/utils/tsoutil"
 )
 
@@ -66,8 +69,8 @@ type debeziumMsgSource struct {
 	Version   string `json:"version"`
 	Connector string `json:"connector"`
 	Name      string `json:"name"`
-	// TsMs: In the source object, ts_ms indicates the time that the change was made in the database.
-	// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
+	// // TsMs: In the source object, ts_ms indicates the time that the change was made in the database.
+	// // https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
 	TsMs     int64   `json:"ts_ms"`
 	Snapshot bool    `json:"snapshot"`
 	Db       string  `json:"db"`
@@ -91,10 +94,24 @@ type Codec struct {
 	nowFunc   func() time.Time
 }
 
+func (c *Codec) writeColumnsAsField(writer *util.JSONWriter, fieldName string, cols []*model.Column, colInfos []rowcodec.ColInfo) error {
+	var err error
+	writer.WriteObjectField(fieldName, func() {
+		for i, col := range cols {
+			err = c.writeDebeziumField(writer, col, colInfos[i].Ft)
+			if err != nil {
+				break
+			}
+		}
+	})
+	return err
+}
+
 // See https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-data-types
-func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (any, error) {
+func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, ft *types.FieldType) error {
 	if col.Value == nil {
-		return nil, nil
+		writer.WriteNullField(col.Name)
+		return nil
 	}
 	switch col.Type {
 	case mysql.TypeBit:
@@ -105,19 +122,20 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 			//						contain the specified number of bits.
 			n := ft.GetFlen()
 			if n == 1 {
-				return v != 0, nil
+				writer.WriteBoolField(col.Name, v != 0)
+				return nil
 			} else {
-				buf := make([]byte, 8)
-				binary.LittleEndian.PutUint64(buf, uint64(v))
-
+				var buf [8]byte
+				binary.LittleEndian.PutUint64(buf[:], v)
 				numBytes := n / 8
 				if n%8 != 0 {
 					numBytes += 1
 				}
-				return base64.StdEncoding.EncodeToString(buf[:numBytes]), nil
+				c.writeBinaryField(writer, col.Name, buf[:numBytes])
+				return nil
 			}
 		}
-		return nil, cerror.WrapError(
+		return cerror.WrapError(
 			cerror.ErrDebeziumEncodeFailed,
 			errors.Errorf(
 				"unexpected column value type %T for bit column %s",
@@ -127,9 +145,10 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		if col.Flag.IsBinary() {
 			if v, ok := col.Value.([]byte); ok {
-				return base64.StdEncoding.EncodeToString(v), nil
+				c.writeBinaryField(writer, col.Name, v)
+				return nil
 			}
-			return nil, cerror.WrapError(
+			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				errors.Errorf(
 					"unexpected column value type %T for binary string column %s",
@@ -137,9 +156,10 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 					col.Name))
 		} else {
 			if v, ok := col.Value.([]byte); ok {
-				return string(v), nil
+				writer.WriteStringField(col.Name, string(hack.String(v)))
+				return nil
 			}
-			return nil, cerror.WrapError(
+			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				errors.Errorf(
 					"unexpected column value type %T for non-binary string column %s",
@@ -150,11 +170,12 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 		if v, ok := col.Value.(uint64); ok {
 			enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
 			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDebeziumEncodeFailed, err)
+				return cerror.WrapError(cerror.ErrDebeziumEncodeFailed, err)
 			}
-			return enumVar.Name, nil
+			writer.WriteStringField(col.Name, enumVar.Name)
+			return nil
 		}
-		return nil, cerror.WrapError(
+		return cerror.WrapError(
 			cerror.ErrDebeziumEncodeFailed,
 			errors.Errorf(
 				"unexpected column value type %T for enum column %s",
@@ -164,11 +185,12 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 		if v, ok := col.Value.(uint64); ok {
 			setVar, err := types.ParseSetValue(ft.GetElems(), v)
 			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDebeziumEncodeFailed, err)
+				return cerror.WrapError(cerror.ErrDebeziumEncodeFailed, err)
 			}
-			return setVar.Name, nil
+			writer.WriteStringField(col.Name, setVar.Name)
+			return nil
 		}
-		return nil, cerror.WrapError(
+		return cerror.WrapError(
 			cerror.ErrDebeziumEncodeFailed,
 			errors.Errorf(
 				"unexpected column value type %T for set column %s",
@@ -178,13 +200,14 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 		if v, ok := col.Value.(string); ok {
 			floatV, err := strconv.ParseFloat(v, 64)
 			if err != nil {
-				return nil, cerror.WrapError(
+				return cerror.WrapError(
 					cerror.ErrDebeziumEncodeFailed,
 					err)
 			}
-			return floatV, nil
+			writer.WriteFloat64Field(col.Name, floatV)
+			return nil
 		}
-		return nil, cerror.WrapError(
+		return cerror.WrapError(
 			cerror.ErrDebeziumEncodeFailed,
 			errors.Errorf(
 				"unexpected column value type %T for decimal column %s",
@@ -197,14 +220,17 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 				// For example, time may be invalid like 1000-00-00
 				// return nil, nil
 				if mysql.HasNotNullFlag(ft.GetFlag()) {
-					return 0, nil
+					writer.WriteInt64Field(col.Name, 0)
+					return nil
 				} else {
-					return nil, nil
+					writer.WriteNullField(col.Name)
+					return nil
 				}
 			}
-			return t.Unix() / 60 / 60 / 24, nil
+			writer.WriteInt64Field(col.Name, t.Unix()/60/60/24)
+			return nil
 		}
-		return nil, cerror.WrapError(
+		return cerror.WrapError(
 			cerror.ErrDebeziumEncodeFailed,
 			errors.Errorf(
 				"unexpected column value type %T for date column %s",
@@ -221,18 +247,22 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 			if err != nil {
 				// For example, time may be 1000-00-00
 				if mysql.HasNotNullFlag(ft.GetFlag()) {
-					return 0, nil
+					writer.WriteInt64Field(col.Name, 0)
+					return nil
 				} else {
-					return nil, nil
+					writer.WriteNullField(col.Name)
+					return nil
 				}
 			}
 			if ft.GetDecimal() <= 3 {
-				return t.UnixMilli(), nil
+				writer.WriteInt64Field(col.Name, t.UnixMilli())
+				return nil
 			} else {
-				return t.UnixMicro(), nil
+				writer.WriteInt64Field(col.Name, t.UnixMicro())
+				return nil
 			}
 		}
-		return nil, cerror.WrapError(
+		return cerror.WrapError(
 			cerror.ErrDebeziumEncodeFailed,
 			errors.Errorf(
 				"unexpected column value type %T for datetime column %s",
@@ -255,7 +285,8 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 				if mysql.HasNotNullFlag(ft.GetFlag()) {
 					t = time.Unix(0, 0)
 				} else {
-					return nil, nil
+					writer.WriteNullField(col.Name)
+					return nil
 				}
 			}
 
@@ -267,9 +298,10 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 			}
 			str += "Z"
 
-			return str, nil
+			writer.WriteStringField(col.Name, str)
+			return nil
 		}
-		return nil, cerror.WrapError(
+		return cerror.WrapError(
 			cerror.ErrDebeziumEncodeFailed,
 			errors.Errorf(
 				"unexpected column value type %T for timestamp column %s",
@@ -283,13 +315,15 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 			ctx := &stmtctx.StatementContext{}
 			d, _, _, err := types.StrToDuration(ctx, v, ft.GetDecimal())
 			if err != nil {
-				return nil, cerror.WrapError(
+				return cerror.WrapError(
 					cerror.ErrDebeziumEncodeFailed,
 					err)
 			}
-			return d.Microseconds(), nil
+
+			writer.WriteInt64Field(col.Name, d.Microseconds())
+			return nil
 		}
-		return nil, cerror.WrapError(
+		return cerror.WrapError(
 			cerror.ErrDebeziumEncodeFailed,
 			errors.Errorf(
 				"unexpected column value type %T for time column %s",
@@ -300,9 +334,10 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 			// Handle with BIGINT UNSIGNED.
 			// Debezium always produce INT64 instead of UINT64 for BIGINT.
 			if v, ok := col.Value.(uint64); ok {
-				return int64(v), nil
+				writer.WriteInt64Field(col.Name, int64(v))
+				return nil
 			}
-			return nil, cerror.WrapError(
+			return cerror.WrapError(
 				cerror.ErrDebeziumEncodeFailed,
 				errors.Errorf(
 					"unexpected column value type %T for unsigned bigint column %s",
@@ -314,95 +349,67 @@ func (c *Codec) convertToDebeziumField(col *model.Column, ft *types.FieldType) (
 		// actually uses INT64. Debezium also uses INT32 for SMALLINT.
 		// So we only handle with TypeLonglong here.
 	}
-	return col.Value, nil
+
+	writer.WriteAnyField(col.Name, col.Value)
+	return nil
 }
 
-func (c *Codec) rowChangeToDebeziumMsg(e *model.RowChangedEvent) (*debeziumDataChangeMsg, error) {
-	commitTime, _ := tsoutil.ParseTS(e.CommitTs)
-
-	source := &debeziumMsgSource{
-		Version:   "2.4.0.Final",
-		Connector: "TiCDC",
-		Name:      c.clusterID,
-		TsMs:      commitTime.UnixMilli(),
-		Snapshot:  false,
-		Db:        e.Table.Schema,
-		Table:     e.Table.Table,
-		ServerID:  0,
-		GtID:      nil,
-		File:      "",
-		Pos:       0,
-		Row:       0,
-		Thread:    0,
-		Query:     nil,
-
-		CommitTs:  e.CommitTs,
-		ClusterID: c.clusterID,
-	}
-
-	payload := &debeziumDataChangeMsgPayload{
-		Source:      source,
-		TsMs:        c.nowFunc().UnixMilli(),
-		Transaction: nil,
-	}
-
-	applyBefore := func() error {
-		payload.Before = make(map[string]any)
-		for i, col := range e.PreColumns {
-			value, err := c.convertToDebeziumField(col, e.ColInfos[i].Ft)
-			if err != nil {
-				return err
-			}
-			payload.Before[col.Name] = value
-		}
-		return nil
-	}
-
-	applyAfter := func() error {
-		payload.After = make(map[string]any)
-		for i, col := range e.Columns {
-			value, err := c.convertToDebeziumField(col, e.ColInfos[i].Ft)
-			if err != nil {
-				return err
-			}
-			payload.After[col.Name] = value
-		}
-		return nil
-	}
-
-	if e.IsInsert() {
-		payload.Op = "c"
-		payload.Before = nil
-		if err := applyAfter(); err != nil {
-			return nil, err
-		}
-	} else if e.IsDelete() {
-		payload.Op = "d"
-		payload.After = nil
-		if err := applyBefore(); err != nil {
-			return nil, err
-		}
-	} else if e.IsUpdate() {
-		payload.Op = "u"
-		if err := applyBefore(); err != nil {
-			return nil, err
-		}
-		if err := applyAfter(); err != nil {
-			return nil, err
-		}
-	}
-
-	return &debeziumDataChangeMsg{
-		Payload: payload,
-	}, nil
+func (c *Codec) writeBinaryField(writer *util.JSONWriter, fieldName string, value []byte) {
+	// TODO: Deal with different binary output later.
+	writer.WriteBase64StringField(fieldName, value)
 }
 
 func (c *Codec) EncodeRowChangedEvent(
 	e *model.RowChangedEvent,
-) ([]byte, error) {
-	m, err := c.rowChangeToDebeziumMsg(e)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	return json.Marshal(m)
+	dest io.Writer,
+) error {
+	jWriter := util.BorrowJSONWriter(dest)
+	defer util.ReturnJSONWriter(jWriter)
+
+	commitTime, _ := tsoutil.ParseTS(e.CommitTs)
+
+	var err error
+
+	jWriter.WriteObject(func() {
+		jWriter.WriteObjectField("payload", func() {
+			jWriter.WriteObjectField("source", func() {
+				jWriter.WriteStringField("version", "2.4.0.Final")
+				jWriter.WriteStringField("connector", "TiCDC")
+				jWriter.WriteStringField("name", c.clusterID)
+				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
+				jWriter.WriteBoolField("snapshot", false)
+				jWriter.WriteStringField("db", e.Table.Schema)
+				jWriter.WriteStringField("table", e.Table.Table)
+				jWriter.WriteInt64Field("server_id", 0)
+				jWriter.WriteNullField("gtid")
+				jWriter.WriteStringField("file", "")
+				jWriter.WriteInt64Field("pos", 0)
+				jWriter.WriteInt64Field("row", 0)
+				jWriter.WriteInt64Field("thread", 0)
+				jWriter.WriteNullField("query")
+				jWriter.WriteUint64Field("commit_ts", e.CommitTs)
+				jWriter.WriteStringField("cluster_id", c.clusterID)
+			})
+			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
+			jWriter.WriteNullField("transaction")
+
+			if e.IsInsert() {
+				jWriter.WriteStringField("op", "c")
+				jWriter.WriteNullField("before")
+				err = c.writeColumnsAsField(jWriter, "after", e.Columns, e.ColInfos)
+			} else if e.IsDelete() {
+				jWriter.WriteStringField("op", "d")
+				jWriter.WriteNullField("after")
+				err = c.writeColumnsAsField(jWriter, "before", e.PreColumns, e.ColInfos)
+			} else if e.IsUpdate() {
+				jWriter.WriteStringField("op", "u")
+				err = c.writeColumnsAsField(jWriter, "before", e.PreColumns, e.ColInfos)
+				if err == nil {
+					err = c.writeColumnsAsField(jWriter, "after", e.Columns, e.ColInfos)
+				}
+			}
+		})
+	})
+
+	return err
 }

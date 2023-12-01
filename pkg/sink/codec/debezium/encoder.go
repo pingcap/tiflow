@@ -49,11 +49,10 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	value, err := d.codec.EncodeRowChangedEvent(e)
+	err := d.codec.EncodeRowChangedEvent(e, d.valueBuf)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	d.valueBuf.Write(value)
 	d.batchSize++
 	if callback != nil {
 		d.callbackBuf = append(d.callbackBuf, callback)
@@ -128,7 +127,7 @@ func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder 
 	}
 }
 
-// Build a `maxwellBatchEncoder`
+// Build a `BatchEncoder`
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return newBatchEncoder(b.config)
 }
