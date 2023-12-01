@@ -159,14 +159,10 @@ var defaultServerConfig = &ServerConfig{
 		EnableNewSink:          true,
 		EnablePullBasedSink:    true,
 		EnableKVConnectBackOff: false,
-<<<<<<< HEAD
-=======
-		CDCV2:                  &CDCV2{Enable: false},
 		Puller: &PullerConfig{
 			EnableResolvedTsStuckDetection: false,
 			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
 		},
->>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
 	},
 	ClusterID:              "default",
 	GcTunerMemoryThreshold: DisableMemoryLimit,

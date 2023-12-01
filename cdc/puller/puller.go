@@ -168,6 +168,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
+		metricsTicker := time.NewTicker(15 * time.Second)
+		defer metricsTicker.Stop()
 		stuckDetectorTicker := time.NewTicker(1 * time.Minute)
 		defer stuckDetectorTicker.Stop()
 		output := func(raw *model.RawKVEntry) error {
@@ -206,17 +208,14 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-<<<<<<< HEAD
 			case <-metricsTicker.C:
 				metricEventChanSize.Observe(float64(len(eventCh)))
 				metricOutputChanSize.Observe(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
-=======
 			case <-stuckDetectorTicker.C:
 				if err := p.detectResolvedTsStuck(initialized); err != nil {
 					return errors.Trace(err)
 				}
->>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
 				continue
 			case e = <-eventCh:
 			}
@@ -277,10 +276,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-<<<<<<< HEAD
 func (p *pullerImpl) GetResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
-=======
+}
+
 func (p *pullerImpl) detectResolvedTsStuck(initialized bool) error {
 	if p.cfg.Debug.Puller.EnableResolvedTsStuckDetection && initialized {
 		resolvedTs := p.tsTracker.Frontier()
@@ -302,7 +301,6 @@ func (p *pullerImpl) detectResolvedTsStuck(initialized bool) error {
 		}
 	}
 	return nil
->>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
 }
 
 func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
