@@ -1054,6 +1054,7 @@ func (c *memoryQuota) consumeWithBlocking(nBytes uint64) error {
 	c.consumed.Lock()
 	defer c.consumed.Unlock()
 
+	start := time.Now()
 	for {
 		if c.isAborted.Load() {
 			return errFlowControllerAborted
@@ -1063,6 +1064,15 @@ func (c *memoryQuota) consumeWithBlocking(nBytes uint64) error {
 		if newConsumed < c.quota {
 			break
 		}
+
+		if time.Since(start) > 10*time.Second {
+			log.Warn("flow controller blocked for 5 seconds",
+				zap.Uint64("quota", c.quota),
+				zap.Uint64("consumed", c.consumed.bytes),
+				zap.Uint64("nBytes", nBytes))
+			start = time.Now()
+		}
+
 		c.consumedCond.Wait()
 	}
 
