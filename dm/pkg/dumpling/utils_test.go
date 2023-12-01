@@ -251,7 +251,7 @@ Finished dump at: 2020-12-02 17:13:56
 `
 	err = os.WriteFile(f.Name(), []byte(noBinlogLoc), 0o644)
 	require.NoError(t, err)
-	_, _, err = ParseMetaData(ctx, fdir, fname,  nil)
+	_, _, err = ParseMetaData(ctx, fdir, fname, nil)
 	require.True(t, terror.ErrMetadataNoBinlogLoc.Equal(err))
 }
 
