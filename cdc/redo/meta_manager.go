@@ -76,7 +76,7 @@ type metaManager struct {
 	metricFlushLogDuration prometheus.Observer
 
 	flushIntervalInMs int64
-	GCIntervalInMs	int64
+	GCIntervalInMs    int64
 }
 
 // NewDisabledMetaManager creates a disabled Meta Manager.
@@ -103,7 +103,7 @@ func NewMetaManager(
 		cfg:               cfg,
 		startTs:           checkpoint,
 		flushIntervalInMs: cfg.MetaFlushIntervalInMs,
-		GCIntervalInMs: cfg.GCIntervalInMs,
+		GCIntervalInMs:    cfg.GCIntervalInMs,
 	}
 
 	if m.flushIntervalInMs < redo.MinFlushIntervalInMs {
