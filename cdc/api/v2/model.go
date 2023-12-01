@@ -270,6 +270,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               c.Consistent.Storage,
 			UseFileBackend:        c.Consistent.UseFileBackend,
+			Compression:           c.Consistent.Compression,
 		}
 	}
 	if c.Sink != nil {
@@ -436,6 +437,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
 				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
 				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
 
@@ -719,6 +721,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
 				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
 				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
 
@@ -761,6 +764,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               cloned.Consistent.Storage,
 			UseFileBackend:        cloned.Consistent.UseFileBackend,
+			Compression:           cloned.Consistent.Compression,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -957,6 +961,7 @@ type ConsistentConfig struct {
 	FlushWorkerNum        int    `json:"flush_worker_num"`
 	Storage               string `json:"storage,omitempty"`
 	UseFileBackend        bool   `json:"use_file_backend"`
+	Compression           string `json:"compression,omitempty"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
@@ -1205,6 +1210,7 @@ type CloudStorageConfig struct {
 	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
 	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
 	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
+	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc
