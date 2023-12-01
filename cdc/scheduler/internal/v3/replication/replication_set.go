@@ -1015,9 +1015,7 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
 	}
 
-	// we only update stats when stats is not empty, due to we only collect stats every 10s.
-	// refer https://github.com/pingcap/tiflow/blob/bbf2d87f467313bf06f1f123b5409ebbac469647 \
-	// /cdc/scheduler/internal/v3/member/capture_manager.go#L176
+	// we only update stats when stats is not empty, because we only collect stats every 10s.
 	if stats.Size() > 0 {
 		r.Stats = stats
 	}
