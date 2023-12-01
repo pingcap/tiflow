@@ -151,8 +151,25 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
+<<<<<<< HEAD
     "enable-new-sink": true,
     "enable-kv-connect-backoff": false
+=======
+    "enable-kv-connect-backoff": false,
+    "cdc-v2": {
+      "enable": false,
+      "meta-store": {
+        "uri": "",
+        "ssl-ca": "",
+        "ssl-cert": "",
+        "ssl-key": ""
+      }
+    },
+    "puller": {
+      "enable-resolved-ts-stuck-detection": false,
+      "resolved-ts-stuck-interval": 300000000000
+    }
+>>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
   },
   "cluster-id": "default",
   "max-memory-percentage": 0,
