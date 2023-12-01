@@ -34,6 +34,7 @@ type ConsistentConfig struct {
 	Storage               string `toml:"storage" json:"storage"`
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
 	Compression           string `toml:"compression" json:"compression"`
+	FlushConcurrency      int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.

@@ -196,7 +196,12 @@ func (f *fileWorkerGroup) bgFlushFileCache(egCtx context.Context) error {
 			if err := file.writer.Close(); err != nil {
 				return errors.Trace(err)
 			}
-			err := f.extStorage.WriteFile(egCtx, file.filename, file.writer.buf.Bytes())
+			var err error
+			if f.cfg.FlushConcurrency <= 1 {
+				err = f.extStorage.WriteFile(egCtx, file.filename, file.writer.buf.Bytes())
+			} else {
+				err = f.multiPartUpload(egCtx, file)
+			}
 			f.metricFlushAllDuration.Observe(time.Since(start).Seconds())
 			if err != nil {
 				return errors.Trace(err)
@@ -208,6 +213,29 @@ func (f *fileWorkerGroup) bgFlushFileCache(egCtx context.Context) error {
 			f.pool.Put(bufPtr)
 		}
 	}
+}
+
+func (f *fileWorkerGroup) multiPartUpload(ctx context.Context, file *fileCache) error {
+	multipartWrite, err := f.extStorage.Create(ctx, file.filename, &storage.WriterOption{
+		Concurrency: f.cfg.FlushConcurrency,
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	defer func() {
+		closeErr := multipartWrite.Close(ctx)
+		if err != nil {
+			log.Error("failed to close writer",
+				zap.String("fileName", file.filename),
+				zap.Error(closeErr))
+			if err == nil {
+				err = closeErr
+			}
+		}
+	}()
+	_, err = multipartWrite.Write(ctx, file.writer.buf.Bytes())
+	return errors.Trace(err)
 }
 
 func (f *fileWorkerGroup) bgWriteLogs(
