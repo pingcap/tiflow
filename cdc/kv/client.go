@@ -1340,8 +1340,9 @@ func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		currTime := s.client.pdClock.CurrentTime()
 		attr := s.rangeLock.CollectLockedRangeAttrs(nil)
+		ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+		currTime := s.client.pdClock.CurrentTime()
 		log.Info("event feed starts to check locked regions",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -1349,9 +1350,8 @@ func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
 			zap.String("tableName", s.tableName))
 
 		if attr.SlowestRegion.Initialized {
-			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
 			if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
-				log.Info("event feed finds a slow region",
+				log.Info("event feed finds a initialized slow region",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Int64("tableID", s.tableID),
@@ -1360,6 +1360,13 @@ func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
 			}
 		} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
 			log.Info("event feed initializes a region too slow",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.Any("slowRegion", attr.SlowestRegion))
+		} else if currTime.Sub(ckptTime) > 10*time.Minute {
+			log.Info("event feed finds a uninitialized slow region",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
