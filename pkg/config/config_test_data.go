@@ -76,7 +76,8 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "gc-interval": 0
   },
   "scheduler": {
     "enable-table-across-nodes": false,
@@ -315,7 +316,8 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "gc-interval": 0,
   },
   "scheduler": {
     "enable-table-across-nodes": true,
@@ -468,7 +470,8 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "gc-interval": 0
   },
   "scheduler": {
     "enable-table-across-nodes": true,
