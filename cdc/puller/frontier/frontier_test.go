@@ -15,6 +15,7 @@ package frontier
 
 import (
 	"bytes"
+	"math"
 	"math/rand"
 	"sort"
 	"testing"
@@ -392,4 +393,47 @@ func TestMinMaxWithRegionSplitMerge(t *testing.T) {
 	require.Equal(t, uint64(4), f.Frontier())
 	f.Forward(8, regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")}, 5)
 	require.Equal(t, uint64(5), f.Frontier())
+}
+
+func TestFrontierEntries(t *testing.T) {
+	t.Parallel()
+
+	ab := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}
+	bc := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}
+	cd := tablepb.Span{StartKey: []byte("c"), EndKey: []byte("d")}
+	de := tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}
+	ef := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
+	af := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("f")}
+	f := NewFrontier(0, af)
+
+	var slowestTs uint64 = math.MaxUint64
+	var slowestRange tablepb.Span
+	getSlowestRange := func() {
+		slowestTs = math.MaxUint64
+		slowestRange = tablepb.Span{}
+		f.Entries(func(key []byte, ts uint64) {
+			if ts < slowestTs {
+				slowestTs = ts
+				slowestRange.StartKey = key
+				slowestRange.EndKey = nil
+			} else if slowestTs != math.MaxUint64 && len(slowestRange.EndKey) == 0 {
+				slowestRange.EndKey = key
+			}
+		})
+	}
+
+	getSlowestRange()
+	require.Equal(t, uint64(0), slowestTs)
+	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
+	require.Equal(t, []byte("f"), []byte(slowestRange.EndKey))
+
+	f.Forward(1, ab, 100)
+	f.Forward(2, bc, 200)
+	f.Forward(3, cd, 300)
+	f.Forward(4, de, 400)
+	f.Forward(5, ef, 500)
+	getSlowestRange()
+	require.Equal(t, uint64(100), slowestTs)
+	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
+	require.Equal(t, []byte("b"), []byte(slowestRange.EndKey))
 }
