@@ -73,6 +73,10 @@ type pullerImpl struct {
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
 	tableName  string
+
+	cfg                   *config.ServerConfig
+	lastForwardTime       time.Time
+	lastForwardResolvedTs uint64
 }
 
 // New create a new Puller fetch event start from checkpointTs and put into buf.
@@ -121,6 +125,7 @@ func New(ctx context.Context,
 		changefeed:   changefeed,
 		tableID:      tableID,
 		tableName:    tableName,
+		cfg:          cfg,
 	}
 	return p
 }
@@ -165,6 +170,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	g.Go(func() error {
 		metricsTicker := time.NewTicker(15 * time.Second)
 		defer metricsTicker.Stop()
+		stuckDetectorTicker := time.NewTicker(1 * time.Minute)
+		defer stuckDetectorTicker.Stop()
 		output := func(raw *model.RawKVEntry) error {
 			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
 			// could still miss region change notification, which leads to resolved
@@ -205,6 +212,10 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				metricEventChanSize.Observe(float64(len(eventCh)))
 				metricOutputChanSize.Observe(float64(len(p.outputCh)))
 				metricPullerResolvedTs.Set(float64(oracle.ExtractPhysical(atomic.LoadUint64(&p.resolvedTs))))
+			case <-stuckDetectorTicker.C:
+				if err := p.detectResolvedTsStuck(initialized); err != nil {
+					return errors.Trace(err)
+				}
 				continue
 			case e = <-eventCh:
 			}
@@ -267,6 +278,29 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 func (p *pullerImpl) GetResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
+}
+
+func (p *pullerImpl) detectResolvedTsStuck(initialized bool) error {
+	if p.cfg.Debug.Puller.EnableResolvedTsStuckDetection && initialized {
+		resolvedTs := p.tsTracker.Frontier()
+		if resolvedTs == p.lastForwardResolvedTs {
+			log.Warn("ResolvedTs stuck detected in puller",
+				zap.String("namespace", p.changefeed.Namespace),
+				zap.String("changefeed", p.changefeed.ID),
+				zap.Int64("tableID", p.tableID),
+				zap.String("tableName", p.tableName),
+				zap.Uint64("lastResolvedTs", p.lastForwardResolvedTs),
+				zap.Uint64("resolvedTs", resolvedTs))
+			if time.Since(p.lastForwardTime) > time.Duration(p.cfg.Debug.Puller.ResolvedTsStuckInterval) {
+				// throw an error to cause changefeed restart
+				return errors.New("resolved ts stuck")
+			}
+		} else {
+			p.lastForwardTime = time.Now()
+			p.lastForwardResolvedTs = resolvedTs
+		}
+	}
+	return nil
 }
 
 func (p *pullerImpl) Output() <-chan *model.RawKVEntry {

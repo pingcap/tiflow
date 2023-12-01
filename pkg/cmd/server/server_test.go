@@ -214,6 +214,10 @@ func TestParseCfg(t *testing.T) {
 				AddTableBatchSize:    50,
 			},
 			EnableNewSink: true,
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -374,6 +378,10 @@ check-balance-interval = "10s"
 				AddTableBatchSize:    50,
 			},
 			EnableNewSink: true,
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -520,6 +528,10 @@ cert-allowed-cn = ["dd","ee"]
 				AddTableBatchSize:    50,
 			},
 			EnableNewSink: true,
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -590,5 +602,9 @@ unknown3 = 3
 			AddTableBatchSize:    50,
 		},
 		EnableNewSink: true,
+		Puller: &config.PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+		},
 	}, o.serverConfig.Debug)
 }

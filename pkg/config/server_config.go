@@ -159,6 +159,10 @@ var defaultServerConfig = &ServerConfig{
 		EnableNewSink:          true,
 		EnablePullBasedSink:    true,
 		EnableKVConnectBackOff: false,
+		Puller: &PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
+		},
 	},
 	ClusterID:              "default",
 	GcTunerMemoryThreshold: DisableMemoryLimit,
