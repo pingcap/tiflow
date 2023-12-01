@@ -152,7 +152,7 @@ const (
       "add-table-batch-size": 50
     },
     "enable-new-sink": true,
-    "enable-kv-connect-backoff": false
+    "enable-kv-connect-backoff": false,
     "puller": {
       "enable-resolved-ts-stuck-detection": false,
       "resolved-ts-stuck-interval": 300000000000
