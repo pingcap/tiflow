@@ -201,6 +201,17 @@ func TestParseCfg(t *testing.T) {
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
 			},
+<<<<<<< HEAD
+=======
+			CDCV2: &config.CDCV2{
+				Enable:          false,
+				MetaStoreConfig: config.MetaStoreConfiguration{},
+			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
+>>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -348,6 +359,17 @@ check-balance-interval = "10s"
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 				AddTableBatchSize:    50,
 			},
+<<<<<<< HEAD
+=======
+			CDCV2: &config.CDCV2{
+				Enable:          false,
+				MetaStoreConfig: config.MetaStoreConfiguration{},
+			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
+>>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -483,6 +505,17 @@ cert-allowed-cn = ["dd","ee"]
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
 			},
+<<<<<<< HEAD
+=======
+			CDCV2: &config.CDCV2{
+				Enable:          false,
+				MetaStoreConfig: config.MetaStoreConfiguration{},
+			},
+			Puller: &config.PullerConfig{
+				EnableResolvedTsStuckDetection: false,
+				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+			},
+>>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
 		},
 		ClusterID:           "default",
 		MaxMemoryPercentage: config.DisableMemoryLimit,
@@ -546,5 +579,16 @@ unknown3 = 3
 			CheckBalanceInterval: 60000000000,
 			AddTableBatchSize:    50,
 		},
+<<<<<<< HEAD
+=======
+		CDCV2: &config.CDCV2{
+			Enable:          false,
+			MetaStoreConfig: config.MetaStoreConfiguration{},
+		},
+		Puller: &config.PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
+		},
+>>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
 	}, o.serverConfig.Debug)
 }
