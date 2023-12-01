@@ -34,60 +34,6 @@ import (
 	"github.com/tikv/pd/pkg/utils/tsoutil"
 )
 
-type debeziumDataChangeMsg struct {
-	// schema is unsupported
-	Payload *debeziumDataChangeMsgPayload `json:"payload"`
-}
-
-type debeziumDataChangeMsgPayload struct {
-	// Before: An optional field that specifies the state of the row before the event occurred.
-	// When the op field is c for create, the before field is null since this change event is for new content.
-	// In a delete event value, the before field contains the values that were in the row before
-	// it was deleted with the database commit.
-	Before map[string]any `json:"before"`
-	// After: An optional field that specifies the state of the row after the event occurred.
-	// Optional field that specifies the state of the row after the event occurred.
-	// In a delete event value, the after field is null, signifying that the row no longer exists.
-	After  map[string]any     `json:"after"`
-	Source *debeziumMsgSource `json:"source"`
-	// Op: Mandatory string that describes the type of operation that caused the connector to generate the event.
-	// Valid values are:
-	// c = create
-	// u = update
-	// d = delete
-	// r = read (applies to only snapshots)
-	// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
-	Op string `json:"op"`
-	// TsMs: displays the time at which the connector processed the event
-	// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
-	TsMs int64 `json:"ts_ms"`
-	// Transaction: Always null
-	Transaction *struct{} `json:"transaction"`
-}
-
-type debeziumMsgSource struct {
-	Version   string `json:"version"`
-	Connector string `json:"connector"`
-	Name      string `json:"name"`
-	// // TsMs: In the source object, ts_ms indicates the time that the change was made in the database.
-	// // https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
-	TsMs     int64   `json:"ts_ms"`
-	Snapshot bool    `json:"snapshot"`
-	Db       string  `json:"db"`
-	Table    string  `json:"table"`
-	ServerID int64   `json:"server_id"`
-	GtID     *string `json:"gtid"`
-	File     string  `json:"file"`
-	Pos      int64   `json:"pos"`
-	Row      int32   `json:"row"`
-	Thread   int64   `json:"thread"`
-	Query    *string `json:"query"`
-
-	// The followings are TiDB extended fields
-	CommitTs  uint64 `json:"commit_ts"`
-	ClusterID string `json:"cluster_id"`
-}
-
 type Codec struct {
 	config    *common.Config
 	clusterID string
@@ -376,6 +322,8 @@ func (c *Codec) EncodeRowChangedEvent(
 				jWriter.WriteStringField("version", "2.4.0.Final")
 				jWriter.WriteStringField("connector", "TiCDC")
 				jWriter.WriteStringField("name", c.clusterID)
+				// ts_ms: In the source object, ts_ms indicates the time that the change was made in the database.
+				// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
 				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
 				jWriter.WriteBoolField("snapshot", false)
 				jWriter.WriteStringField("db", e.Table.Schema)
@@ -387,15 +335,36 @@ func (c *Codec) EncodeRowChangedEvent(
 				jWriter.WriteInt64Field("row", 0)
 				jWriter.WriteInt64Field("thread", 0)
 				jWriter.WriteNullField("query")
+
+				// The followings are TiDB extended fields
 				jWriter.WriteUint64Field("commit_ts", e.CommitTs)
 				jWriter.WriteStringField("cluster_id", c.clusterID)
 			})
+
+			// ts_ms: displays the time at which the connector processed the event
+			// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
 			jWriter.WriteInt64Field("ts_ms", c.nowFunc().UnixMilli())
 			jWriter.WriteNullField("transaction")
 
 			if e.IsInsert() {
+				// op: Mandatory string that describes the type of operation that caused the connector to generate the event.
+				// Valid values are:
+				// c = create
+				// u = update
+				// d = delete
+				// r = read (applies to only snapshots)
+				// https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-create-events
 				jWriter.WriteStringField("op", "c")
+
+				// before: An optional field that specifies the state of the row before the event occurred.
+				// When the op field is c for create, the before field is null since this change event is for new content.
+				// In a delete event value, the before field contains the values that were in the row before
+				// it was deleted with the database commit.
 				jWriter.WriteNullField("before")
+
+				// after: An optional field that specifies the state of the row after the event occurred.
+				// Optional field that specifies the state of the row after the event occurred.
+				// In a delete event value, the after field is null, signifying that the row no longer exists.
 				err = c.writeColumnsAsField(jWriter, "after", e.Columns, e.ColInfos)
 			} else if e.IsDelete() {
 				jWriter.WriteStringField("op", "d")
