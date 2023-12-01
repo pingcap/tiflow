@@ -2436,12 +2436,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					eventType = "XID"
 					needContinue, err2 = funcCommit()
 				case *replication.TableMapEvent:
-					s.tctx.L().Info("unhandled TableMap event from transaction payload",
-						zap.String("schema", string(tpevt.Schema)),
-						zap.String("table", string(tpevt.Table)),
-					)
 				case *replication.FormatDescriptionEvent:
-					s.tctx.L().Info("unhandled FormatDescription event from transaction payload")
 				default:
 					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
 				}
@@ -2450,12 +2445,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				continue
 			}
 		case *replication.TableMapEvent:
-			s.tctx.L().Info("unhandled TableMap event",
-				zap.String("schema", string(ev.Schema)),
-				zap.String("table", string(ev.Table)),
-			)
 		case *replication.FormatDescriptionEvent:
-			s.tctx.L().Info("unhandled FormatDescription event")
 		default:
 			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
 		}
