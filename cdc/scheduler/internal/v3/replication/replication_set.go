@@ -1014,7 +1014,13 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 			zap.Any("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
 	}
-	r.Stats = stats
+
+	// we only update stats when stats is not empty, due to we only collect stats every 10s.
+	// refer https://github.com/pingcap/tiflow/blob/bbf2d87f467313bf06f1f123b5409ebbac469647 \
+	// /cdc/scheduler/internal/v3/member/capture_manager.go#L176
+	if stats.Size() > 0 {
+		r.Stats = stats
+	}
 }
 
 // SetHeap is a max-heap, it implements heap.Interface.
