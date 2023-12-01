@@ -222,20 +222,10 @@ func (f *fileWorkerGroup) multiPartUpload(ctx context.Context, file *fileCache) 
 	if err != nil {
 		return errors.Trace(err)
 	}
-
-	defer func() {
-		closeErr := multipartWrite.Close(ctx)
-		if err != nil {
-			log.Error("failed to close writer",
-				zap.String("fileName", file.filename),
-				zap.Error(closeErr))
-			if err == nil {
-				err = closeErr
-			}
-		}
-	}()
-	_, err = multipartWrite.Write(ctx, file.writer.buf.Bytes())
-	return errors.Trace(err)
+	if _, err = multipartWrite.Write(ctx, file.writer.buf.Bytes()); err != nil {
+		return errors.Trace(err)
+	}
+	return errors.Trace(multipartWrite.Close(ctx))
 }
 
 func (f *fileWorkerGroup) bgWriteLogs(
