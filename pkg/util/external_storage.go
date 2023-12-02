@@ -195,9 +195,19 @@ func (s *extStorageWithTimeout) WalkDir(
 func (s *extStorageWithTimeout) Create(
 	ctx context.Context, path string,
 ) (storage.ExternalFileWriter, error) {
+<<<<<<< HEAD
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	return s.ExternalStorage.Create(ctx, path)
+=======
+	if option.Concurrency <= 1 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+	}
+	// multipart uploading spawns a background goroutine, can't set timeout
+	return s.ExternalStorage.Create(ctx, path, option)
+>>>>>>> 89e57d7a6e (redo(ticdc): use multi part s3 uploader in  redo (#10227))
 }
 
 // Rename file name from oldFileName to newFileName

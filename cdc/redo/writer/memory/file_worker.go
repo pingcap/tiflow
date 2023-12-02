@@ -170,7 +170,19 @@ func (f *fileWorkerGroup) bgFlushFileCache(egCtx context.Context) error {
 			return errors.Trace(egCtx.Err())
 		case file := <-f.flushCh:
 			start := time.Now()
+<<<<<<< HEAD
 			err := f.extStorage.WriteFile(egCtx, file.filename, file.data)
+=======
+			if err := file.writer.Close(); err != nil {
+				return errors.Trace(err)
+			}
+			var err error
+			if f.cfg.FlushConcurrency <= 1 {
+				err = f.extStorage.WriteFile(egCtx, file.filename, file.writer.buf.Bytes())
+			} else {
+				err = f.multiPartUpload(egCtx, file)
+			}
+>>>>>>> 89e57d7a6e (redo(ticdc): use multi part s3 uploader in  redo (#10227))
 			f.metricFlushAllDuration.Observe(time.Since(start).Seconds())
 			if err != nil {
 				return errors.Trace(err)
@@ -182,6 +194,19 @@ func (f *fileWorkerGroup) bgFlushFileCache(egCtx context.Context) error {
 			f.pool.Put(bufPtr)
 		}
 	}
+}
+
+func (f *fileWorkerGroup) multiPartUpload(ctx context.Context, file *fileCache) error {
+	multipartWrite, err := f.extStorage.Create(ctx, file.filename, &storage.WriterOption{
+		Concurrency: f.cfg.FlushConcurrency,
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if _, err = multipartWrite.Write(ctx, file.writer.buf.Bytes()); err != nil {
+		return errors.Trace(err)
+	}
+	return errors.Trace(multipartWrite.Close(ctx))
 }
 
 func (f *fileWorkerGroup) bgWriteLogs(
