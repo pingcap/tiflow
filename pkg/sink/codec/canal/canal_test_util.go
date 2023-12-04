@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
 type testColumnTuple struct {
@@ -46,7 +46,7 @@ var (
 				Name: "tinyint unsigned", Type: mysql.TypeTiny, Value: uint64(127),
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
+			rowcodec.ColInfo{ID: 2, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
 			"127", "127",
 		},
 
@@ -55,7 +55,7 @@ var (
 				Name: "tinyint unsigned 2", Type: mysql.TypeTiny, Value: uint64(128),
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
+			rowcodec.ColInfo{ID: 3, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
 			"128", "128",
 		},
 
@@ -64,7 +64,7 @@ var (
 				Name: "tinyint unsigned 3", Type: mysql.TypeTiny, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 4, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
+			rowcodec.ColInfo{ID: 4, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
 			"0", "0",
 		},
 
@@ -73,7 +73,7 @@ var (
 				Name: "tinyint unsigned 4", Type: mysql.TypeTiny, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			rowcodec.ColInfo{ID: 5, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
+			rowcodec.ColInfo{ID: 5, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeTiny))},
 			"", nil,
 		},
 
@@ -87,7 +87,7 @@ var (
 				Name: "smallint unsigned", Type: mysql.TypeShort, Value: uint64(32767),
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 7, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
+			rowcodec.ColInfo{ID: 7, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
 			"32767", "32767",
 		},
 		{
@@ -95,7 +95,7 @@ var (
 				Name: "smallint unsigned 2", Type: mysql.TypeShort, Value: uint64(32768),
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 8, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
+			rowcodec.ColInfo{ID: 8, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
 			"32768", "32768",
 		},
 		{
@@ -103,7 +103,7 @@ var (
 				Name: "smallint unsigned 3", Type: mysql.TypeShort, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 9, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
+			rowcodec.ColInfo{ID: 9, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
 			"0", "0",
 		},
 		{
@@ -111,7 +111,7 @@ var (
 				Name: "smallint unsigned 4", Type: mysql.TypeShort, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			rowcodec.ColInfo{ID: 10, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
+			rowcodec.ColInfo{ID: 10, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeShort))},
 			"", nil,
 		},
 
@@ -125,7 +125,7 @@ var (
 				Name: "mediumint unsigned", Type: mysql.TypeInt24, Value: uint64(8388607),
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 12, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
+			rowcodec.ColInfo{ID: 12, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
 			"8388607", "8388607",
 		},
 		{
@@ -133,7 +133,7 @@ var (
 				Name: "mediumint unsigned 2", Type: mysql.TypeInt24, Value: uint64(8388608),
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 13, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
+			rowcodec.ColInfo{ID: 13, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
 			"8388608", "8388608",
 		},
 		{
@@ -141,7 +141,7 @@ var (
 				Name: "mediumint unsigned 3", Type: mysql.TypeInt24, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 14, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
+			rowcodec.ColInfo{ID: 14, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
 			"0", "0",
 		},
 		{
@@ -149,7 +149,7 @@ var (
 				Name: "mediumint unsigned 4", Type: mysql.TypeInt24, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			rowcodec.ColInfo{ID: 15, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
+			rowcodec.ColInfo{ID: 15, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeInt24))},
 			"", nil,
 		},
 
@@ -163,7 +163,7 @@ var (
 				Name: "int unsigned", Type: mysql.TypeLong, Value: uint64(2147483647),
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 17, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
+			rowcodec.ColInfo{ID: 17, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
 			"2147483647", "2147483647",
 		},
 		{
@@ -171,7 +171,7 @@ var (
 				Name: "int unsigned 2", Type: mysql.TypeLong, Value: uint64(2147483648),
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 18, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
+			rowcodec.ColInfo{ID: 18, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
 			"2147483648", "2147483648",
 		},
 		{
@@ -179,7 +179,7 @@ var (
 				Name: "int unsigned 3", Type: mysql.TypeLong, Value: "0",
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 19, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
+			rowcodec.ColInfo{ID: 19, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
 			"0", "0",
 		},
 		{
@@ -187,7 +187,7 @@ var (
 				Name: "int unsigned 4", Type: mysql.TypeLong, Value: nil,
 				Flag: model.BinaryFlag | model.UnsignedFlag | model.NullableFlag,
 			},
-			rowcodec.ColInfo{ID: 20, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
+			rowcodec.ColInfo{ID: 20, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeLong))},
 			"", nil,
 		},
 
@@ -205,7 +205,7 @@ var (
 				ID:            22,
 				IsPKHandle:    false,
 				VirtualGenCol: false,
-				Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
+				Ft:            common.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
 			},
 			"9223372036854775807", "9223372036854775807",
 		},
@@ -218,7 +218,7 @@ var (
 				ID:            23,
 				IsPKHandle:    false,
 				VirtualGenCol: false,
-				Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
+				Ft:            common.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
 			},
 			"9223372036854775808", "9223372036854775808",
 		},
@@ -231,7 +231,7 @@ var (
 				ID:            24,
 				IsPKHandle:    false,
 				VirtualGenCol: false,
-				Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
+				Ft:            common.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
 			},
 			"0", "0",
 		},
@@ -244,7 +244,7 @@ var (
 				ID:            25,
 				IsPKHandle:    false,
 				VirtualGenCol: false,
-				Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
+				Ft:            common.SetUnsigned(types.NewFieldType(mysql.TypeLonglong)),
 			},
 			"", nil,
 		},
@@ -270,7 +270,7 @@ var (
 				Name: "float unsigned", Type: mysql.TypeFloat, Value: 3.14,
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 29, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeFloat))},
+			rowcodec.ColInfo{ID: 29, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeFloat))},
 			"3.14", "3.14",
 		},
 		{
@@ -278,7 +278,7 @@ var (
 				Name: "double unsigned", Type: mysql.TypeDouble, Value: 2.71,
 				Flag: model.UnsignedFlag,
 			},
-			rowcodec.ColInfo{ID: 30, IsPKHandle: false, VirtualGenCol: false, Ft: utils.SetUnsigned(types.NewFieldType(mysql.TypeDouble))},
+			rowcodec.ColInfo{ID: 30, IsPKHandle: false, VirtualGenCol: false, Ft: common.SetUnsigned(types.NewFieldType(mysql.TypeDouble))},
 			"2.71", "2.71",
 		},
 		{
@@ -290,7 +290,7 @@ var (
 				ID:            31,
 				IsPKHandle:    false,
 				VirtualGenCol: false,
-				Ft:            utils.SetUnsigned(types.NewFieldType(mysql.TypeNewDecimal)),
+				Ft:            common.SetUnsigned(types.NewFieldType(mysql.TypeNewDecimal)),
 			},
 			"2333", "2333",
 		},
@@ -315,7 +315,7 @@ var (
 				ID:            34,
 				IsPKHandle:    false,
 				VirtualGenCol: false,
-				Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeString)),
+				Ft:            common.SetBinChsClnFlag(types.NewFieldType(mysql.TypeString)),
 			},
 			"测试Binary", "测试Binary",
 		},
@@ -328,30 +328,30 @@ var (
 				ID:            35,
 				IsPKHandle:    false,
 				VirtualGenCol: false,
-				Ft:            utils.SetBinChsClnFlag(types.NewFieldType(mysql.TypeVarchar)),
+				Ft:            common.SetBinChsClnFlag(types.NewFieldType(mysql.TypeVarchar)),
 			},
 			"测试varbinary", "测试varbinary",
 		},
 
 		{
 			&model.Column{Name: "tinytext", Type: mysql.TypeTinyBlob, Value: []uint8("测试Tinytext")},
-			rowcodec.ColInfo{ID: 36, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(mysql.TypeTinyBlob)},
+			rowcodec.ColInfo{ID: 36, IsPKHandle: false, VirtualGenCol: false, Ft: common.NewTextFieldType(mysql.TypeTinyBlob)},
 			"测试Tinytext", "测试Tinytext",
 		},
 
 		{
 			&model.Column{Name: "text", Type: mysql.TypeBlob, Value: []uint8("测试text")},
-			rowcodec.ColInfo{ID: 37, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(mysql.TypeBlob)},
+			rowcodec.ColInfo{ID: 37, IsPKHandle: false, VirtualGenCol: false, Ft: common.NewTextFieldType(mysql.TypeBlob)},
 			"测试text", "测试text",
 		},
 		{
 			&model.Column{Name: "mediumtext", Type: mysql.TypeMediumBlob, Value: []uint8("测试mediumtext")},
-			rowcodec.ColInfo{ID: 38, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(mysql.TypeMediumBlob)},
+			rowcodec.ColInfo{ID: 38, IsPKHandle: false, VirtualGenCol: false, Ft: common.NewTextFieldType(mysql.TypeMediumBlob)},
 			"测试mediumtext", "测试mediumtext",
 		},
 		{
 			&model.Column{Name: "longtext", Type: mysql.TypeLongBlob, Value: []uint8("测试longtext")},
-			rowcodec.ColInfo{ID: 39, IsPKHandle: false, VirtualGenCol: false, Ft: utils.NewTextFieldType(mysql.TypeLongBlob)},
+			rowcodec.ColInfo{ID: 39, IsPKHandle: false, VirtualGenCol: false, Ft: common.NewTextFieldType(mysql.TypeLongBlob)},
 			"测试longtext", "测试longtext",
 		},
 
@@ -425,7 +425,7 @@ var (
 				ID:            50,
 				IsPKHandle:    false,
 				VirtualGenCol: false,
-				Ft:            utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b", "c"}),
+				Ft:            common.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b", "c"}),
 			},
 			"2", uint64(2),
 		},
