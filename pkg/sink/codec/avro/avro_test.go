@@ -465,7 +465,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            29,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            common.SetElems(types.NewFieldType(mysql.TypeEnum), []string{"a", "b"}),
+			Ft:            common.SetElems(types.NewFieldType(mysql.TypeEnum), []string{"a,", "b"}),
 		},
 		avroSchema{
 			Type:       "string",
@@ -479,7 +479,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            30,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-			Ft:            common.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b"}),
+			Ft:            common.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a,", "b"}),
 		},
 		avroSchema{
 			Type:       "string",
