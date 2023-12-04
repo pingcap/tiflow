@@ -72,6 +72,7 @@ type metaManager struct {
 	startTs model.Ts
 
 	lastFlushTime          time.Time
+	flushIntervalInMs      int64
 	cfg                    *config.ConsistentConfig
 	metricFlushLogDuration prometheus.Observer
 }
@@ -94,12 +95,19 @@ func NewMetaManager(
 	}
 
 	m := &metaManager{
-		captureID:     config.GetGlobalServerConfig().AdvertiseAddr,
-		changeFeedID:  changefeedID,
-		uuidGenerator: uuid.NewGenerator(),
-		enabled:       true,
-		cfg:           cfg,
-		startTs:       checkpoint,
+		captureID:         config.GetGlobalServerConfig().AdvertiseAddr,
+		changeFeedID:      changefeedID,
+		uuidGenerator:     uuid.NewGenerator(),
+		enabled:           true,
+		cfg:               cfg,
+		startTs:           checkpoint,
+		flushIntervalInMs: cfg.MetaFlushIntervalInMs,
+	}
+
+	if m.flushIntervalInMs < redo.MinFlushIntervalInMs {
+		log.Warn("redo flush interval is too small, use default value",
+			zap.Int64("interval", m.flushIntervalInMs))
+		m.flushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
 	}
 
 	return m
@@ -158,7 +166,7 @@ func (m *metaManager) Run(ctx context.Context, _ ...chan<- error) error {
 	}
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		return m.bgFlushMeta(egCtx, m.cfg.FlushIntervalInMs)
+		return m.bgFlushMeta(egCtx, m.flushIntervalInMs)
 	})
 	eg.Go(func() error {
 		return m.bgGC(egCtx)
