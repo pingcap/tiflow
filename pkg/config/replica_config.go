@@ -41,7 +41,7 @@ const (
 
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        DefaultChangefeedMemoryQuota,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,

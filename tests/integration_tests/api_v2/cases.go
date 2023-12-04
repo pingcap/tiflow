@@ -109,7 +109,7 @@ var customReplicaConfig = &ReplicaConfig{
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        1024 * 1024 * 1024,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
