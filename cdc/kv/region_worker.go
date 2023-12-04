@@ -193,13 +193,6 @@ func (w *regionWorker) checkRegionStateEmpty() (empty bool) {
 
 // checkShouldExit checks whether the region worker should exit, if exit return an error
 func (w *regionWorker) checkShouldExit() error {
-	empty := w.checkRegionStateEmpty()
-	// If there is no region maintained by this region worker, exit it and
-	// cancel the gRPC stream.
-	if empty {
-		w.cancelStream(time.Duration(0))
-		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
-	}
 	return nil
 }
 
