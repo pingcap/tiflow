@@ -28,76 +28,10 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-<<<<<<< HEAD
-	"github.com/stretchr/testify/require"
-)
-
-func setupEncoderAndSchemaRegistry(
-	enableTiDBExtension bool,
-	decimalHandlingMode string,
-	bigintUnsignedHandlingMode string,
-) (*BatchEncoder, error) {
-	startHTTPInterceptForTestingRegistry()
-
-	keyManager, err := NewAvroSchemaManager(
-		context.Background(),
-		nil,
-		"http://127.0.0.1:8081",
-		"-key",
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	valueManager, err := NewAvroSchemaManager(
-		context.Background(),
-		nil,
-		"http://127.0.0.1:8081",
-		"-value",
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &BatchEncoder{
-		namespace:                  model.DefaultNamespace,
-		valueSchemaManager:         valueManager,
-		keySchemaManager:           keyManager,
-		result:                     make([]*common.Message, 0, 1),
-		enableTiDBExtension:        enableTiDBExtension,
-		decimalHandlingMode:        decimalHandlingMode,
-		bigintUnsignedHandlingMode: bigintUnsignedHandlingMode,
-	}, nil
-}
-
-func teardownEncoderAndSchemaRegistry() {
-	stopHTTPInterceptForTestingRegistry()
-}
-
-func setBinChsClnFlag(ft *types.FieldType) *types.FieldType {
-	types.SetBinChsClnFlag(ft)
-	return ft
-}
-
-//nolint:unparam
-func setFlag(ft *types.FieldType, flag uint) *types.FieldType {
-	ft.SetFlag(flag)
-	return ft
-}
-
-func setElems(ft *types.FieldType, elems []string) *types.FieldType {
-	ft.SetElems(elems)
-	return ft
-}
-
-=======
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
-	"github.com/pingcap/tiflow/pkg/uuid"
 	"github.com/stretchr/testify/require"
 )
 
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 type avroTestColumnTuple struct {
 	col            model.Column
 	colInfo        rowcodec.ColInfo
@@ -489,11 +423,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            29,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-<<<<<<< HEAD
-			Ft:            setElems(types.NewFieldType(mysql.TypeEnum), []string{"a,", "b"}),
-=======
 			Ft:            utils.SetElems(types.NewFieldType(mysql.TypeEnum), []string{"a", "b"}),
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 		},
 		avroSchema{
 			Type:       "string",
@@ -507,11 +437,7 @@ var avroTestColumns = []*avroTestColumnTuple{
 			ID:            30,
 			IsPKHandle:    false,
 			VirtualGenCol: false,
-<<<<<<< HEAD
-			Ft:            setElems(types.NewFieldType(mysql.TypeSet), []string{"a,", "b"}),
-=======
 			Ft:            utils.SetElems(types.NewFieldType(mysql.TypeSet), []string{"a", "b"}),
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 		},
 		avroSchema{
 			Type:       "string",

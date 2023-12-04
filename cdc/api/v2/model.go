@@ -384,7 +384,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 
 		res.Sink = &config.SinkConfig{
-<<<<<<< HEAD
 			DispatchRules:            dispatchRules,
 			Protocol:                 c.Sink.Protocol,
 			CSVConfig:                csvConfig,
@@ -398,35 +397,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			FileIndexWidth:           c.Sink.FileIndexWidth,
 			EnableKafkaSinkV2:        c.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns: c.Sink.OnlyOutputUpdatedColumns,
+			ContentCompatible:        c.Sink.ContentCompatible,
 			KafkaConfig:              kafkaConfig,
 			MySQLConfig:              mysqlConfig,
 			CloudStorageConfig:       cloudStorageConfig,
 			SafeMode:                 c.Sink.SafeMode,
-=======
-			DispatchRules:                    dispatchRules,
-			Protocol:                         c.Sink.Protocol,
-			CSVConfig:                        csvConfig,
-			ColumnSelectors:                  columnSelectors,
-			SchemaRegistry:                   c.Sink.SchemaRegistry,
-			EncoderConcurrency:               c.Sink.EncoderConcurrency,
-			Terminator:                       c.Sink.Terminator,
-			DateSeparator:                    c.Sink.DateSeparator,
-			EnablePartitionSeparator:         c.Sink.EnablePartitionSeparator,
-			FileIndexWidth:                   c.Sink.FileIndexWidth,
-			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
-			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
-			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
-			ContentCompatible:                c.Sink.ContentCompatible,
-			KafkaConfig:                      kafkaConfig,
-			MySQLConfig:                      mysqlConfig,
-			PulsarConfig:                     pulsarConfig,
-			CloudStorageConfig:               cloudStorageConfig,
-			SafeMode:                         c.Sink.SafeMode,
-		}
-
-		if c.Sink.TxnAtomicity != nil {
-			res.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel(*c.Sink.TxnAtomicity))
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 		}
 		if c.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
@@ -629,7 +604,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		res.Sink = &SinkConfig{
-<<<<<<< HEAD
 			Protocol:                 cloned.Sink.Protocol,
 			SchemaRegistry:           cloned.Sink.SchemaRegistry,
 			DispatchRules:            dispatchRules,
@@ -643,35 +617,11 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			FileIndexWidth:           cloned.Sink.FileIndexWidth,
 			EnableKafkaSinkV2:        cloned.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns: cloned.Sink.OnlyOutputUpdatedColumns,
+			ContentCompatible:        cloned.Sink.ContentCompatible,
 			KafkaConfig:              kafkaConfig,
 			MySQLConfig:              mysqlConfig,
 			CloudStorageConfig:       cloudStorageConfig,
 			SafeMode:                 cloned.Sink.SafeMode,
-=======
-			Protocol:                         cloned.Sink.Protocol,
-			SchemaRegistry:                   cloned.Sink.SchemaRegistry,
-			DispatchRules:                    dispatchRules,
-			CSVConfig:                        csvConfig,
-			ColumnSelectors:                  columnSelectors,
-			EncoderConcurrency:               cloned.Sink.EncoderConcurrency,
-			Terminator:                       cloned.Sink.Terminator,
-			DateSeparator:                    cloned.Sink.DateSeparator,
-			EnablePartitionSeparator:         cloned.Sink.EnablePartitionSeparator,
-			FileIndexWidth:                   cloned.Sink.FileIndexWidth,
-			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
-			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
-			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
-			ContentCompatible:                cloned.Sink.ContentCompatible,
-			KafkaConfig:                      kafkaConfig,
-			MySQLConfig:                      mysqlConfig,
-			PulsarConfig:                     pulsarConfig,
-			CloudStorageConfig:               cloudStorageConfig,
-			SafeMode:                         cloned.Sink.SafeMode,
-		}
-
-		if cloned.Sink.TxnAtomicity != nil {
-			res.Sink.TxnAtomicity = util.AddressOf(string(*cloned.Sink.TxnAtomicity))
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 		}
 		if cloned.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
@@ -811,7 +761,6 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-<<<<<<< HEAD
 	Protocol                 string              `json:"protocol"`
 	SchemaRegistry           string              `json:"schema_registry"`
 	CSVConfig                *CSVConfig          `json:"csv"`
@@ -826,33 +775,11 @@ type SinkConfig struct {
 	EnableKafkaSinkV2        bool                `json:"enable_kafka_sink_v2"`
 	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns"`
 	SafeMode                 *bool               `json:"safe_mode,omitempty"`
+	ContentCompatible        *bool               `json:"content_compatible"`
 	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 	AdvanceTimeoutInSec      *uint               `json:"advance_timeout,omitempty"`
-=======
-	Protocol                         *string             `json:"protocol,omitempty"`
-	SchemaRegistry                   *string             `json:"schema_registry,omitempty"`
-	CSVConfig                        *CSVConfig          `json:"csv,omitempty"`
-	DispatchRules                    []*DispatchRule     `json:"dispatchers,omitempty"`
-	ColumnSelectors                  []*ColumnSelector   `json:"column_selectors,omitempty"`
-	TxnAtomicity                     *string             `json:"transaction_atomicity,omitempty"`
-	EncoderConcurrency               *int                `json:"encoder_concurrency,omitempty"`
-	Terminator                       *string             `json:"terminator,omitempty"`
-	DateSeparator                    *string             `json:"date_separator,omitempty"`
-	EnablePartitionSeparator         *bool               `json:"enable_partition_separator,omitempty"`
-	FileIndexWidth                   *int                `json:"file_index_width,omitempty"`
-	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
-	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
-	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
-	ContentCompatible                *bool               `json:"content_compatible"`
-	SafeMode                         *bool               `json:"safe_mode,omitempty"`
-	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
-	PulsarConfig                     *PulsarConfig       `json:"pulsar_config,omitempty"`
-	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
-	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
-	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 }
 
 // CSVConfig denotes the csv config

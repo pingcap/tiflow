@@ -50,24 +50,12 @@ var defaultAPIConfig = &ReplicaConfig{
 			NullString:           config.NULL,
 			BinaryEncodingMethod: config.BinaryEncodingBase64,
 		},
-<<<<<<< HEAD
 		EncoderConcurrency:       16,
 		Terminator:               config.CRLF,
 		DateSeparator:            config.DateSeparatorDay.String(),
 		EnablePartitionSeparator: true,
 		EnableKafkaSinkV2:        false,
 		AdvanceTimeoutInSec:      util.AddressOf(uint(150)),
-=======
-		EncoderConcurrency:               util.AddressOf(config.DefaultEncoderGroupConcurrency),
-		Terminator:                       util.AddressOf(config.CRLF),
-		DateSeparator:                    util.AddressOf(config.DateSeparatorDay.String()),
-		EnablePartitionSeparator:         util.AddressOf(true),
-		EnableKafkaSinkV2:                util.AddressOf(false),
-		OnlyOutputUpdatedColumns:         util.AddressOf(false),
-		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
-		ContentCompatible:                util.AddressOf(false),
-		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	},
 	Consistent: &ConsistentConfig{
 		Level:             "none",
