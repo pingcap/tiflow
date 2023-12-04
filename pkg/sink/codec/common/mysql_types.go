@@ -21,25 +21,6 @@ import (
 	"github.com/pingcap/tidb/parser/types"
 )
 
-// WithUnsigned4MySQLType add `unsigned` keyword.
-// it should have the form `t unsigned`, such as `int unsigned`
-func WithUnsigned4MySQLType(mysqlType string, unsigned bool) string {
-	if unsigned && mysqlType != "bit" && mysqlType != "year" {
-		return mysqlType + " unsigned"
-	}
-	return mysqlType
-}
-
-// WithZerofill4MySQLType add `zerofill` keyword.
-func WithZerofill4MySQLType(mysqlType string, zerofill bool) string {
-	if zerofill &&
-		!strings.HasPrefix(mysqlType, "bit") &&
-		!strings.HasPrefix(mysqlType, "year") {
-		return mysqlType + " zerofill"
-	}
-	return mysqlType
-}
-
 // when encoding the canal format, for unsigned mysql type, add `unsigned` keyword.
 // it should have the form `t unsigned`, such as `int unsigned`
 func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {

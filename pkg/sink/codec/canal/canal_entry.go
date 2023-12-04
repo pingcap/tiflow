@@ -18,14 +18,11 @@ import (
 	"math"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"github.com/golang/protobuf/proto" // nolint:staticcheck
 	"github.com/pingcap/errors"
 	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -117,8 +114,8 @@ func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (resul
 
 // build the Column in the canal RowData
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L756-L872
-func (b *canalEntryBuilder) buildColumn(c *model.Column, colInfo rowcodec.ColInfo, updated bool) (*canal.Column, error) {
-	mysqlType := getMySQLType(colInfo.Ft, c.Flag, b.config.ContentCompatible)
+func (b *canalEntryBuilder) buildColumn(c *model.Column, columnInfo *mm.ColumnInfo, updated bool) (*canal.Column, error) {
+	mysqlType := common.GetMySQLType(columnInfo, b.config.ContentCompatible)
 	javaType, err := getJavaSQLType(c.Value, c.Type, c.Flag)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
@@ -148,7 +145,12 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 		if column == nil {
 			continue
 		}
-		c, err := b.buildColumn(column, e.ColInfos[idx], !e.IsDelete())
+		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+		if !ok {
+			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+				"column info not found for column id: %d", e.ColInfos[idx].ID)
+		}
+		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -164,7 +166,12 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 		if onlyHandleKeyColumns && !column.Flag.IsHandleKey() {
 			continue
 		}
-		c, err := b.buildColumn(column, e.ColInfos[idx], !e.IsDelete())
+		columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+		if !ok {
+			return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+				"column info not found for column id: %d", e.ColInfos[idx].ID)
+		}
+		c, err := b.buildColumn(column, columnInfo, !e.IsDelete())
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -360,36 +367,4 @@ func getJavaSQLType(value interface{}, tp byte, flag model.ColumnFlagType) (resu
 	}
 
 	return javaType, nil
-}
-
-// when encoding the canal format, for unsigned mysql type, add `unsigned` keyword.
-// it should have the form `t unsigned`, such as `int unsigned`
-func withUnsigned4MySQLType(mysqlType string, unsigned bool) string {
-	if unsigned && mysqlType != "bit" && mysqlType != "year" {
-		return mysqlType + " unsigned"
-	}
-	return mysqlType
-}
-
-func withZerofill4MySQLType(mysqlType string, zerofill bool) string {
-	if zerofill &&
-		!strings.HasPrefix(mysqlType, "bit") &&
-		!strings.HasPrefix(mysqlType, "year") {
-		return mysqlType + " zerofill"
-	}
-	return mysqlType
-}
-
-func getMySQLType(fieldType *types.FieldType, flag model.ColumnFlagType, fullType bool) string {
-	if !fullType {
-		result := types.TypeToStr(fieldType.GetType(), fieldType.GetCharset())
-		result = withUnsigned4MySQLType(result, flag.IsUnsigned())
-		result = withZerofill4MySQLType(result, flag.IsZerofill())
-
-		return result
-	}
-
-	result := fieldType.InfoSchemaStr()
-	result = withZerofill4MySQLType(result, flag.IsZerofill())
-	return result
 }
