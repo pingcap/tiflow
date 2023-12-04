@@ -146,12 +146,8 @@ func TestVerifyAndComplete(t *testing.T) {
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
 			MemoryQuota:        1073741824,
-<<<<<<< HEAD
-			CaseSensitive:      true,
-			EnableOldValue:     true,
-=======
 			CaseSensitive:      false,
->>>>>>> db3a2ddccd (config(ticdc): change case-sensitive default value (#10049))
+			EnableOldValue:     true,
 			CheckGCSafePoint:   true,
 			SyncPointInterval:  time.Minute * 10,
 			SyncPointRetention: time.Hour * 24,
