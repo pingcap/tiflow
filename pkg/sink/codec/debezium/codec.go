@@ -116,7 +116,9 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 		if v, ok := col.Value.(uint64); ok {
 			enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
 			if err != nil {
-				return cerror.WrapError(cerror.ErrDebeziumEncodeFailed, err)
+				// Invalid enum value inserted in non-strict mode.
+				writer.WriteStringField(col.Name, "")
+				return nil
 			}
 			writer.WriteStringField(col.Name, enumVar.Name)
 			return nil
@@ -131,7 +133,9 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 		if v, ok := col.Value.(uint64); ok {
 			setVar, err := types.ParseSetValue(ft.GetElems(), v)
 			if err != nil {
-				return cerror.WrapError(cerror.ErrDebeziumEncodeFailed, err)
+				// Invalid enum value inserted in non-strict mode.
+				writer.WriteStringField(col.Name, "")
+				return nil
 			}
 			writer.WriteStringField(col.Name, setVar.Name)
 			return nil

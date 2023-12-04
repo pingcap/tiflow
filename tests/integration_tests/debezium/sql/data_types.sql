@@ -399,3 +399,7 @@ CREATE TABLE t_enum(
 );
 
 INSERT INTO t_enum VALUES ('a', 'c', 1);
+
+SET sql_mode='';
+INSERT INTO t_enum VALUES ('d', 'e');
+SET sql_mode='strict_trans_tables';
