@@ -31,40 +31,8 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-<<<<<<< HEAD
-func TestGetMySQLTypeAndJavaSQLType(t *testing.T) {
-	t.Parallel()
-	canalEntryBuilder := newCanalEntryBuilder()
-	for _, item := range testColumnsTable {
-		obtainedMySQLType := getMySQLType(item.column)
-		require.Equal(t, item.expectedMySQLType, obtainedMySQLType)
-
-		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
-		require.Nil(t, err)
-		require.Equal(t, item.expectedJavaSQLType, obtainedJavaSQLType)
-
-		if !item.column.Flag.IsBinary() {
-			obtainedFinalValue, err := canalEntryBuilder.formatValue(item.column.Value, obtainedJavaSQLType)
-			require.Nil(t, err)
-			require.Equal(t, item.expectedEncodedValue, obtainedFinalValue)
-		}
-	}
-}
-
-func TestConvertEntry(t *testing.T) {
-	t.Parallel()
-	testInsert(t)
-	testUpdate(t)
-	testDelete(t)
-	testDdl(t)
-}
-
-func testInsert(t *testing.T) {
-	testCaseInsert := &model.RowChangedEvent{
-=======
 func TestInsert(t *testing.T) {
 	event := &model.RowChangedEvent{
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 		CommitTs: 417318403368288260,
 		Table: &model.TableName{
 			Schema: "cdc",

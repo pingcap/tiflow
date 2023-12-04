@@ -32,8 +32,7 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 	t.Parallel()
 	cfg := common.NewConfig(config.ProtocolCanalJSON)
 
-	builder, err := NewJSONRowEventEncoderBuilder(context.Background(), cfg)
-	require.NoError(t, err)
+	builder := NewJSONRowEventEncoderBuilder(cfg)
 	encoder, ok := builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 	require.NotNil(t, encoder.config)
@@ -42,10 +41,8 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 func TestNewCanalJSONMessage4DML(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
 
 	encoder, ok := builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)

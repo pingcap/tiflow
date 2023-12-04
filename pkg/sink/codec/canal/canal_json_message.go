@@ -21,10 +21,9 @@ import (
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	canal "github.com/pingcap/tiflow/proto/canal"
 	"go.uber.org/zap"
 	"golang.org/x/text/encoding/charmap"
@@ -202,10 +201,7 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
-		isBinary := isBinaryMySQLType(mysqlTypeStr)
-		mysqlType := types.StrToType(mysqlTypeStr)
-		col := internal.NewColumn(value, mysqlType).ToCanalJSONFormatColumn(name, isBinary)
+		col := canalJSONFormatColumn(value, name, mysqlTypeStr)
 		result = append(result, col)
 	}
 	if len(result) == 0 {
@@ -227,9 +223,7 @@ func extractBasicMySQLType(mysqlType string) string {
 }
 
 func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) *model.Column {
-	mysqlTypeStr = extractBasicMySQLType(mysqlTypeStr)
-	mysqlType := types.StrToType(mysqlTypeStr)
-
+	mysqlType := common.ExtractBasicMySQLType(mysqlTypeStr)
 	result := &model.Column{
 		Type:  mysqlType,
 		Name:  name,
