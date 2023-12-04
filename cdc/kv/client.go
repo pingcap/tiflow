@@ -378,9 +378,10 @@ func newEventFeedSession(
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
 ) *eventFeedSession {
-	id := strconv.FormatUint(allocID(), 10)
+	id := allocID()
+	idStr := strconv.FormatUint(id, 10)
 	rangeLock := regionlock.NewRegionRangeLock(
-		totalSpan.StartKey, totalSpan.EndKey, startTs,
+		id, totalSpan.StartKey, totalSpan.EndKey, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
 	return &eventFeedSession{
 		client:     client,
@@ -393,7 +394,7 @@ func newEventFeedSession(
 		eventCh:           eventCh,
 		rangeLock:         rangeLock,
 		lockResolver:      lockResolver,
-		id:                id,
+		id:                idStr,
 		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
 		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
 		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
@@ -1015,7 +1016,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
-	worker := newRegionWorker(parentCtx, s.changefeed, s, addr)
+	worker := newRegionWorker(parentCtx, s.changefeed, s, addr, pendingRegions)
 	defer worker.evictAllRegions()
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -1061,7 +1062,7 @@ func (s *eventFeedSession) receiveFromStream(
 			})
 			if err != nil {
 				if status.Code(errors.Cause(err)) == codes.Canceled {
-					log.Debug(
+					log.Info(
 						"receive from stream canceled",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),

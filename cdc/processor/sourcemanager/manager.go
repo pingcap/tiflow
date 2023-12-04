@@ -200,7 +200,7 @@ func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats
 func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 	if m.multiplexing {
 		serverConfig := config.GetGlobalServerConfig()
-		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig)
+		grpcPool := sharedconn.NewConnAndClientPool(m.up.SecurityConfig, kv.GetGlobalGrpcMetrics())
 		client := kv.NewSharedClient(
 			m.changefeedID, serverConfig, m.bdrMode,
 			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
