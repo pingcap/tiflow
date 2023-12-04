@@ -27,7 +27,6 @@ import (
 	"github.com/pingcap/tidb/util/hack"
 	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -81,12 +80,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 				return nil
 			}
 		}
-		return cerror.WrapError(
-			cerror.ErrDebeziumEncodeFailed,
-			errors.Errorf(
-				"unexpected column value type %T for bit column %s",
-				col.Value,
-				col.Name))
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for bit column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
 		mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
 		if col.Flag.IsBinary() {
@@ -94,23 +91,19 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 				c.writeBinaryField(writer, col.Name, v)
 				return nil
 			}
-			return cerror.WrapError(
-				cerror.ErrDebeziumEncodeFailed,
-				errors.Errorf(
-					"unexpected column value type %T for binary string column %s",
-					col.Value,
-					col.Name))
+			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+				"unexpected column value type %T for binary string column %s",
+				col.Value,
+				col.Name)
 		} else {
 			if v, ok := col.Value.([]byte); ok {
 				writer.WriteStringField(col.Name, string(hack.String(v)))
 				return nil
 			}
-			return cerror.WrapError(
-				cerror.ErrDebeziumEncodeFailed,
-				errors.Errorf(
-					"unexpected column value type %T for non-binary string column %s",
-					col.Value,
-					col.Name))
+			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+				"unexpected column value type %T for non-binary string column %s",
+				col.Value,
+				col.Name)
 		}
 	case mysql.TypeEnum:
 		if v, ok := col.Value.(uint64); ok {
@@ -123,12 +116,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 			writer.WriteStringField(col.Name, enumVar.Name)
 			return nil
 		}
-		return cerror.WrapError(
-			cerror.ErrDebeziumEncodeFailed,
-			errors.Errorf(
-				"unexpected column value type %T for enum column %s",
-				col.Value,
-				col.Name))
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for enum column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeSet:
 		if v, ok := col.Value.(uint64); ok {
 			setVar, err := types.ParseSetValue(ft.GetElems(), v)
@@ -140,12 +131,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 			writer.WriteStringField(col.Name, setVar.Name)
 			return nil
 		}
-		return cerror.WrapError(
-			cerror.ErrDebeziumEncodeFailed,
-			errors.Errorf(
-				"unexpected column value type %T for set column %s",
-				col.Value,
-				col.Name))
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for set column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeNewDecimal:
 		if v, ok := col.Value.(string); ok {
 			floatV, err := strconv.ParseFloat(v, 64)
@@ -157,12 +146,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 			writer.WriteFloat64Field(col.Name, floatV)
 			return nil
 		}
-		return cerror.WrapError(
-			cerror.ErrDebeziumEncodeFailed,
-			errors.Errorf(
-				"unexpected column value type %T for decimal column %s",
-				col.Value,
-				col.Name))
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for decimal column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeDate, mysql.TypeNewDate:
 		if v, ok := col.Value.(string); ok {
 			t, err := time.Parse("2006-01-02", v)
@@ -180,12 +167,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 			writer.WriteInt64Field(col.Name, t.Unix()/60/60/24)
 			return nil
 		}
-		return cerror.WrapError(
-			cerror.ErrDebeziumEncodeFailed,
-			errors.Errorf(
-				"unexpected column value type %T for date column %s",
-				col.Value,
-				col.Name))
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for date column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeDatetime:
 		// Debezium behavior from doc:
 		// > Such columns are converted into epoch milliseconds or microseconds based on the
@@ -212,12 +197,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 				return nil
 			}
 		}
-		return cerror.WrapError(
-			cerror.ErrDebeziumEncodeFailed,
-			errors.Errorf(
-				"unexpected column value type %T for datetime column %s",
-				col.Value,
-				col.Name))
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for datetime column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeTimestamp:
 		// Debezium behavior from doc:
 		// > The TIMESTAMP type represents a timestamp without time zone information.
@@ -251,12 +234,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 			writer.WriteStringField(col.Name, str)
 			return nil
 		}
-		return cerror.WrapError(
-			cerror.ErrDebeziumEncodeFailed,
-			errors.Errorf(
-				"unexpected column value type %T for timestamp column %s",
-				col.Value,
-				col.Name))
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for timestamp column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeDuration:
 		// Debezium behavior from doc:
 		// > Represents the time value in microseconds and does not include
@@ -273,12 +254,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 			writer.WriteInt64Field(col.Name, d.Microseconds())
 			return nil
 		}
-		return cerror.WrapError(
-			cerror.ErrDebeziumEncodeFailed,
-			errors.Errorf(
-				"unexpected column value type %T for time column %s",
-				col.Value,
-				col.Name))
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for time column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeLonglong:
 		if col.Flag.IsUnsigned() {
 			// Handle with BIGINT UNSIGNED.
@@ -287,12 +266,10 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 				writer.WriteInt64Field(col.Name, int64(v))
 				return nil
 			}
-			return cerror.WrapError(
-				cerror.ErrDebeziumEncodeFailed,
-				errors.Errorf(
-					"unexpected column value type %T for unsigned bigint column %s",
-					col.Value,
-					col.Name))
+			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+				"unexpected column value type %T for unsigned bigint column %s",
+				col.Value,
+				col.Name)
 		}
 
 		// Note: Although Debezium's doc claims to use INT32 for INT, but it
