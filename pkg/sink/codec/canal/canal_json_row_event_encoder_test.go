@@ -41,15 +41,6 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
 	t.Parallel()
-<<<<<<< HEAD
-	e := newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: false,
-		Terminator:          "",
-	})
-	require.NotNil(t, e)
-
-	encoder, ok := e.(*JSONRowEventEncoder)
-=======
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
@@ -57,7 +48,6 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	require.NoError(t, err)
 
 	encoder, ok := builder.Build().(*JSONRowEventEncoder)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	require.True(t, ok)
 
 	data, err := newJSONMessageForDML(testCaseInsert, encoder.config, encoder.builder, false)
@@ -160,21 +150,11 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		}
 	}
 
-<<<<<<< HEAD
-	e = newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension:      true,
-		Terminator:               "",
-		OnlyOutputUpdatedColumns: true,
-	})
-	require.NotNil(t, e)
-=======
 	codecConfig = common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.OnlyOutputUpdatedColumns = true
 
-	builder, err = NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
+	builder = NewJSONRowEventEncoderBuilder(codecConfig)
 
 	encoder, ok = builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
@@ -351,9 +331,11 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 func TestCheckpointEventValueMarshal(t *testing.T) {
 	t.Parallel()
 	var watermark uint64 = 1024
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	codecConfig.EnableTiDBExtension = true
 	encoder := &JSONRowEventEncoder{
-		builder: newCanalEntryBuilder(),
-		config:  &common.Config{EnableTiDBExtension: true},
+		builder: newCanalEntryBuilder(codecConfig),
+		config:  codecConfig,
 	}
 	require.NotNil(t, encoder)
 	msg, err := encoder.EncodeCheckpointEvent(watermark)
@@ -569,12 +551,10 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.ContentCompatible = true
 
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
 	encoder := builder.Build()
 
-	err = encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
+	err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
 	require.NoError(t, err)
 
 	message := encoder.Build()[0]

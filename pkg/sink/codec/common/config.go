@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -188,22 +189,13 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		c.EnableRowChecksum = replicaConfig.Integrity.Enabled()
 	}
 
-<<<<<<< HEAD
 	c.DeleteOnlyHandleKeyColumns = !replicaConfig.EnableOldValue
-=======
-	c.DeleteOnlyHandleKeyColumns = util.GetOrZero(replicaConfig.Sink.DeleteOnlyOutputHandleKeyColumns)
-	if c.DeleteOnlyHandleKeyColumns && replicaConfig.ForceReplicate {
-		return cerror.ErrCodecInvalidConfig.GenWithStack(
-			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
-	}
-
 	if c.Protocol == config.ProtocolCanalJSON {
 		c.ContentCompatible = util.GetOrZero(urlParameter.ContentCompatible)
 		if c.ContentCompatible {
 			c.OnlyOutputUpdatedColumns = true
 		}
 	}
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 
 	return nil
 }

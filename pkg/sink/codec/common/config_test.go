@@ -19,7 +19,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/stretchr/testify/require"
 )
@@ -286,11 +285,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, true, c.EnableTiDBExtension)
 	require.Equal(t, "abc", c.AvroSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
-<<<<<<< HEAD
-=======
-	require.True(t, c.AvroEnableWatermark)
 	require.False(t, c.ContentCompatible)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -318,11 +313,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, true, c.EnableTiDBExtension)
 	require.Equal(t, "abc", c.AvroSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
-<<<<<<< HEAD
-=======
-	require.True(t, c.AvroEnableWatermark)
 	require.False(t, c.ContentCompatible)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -354,29 +345,11 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, true, c.EnableTiDBExtension)
 	require.Equal(t, "abc", c.AvroSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
-<<<<<<< HEAD
-=======
-	require.True(t, c.AvroEnableWatermark)
 	require.False(t, c.ContentCompatible)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
 	require.Equal(t, 456, c.MaxBatchSize)
-<<<<<<< HEAD
-}
-
-func TestCanalJSONHandleKeyOnly(t *testing.T) {
-	t.Parallel()
-
-	// handle-key-only not enabled, always no error
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
-		LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
-	}
-
-	uri := "kafka://127.0.0.1:9092/canal-json?protocol=canal-json"
-=======
 	require.Equal(t, c.LargeMessageHandle.LargeMessageHandleOption, config.LargeMessageHandleOptionClaimCheck)
 
 	replicaConfig = config.GetDefaultReplicaConfig()
@@ -393,102 +366,12 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 
 func TestApplyConfig4CanalJSON(t *testing.T) {
 	uri := "kafka://127.0.0.1:9092/abc?protocol=canal-json&content-compatible=true"
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
 	codecConfig := NewConfig(config.ProtocolCanalJSON)
-<<<<<<< HEAD
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-
-	err = codecConfig.Validate()
-	require.NoError(t, err)
-	require.True(t, codecConfig.LargeMessageHandle.Disabled())
-
-	// enable handle-key only
-	replicaConfig.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
-
-	// `enable-tidb-extension` is false, return error
-	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json"
-	sinkURI, err = url.Parse(uri)
-	require.NoError(t, err)
-
-	codecConfig = NewConfig(config.ProtocolCanal)
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	err = codecConfig.Validate()
-	require.Error(t, err)
-
-	// canal-json, `enable-tidb-extension` is true, no error
-	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=canal-json&enable-tidb-extension=true"
-	sinkURI, err = url.Parse(uri)
-	require.NoError(t, err)
-
-	codecConfig = NewConfig(config.ProtocolCanalJSON)
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	err = codecConfig.Validate()
-	require.NoError(t, err)
-
-	require.True(t, codecConfig.LargeMessageHandle.HandleKeyOnly())
-
-	// force-replicate is set to true, should return error
-	replicaConfig.ForceReplicate = true
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
-}
-
-func TestOpenProtocolHandleKeyOnly(t *testing.T) {
-	t.Parallel()
-
-	// large message handle is set to default, none.
-	replicaConfig := config.GetDefaultReplicaConfig()
-	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
-		LargeMessageHandle: config.NewDefaultLargeMessageHandleConfig(),
-	}
-
-	// enable-tidb-extension is false, should always success, no error
-	uri := "kafka://127.0.0.1:9092/large-message-handle?protocol=open-protocol"
-	sinkURI, err := url.Parse(uri)
-	require.NoError(t, err)
-
-	codecConfig := NewConfig(config.ProtocolOpen)
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	err = codecConfig.Validate()
-	require.NoError(t, err)
-	require.True(t, codecConfig.LargeMessageHandle.Disabled())
-
-	// enable-tidb-extension is true, should always success, no error
-	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=open-protocol&enable-tidb-extension=true"
-	sinkURI, err = url.Parse(uri)
-	require.NoError(t, err)
-
-	codecConfig = NewConfig(config.ProtocolOpen)
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	err = codecConfig.Validate()
-	require.NoError(t, err)
-	require.True(t, codecConfig.LargeMessageHandle.Disabled())
-
-	// enable handle-key only as the large message handle option
-	replicaConfig.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
-
-	// no matter enable-tidb-extension, always no error
-	uri = "kafka://127.0.0.1:9092/large-message-handle?protocol=open-protocol"
-	sinkURI, err = url.Parse(uri)
-	require.NoError(t, err)
-
-	codecConfig = NewConfig(config.ProtocolOpen)
-	err = codecConfig.Apply(sinkURI, replicaConfig)
-	require.NoError(t, err)
-	err = codecConfig.Validate()
-	require.NoError(t, err)
-=======
 	err = codecConfig.Apply(sinkURI, config.GetDefaultReplicaConfig())
 	require.NoError(t, err)
 	require.True(t, codecConfig.ContentCompatible)
 	require.True(t, codecConfig.OnlyOutputUpdatedColumns)
->>>>>>> 4a3762cdc5 (codec(ticdc): canal-json support compatible content by output detailed mysql type information (#10014))
 }

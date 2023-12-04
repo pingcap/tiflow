@@ -10,7 +10,7 @@ SINK_TYPE=$1
 
 # use kafka-consumer with canal-json decoder to sync data from kafka to mysql
 function run() {
-	if [ "$SINK_TYPE" != "kafka" ] && [ "$SINK_TYPE" != "pulsar" ]; then
+	if [ "$SINK_TYPE" != "kafka" ]; then
 		return
 	fi
 
@@ -22,16 +22,11 @@ function run() {
 
 	cd $WORK_DIR
 
-	TOPIC_NAME="ticdc-canal-json-test"
-
+	TOPIC_NAME="ticdc-canal-json-content-compatible"
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true&kafka-version=${KAFKA_VERSION}"
-	fi
-
-	if [ "$SINK_TYPE" == "pulsar" ]; then
-		SINK_URI="pulsar://127.0.0.1:6650/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true"
 	fi
 
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
@@ -40,10 +35,6 @@ function run() {
 	# currently only kafka and pulsar are supported
 	if [ "$SINK_TYPE" == "kafka" ]; then
 		run_kafka_consumer $WORK_DIR $SINK_URI
-	fi
-
-	if [ "$SINK_TYPE" == "pulsar" ]; then
-		run_pulsar_consumer $WORK_DIR $SINK_URI
 	fi
 
 	run_sql_file $CUR/data/data.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
