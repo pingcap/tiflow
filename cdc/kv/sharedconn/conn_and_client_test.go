@@ -151,6 +151,40 @@ func TestConnectToUnavailable(t *testing.T) {
 	require.Nil(t, conn.Close())
 }
 
+func TestCancelStream(t *testing.T) {
+	service := make(chan *grpc.Server, 1)
+	var addr string
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		require.Nil(t, runGrpcService(&srv{}, &addr, service))
+	}()
+
+	svc := <-service
+	require.NotNil(t, svc)
+	defer svc.GracefulStop()
+
+	connCtx, connCancel := context.WithCancel(context.Background())
+	defer connCancel()
+
+	pool := newConnAndClientPool(&security.Credential{}, nil, 1)
+	conn, err := pool.connect(connCtx, addr)
+	require.NotNil(t, conn)
+	require.Nil(t, err)
+
+	rpcCtx, rpcCancel := context.WithCancel(context.Background())
+	rpc := cdcpb.NewChangeDataClient(conn)
+	client, err := rpc.EventFeed(rpcCtx)
+	require.Nil(t, err)
+
+	rpcCancel()
+	_, err = client.Recv()
+	require.Equal(t, grpccodes.Canceled, grpcstatus.Code(err))
+	require.Nil(t, conn.Close())
+}
+
 func runGrpcService(srv cdcpb.ChangeDataServer, addr *string, service chan<- *grpc.Server) error {
 	defer close(service)
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
