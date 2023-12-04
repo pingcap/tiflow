@@ -56,11 +56,7 @@ func fillColumns(columns []*model.Column, out *jwriter.Writer,
 			} else {
 				out.RawByte(',')
 			}
-			javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			value, err := builder.formatValue(col.Value, javaType)
+			value, err := builder.formatValue(col.Value, col.Flag.IsBinary())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
