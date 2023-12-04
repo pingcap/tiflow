@@ -227,10 +227,26 @@
           {
             "type": "string",
             "optional": true,
+            "name": "io.debezium.data.Enum",
+            "version": 1,
+            "parameters": { "allowed": "a,b,c" },
+            "field": "col_enum_invalid"
+          },
+          {
+            "type": "string",
+            "optional": true,
             "name": "io.debezium.data.EnumSet",
             "version": 1,
             "parameters": { "allowed": "a,b,c" },
             "field": "col_set"
+          },
+          {
+            "type": "string",
+            "optional": true,
+            "name": "io.debezium.data.EnumSet",
+            "version": 1,
+            "parameters": { "allowed": "a,b,c" },
+            "field": "col_set_invalid"
           },
           {
             "type": "string",
@@ -469,10 +485,26 @@
           {
             "type": "string",
             "optional": true,
+            "name": "io.debezium.data.Enum",
+            "version": 1,
+            "parameters": { "allowed": "a,b,c" },
+            "field": "col_enum_invalid"
+          },
+          {
+            "type": "string",
+            "optional": true,
             "name": "io.debezium.data.EnumSet",
             "version": 1,
             "parameters": { "allowed": "a,b,c" },
             "field": "col_set"
+          },
+          {
+            "type": "string",
+            "optional": true,
+            "name": "io.debezium.data.EnumSet",
+            "version": 1,
+            "parameters": { "allowed": "a,b,c" },
+            "field": "col_set_invalid"
           },
           {
             "type": "string",
@@ -589,15 +621,17 @@
       "col_mediumint_unsigned": 16777215,
       "col_bigint": -9223372036854775808,
       "col_bigint_unsigned": -1,
-      "col_enum": "",
+      "col_enum": "a",
+      "col_enum_invalid": "",
       "col_set": "a,b",
+      "col_set_invalid": "",
       "col_json": "[\"foo\"]"
     },
     "source": {
       "version": "2.4.0.Final",
       "connector": "mysql",
       "name": "dbserver1",
-      "ts_ms": 1701672687000,
+      "ts_ms": 1701673705000,
       "snapshot": "false",
       "db": "test",
       "sequence": null,
@@ -605,13 +639,13 @@
       "server_id": 223344,
       "gtid": null,
       "file": "mysql-bin.000005",
-      "pos": 7352,
+      "pos": 10394,
       "row": 0,
       "thread": 11,
       "query": null
     },
     "op": "c",
-    "ts_ms": 1701672687217,
+    "ts_ms": 1701673705263,
     "transaction": null
   }
 }
