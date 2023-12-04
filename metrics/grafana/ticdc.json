@@ -3426,8 +3426,16 @@
               "hide": false,
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}",
+              "legendFormat": "{{changefeed}}-barrier",
               "refId": "C"
+            },
+            {
+              "exemplar": true,
+              "expr": "max(ticdc_scheduler_slow_table_puller_resolved_ts{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-puller",
+              "refId": "B"
             }
           ],
           "thresholds": [],
@@ -3633,8 +3641,16 @@
               "format": "time_series",
               "interval": "",
               "intervalFactor": 1,
-              "legendFormat": "{{changefeed}}",
+              "legendFormat": "{{changefeed}}-barrier",
               "refId": "C"
+            },
+            {
+              "exemplar": true,
+              "expr": "max(ticdc_scheduler_slow_table_puller_resolved_ts_lag{k8s_cluster=\"$k8s_cluster\", tidb_cluster=\"$tidb_cluster\", changefeed=~\"$changefeed\"}) by (changefeed)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{changefeed}}-puller",
+              "refId": "A"
             }
           ],
           "thresholds": [],

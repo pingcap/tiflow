@@ -72,10 +72,9 @@ type metaManager struct {
 	startTs model.Ts
 
 	lastFlushTime          time.Time
+	flushIntervalInMs      int64
 	cfg                    *config.ConsistentConfig
 	metricFlushLogDuration prometheus.Observer
-
-	flushIntervalInMs int64
 }
 
 // NewDisabledMetaManager creates a disabled Meta Manager.
