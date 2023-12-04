@@ -112,10 +112,13 @@ type regionWorker struct {
 
 	// how many pending input events
 	inputPending int32
+
+	pendingRegions *syncRegionFeedStateMap
 }
 
 func newRegionWorker(
 	changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+	pendingRegions *syncRegionFeedStateMap,
 ) *regionWorker {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
@@ -149,6 +152,8 @@ func newRegionWorker(
 		concurrency:   s.client.config.WorkerConcurrent,
 		metrics:       metrics,
 		inputPending:  0,
+
+		pendingRegions: pendingRegions,
 	}
 }
 
@@ -184,7 +189,7 @@ func (w *regionWorker) checkShouldExit() error {
 	empty := w.checkRegionStateEmpty()
 	// If there is no region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
-	if empty {
+	if empty && w.pendingRegions.len() == 0 {
 		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
