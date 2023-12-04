@@ -106,7 +106,7 @@ function run() {
 	cleanup_process $CDC_BINARY
 
 	# make sure initialize changefeed error will not stuck the owner
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/ChangefeedNewRedoManagerError=2*return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/redo/ChangefeedNewRedoManagerError=2*return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
 	changefeedid_3="changefeed-initialize-error"

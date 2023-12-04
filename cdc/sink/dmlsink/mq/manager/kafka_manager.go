@@ -41,6 +41,8 @@ const (
 type kafkaTopicManager struct {
 	changefeedID model.ChangeFeedID
 
+	defaultTopic string
+
 	admin kafka.ClusterAdminClient
 
 	cfg *kafka.AutoCreateTopicConfig
@@ -56,11 +58,13 @@ type kafkaTopicManager struct {
 // NewKafkaTopicManager creates a new topic manager.
 func NewKafkaTopicManager(
 	ctx context.Context,
+	defaultTopic string,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
 ) *kafkaTopicManager {
 	changefeedID := contextutil.ChangefeedIDFromCtx(ctx)
 	mgr := &kafkaTopicManager{
+		defaultTopic:      defaultTopic,
 		changefeedID:      changefeedID,
 		admin:             admin,
 		cfg:               cfg,
@@ -164,6 +168,15 @@ func (m *kafkaTopicManager) fetchAllTopicsPartitionsNum(
 			zap.Duration("duration", time.Since(start)),
 		)
 		return nil, err
+	}
+
+	// it may happen the following case:
+	// 1. user create the default topic with partition number set as 3 manually
+	// 2. set the partition-number as 2 in the sink-uri.
+	// in the such case, we should use 2 instead of 3 as the partition number.
+	_, ok := numPartitions[m.defaultTopic]
+	if ok {
+		numPartitions[m.defaultTopic] = m.cfg.PartitionNum
 	}
 
 	log.Info(
@@ -272,8 +285,12 @@ func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
 		return 0, errors.Trace(err)
 	}
 	if detail, ok := topicDetails[topicName]; ok {
-		m.tryUpdatePartitionsAndLogging(topicName, detail.NumPartitions)
-		return detail.NumPartitions, nil
+		numPartition := detail.NumPartitions
+		if topicName == m.defaultTopic {
+			numPartition = m.cfg.PartitionNum
+		}
+		m.tryUpdatePartitionsAndLogging(topicName, numPartition)
+		return numPartition, nil
 	}
 
 	partitionNum, err := m.createTopic(ctx, topicName)
