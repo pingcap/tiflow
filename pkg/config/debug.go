@@ -28,15 +28,9 @@ type DebugConfig struct {
 
 	// EnableKVConnectBackOff enables the backoff for kv connect.
 	EnableKVConnectBackOff bool `toml:"enable-kv-connect-backoff" json:"enable-kv-connect-backoff"`
-<<<<<<< HEAD
-=======
-
-	// CDCV2 enables ticdc version 2 implementation with new metastore
-	CDCV2 *CDCV2 `toml:"cdc-v2" json:"cdc-v2"`
 
 	// Puller is the configuration of the puller.
 	Puller *PullerConfig `toml:"puller" json:"puller"`
->>>>>>> 05e032835b (puller(ticdc):  detect resolved ts stuck in puller (#10182))
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration
