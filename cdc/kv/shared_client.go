@@ -244,7 +244,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 		s.workers = append(s.workers, worker)
 	}
 
-	g.Go(func() error { return s.handleRequestRanges(ctx, g) })
+	g.Go(func() error { return s.handleRequestRanges(ctx) })
 	g.Go(func() error { return s.dispatchRequest(ctx) })
 	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
@@ -427,7 +427,9 @@ func (s *SharedClient) broadcastRequest(r *requestedStore, sri singleRegionInfo)
 	}
 }
 
-func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Group) error {
+func (s *SharedClient) handleRequestRanges(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(scanRegionsConcurrency)
 	for {
 		select {
 		case <-ctx.Done():
