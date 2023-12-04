@@ -17,8 +17,6 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -59,20 +57,7 @@ func TestCanalJSONTxnEventEncoderMaxMessageBytes(t *testing.T) {
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
 				}},
-<<<<<<< HEAD
-				ColInfos: []rowcodec.ColInfo{
-					{
-						ID: 1,
-						Ft: types.NewFieldType(mysql.TypeVarchar),
-					},
-				},
-||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
-=======
-<<<<<<< HEAD
-=======
 				ColInfos: colInfos,
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
->>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 			},
 		},
 	}
@@ -119,20 +104,7 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 					Type:  mysql.TypeVarchar,
 					Value: []byte("aa"),
 				}},
-<<<<<<< HEAD
-				ColInfos: []rowcodec.ColInfo{
-					{
-						ID: 1,
-						Ft: types.NewFieldType(mysql.TypeVarchar),
-					},
-				},
-||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
-=======
-<<<<<<< HEAD
-=======
 				ColInfos: colInfos,
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
->>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 			},
 			{
 				CommitTs:  2,
@@ -143,20 +115,7 @@ func TestCanalJSONAppendTxnEventEncoderWithCallback(t *testing.T) {
 					Type:  mysql.TypeVarchar,
 					Value: []byte("bb"),
 				}},
-<<<<<<< HEAD
-				ColInfos: []rowcodec.ColInfo{
-					{
-						ID: 1,
-						Ft: types.NewFieldType(mysql.TypeVarchar),
-					},
-				},
-||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
-=======
-<<<<<<< HEAD
-=======
 				ColInfos: colInfos,
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
->>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 			},
 		},
 	}

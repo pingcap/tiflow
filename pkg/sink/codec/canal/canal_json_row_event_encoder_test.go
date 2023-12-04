@@ -15,22 +15,15 @@ package canal
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"testing"
 
 	"github.com/pingcap/tidb/parser/mysql"
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
-||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
-=======
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tiflow/cdc/entry"
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
->>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/encoding/charmap"
@@ -47,34 +40,21 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 }
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
-<<<<<<< HEAD
-	t.Parallel()
-
+	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	builder := NewJSONRowEventEncoderBuilder(codecConfig)
 
 	encoder, ok := builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
 
-	data, err := newJSONMessageForDML(testCaseInsert, encoder.config, encoder.builder, false)
-	require.Nil(t, err)
-=======
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-
-	encoder, ok := builder.Build().(*JSONRowEventEncoder)
-	require.True(t, ok)
-
 	insertEvent, updateEvent, deleteEvent := newLargeEvent4Test(t)
-	data, err := newJSONMessageForDML(encoder.builder, insertEvent, encoder.config, false, "")
+	data, err := newJSONMessageForDML(insertEvent, codecConfig, encoder.builder, false)
 	require.NoError(t, err)
 
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 	var msg canalJSONMessageInterface = &JSONMessage{}
 	err = json.Unmarshal(data, msg)
-	require.Nil(t, err)
+	require.NoError(t, err)
+
 	jsonMsg, ok := msg.(*JSONMessage)
 	require.True(t, ok)
 	require.NotNil(t, jsonMsg.Data)
@@ -111,7 +91,7 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 
 		if bytes, ok := item.column.Value.([]byte); ok {
 			expectedValue, err := charmap.ISO8859_1.NewDecoder().Bytes(bytes)
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.Equal(t, string(expectedValue), obtainedValue)
 			continue
 		}
@@ -119,17 +99,13 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Equal(t, item.expectedEncodedValue, obtainedValue)
 	}
 
-<<<<<<< HEAD
-	data, err = newJSONMessageForDML(testCaseUpdate, encoder.config, encoder.builder, false)
-	require.Nil(t, err)
-=======
-	data, err = newJSONMessageForDML(encoder.builder, updateEvent, encoder.config, false, "")
+	data, err = newJSONMessageForDML(updateEvent, codecConfig, encoder.builder, false)
 	require.NoError(t, err)
 
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
-	require.Nil(t, err)
+	require.NoError(t, err)
+
 	require.NotNil(t, jsonMsg.Data)
 	require.NotNil(t, jsonMsg.Old)
 	require.Equal(t, "UPDATE", jsonMsg.EventType)
@@ -143,17 +119,12 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Old[0], col.Name)
 	}
 
-<<<<<<< HEAD
-	data, err = newJSONMessageForDML(testCaseDelete, encoder.config, encoder.builder, false)
-	require.Nil(t, err)
-=======
-	data, err = newJSONMessageForDML(encoder.builder, deleteEvent, encoder.config, false, "")
+	data, err = newJSONMessageForDML(deleteEvent, codecConfig, encoder.builder, false)
 	require.NoError(t, err)
 
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, jsonMsg.Data)
 	require.Nil(t, jsonMsg.Old)
 	require.Equal(t, "DELETE", jsonMsg.EventType)
@@ -162,13 +133,10 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 		require.Contains(t, jsonMsg.Data[0], col.Name)
 	}
 
-<<<<<<< HEAD
-	data, err = newJSONMessageForDML(testCaseDelete, &common.Config{DeleteOnlyHandleKeyColumns: true}, encoder.builder, false)
-=======
 	codecConfig = &common.Config{DeleteOnlyHandleKeyColumns: true}
-	data, err = newJSONMessageForDML(encoder.builder, deleteEvent, codecConfig, false, "")
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+	data, err = newJSONMessageForDML(deleteEvent, codecConfig, encoder.builder, false)
 	require.NoError(t, err)
+
 	jsonMsg = &JSONMessage{}
 	err = json.Unmarshal(data, jsonMsg)
 	require.NoError(t, err)
@@ -192,208 +160,70 @@ func TestNewCanalJSONMessage4DML(t *testing.T) {
 	codecConfig.OnlyOutputUpdatedColumns = true
 
 	builder = NewJSONRowEventEncoderBuilder(codecConfig)
-
 	encoder, ok = builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
-<<<<<<< HEAD
-	data, err = newJSONMessageForDML(testCaseUpdate, encoder.config, encoder.builder, false)
-	require.Nil(t, err)
-=======
-	data, err = newJSONMessageForDML(encoder.builder, updateEvent, encoder.config, false, "")
+	data, err = newJSONMessageForDML(updateEvent, codecConfig, encoder.builder, false)
 	require.NoError(t, err)
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 
 	withExtension := &canalJSONMessageWithTiDBExtension{}
 	err = json.Unmarshal(data, withExtension)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, updateEvent.CommitTs, withExtension.Extensions.CommitTs)
 
 	encoder, ok = builder.Build().(*JSONRowEventEncoder)
 	require.True(t, ok)
-<<<<<<< HEAD
-	data, err = newJSONMessageForDML(testCaseUpdate, encoder.config, encoder.builder, false)
-	require.Nil(t, err)
-=======
-	data, err = newJSONMessageForDML(encoder.builder, updateEvent, encoder.config, false, "")
+	data, err = newJSONMessageForDML(updateEvent, codecConfig, encoder.builder, false)
 	require.NoError(t, err)
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 
 	withExtension = &canalJSONMessageWithTiDBExtension{}
 	err = json.Unmarshal(data, withExtension)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, 0, len(withExtension.JSONMessage.Old[0]))
 
 	require.NotNil(t, withExtension.Extensions)
 	require.Equal(t, updateEvent.CommitTs, withExtension.Extensions.CommitTs)
 }
 
-<<<<<<< HEAD
-=======
-func TestCanalJSONCompressionE2E(t *testing.T) {
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	codecConfig.EnableTiDBExtension = true
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.LZ4
-
-	ctx := context.Background()
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	encoder := builder.Build()
-
-	insertEvent, _, _ := newLargeEvent4Test(t)
-
-	// encode normal row changed event
-	err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
-	require.NoError(t, err)
-
-	message := encoder.Build()[0]
-
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err := decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeRow)
-
-	decodedEvent, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedEvent.CommitTs, insertEvent.CommitTs)
-	require.Equal(t, decodedEvent.Table.Schema, insertEvent.Table.Schema)
-	require.Equal(t, decodedEvent.Table.Table, insertEvent.Table.Table)
-
-	// encode DDL event
-	message, err = encoder.EncodeDDLEvent(testCaseDDL)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err = decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeDDL)
-
-	decodedDDL, err := decoder.NextDDLEvent()
-	require.NoError(t, err)
-
-	require.Equal(t, decodedDDL.Query, testCaseDDL.Query)
-	require.Equal(t, decodedDDL.CommitTs, testCaseDDL.CommitTs)
-	require.Equal(t, decodedDDL.TableInfo.TableName.Schema, testCaseDDL.TableInfo.TableName.Schema)
-	require.Equal(t, decodedDDL.TableInfo.TableName.Table, testCaseDDL.TableInfo.TableName.Table)
-
-	// encode checkpoint event
-	waterMark := uint64(2333)
-	message, err = encoder.EncodeCheckpointEvent(waterMark)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err = decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeResolved)
-
-	decodedWatermark, err := decoder.NextResolvedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedWatermark, waterMark)
-}
-
-func TestCanalJSONClaimCheckE2E(t *testing.T) {
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	codecConfig.EnableTiDBExtension = true
-	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
-	codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compression.Snappy
-	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/canal-json-claim-check"
-	codecConfig.MaxMessageBytes = 500
-	ctx := context.Background()
-
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	encoder := builder.Build()
-
-	insertEvent, _, _ := newLargeEvent4Test(t)
-	err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
-	require.NoError(t, err)
-
-	// this is a large message, should be delivered to the external storage.
-	claimCheckLocationMessage := encoder.Build()[0]
-
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(claimCheckLocationMessage.Key, claimCheckLocationMessage.Value)
-	require.NoError(t, err)
-
-	messageType, ok, err := decoder.HasNext()
-	require.NoError(t, err)
-	require.Equal(t, messageType, model.MessageTypeRow)
-	require.True(t, ok)
-
-	decodedLargeEvent, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-
-	require.Equal(t, insertEvent.CommitTs, decodedLargeEvent.CommitTs)
-	require.Equal(t, insertEvent.Table, decodedLargeEvent.Table)
-	require.Equal(t, insertEvent.PreColumns, decodedLargeEvent.PreColumns)
-
-	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
-	for _, column := range decodedLargeEvent.Columns {
-		decodedColumns[column.Name] = column
-	}
-
-	expectedValue := collectExpectedDecodedValue(testColumnsTable)
-	for _, column := range insertEvent.Columns {
-		decodedColumn, ok := decodedColumns[column.Name]
-		require.True(t, ok)
-		require.Equal(t, column.Type, decodedColumn.Type)
-		require.Equal(t, expectedValue[column.Name], decodedColumn.Value)
-	}
-}
-
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionHandleKeyOnly
 	codecConfig.MaxMessageBytes = 500
-	encoder := newJSONRowEventEncoder(codecConfig)
 
-<<<<<<< HEAD
-	err := encoder.AppendRowChangedEvent(context.Background(), "", testCaseInsert, func() {})
-=======
-	ctx := context.Background()
-
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
 	encoder := builder.Build()
 
 	insertEvent, _, _ := newLargeEvent4Test(t)
-	err = encoder.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
+	err := encoder.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
 	require.NoError(t, err)
 
 	message := encoder.Build()[0]
 
-	var decoded canalJSONMessageWithTiDBExtension
-	err = json.Unmarshal(message.Value, &decoded)
+	decoder, err := NewBatchDecoder(context.Background(), codecConfig, &sql.DB{})
 	require.NoError(t, err)
-	require.True(t, decoded.Extensions.OnlyHandleKey)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, ok, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, messageType, model.MessageTypeRow)
+
+	handleKeyOnlyMessage := decoder.(*batchDecoder).msg.(*canalJSONMessageWithTiDBExtension)
+	require.True(t, handleKeyOnlyMessage.Extensions.OnlyHandleKey)
 
 	for _, col := range insertEvent.Columns {
 		if col.Flag.IsHandleKey() {
-			require.Contains(t, decoded.Data[0], col.Name)
-			require.Contains(t, decoded.SQLType, col.Name)
-			require.Contains(t, decoded.MySQLType, col.Name)
+			require.Contains(t, handleKeyOnlyMessage.Data[0], col.Name)
+			require.Contains(t, handleKeyOnlyMessage.SQLType, col.Name)
+			require.Contains(t, handleKeyOnlyMessage.MySQLType, col.Name)
 		} else {
-			require.NotContains(t, decoded.Data[0], col.Name)
-			require.NotContains(t, decoded.SQLType, col.Name)
-			require.NotContains(t, decoded.MySQLType, col.Name)
+			require.NotContains(t, handleKeyOnlyMessage.Data[0], col.Name)
+			require.NotContains(t, handleKeyOnlyMessage.SQLType, col.Name)
+			require.NotContains(t, handleKeyOnlyMessage.MySQLType, col.Name)
 		}
 	}
 }
@@ -401,8 +231,9 @@ func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
 func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	t.Parallel()
 
-	encoder, ok := newJSONRowEventEncoder(&common.Config{}).(*JSONRowEventEncoder)
-	require.True(t, ok)
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
+	encoder := builder.Build().(*JSONRowEventEncoder)
 
 	message := encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
@@ -416,11 +247,10 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 	require.Equal(t, testCaseDDL.Query, msg.Query)
 	require.Equal(t, "CREATE", msg.EventType)
 
-	encoder, ok = newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: true,
-	}).(*JSONRowEventEncoder)
-	require.True(t, ok)
+	codecConfig.EnableTiDBExtension = true
+	builder = NewJSONRowEventEncoderBuilder(codecConfig)
 
+	encoder = builder.Build().(*JSONRowEventEncoder)
 	message = encoder.newJSONMessageForDDL(testCaseDDL)
 	require.NotNil(t, message)
 
@@ -432,20 +262,9 @@ func TestNewCanalJSONMessageFromDDL(t *testing.T) {
 }
 
 func TestBatching(t *testing.T) {
-<<<<<<< HEAD
-	t.Parallel()
-	encoder := newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: false,
-		Terminator:          "",
-		MaxMessageBytes:     config.DefaultMaxMessageBytes,
-	})
-=======
-	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
 	encoder := builder.Build()
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 	require.NotNil(t, encoder)
 
 	_, updateEvent, _ := newLargeEvent4Test(t)
@@ -454,7 +273,7 @@ func TestBatching(t *testing.T) {
 		ts := uint64(i)
 		updateCase.CommitTs = ts
 		err := encoder.AppendRowChangedEvent(context.Background(), "", &updateCase, nil)
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		if i%100 == 0 {
 			msgs := encoder.Build()
@@ -466,7 +285,7 @@ func TestBatching(t *testing.T) {
 
 				var msg JSONMessage
 				err := json.Unmarshal(msgs[j].Value, &msg)
-				require.Nil(t, err)
+				require.NoError(t, err)
 				require.Equal(t, "UPDATE", msg.EventType)
 			}
 		}
@@ -477,15 +296,17 @@ func TestBatching(t *testing.T) {
 
 func TestEncodeCheckpointEvent(t *testing.T) {
 	t.Parallel()
+
 	var watermark uint64 = 2333
 	for _, enable := range []bool{false, true} {
 		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 		codecConfig.EnableTiDBExtension = enable
-		encoder := newJSONRowEventEncoder(codecConfig).(*JSONRowEventEncoder)
-		require.NotNil(t, encoder)
+
+		builder := NewJSONRowEventEncoderBuilder(codecConfig)
+		encoder := builder.Build()
 
 		msg, err := encoder.EncodeCheckpointEvent(watermark)
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		if !enable {
 			require.Nil(t, msg)
@@ -502,12 +323,12 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		require.NoError(t, err)
 
 		ty, hasNext, err := decoder.HasNext()
-		require.Nil(t, err)
+		require.NoError(t, err)
 		if enable {
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeResolved, ty)
 			consumed, err := decoder.NextResolvedEvent()
-			require.Nil(t, err)
+			require.NoError(t, err)
 			require.Equal(t, watermark, consumed)
 		} else {
 			require.False(t, hasNext)
@@ -515,7 +336,7 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 		}
 
 		ty, hasNext, err = decoder.HasNext()
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.False(t, hasNext)
 		require.Equal(t, model.MessageTypeUnknown, ty)
 	}
@@ -523,16 +344,16 @@ func TestEncodeCheckpointEvent(t *testing.T) {
 
 func TestCheckpointEventValueMarshal(t *testing.T) {
 	t.Parallel()
-	var watermark uint64 = 1024
+
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
-	encoder := &JSONRowEventEncoder{
-		builder: newCanalEntryBuilder(codecConfig),
-		config:  codecConfig,
-	}
-	require.NotNil(t, encoder)
+
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
+
+	encoder := builder.Build()
+	var watermark uint64 = 1024
 	msg, err := encoder.EncodeCheckpointEvent(watermark)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, msg)
 
 	// Unmarshal from the data we have encoded.
@@ -541,13 +362,13 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 		&tidbExtension{},
 	}
 	err = json.Unmarshal(msg.Value, &jsonMsg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, watermark, jsonMsg.Extensions.WatermarkTs)
 	// Hack the build time.
 	// Otherwise, the timing will be inconsistent.
 	jsonMsg.BuildTime = 1469579899
 	rawBytes, err := json.MarshalIndent(jsonMsg, "", "  ")
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// No commit ts will be output.
 	expectedJSON := `{
@@ -589,7 +410,7 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 	// Otherwise, the timing will be inconsistent.
 	msg.BuildTime = 1469579899
 	rawBytes, err := json.MarshalIndent(msg, "", "  ")
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// No watermark ts will be output.
 	expectedJSON := `{
@@ -614,14 +435,6 @@ func TestDDLEventWithExtensionValueMarshal(t *testing.T) {
 }
 
 func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
-<<<<<<< HEAD
-	encoder := newJSONRowEventEncoder(&common.Config{
-		EnableTiDBExtension: true,
-		Terminator:          "",
-		MaxMessageBytes:     config.DefaultMaxMessageBytes,
-	})
-	require.NotNil(t, encoder)
-=======
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -633,15 +446,10 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
-	ctx := context.Background()
-
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
 	encoder := builder.Build()
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
 
 	count := 0
-
 	row := &model.RowChangedEvent{
 		CommitTs:  1,
 		Table:     &model.TableName{Schema: "test", Table: "t"},
@@ -651,20 +459,7 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-<<<<<<< HEAD
-		ColInfos: []rowcodec.ColInfo{
-			{
-				ID: 0,
-				Ft: types.NewFieldType(mysql.TypeVarchar),
-			},
-		},
-||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
-=======
-<<<<<<< HEAD
-=======
 		ColInfos: colInfos,
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
->>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 	}
 
 	tests := []struct {
@@ -710,7 +505,7 @@ func TestCanalJSONAppendRowChangedEventWithCallback(t *testing.T) {
 	// Append the events.
 	for _, test := range tests {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", test.row, test.callback)
-		require.Nil(t, err)
+		require.NoError(t, err)
 	}
 	require.Equal(t, 0, count, "nothing should be called")
 
@@ -748,20 +543,7 @@ func TestMaxMessageBytes(t *testing.T) {
 			Type:  mysql.TypeVarchar,
 			Value: []byte("aa"),
 		}},
-<<<<<<< HEAD
-		ColInfos: []rowcodec.ColInfo{
-			{
-				ID: 0,
-				Ft: types.NewFieldType(mysql.TypeVarchar),
-			},
-		},
-||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
-=======
-<<<<<<< HEAD
-=======
 		ColInfos: colInfos,
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
->>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 	}
 
 	ctx := context.Background()
@@ -769,19 +551,20 @@ func TestMaxMessageBytes(t *testing.T) {
 
 	// the test message length is smaller than max-message-bytes
 	maxMessageBytes := 300
-	cfg := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(maxMessageBytes)
-	encoder := NewJSONRowEventEncoderBuilder(cfg).Build()
+	codecConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(maxMessageBytes)
+
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
+	encoder := builder.Build()
+
 	err := encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	// the test message length is larger than max-message-bytes
-	cfg = cfg.WithMaxMessageBytes(100)
-	cfg.LargeMessageHandle = config.NewDefaultLargeMessageHandleConfig()
-	encoder = NewJSONRowEventEncoderBuilder(cfg).Build()
+	codecConfig = codecConfig.WithMaxMessageBytes(100)
+	builder = NewJSONRowEventEncoderBuilder(codecConfig)
+
+	encoder = builder.Build()
 	err = encoder.AppendRowChangedEvent(ctx, topic, testEvent, nil)
-<<<<<<< HEAD
-	require.NotNil(t, err)
-=======
 	require.Error(t, err, cerror.ErrMessageTooLarge)
 }
 
@@ -791,13 +574,11 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 	codecConfig.EnableTiDBExtension = true
 	codecConfig.ContentCompatible = true
 
-	builder, err := NewJSONRowEventEncoderBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-
+	builder := NewJSONRowEventEncoderBuilder(codecConfig)
 	encoder := builder.Build()
 
 	insertEvent, _, _ := newLargeEvent4Test(t)
-	err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+	err := encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
 	require.NoError(t, err)
 
 	message := encoder.Build()[0]
@@ -826,54 +607,6 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 
 	expectedValue := collectExpectedDecodedValue(testColumnsTable)
 	for _, actual := range insertEvent.Columns {
-		obtained, ok := obtainedColumns[actual.Name]
-		require.True(t, ok)
-		require.Equal(t, actual.Type, obtained.Type)
-		require.Equal(t, expectedValue[actual.Name], obtained.Value)
-	}
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
-}
-
-func TestCanalJSONContentCompatibleE2E(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
-	codecConfig.EnableTiDBExtension = true
-	codecConfig.ContentCompatible = true
-
-	builder := NewJSONRowEventEncoderBuilder(codecConfig)
-	encoder := builder.Build()
-
-	err := encoder.AppendRowChangedEvent(ctx, "", testCaseInsert, func() {})
-	require.NoError(t, err)
-
-	message := encoder.Build()[0]
-
-	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
-
-	err = decoder.AddKeyValue(message.Key, message.Value)
-	require.NoError(t, err)
-
-	messageType, hasNext, err := decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, messageType, model.MessageTypeRow)
-
-	decodedEvent, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedEvent.CommitTs, testCaseInsert.CommitTs)
-	require.Equal(t, decodedEvent.Table.Schema, testCaseInsert.Table.Schema)
-	require.Equal(t, decodedEvent.Table.Table, testCaseInsert.Table.Table)
-
-	obtainedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
-	for _, column := range decodedEvent.Columns {
-		obtainedColumns[column.Name] = column
-	}
-
-	expectedValue := collectExpectedDecodedValue(testColumnsTable)
-	for _, actual := range testCaseInsert.Columns {
 		obtained, ok := obtainedColumns[actual.Name]
 		require.True(t, ok)
 		require.Equal(t, actual.Type, obtained.Type)

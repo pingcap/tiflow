@@ -20,18 +20,8 @@ import (
 	"testing"
 	"time"
 
-<<<<<<< HEAD
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tidb/util/rowcodec"
-||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
-=======
-<<<<<<< HEAD
-=======
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
->>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -58,9 +48,10 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	require.NoError(t, replicaConfig.ValidateAndAdjust(sinkURI))
 
 	ctx = context.WithValue(ctx, "testing.T", t)
+	changefeedID := model.DefaultChangeFeedID("test")
 
 	errCh := make(chan error, 1)
-	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
+	s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
 		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
 	require.ErrorContains(t, err, "Avro protocol requires parameter \"schema-registry\"",
 		"should report error when protocol is avro but schema-registry is not set")
@@ -83,7 +74,8 @@ func TestWriteEvents(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	ctx = context.WithValue(ctx, "testing.T", t)
-	s, err := NewKafkaDMLSink(ctx, sinkURI, replicaConfig, errCh,
+	changefeedID := model.DefaultChangeFeedID("test")
+	s, err := NewKafkaDMLSink(ctx, changefeedID, sinkURI, replicaConfig, errCh,
 		kafka.NewMockFactory, dmlproducer.NewDMLMockProducer)
 	require.NoError(t, err)
 	require.NotNil(t, s)
@@ -99,24 +91,11 @@ func TestWriteEvents(t *testing.T) {
 
 	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
-<<<<<<< HEAD
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-<<<<<<< HEAD
-		Columns:  []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
-		ColInfos: []rowcodec.ColInfo{{ID: 1, Ft: types.NewFieldType(mysql.TypeVarchar)}},
-||||||| parent of 503cc090f (This is an automated cherry-pick of #10123)
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-=======
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
-=======
 		CommitTs:  1,
 		Table:     &model.TableName{Schema: "test", Table: "t"},
 		TableInfo: tableInfo,
 		Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
 		ColInfos:  colInfo,
->>>>>>> 5921050d90 (codec(ticdc): canal-json decouple get value from java type and refactor unit test (#10123))
->>>>>>> 503cc090f (This is an automated cherry-pick of #10123)
 	}
 
 	events := make([]*dmlsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)
