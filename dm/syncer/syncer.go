@@ -2373,6 +2373,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if err2 != nil {
 				return err2
 			}
+<<<<<<< HEAD
 			currentLocation.Position.Pos = e.Header.LogPos // update currentLocation's position here to make sure optimism redirection can end correctly
 			if s.cfg.EnableGTID {
 				// TODO: add mariaDB integration test
@@ -2381,6 +2382,41 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					return err2
 				}
 			}
+=======
+		case *replication.TransactionPayloadEvent:
+			for _, tpev := range ev.Events {
+				switch tpevt := tpev.Event.(type) {
+				case *replication.RowsEvent:
+					eventIndex++
+					s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(tpevt.Rows)))
+					ec.header.EventType = tpev.Header.EventType
+					sourceTable, err2 = s.handleRowsEvent(tpevt, ec)
+					if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
+						if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
+							affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
+						}
+						affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
+					}
+				case *replication.QueryEvent:
+					originSQL = strings.TrimSpace(string(tpevt.Query))
+					err2 = s.ddlWorker.HandleQueryEvent(tpevt, ec, originSQL)
+				case *replication.XIDEvent:
+					eventType = "XID"
+					needContinue, err2 = funcCommit()
+				case *replication.TableMapEvent:
+				case *replication.FormatDescriptionEvent:
+				default:
+					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
+				}
+			}
+			if needContinue {
+				continue
+			}
+		case *replication.TableMapEvent:
+		case *replication.FormatDescriptionEvent:
+		default:
+			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
+>>>>>>> 1fa2752c10 (syncer(dm): Improve logging of ignored TableMap/FormatDesc (#10205))
 		}
 		if err2 != nil {
 			if err := s.handleEventError(err2, startLocation, currentLocation, e.Header.EventType == replication.QUERY_EVENT, originSQL); err != nil {
