@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build intest
+// +build intest
+
 package canal
 
 import (
@@ -40,7 +43,6 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 }
 
 func TestNewCanalJSONMessage4DML(t *testing.T) {
-	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	builder := NewJSONRowEventEncoderBuilder(codecConfig)
 
