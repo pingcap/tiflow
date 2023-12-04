@@ -49,6 +49,7 @@ func BorrowJSONWriter(out io.Writer) *JSONWriter {
 
 func ReturnJSONWriter(w *JSONWriter) {
 	w.stream.Flush()
+	jsonAPI.ReturnStream(w.stream)
 	w.out = nil
 	w.stream = nil
 	jWriterPool.Put(w)
