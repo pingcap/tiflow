@@ -2435,6 +2435,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				case *replication.XIDEvent:
 					eventType = "XID"
 					needContinue, err2 = funcCommit()
+				case *replication.TableMapEvent:
+				case *replication.FormatDescriptionEvent:
 				default:
 					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
 				}
@@ -2442,6 +2444,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if needContinue {
 				continue
 			}
+		case *replication.TableMapEvent:
+		case *replication.FormatDescriptionEvent:
 		default:
 			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
 		}

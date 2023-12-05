@@ -1,0 +1,23 @@
+{
+  "name": "vite-plugin-i18next-scanner",
+  "version": "0.4.0",
+  "main": "index.js",
+  "module": "./index.mjs",
+  "exports": {
+    ".": {
+      "require": "./index.js",
+      "import": "./index.mjs",
+      "types": "./index.d.ts"
+    }
+  },
+  "dependencies": {
+    "debug": "^4.3.3",
+    "i18next-scanner": "^3.1.0",
+    "lodash": "^4.17.21",
+    "vinyl-fs": "^3.0.3",
+    "workerpool": "^6.1.5"
+  },
+  "peerDependencies": {
+    "vite": ">=2"
+  }
+}

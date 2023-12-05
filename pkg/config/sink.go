@@ -182,7 +182,9 @@ func (s *SinkConfig) MaskSensitiveData() {
 
 // CSVConfig defines a series of configuration items for csv codec.
 type CSVConfig struct {
-	// delimiter between fields
+	// delimiter between fields, it can be 1 character or at most 2 characters
+	// It can not be CR or LF or contains CR or LF.
+	// It should have exclusive characters with quote.
 	Delimiter string `toml:"delimiter" json:"delimiter"`
 	// quoting character
 	Quote string `toml:"quote" json:"quote"`
@@ -217,19 +219,24 @@ func (c *CSVConfig) validateAndAdjust() error {
 	case 0:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config delimiter cannot be empty"))
-	case 1:
+	case 1, 2:
 		if strings.ContainsRune(c.Delimiter, CR) || strings.ContainsRune(c.Delimiter, LF) {
 			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 				errors.New("csv config delimiter contains line break characters"))
 		}
 	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains more than one character"))
+			errors.New("csv config delimiter contains more than two character, note that escape "+
+				"sequences can only be used in double quotes in toml configuration items."))
 	}
 
-	if len(c.Quote) > 0 && strings.Contains(c.Delimiter, c.Quote) {
-		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config quote and delimiter cannot be the same"))
+	if len(c.Quote) > 0 {
+		for _, r := range c.Delimiter {
+			if strings.ContainsRune(c.Quote, r) {
+				return cerror.WrapError(cerror.ErrSinkInvalidConfig,
+					errors.New("csv config quote and delimiter has common characters which is not allowed"))
+			}
+		}
 	}
 
 	// validate binary encoding method
@@ -270,6 +277,22 @@ func (d *DateSeparator) FromString(separator string) error {
 	}
 
 	return nil
+}
+
+// GetPattern returns the pattern of the date separator.
+func (d DateSeparator) GetPattern() string {
+	switch d {
+	case DateSeparatorNone:
+		return ""
+	case DateSeparatorYear:
+		return `\d{4}`
+	case DateSeparatorMonth:
+		return `\d{4}-\d{2}`
+	case DateSeparatorDay:
+		return `\d{4}-\d{2}-\d{2}`
+	default:
+		return ""
+	}
 }
 
 func (d DateSeparator) String() string {
@@ -577,7 +600,10 @@ type CloudStorageConfig struct {
 	FlushInterval *string `toml:"flush-interval" json:"flush-interval,omitempty"`
 	FileSize      *int    `toml:"file-size" json:"file-size,omitempty"`
 
-	OutputColumnID *bool `toml:"output-column-id" json:"output-column-id,omitempty"`
+	OutputColumnID      *bool   `toml:"output-column-id" json:"output-column-id,omitempty"`
+	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
+	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
+	FlushConcurrency    *int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {

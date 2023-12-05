@@ -24,42 +24,51 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
-//nolint:unused
-type encoder struct{}
+type encoder struct {
+	config *common.Config
 
-type builder struct{}
-
-// NewBuilder returns a new builder
-func NewBuilder() *builder {
-	return &builder{}
-}
-
-// Build implement the RowEventEncoderBuilder interface
-func (b *builder) Build() codec.RowEventEncoder {
-	return &encoder{}
+	messages []*common.Message
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
-//
-//nolint:unused
 func (e *encoder) AppendRowChangedEvent(
-	ctx context.Context, s string, event *model.RowChangedEvent, callback func(),
+	_ context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	// TODO implement me
-	panic("implement me")
+	m, err := newDMLMessage(event)
+	if err != nil {
+		return err
+	}
+	value, err := json.Marshal(m)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+
+	result := &common.Message{
+		Key:      nil,
+		Value:    value,
+		Ts:       event.CommitTs,
+		Schema:   &event.Table.Schema,
+		Table:    &event.Table.Table,
+		Type:     model.MessageTypeRow,
+		Protocol: config.ProtocolSimple,
+		Callback: callback,
+	}
+	result.IncRowsCount()
+	e.messages = append(e.messages, result)
+	return nil
 }
 
 // Build implement the RowEventEncoder interface
-//
-//nolint:unused
 func (e *encoder) Build() []*common.Message {
-	// TODO implement me
-	panic("implement me")
+	if len(e.messages) == 0 {
+		return nil
+	}
+	result := e.messages
+	e.messages = nil
+	return result
 }
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
-//
-//nolint:unused
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	message := newResolvedMessage(ts)
 	value, err := json.Marshal(message)
@@ -70,18 +79,35 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 }
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
-//
-//nolint:unused
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	var message *message
-	if event.IsBootstrap {
-		message = newBootstrapMessage(event)
-	} else {
-		message = newDDLMessage(event)
-	}
+	message := newDDLMessage(event)
 	value, err := json.Marshal(message)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
 	return common.NewDDLMsg(config.ProtocolSimple, nil, value, event), nil
+}
+
+type builder struct {
+	config *common.Config
+}
+
+// NewBuilder returns a new builder
+func NewBuilder(config *common.Config) *builder {
+	return &builder{
+		config: config,
+	}
+}
+
+// Build implement the RowEventEncoderBuilder interface
+func (b *builder) Build() codec.RowEventEncoder {
+	return &encoder{
+		config:   b.config,
+		messages: make([]*common.Message, 0, 1),
+	}
+}
+
+// CleanMetrics implement the RowEventEncoderBuilder interface
+func (b *builder) CleanMetrics() {
+	// do nothing
 }

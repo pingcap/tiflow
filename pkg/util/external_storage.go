@@ -196,8 +196,12 @@ func (s *extStorageWithTimeout) WalkDir(
 func (s *extStorageWithTimeout) Create(
 	ctx context.Context, path string, option *storage.WriterOption,
 ) (storage.ExternalFileWriter, error) {
-	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
+	if option.Concurrency <= 1 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+	}
+	// multipart uploading spawns a background goroutine, can't set timeout
 	return s.ExternalStorage.Create(ctx, path, option)
 }
 
@@ -260,38 +264,38 @@ func RemoveFilesIf(
 	}
 
 	log.Debug("Removing files", zap.Any("toRemoveFiles", toRemoveFiles))
-
-	for _, path := range toRemoveFiles {
-		if err := extStorage.DeleteFile(ctx, path); err != nil {
-			return errors.ErrExternalStorageAPI.Wrap(err)
-		}
-	}
 	return DeleteFilesInExtStorage(ctx, extStorage, toRemoveFiles)
 }
 
 // DeleteFilesInExtStorage deletes files in external storage concurrently.
+// TODO: Add a test for this function to cover batch delete.
 func DeleteFilesInExtStorage(
 	ctx context.Context, extStorage storage.ExternalStorage, toRemoveFiles []string,
 ) error {
 	limit := make(chan struct{}, 32)
+	batch := 3000
 	eg, egCtx := errgroup.WithContext(ctx)
-	for _, file := range toRemoveFiles {
+	for len(toRemoveFiles) > 0 {
 		select {
 		case <-egCtx.Done():
 			return egCtx.Err()
 		case limit <- struct{}{}:
 		}
 
-		name := file
+		if len(toRemoveFiles) < batch {
+			batch = len(toRemoveFiles)
+		}
+		files := toRemoveFiles[:batch]
 		eg.Go(func() error {
 			defer func() { <-limit }()
-			err := extStorage.DeleteFile(egCtx, name)
+			err := extStorage.DeleteFiles(egCtx, files)
 			if err != nil && !IsNotExistInExtStorage(err) {
 				// if fail then retry, may end up with notExit err, ignore the error
 				return errors.ErrExternalStorageAPI.Wrap(err)
 			}
 			return nil
 		})
+		toRemoveFiles = toRemoveFiles[batch:]
 	}
 	return eg.Wait()
 }

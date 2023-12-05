@@ -140,9 +140,11 @@ type ddlManager struct {
 	sinkType      model.DownstreamType
 	ddlResolvedTs model.Ts
 
-	needBootstrap  bool
-	errCh          chan error
-	bootstrapState int32
+	// needBootstrap is true when the downstream is kafka
+	// and the protocol is simple protocol.
+	needSendBootstrapEvent bool
+	errCh                  chan error
+	bootstrapState         int32
 }
 
 func newDDLManager(
@@ -156,6 +158,7 @@ func newDDLManager(
 	redoMetaManager redo.MetaManager,
 	sinkType model.DownstreamType,
 	bdrMode bool,
+	needSendBootstrapEvent bool,
 ) *ddlManager {
 	log.Info("create ddl manager",
 		zap.String("namaspace", changefeedID.Namespace),
@@ -177,10 +180,11 @@ func newDDLManager(
 		ddlResolvedTs:   startTs,
 		BDRMode:         bdrMode,
 		// use the passed sinkType after we support get resolvedTs from sink
-		sinkType:        model.DB,
-		tableCheckpoint: make(map[model.TableName]model.Ts),
-		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
-		errCh:           make(chan error, 1),
+		sinkType:               model.DB,
+		tableCheckpoint:        make(map[model.TableName]model.Ts),
+		pendingDDLs:            make(map[model.TableName][]*model.DDLEvent),
+		errCh:                  make(chan error, 1),
+		needSendBootstrapEvent: needSendBootstrapEvent,
 	}
 }
 
@@ -198,15 +202,13 @@ func (m *ddlManager) tick(
 	checkpointTs model.Ts,
 	tableCheckpoint map[model.TableName]model.Ts,
 ) ([]model.TableID, *schedulepb.BarrierWithMinTs, error) {
-	// needBootstrap is true when the downstream is kafka
-	// and the protocol is simple protocol.
-	if m.needBootstrap {
-		ok, err := m.checkAndBootstrap(ctx)
+	if m.needSendBootstrapEvent {
+		finished, err := m.checkAndBootstrap(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
-		if !ok {
-			return nil, nil, nil
+		if !finished {
+			return nil, schedulepb.NewBarrierWithMinTs(checkpointTs), nil
 		}
 	}
 
