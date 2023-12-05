@@ -147,7 +147,8 @@ type Manager struct { //nolint:revive
 	maxTaskConcurrency int
 
 	changefeedID           model.ChangeFeedID
-	slowestTableID         tablepb.Span
+	slowestPuller          tablepb.Span
+	slowestSink            tablepb.Span
 	acceptAddTableTask     int
 	acceptRemoveTableTask  int
 	acceptMoveTableTask    int
@@ -589,14 +590,16 @@ func (r *Manager) AdvanceCheckpoint(
 		}
 	}()
 
+	r.slowestPuller = tablepb.Span{}
+	r.slowestSink = tablepb.Span{}
+	var slowestPullerResolvedTs uint64 = math.MaxUint64
+
 	newCheckpointTs, newResolvedTs = math.MaxUint64, math.MaxUint64
-	slowestRange := tablepb.Span{}
 	cannotProceed := false
-	lastSpan := tablepb.Span{}
 	currentTables.Iter(func(tableID model.TableID, tableStart, tableEnd tablepb.Span) bool {
 		tableSpanFound, tableHasHole := false, false
 		tableSpanStartFound, tableSpanEndFound := false, false
-		lastSpan = tablepb.Span{}
+		lastSpan := tablepb.Span{}
 		r.spans.AscendRange(tableStart, tableEnd,
 			func(span tablepb.Span, table *ReplicationSet) bool {
 				if lastSpan.TableID != 0 && !bytes.Equal(lastSpan.EndKey, span.StartKey) {
@@ -620,10 +623,18 @@ func (r *Manager) AdvanceCheckpoint(
 				// Find the minimum checkpoint ts and resolved ts.
 				if newCheckpointTs > table.Checkpoint.CheckpointTs {
 					newCheckpointTs = table.Checkpoint.CheckpointTs
-					slowestRange = span
+					r.slowestSink = span
 				}
 				if newResolvedTs > table.Checkpoint.ResolvedTs {
 					newResolvedTs = table.Checkpoint.ResolvedTs
+				}
+
+				// Find the minimum puller resolved ts.
+				if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
+					if slowestPullerResolvedTs > pullerCkpt.ResolvedTs {
+						slowestPullerResolvedTs = pullerCkpt.ResolvedTs
+						r.slowestPuller = span
+					}
 				}
 				return true
 			})
@@ -656,9 +667,6 @@ func (r *Manager) AdvanceCheckpoint(
 			limitBarrierWithRedo(newCheckpointTs, newResolvedTs)
 		}
 		return checkpointCannotProceed, checkpointCannotProceed
-	}
-	if slowestRange.TableID != 0 {
-		r.slowestTableID = slowestRange
 	}
 
 	// If currentTables is empty, we should advance newResolvedTs to global barrier ts and
@@ -745,9 +753,9 @@ func (r *Manager) CollectMetrics() {
 	cf := r.changefeedID
 	tableGauge.
 		WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.spans.Len()))
-	if table, ok := r.spans.Get(r.slowestTableID); ok {
+	if table, ok := r.spans.Get(r.slowestSink); ok {
 		slowestTableIDGauge.
-			WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.slowestTableID.TableID))
+			WithLabelValues(cf.Namespace, cf.ID).Set(float64(r.slowestSink.TableID))
 		slowestTableStateGauge.
 			WithLabelValues(cf.Namespace, cf.ID).Set(float64(table.State))
 		phyCkpTs := oracle.ExtractPhysical(table.Checkpoint.CheckpointTs)
@@ -828,6 +836,17 @@ func (r *Manager) CollectMetrics() {
 		tableStateGauge.
 			WithLabelValues(cf.Namespace, cf.ID, ReplicationSetState(s).String()).
 			Set(float64(counter))
+	}
+
+	if table, ok := r.spans.Get(r.slowestSink); ok {
+		if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
+			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.ResolvedTs)
+			slowestTablePullerResolvedTs.WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkptTs))
+
+			phyCurrentTs := oracle.ExtractPhysical(table.Stats.CurrentTs)
+			lag := float64(phyCurrentTs-phyCkptTs) / 1e3
+			slowestTablePullerResolvedTsLag.WithLabelValues(cf.Namespace, cf.ID).Set(lag)
+		}
 	}
 }
 
