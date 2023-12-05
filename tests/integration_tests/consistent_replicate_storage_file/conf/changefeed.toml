@@ -1,4 +1,3 @@
 [consistent]
 level = "eventual"
 storage = "file:///tmp/tidb_cdc_test/consistent_replicate_storage_file/redo"
-compression = "lz4"

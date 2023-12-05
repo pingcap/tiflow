@@ -14,20 +14,16 @@
 package memory
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"sync"
 	"time"
 
-	"github.com/pierrec/lz4/v4"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
-	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -38,7 +34,6 @@ import (
 
 type fileCache struct {
 	data        []byte
-	fileSize    int64
 	maxCommitTs model.Ts
 	// After memoryWriter become stable, this field would be used to
 	// avoid traversing log files.
@@ -46,24 +41,17 @@ type fileCache struct {
 
 	filename string
 	flushed  chan struct{}
-	writer   *dataWriter
 }
 
-type dataWriter struct {
-	buf    *bytes.Buffer
-	writer io.Writer
-	closer io.Closer
-}
-
-func (w *dataWriter) Write(p []byte) (n int, err error) {
-	return w.writer.Write(p)
-}
-
-func (w *dataWriter) Close() error {
-	if w.closer != nil {
-		return w.closer.Close()
+func newFileCache(event *polymorphicRedoEvent, buf []byte) *fileCache {
+	buf = buf[:0]
+	buf = append(buf, event.data.Bytes()...)
+	return &fileCache{
+		data:        buf,
+		maxCommitTs: event.commitTs,
+		minCommitTs: event.commitTs,
+		flushed:     make(chan struct{}),
 	}
-	return nil
 }
 
 func (f *fileCache) waitFlushed(ctx context.Context) error {
@@ -83,19 +71,14 @@ func (f *fileCache) markFlushed() {
 	}
 }
 
-func (f *fileCache) appendData(event *polymorphicRedoEvent) error {
-	_, err := f.writer.Write(event.data.Bytes())
-	if err != nil {
-		return err
-	}
-	f.fileSize += int64(event.data.Len())
+func (f *fileCache) appendData(event *polymorphicRedoEvent) {
+	f.data = append(f.data, event.data.Bytes()...)
 	if event.commitTs > f.maxCommitTs {
 		f.maxCommitTs = event.commitTs
 	}
 	if event.commitTs < f.minCommitTs {
 		f.minCommitTs = event.commitTs
 	}
-	return nil
 }
 
 type fileWorkerGroup struct {
@@ -187,12 +170,9 @@ func (f *fileWorkerGroup) bgFlushFileCache(egCtx context.Context) error {
 			return errors.Trace(egCtx.Err())
 		case file := <-f.flushCh:
 			start := time.Now()
-			if err := file.writer.Close(); err != nil {
-				return errors.Trace(err)
-			}
 			var err error
 			if f.cfg.FlushConcurrency <= 1 {
-				err = f.extStorage.WriteFile(egCtx, file.filename, file.writer.buf.Bytes())
+				err = f.extStorage.WriteFile(egCtx, file.filename, file.data)
 			} else {
 				err = f.multiPartUpload(egCtx, file)
 			}
@@ -216,7 +196,7 @@ func (f *fileWorkerGroup) multiPartUpload(ctx context.Context, file *fileCache) 
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if _, err = multipartWrite.Write(ctx, file.writer.buf.Bytes()); err != nil {
+	if _, err = multipartWrite.Write(ctx, file.data); err != nil {
 		return errors.Trace(err)
 	}
 	return errors.Trace(multipartWrite.Close(ctx))
@@ -251,40 +231,10 @@ func (f *fileWorkerGroup) bgWriteLogs(
 }
 
 // newFileCache write event to a new file cache.
-func (f *fileWorkerGroup) newFileCache(event *polymorphicRedoEvent) error {
+func (f *fileWorkerGroup) newFileCache(event *polymorphicRedoEvent) {
 	bufPtr := f.pool.Get().(*[]byte)
-	buf := *bufPtr
-	buf = buf[:0]
-	var (
-		wr     io.Writer
-		closer io.Closer
-	)
-	bufferWriter := bytes.NewBuffer(buf)
-	wr = bufferWriter
-	if f.cfg.Compression == compression.LZ4 {
-		wr = lz4.NewWriter(bufferWriter)
-		closer = wr.(io.Closer)
-	}
-	_, err := wr.Write(event.data.Bytes())
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	dw := &dataWriter{
-		buf:    bufferWriter,
-		writer: wr,
-		closer: closer,
-	}
-	file := &fileCache{
-		data:        buf,
-		fileSize:    int64(len(event.data.Bytes())),
-		maxCommitTs: event.commitTs,
-		minCommitTs: event.commitTs,
-		flushed:     make(chan struct{}),
-		writer:      dw,
-	}
+	file := newFileCache(event, *bufPtr)
 	f.files = append(f.files, file)
-	return nil
 }
 
 func (f *fileWorkerGroup) writeToCache(
@@ -298,11 +248,12 @@ func (f *fileWorkerGroup) writeToCache(
 	defer f.metricWriteBytes.Add(float64(writeLen))
 
 	if len(f.files) == 0 {
-		return f.newFileCache(event)
+		f.newFileCache(event)
+		return nil
 	}
 
 	file := f.files[len(f.files)-1]
-	if file.fileSize+writeLen > f.cfg.MaxLogSizeInBytes {
+	if int64(len(file.data))+writeLen > f.cfg.MaxLogSizeInBytes {
 		file.filename = f.getLogFileName(file.maxCommitTs)
 		select {
 		case <-egCtx.Done():
@@ -310,10 +261,12 @@ func (f *fileWorkerGroup) writeToCache(
 		case f.flushCh <- file:
 		}
 
-		return f.newFileCache(event)
+		f.newFileCache(event)
+		return nil
 	}
 
-	return file.appendData(event)
+	file.appendData(event)
+	return nil
 }
 
 func (f *fileWorkerGroup) flushAll(egCtx context.Context) error {
