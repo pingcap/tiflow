@@ -34,6 +34,7 @@ type ConsistentConfig struct {
 	Storage               string `toml:"storage" json:"storage"`
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
 	Compression           string `toml:"compression" json:"compression"`
+	FlushConcurrency      int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
 	GCIntervalInMs        int64  `toml:"gc-interval" json:"gc-interval"`
 }
 
