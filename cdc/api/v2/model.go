@@ -268,6 +268,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               c.Consistent.Storage,
 			UseFileBackend:        c.Consistent.UseFileBackend,
+			Compression:           c.Consistent.Compression,
 		}
 	}
 	if c.Sink != nil {
@@ -640,6 +641,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               cloned.Consistent.Storage,
 			UseFileBackend:        cloned.Consistent.UseFileBackend,
+			Compression:           cloned.Consistent.Compression,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -824,6 +826,7 @@ type ConsistentConfig struct {
 	FlushWorkerNum        int    `json:"flush_worker_num"`
 	Storage               string `json:"storage,omitempty"`
 	UseFileBackend        bool   `json:"use_file_backend"`
+	Compression           string `json:"compression,omitempty"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
