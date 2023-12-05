@@ -640,7 +640,7 @@ func TestBarrierAdvance(t *testing.T) {
 		if i == 1 {
 			cf.ddlManager.ddlResolvedTs += 10
 		}
-		_, barrier, err := cf.ddlManager.tick(ctx, state.Status.CheckpointTs, nil)
+		_, barrier, err := cf.ddlManager.tick(ctx, state.Status.CheckpointTs)
 
 		require.Nil(t, err)
 
@@ -667,7 +667,7 @@ func TestBarrierAdvance(t *testing.T) {
 
 			// Then the last tick barrier must be advanced correctly.
 			cf.ddlManager.ddlResolvedTs += 1000000000000
-			_, barrier, err = cf.ddlManager.tick(ctx, state.Status.CheckpointTs+10, nil)
+			_, barrier, err = cf.ddlManager.tick(ctx, state.Status.CheckpointTs+10)
 			require.Nil(t, err)
 			err = cf.handleBarrier(ctx, state.Info, state.Status, barrier)
 
