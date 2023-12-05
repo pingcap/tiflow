@@ -400,6 +400,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			FileIndexWidth:           c.Sink.FileIndexWidth,
 			EnableKafkaSinkV2:        c.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns: c.Sink.OnlyOutputUpdatedColumns,
+			ContentCompatible:        c.Sink.ContentCompatible,
 			KafkaConfig:              kafkaConfig,
 			MySQLConfig:              mysqlConfig,
 			CloudStorageConfig:       cloudStorageConfig,
@@ -619,6 +620,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			FileIndexWidth:           cloned.Sink.FileIndexWidth,
 			EnableKafkaSinkV2:        cloned.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns: cloned.Sink.OnlyOutputUpdatedColumns,
+			ContentCompatible:        cloned.Sink.ContentCompatible,
 			KafkaConfig:              kafkaConfig,
 			MySQLConfig:              mysqlConfig,
 			CloudStorageConfig:       cloudStorageConfig,
@@ -779,6 +781,7 @@ type SinkConfig struct {
 	EnableKafkaSinkV2        bool                `json:"enable_kafka_sink_v2"`
 	OnlyOutputUpdatedColumns *bool               `json:"only_output_updated_columns"`
 	SafeMode                 *bool               `json:"safe_mode,omitempty"`
+	ContentCompatible        *bool               `json:"content_compatible"`
 	KafkaConfig              *KafkaConfig        `json:"kafka_config,omitempty"`
 	MySQLConfig              *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig       *CloudStorageConfig `json:"cloud_storage_config,omitempty"`

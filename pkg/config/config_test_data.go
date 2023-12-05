@@ -210,9 +210,9 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "only-output-updated-columns": false,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -349,9 +349,9 @@ const (
         "large-message-handle-option": "handle-key-only"
       }
     },
-    "only-output-updated-columns": false,
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
