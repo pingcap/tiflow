@@ -279,14 +279,6 @@ func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 
 func (m *logManager) getFlushDuration() time.Duration {
 	flushIntervalInMs := m.cfg.FlushIntervalInMs
-	if m.cfg.LogType == redo.RedoDDLLogFileType {
-		flushIntervalInMs = m.cfg.MetaFlushIntervalInMs
-	}
-	return time.Duration(flushIntervalInMs) * time.Millisecond
-}
-
-func (m *logManager) getFlushDuration() time.Duration {
-	flushIntervalInMs := m.cfg.FlushIntervalInMs
 	defaultFlushIntervalInMs := redo.DefaultFlushIntervalInMs
 	if m.cfg.LogType == redo.RedoDDLLogFileType {
 		flushIntervalInMs = m.cfg.MetaFlushIntervalInMs
