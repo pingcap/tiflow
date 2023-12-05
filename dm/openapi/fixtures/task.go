@@ -103,7 +103,7 @@ var (
 		"enhance_online_schema_change": true,
 		"meta_schema": "dm_meta",
 		"name": "test",
-		"on_duplicate": "replace",
+		"on_duplicate": "error",
 		"shard_mode": "optimistic",
 		"strict_optimistic_shard_mode": true,
 		"source_config": {
