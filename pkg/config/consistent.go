@@ -55,6 +55,22 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 				c.FlushIntervalInMs, redo.MinFlushIntervalInMs))
 	}
 
+	if c.MetaFlushIntervalInMs == 0 {
+		c.MetaFlushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
+	}
+	if c.MetaFlushIntervalInMs < redo.MinFlushIntervalInMs {
+		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
+			fmt.Sprintf("The consistent.meta-flush-interval:%d must be equal or greater than %d",
+				c.MetaFlushIntervalInMs, redo.MinFlushIntervalInMs))
+	}
+
+	if c.EncodingWorkerNum == 0 {
+		c.EncodingWorkerNum = redo.DefaultEncodingWorkerNum
+	}
+	if c.FlushWorkerNum == 0 {
+		c.FlushWorkerNum = redo.DefaultFlushWorkerNum
+	}
+
 	uri, err := storage.ParseRawURL(c.Storage)
 	if err != nil {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(

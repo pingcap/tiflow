@@ -90,11 +90,14 @@ var customReplicaConfig = &ReplicaConfig{
 		EnablePartitionSeparator: true,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "",
-		MaxLogSize:        65,
-		FlushIntervalInMs: 500,
-		Storage:           "local://test",
-		UseFileBackend:    true,
+		Level:                 "",
+		MaxLogSize:            65,
+		MetaFlushIntervalInMs: 201,
+		FlushIntervalInMs:     500,
+		Storage:               "local://test",
+		UseFileBackend:        true,
+		EncoderWorkerNum:      14,
+		FlushWorkerNum:        23,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -109,7 +112,7 @@ var customReplicaConfig = &ReplicaConfig{
 // defaultReplicaConfig check if the default values is changed
 var defaultReplicaConfig = &ReplicaConfig{
 	MemoryQuota:        1024 * 1024 * 1024,
-	CaseSensitive:      true,
+	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    false,
@@ -133,11 +136,14 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EnablePartitionSeparator: true,
 	},
 	Consistent: &ConsistentConfig{
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
+		Level:                 "none",
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
+		Storage:               "",
+		UseFileBackend:        false,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		EncoderWorkerNum:      redo.DefaultEncodingWorkerNum,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,

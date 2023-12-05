@@ -71,7 +71,7 @@ function run() {
 
 	# Update changefeed failed because changefeed is running
 	cat - >"$WORK_DIR/changefeed.toml" <<EOF
-case-sensitive = false
+case-sensitive = true
 [scheduler]
 enable-table-across-nodes = true
 EOF
@@ -89,7 +89,7 @@ EOF
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
 	changefeed_info=$(curl -s -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
-	if [[ ! $changefeed_info == *"\"case_sensitive\":false"* ]]; then
+	if [[ ! $changefeed_info == *"\"case_sensitive\":true"* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
 	fi
