@@ -25,13 +25,6 @@ import (
 
 // ConsistentConfig represents replication consistency config for a changefeed.
 type ConsistentConfig struct {
-<<<<<<< HEAD
-	Level             string `toml:"level" json:"level"`
-	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
-	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
-	Storage           string `toml:"storage" json:"storage"`
-	UseFileBackend    bool   `toml:"use-file-backend" json:"use-file-backend"`
-=======
 	Level                 string `toml:"level" json:"level"`
 	MaxLogSize            int64  `toml:"max-log-size" json:"max-log-size"`
 	FlushIntervalInMs     int64  `toml:"flush-interval" json:"flush-interval"`
@@ -41,7 +34,6 @@ type ConsistentConfig struct {
 	Storage               string `toml:"storage" json:"storage"`
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
 	Compression           string `toml:"compression" json:"compression"`
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.
@@ -63,8 +55,6 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 				c.FlushIntervalInMs, redo.MinFlushIntervalInMs))
 	}
 
-<<<<<<< HEAD
-=======
 	if c.MetaFlushIntervalInMs == 0 {
 		c.MetaFlushIntervalInMs = redo.DefaultMetaFlushIntervalInMs
 	}
@@ -86,7 +76,6 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		c.FlushWorkerNum = redo.DefaultFlushWorkerNum
 	}
 
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
 	uri, err := storage.ParseRawURL(c.Storage)
 	if err != nil {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(

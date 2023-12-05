@@ -69,13 +69,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		AdvanceTimeoutInSec:      util.AddressOf(DefaultAdvanceTimeoutInSec),
 	},
 	Consistent: &ConsistentConfig{
-<<<<<<< HEAD
-		Level:             "none",
-		MaxLogSize:        redo.DefaultMaxLogSize,
-		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
-		Storage:           "",
-		UseFileBackend:    false,
-=======
 		Level:                 "none",
 		MaxLogSize:            redo.DefaultMaxLogSize,
 		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
@@ -85,7 +78,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Storage:               "",
 		UseFileBackend:        false,
 		Compression:           "",
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,

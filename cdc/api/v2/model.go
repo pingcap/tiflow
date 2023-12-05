@@ -260,13 +260,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	}
 	if c.Consistent != nil {
 		res.Consistent = &config.ConsistentConfig{
-<<<<<<< HEAD
-			Level:             c.Consistent.Level,
-			MaxLogSize:        c.Consistent.MaxLogSize,
-			FlushIntervalInMs: c.Consistent.FlushIntervalInMs,
-			Storage:           c.Consistent.Storage,
-			UseFileBackend:    c.Consistent.UseFileBackend,
-=======
 			Level:                 c.Consistent.Level,
 			MaxLogSize:            c.Consistent.MaxLogSize,
 			FlushIntervalInMs:     c.Consistent.FlushIntervalInMs,
@@ -276,7 +269,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			Storage:               c.Consistent.Storage,
 			UseFileBackend:        c.Consistent.UseFileBackend,
 			Compression:           c.Consistent.Compression,
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
 		}
 	}
 	if c.Sink != nil {
@@ -639,13 +631,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
-<<<<<<< HEAD
-			Level:             cloned.Consistent.Level,
-			MaxLogSize:        cloned.Consistent.MaxLogSize,
-			FlushIntervalInMs: cloned.Consistent.FlushIntervalInMs,
-			Storage:           cloned.Consistent.Storage,
-			UseFileBackend:    cloned.Consistent.UseFileBackend,
-=======
 			Level:                 cloned.Consistent.Level,
 			MaxLogSize:            cloned.Consistent.MaxLogSize,
 			FlushIntervalInMs:     cloned.Consistent.FlushIntervalInMs,
@@ -655,7 +640,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Storage:               cloned.Consistent.Storage,
 			UseFileBackend:        cloned.Consistent.UseFileBackend,
 			Compression:           cloned.Consistent.Compression,
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
 		}
 	}
 	if cloned.Mounter != nil {
@@ -831,13 +815,6 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-<<<<<<< HEAD
-	Level             string `json:"level"`
-	MaxLogSize        int64  `json:"max_log_size"`
-	FlushIntervalInMs int64  `json:"flush_interval"`
-	Storage           string `json:"storage"`
-	UseFileBackend    bool   `json:"use_file_backend"`
-=======
 	Level                 string `json:"level,omitempty"`
 	MaxLogSize            int64  `json:"max_log_size"`
 	FlushIntervalInMs     int64  `json:"flush_interval"`
@@ -847,7 +824,6 @@ type ConsistentConfig struct {
 	Storage               string `json:"storage,omitempty"`
 	UseFileBackend        bool   `json:"use_file_backend"`
 	Compression           string `json:"compression,omitempty"`
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

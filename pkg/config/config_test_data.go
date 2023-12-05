@@ -60,13 +60,10 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-<<<<<<< HEAD
-=======
     "meta-flush-interval": 200,
     "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
     "storage": "",
     "use-file-backend": false
   },
@@ -280,13 +277,10 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-<<<<<<< HEAD
-=======
     "meta-flush-interval": 200,
     "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
     "storage": "",
     "use-file-backend": false
   },
@@ -420,13 +414,10 @@ const (
     "level": "none",
     "max-log-size": 64,
     "flush-interval": 2000,
-<<<<<<< HEAD
-=======
     "meta-flush-interval": 200,
     "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
->>>>>>> 07e50f7abb (redo(ticdc):   redo lz4 compression (#10171))
     "storage": "",
     "use-file-backend": false
   },
