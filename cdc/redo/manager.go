@@ -449,6 +449,7 @@ func (m *logManager) flushLog(
 		log.Debug("Flush redo log",
 			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 			zap.String("changefeed", m.cfg.ChangeFeedID.ID),
+			zap.String("logType", m.cfg.LogType),
 			zap.Any("tableRtsMap", tableRtsMap))
 		err := m.withLock(func(m *logManager) error {
 			return m.writer.FlushLog(ctx)
