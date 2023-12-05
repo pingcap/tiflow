@@ -134,8 +134,6 @@ func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
 type eventFeedStream struct {
 	client cdcpb.ChangeData_EventFeedClient
 	conn   *sharedConn
-	// The timestamp when the last `ServerIsBusy` error is reported.
-	lastKvIsBusy atomic.Int64
 }
 
 // CDCKVClient is an interface to receives kv changed logs from TiKV
@@ -678,7 +676,7 @@ func (s *eventFeedSession) requestRegionToStore(
 
 			g.Go(func() error {
 				defer s.deleteStream(storeAddr)
-				return s.receiveFromStream(ctx, storeAddr, storeID, stream, pendingRegions)
+				return s.receiveFromStream(ctx, storeAddr, storeID, stream.client, pendingRegions)
 			})
 		}
 
@@ -988,7 +986,7 @@ func (s *eventFeedSession) receiveFromStream(
 	parentCtx context.Context,
 	addr string,
 	storeID uint64,
-	stream *eventFeedStream,
+	stream cdcpb.ChangeData_EventFeedClient,
 	pendingRegions *syncRegionFeedStateMap,
 ) error {
 	var tsStat *tableStoreStat
@@ -1052,7 +1050,7 @@ func (s *eventFeedSession) receiveFromStream(
 	receiveEvents := func() error {
 		maxCommitTs := model.Ts(0)
 		for {
-			cevent, err := stream.client.Recv()
+			cevent, err := stream.Recv()
 
 			failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
 				if op.(string) == "error" {
@@ -1133,7 +1131,7 @@ func (s *eventFeedSession) receiveFromStream(
 					}
 				}
 			}
-			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr, stream)
+			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
 			if err != nil {
 				return err
 			}
@@ -1172,7 +1170,6 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	worker *regionWorker,
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
-	stream *eventFeedStream,
 ) error {
 	statefulEvents := make([][]*regionStatefulEvent, worker.concurrency)
 	for i := 0; i < worker.concurrency; i++ {
@@ -1244,9 +1241,6 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 				zap.String("tableName", s.tableName),
 				zap.Uint64("regionID", event.RegionId),
 				zap.Any("error", x.Error))
-			if x.Error.GetServerIsBusy() != nil {
-				stream.lastKvIsBusy.Store(time.Now().Unix())
-			}
 		}
 
 		slot := worker.inputCalcSlot(event.RegionId)

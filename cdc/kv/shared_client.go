@@ -600,6 +600,11 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
 			return nil
 		}
+		if innerErr.GetServerIsBusy() != nil {
+			metricKvIsBusyCounter.Inc()
+			s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
+			return nil
+		}
 		if duplicated := innerErr.GetDuplicateRequest(); duplicated != nil {
 			metricFeedDuplicateRequestCounter.Inc()
 			// TODO(qupeng): It's better to add a new machanism to deregister one region.
@@ -855,7 +860,8 @@ var (
 )
 
 const (
-	loadRegionRetryInterval time.Duration  = 100 * time.Millisecond
-	resolveLockMinInterval  time.Duration  = 10 * time.Second
-	invalidSubscriptionID   SubscriptionID = SubscriptionID(0)
+	loadRegionRetryInterval     time.Duration  = 100 * time.Millisecond
+	resolveLockMinInterval      time.Duration  = 10 * time.Second
+	serverIsBusyBackoffInterval time.Duration  = 200 * time.Millisecond
+	invalidSubscriptionID       SubscriptionID = SubscriptionID(0)
 )

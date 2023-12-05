@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	grpcstatus "google.golang.org/grpc/status"
@@ -48,6 +49,9 @@ type requestedStream struct {
 
 	// tableExclusives means one GRPC stream is exclusive by one table.
 	tableExclusives chan tableExclusive
+
+	// Time of the last `ServerIsBusy` error is reported.
+	lastKvIsBusy atomic.Int64
 }
 
 type tableExclusive struct {
@@ -250,6 +254,13 @@ func (s *requestedStream) receive(
 
 func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *requestedStore) (err error) {
 	doSend := func(cc *sharedconn.ConnAndClient, req *cdcpb.ChangeDataRequest, subscriptionID SubscriptionID) error {
+		backoff := time.Now().Sub(time.UnixMilli(s.lastKvIsBusy.Load()))
+		if backoff < serverIsBusyBackoffInterval {
+			if err := util.Hang(ctx, backoff); err != nil {
+				return err
+			}
+		}
+
 		if err := cc.Client().Send(req); err != nil {
 			log.Warn("event feed send request to grpc stream failed",
 				zap.String("namespace", c.changefeed.Namespace),
@@ -486,6 +497,9 @@ func (s *requestedStream) sendRegionChangeEvents(
 				zap.Uint64("regionID", event.RegionId),
 				zap.Bool("stateIsNil", state == nil),
 				zap.Any("error", x.Error))
+			if x.Error.GetServerIsBusy() != nil {
+				s.lastKvIsBusy.Store(time.Now().UnixMilli())
+			}
 		}
 
 		if state != nil {
