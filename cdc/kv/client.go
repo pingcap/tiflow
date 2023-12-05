@@ -73,6 +73,8 @@ const (
 	// failed region will be reloaded via `BatchLoadRegionsWithKeyRange` API. So we
 	// don't need to force reload region anymore.
 	regionScheduleReload = false
+
+	scanRegionsConcurrency = 1024
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -432,6 +434,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	g.Go(func() error {
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(scanRegionsConcurrency)
 		for {
 			select {
 			case <-ctx.Done():
@@ -1012,7 +1016,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
-	worker := newRegionWorker(parentCtx, s.changefeed, s, addr)
+	worker := newRegionWorker(parentCtx, s.changefeed, s, addr, pendingRegions)
 	defer worker.evictAllRegions()
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -1058,7 +1062,7 @@ func (s *eventFeedSession) receiveFromStream(
 			})
 			if err != nil {
 				if status.Code(errors.Cause(err)) == codes.Canceled {
-					log.Debug(
+					log.Info(
 						"receive from stream canceled",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),

@@ -39,8 +39,8 @@ var (
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
 
 	// Sink manager schedules table tasks based on lag. Limit the max task range
-	// can be helpful to reduce changefeed latency.
-	maxTaskTimeRange = 5 * time.Second
+	// can be helpful to reduce changefeed latency for large initial data.
+	maxTaskTimeRange = 30 * time.Minute
 )
 
 // Used to record the progress of the table.

@@ -44,8 +44,21 @@ const (
 	FlushWarnDuration = time.Second * 20
 	// DefaultFlushIntervalInMs is the default flush interval for redo log.
 	DefaultFlushIntervalInMs = 2000
+	// DefaultMetaFlushIntervalInMs is the default flush interval for redo meta.
+	DefaultMetaFlushIntervalInMs = 200
 	// MinFlushIntervalInMs is the minimum flush interval for redo log.
 	MinFlushIntervalInMs = 50
+
+	// DefaultEncodingWorkerNum is the default number of encoding workers.
+	DefaultEncodingWorkerNum = 16
+	// DefaultEncodingInputChanSize is the default size of input channel for encoding worker.
+	DefaultEncodingInputChanSize = 128
+	// DefaultEncodingOutputChanSize is the default size of output channel for encoding worker.
+	DefaultEncodingOutputChanSize = 2048
+	// DefaultFlushWorkerNum is the default number of flush workers.
+	// Maximum allocated memory is flushWorkerNum*maxLogSize, which is
+	// `8*64MB = 512MB` by default.
+	DefaultFlushWorkerNum = 8
 
 	// DefaultFileMode is the default mode when operation files
 	DefaultFileMode = 0o644
