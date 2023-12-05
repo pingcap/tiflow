@@ -274,10 +274,7 @@ func (m *logManager) Run(ctx context.Context, _ ...chan<- error) error {
 		return err
 	}
 	m.writer = w
-<<<<<<< HEAD
 	return m.bgUpdateLog(ctx)
-=======
-	return m.bgUpdateLog(ctx, m.getFlushDuration())
 }
 
 func (m *logManager) getFlushDuration() time.Duration {
@@ -296,7 +293,6 @@ func (m *logManager) getFlushDuration() time.Duration {
 		flushIntervalInMs = int64(defaultFlushIntervalInMs)
 	}
 	return time.Duration(flushIntervalInMs) * time.Millisecond
->>>>>>> a54a062d03 (redo(ticdc): fix redo zero flush interval panic issue (#10102))
 }
 
 // WaitForReady implements pkg/util.Runnable.
