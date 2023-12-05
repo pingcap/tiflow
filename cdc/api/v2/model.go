@@ -965,6 +965,7 @@ type ConsistentConfig struct {
 	UseFileBackend        bool   `json:"use_file_backend"`
 	Compression           string `json:"compression,omitempty"`
 	FlushConcurrency      int    `json:"flush_concurrency,omitempty"`
+	GCIntervalInMs        int64  `json:"gc_interval,omitempty"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
