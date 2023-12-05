@@ -107,6 +107,7 @@ var (
 	metricFeedRPCCtxUnavailable       = eventFeedErrorCounter.WithLabelValues("RPCCtxUnavailable")
 	metricStoreSendRequestErr         = eventFeedErrorCounter.WithLabelValues("SendRequestToStore")
 	metricConnectToStoreErr           = eventFeedErrorCounter.WithLabelValues("ConnectToStore")
+	metricKvIsBusyCounter             = eventFeedErrorCounter.WithLabelValues("KvIsBusy")
 )
 
 var (
@@ -133,6 +134,8 @@ func newRegionErrorInfo(info singleRegionInfo, err error) regionErrorInfo {
 type eventFeedStream struct {
 	client cdcpb.ChangeData_EventFeedClient
 	conn   *sharedConn
+	// The timestamp when the last `ServerIsBusy` error is reported.
+	lastKvIsBusy atomic.Int64
 }
 
 // CDCKVClient is an interface to receives kv changed logs from TiKV
@@ -675,7 +678,7 @@ func (s *eventFeedSession) requestRegionToStore(
 
 			g.Go(func() error {
 				defer s.deleteStream(storeAddr)
-				return s.receiveFromStream(ctx, storeAddr, storeID, stream.client, pendingRegions)
+				return s.receiveFromStream(ctx, storeAddr, storeID, stream, pendingRegions)
 			})
 		}
 
@@ -912,6 +915,10 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			metricFeedRegionNotFoundCounter.Inc()
 			s.scheduleDivideRegionAndRequest(ctx, errInfo.span)
 			return nil
+		} else if busy := innerErr.GetServerIsBusy(); busy != nil {
+			metricKvIsBusyCounter.Inc()
+			s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
+			return nil
 		} else if duplicatedRequest := innerErr.GetDuplicateRequest(); duplicatedRequest != nil {
 			metricFeedDuplicateRequestCounter.Inc()
 			logPanic("tikv reported duplicated request to the same region, which is not expected",
@@ -981,7 +988,7 @@ func (s *eventFeedSession) receiveFromStream(
 	parentCtx context.Context,
 	addr string,
 	storeID uint64,
-	stream cdcpb.ChangeData_EventFeedClient,
+	stream *eventFeedStream,
 	pendingRegions *syncRegionFeedStateMap,
 ) error {
 	var tsStat *tableStoreStat
@@ -1045,7 +1052,7 @@ func (s *eventFeedSession) receiveFromStream(
 	receiveEvents := func() error {
 		maxCommitTs := model.Ts(0)
 		for {
-			cevent, err := stream.Recv()
+			cevent, err := stream.client.Recv()
 
 			failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
 				if op.(string) == "error" {
@@ -1126,7 +1133,7 @@ func (s *eventFeedSession) receiveFromStream(
 					}
 				}
 			}
-			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
+			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr, stream)
 			if err != nil {
 				return err
 			}
@@ -1165,6 +1172,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	worker *regionWorker,
 	pendingRegions *syncRegionFeedStateMap,
 	addr string,
+	stream *eventFeedStream,
 ) error {
 	statefulEvents := make([][]*regionStatefulEvent, worker.concurrency)
 	for i := 0; i < worker.concurrency; i++ {
@@ -1236,6 +1244,9 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 				zap.String("tableName", s.tableName),
 				zap.Uint64("regionID", event.RegionId),
 				zap.Any("error", x.Error))
+			if x.Error.GetServerIsBusy() != nil {
+				stream.lastKvIsBusy.Store(time.Now().Unix())
+			}
 		}
 
 		slot := worker.inputCalcSlot(event.RegionId)
