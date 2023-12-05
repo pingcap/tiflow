@@ -44,6 +44,8 @@ const (
 	FlushWarnDuration = time.Second * 20
 	// DefaultFlushIntervalInMs is the default flush interval for redo log.
 	DefaultFlushIntervalInMs = 2000
+	// DefaultMetaFlushIntervalInMs is the default flush interval for redo meta.
+	DefaultMetaFlushIntervalInMs = 200
 	// MinFlushIntervalInMs is the minimum flush interval for redo log.
 	MinFlushIntervalInMs = 50
 
