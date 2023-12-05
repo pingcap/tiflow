@@ -24,13 +24,6 @@ import (
 
 // ConsistentConfig represents replication consistency config for a changefeed.
 type ConsistentConfig struct {
-<<<<<<< HEAD
-	Level             string `toml:"level" json:"level"`
-	MaxLogSize        int64  `toml:"max-log-size" json:"max-log-size"`
-	FlushIntervalInMs int64  `toml:"flush-interval" json:"flush-interval"`
-	Storage           string `toml:"storage" json:"storage"`
-	UseFileBackend    bool   `toml:"use-file-backend" json:"use-file-backend"`
-=======
 	Level                 string `toml:"level" json:"level"`
 	MaxLogSize            int64  `toml:"max-log-size" json:"max-log-size"`
 	FlushIntervalInMs     int64  `toml:"flush-interval" json:"flush-interval"`
@@ -41,7 +34,6 @@ type ConsistentConfig struct {
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
 	Compression           string `toml:"compression" json:"compression"`
 	FlushConcurrency      int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
->>>>>>> 89e57d7a6e (redo(ticdc): use multi part s3 uploader in  redo (#10227))
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.

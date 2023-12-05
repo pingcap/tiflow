@@ -170,9 +170,6 @@ func (f *fileWorkerGroup) bgFlushFileCache(egCtx context.Context) error {
 			return errors.Trace(egCtx.Err())
 		case file := <-f.flushCh:
 			start := time.Now()
-<<<<<<< HEAD
-			err := f.extStorage.WriteFile(egCtx, file.filename, file.data)
-=======
 			if err := file.writer.Close(); err != nil {
 				return errors.Trace(err)
 			}
@@ -182,7 +179,6 @@ func (f *fileWorkerGroup) bgFlushFileCache(egCtx context.Context) error {
 			} else {
 				err = f.multiPartUpload(egCtx, file)
 			}
->>>>>>> 89e57d7a6e (redo(ticdc): use multi part s3 uploader in  redo (#10227))
 			f.metricFlushAllDuration.Observe(time.Since(start).Seconds())
 			if err != nil {
 				return errors.Trace(err)
