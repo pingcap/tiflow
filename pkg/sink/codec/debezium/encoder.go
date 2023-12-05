@@ -16,7 +16,6 @@ package debezium
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
@@ -27,10 +26,7 @@ import (
 )
 
 type BatchEncoder struct {
-	keyBuf      *bytes.Buffer
-	valueBuf    *bytes.Buffer
-	callbackBuf []func()
-	batchSize   int
+	messages []*common.Message
 
 	config *common.Config
 	codec  *Codec
@@ -49,14 +45,33 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	e *model.RowChangedEvent,
 	callback func(),
 ) error {
-	err := d.codec.EncodeRowChangedEvent(e, d.valueBuf)
+	valueBuf := bytes.Buffer{}
+	err := d.codec.EncodeRowChangedEvent(e, &valueBuf)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	d.batchSize++
-	if callback != nil {
-		d.callbackBuf = append(d.callbackBuf, callback)
+	// TODO: Use a streaming compression is better.
+	value, err := common.Compress(
+		d.config.ChangefeedID,
+		d.config.LargeMessageHandle.LargeMessageHandleCompression,
+		valueBuf.Bytes(),
+	)
+	if err != nil {
+		return errors.Trace(err)
 	}
+	m := &common.Message{
+		Key:      nil,
+		Value:    value,
+		Ts:       e.CommitTs,
+		Schema:   &e.Table.Schema,
+		Table:    &e.Table.Table,
+		Type:     model.MessageTypeRow,
+		Protocol: config.ProtocolDebezium,
+		Callback: callback,
+	}
+	m.IncRowsCount()
+
+	d.messages = append(d.messages, m)
 	return nil
 }
 
@@ -69,50 +84,26 @@ func (d *BatchEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message, error
 
 // Build implements the RowEventEncoder interface
 func (d *BatchEncoder) Build() []*common.Message {
-	if d.batchSize == 0 {
+	if len(d.messages) == 0 {
 		return nil
 	}
 
-	ret := common.NewMsg(config.ProtocolDebezium,
-		d.keyBuf.Bytes(), d.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
-	ret.SetRowsCount(d.batchSize)
-	if len(d.callbackBuf) != 0 && len(d.callbackBuf) == d.batchSize {
-		callbacks := d.callbackBuf
-		ret.Callback = func() {
-			for _, cb := range callbacks {
-				cb()
-			}
-		}
-		d.callbackBuf = make([]func(), 0)
-	}
-	d.reset()
-	return []*common.Message{ret}
-}
-
-// reset implements the RowEventEncoder interface
-func (d *BatchEncoder) reset() {
-	d.keyBuf.Reset()
-	d.valueBuf.Reset()
-	d.batchSize = 0
-	var versionByte [8]byte
-	binary.BigEndian.PutUint64(versionByte[:], codec.BatchVersion1)
-	d.keyBuf.Write(versionByte[:])
+	result := d.messages
+	d.messages = nil
+	return result
 }
 
 // newBatchEncoder creates a new Debezium BatchEncoder.
 func newBatchEncoder(c *common.Config) codec.RowEventEncoder {
 	batch := &BatchEncoder{
-		keyBuf:      &bytes.Buffer{},
-		valueBuf:    &bytes.Buffer{},
-		callbackBuf: make([]func(), 0),
-		config:      c,
+		messages: nil,
+		config:   c,
 		codec: &Codec{
 			config:    c,
 			clusterID: config.GetGlobalServerConfig().ClusterID,
 			nowFunc:   time.Now,
 		},
 	}
-	batch.reset()
 	return batch
 }
 
