@@ -55,14 +55,30 @@ func ReturnJSONWriter(w *JSONWriter) {
 	jWriterPool.Put(w)
 }
 
+// Buffer returns the buffer if out is nil.
+// WARN: You may need to copy the result of the buffer. Otherwise the content of the buffer
+// may be changed.
+func (w *JSONWriter) Buffer() []byte {
+	return w.stream.Buffer()
+}
+
 func (w *JSONWriter) WriteBase64String(b []byte) {
-	// As we write to out directly so we need to flush the jsoniter stream first.
-	w.stream.Flush()
-	w.out.Write([]byte(`"`))
-	encoder := base64.NewEncoder(base64.StdEncoding, w.out)
-	_, _ = encoder.Write(b)
-	encoder.Close()
-	w.out.Write([]byte(`"`))
+	if w.out == nil {
+		w.stream.WriteRaw(`"`)
+		encoder := base64.NewEncoder(base64.StdEncoding, w.stream)
+		_, _ = encoder.Write(b)
+		encoder.Close()
+		w.stream.WriteRaw(`"`)
+	} else {
+		// If out is available, let's write to out directly to avoid extra copy.
+		// As we write to out directly so we need to flush the jsoniter stream first.
+		w.stream.Flush()
+		w.out.Write([]byte(`"`))
+		encoder := base64.NewEncoder(base64.StdEncoding, w.out)
+		_, _ = encoder.Write(b)
+		encoder.Close()
+		w.out.Write([]byte(`"`))
+	}
 }
 
 func (w *JSONWriter) WriteObject(objectFieldsWriteFn func()) {
