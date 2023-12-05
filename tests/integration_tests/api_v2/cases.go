@@ -96,6 +96,8 @@ var customReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs:     500,
 		Storage:               "local://test",
 		UseFileBackend:        true,
+		EncoderWorkerNum:      14,
+		FlushWorkerNum:        23,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -140,6 +142,8 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
 		Storage:               "",
 		UseFileBackend:        false,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		EncoderWorkerNum:      redo.DefaultEncodingWorkerNum,
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,

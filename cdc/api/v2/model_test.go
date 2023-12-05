@@ -62,6 +62,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		MaxLogSize:            64,
 		FlushIntervalInMs:     redo.DefaultFlushIntervalInMs,
 		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
+		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
+		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
 	},
