@@ -26,7 +26,7 @@ var (
 		"enhance_online_schema_change": true,
 		"meta_schema": "dm_meta",
 		"name": "test",
-		"on_duplicate": "error",
+		"on_duplicate": "replace",
 		"source_config": {
 		  "full_migrate_conf": {
 			"data_dir": "./exported_data",
