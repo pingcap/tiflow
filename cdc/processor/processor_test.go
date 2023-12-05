@@ -73,6 +73,8 @@ func newProcessor4Test(
 				MaxLogSize:            redoPkg.DefaultMaxLogSize,
 				FlushIntervalInMs:     redoPkg.DefaultFlushIntervalInMs,
 				MetaFlushIntervalInMs: redoPkg.DefaultMetaFlushIntervalInMs,
+				EncodingWorkerNum:     redoPkg.DefaultEncodingWorkerNum,
+				FlushWorkerNum:        redoPkg.DefaultFlushWorkerNum,
 				Storage:               "file://" + redoDir,
 				UseFileBackend:        false,
 			})
