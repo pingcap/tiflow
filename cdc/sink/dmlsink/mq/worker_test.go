@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build intest
+// +build intest
+
 package mq
 
 import (
@@ -39,6 +42,7 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	encoderConfig := common.NewConfig(config.ProtocolOpen).WithMaxMessageBytes(200)
 	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), encoderConfig)
 	require.NoError(t, err)
+
 	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, sink.RowSink)
@@ -46,9 +50,9 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 }
 
 func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproducer.DMLProducer) {
-	id := model.DefaultChangeFeedID("test")
 	// 300 is about the size of a rowEvent change.
 	encoderConfig := common.NewConfig(config.ProtocolCanalJSON).WithMaxMessageBytes(300)
+	id := model.DefaultChangeFeedID("test")
 	builder, err := builder.NewRowEventEncoderBuilder(context.Background(), encoderConfig)
 	require.NoError(t, err)
 	p := dmlproducer.NewDMLMockProducer(context.Background(), id, nil, nil, nil, nil)
