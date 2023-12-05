@@ -17,30 +17,41 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
+	"go.uber.org/zap"
 )
 
 type encoder struct {
-	config *common.Config
-
 	messages []*common.Message
+
+	config     *common.Config
+	claimCheck *claimcheck.ClaimCheck
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
 func (e *encoder) AppendRowChangedEvent(
-	_ context.Context, _ string, event *model.RowChangedEvent, callback func(),
+	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	m, err := newDMLMessage(event)
+	m, err := newDMLMessage(event, false)
 	if err != nil {
 		return err
 	}
 	value, err := json.Marshal(m)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+
+	value, err = common.Compress(e.config.ChangefeedID,
+		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return err
 	}
 
 	result := &common.Message{
@@ -54,8 +65,92 @@ func (e *encoder) AppendRowChangedEvent(
 		Callback: callback,
 	}
 	result.IncRowsCount()
+	if result.Length() > e.config.MaxMessageBytes {
+		if e.config.LargeMessageHandle.Disabled() {
+			log.Error("Single message is too large for simple",
+				zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
+				zap.Int("length", result.Length()),
+				zap.Any("table", event.Table))
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		}
+		if e.config.LargeMessageHandle.HandleKeyOnly() {
+			m, err = newDMLMessage(event, true)
+			if err != nil {
+				return err
+			}
+			value, err = json.Marshal(m)
+			if err != nil {
+				return cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			value, err = common.Compress(e.config.ChangefeedID,
+				e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+			if err != nil {
+				return err
+			}
+			result.Value = value
+			if result.Length() > e.config.MaxMessageBytes {
+				log.Error("Single message is still too large for simple only encode handle key columns",
+					zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
+					zap.Int("length", result.Length()),
+					zap.Any("table", event.Table))
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			}
+			log.Warn("Single message is too large for simple, only encode handle-key columns",
+				zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
+				zap.Int("originLength", result.Length()),
+				zap.Int("length", result.Length()),
+				zap.Any("table", event.Table))
+		}
+		if e.config.LargeMessageHandle.EnableClaimCheck() {
+			claimCheckFileName := claimcheck.NewFileName()
+			if err := e.claimCheck.WriteMessage(ctx, result.Key, result.Value, claimCheckFileName); err != nil {
+				return errors.Trace(err)
+			}
+
+			result, err = e.newClaimCheckLocationMessage(event, callback, claimCheckFileName)
+			if err != nil {
+				return errors.Trace(err)
+			}
+		}
+	}
+
 	e.messages = append(e.messages, result)
 	return nil
+}
+
+func (e *encoder) newClaimCheckLocationMessage(
+	event *model.RowChangedEvent, callback func(), fileName string,
+) (*common.Message, error) {
+	m, err := newDMLMessage(event, true)
+	if err != nil {
+		return nil, err
+	}
+	m.ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
+
+	value, err := json.Marshal(m)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+
+	value, err = common.Compress(e.config.ChangefeedID,
+		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	result := common.NewMsg(config.ProtocolSimple, nil, value, 0, model.MessageTypeRow, nil, nil)
+	result.Callback = callback
+	result.IncRowsCount()
+
+	length := result.Length()
+	if length > e.config.MaxMessageBytes {
+		log.Warn("Single message is too large for canal-json, when create the claim check location message",
+			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
+			zap.Int("length", length),
+			zap.Any("table", event.Table))
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(length)
+	}
+	return result, nil
 }
 
 // Build implement the RowEventEncoder interface
@@ -89,25 +184,41 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 }
 
 type builder struct {
-	config *common.Config
+	config     *common.Config
+	claimCheck *claimcheck.ClaimCheck
 }
 
 // NewBuilder returns a new builder
-func NewBuilder(config *common.Config) *builder {
-	return &builder{
-		config: config,
+func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
+	var (
+		claimCheck *claimcheck.ClaimCheck
+		err        error
+	)
+	if config.LargeMessageHandle.EnableClaimCheck() {
+		claimCheck, err = claimcheck.New(ctx,
+			config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
+	return &builder{
+		config:     config,
+		claimCheck: claimCheck,
+	}, nil
 }
 
 // Build implement the RowEventEncoderBuilder interface
 func (b *builder) Build() codec.RowEventEncoder {
 	return &encoder{
-		config:   b.config,
-		messages: make([]*common.Message, 0, 1),
+		messages:   make([]*common.Message, 0, 1),
+		config:     b.config,
+		claimCheck: b.claimCheck,
 	}
 }
 
 // CleanMetrics implement the RowEventEncoderBuilder interface
 func (b *builder) CleanMetrics() {
-	// do nothing
+	if b.claimCheck != nil {
+		b.claimCheck.CleanMetrics()
+	}
 }

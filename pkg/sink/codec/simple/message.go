@@ -321,6 +321,9 @@ type message struct {
 	SQL string `json:"sql,omitempty"`
 	// SchemaVersion is for the DDL, Bootstrap and DML event.
 	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
+
+	// ClaimCheckLocation is only for the DML event.
+	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
@@ -366,7 +369,9 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 	return msg
 }
 
-func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
+func newDMLMessage(
+	event *model.RowChangedEvent, onlyHandleKey bool,
+) (*message, error) {
 	m := &message{
 		Version:       defaultVersion,
 		Database:      event.Table.Schema,
@@ -378,23 +383,23 @@ func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 	var err error
 	if event.IsInsert() {
 		m.Type = InsertType
-		m.Data, err = formatColumns(event.Columns, event.ColInfos)
+		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsDelete() {
 		m.Type = DeleteType
-		m.Old, err = formatColumns(event.PreColumns, event.ColInfos)
+		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsUpdate() {
 		m.Type = UpdateType
-		m.Data, err = formatColumns(event.Columns, event.ColInfos)
+		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
-		m.Old, err = formatColumns(event.PreColumns, event.ColInfos)
+		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
@@ -406,10 +411,16 @@ func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 }
 
 func formatColumns(
-	columns []*model.Column, columnInfos []rowcodec.ColInfo,
+	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
 	for idx, col := range columns {
+		if col == nil {
+			continue
+		}
+		if onlyHandleKey && !col.Flag.IsHandleKey() {
+			continue
+		}
 		value, err := encodeValue(col.Value, columnInfos[idx].Ft)
 		if err != nil {
 			return nil, err

@@ -27,8 +27,11 @@ import (
 func TestEncodeCheckpoint(t *testing.T) {
 	t.Parallel()
 
+	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	enc := NewBuilder(codecConfig).Build()
+	builder, err := NewBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	enc := builder.Build()
 
 	checkpoint := 23
 	m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
@@ -62,8 +65,11 @@ func TestEncodeDDLEvent(t *testing.T) {
     	key idx_name_email(name, email))`
 	ddlEvent := helper.DDL2Event(sql)
 
+	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	enc := NewBuilder(codecConfig).Build()
+	builder, err := NewBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	enc := builder.Build()
 
 	m, err := enc.EncodeDDLEvent(ddlEvent)
 	require.NoError(t, err)
@@ -122,8 +128,11 @@ func TestEncoderOtherTypes(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
+	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	enc := NewBuilder(codecConfig).Build()
+	builder, err := NewBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	enc := builder.Build()
 
 	sql := `create table test.t(
     	a int primary key auto_increment,
@@ -199,8 +208,11 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	ddlEvent := helper.DDL2Event(sql)
 	ddlEvent.IsBootstrap = true
 
+	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	enc := NewBuilder(codecConfig).Build()
+	builder, err := NewBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	enc := builder.Build()
 
 	m, err := enc.EncodeDDLEvent(ddlEvent)
 	require.NoError(t, err)
