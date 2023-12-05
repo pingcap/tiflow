@@ -273,11 +273,12 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-	Level             string `json:"level"`
-	MaxLogSize        int64  `json:"max_log_size"`
-	FlushIntervalInMs int64  `json:"flush_interval"`
-	Storage           string `json:"storage"`
-	UseFileBackend    bool   `json:"use_file_backend"`
+	Level                 string `json:"level"`
+	MaxLogSize            int64  `json:"max_log_size"`
+	FlushIntervalInMs     int64  `json:"flush_interval"`
+	MetaFlushIntervalInMs int64  `json:"meta_flush_interval"`
+	Storage               string `json:"storage"`
+	UseFileBackend        bool   `json:"use_file_backend"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

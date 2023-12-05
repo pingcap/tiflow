@@ -140,6 +140,10 @@ var defaultServerConfig = &ServerConfig{
 
 		Scheduler:              NewDefaultSchedulerConfig(),
 		EnableKVConnectBackOff: false,
+		Puller: &PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
+		},
 	},
 	ClusterID:              "default",
 	GcTunerMemoryThreshold: DisableMemoryLimit,

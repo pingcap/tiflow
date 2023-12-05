@@ -30,16 +30,16 @@ func TestGetMySQLTypeAndJavaSQLType(t *testing.T) {
 	t.Parallel()
 	canalEntryBuilder := newCanalEntryBuilder()
 	for _, item := range testColumnsTable {
-		obtainedMySQLType := getMySQLType(item.column)
+		obtainedMySQLType := getMySQLType(item.column.Type, item.column.Flag)
 		require.Equal(t, item.expectedMySQLType, obtainedMySQLType)
 
-		obtainedJavaSQLType, err := getJavaSQLType(item.column, obtainedMySQLType)
-		require.Nil(t, err)
+		obtainedJavaSQLType, err := getJavaSQLType(item.column.Value, item.column.Type, item.column.Flag)
+		require.NoError(t, err)
 		require.Equal(t, item.expectedJavaSQLType, obtainedJavaSQLType)
 
+		obtainedFinalValue, err := canalEntryBuilder.formatValue(item.column.Value, item.column.Flag.IsBinary())
+		require.NoError(t, err)
 		if !item.column.Flag.IsBinary() {
-			obtainedFinalValue, err := canalEntryBuilder.formatValue(item.column.Value, obtainedJavaSQLType)
-			require.Nil(t, err)
 			require.Equal(t, item.expectedEncodedValue, obtainedFinalValue)
 		}
 	}
