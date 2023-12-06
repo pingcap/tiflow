@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/stretchr/testify/require"
@@ -28,99 +29,115 @@ func TestEncodeCheckpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolSimple)
-	builder, err := NewBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	enc := builder.Build()
+	for _, compressionType := range []string{
+		compression.None,
+		compression.Snappy,
+		compression.LZ4,
+	} {
+		codecConfig := common.NewConfig(config.ProtocolSimple)
+		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+		builder, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := builder.Build()
 
-	checkpoint := 23
-	m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
-	require.NoError(t, err)
+		checkpoint := 23
+		m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
+		require.NoError(t, err)
 
-	dec := NewDecoder()
-	err = dec.AddKeyValue(m.Key, m.Value)
-	require.NoError(t, err)
+		dec := NewDecoder(codecConfig)
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
 
-	messageType, hasNext, err := dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeResolved, messageType)
-	require.NotEqual(t, 0, dec.msg.BuildTs)
+		messageType, hasNext, err := dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeResolved, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
 
-	ts, err := dec.NextResolvedEvent()
-	require.NoError(t, err)
-	require.Equal(t, uint64(checkpoint), ts)
+		ts, err := dec.NextResolvedEvent()
+		require.NoError(t, err)
+		require.Equal(t, uint64(checkpoint), ts)
+	}
 }
 
 func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
-	sql := `create table test.t(
+	ctx := context.Background()
+	for _, compressionType := range []string{
+		compression.None,
+		compression.Snappy,
+		compression.LZ4,
+	} {
+		codecConfig := common.NewConfig(config.ProtocolSimple)
+		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+		builder, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := builder.Build()
+
+		sql := `create table test.t(
     	id int primary key,
     	name varchar(255) not null,
     	gender enum('male', 'female'),
     	email varchar(255) not null,
     	key idx_name_email(name, email))`
-	ddlEvent := helper.DDL2Event(sql)
+		ddlEvent := helper.DDL2Event(sql)
 
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolSimple)
-	builder, err := NewBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	enc := builder.Build()
+		m, err := enc.EncodeDDLEvent(ddlEvent)
+		require.NoError(t, err)
 
-	m, err := enc.EncodeDDLEvent(ddlEvent)
-	require.NoError(t, err)
+		dec := NewDecoder(codecConfig)
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
 
-	dec := NewDecoder()
-	err = dec.AddKeyValue(m.Key, m.Value)
-	require.NoError(t, err)
+		messageType, hasNext, err := dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
 
-	messageType, hasNext, err := dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeDDL, messageType)
-	require.NotEqual(t, 0, dec.msg.BuildTs)
+		event, err := dec.NextDDLEvent()
+		require.NoError(t, err)
+		require.Equal(t, ddlEvent.CommitTs, event.CommitTs)
+		// because we don't we don't set startTs in the encoded message,
+		// so the startTs is equal to commitTs
+		require.Equal(t, ddlEvent.CommitTs, event.StartTs)
+		require.Equal(t, ddlEvent.Query, event.Query)
+		require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
+		require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
 
-	event, err := dec.NextDDLEvent()
-	require.NoError(t, err)
-	require.Equal(t, ddlEvent.CommitTs, event.CommitTs)
-	// because we don't we don't set startTs in the encoded message,
-	// so the startTs is equal to commitTs
-	require.Equal(t, ddlEvent.CommitTs, event.StartTs)
-	require.Equal(t, ddlEvent.Query, event.Query)
-	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
-	require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
+		item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
+			ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
+		require.NotNil(t, item)
 
-	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
-		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
-	require.NotNil(t, item)
+		sql = `insert into test.t values (1, "jack", "male", "jack@abc.com")`
+		row := helper.DML2Event(sql, "test", "t")
 
-	sql = `insert into test.t values (1, "jack", 23, "jack@abc.com")`
-	row := helper.DML2Event(sql, "test", "t")
+		err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
+		require.NoError(t, err)
 
-	err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
-	require.NoError(t, err)
+		messages := enc.Build()
+		require.Len(t, messages, 1)
 
-	messages := enc.Build()
-	require.Len(t, messages, 1)
+		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+		require.NoError(t, err)
 
-	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-	require.NoError(t, err)
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
 
-	messageType, hasNext, err = dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeRow, messageType)
-	require.NotEqual(t, 0, dec.msg.BuildTs)
+		decodedRow, err := dec.NextRowChangedEvent()
+		require.NoError(t, err)
+		require.Equal(t, decodedRow.CommitTs, row.CommitTs)
+		require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
+		require.Equal(t, decodedRow.Table.Table, row.Table.Table)
+		require.Nil(t, decodedRow.PreColumns)
 
-	decodedRow, err := dec.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedRow.CommitTs, row.CommitTs)
-	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
-	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
-	require.Nil(t, decodedRow.PreColumns)
+		helper.Tk().MustExec("drop table test.t")
+	}
 }
 
 func TestEncoderOtherTypes(t *testing.T) {
@@ -128,68 +145,77 @@ func TestEncoderOtherTypes(t *testing.T) {
 	defer helper.Close()
 
 	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolSimple)
-	builder, err := NewBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	enc := builder.Build()
+	for _, compressionType := range []string{
+		compression.None,
+		compression.Snappy,
+		compression.LZ4,
+	} {
+		codecConfig := common.NewConfig(config.ProtocolSimple)
+		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+		builder, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := builder.Build()
 
-	sql := `create table test.t(
+		sql := `create table test.t(
     	a int primary key auto_increment,
     	b enum('a', 'b', 'c'),
     	c set('a', 'b', 'c'),
     	d bit(64),
     	e json)`
-	ddlEvent := helper.DDL2Event(sql)
+		ddlEvent := helper.DDL2Event(sql)
 
-	m, err := enc.EncodeDDLEvent(ddlEvent)
-	require.NoError(t, err)
+		m, err := enc.EncodeDDLEvent(ddlEvent)
+		require.NoError(t, err)
 
-	dec := NewDecoder()
-	err = dec.AddKeyValue(m.Key, m.Value)
-	require.NoError(t, err)
+		dec := NewDecoder(codecConfig)
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
 
-	messageType, hasNext, err := dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeDDL, messageType)
+		messageType, hasNext, err := dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
 
-	_, err = dec.NextDDLEvent()
-	require.NoError(t, err)
+		_, err = dec.NextDDLEvent()
+		require.NoError(t, err)
 
-	sql = `insert into test.t() values (1, 'a', 'a,b', b'1000001', '{
+		sql = `insert into test.t() values (1, 'a', 'a,b', b'1000001', '{
 		  "key1": "value1",
 		  "key2": "value2"
 		}');`
-	row := helper.DML2Event(sql, "test", "t")
+		row := helper.DML2Event(sql, "test", "t")
 
-	err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
-	require.NoError(t, err)
+		err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
+		require.NoError(t, err)
 
-	messages := enc.Build()
-	require.Len(t, messages, 1)
+		messages := enc.Build()
+		require.Len(t, messages, 1)
 
-	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-	require.NoError(t, err)
+		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+		require.NoError(t, err)
 
-	messageType, hasNext, err = dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeRow, messageType)
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, messageType)
 
-	decodedRow, err := dec.NextRowChangedEvent()
-	require.NoError(t, err)
+		decodedRow, err := dec.NextRowChangedEvent()
+		require.NoError(t, err)
 
-	decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
-	for _, column := range decodedRow.Columns {
-		decodedColumns[column.Name] = column
-	}
+		decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+		for _, column := range decodedRow.Columns {
+			decodedColumns[column.Name] = column
+		}
 
-	for _, expected := range row.Columns {
-		decoded, ok := decodedColumns[expected.Name]
-		require.True(t, ok)
-		require.Equal(t, expected.Value, decoded.Value)
-		require.Equal(t, expected.Charset, decoded.Charset)
-		require.Equal(t, expected.Collation, decoded.Collation)
+		for _, expected := range row.Columns {
+			decoded, ok := decodedColumns[expected.Name]
+			require.True(t, ok)
+			require.Equal(t, expected.Value, decoded.Value)
+			require.Equal(t, expected.Charset, decoded.Charset)
+			require.Equal(t, expected.Collation, decoded.Collation)
+		}
+
+		helper.Tk().MustExec("drop table test.t")
 	}
 }
 
@@ -197,72 +223,81 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
-	sql := `create table test.t(
+	ctx := context.Background()
+	for _, compressionType := range []string{
+		compression.None,
+		compression.Snappy,
+		compression.LZ4,
+	} {
+		codecConfig := common.NewConfig(config.ProtocolSimple)
+		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+		builder, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := builder.Build()
+
+		sql := `create table test.t(
     	id int primary key,
     	name varchar(255) not null,
     	age int,
     	email varchar(255) not null,
     	key idx_name(name),
     	key idx_name_email(name, email))`
-	ddlEvent := helper.DDL2Event(sql)
-	ddlEvent.IsBootstrap = true
+		ddlEvent := helper.DDL2Event(sql)
+		ddlEvent.IsBootstrap = true
 
-	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolSimple)
-	builder, err := NewBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	enc := builder.Build()
+		m, err := enc.EncodeDDLEvent(ddlEvent)
+		require.NoError(t, err)
 
-	m, err := enc.EncodeDDLEvent(ddlEvent)
-	require.NoError(t, err)
+		dec := NewDecoder(codecConfig)
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
 
-	dec := NewDecoder()
-	err = dec.AddKeyValue(m.Key, m.Value)
-	require.NoError(t, err)
+		messageType, hasNext, err := dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
 
-	messageType, hasNext, err := dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeDDL, messageType)
-	require.NotEqual(t, 0, dec.msg.BuildTs)
+		event, err := dec.NextDDLEvent()
+		require.NoError(t, err)
+		require.Equal(t, ddlEvent.CommitTs, event.CommitTs)
+		// because we don't we don't set startTs in the encoded message,
+		// so the startTs is equal to commitTs
+		require.Equal(t, ddlEvent.CommitTs, event.StartTs)
+		// Bootstrap event doesn't have query
+		require.Equal(t, "", event.Query)
+		require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
+		require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
 
-	event, err := dec.NextDDLEvent()
-	require.NoError(t, err)
-	require.Equal(t, ddlEvent.CommitTs, event.CommitTs)
-	// because we don't we don't set startTs in the encoded message,
-	// so the startTs is equal to commitTs
-	require.Equal(t, ddlEvent.CommitTs, event.StartTs)
-	// Bootstrap event doesn't have query
-	require.Equal(t, "", event.Query)
-	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
-	require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
+		item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
+			ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
+		require.NotNil(t, item)
 
-	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
-		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
-	require.NotNil(t, item)
+		sql = `insert into test.t values (1, "jack", 23, "jack@abc.com")`
+		row := helper.DML2Event(sql, "test", "t")
 
-	sql = `insert into test.t values (1, "jack", 23, "jack@abc.com")`
-	row := helper.DML2Event(sql, "test", "t")
+		err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
+		require.NoError(t, err)
 
-	err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
-	require.NoError(t, err)
+		messages := enc.Build()
+		require.Len(t, messages, 1)
 
-	messages := enc.Build()
-	require.Len(t, messages, 1)
+		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+		require.NoError(t, err)
 
-	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-	require.NoError(t, err)
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
 
-	messageType, hasNext, err = dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeRow, messageType)
-	require.NotEqual(t, 0, dec.msg.BuildTs)
+		decodedRow, err := dec.NextRowChangedEvent()
+		require.NoError(t, err)
+		require.Equal(t, decodedRow.CommitTs, row.CommitTs)
+		require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
+		require.Equal(t, decodedRow.Table.Table, row.Table.Table)
+		require.Nil(t, decodedRow.PreColumns)
 
-	decodedRow, err := dec.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, decodedRow.CommitTs, row.CommitTs)
-	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
-	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
-	require.Nil(t, decodedRow.PreColumns)
+		helper.Tk().MustExec("drop table test.t")
+	}
 }

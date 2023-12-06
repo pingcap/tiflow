@@ -19,21 +19,23 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
 type decoder struct {
+	config *common.Config
+
 	value []byte
-
-	msg *message
-
-	memo TableInfoProvider
+	msg   *message
+	memo  TableInfoProvider
 }
 
 // NewDecoder returns a new decoder
-func NewDecoder() *decoder {
+func NewDecoder(config *common.Config) *decoder {
 	return &decoder{
-		memo: newMemoryTableInfoProvider(),
+		config: config,
+		memo:   newMemoryTableInfoProvider(),
 	}
 }
 
@@ -42,6 +44,10 @@ func (d *decoder) AddKeyValue(_, value []byte) error {
 	if d.value != nil {
 		return cerror.ErrDecodeFailed.GenWithStack(
 			"decoder value already exists, not consumed yet")
+	}
+	value, err := common.Decompress(d.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return err
 	}
 	d.value = value
 	return nil
