@@ -477,10 +477,6 @@ cert-allowed-cn = ["dd","ee"]
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
 			},
-			CDCV2: &config.CDCV2{
-				Enable:          false,
-				MetaStoreConfig: config.MetaStoreConfiguration{},
-			},
 			Puller: &config.PullerConfig{
 				EnableResolvedTsStuckDetection: false,
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
