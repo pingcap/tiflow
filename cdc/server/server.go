@@ -345,10 +345,6 @@ func (s *server) run(ctx context.Context) (err error) {
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
-		return s.capture.Run(egCtx)
-	})
-
-	eg.Go(func() error {
 		return s.upstreamPDHealthChecker(egCtx)
 	})
 
@@ -370,6 +366,10 @@ func (s *server) run(ctx context.Context) (err error) {
 		<-egCtx.Done()
 		grpcServer.Stop()
 		return nil
+	})
+
+	eg.Go(func() error {
+		return s.capture.Run(egCtx)
 	})
 
 	return eg.Wait()
