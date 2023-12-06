@@ -59,9 +59,8 @@ func TestEncodeDDLEvent(t *testing.T) {
 	sql := `create table test.t(
     	id int primary key,
     	name varchar(255) not null,
-    	age int,
+    	gender enum('male', 'female'),
     	email varchar(255) not null,
-    	key idx_name(name),
     	key idx_name_email(name, email))`
 	ddlEvent := helper.DDL2Event(sql)
 
