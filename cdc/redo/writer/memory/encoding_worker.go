@@ -184,7 +184,7 @@ func (e *encodingWorkerGroup) input(
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-e.closed:
-		return errors.ErrRedoWriterStopped.GenWithStackByArgs("encoding worker is closed")
+		return errors.ErrRedoWriterStopped.GenWithStack("encoding worker is closed")
 	case e.inputChs[idx] <- event:
 		return nil
 	}
@@ -197,7 +197,7 @@ func (e *encodingWorkerGroup) output(
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-e.closed:
-		return errors.ErrRedoWriterStopped.GenWithStackByArgs("encoding worker is closed")
+		return errors.ErrRedoWriterStopped.GenWithStack("encoding worker is closed")
 	case e.outputCh <- event:
 		return nil
 	}
@@ -222,7 +222,7 @@ func (e *encodingWorkerGroup) FlushAll(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-e.closed:
-		return errors.ErrRedoWriterStopped.GenWithStackByArgs("encoding worker is closed")
+		return errors.ErrRedoWriterStopped.GenWithStack("encoding worker is closed")
 	case <-flushCh:
 	}
 	return nil
@@ -246,7 +246,7 @@ func (e *encodingWorkerGroup) broadcastAndWaitEncoding(ctx context.Context) erro
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-e.closed:
-			return errors.ErrRedoWriterStopped.GenWithStackByArgs("encoding worker is closed")
+			return errors.ErrRedoWriterStopped.GenWithStack("encoding worker is closed")
 		case <-ch:
 		}
 	}
