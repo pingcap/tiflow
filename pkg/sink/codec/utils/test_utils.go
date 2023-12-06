@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package canal
+package utils
 
 import (
 	"testing"
@@ -23,17 +23,17 @@ import (
 )
 
 type testColumnTuple struct {
-	column *model.Column
+	Column *model.Column
 
-	// expectedEncodedValue is expected by encoding
-	expectedEncodedValue string
+	// ExpectedEncodedValue is expected by encoding
+	ExpectedEncodedValue string
 
 	// expectedDecodedValue is expected by decoding
 	expectedDecodedValue interface{}
 }
 
 var (
-	testColumnsTable = []*testColumnTuple{
+	TestColumnsTable = []*testColumnTuple{
 		{
 			&model.Column{Name: "t", Flag: model.HandleKeyFlag | model.PrimaryKeyFlag, Type: mysql.TypeTiny, Value: int64(127)},
 			"127", "127",
@@ -238,7 +238,7 @@ var (
 			"2333", "2333",
 		},
 
-		// for column value type in `[]uint8` and have `BinaryFlag`, expectedEncodedValue is dummy.
+		// for Column value type in `[]uint8` and have `BinaryFlag`, ExpectedEncodedValue is dummy.
 		{
 			&model.Column{Name: "varcharT", Type: mysql.TypeVarchar, Value: []uint8("测试Varchar")},
 			"测试Varchar", "测试Varchar",
@@ -354,7 +354,7 @@ var (
 		},
 	}
 
-	testCaseDDL = &model.DDLEvent{
+	TestCaseDDL = &model.DDLEvent{
 		CommitTs: 417318403368288260,
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
@@ -369,20 +369,20 @@ var (
 func collectAllColumns(groups []*testColumnTuple) []*model.Column {
 	columns := make([]*model.Column, 0, len(groups))
 	for _, item := range groups {
-		columns = append(columns, item.column)
+		columns = append(columns, item.Column)
 	}
 	return columns
 }
 
-func collectExpectedDecodedValue(columns []*testColumnTuple) map[string]interface{} {
+func CollectExpectedDecodedValue(columns []*testColumnTuple) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
 	for _, item := range columns {
-		result[item.column.Name] = item.expectedDecodedValue
+		result[item.Column.Name] = item.expectedDecodedValue
 	}
 	return result
 }
 
-func newLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
+func NewLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -443,7 +443,7 @@ func newLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChanged
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 	_, _, colInfo := tableInfo.GetRowColInfos()
 
-	testColumns := collectAllColumns(testColumnsTable)
+	testColumns := collectAllColumns(TestColumnsTable)
 
 	insert := &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
