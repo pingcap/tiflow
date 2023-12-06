@@ -280,17 +280,12 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-<<<<<<< HEAD
 func (p *pullerImpl) GetResolvedTs() uint64 {
 	return atomic.LoadUint64(&p.resolvedTs)
 }
 
-func (p *pullerImpl) detectResolvedTsStuck(initialized bool) error {
-	if p.cfg.Debug.Puller.EnableResolvedTsStuckDetection && initialized {
-=======
 func (p *pullerImpl) detectResolvedTsStuck() error {
 	if p.cfg.Debug.Puller.EnableResolvedTsStuckDetection {
->>>>>>> e16c52d843 (puller(ticdc):  fix stuck detect issue (#10258))
 		resolvedTs := p.tsTracker.Frontier()
 		// check if the resolvedTs is advancing,
 		// If the resolvedTs in Frontier is less than startResolvedTs, it means that the incremental scan has
