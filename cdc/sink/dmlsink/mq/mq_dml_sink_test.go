@@ -11,6 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build intest
+// +build intest
+
 package mq
 
 import (
@@ -20,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer"
@@ -56,8 +61,6 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 }
 
 func TestWriteEvents(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -79,11 +82,21 @@ func TestWriteEvents(t *testing.T) {
 	require.NotNil(t, s)
 	defer s.Close()
 
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	sql := `create table test.t(a varchar(255) primary key)`
+	job := helper.DDL2Job(sql)
+	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
+	_, _, colInfo := tableInfo.GetRowColInfos()
+
 	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
-		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		CommitTs:  1,
+		Table:     &model.TableName{Schema: "test", Table: "t"},
+		TableInfo: tableInfo,
+		Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
+		ColInfos:  colInfo,
 	}
 
 	events := make([]*dmlsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)

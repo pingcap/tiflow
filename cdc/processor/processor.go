@@ -670,10 +670,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	}
 	p.changefeed.Info.Config.Sink.TiDBSourceID = sourceID
 
-	p.redo.r, err = redo.NewDMLManager(stdCtx, p.changefeed.Info.Config.Consistent)
-	if err != nil {
-		return err
-	}
+	p.redo.r = redo.NewDMLManager(p.changefeedID, p.changefeed.Info.Config.Consistent)
 	p.redo.name = "RedoManager"
 	p.redo.spawn(stdCtx)
 

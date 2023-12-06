@@ -56,12 +56,7 @@ func fillColumns(columns []*model.Column, out *jwriter.Writer,
 			} else {
 				out.RawByte(',')
 			}
-			mysqlType := getMySQLType(col)
-			javaType, err := getJavaSQLType(col, mysqlType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			value, err := builder.formatValue(col.Value, javaType)
+			value, err := builder.formatValue(col.Value, col.Flag.IsBinary())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
@@ -160,7 +155,7 @@ func newJSONMessageForDML(
 		const prefix string = ",\"sqlType\":"
 		out.RawString(prefix)
 		emptyColumn := true
-		for _, col := range columns {
+		for idx, col := range columns {
 			if col != nil {
 				if onlyHandleKey && !col.Flag.IsHandleKey() {
 					continue
@@ -171,15 +166,19 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
+				javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
-				mysqlTypeMap[col.Name] = mysqlType
+				columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+				if !ok {
+					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
+				}
+				mysqlTypeMap[col.Name] = common.GetMySQLType(columnInfo, config.ContentCompatible)
 			}
 		}
 		if emptyColumn {
@@ -284,7 +283,7 @@ type JSONRowEventEncoder struct {
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
 func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &JSONRowEventEncoder{
-		builder:  newCanalEntryBuilder(),
+		builder:  newCanalEntryBuilder(config),
 		messages: make([]*common.Message, 0, 1),
 
 		config: config,
