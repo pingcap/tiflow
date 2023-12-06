@@ -76,6 +76,8 @@ type pullerImpl struct {
 	cfg                   *config.ServerConfig
 	lastForwardTime       time.Time
 	lastForwardResolvedTs uint64
+	// startResolvedTs is the resolvedTs when puller is initialized
+	startResolvedTs uint64
 }
 
 // New create a new Puller fetch event start from checkpointTs and put into buf.
@@ -117,6 +119,8 @@ func New(ctx context.Context,
 		tableID:      tableID,
 		tableName:    tableName,
 		cfg:          cfg,
+
+		startResolvedTs: checkpointTs,
 	}
 	return p
 }
@@ -184,7 +188,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			case <-stuckDetectorTicker.C:
-				if err := p.detectResolvedTsStuck(initialized); err != nil {
+				if err := p.detectResolvedTsStuck(); err != nil {
 					return errors.Trace(err)
 				}
 				continue
@@ -247,9 +251,13 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-func (p *pullerImpl) detectResolvedTsStuck(initialized bool) error {
-	if p.cfg.Debug.Puller.EnableResolvedTsStuckDetection && initialized {
+func (p *pullerImpl) detectResolvedTsStuck() error {
+	if p.cfg.Debug.Puller.EnableResolvedTsStuckDetection {
 		resolvedTs := p.tsTracker.Frontier()
+		// check if the resolvedTs is advanced before
+		if resolvedTs <= p.startResolvedTs {
+			return nil
+		}
 		if resolvedTs == p.lastForwardResolvedTs {
 			log.Warn("ResolvedTs stuck detected in puller",
 				zap.String("namespace", p.changefeed.Namespace),
