@@ -284,8 +284,8 @@ func (p *pullerImpl) detectResolvedTsStuck() error {
 	if p.cfg.Debug.Puller.EnableResolvedTsStuckDetection {
 		resolvedTs := p.tsTracker.Frontier()
 		// check if the resolvedTs is advancing,
-		// If the resolvedTs in Frontier is less than startResolvedTs, it means that the incremental scan has 
-		// not complete yet. We need to make no decision in this scenario. 
+		// If the resolvedTs in Frontier is less than startResolvedTs, it means that the incremental scan has
+		// not complete yet. We need to make no decision in this scenario.
 		if resolvedTs <= p.startResolvedTs {
 			return nil
 		}
