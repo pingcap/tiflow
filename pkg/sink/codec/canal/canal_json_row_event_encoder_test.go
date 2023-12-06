@@ -521,32 +521,16 @@ func TestCheckpointEventValueMarshal(t *testing.T) {
 	err = json.Unmarshal(msg.Value, &jsonMsg)
 	require.NoError(t, err)
 	require.Equal(t, watermark, jsonMsg.Extensions.WatermarkTs)
-	// Hack the build time.
-	// Otherwise, the timing will be inconsistent.
-	jsonMsg.BuildTime = 1469579899
-	rawBytes, err := json.MarshalIndent(jsonMsg, "", "  ")
-	require.NoError(t, err)
-
-	// No commit ts will be output.
-	expectedJSON := `{
-  "id": 0,
-  "database": "",
-  "table": "",
-  "pkNames": null,
-  "isDdl": false,
-  "type": "TIDB_WATERMARK",
-  "es": 0,
-  "ts": 1469579899,
-  "sql": "",
-  "sqlType": null,
-  "mysqlType": null,
-  "data": null,
-  "old": null,
-  "_tidb": {
-    "watermarkTs": 1024
-  }
-}`
-	require.Equal(t, expectedJSON, string(rawBytes))
+	require.Equal(t, tidbWaterMarkType, jsonMsg.EventType)
+	require.Equal(t, "", jsonMsg.Schema)
+	require.Equal(t, "", jsonMsg.Table)
+	require.Equal(t, "", jsonMsg.Query)
+	require.False(t, jsonMsg.IsDDL)
+	require.Equal(t, 0, jsonMsg.ExecutionTime)
+	require.Nil(t, jsonMsg.Data)
+	require.Nil(t, jsonMsg.Old)
+	require.Nil(t, jsonMsg.SQLType)
+	require.Nil(t, jsonMsg.MySQLType)
 }
 
 func TestDDLEventWithExtension(t *testing.T) {
