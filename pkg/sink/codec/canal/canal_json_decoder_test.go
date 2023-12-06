@@ -20,13 +20,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
-	insertEvent, _, _ := newLargeEvent4Test(t)
+	insertEvent, _, _ := utils.newLargeEvent4Test(t)
 	ctx := context.Background()
-	expectedDecodedValue := collectExpectedDecodedValue(testColumnsTable)
+	expectedDecodedValue := utils.collectExpectedDecodedValue(utils.testColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
 		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 		codecConfig.EnableTiDBExtension = encodeEnable
@@ -100,7 +101,7 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 		require.NoError(t, err)
 		encoder := builder.Build()
 
-		result, err := encoder.EncodeDDLEvent(testCaseDDL)
+		result, err := encoder.EncodeDDLEvent(utils.testCaseDDL)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -121,13 +122,13 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 			require.Nil(t, err)
 
 			if encodeEnable && decodeEnable {
-				require.Equal(t, testCaseDDL.CommitTs, consumed.CommitTs)
+				require.Equal(t, utils.testCaseDDL.CommitTs, consumed.CommitTs)
 			} else {
 				require.Equal(t, uint64(0), consumed.CommitTs)
 			}
 
-			require.Equal(t, testCaseDDL.TableInfo, consumed.TableInfo)
-			require.Equal(t, testCaseDDL.Query, consumed.Query)
+			require.Equal(t, utils.testCaseDDL.TableInfo, consumed.TableInfo)
+			require.Equal(t, utils.testCaseDDL.Query, consumed.Query)
 
 			ty, hasNext, err = decoder.HasNext()
 			require.Nil(t, err)
