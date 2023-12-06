@@ -254,7 +254,7 @@ func (s *requestedStream) receive(
 
 func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *requestedStore) (err error) {
 	doSend := func(cc *sharedconn.ConnAndClient, req *cdcpb.ChangeDataRequest, subscriptionID SubscriptionID) error {
-		backoff := time.Now().Sub(time.UnixMilli(s.lastKvIsBusy.Load()))
+		backoff := time.Since(time.UnixMilli(s.lastKvIsBusy.Load()))
 		if backoff < serverIsBusyBackoffInterval {
 			if err := util.Hang(ctx, backoff); err != nil {
 				return err
@@ -498,7 +498,13 @@ func (s *requestedStream) sendRegionChangeEvents(
 				zap.Bool("stateIsNil", state == nil),
 				zap.Any("error", x.Error))
 			if x.Error.GetServerIsBusy() != nil {
-				s.lastKvIsBusy.Store(time.Now().UnixMilli())
+				for {
+					prev := s.lastKvIsBusy.Load()
+					next := time.Now().UnixMilli()
+					if prev >= next || s.lastKvIsBusy.CompareAndSwap(prev, next) {
+						break
+					}
+				}
 			}
 		}
 
