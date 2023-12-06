@@ -32,6 +32,26 @@ var jWriterPool = sync.Pool{
 	},
 }
 
+// JSONWriter builds JSON in an efficient and structural way.
+//
+// Example Usage
+//
+//	w := BorrowJSONWriter(out)
+//
+//	w.WriteObject(func() {
+//	  w.WriteObjectField("payload", func() {
+//	    w.WriteObjectField("dml", func() {
+//	      w.WriteStringField("statement", "INSERT")
+//	      w.WriteUint64Field("ts", 100)
+//	    })
+//	  })
+//	  w.WriteObjectField("source", func() {
+//	    w.WriteStringField("source", "TiCDC")
+//	    w.WriteInt64Field("version", 1)
+//	  })
+//	})
+//
+//	ReturnJSONWriter(w)
 type JSONWriter struct {
 	out    io.Writer
 	stream *jsoniter.Stream // `stream` is created over `out`
