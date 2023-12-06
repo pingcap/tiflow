@@ -14,9 +14,11 @@
 package entry
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	ticonfig "github.com/pingcap/tidb/config"
 	tiddl "github.com/pingcap/tidb/ddl"
@@ -27,6 +29,11 @@ import (
 	"github.com/pingcap/tidb/session"
 	"github.com/pingcap/tidb/store/mockstore"
 	"github.com/pingcap/tidb/testkit"
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -37,10 +44,17 @@ type SchemaTestHelper struct {
 	tk      *testkit.TestKit
 	storage kv.Storage
 	domain  *domain.Domain
+
+	schemaStorage SchemaStorage
+	mounter       Mounter
+	filter        filter.Filter
 }
 
-// NewSchemaTestHelper creates a SchemaTestHelper
-func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
+// NewSchemaTestHelperWithReplicaConfig creates a SchemaTestHelper
+// by using the given replica config.
+func NewSchemaTestHelperWithReplicaConfig(
+	t *testing.T, replicaConfig *config.ReplicaConfig,
+) *SchemaTestHelper {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
@@ -52,12 +66,38 @@ func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
 	require.Nil(t, err)
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
+
+	filter, err := filter.NewFilter(replicaConfig, "")
+	require.NoError(t, err)
+
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-testkit")
+
+	meta := timeta.NewSnapshotMeta(store.GetSnapshot(ver))
+	schemaStorage, err := NewSchemaStorage(
+		meta, ver.Ver, replicaConfig.ForceReplicate,
+		changefeedID, util.RoleTester, filter)
+	require.NoError(t, err)
+
+	mounter := NewMounter(schemaStorage, changefeedID, time.Local,
+		filter, replicaConfig.Integrity)
+
 	return &SchemaTestHelper{
-		t:       t,
-		tk:      tk,
-		storage: store,
-		domain:  domain,
+		t:             t,
+		tk:            tk,
+		storage:       store,
+		domain:        domain,
+		filter:        filter,
+		schemaStorage: schemaStorage,
+		mounter:       mounter,
 	}
+}
+
+// NewSchemaTestHelper creates a SchemaTestHelper
+func NewSchemaTestHelper(t *testing.T) *SchemaTestHelper {
+	return NewSchemaTestHelperWithReplicaConfig(t, config.GetDefaultReplicaConfig())
 }
 
 // DDL2Job executes the DDL stmt and returns the DDL job
@@ -125,6 +165,115 @@ func (s *SchemaTestHelper) DDL2Jobs(ddl string, jobCnt int) []*timodel.Job {
 		jobs[i].State = timodel.JobStateDone
 	}
 	return jobs
+}
+
+// DML2Event execute the dml and return the corresponding row changed event.
+// caution: it does not support `delete` since the key value cannot be found
+// after the query executed.
+func (s *SchemaTestHelper) DML2Event(dml string, schema, table string) *model.RowChangedEvent {
+	s.tk.MustExec(dml)
+
+	tableInfo, ok := s.schemaStorage.GetLastSnapshot().TableByName(schema, table)
+	require.True(s.t, ok)
+
+	key, value := s.getLastKeyValue(tableInfo.ID)
+	ts := s.schemaStorage.GetLastSnapshot().CurrentTs()
+	rawKV := &model.RawKVEntry{
+		OpType:   model.OpTypePut,
+		Key:      key,
+		Value:    value,
+		OldValue: nil,
+		StartTs:  ts - 1,
+		CRTs:     ts + 1,
+	}
+	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
+	err := s.mounter.DecodeEvent(context.Background(), polymorphicEvent)
+	require.NoError(s.t, err)
+	return polymorphicEvent.Row
+}
+
+func (s *SchemaTestHelper) getLastKeyValue(tableID int64) (key, value []byte) {
+	txn, err := s.storage.Begin()
+	require.NoError(s.t, err)
+	defer txn.Rollback() //nolint:errcheck
+
+	start, end := spanz.GetTableRange(tableID)
+	iter, err := txn.Iter(start, end)
+	require.NoError(s.t, err)
+	defer iter.Close()
+	for iter.Valid() {
+		key = iter.Key()
+		value = iter.Value()
+		err = iter.Next()
+		require.NoError(s.t, err)
+	}
+	return key, value
+}
+
+// DDL2Event executes the DDL and return the corresponding event.
+func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
+	s.tk.MustExec(ddl)
+	jobs, err := tiddl.GetLastNHistoryDDLJobs(s.GetCurrentMeta(), 1)
+	require.NoError(s.t, err)
+	require.Len(s.t, jobs, 1)
+	// Set State from Synced to Done.
+	// Because jobs are put to history queue after TiDB alter its state from
+	// Done to Synced.
+	jobs[0].State = timodel.JobStateDone
+	res := jobs[0]
+	if res.Type == timodel.ActionRenameTables {
+		// the RawArgs field in job fetched from tidb snapshot meta is incorrent,
+		// so we manually construct `job.RawArgs` to do the workaround.
+		// we assume the old schema name is same as the new schema name here.
+		// for example, "ALTER TABLE RENAME test.t1 TO test.t1, test.t2 to test.t22", schema name is "test"
+		schema := strings.Split(strings.Split(strings.Split(res.Query, ",")[1], " ")[1], ".")[0]
+		tableNum := len(res.BinlogInfo.MultipleTableInfos)
+		oldSchemaIDs := make([]int64, tableNum)
+		for i := 0; i < tableNum; i++ {
+			oldSchemaIDs[i] = res.SchemaID
+		}
+		oldTableIDs := make([]int64, tableNum)
+		for i := 0; i < tableNum; i++ {
+			oldTableIDs[i] = res.BinlogInfo.MultipleTableInfos[i].ID
+		}
+		newTableNames := make([]timodel.CIStr, tableNum)
+		for i := 0; i < tableNum; i++ {
+			newTableNames[i] = res.BinlogInfo.MultipleTableInfos[i].Name
+		}
+		oldSchemaNames := make([]timodel.CIStr, tableNum)
+		for i := 0; i < tableNum; i++ {
+			oldSchemaNames[i] = timodel.NewCIStr(schema)
+		}
+		newSchemaIDs := oldSchemaIDs
+
+		args := []interface{}{
+			oldSchemaIDs, newSchemaIDs,
+			newTableNames, oldTableIDs, oldSchemaNames,
+		}
+		rawArgs, err := json.Marshal(args)
+		require.NoError(s.t, err)
+		res.RawArgs = rawArgs
+	}
+
+	err = s.schemaStorage.HandleDDLJob(res)
+	require.NoError(s.t, err)
+
+	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(s.t, err)
+	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+	tableInfo, ok := s.schemaStorage.GetLastSnapshot().TableByName(res.SchemaName, res.TableName)
+	require.True(s.t, ok)
+
+	event := &model.DDLEvent{
+		StartTs:   res.StartTS,
+		CommitTs:  res.BinlogInfo.FinishedTS,
+		TableInfo: tableInfo,
+		Query:     res.Query,
+		Type:      res.Type,
+	}
+
+	return event
 }
 
 // Storage returns the tikv storage

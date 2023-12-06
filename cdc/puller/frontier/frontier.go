@@ -31,6 +31,7 @@ type Frontier interface {
 	Forward(regionID uint64, span tablepb.Span, ts uint64)
 	Frontier() uint64
 	String() string
+	Entries(fn func(key []byte, ts uint64))
 }
 
 // spanFrontier tracks the minimum timestamp of a set of spans.

@@ -239,7 +239,7 @@ func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) 
 	}
 
 	var err error
-	if isBinaryMySQLType(mysqlTypeStr) {
+	if utils.IsBinaryMySQLType(mysqlTypeStr) {
 		// when encoding the `JavaSQLTypeBLOB`, use `ISO8859_1` decoder, now reverse it back.
 		encoder := charmap.ISO8859_1.NewEncoder()
 		value, err = encoder.String(data)
@@ -250,10 +250,6 @@ func canalJSONFormatColumn(value interface{}, name string, mysqlTypeStr string) 
 
 	result.Value = value
 	return result
-}
-
-func isBinaryMySQLType(mysqlType string) bool {
-	return strings.Contains(mysqlType, "blob") || strings.Contains(mysqlType, "binary")
 }
 
 func canalJSONMessage2DDLEvent(msg canalJSONMessageInterface) *model.DDLEvent {

@@ -72,6 +72,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
@@ -171,6 +172,10 @@ const (
         "ssl-cert": "",
         "ssl-key": ""
       }
+    },
+    "puller": {
+      "enable-resolved-ts-stuck-detection": false,
+      "resolved-ts-stuck-interval": 300000000000
     }
   },
   "cluster-id": "default",
@@ -310,6 +315,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
@@ -462,6 +468,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
