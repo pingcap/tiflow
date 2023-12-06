@@ -25,9 +25,9 @@ import (
 )
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
-	insertEvent, _, _ := utils.newLargeEvent4Test(t)
+	insertEvent, _, _ := utils.NewLargeEvent4Test(t)
 	ctx := context.Background()
-	expectedDecodedValue := utils.collectExpectedDecodedValue(utils.testColumnsTable)
+	expectedDecodedValue := utils.CollectExpectedDecodedValue(utils.TestColumnsTable)
 	for _, encodeEnable := range []bool{false, true} {
 		codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 		codecConfig.EnableTiDBExtension = encodeEnable
@@ -101,7 +101,7 @@ func TestNewCanalJSONBatchDecoder4DDLMessage(t *testing.T) {
 		require.NoError(t, err)
 		encoder := builder.Build()
 
-		result, err := encoder.EncodeDDLEvent(utils.testCaseDDL)
+		result, err := encoder.EncodeDDLEvent(utils.TestCaseDDL)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 

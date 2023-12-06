@@ -16,7 +16,6 @@ package utils
 import (
 	"testing"
 
-	mm "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -352,17 +351,6 @@ var (
 			},
 			"{\"key1\": \"value1\"}", "{\"key1\": \"value1\"}",
 		},
-	}
-
-	TestCaseDDL = &model.DDLEvent{
-		CommitTs: 417318403368288260,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "cdc", Table: "person",
-			},
-		},
-		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
-		Type:  mm.ActionCreateTable,
 	}
 )
 
