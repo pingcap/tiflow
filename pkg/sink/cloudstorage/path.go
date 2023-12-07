@@ -192,27 +192,28 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	_, checksum := mustParseSchemaName(tblSchemaFile)
 	schemaFileCnt := 0
 	lastVersion := uint64(0)
-	prefix := fmt.Sprintf(tableSchemaPrefix+"schema_", def.Schema, def.Table)
+	subDir := fmt.Sprintf(tableSchemaPrefix, def.Schema, def.Table)
 	checksumSuffix := fmt.Sprintf("%010d.json", checksum)
-	err = f.storage.WalkDir(ctx, &storage.WalkOption{ObjPrefix: prefix},
-		func(path string, _ int64) error {
-			schemaFileCnt++
-			if !strings.HasSuffix(path, checksumSuffix) {
-				return nil
-			}
-			version, parsedChecksum := mustParseSchemaName(path)
-			if parsedChecksum != checksum {
-				// TODO: parsedChecksum should be ignored, remove this panic
-				// after the new path protocol is verified.
-				log.Panic("invalid schema file name",
-					zap.String("path", path), zap.Any("checksum", checksum))
-			}
-			if version > lastVersion {
-				lastVersion = version
-			}
+	err = f.storage.WalkDir(ctx, &storage.WalkOption{
+		SubDir:    subDir, /* use subDir to prevent walk the whole storage */
+		ObjPrefix: subDir + "schema_",
+	}, func(path string, _ int64) error {
+		schemaFileCnt++
+		if !strings.HasSuffix(path, checksumSuffix) {
 			return nil
-		},
-	)
+		}
+		version, parsedChecksum := mustParseSchemaName(path)
+		if parsedChecksum != checksum {
+			// TODO: parsedChecksum should be ignored, remove this panic
+			// after the new path protocol is verified.
+			log.Panic("invalid schema file name",
+				zap.String("path", path), zap.Any("checksum", checksum))
+		}
+		if version > lastVersion {
+			lastVersion = version
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -220,7 +221,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	// Case 2: the table meta path is not empty.
 	if schemaFileCnt != 0 {
 		if lastVersion == 0 {
-			log.Panic("no table schema file found in an non-empty meta path",
+			log.Warn("no table schema file found in an non-empty meta path",
 				zap.Any("versionedTableName", table),
 				zap.Uint32("checksum", checksum))
 		}
@@ -228,9 +229,9 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 		return nil
 	}
 
-	// Case 3: the table meta path is empty, which only happens when the table is
-	// existed before changefeed started. We need to write schema file to external
-	// storage.
+	// Case 3: the table meta path is empty, which happens when:
+	//  a. the table is existed before changefeed started. We need to write schema file to external storage.
+	//  b. the schema file is deleted by the consumer. We write schema file to external storage too.
 	encodedDetail, err := def.MarshalWithQuery()
 	if err != nil {
 		return err

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -47,6 +48,9 @@ type Config struct {
 	AvroSchemaRegistry             string
 	AvroDecimalHandlingMode        string
 	AvroBigintUnsignedHandlingMode string
+
+	// canal-json only
+	ContentCompatible bool
 
 	// for sinking to cloud storage
 	Delimiter            string
@@ -111,6 +115,7 @@ type urlConfig struct {
 
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
+	ContentCompatible        *bool  `form:"content-compatible"`
 }
 
 // Apply fill the Config
@@ -185,6 +190,12 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	c.DeleteOnlyHandleKeyColumns = !replicaConfig.EnableOldValue
+	if c.Protocol == config.ProtocolCanalJSON {
+		c.ContentCompatible = util.GetOrZero(urlParameter.ContentCompatible)
+		if c.ContentCompatible {
+			c.OnlyOutputUpdatedColumns = true
+		}
+	}
 
 	return nil
 }
@@ -197,6 +208,10 @@ func mergeConfig(
 	if replicaConfig.Sink != nil {
 		dest.AvroSchemaRegistry = replicaConfig.Sink.SchemaRegistry
 		dest.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
+		dest.ContentCompatible = replicaConfig.Sink.ContentCompatible
+		if util.GetOrZero(dest.ContentCompatible) {
+			dest.OnlyOutputUpdatedColumns = util.AddressOf(true)
+		}
 		if replicaConfig.Sink.KafkaConfig != nil {
 			dest.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
 			if replicaConfig.Sink.KafkaConfig.CodecConfig != nil {

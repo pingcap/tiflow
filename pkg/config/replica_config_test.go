@@ -64,6 +64,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Scheduler.WriteKeyThreshold = 100001
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
+	conf.Sink.ContentCompatible = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.AdvanceTimeoutInSec = util.AddressOf(uint(150))
 	conf.Sink.KafkaConfig = &KafkaConfig{
