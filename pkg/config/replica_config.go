@@ -87,6 +87,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
+		Compression:           "",
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
