@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 )
 
+// NewLargeEvent4Test creates large events for test
 func NewLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
