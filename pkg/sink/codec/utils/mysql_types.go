@@ -40,7 +40,7 @@ func WithZerofill4MySQLType(mysqlType string, zerofill bool) string {
 	return mysqlType
 }
 
-// GetMySQLType get the mysql type from Column info
+// GetMySQLType get the mysql type from column info
 func GetMySQLType(columnInfo *timodel.ColumnInfo, fullType bool) string {
 	if !fullType {
 		result := types.TypeToStr(columnInfo.GetType(), columnInfo.GetCharset())
