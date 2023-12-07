@@ -71,15 +71,12 @@ type pullerImpl struct {
 	changefeed model.ChangeFeedID
 	tableID    model.TableID
 	tableName  string
-<<<<<<< HEAD
-=======
 
 	cfg                   *config.ServerConfig
 	lastForwardTime       time.Time
 	lastForwardResolvedTs uint64
 	// startResolvedTs is the resolvedTs when puller is initialized
 	startResolvedTs uint64
->>>>>>> e16c52d843 (puller(ticdc):  fix stuck detect issue (#10258))
 }
 
 // New create a new Puller fetch event start from checkpointTs and put into buf.
@@ -119,12 +116,9 @@ func New(ctx context.Context,
 		changefeed:   changefeed,
 		tableID:      tableID,
 		tableName:    tableName,
-<<<<<<< HEAD
-=======
 		cfg:          cfg,
 
 		startResolvedTs: checkpointTs,
->>>>>>> e16c52d843 (puller(ticdc):  fix stuck detect issue (#10258))
 	}
 	return p
 }
@@ -153,8 +147,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 
 	lastResolvedTs := p.checkpointTs
 	g.Go(func() error {
-		metricsTicker := time.NewTicker(15 * time.Second)
-		defer metricsTicker.Stop()
+		stuckDetectorTicker := time.NewTicker(1 * time.Minute)
+		defer stuckDetectorTicker.Stop()
 		output := func(raw *model.RawKVEntry) error {
 			// even after https://github.com/pingcap/tiflow/pull/2038, kv client
 			// could still miss region change notification, which leads to resolved
@@ -191,14 +185,11 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
-<<<<<<< HEAD
-=======
 			case <-stuckDetectorTicker.C:
 				if err := p.detectResolvedTsStuck(); err != nil {
 					return errors.Trace(err)
 				}
 				continue
->>>>>>> e16c52d843 (puller(ticdc):  fix stuck detect issue (#10258))
 			case e = <-eventCh:
 			}
 
@@ -258,8 +249,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	return g.Wait()
 }
 
-<<<<<<< HEAD
-=======
 func (p *pullerImpl) detectResolvedTsStuck() error {
 	if p.cfg.Debug.Puller.EnableResolvedTsStuckDetection {
 		resolvedTs := p.tsTracker.Frontier()
@@ -289,7 +278,6 @@ func (p *pullerImpl) detectResolvedTsStuck() error {
 	return nil
 }
 
->>>>>>> e16c52d843 (puller(ticdc):  fix stuck detect issue (#10258))
 func (p *pullerImpl) Output() <-chan *model.RawKVEntry {
 	return p.outputCh
 }
