@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -37,6 +38,12 @@ const (
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
 	minSyncPointRetention           = time.Hour * 1
 	minChangeFeedErrorStuckDuration = time.Minute * 30
+	// The default SQL Mode of TiDB: "ONLY_FULL_GROUP_BY,
+	// STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,
+	// NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+	// Note: The SQL Mode of TiDB is not the same as ORACLE.
+	// If you want to use the same SQL Mode as ORACLE, you need to add "ORACLE" to the SQL Mode.
+	defaultSQLMode = mysql.DefaultSQLMode
 )
 
 var defaultReplicaConfig = &ReplicaConfig{
@@ -89,6 +96,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		CorruptionHandleLevel: integrity.CorruptionHandleLevelWarn,
 	},
 	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
+	SQLMode:                      defaultSQLMode,
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -132,6 +140,7 @@ type replicaConfig struct {
 	Scheduler                    *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
 	Integrity                    *integrity.Config          `toml:"integrity" json:"integrity"`
 	ChangefeedErrorStuckDuration *time.Duration             `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	SQLMode                      string                     `toml:"sql-mode" json:"sql-mode"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

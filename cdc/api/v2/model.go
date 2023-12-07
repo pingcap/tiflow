@@ -193,7 +193,8 @@ type ReplicaConfig struct {
 	Consistent                   *ConsistentConfig          `json:"consistent,omitempty"`
 	Scheduler                    *ChangefeedSchedulerConfig `json:"scheduler"`
 	Integrity                    *IntegrityConfig           `json:"integrity"`
-	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
+	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty"`
+	SQLMode                      string                     `json:"sql_mode,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -211,6 +212,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
+	res.SQLMode = c.SQLMode
 	if c.SyncPointInterval != nil {
 		res.SyncPointInterval = c.SyncPointInterval.duration
 	}
@@ -449,6 +451,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
 		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
+		SQLMode:               cloned.SQLMode,
 	}
 
 	if cloned.Filter != nil {
