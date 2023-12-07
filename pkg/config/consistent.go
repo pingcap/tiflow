@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -62,6 +63,11 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
 			fmt.Sprintf("The consistent.meta-flush-interval:%d must be equal or greater than %d",
 				c.MetaFlushIntervalInMs, redo.MinFlushIntervalInMs))
+	}
+	if len(c.Compression) > 0 &&
+		c.Compression != compression.None && c.Compression != compression.LZ4 {
+		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
+			fmt.Sprintf("The consistent.compression:%s must be 'none' or 'lz4'", c.Compression))
 	}
 
 	if c.EncodingWorkerNum == 0 {

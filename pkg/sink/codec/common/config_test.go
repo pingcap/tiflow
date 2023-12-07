@@ -286,6 +286,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, true, c.EnableTiDBExtension)
 	require.Equal(t, "abc", c.AvroSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -313,6 +314,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, true, c.EnableTiDBExtension)
 	require.Equal(t, "abc", c.AvroSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -344,6 +346,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, true, c.EnableTiDBExtension)
 	require.Equal(t, "abc", c.AvroSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
+	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
 	require.Equal(t, 123, c.MaxMessageBytes)
@@ -397,6 +400,8 @@ func TestCanalJSONHandleKeyOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, codecConfig.LargeMessageHandle.HandleKeyOnly())
+	require.False(t, codecConfig.ContentCompatible)
+	require.False(t, codecConfig.OnlyOutputUpdatedColumns)
 
 	// force-replicate is set to true, should return error
 	replicaConfig.ForceReplicate = true
@@ -450,4 +455,16 @@ func TestOpenProtocolHandleKeyOnly(t *testing.T) {
 	require.NoError(t, err)
 	err = codecConfig.Validate()
 	require.NoError(t, err)
+}
+
+func TestApplyConfig4CanalJSON(t *testing.T) {
+	uri := "kafka://127.0.0.1:9092/abc?protocol=canal-json&content-compatible=true"
+	sinkURI, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolCanalJSON)
+	err = codecConfig.Apply(sinkURI, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.True(t, codecConfig.ContentCompatible)
+	require.True(t, codecConfig.OnlyOutputUpdatedColumns)
 }

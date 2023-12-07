@@ -102,7 +102,6 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, err
 	}
 	b.msg = msg
-
 	return b.msg.messageType(), true, nil
 }
 
@@ -118,7 +117,7 @@ func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]inter
 
 		var value string
 		rawValue := holder.Values[i].([]uint8)
-		if isBinaryMySQLType(mysqlType) {
+		if common.IsBinaryMySQLType(mysqlType) {
 			rawValue, err := b.bytesDecoder.Bytes(rawValue)
 			if err != nil {
 				return nil, nil, errors.Trace(err)

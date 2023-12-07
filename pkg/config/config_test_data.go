@@ -61,6 +61,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
@@ -210,9 +211,9 @@ const (
     "terminator": "",
     "date-separator": "month",
     "enable-partition-separator": true,
-    "only-output-updated-columns": false,
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -281,6 +282,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
@@ -349,9 +351,9 @@ const (
         "large-message-handle-option": "handle-key-only"
       }
     },
-    "only-output-updated-columns": false,
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -417,6 +419,7 @@ const (
     "max-log-size": 64,
     "flush-interval": 2000,
     "meta-flush-interval": 200,
+    "compression": "",
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
