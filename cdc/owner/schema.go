@@ -46,13 +46,8 @@ func newSchemaWrap4Owner(
 	filter filter.Filter,
 ) (*schemaWrap4Owner, error) {
 	var meta *timeta.Meta
-
 	if kvStorage != nil {
-		var err error
-		meta, err = kv.GetSnapshotMeta(kvStorage, startTs)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		meta = kv.GetSnapshotMeta(kvStorage, startTs)
 	}
 
 	schemaStorage, err := entry.NewSchemaStorage(
