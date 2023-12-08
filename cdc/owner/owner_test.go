@@ -57,13 +57,12 @@ var _ gc.Manager = (*mockManager)(nil)
 // newOwner4Test creates a new Owner for test
 func newOwner4Test(
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
 		filter filter.Filter,
-	) (puller.DDLPuller, error),
+	) puller.DDLPuller,
 	newSink func(model.ChangeFeedID, *model.ChangeFeedInfo, func(error), func(error)) DDLSink,
 	newScheduler func(
 		ctx cdcContext.Context, up *upstream.Upstream, changefeedEpoch uint64,
@@ -102,14 +101,13 @@ func createOwner4Test(ctx cdcContext.Context, t *testing.T) (*ownerImpl, *orches
 	owner := newOwner4Test(
 		// new ddl puller
 		func(ctx context.Context,
-			replicaConfig *config.ReplicaConfig,
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,
 			schemaStorage entry.SchemaStorage,
 			filter filter.Filter,
-		) (puller.DDLPuller, error) {
-			return &mockDDLPuller{resolvedTs: startTs - 1}, nil
+		) puller.DDLPuller {
+			return &mockDDLPuller{resolvedTs: startTs - 1}
 		},
 		// new ddl sink
 		func(model.ChangeFeedID, *model.ChangeFeedInfo, func(error), func(error)) DDLSink {
