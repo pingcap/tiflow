@@ -424,8 +424,8 @@ func TestFrontierEntries(t *testing.T) {
 
 	getSlowestRange()
 	require.Equal(t, uint64(0), slowestTs)
-	require.Equal(t, []byte("a"), []byte(slowestRange.Start))
-	require.Equal(t, []byte("f"), []byte(slowestRange.End))
+	require.Equal(t, []byte("a"), slowestRange.Start)
+	require.Equal(t, []byte("f"), slowestRange.End)
 
 	f.Forward(1, ab, 100)
 	f.Forward(2, bc, 200)
@@ -434,6 +434,6 @@ func TestFrontierEntries(t *testing.T) {
 	f.Forward(5, ef, 500)
 	getSlowestRange()
 	require.Equal(t, uint64(100), slowestTs)
-	require.Equal(t, []byte("a"), []byte(slowestRange.Start))
-	require.Equal(t, []byte("b"), []byte(slowestRange.End))
+	require.Equal(t, []byte("a"), slowestRange.Start)
+	require.Equal(t, []byte("b"), slowestRange.End)
 }
