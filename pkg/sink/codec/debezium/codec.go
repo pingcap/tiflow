@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/goccy/go-json"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/sessionctx/stmtctx"
 	"github.com/pingcap/tidb/types"
@@ -33,13 +32,13 @@ import (
 	"github.com/tikv/pd/pkg/utils/tsoutil"
 )
 
-type Codec struct {
+type dbzCodec struct {
 	config    *common.Config
 	clusterID string
 	nowFunc   func() time.Time
 }
 
-func (c *Codec) writeColumnsAsField(writer *util.JSONWriter, fieldName string, cols []*model.Column, colInfos []rowcodec.ColInfo) error {
+func (c *dbzCodec) writeColumnsAsField(writer *util.JSONWriter, fieldName string, cols []*model.Column, colInfos []rowcodec.ColInfo) error {
 	var err error
 	writer.WriteObjectField(fieldName, func() {
 		for i, col := range cols {
@@ -53,7 +52,7 @@ func (c *Codec) writeColumnsAsField(writer *util.JSONWriter, fieldName string, c
 }
 
 // See https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-data-types
-func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, ft *types.FieldType) error {
+func (c *dbzCodec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, ft *types.FieldType) error {
 	if col.Value == nil {
 		writer.WriteNullField(col.Name)
 		return nil
@@ -69,16 +68,16 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 			if n == 1 {
 				writer.WriteBoolField(col.Name, v != 0)
 				return nil
-			} else {
-				var buf [8]byte
-				binary.LittleEndian.PutUint64(buf[:], v)
-				numBytes := n / 8
-				if n%8 != 0 {
-					numBytes += 1
-				}
-				c.writeBinaryField(writer, col.Name, buf[:numBytes])
-				return nil
 			}
+
+			var buf [8]byte
+			binary.LittleEndian.PutUint64(buf[:], v)
+			numBytes := n / 8
+			if n%8 != 0 {
+				numBytes += 1
+			}
+			c.writeBinaryField(writer, col.Name, buf[:numBytes])
+			return nil
 		}
 		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 			"unexpected column value type %T for bit column %s",
@@ -95,16 +94,15 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 				"unexpected column value type %T for binary string column %s",
 				col.Value,
 				col.Name)
-		} else {
-			if v, ok := col.Value.([]byte); ok {
-				writer.WriteStringField(col.Name, string(hack.String(v)))
-				return nil
-			}
-			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-				"unexpected column value type %T for non-binary string column %s",
-				col.Value,
-				col.Name)
 		}
+		if v, ok := col.Value.([]byte); ok {
+			writer.WriteStringField(col.Name, string(hack.String(v)))
+			return nil
+		}
+		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+			"unexpected column value type %T for non-binary string column %s",
+			col.Value,
+			col.Name)
 	case mysql.TypeEnum:
 		if v, ok := col.Value.(uint64); ok {
 			enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
@@ -159,10 +157,9 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 				if mysql.HasNotNullFlag(ft.GetFlag()) {
 					writer.WriteInt64Field(col.Name, 0)
 					return nil
-				} else {
-					writer.WriteNullField(col.Name)
-					return nil
 				}
+				writer.WriteNullField(col.Name)
+				return nil
 			}
 			writer.WriteInt64Field(col.Name, t.Unix()/60/60/24)
 			return nil
@@ -184,18 +181,16 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 				if mysql.HasNotNullFlag(ft.GetFlag()) {
 					writer.WriteInt64Field(col.Name, 0)
 					return nil
-				} else {
-					writer.WriteNullField(col.Name)
-					return nil
 				}
+				writer.WriteNullField(col.Name)
+				return nil
 			}
 			if ft.GetDecimal() <= 3 {
 				writer.WriteInt64Field(col.Name, t.UnixMilli())
 				return nil
-			} else {
-				writer.WriteInt64Field(col.Name, t.UnixMicro())
-				return nil
 			}
+			writer.WriteInt64Field(col.Name, t.UnixMicro())
+			return nil
 		}
 		return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 			"unexpected column value type %T for datetime column %s",
@@ -281,12 +276,12 @@ func (c *Codec) writeDebeziumField(writer *util.JSONWriter, col *model.Column, f
 	return nil
 }
 
-func (c *Codec) writeBinaryField(writer *util.JSONWriter, fieldName string, value []byte) {
+func (c *dbzCodec) writeBinaryField(writer *util.JSONWriter, fieldName string, value []byte) {
 	// TODO: Deal with different binary output later.
 	writer.WriteBase64StringField(fieldName, value)
 }
 
-func (c *Codec) EncodeRowChangedEvent(
+func (c *dbzCodec) EncodeRowChangedEvent(
 	e *model.RowChangedEvent,
 	dest io.Writer,
 ) error {

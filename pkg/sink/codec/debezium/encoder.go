@@ -25,11 +25,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
+// BatchEncoder encodes message into Debezium format.
 type BatchEncoder struct {
 	messages []*common.Message
 
 	config *common.Config
-	codec  *Codec
+	codec  *dbzCodec
 }
 
 // EncodeCheckpointEvent implements the RowEventEncoder interface
@@ -98,7 +99,7 @@ func newBatchEncoder(c *common.Config) codec.RowEventEncoder {
 	batch := &BatchEncoder{
 		messages: nil,
 		config:   c,
-		codec: &Codec{
+		codec: &dbzCodec{
 			config:    c,
 			clusterID: config.GetGlobalServerConfig().ClusterID,
 			nowFunc:   time.Now,

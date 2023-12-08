@@ -29,7 +29,7 @@ import (
 )
 
 func TestEncodeInsert(t *testing.T) {
-	codec := &Codec{
+	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
 		clusterID: "test-cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
@@ -81,11 +81,11 @@ func TestEncodeInsert(t *testing.T) {
 			"ts_ms": 1701326309000,
 			"transaction": null
 		}
-	}`, string(buf.Bytes()))
+	}`, buf.String())
 }
 
 func TestEncodeUpdate(t *testing.T) {
-	codec := &Codec{
+	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
 		clusterID: "test-cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
@@ -143,11 +143,11 @@ func TestEncodeUpdate(t *testing.T) {
 			"ts_ms": 1701326309000,
 			"transaction": null
 		}
-	}`, string(buf.Bytes()))
+	}`, buf.String())
 }
 
 func TestEncodeDelete(t *testing.T) {
-	codec := &Codec{
+	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
 		clusterID: "test-cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
@@ -199,11 +199,11 @@ func TestEncodeDelete(t *testing.T) {
 			"ts_ms": 1701326309000,
 			"transaction": null
 		}
-	}`, string(buf.Bytes()))
+	}`, buf.String())
 }
 
 func BenchmarkEncodeOneTinyColumn(b *testing.B) {
-	codec := &Codec{
+	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
 		clusterID: "test-cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
@@ -234,7 +234,7 @@ func BenchmarkEncodeOneTinyColumn(b *testing.B) {
 }
 
 func BenchmarkEncodeLargeText(b *testing.B) {
-	codec := &Codec{
+	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
 		clusterID: "test-cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
@@ -265,7 +265,7 @@ func BenchmarkEncodeLargeText(b *testing.B) {
 }
 
 func BenchmarkEncodeLargeBinary(b *testing.B) {
-	codec := &Codec{
+	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
 		clusterID: "test-cluster",
 		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
