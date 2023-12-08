@@ -398,34 +398,34 @@ func TestMinMaxWithRegionSplitMerge(t *testing.T) {
 func TestFrontierEntries(t *testing.T) {
 	t.Parallel()
 
-	ab := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}
-	bc := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}
-	cd := tablepb.Span{StartKey: []byte("c"), EndKey: []byte("d")}
-	de := tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}
-	ef := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
-	af := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("f")}
-	f := NewFrontier(0, af)
+	ab := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}
+	bc := regionspan.ComparableSpan{Start: []byte("b"), End: []byte("c")}
+	cd := regionspan.ComparableSpan{Start: []byte("c"), End: []byte("d")}
+	de := regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")}
+	ef := regionspan.ComparableSpan{Start: []byte("e"), End: []byte("f")}
+	af := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("f")}
+	f := NewFrontier(0, c, af)
 
 	var slowestTs uint64 = math.MaxUint64
-	var slowestRange tablepb.Span
+	var slowestRange regionspan.ComparableSpan
 	getSlowestRange := func() {
 		slowestTs = math.MaxUint64
-		slowestRange = tablepb.Span{}
+		slowestRange = regionspan.ComparableSpan{}
 		f.Entries(func(key []byte, ts uint64) {
 			if ts < slowestTs {
 				slowestTs = ts
-				slowestRange.StartKey = key
-				slowestRange.EndKey = nil
-			} else if slowestTs != math.MaxUint64 && len(slowestRange.EndKey) == 0 {
-				slowestRange.EndKey = key
+				slowestRange.Start = key
+				slowestRange.End = nil
+			} else if slowestTs != math.MaxUint64 && len(slowestRange.End) == 0 {
+				slowestRange.End = key
 			}
 		})
 	}
 
 	getSlowestRange()
 	require.Equal(t, uint64(0), slowestTs)
-	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
-	require.Equal(t, []byte("f"), []byte(slowestRange.EndKey))
+	require.Equal(t, []byte("a"), []byte(slowestRange.Start))
+	require.Equal(t, []byte("f"), []byte(slowestRange.End))
 
 	f.Forward(1, ab, 100)
 	f.Forward(2, bc, 200)
@@ -434,6 +434,6 @@ func TestFrontierEntries(t *testing.T) {
 	f.Forward(5, ef, 500)
 	getSlowestRange()
 	require.Equal(t, uint64(100), slowestTs)
-	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
-	require.Equal(t, []byte("b"), []byte(slowestRange.EndKey))
+	require.Equal(t, []byte("a"), []byte(slowestRange.Start))
+	require.Equal(t, []byte("b"), []byte(slowestRange.End))
 }

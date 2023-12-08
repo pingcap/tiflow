@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/pdutil"
@@ -275,15 +274,15 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 				if resolvedTs <= lastResolvedTs {
 					if time.Since(lastAdvancedTime) > 30*time.Second && time.Since(lastLogSlowRangeTime) > 30*time.Second {
 						var slowestTs uint64 = math.MaxUint64
-						slowestRange := tablepb.Span{}
+						slowestRange := regionspan.ComparableSpan{}
 						rangeFilled := true
 						p.tsTracker.Entries(func(key []byte, ts uint64) {
 							if ts < slowestTs {
 								slowestTs = ts
-								slowestRange.StartKey = key
+								slowestRange.Start = key
 								rangeFilled = false
 							} else if !rangeFilled {
-								slowestRange.EndKey = key
+								slowestRange.End = key
 								rangeFilled = true
 							}
 						})
