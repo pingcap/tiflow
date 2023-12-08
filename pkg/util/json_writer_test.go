@@ -26,20 +26,20 @@ type JSONWriterTestSuite struct {
 	useInternalBuffer bool
 }
 
-func (s *JSONWriterTestSuite) writeJSON(fn func(*JSONWriter)) string {
-	if s.useInternalBuffer {
+func (suite *JSONWriterTestSuite) writeJSON(fn func(*JSONWriter)) string {
+	if suite.useInternalBuffer {
 		w := BorrowJSONWriter(nil)
 		fn(w)
 		ret := string(w.Buffer())
 		ReturnJSONWriter(w)
 		return ret
-	} else {
-		out := &bytes.Buffer{}
-		w := BorrowJSONWriter(out)
-		fn(w)
-		ReturnJSONWriter(w)
-		return out.String()
 	}
+
+	out := &bytes.Buffer{}
+	w := BorrowJSONWriter(out)
+	fn(w)
+	ReturnJSONWriter(w)
+	return out.String()
 }
 
 func (suite *JSONWriterTestSuite) TestObject() {
