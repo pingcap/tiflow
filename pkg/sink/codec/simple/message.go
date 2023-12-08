@@ -324,6 +324,9 @@ type message struct {
 
 	// ClaimCheckLocation is only for the DML event.
 	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
+
+	// HandleKeyOnly is only for the DML event.
+	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
@@ -512,49 +515,55 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		return result, nil
 	}
 
+	var err error
 	switch fieldType.GetType() {
 	case mysql.TypeBit:
-		val, err := strconv.ParseUint(data, 10, 64)
+		value, err = strconv.ParseUint(data, 10, 64)
 		if err != nil {
 			log.Panic("invalid column value for bit or set",
 				zap.String("name", name), zap.Any("data", data),
 				zap.Any("type", fieldType.GetType()), zap.Error(err))
 		}
-		result.Value = val
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24:
-		val, err := strconv.ParseInt(data, 10, 64)
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
+		value, err = strconv.ParseInt(data, 10, 64)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = val
+	case mysql.TypeLonglong:
+		value, err = strconv.ParseInt(data, 10, 64)
+		if err != nil {
+			value, err = strconv.ParseUint(data, 10, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		}
 	case mysql.TypeFloat:
-		val, err := strconv.ParseFloat(data, 32)
+		value, err = strconv.ParseFloat(data, 32)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = val
 	case mysql.TypeDouble:
-		val, err := strconv.ParseFloat(data, 64)
+		value, err = strconv.ParseFloat(data, 64)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = val
 	case mysql.TypeEnum:
 		element := fieldType.GetElems()
 		enumVar, err := tiTypes.ParseEnumName(element, data, fieldType.GetCharset())
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = enumVar.Value
+		value = enumVar.Value
 	case mysql.TypeSet:
 		elements := fieldType.GetElems()
 		setVar, err := tiTypes.ParseSetName(elements, data, fieldType.GetCharset())
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = setVar.Value
+		value = setVar.Value
 	default:
 	}
 
+	result.Value = value
 	return result, nil
 }

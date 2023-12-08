@@ -125,8 +125,8 @@ func (e *encoder) Build() []*common.Message {
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	message := newResolvedMessage(ts)
-	value, err := json.Marshal(message)
+	m := newResolvedMessage(ts)
+	value, err := json.Marshal(m)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
