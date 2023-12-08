@@ -193,7 +193,8 @@ type ReplicaConfig struct {
 	Consistent                   *ConsistentConfig          `json:"consistent,omitempty"`
 	Scheduler                    *ChangefeedSchedulerConfig `json:"scheduler"`
 	Integrity                    *IntegrityConfig           `json:"integrity"`
-	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
+	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty"`
+	SQLMode                      string                     `json:"sql_mode,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -211,6 +212,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
+	res.SQLMode = c.SQLMode
 	if c.SyncPointInterval != nil {
 		res.SyncPointInterval = c.SyncPointInterval.duration
 	}
@@ -382,9 +384,13 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var cloudStorageConfig *config.CloudStorageConfig
 		if c.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:   c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval: c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:      c.Sink.CloudStorageConfig.FileSize,
+				WorkerCount:         c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            c.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
 
@@ -450,6 +456,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
 		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
 		BDRMode:               cloned.BDRMode,
+		SQLMode:               cloned.SQLMode,
 	}
 
 	if cloned.Filter != nil {
@@ -602,9 +609,13 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var cloudStorageConfig *CloudStorageConfig
 		if cloned.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:   cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval: cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:      cloned.Sink.CloudStorageConfig.FileSize,
+				WorkerCount:         cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            cloned.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
 
@@ -1041,9 +1052,13 @@ type MySQLConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount   *int    `json:"worker_count,omitempty"`
-	FlushInterval *string `json:"flush_interval,omitempty"`
-	FileSize      *int    `json:"file_size,omitempty"`
+	WorkerCount         *int    `json:"worker_count,omitempty"`
+	FlushInterval       *string `json:"flush_interval,omitempty"`
+	FileSize            *int    `json:"file_size,omitempty"`
+	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
+	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
+	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
+	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc

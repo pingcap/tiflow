@@ -336,6 +336,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.ChangefeedErrorStuckDuration == nil {
 		info.Config.ChangefeedErrorStuckDuration = defaultConfig.ChangefeedErrorStuckDuration
 	}
+	if info.Config.SQLMode == "" {
+		info.Config.SQLMode = defaultConfig.SQLMode
+	}
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.
