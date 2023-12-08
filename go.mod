@@ -87,6 +87,7 @@ require (
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.8.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
+	github.com/thanhpk/randstr v1.0.6
 	github.com/tikv/client-go/v2 v2.0.8-0.20230925032502-44b0cf7aba2b
 	github.com/tikv/pd v1.1.0-beta.0.20230203015356-248b3f0be132
 	github.com/tikv/pd/client v0.0.0-20230912103610-2f57a9f050eb
@@ -255,7 +256,7 @@ require (
 	github.com/joho/sqltocsv v0.0.0-20210428211105-a6d6801d59df // indirect
 	github.com/jonboulle/clockwork v0.3.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
-	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/json-iterator/go v1.1.12
 	github.com/klauspost/cpuid v1.3.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
