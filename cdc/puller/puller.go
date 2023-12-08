@@ -15,6 +15,7 @@ package puller
 
 import (
 	"context"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -146,6 +147,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		WithLabelValues(p.changefeed.Namespace, p.changefeed.ID, "resolved")
 
 	lastResolvedTs := p.checkpointTs
+	lastAdvancedTime := time.Now()
+	lastLogSlowRangeTime := time.Now()
 	g.Go(func() error {
 		stuckDetectorTicker := time.NewTicker(1 * time.Minute)
 		defer stuckDetectorTicker.Stop()
@@ -234,10 +237,38 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						zap.Duration("duration", time.Since(start)),
 						zap.Strings("spans", spans))
 				}
-				if !initialized || resolvedTs == lastResolvedTs {
+				if !initialized {
+					continue
+				}
+				if resolvedTs <= lastResolvedTs {
+					if time.Since(lastAdvancedTime) > 30*time.Second && time.Since(lastLogSlowRangeTime) > 30*time.Second {
+						var slowestTs uint64 = math.MaxUint64
+						slowestRange := tablepb.Span{}
+						rangeFilled := true
+						p.tsTracker.Entries(func(key []byte, ts uint64) {
+							if ts < slowestTs {
+								slowestTs = ts
+								slowestRange.StartKey = key
+								rangeFilled = false
+							} else if !rangeFilled {
+								slowestRange.EndKey = key
+								rangeFilled = true
+							}
+						})
+						log.Info("table puller has been stucked",
+							zap.String("namespace", p.changefeed.Namespace),
+							zap.String("changefeed", p.changefeed.ID),
+							zap.Int64("tableID", p.tableID),
+							zap.String("tableName", p.tableName),
+							zap.Uint64("resolvedTs", resolvedTs),
+							zap.Uint64("slowestRangeTs", slowestTs),
+							zap.Stringer("range", &slowestRange))
+						lastLogSlowRangeTime = time.Now()
+					}
 					continue
 				}
 				lastResolvedTs = resolvedTs
+				lastAdvancedTime = time.Now()
 				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
 				if err != nil {
 					return errors.Trace(err)
