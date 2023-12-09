@@ -122,7 +122,8 @@ const (
     "ca-path": "",
     "cert-path": "",
     "key-path": "",
-    "cert-allowed-cn": null
+    "cert-allowed-cn": null,
+    "mtls": flase
   },
   "per-table-memory-quota": 0,
   "kv-client": {
