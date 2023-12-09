@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -41,7 +41,7 @@ func getChangefeedInfo() *model.ChangeFeedInfo {
 // It is ok to use the same tableID in test.
 func addTableAndAddEventsToSortEngine(
 	t *testing.T,
-	engine engine.SortEngine,
+	engine sorter.SortEngine,
 	span tablepb.Span,
 ) {
 	engine.AddTable(span, 0)
@@ -396,8 +396,8 @@ func TestSinkManagerRestartTableSinks(t *testing.T) {
 	table.(*tableSinkWrapper).updateBarrierTs(4)
 	select {
 	case task := <-manager.sinkTaskChan:
-		require.Equal(t, engine.Position{StartTs: 0, CommitTs: 3}, task.lowerBound)
-		task.callback(engine.Position{StartTs: 3, CommitTs: 4})
+		require.Equal(t, sorter.Position{StartTs: 0, CommitTs: 3}, task.lowerBound)
+		task.callback(sorter.Position{StartTs: 3, CommitTs: 4})
 	case <-time.After(2 * time.Second):
 		panic("should always get a sink task")
 	}
@@ -408,8 +408,8 @@ func TestSinkManagerRestartTableSinks(t *testing.T) {
 	defer failpoint.Disable("github.com/pingcap/tiflow/cdc/sink/dmlsink/blackhole/WriteEventsFail")
 	select {
 	case task := <-manager.sinkTaskChan:
-		require.Equal(t, engine.Position{StartTs: 2, CommitTs: 2}, task.lowerBound)
-		task.callback(engine.Position{StartTs: 3, CommitTs: 4})
+		require.Equal(t, sorter.Position{StartTs: 2, CommitTs: 2}, task.lowerBound)
+		task.callback(sorter.Position{StartTs: 3, CommitTs: 4})
 	case <-time.After(2 * time.Second):
 		panic("should always get a sink task")
 	}

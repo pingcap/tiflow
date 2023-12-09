@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -33,7 +33,7 @@ type Wrapper interface {
 	Start(
 		ctx context.Context,
 		up *upstream.Upstream,
-		eventSortEngine engine.SortEngine,
+		eventSortEngine sorter.SortEngine,
 		errChan chan<- error,
 	)
 	GetStats() puller.Stats
@@ -77,7 +77,7 @@ func NewPullerWrapper(
 func (n *WrapperImpl) Start(
 	ctx context.Context,
 	up *upstream.Upstream,
-	eventSortEngine engine.SortEngine,
+	eventSortEngine sorter.SortEngine,
 	errChan chan<- error,
 ) {
 	ctx, n.cancel = context.WithCancel(ctx)

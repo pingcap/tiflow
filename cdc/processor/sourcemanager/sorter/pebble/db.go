@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/pebble/bloom"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
@@ -66,7 +66,7 @@ func (t *tableCRTsCollector) Name() string {
 func iterTable(
 	db *pebble.DB,
 	uniqueID uint32, tableID model.TableID,
-	lowerBound, upperBound engine.Position,
+	lowerBound, upperBound sorter.Position,
 ) *pebble.Iterator {
 	// Pebble's iterator range is left-included but right-excluded.
 	upperBoundNext := upperBound.Next()

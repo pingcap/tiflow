@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble/encoding"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -33,8 +33,8 @@ import (
 )
 
 var (
-	_ engine.SortEngine    = (*EventSorter)(nil)
-	_ engine.EventIterator = (*EventIter)(nil)
+	_ sorter.SortEngine    = (*EventSorter)(nil)
+	_ sorter.EventIterator = (*EventIter)(nil)
 )
 
 // EventSorter is an event sort engine.
@@ -104,12 +104,12 @@ func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	return eventSorter
 }
 
-// IsTableBased implements engine.SortEngine.
+// IsTableBased implements sorter.SortEngine.
 func (s *EventSorter) IsTableBased() bool {
 	return true
 }
 
-// AddTable implements engine.SortEngine.
+// AddTable implements sorter.SortEngine.
 func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 	s.mu.Lock()
 	if _, exists := s.tables.Get(span); exists {
@@ -129,7 +129,7 @@ func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 	s.mu.Unlock()
 }
 
-// RemoveTable implements engine.SortEngine.
+// RemoveTable implements sorter.SortEngine.
 func (s *EventSorter) RemoveTable(span tablepb.Span) {
 	s.mu.Lock()
 	if _, exists := s.tables.Get(span); !exists {
@@ -144,7 +144,7 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 	s.mu.Unlock()
 }
 
-// Add implements engine.SortEngine.
+// Add implements sorter.SortEngine.
 //
 // Panics if the table doesn't exist.
 func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
@@ -177,16 +177,16 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 	}
 }
 
-// OnResolve implements engine.SortEngine.
+// OnResolve implements sorter.SortEngine.
 func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
 }
 
-// FetchByTable implements engine.SortEngine.
-func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
-	iterReadDur := engine.SorterIterReadDuration()
+// FetchByTable implements sorter.SortEngine.
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) sorter.EventIterator {
+	iterReadDur := sorter.SorterIterReadDuration()
 	eventIter := &EventIter{
 		tableID:      span.TableID,
 		serde:        s.serde,
@@ -222,16 +222,16 @@ func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound eng
 	return eventIter
 }
 
-// FetchAllTables implements engine.SortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
+// FetchAllTables implements sorter.SortEngine.
+func (s *EventSorter) FetchAllTables(lowerBound sorter.Position) sorter.EventIterator {
 	log.Panic("FetchAllTables should never be called",
 		zap.String("namespace", s.changefeedID.Namespace),
 		zap.String("changefeed", s.changefeedID.ID))
 	return nil
 }
 
-// CleanByTable implements engine.SortEngine.
-func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound engine.Position) error {
+// CleanByTable implements sorter.SortEngine.
+func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound sorter.Position) error {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
 	s.mu.RUnlock()
@@ -243,18 +243,18 @@ func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound engine.Position
 	return s.cleanTable(state, span, upperBound)
 }
 
-// CleanAllTables implements engine.EventSortEngine.
-func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
+// CleanAllTables implements sorter.EventSortEngine.
+func (s *EventSorter) CleanAllTables(upperBound sorter.Position) error {
 	log.Panic("CleanAllTables should never be called",
 		zap.String("namespace", s.changefeedID.Namespace),
 		zap.String("changefeed", s.changefeedID.ID))
 	return nil
 }
 
-// GetStatsByTable implements engine.SortEngine.
+// GetStatsByTable implements sorter.SortEngine.
 //
 // Panics if the table doesn't exist.
-func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
+func (s *EventSorter) GetStatsByTable(span tablepb.Span) sorter.TableStats {
 	s.mu.RLock()
 	state, exists := s.tables.Get(span)
 	s.mu.RUnlock()
@@ -273,13 +273,13 @@ func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
 		// we use maxResolvedTs as maxCommitTs to make the stats meaningful.
 		maxCommitTs = maxResolvedTs
 	}
-	return engine.TableStats{
+	return sorter.TableStats{
 		ReceivedMaxCommitTs:   maxCommitTs,
 		ReceivedMaxResolvedTs: maxResolvedTs,
 	}
 }
 
-// Close implements engine.SortEngine.
+// Close implements sorter.SortEngine.
 func (s *EventSorter) Close() error {
 	s.mu.Lock()
 	if s.isClosed {
@@ -311,13 +311,13 @@ func (s *EventSorter) Close() error {
 	return err
 }
 
-// SlotsAndHasher implements engine.SortEngine.
+// SlotsAndHasher implements sorter.SortEngine.
 func (s *EventSorter) SlotsAndHasher() (slotCount int, hasher func(tablepb.Span, int) int) {
 	return len(s.dbs), spanz.HashTableSpan
 }
 
 // Next implements sorter.EventIterator.
-func (s *EventIter) Next() (event *model.PolymorphicEvent, pos engine.Position, err error) {
+func (s *EventIter) Next() (event *model.PolymorphicEvent, pos sorter.Position, err error) {
 	valid := s.iter != nil && s.iter.Valid()
 	var value []byte
 	for valid {
@@ -368,7 +368,7 @@ type tableState struct {
 
 	// Following fields are protected by mu.
 	mu      sync.RWMutex
-	cleaned engine.Position
+	cleaned sorter.Position
 }
 
 func (s *EventSorter) handleEvents(
@@ -376,8 +376,8 @@ func (s *EventSorter) handleEvents(
 	fetchTokens, ioTokens chan struct{},
 ) {
 	idstr := strconv.Itoa(id + 1)
-	writeDuration := engine.SorterWriteDuration().WithLabelValues(idstr)
-	writeBytes := engine.SorterWriteBytes().WithLabelValues(idstr)
+	writeDuration := sorter.SorterWriteDuration().WithLabelValues(idstr)
+	writeBytes := sorter.SorterWriteBytes().WithLabelValues(idstr)
 
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}
@@ -495,15 +495,15 @@ func (s *EventSorter) handleEvents(
 
 // cleanTable uses DeleteRange to clean data of the given table.
 func (s *EventSorter) cleanTable(
-	state *tableState, span tablepb.Span, upperBound ...engine.Position,
+	state *tableState, span tablepb.Span, upperBound ...sorter.Position,
 ) error {
-	var toClean engine.Position
+	var toClean sorter.Position
 	var start, end []byte
 
 	if len(upperBound) == 1 {
 		toClean = upperBound[0]
 	} else {
-		toClean = engine.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
+		toClean = sorter.Position{CommitTs: math.MaxUint64, StartTs: math.MaxUint64 - 1}
 	}
 
 	state.mu.RLock()
