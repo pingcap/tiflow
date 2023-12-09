@@ -140,6 +140,10 @@ func (m *mockDDLSink) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	m.mu.currentTables = tables
 }
 
+func (m *mockDDLSink) emitBootstrapEvent(ctx context.Context, ddl *model.DDLEvent) error {
+	return nil
+}
+
 func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -207,14 +211,13 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 		state.Info, state.Status, newFeedStateManager(up, state), up,
 		// new ddl puller
 		func(ctx context.Context,
-			replicaConfig *config.ReplicaConfig,
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,
 			schemaStorage entry.SchemaStorage,
 			filter filter.Filter,
-		) (puller.DDLPuller, error) {
-			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}, nil
+		) puller.DDLPuller {
+			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}
 		},
 		// new ddl ddlSink
 		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
@@ -637,7 +640,7 @@ func TestBarrierAdvance(t *testing.T) {
 		if i == 1 {
 			cf.ddlManager.ddlResolvedTs += 10
 		}
-		_, barrier, err := cf.ddlManager.tick(ctx, state.Status.CheckpointTs, nil)
+		_, barrier, err := cf.ddlManager.tick(ctx, state.Status.CheckpointTs)
 
 		require.Nil(t, err)
 
@@ -664,7 +667,7 @@ func TestBarrierAdvance(t *testing.T) {
 
 			// Then the last tick barrier must be advanced correctly.
 			cf.ddlManager.ddlResolvedTs += 1000000000000
-			_, barrier, err = cf.ddlManager.tick(ctx, state.Status.CheckpointTs+10, nil)
+			_, barrier, err = cf.ddlManager.tick(ctx, state.Status.CheckpointTs+10)
 			require.Nil(t, err)
 			err = cf.handleBarrier(ctx, state.Info, state.Status, barrier)
 

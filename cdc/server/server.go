@@ -25,7 +25,9 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/diagnosticspb"
 	"github.com/pingcap/log"
+	"github.com/pingcap/sysutil"
 	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
@@ -76,11 +78,12 @@ type Server interface {
 // TODO: we need to make server more unit testable and add more test cases.
 // Especially we need to decouple the HTTPServer out of server.
 type server struct {
-	capture      capture.Capture
-	tcpServer    tcpserver.TCPServer
-	grpcService  *p2p.ServerWrapper
-	statusServer *http.Server
-	etcdClient   etcd.CDCEtcdClient
+	capture            capture.Capture
+	tcpServer          tcpserver.TCPServer
+	grpcService        *p2p.ServerWrapper
+	diagnosticsService *sysutil.DiagnosticsServer
+	statusServer       *http.Server
+	etcdClient         etcd.CDCEtcdClient
 	// pdClient is the default upstream PD client.
 	// The PD acts as a metadata management service for TiCDC.
 	pdClient          pd.Client
@@ -113,9 +116,10 @@ func New(pdEndpoints []string) (*server, error) {
 
 	debugConfig := config.GetGlobalServerConfig().Debug
 	s := &server{
-		pdEndpoints: pdEndpoints,
-		grpcService: p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
-		tcpServer:   tcpServer,
+		pdEndpoints:        pdEndpoints,
+		grpcService:        p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
+		diagnosticsService: sysutil.NewDiagnosticsServer(conf.LogFile),
+		tcpServer:          tcpServer,
 	}
 
 	log.Info("CDC server created",
@@ -345,10 +349,6 @@ func (s *server) run(ctx context.Context) (err error) {
 	eg, egCtx := errgroup.WithContext(ctx)
 
 	eg.Go(func() error {
-		return s.capture.Run(egCtx)
-	})
-
-	eg.Go(func() error {
 		return s.upstreamPDHealthChecker(egCtx)
 	})
 
@@ -362,6 +362,7 @@ func (s *server) run(ctx context.Context) (err error) {
 
 	grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
 	p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
+	diagnosticspb.RegisterDiagnosticsServer(grpcServer, s.diagnosticsService)
 
 	eg.Go(func() error {
 		return grpcServer.Serve(s.tcpServer.GrpcListener())
@@ -370,6 +371,10 @@ func (s *server) run(ctx context.Context) (err error) {
 		<-egCtx.Done()
 		grpcServer.Stop()
 		return nil
+	})
+
+	eg.Go(func() error {
+		return s.capture.Run(egCtx)
 	})
 
 	return eg.Wait()
