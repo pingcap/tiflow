@@ -186,7 +186,7 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 
 // FetchByTable implements sorter.SortEngine.
 func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) sorter.EventIterator {
-	iterReadDur := sorter.SorterIterReadDuration()
+	iterReadDur := sorter.IterReadDuration()
 	eventIter := &EventIter{
 		tableID:      span.TableID,
 		serde:        s.serde,
@@ -376,8 +376,8 @@ func (s *EventSorter) handleEvents(
 	fetchTokens, ioTokens chan struct{},
 ) {
 	idstr := strconv.Itoa(id + 1)
-	writeDuration := sorter.SorterWriteDuration().WithLabelValues(idstr)
-	writeBytes := sorter.SorterWriteBytes().WithLabelValues(idstr)
+	writeDuration := sorter.WriteDuration().WithLabelValues(idstr)
+	writeBytes := sorter.WriteBytes().WithLabelValues(idstr)
 
 	batch := db.NewBatch()
 	writeOpts := &pebble.WriteOptions{Sync: false}

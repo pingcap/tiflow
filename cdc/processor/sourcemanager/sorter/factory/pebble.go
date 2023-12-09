@@ -54,7 +54,7 @@ func createPebbleDBs(
 			}
 			opts.EventListener.CompactionEnd = func(job pebble.CompactionInfo) {
 				idstr := strconv.Itoa(id + 1)
-				x := sorter.SorterCompactionDuration().WithLabelValues(idstr)
+				x := sorter.CompactionDuration().WithLabelValues(idstr)
 				x.Observe(job.TotalDuration.Seconds())
 			}
 		}
