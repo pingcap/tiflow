@@ -983,7 +983,8 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			NowTs:            transformerTime(physicalNow),
 			Info:             "Data syncing is finished",
 		})
-	} else if physicalNow-status.LastSyncedTs > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 { // lastSyncedTs 条件达到，checkpoint-ts 未达到
+	} else if physicalNow-status.LastSyncedTs > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
+		// lastSyncedTs 条件达到，checkpoint-ts 未达到
 		var message string
 		if (status.PullerResolvedTs - status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 { // 5s
 			message = fmt.Sprintf("Please check whether pd is health and tikv region is all available. " +
