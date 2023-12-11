@@ -271,6 +271,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			Storage:               c.Consistent.Storage,
 			UseFileBackend:        c.Consistent.UseFileBackend,
 			Compression:           c.Consistent.Compression,
+			FlushConcurrency:      c.Consistent.FlushConcurrency,
 		}
 	}
 	if c.Sink != nil {
@@ -757,6 +758,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Storage:               cloned.Consistent.Storage,
 			UseFileBackend:        cloned.Consistent.UseFileBackend,
 			Compression:           cloned.Consistent.Compression,
+			FlushConcurrency:      cloned.Consistent.FlushConcurrency,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -953,6 +955,7 @@ type ConsistentConfig struct {
 	Storage               string `json:"storage,omitempty"`
 	UseFileBackend        bool   `json:"use_file_backend"`
 	Compression           string `json:"compression,omitempty"`
+	FlushConcurrency      int    `json:"flush_concurrency,omitempty"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

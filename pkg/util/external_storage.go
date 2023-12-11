@@ -196,8 +196,12 @@ func (s *extStorageWithTimeout) WalkDir(
 func (s *extStorageWithTimeout) Create(
 	ctx context.Context, path string, option *storage.WriterOption,
 ) (storage.ExternalFileWriter, error) {
-	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
+	if option.Concurrency <= 1 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+	}
+	// multipart uploading spawns a background goroutine, can't set timeout
 	return s.ExternalStorage.Create(ctx, path, option)
 }
 
