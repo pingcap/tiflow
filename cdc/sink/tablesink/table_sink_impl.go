@@ -40,6 +40,7 @@ type LastSyncedTsRecord struct {
 	lastSyncedTs model.Ts
 }
 
+// getLastSyncedTs get value from LastSyncedTsRecord
 func (r *LastSyncedTsRecord) getLastSyncedTs() model.Ts {
 	r.Lock()
 	defer r.Unlock()
@@ -47,7 +48,6 @@ func (r *LastSyncedTsRecord) getLastSyncedTs() model.Ts {
 }
 
 // EventTableSink is a table sink that can write events.
-
 type EventTableSink[E dmlsink.TableEvent, P dmlsink.Appender[E]] struct {
 	changefeedID model.ChangeFeedID
 	span         tablepb.Span
