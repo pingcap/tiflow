@@ -236,9 +236,13 @@ func (o *Owner) Run(ctx cdcContext.Context) error {
 						ownerID:  self.ID,
 						captures: []*model.CaptureInfo{self},
 					})
-				feedstateManager := newFeedStateManager(cfID, up, o.captureObservation.OnOwnerLaunched(cf.ChangefeedUUID))
+				ownerDB := o.captureObservation.OnOwnerLaunched(cf.ChangefeedUUID)
+				feedstateManager := owner.NewFeedStateManager(up, NewDBChangefeedState(cf.ChangefeedUUID, cfID, cfInfo, mstatus,
+					ownerDB,
+					o.querier))
 				changefeed := owner.NewChangefeed(cfID, cfInfo, mstatus, feedstateManager, up, &cfg)
-				o.changefeedUUIDMap[cf.ChangefeedUUID] = newChangefeed(changefeed, cf.ChangefeedUUID, cfInfo, mstatus, p, feedstateManager, o.captureObservation, o.querier)
+				o.changefeedUUIDMap[cf.ChangefeedUUID] = newChangefeed(changefeed, cf.ChangefeedUUID, cfInfo, mstatus, p, feedstateManager,
+					o.captureObservation, ownerDB, o.querier)
 			}
 		}
 	}

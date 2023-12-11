@@ -192,7 +192,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 				up = o.upstreamManager.AddUpstream(upstreamInfo)
 			}
 			cfReactor = o.newChangefeed(changefeedID, changefeedState.Info, changefeedState.Status,
-				newFeedStateManager(up, changefeedState),
+				NewFeedStateManager(up, changefeedState),
 				up, o.cfg)
 			o.changefeeds[changefeedID] = cfReactor
 		}

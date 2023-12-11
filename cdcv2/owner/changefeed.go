@@ -37,8 +37,9 @@ type changefeedImpl struct {
 	Status           *model.ChangeFeedStatus
 	processor        processor.Processor
 	changefeed       owner.Changefeed
-	feedstateManager *feedStateManagerImpl
+	feedstateManager owner.FeedStateManager
 	captureOb        metadata.CaptureObservation
+	ownerDB          metadata.OwnerObservation
 	querier          metadata.Querier
 	processorClosed  atomic.Bool
 }
@@ -48,8 +49,9 @@ func newChangefeed(changefeed owner.Changefeed,
 	info *model.ChangeFeedInfo,
 	status *model.ChangeFeedStatus,
 	processor processor.Processor,
-	feedstateManager *feedStateManagerImpl,
+	feedstateManager owner.FeedStateManager,
 	captureDB metadata.CaptureObservation,
+	ownerDB metadata.OwnerObservation,
 	querier metadata.Querier) *changefeedImpl {
 	return &changefeedImpl{
 		uuid: uuid,
@@ -63,6 +65,7 @@ func newChangefeed(changefeed owner.Changefeed,
 		processor:        processor,
 		feedstateManager: feedstateManager,
 		captureOb:        captureDB,
+		ownerDB:          ownerDB,
 		querier:          querier,
 	}
 }
@@ -89,8 +92,6 @@ func (c *changefeedImpl) Tick(ctx cdcContext.Context,
 			zap.Error(err))
 		return 0, 0
 	}
-	c.feedstateManager.state = states[0]
-	c.feedstateManager.status = status
 	ts, ts2 := c.changefeed.Tick(ctx, info, status, captures)
 	if c.feedstateManager.ShouldRunning() {
 		err, warning := c.processor.Tick(ctx, info, status)
@@ -138,7 +139,7 @@ func (c *changefeedImpl) patchProcessorErr(captureInfo *model.CaptureInfo,
 	} else {
 		code = string(cerror.ErrProcessorUnknown.RFCCode())
 	}
-	_ = c.feedstateManager.ownerdb.SetChangefeedFailed(&model.RunningError{
+	_ = c.ownerDB.SetChangefeedFailed(&model.RunningError{
 		Time:    time.Now(),
 		Addr:    captureInfo.AdvertiseAddr,
 		Code:    code,
@@ -162,7 +163,7 @@ func (c *changefeedImpl) patchProcessorWarning(captureInfo *model.CaptureInfo, e
 	} else {
 		code = string(cerror.ErrProcessorUnknown.RFCCode())
 	}
-	_ = c.feedstateManager.ownerdb.SetChangefeedWarning(&model.RunningError{
+	_ = c.ownerDB.SetChangefeedWarning(&model.RunningError{
 		Time:    time.Now(),
 		Addr:    captureInfo.AdvertiseAddr,
 		Code:    code,
