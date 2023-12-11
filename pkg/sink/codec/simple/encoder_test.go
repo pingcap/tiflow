@@ -87,7 +87,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 			gender enum('male', 'female'),
 			email varchar(255) not null,
 			key idx_name_email(name, email))`
-
 		ddlEvent := helper.DDL2Event(sql)
 
 		m, err := enc.EncodeDDLEvent(ddlEvent)
