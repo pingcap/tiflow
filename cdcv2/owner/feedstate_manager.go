@@ -121,11 +121,6 @@ func (f *feedStateManagerImpl) Tick(resolvedTs model.Ts,
 
 	f.resolvedTs = resolvedTs
 	f.shouldBeRunning = true
-	//defer func() {
-	//	if !f.shouldBeRunning {
-	//		m.cleanUpTaskPositions()
-	//	}
-	//}()
 
 	if f.handleAdminJob() {
 		// `handleAdminJob` returns true means that some admin jobs are pending
@@ -211,26 +206,6 @@ func (f *feedStateManagerImpl) checkAndInitLastRetryCheckpointTs(status *model.C
 }
 
 func (f *feedStateManagerImpl) errorsReportedByProcessors() []*model.RunningError {
-	//for captureID, position := range m.state.TaskPositions {
-	//	if position.Error != nil {
-	//		if runningErrors == nil {
-	//			runningErrors = make(map[string]*model.RunningError)
-	//		}
-	//		runningErrors[position.Error.Code] = position.Error
-	//		log.Error("processor reports an error",
-	//			zap.String("namespace", m.state.ID.Namespace),
-	//			zap.String("changefeed", m.state.ID.ID),
-	//			zap.String("captureID", captureID),
-	//			zap.Any("error", position.Error))
-	//		m.state.PatchTaskPosition(captureID, func(position *model.TaskPosition) (*model.TaskPosition, bool, error) {
-	//			if position == nil {
-	//				return nil, false, nil
-	//			}
-	//			position.Error = nil
-	//			return position, true, nil
-	//		})
-	//	}
-	//}
 	if f.state == nil || f.state.Error == nil {
 		return nil
 	}
