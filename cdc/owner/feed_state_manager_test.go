@@ -416,11 +416,11 @@ func TestHandleErrorWhenChangefeedIsPaused(t *testing.T) {
 		Code:    "CDC:ErrReachMaxTry",
 		Message: "fake error for test",
 	}
-	manager.state.Info = &model.ChangeFeedInfo{
+	manager.state.(*orchestrator.ChangefeedReactorState).Info = &model.ChangeFeedInfo{
 		State: model.StateStopped,
 	}
 	manager.HandleError(err)
-	require.Equal(t, model.StateStopped, manager.state.Info.State)
+	require.Equal(t, model.StateStopped, manager.state.(*orchestrator.ChangefeedReactorState).Info.State)
 }
 
 func TestChangefeedStatusNotExist(t *testing.T) {

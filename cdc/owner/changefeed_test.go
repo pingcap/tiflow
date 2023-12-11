@@ -211,7 +211,7 @@ func createChangefeed4Test(ctx context.Context,
 	})
 	tester.MustApplyPatches()
 	cf := newChangefeed4Test(changefeedVars.ID,
-		state.Info, state.Status, newFeedStateManager(up, state), up,
+		state.Info, state.Status, NewFeedStateManager(up, state), up,
 		// new ddl puller
 		func(ctx context.Context,
 			up *upstream.Upstream,
