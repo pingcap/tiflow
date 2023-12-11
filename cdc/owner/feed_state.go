@@ -24,19 +24,19 @@ type ChangefeedState interface {
 	// GetChangefeedStatus returns the changefeed status.
 	GetChangefeedStatus() *model.ChangeFeedStatus
 	// RemoveChangefeed removes the changefeed and clean the information and status.
-	RemoveChangefeed() error
+	RemoveChangefeed()
 	// ResumeChnagefeed resumes the changefeed and set the checkpoint ts.
-	ResumeChnagefeed(uint64) error
+	ResumeChnagefeed(uint64)
 	// SetWarning sets the warning to changefeed
-	SetWarning(*model.RunningError) error
+	SetWarning(*model.RunningError)
 	// TakeProcessorWarnings reuturns the warning of the changefeed and clean the warning.
 	TakeProcessorWarnings() []*model.RunningError
 	// SetError sets the error to changefeed
-	SetError(*model.RunningError) error
+	SetError(*model.RunningError)
 	// TakeProcessorErrors reuturns the error of the changefeed and clean the error.
 	TakeProcessorErrors() []*model.RunningError
 	// CleanUpTaskPositions removes the task positions of the changefeed.
 	CleanUpTaskPositions()
 	// UpdateChangefeedState returns the task status of the changefeed.
-	UpdateChangefeedState(model.FeedState, model.AdminJobType, uint64) error
+	UpdateChangefeedState(model.FeedState, model.AdminJobType, uint64)
 }

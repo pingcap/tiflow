@@ -289,7 +289,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.shouldBeRunning = false
 		m.shouldBeRemoved = true
 		jobsPending = true
-		_ = m.state.RemoveChangefeed()
+		m.state.RemoveChangefeed()
 		checkpointTs := m.state.GetChangefeedInfo().GetCheckpointTs(m.state.GetChangefeedStatus())
 
 		log.Info("the changefeed is removed",
@@ -312,7 +312,7 @@ func (m *feedStateManager) handleAdminJob() (jobsPending bool) {
 		m.isRetrying = false
 		jobsPending = true
 		m.patchState(model.StateNormal)
-		_ = m.state.ResumeChnagefeed(job.OverwriteCheckpointTs)
+		m.state.ResumeChnagefeed(job.OverwriteCheckpointTs)
 
 	case model.AdminFinish:
 		switch m.state.GetChangefeedInfo().State {
@@ -377,7 +377,7 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 			epoch = GenerateChangefeedEpoch(ctx, m.upstream.PDClient)
 		}
 	}
-	_ = m.state.UpdateChangefeedState(feedState, adminJobType, epoch)
+	m.state.UpdateChangefeedState(feedState, adminJobType, epoch)
 }
 
 func (m *feedStateManager) cleanUp() {
@@ -396,7 +396,7 @@ func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 	for _, err := range errs {
 		if cerrors.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(err.Code)) ||
 			err.ShouldFailChangefeed() {
-			_ = m.state.SetError(err)
+			m.state.SetError(err)
 			m.shouldBeRunning = false
 			m.patchState(model.StateFailed)
 			return
@@ -431,7 +431,7 @@ func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 		m.patchState(model.StatePending)
 
 		// patch the last error to changefeed info
-		_ = m.state.SetError(lastError)
+		m.state.SetError(lastError)
 
 		// The errBackoff needs to be reset before the first retry.
 		if !m.isRetrying {
@@ -473,7 +473,7 @@ func (m *feedStateManager) HandleWarning(errs ...*model.RunningError) {
 	}
 
 	m.patchState(model.StateWarning)
-	_ = m.state.SetWarning(lastError)
+	m.state.SetWarning(lastError)
 }
 
 // GenerateChangefeedEpoch generates a unique changefeed epoch.

@@ -219,7 +219,7 @@ func (s *ChangefeedReactorState) GetChangefeedStatus() *model.ChangeFeedStatus {
 }
 
 // SetWarning sets the warning to changefeed
-func (s *ChangefeedReactorState) SetWarning(lastError *model.RunningError) error {
+func (s *ChangefeedReactorState) SetWarning(lastError *model.RunningError) {
 	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		if info == nil {
 			return nil, false, nil
@@ -227,11 +227,10 @@ func (s *ChangefeedReactorState) SetWarning(lastError *model.RunningError) error
 		info.Warning = lastError
 		return info, true, nil
 	})
-	return nil
 }
 
 // SetError sets the error to changefeed
-func (s *ChangefeedReactorState) SetError(lastError *model.RunningError) error {
+func (s *ChangefeedReactorState) SetError(lastError *model.RunningError) {
 	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		if info == nil {
 			return nil, false, nil
@@ -239,11 +238,10 @@ func (s *ChangefeedReactorState) SetError(lastError *model.RunningError) error {
 		info.Error = lastError
 		return info, true, nil
 	})
-	return nil
 }
 
 // RemoveChangefeed removes the changefeed and clean the information and status.
-func (s *ChangefeedReactorState) RemoveChangefeed() error {
+func (s *ChangefeedReactorState) RemoveChangefeed() {
 	// remove info
 	s.PatchInfo(func(info *model.ChangeFeedInfo) (
 		*model.ChangeFeedInfo, bool, error,
@@ -257,11 +255,10 @@ func (s *ChangefeedReactorState) RemoveChangefeed() error {
 		) {
 			return nil, true, nil
 		})
-	return nil
 }
 
 // ResumeChnagefeed resumes the changefeed and set the checkpoint ts.
-func (s *ChangefeedReactorState) ResumeChnagefeed(overwriteCheckpointTs uint64) error {
+func (s *ChangefeedReactorState) ResumeChnagefeed(overwriteCheckpointTs uint64) {
 	s.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		changed := false
 		if info == nil {
@@ -298,7 +295,6 @@ func (s *ChangefeedReactorState) ResumeChnagefeed(overwriteCheckpointTs uint64) 
 		}
 		return status, false, nil
 	})
-	return nil
 }
 
 // TakeProcessorErrors reuturns the error of the changefeed and clean the error.
@@ -381,7 +377,7 @@ func (s *ChangefeedReactorState) CleanUpTaskPositions() {
 func (s *ChangefeedReactorState) UpdateChangefeedState(feedState model.FeedState,
 	adminJobType model.AdminJobType,
 	epoch uint64,
-) error {
+) {
 	s.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		if status == nil {
 			return status, false, nil
@@ -417,7 +413,6 @@ func (s *ChangefeedReactorState) UpdateChangefeedState(feedState model.FeedState
 		}
 		return info, changed, nil
 	})
-	return nil
 }
 
 // UpdatePendingChange implements the ReactorState interface
