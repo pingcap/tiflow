@@ -172,7 +172,7 @@ func TestDataTypes(t *testing.T) {
 	helper := NewSQLTestHelper(t, "foo", string(dataDDL))
 
 	helper.MustExec(`SET sql_mode='';`)
-	helper.MustExec(`SET time_zone='utc';`)
+	helper.MustExec(`SET time_zone='UTC';`)
 	helper.MustExec(string(dataDML))
 
 	rows := helper.ScanTable()
