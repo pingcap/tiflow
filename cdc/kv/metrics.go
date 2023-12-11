@@ -145,6 +145,11 @@ var (
 		[]string{"namespace", "changefeed"})
 )
 
+// GetGlobalGrpcMetrics gets the global grpc metrics.
+func GetGlobalGrpcMetrics() *grpc_prometheus.ClientMetrics {
+	return grpcMetrics
+}
+
 // InitMetrics registers all metrics in the kv package
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(eventFeedErrorCounter)
