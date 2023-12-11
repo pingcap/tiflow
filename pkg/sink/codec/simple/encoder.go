@@ -63,54 +63,62 @@ func (e *encoder) AppendRowChangedEvent(
 		Protocol: config.ProtocolSimple,
 		Callback: callback,
 	}
+
+	log.Info("simple encode DML message", zap.Int("length", result.Length()))
+
 	result.IncRowsCount()
-	if result.Length() > e.config.MaxMessageBytes {
-		if e.config.LargeMessageHandle.Disabled() {
-			log.Error("Single message is too large for simple",
-				zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
-				zap.Int("length", result.Length()),
-				zap.Any("table", event.Table))
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
-		}
+	if result.Length() <= e.config.MaxMessageBytes {
+		e.messages = append(e.messages, result)
+		return nil
+	}
 
-		m, err = newDMLMessage(event, true)
-		if err != nil {
-			return err
-		}
+	if e.config.LargeMessageHandle.Disabled() {
+		log.Error("Single message is too large for simple",
+			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
+			zap.Int("length", result.Length()),
+			zap.Any("table", event.Table))
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+	}
 
-		if e.config.LargeMessageHandle.EnableClaimCheck() {
-			fileName := claimcheck.NewFileName()
-			if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
-				return errors.Trace(err)
-			}
-			m.ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
+	m, err = newDMLMessage(event, true)
+	if err != nil {
+		return err
+	}
+
+	if e.config.LargeMessageHandle.EnableClaimCheck() {
+		fileName := claimcheck.NewFileName()
+		m.ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
+		if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
+			return errors.Trace(err)
 		}
-		value, err = json.Marshal(m)
-		if err != nil {
-			return cerror.WrapError(cerror.ErrEncodeFailed, err)
-		}
-		value, err = common.Compress(e.config.ChangefeedID,
-			e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-		if err != nil {
-			return err
-		}
-		result.Value = value
-		if result.Length() > e.config.MaxMessageBytes {
-			log.Error("Single message is still too large for simple",
-				zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
-				zap.Int("length", result.Length()),
-				zap.Any("table", event.Table))
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
-		}
-		log.Warn("Single message is too large for simple",
+	}
+
+	value, err = json.Marshal(m)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrEncodeFailed, err)
+	}
+	value, err = common.Compress(e.config.ChangefeedID,
+		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return err
+	}
+	result.Value = value
+
+	if result.Length() <= e.config.MaxMessageBytes {
+		log.Warn("Single message is too large for simple, only encode handle key columns",
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 			zap.Int("originLength", result.Length()),
 			zap.Int("length", result.Length()),
 			zap.Any("table", event.Table))
+		e.messages = append(e.messages, result)
+		return nil
 	}
 
-	e.messages = append(e.messages, result)
-	return nil
+	log.Error("Single message is still too large for simple after only encode handle key columns",
+		zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
+		zap.Int("length", result.Length()),
+		zap.Any("table", event.Table))
+	return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 }
 
 // Build implement the RowEventEncoder interface
@@ -151,16 +159,15 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 	if err != nil {
 		return nil, err
 	}
-
 	result := common.NewDDLMsg(config.ProtocolSimple, nil, value, event)
+
+	log.Info("simple encode DDL message", zap.Int("length", result.Length()))
 	if result.Length() > e.config.MaxMessageBytes {
-		if !e.config.LargeMessageHandle.EnableClaimCheck() {
-			log.Error("DDL message is too large for simple",
-				zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
-				zap.Int("length", result.Length()),
-				zap.Any("table", event.TableInfo.TableName))
-			return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
-		}
+		log.Error("DDL message is too large for simple",
+			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
+			zap.Int("length", result.Length()),
+			zap.Any("table", event.TableInfo.TableName))
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 	return result, nil
 }

@@ -382,6 +382,7 @@ func newDMLMessage(
 		CommitTs:      event.CommitTs,
 		BuildTs:       time.Now().UnixMilli(),
 		SchemaVersion: event.TableInfo.UpdateTS,
+		HandleKeyOnly: onlyHandleKey,
 	}
 	var err error
 	if event.IsInsert() {

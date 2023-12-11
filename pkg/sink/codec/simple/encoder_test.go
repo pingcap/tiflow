@@ -87,6 +87,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 			gender enum('male', 'female'),
 			email varchar(255) not null,
 			key idx_name_email(name, email))`
+
 		ddlEvent := helper.DDL2Event(sql)
 
 		m, err := enc.EncodeDDLEvent(ddlEvent)
@@ -390,26 +391,24 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 	ddlEvent, _, updateEvent, _ := utils.NewLargeEvent4Test(t)
 
 	ctx := context.Background()
-	codecConfig := common.NewConfig(config.ProtocolSimple)
-	codecConfig.MaxMessageBytes = 500
-	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
-	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/simple-claim-check"
-
 	for _, compressionType := range []string{
 		compression.None,
 		compression.Snappy,
 		compression.LZ4,
 	} {
+		codecConfig := common.NewConfig(config.ProtocolSimple)
+		codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
+		codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/simple-claim-check"
 		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
 		builder, err := NewBuilder(ctx, codecConfig)
 		require.NoError(t, err)
 		enc := builder.Build()
 
-		dec, err := NewDecoder(ctx, codecConfig, nil)
+		m, err := enc.EncodeDDLEvent(ddlEvent)
 		require.NoError(t, err)
 
-		m, err := enc.EncodeDDLEvent(ddlEvent)
+		dec, err := NewDecoder(ctx, codecConfig, nil)
 		require.NoError(t, err)
 
 		err = dec.AddKeyValue(m.Key, m.Value)
@@ -423,11 +422,13 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 		_, err = dec.NextDDLEvent()
 		require.NoError(t, err)
 
+		enc.(*encoder).config.MaxMessageBytes = 500
 		err = enc.AppendRowChangedEvent(ctx, "", updateEvent, func() {})
 		require.NoError(t, err)
 
 		claimCheckLocationM := enc.Build()[0]
 
+		dec.config.MaxMessageBytes = 500
 		err = dec.AddKeyValue(claimCheckLocationM.Key, claimCheckLocationM.Value)
 		require.NoError(t, err)
 
@@ -435,6 +436,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, hasNext)
 		require.Equal(t, model.MessageTypeRow, messageType)
+		require.NotEqual(t, "", dec.msg.ClaimCheckLocation)
 
 		decodedRow, err := dec.NextRowChangedEvent()
 		require.NoError(t, err)
@@ -504,6 +506,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, hasNext)
 		require.Equal(t, model.MessageTypeRow, messageType)
+		require.True(t, dec.msg.HandleKeyOnly)
 
 		for _, col := range updateEvent.Columns {
 			if col.Flag.IsHandleKey() {
