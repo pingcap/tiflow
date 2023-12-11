@@ -2435,6 +2435,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				case *replication.XIDEvent:
 					eventType = "XID"
 					needContinue, err2 = funcCommit()
+				case *replication.TableMapEvent:
+				case *replication.FormatDescriptionEvent:
 				default:
 					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
 				}
@@ -2442,6 +2444,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if needContinue {
 				continue
 			}
+		case *replication.TableMapEvent:
+		case *replication.FormatDescriptionEvent:
 		default:
 			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
 		}
@@ -3044,7 +3048,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				zap.String("db", db),
 				zap.String("path", s.cfg.LoaderConfig.Dir),
 				zap.String("file", file),
-				zap.Error(err))
+				zap.Error(err2))
 			setFirstErr(err2)
 			continue
 		}

@@ -144,13 +144,12 @@ type changefeed struct {
 	observerLastTick   *atomic.Time
 
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
 		filter filter.Filter,
-	) (puller.DDLPuller, error)
+	) puller.DDLPuller
 
 	newSink func(
 		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
@@ -215,13 +214,12 @@ func newChangefeed4Test(
 	cfStatus *model.ChangeFeedStatus,
 	cfstateManager FeedStateManager, up *upstream.Upstream,
 	newDDLPuller func(ctx context.Context,
-		replicaConfig *config.ReplicaConfig,
 		up *upstream.Upstream,
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
 		filter filter.Filter,
-	) (puller.DDLPuller, error),
+	) puller.DDLPuller,
 	newSink func(
 		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
 		reportError func(err error), reportWarning func(err error),
@@ -337,11 +335,10 @@ func (c *changefeed) handleWarning(err error) {
 	})
 }
 
-func (c *changefeed) checkStaleCheckpointTs(ctx cdcContext.Context,
-	cfInfo *model.ChangeFeedInfo,
-	checkpointTs uint64,
+func (c *changefeed) checkStaleCheckpointTs(
+	ctx cdcContext.Context, checkpointTs uint64,
 ) error {
-	if cfInfo.NeedBlockGC() {
+	if c.latestInfo.NeedBlockGC() {
 		failpoint.Inject("InjectChangefeedFastFailError", func() error {
 			return cerror.ErrStartTsBeforeGC.FastGen("InjectChangefeedFastFailError")
 		})
@@ -361,7 +358,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	preCheckpointTs := c.latestInfo.GetCheckpointTs(c.latestStatus)
 	// checkStaleCheckpointTs must be called before `feedStateManager.ShouldRunning()`
 	// to ensure all changefeeds, no matter whether they are running or not, will be checked.
-	if err := c.checkStaleCheckpointTs(ctx, c.latestInfo, preCheckpointTs); err != nil {
+	if err := c.checkStaleCheckpointTs(ctx, preCheckpointTs); err != nil {
 		return 0, 0, errors.Trace(err)
 	}
 
@@ -391,8 +388,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 		}
 	}
 
-	// TODO: pass table checkpointTs when we support concurrent process ddl
-	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs, nil)
+	allPhysicalTables, barrier, err := c.ddlManager.tick(ctx, preCheckpointTs)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
 	}
@@ -604,7 +600,7 @@ LOOP2:
 	}
 	c.barriers.Update(finishBarrier, c.latestInfo.GetTargetTs())
 
-	filter, err := filter.NewFilter(c.latestInfo.Config, "")
+	f, err := filter.NewFilter(c.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -613,7 +609,7 @@ LOOP2:
 		ddlStartTs,
 		c.latestInfo.Config,
 		c.id,
-		filter)
+		f)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -640,16 +636,7 @@ LOOP2:
 	})
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller, err = c.newDDLPuller(cancelCtx,
-		c.latestInfo.Config,
-		c.upstream, ddlStartTs,
-		c.id,
-		c.schema,
-		filter)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
+	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, f)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()

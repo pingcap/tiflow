@@ -232,7 +232,7 @@ Finished dump at: 2020-09-30 12:16:49
 	for _, tc := range testCases {
 		err2 := os.WriteFile(f.Name(), []byte(tc.source), 0o644)
 		require.NoError(t, err2)
-		loc, loc2, err2 := ParseMetaData(ctx, fdir, fname, "mysql", nil)
+		loc, loc2, err2 := ParseMetaData(ctx, fdir, fname, nil)
 		require.NoError(t, err2)
 		require.Equal(t, tc.pos, loc.Position)
 		gs, _ := gtid.ParserGTID("mysql", tc.gsetStr)
@@ -251,7 +251,7 @@ Finished dump at: 2020-12-02 17:13:56
 `
 	err = os.WriteFile(f.Name(), []byte(noBinlogLoc), 0o644)
 	require.NoError(t, err)
-	_, _, err = ParseMetaData(ctx, fdir, fname, "mysql", nil)
+	_, _, err = ParseMetaData(ctx, fdir, fname, nil)
 	require.True(t, terror.ErrMetadataNoBinlogLoc.Equal(err))
 }
 
