@@ -67,7 +67,7 @@ func TestParseGTIDNoFlavor(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestIsNilGTIDSet(t *testing.T) {
+func TestIsNilMySQLGTIDSet(t *testing.T) {
 	t.Parallel()
 
 	require.False(t, IsZeroMySQLGTIDSet(""))
@@ -77,6 +77,17 @@ func TestIsNilGTIDSet(t *testing.T) {
 	require.False(t, IsZeroMySQLGTIDSet("xxxxx:0-0"))
 	require.True(t, IsZeroMySQLGTIDSet("xxxxx:0"))
 	require.True(t, IsZeroMySQLGTIDSet(" xxxxx:0 "))
+}
+
+func TestIsNilMariaDBGTIDSet(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, IsZeroMariaDBGTIDSet(""))
+	require.False(t, IsZeroMariaDBGTIDSet("xxxxx"))
+	require.False(t, IsZeroMariaDBGTIDSet("a-b-0,c-d:0"))
+	require.False(t, IsZeroMariaDBGTIDSet("xxxxx:1"))
+	require.True(t, IsZeroMariaDBGTIDSet("x-y-0"))
+	require.True(t, IsZeroMariaDBGTIDSet(" x-y-0 "))
 }
 
 func TestParseZeroAsEmptyGTIDSet(t *testing.T) {
@@ -93,4 +104,51 @@ func TestParseZeroAsEmptyGTIDSet(t *testing.T) {
 	gset, err = ParserGTID(mysql.MySQLFlavor, "3ccc475b-2343-11e7-be21-6c0b84d59f30:0")
 	require.NoError(t, err)
 	require.Equal(t, "", gset.String())
+}
+
+func TestIsZeroGTIDSet(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		gsetStr string
+		isZero  bool
+		flavor  string
+	}{
+		{
+			"",
+			true,
+			mysql.MySQLFlavor,
+		},
+		{
+			"",
+			true,
+			mysql.MariaDBFlavor,
+		},
+		{
+			"3ccc475b-2343-11e7-be21-6c0b84d59f30:0",
+			true,
+			mysql.MySQLFlavor,
+		},
+		{
+			"0-0-0",
+			true,
+			mysql.MariaDBFlavor,
+		},
+		{
+			"3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14",
+			false,
+			mysql.MySQLFlavor,
+		},
+		{
+			"1-2-3",
+			false,
+			mysql.MariaDBFlavor,
+		},
+	}
+	for i, testCase := range testCases {
+		t.Logf("test case %d", i)
+		gset, err := ParserGTID(testCase.flavor, testCase.gsetStr)
+		require.NoError(t, err)
+		require.Equal(t, testCase.isZero, IsZeroGTIDSet(gset))
+	}
 }
