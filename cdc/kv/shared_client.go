@@ -244,7 +244,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 		s.workers = append(s.workers, worker)
 	}
 
-	g.Go(func() error { return s.handleRequestRanges(ctx, g) })
+	g.Go(func() error { return s.handleRequestRanges(ctx) })
 	g.Go(func() error { return s.dispatchRequest(ctx) })
 	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
@@ -410,7 +410,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 
 func (s *SharedClient) appendRequest(r *requestedStore, sri singleRegionInfo) {
 	offset := r.nextStream.Add(1) % uint32(len(r.streams))
-	log.Debug("event feed will request a region",
+	log.Info("event feed will request a region",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("streamID", r.streams[offset].streamID),
@@ -427,7 +427,9 @@ func (s *SharedClient) broadcastRequest(r *requestedStore, sri singleRegionInfo)
 	}
 }
 
-func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Group) error {
+func (s *SharedClient) handleRequestRanges(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(scanRegionsConcurrency)
 	for {
 		select {
 		case <-ctx.Done():
@@ -576,7 +578,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 	switch eerr := err.(type) {
 	case *eventError:
 		innerErr := eerr.err
-		log.Debug("cdc error",
+		log.Info("cdc region error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),
@@ -694,7 +696,7 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 }
 
 func (s *SharedClient) logSlowRegions(ctx context.Context) error {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
@@ -702,15 +704,18 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
+		log.Info("event feed starts to check locked regions",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID))
 
 		currTime := s.pdClock.CurrentTime()
 		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
 			if attr.SlowestRegion.Initialized {
-				ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
-					log.Info("event feed finds a slow region",
+					log.Info("event feed finds a initialized slow region",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Any("subscriptionID", subscriptionID),
@@ -718,6 +723,12 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 				}
 			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
 				log.Info("event feed initializes a region too slow",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Any("subscriptionID", subscriptionID),
+					zap.Any("slowRegion", attr.SlowestRegion))
+			} else if currTime.Sub(ckptTime) > 10*time.Minute {
+				log.Info("event feed finds a uninitialized slow region",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
@@ -744,7 +755,7 @@ func (s *SharedClient) newRequestedTable(
 	eventCh chan<- MultiplexingEvent,
 ) *requestedTable {
 	cfName := s.changefeed.String()
-	rangeLock := regionlock.NewRegionRangeLock(span.StartKey, span.EndKey, startTs, cfName)
+	rangeLock := regionlock.NewRegionRangeLock(uint64(subID), span.StartKey, span.EndKey, startTs, cfName)
 
 	rt := &requestedTable{
 		subscriptionID: subID,

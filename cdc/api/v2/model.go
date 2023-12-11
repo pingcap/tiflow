@@ -270,11 +270,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               c.Consistent.Storage,
 			UseFileBackend:        c.Consistent.UseFileBackend,
-<<<<<<< HEAD
-=======
 			Compression:           c.Consistent.Compression,
 			FlushConcurrency:      c.Consistent.FlushConcurrency,
->>>>>>> 89e57d7a6e (redo(ticdc): use multi part s3 uploader in  redo (#10227))
 		}
 	}
 	if c.Sink != nil {
@@ -760,11 +757,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               cloned.Consistent.Storage,
 			UseFileBackend:        cloned.Consistent.UseFileBackend,
-<<<<<<< HEAD
-=======
 			Compression:           cloned.Consistent.Compression,
 			FlushConcurrency:      cloned.Consistent.FlushConcurrency,
->>>>>>> 89e57d7a6e (redo(ticdc): use multi part s3 uploader in  redo (#10227))
 		}
 	}
 	if cloned.Mounter != nil {
@@ -960,11 +954,8 @@ type ConsistentConfig struct {
 	FlushWorkerNum        int    `json:"flush_worker_num"`
 	Storage               string `json:"storage,omitempty"`
 	UseFileBackend        bool   `json:"use_file_backend"`
-<<<<<<< HEAD
-=======
 	Compression           string `json:"compression,omitempty"`
 	FlushConcurrency      int    `json:"flush_concurrency,omitempty"`
->>>>>>> 89e57d7a6e (redo(ticdc): use multi part s3 uploader in  redo (#10227))
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
