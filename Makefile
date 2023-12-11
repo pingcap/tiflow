@@ -40,7 +40,16 @@ ifeq (${CDC_ENABLE_VENDOR}, 1)
 GOVENDORFLAG := -mod=vendor
 endif
 
-GOBUILD  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
+BUILD_FLAG =
+GOEXPERIMENT=
+ifeq ("${ENABLE_FIPS}", "1")
+	BUILD_FLAG = -tags boringcrypto
+	GOEXPERIMENT = GOEXPERIMENT=boringcrypto
+	CGO := 1
+else
+	CGO := 0
+endif
+GOBUILD  := $(GOEXPERIMENT) CGO_ENABLED=$(CGO) $(GO) build $(BUILD_FLAG) -trimpath $(GOVENDORFLAG)
 GOBUILDNOVENDOR  := CGO_ENABLED=0 $(GO) build $(BUILD_FLAG) -trimpath
 GOTEST   := CGO_ENABLED=1 $(GO) test -p $(P) --race
 GOTESTNORACE := CGO_ENABLED=1 $(GO) test -p $(P)
@@ -136,7 +145,7 @@ build-failpoint: check_failpoint_ctl
 	$(FAILPOINT_DISABLE)
 
 cdc:
-	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc/main.go
+	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc ./cmd/cdc
 
 kafka_consumer:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/cdc_kafka_consumer ./cmd/kafka-consumer/main.go

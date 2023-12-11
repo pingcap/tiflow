@@ -266,6 +266,10 @@ func TestCompareVersion(t *testing.T) {
 	dirtyVersion := semver.New(SanitizeVersion("v6.3.0-dirty"))
 	require.Equal(t, 1, dirtyVersion.Compare(*MinTiCDCVersion))
 	require.Equal(t, 0, dirtyVersion.Compare(*semver.New("6.3.0")))
+
+	dirtyVersionWithFIPS := semver.New(SanitizeVersion("v6.3.0-dirty-fips"))
+	require.Equal(t, 1, dirtyVersionWithFIPS.Compare(*MinTiCDCVersion))
+	require.Equal(t, 0, dirtyVersionWithFIPS.Compare(*semver.New("6.3.0")))
 }
 
 func TestReleaseSemver(t *testing.T) {

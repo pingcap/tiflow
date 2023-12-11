@@ -67,6 +67,7 @@ func SanitizeVersion(v string) string {
 		return v
 	}
 	v = versionHash.ReplaceAllLiteralString(v, "")
+	v = strings.TrimSuffix(v, "-fips")
 	v = strings.TrimSuffix(v, "-dirty")
 	return strings.TrimPrefix(v, "v")
 }
