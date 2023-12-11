@@ -154,7 +154,7 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 
 	result := common.NewDDLMsg(config.ProtocolSimple, nil, value, event)
 	if result.Length() > e.config.MaxMessageBytes {
-		if e.config.LargeMessageHandle.Disabled() {
+		if !e.config.LargeMessageHandle.EnableClaimCheck() {
 			log.Error("DDL message is too large for simple",
 				zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 				zap.Int("length", result.Length()),
