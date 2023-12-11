@@ -79,7 +79,6 @@ var customReplicaConfig = &ReplicaConfig{
 		DateSeparator:            "day",
 		EncoderConcurrency:       util.AddressOf(32),
 		EnablePartitionSeparator: util.AddressOf(true),
-		ContentCompatible:        util.AddressOf(true),
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -126,7 +125,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		DateSeparator:            "day",
 		EncoderConcurrency:       util.AddressOf(32),
 		EnablePartitionSeparator: util.AddressOf(true),
-		ContentCompatible:        util.AddressOf(false),
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,

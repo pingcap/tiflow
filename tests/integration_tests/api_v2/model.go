@@ -243,7 +243,6 @@ type SinkConfig struct {
 	Terminator               string            `json:"terminator"`
 	DateSeparator            string            `json:"date_separator,omitempty"`
 	EnablePartitionSeparator *bool             `json:"enable_partition_separator,omitempty"`
-	ContentCompatible        *bool             `json:"content_compatible"`
 }
 
 // CSVConfig denotes the csv config
