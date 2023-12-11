@@ -133,7 +133,7 @@ func createOwner4Test(ctx context.Context, globalVars *cdcContext.GlobalVars, t 
 			return observer.NewDummyObserver(), nil
 		},
 		pdClient,
-		nil,
+		globalVars,
 	)
 	o := owner.(*ownerImpl)
 	o.upstreamManager = upstream.NewManager4Test(pdClient)
