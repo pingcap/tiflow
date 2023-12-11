@@ -17,7 +17,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -121,32 +120,10 @@ func (c *changefeedImpl) Tick(ctx cdcContext.Context,
 	return ts, ts2
 }
 
-var processorIgnorableError = []*errors.Error{
-	cerror.ErrAdminStopProcessor,
-	cerror.ErrReactorFinished,
-}
-
-// isProcessorIgnorableError returns true if the error means the processor exits
-// normally, caused by changefeed pause, remove, etc.
-func isProcessorIgnorableError(err error) bool {
-	if err == nil {
-		return true
-	}
-	if errors.Cause(err) == context.Canceled {
-		return true
-	}
-	for _, e := range processorIgnorableError {
-		if e.Equal(err) {
-			return true
-		}
-	}
-	return false
-}
-
 func (c *changefeedImpl) patchProcessorErr(captureInfo *model.CaptureInfo,
 	err error,
 ) {
-	if isProcessorIgnorableError(err) {
+	if processor.IsProcessorIgnorableError(err) {
 		log.Info("processor exited",
 			zap.String("capture", captureInfo.ID),
 			zap.String("namespace", c.ID.Namespace),

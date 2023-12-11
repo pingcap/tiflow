@@ -215,7 +215,7 @@ func patchProcessorErr(captureInfo *model.CaptureInfo,
 	changefeed *orchestrator.ChangefeedReactorState,
 	err error,
 ) {
-	if isProcessorIgnorableError(err) {
+	if IsProcessorIgnorableError(err) {
 		log.Info("processor exited",
 			zap.String("capture", captureInfo.ID),
 			zap.String("namespace", changefeed.ID.Namespace),

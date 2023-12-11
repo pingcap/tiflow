@@ -456,9 +456,9 @@ var processorIgnorableError = []*errors.Error{
 	cerror.ErrReactorFinished,
 }
 
-// isProcessorIgnorableError returns true if the error means the processor exits
+// IsProcessorIgnorableError returns true if the error means the processor exits
 // normally, caused by changefeed pause, remove, etc.
-func isProcessorIgnorableError(err error) bool {
+func IsProcessorIgnorableError(err error) bool {
 	if err == nil {
 		return true
 	}
@@ -681,7 +681,7 @@ func (p *processor) handleErrorCh() (err error) {
 	default:
 		return nil
 	}
-	if !isProcessorIgnorableError(err) {
+	if !IsProcessorIgnorableError(err) {
 		log.Error("error on running processor",
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),

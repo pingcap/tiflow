@@ -658,7 +658,7 @@ func TestIgnorableError(t *testing.T) {
 		{errors.New("test error"), false},
 	}
 	for _, tc := range testCases {
-		require.Equal(t, isProcessorIgnorableError(tc.err), tc.ignorable)
+		require.Equal(t, IsProcessorIgnorableError(tc.err), tc.ignorable)
 	}
 }
 
