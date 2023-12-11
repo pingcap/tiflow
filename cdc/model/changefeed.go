@@ -353,6 +353,10 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 		)
 		return
 	}
+	// blackhole is for testing purpose, no need to remove fields
+	if sink.IsBlackHoleScheme(uri.Scheme) {
+		return
+	}
 	if !sink.IsMQScheme(uri.Scheme) {
 		info.rmMQOnlyFields()
 	} else {
