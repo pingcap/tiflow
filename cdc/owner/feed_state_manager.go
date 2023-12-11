@@ -92,8 +92,8 @@ type feedStateManager struct {
 	changefeedErrorStuckDuration time.Duration
 }
 
-// newFeedStateManager creates feedStateManager and initialize the exponential backoff
-func newFeedStateManager(up *upstream.Upstream,
+// NewFeedStateManager creates feedStateManager and initialize the exponential backoff
+func NewFeedStateManager(up *upstream.Upstream,
 	state ChangefeedState,
 ) FeedStateManager {
 	m := new(feedStateManager)
