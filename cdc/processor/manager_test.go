@@ -56,29 +56,34 @@ func NewManager4Test(
 		changefeedEpoch uint64,
 		cfg *config.SchedulerConfig,
 		client etcd.OwnerCaptureInfoClient,
+		globalVars *cdcContext.GlobalVars,
 	) *processor {
-		return newProcessor4Test(t, info, status, captureInfo, m.liveness, cfg, false, client)
+		return newProcessor4Test(t, info, status, captureInfo, m.liveness, cfg, false, client, globalVars)
 	}
 	return m
 }
 
 //nolint:unused
-func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
+func (s *managerTester) resetSuit(ctx context.Context,
+	globalVars *cdcContext.GlobalVars,
+	t *testing.T,
+) {
 	s.manager = NewManager4Test(t, &s.liveness)
 	s.state = orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
-	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
+	captureInfoBytes, err := globalVars.CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{
 		fmt.Sprintf("%s/capture/%s",
 			etcd.DefaultClusterAndMetaPrefix,
-			ctx.GlobalVars().CaptureInfo.ID): string(captureInfoBytes),
+			globalVars.CaptureInfo.ID): string(captureInfoBytes),
 	})
 }
 
 func TestChangefeed(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	globalVars := cdcContext.NewGlobalVars4Test()
+	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, t)
+	s.resetSuit(ctx, globalVars, t)
 	var err error
 
 	// no changefeed
@@ -129,9 +134,10 @@ func TestChangefeed(t *testing.T) {
 }
 
 func TestDebugInfo(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	globalVars := cdcContext.NewGlobalVars4Test()
+	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, t)
+	s.resetSuit(ctx, globalVars, t)
 	var err error
 
 	// no changefeed
@@ -195,9 +201,10 @@ func TestDebugInfo(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	globalVars := cdcContext.NewGlobalVars4Test()
+	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, t)
+	s.resetSuit(ctx, globalVars, t)
 	var err error
 
 	// no changefeed
@@ -251,9 +258,10 @@ func TestSendCommandError(t *testing.T) {
 }
 
 func TestManagerLiveness(t *testing.T) {
-	ctx := cdcContext.NewBackendContext4Test(false)
+	globalVars := cdcContext.NewGlobalVars4Test()
+	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, t)
+	s.resetSuit(ctx, globalVars, t)
 	var err error
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")

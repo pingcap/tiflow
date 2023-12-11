@@ -76,8 +76,10 @@ type managerImpl struct {
 		uint64,
 		*config.SchedulerConfig,
 		etcd.OwnerCaptureInfoClient,
+		*cdcContext.GlobalVars,
 	) *processor
-	cfg *config.SchedulerConfig
+	cfg        *config.SchedulerConfig
+	globalVars *cdcContext.GlobalVars
 
 	metricProcessorCloseDuration prometheus.Observer
 }
@@ -105,7 +107,6 @@ func NewManager(
 // the `state` parameter is sent by the etcd worker, the `state` must be a snapshot of KVs in etcd
 // the Tick function of Manager create or remove processor instances according to the specified `state`, or pass the `state` to processor instances
 func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorState) (nextState orchestrator.ReactorState, err error) {
-	ctx := stdCtx.(cdcContext.Context)
 	globalState := state.(*orchestrator.GlobalReactorState)
 	m.handleCommand()
 
@@ -131,13 +132,10 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 			p = m.newProcessor(
 				changefeedState.Info, changefeedState.Status,
 				m.captureInfo, changefeedID, up, m.liveness,
-				currentChangefeedEpoch, &cfg, ctx.GlobalVars().EtcdClient)
+				currentChangefeedEpoch, &cfg, m.globalVars.EtcdClient,
+				m.globalVars)
 			m.processors[changefeedID] = p
 		}
-		ctx := cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
-			ID:   changefeedID,
-			Info: changefeedState.Info,
-		})
 		if currentChangefeedEpoch != p.changefeedEpoch {
 			// Changefeed has restarted due to error, the processor is stale.
 			m.closeProcessor(changefeedID)
@@ -156,7 +154,7 @@ func (m *managerImpl) Tick(stdCtx context.Context, state orchestrator.ReactorSta
 		if createTaskPosition(changefeedState, p.captureInfo) {
 			continue
 		}
-		err, warning := p.Tick(ctx, changefeedState.Info, changefeedState.Status)
+		err, warning := p.Tick(stdCtx, changefeedState.Info, changefeedState.Status)
 		if warning != nil {
 			patchProcessorWarning(p.captureInfo, changefeedState, warning)
 		}

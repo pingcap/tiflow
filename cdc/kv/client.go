@@ -1062,7 +1062,7 @@ func (s *eventFeedSession) receiveFromStream(
 			})
 			if err != nil {
 				if status.Code(errors.Cause(err)) == codes.Canceled {
-					log.Info(
+					log.Debug(
 						"receive from stream canceled",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),

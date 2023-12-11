@@ -122,7 +122,8 @@ type captureImpl struct {
 		liveness *model.Liveness,
 		cfg *config.SchedulerConfig,
 	) processor.Manager
-	newOwner      func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig, etcdClient etcd.CDCEtcdClient) owner.Owner
+	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig,
+		globalVars *cdcContext.GlobalVars) owner.Owner
 	newController func(upstreamManager *upstream.Manager, captureInfo *model.CaptureInfo, client etcd.CDCEtcdClient) controller.Controller
 }
 
@@ -346,18 +347,18 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	stdCtx, cancel := context.WithCancel(stdCtx)
 
-	ctx := cdcContext.NewContext(stdCtx, &cdcContext.GlobalVars{
+	globalVars := &cdcContext.GlobalVars{
 		CaptureInfo:       c.info,
 		EtcdClient:        c.EtcdClient,
 		MessageServer:     c.MessageServer,
 		MessageRouter:     c.MessageRouter,
 		SortEngineFactory: c.sortEngineFactory,
-	})
+	}
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
 		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)
 		// so we should restart the capture.
-		err := c.campaignOwner(ctx)
+		err := c.campaignOwner(stdCtx, globalVars)
 		if err != nil || c.liveness.Load() != model.LivenessCaptureStopping {
 			log.Warn("campaign owner routine exited, restart the capture",
 				zap.String("captureID", c.info.ID), zap.Error(err))
@@ -393,14 +394,14 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 		// when the etcd worker of processor returns an error, it means that the processor throws an unrecoverable serious errors
 		// (recoverable errors are intercepted in the processor tick)
 		// so we should also stop the processor and let capture restart or exit
-		err := c.runEtcdWorker(ctx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
+		err := c.runEtcdWorker(stdCtx, c.processorManager, globalState, processorFlushInterval, util.RoleProcessor.String())
 		log.Info("processor routine exited",
 			zap.String("captureID", c.info.ID), zap.Error(err))
 		return err
 	})
 
 	g.Go(func() error {
-		return c.MessageServer.Run(ctx, c.MessageRouter.GetLocalChannel())
+		return c.MessageServer.Run(stdCtx, c.MessageRouter.GetLocalChannel())
 	})
 
 	return errors.Trace(g.Wait())
@@ -417,7 +418,7 @@ func (c *captureImpl) Info() (model.CaptureInfo, error) {
 	return model.CaptureInfo{}, cerror.ErrCaptureNotInitialized.GenWithStackByArgs()
 }
 
-func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
+func (c *captureImpl) campaignOwner(ctx context.Context, globalVars *cdcContext.GlobalVars) error {
 	// In most failure cases, we don't return error directly, just run another
 	// campaign loop. We treat campaign loop as a special background routine.
 	ownerFlushInterval := time.Duration(c.config.OwnerFlushInterval)
@@ -482,7 +483,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 
 		// We do a copy of the globalVars here to avoid
 		// accidental modifications and potential race conditions.
-		globalVars := *ctx.GlobalVars()
+		globalVars := *globalVars
 		newGlobalVars := &globalVars
 		newGlobalVars.OwnerRevision = ownerRev
 
@@ -491,7 +492,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 			zap.Int64("ownerRev", ownerRev))
 
 		controller := c.newController(c.upstreamManager, c.info, c.EtcdClient)
-		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler, c.EtcdClient)
+		owner := c.newOwner(c.upstreamManager, c.config.Debug.Scheduler, newGlobalVars)
 		c.setOwner(owner)
 		c.setController(controller)
 
@@ -514,8 +515,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 		})
 
 		g, ctx := errgroup.WithContext(ctx)
-		ctx, cancelOwner := context.WithCancel(ctx)
-		ownerCtx := cdcContext.NewContext(ctx, newGlobalVars)
+		ownerCtx, cancelOwner := context.WithCancel(ctx)
 		g.Go(func() error {
 			return c.runEtcdWorker(ownerCtx, owner.(orchestrator.Reactor),
 				orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL),
@@ -570,7 +570,7 @@ func (c *captureImpl) campaignOwner(ctx cdcContext.Context) error {
 }
 
 func (c *captureImpl) runEtcdWorker(
-	ctx cdcContext.Context,
+	ctx context.Context,
 	reactor orchestrator.Reactor,
 	reactorState orchestrator.ReactorState,
 	timerInterval time.Duration,
