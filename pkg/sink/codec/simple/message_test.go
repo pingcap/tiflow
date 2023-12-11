@@ -14,7 +14,6 @@
 package simple
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/pingcap/log"
@@ -694,11 +693,10 @@ func TestNewTableSchema(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			tableInfo := helper.DDL2Event(tc.sql).TableInfo
-			log.Info("fizz tableInfo", zap.Any("test", tc.name), zap.Any("", tableInfo.TableInfo))
 			got := newTableSchema(tableInfo)
+			// This log is useful to help debug when the test fails.
 			log.Info("newTableSchema", zap.Any("test", tc.name), zap.Any("", got))
-			require.Equal(t, tc.want, got,
-				fmt.Sprintf("want:%v, got:%v", zap.Any("", tc.want), zap.Any("", got)))
+			require.Equal(t, tc.want, got)
 		})
 	}
 }
