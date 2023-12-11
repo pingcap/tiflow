@@ -733,10 +733,11 @@ func (s *mysqlBackend) sequenceExecute(
 
 func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
-		log.Panic("unexpected number of sqls and values",
+		log.Error("unexpected number of sqls and values",
 			zap.String("changefeed", s.changefeed),
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
+		return cerror.ErrUnexpected.FastGenByArgs("unexpected number of sqls and values")
 	}
 
 	start := time.Now()

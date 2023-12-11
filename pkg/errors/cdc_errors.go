@@ -969,4 +969,9 @@ var (
 		"meta cache is inconsistent: %s",
 		errors.RFCCodeText("DFLOW:ErrInconsistentMetaCache"),
 	)
+
+	ErrUnexpected = errors.Normalize(
+		"cdc met unexpected error: %s",
+		errors.RFCCodeText("CDC:ErrUnexpected"),
+	)
 )
