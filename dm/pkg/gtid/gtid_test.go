@@ -63,8 +63,9 @@ func TestParseGTIDNoFlavor(t *testing.T) {
 	require.NoError(t, err)
 	require.IsType(t, &mysql.MariadbGTIDSet{}, gset)
 
-	_, err = ParserGTID("", "")
-	require.Error(t, err)
+	gset, err = ParserGTID("", "")
+	require.NoError(t, err)
+	require.IsType(t, &mysql.MysqlGTIDSet{}, gset)
 }
 
 func TestIsNilGTIDSet(t *testing.T) {
