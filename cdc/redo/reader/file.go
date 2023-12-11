@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/redo/writer/file"
+	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"go.uber.org/zap"
@@ -51,6 +52,9 @@ const (
 	// the memory used is defaultWorkerNum * defaultMaxLogSize (64 * megabyte) total
 	defaultWorkerNum = 16
 )
+
+// lz4MagicNumber is the magic number of lz4 compressed data
+var lz4MagicNumber = []byte{0x04, 0x22, 0x4D, 0x18}
 
 type fileReader interface {
 	io.Closer
@@ -203,6 +207,13 @@ func selectDownLoadFile(
 	return files, nil
 }
 
+func isLZ4Compressed(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	return bytes.Equal(data[:4], lz4MagicNumber)
+}
+
 func readAllFromBuffer(buf []byte) (logHeap, error) {
 	r := &reader{
 		br: bytes.NewReader(buf),
@@ -250,6 +261,12 @@ func sortAndWriteFile(
 	if len(fileContent) == 0 {
 		log.Warn("download file is empty", zap.String("file", fileName))
 		return nil
+	}
+	// it's lz4 compressed, decompress it
+	if isLZ4Compressed(fileContent) {
+		if fileContent, err = compression.Decode(compression.LZ4, fileContent); err != nil {
+			return err
+		}
 	}
 
 	// sort data

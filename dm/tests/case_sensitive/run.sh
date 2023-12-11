@@ -127,24 +127,24 @@ function check_ignore_when_sensitive() {
 	check_not_contains "Do_table_ignore"
 }
 
-# TODO need to update tidb-tools to pass, because sync-diff will use DM as library to parse DM config
-#trap cleanup_process EXIT
-#trap "cleanup_data Upper_DB Upper_DB1 lower_db UPPER_DB_ROUTE Upper_Db_IGNORE sync_diff_inspector" EXIT
-#
-## also cleanup dm processes in case of last run failed
-#cleanup_process $*
-#cleanup_data Upper_DB Upper_DB1 lower_db UPPER_DB_ROUTE Upper_Db_IGNORE
-#
-#prepare_sensitive_task
-#run_with_prepared
-#check_ignore_when_sensitive
-#
-#cleanup_process $*
-#cleanup_data Upper_DB Upper_DB1 lower_db UPPER_DB_ROUTE Upper_Db_IGNORE
-#
-#prepare_insensitive_task
-#run_with_prepared
-#
-#cleanup_process $*
-#
-#echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
+trap cleanup_process EXIT
+trap "cleanup_data Upper_DB Upper_DB1 lower_db UPPER_DB_ROUTE Upper_Db_IGNORE sync_diff_inspector" EXIT
+
+# also cleanup dm processes in case of last run failed
+cleanup_process $*
+cleanup_data Upper_DB Upper_DB1 lower_db UPPER_DB_ROUTE Upper_Db_IGNORE
+
+prepare_sensitive_task
+run_with_prepared
+check_ignore_when_sensitive
+
+cleanup_process $*
+cleanup_data Upper_DB Upper_DB1 lower_db UPPER_DB_ROUTE Upper_Db_IGNORE
+
+prepare_insensitive_task
+run_with_prepared
+
+cleanup_process $*
+
+run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"

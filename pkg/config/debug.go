@@ -28,6 +28,9 @@ type DebugConfig struct {
 
 	// EnableKVConnectBackOff enables the backoff for kv connect.
 	EnableKVConnectBackOff bool `toml:"enable-kv-connect-backoff" json:"enable-kv-connect-backoff"`
+
+	// Puller is the configuration of the puller.
+	Puller *PullerConfig `toml:"puller" json:"puller"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration
@@ -43,4 +46,12 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 	}
 
 	return nil
+}
+
+// PullerConfig represents config for puller
+type PullerConfig struct {
+	// EnableResolvedTsStuckDetection is used to enable resolved ts stuck detection.
+	EnableResolvedTsStuckDetection bool `toml:"enable-resolved-ts-stuck-detection" json:"enable-resolved-ts-stuck-detection"`
+	// ResolvedTsStuckInterval is the interval of checking resolved ts stuck.
+	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
 }

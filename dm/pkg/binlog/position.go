@@ -375,8 +375,8 @@ func CheckGTIDSetEmpty(gSet gmysql.GTIDSet) bool {
 }
 
 func CompareGTID(gSet1, gSet2 gmysql.GTIDSet) (int, bool) {
-	gSetIsEmpty1 := CheckGTIDSetEmpty(gSet1)
-	gSetIsEmpty2 := CheckGTIDSetEmpty(gSet2)
+	gSetIsEmpty1 := gtid.IsZeroGTIDSet(gSet1)
+	gSetIsEmpty2 := gtid.IsZeroGTIDSet(gSet2)
 
 	switch {
 	case gSetIsEmpty1 && gSetIsEmpty2:
