@@ -90,6 +90,7 @@ func NewManager(
 	upstreamManager *upstream.Manager,
 	liveness *model.Liveness,
 	cfg *config.SchedulerConfig,
+	globalVars *cdcContext.GlobalVars,
 ) Manager {
 	return &managerImpl{
 		captureInfo:                  captureInfo,
@@ -100,6 +101,7 @@ func NewManager(
 		newProcessor:                 NewProcessor,
 		metricProcessorCloseDuration: processorCloseDuration,
 		cfg:                          cfg,
+		globalVars:                   globalVars,
 	}
 }
 

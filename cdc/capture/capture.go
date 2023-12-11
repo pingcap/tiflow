@@ -121,6 +121,7 @@ type captureImpl struct {
 		upstreamManager *upstream.Manager,
 		liveness *model.Liveness,
 		cfg *config.SchedulerConfig,
+		globalVars *cdcContext.GlobalVars,
 	) processor.Manager
 	newOwner func(upstreamManager *upstream.Manager, cfg *config.SchedulerConfig,
 		globalVars *cdcContext.GlobalVars) owner.Owner
@@ -212,7 +213,7 @@ func (c *captureImpl) GetEtcdClient() etcd.CDCEtcdClient {
 }
 
 // reset the capture before run it.
-func (c *captureImpl) reset(ctx context.Context) error {
+func (c *captureImpl) reset(ctx context.Context, globalVars *cdcContext.GlobalVars) error {
 	lease, err := c.EtcdClient.GetEtcdClient().Grant(ctx, int64(c.config.CaptureSessionTTL))
 	if err != nil {
 		return errors.Trace(err)
@@ -242,7 +243,7 @@ func (c *captureImpl) reset(ctx context.Context) error {
 	}
 
 	c.processorManager = c.newProcessorManager(
-		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler)
+		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler, globalVars)
 	if c.session != nil {
 		// It can't be handled even after it fails, so we ignore it.
 		_ = c.session.Close()
@@ -319,7 +320,14 @@ func (c *captureImpl) Run(ctx context.Context) error {
 }
 
 func (c *captureImpl) run(stdCtx context.Context) error {
-	err := c.reset(stdCtx)
+	globalVars := &cdcContext.GlobalVars{
+		CaptureInfo:       c.info,
+		EtcdClient:        c.EtcdClient,
+		MessageServer:     c.MessageServer,
+		MessageRouter:     c.MessageRouter,
+		SortEngineFactory: c.sortEngineFactory,
+	}
+	err := c.reset(stdCtx, globalVars)
 	if err != nil {
 		log.Error("reset capture failed", zap.Error(err))
 		return errors.Trace(err)
@@ -347,13 +355,6 @@ func (c *captureImpl) run(stdCtx context.Context) error {
 	g, stdCtx := errgroup.WithContext(stdCtx)
 	stdCtx, cancel := context.WithCancel(stdCtx)
 
-	globalVars := &cdcContext.GlobalVars{
-		CaptureInfo:       c.info,
-		EtcdClient:        c.EtcdClient,
-		MessageServer:     c.MessageServer,
-		MessageRouter:     c.MessageRouter,
-		SortEngineFactory: c.sortEngineFactory,
-	}
 	g.Go(func() error {
 		// when the campaignOwner returns an error, it means that the owner throws
 		// an unrecoverable serious errors (recoverable errors are intercepted in the owner tick)

@@ -42,10 +42,11 @@ type managerTester struct {
 func NewManager4Test(
 	t *testing.T,
 	liveness *model.Liveness,
+	globalVars *cdcContext.GlobalVars,
 ) *managerImpl {
 	captureInfo := &model.CaptureInfo{ID: "capture-test", AdvertiseAddr: "127.0.0.1:0000"}
 	cfg := config.NewDefaultSchedulerConfig()
-	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness, cfg).(*managerImpl)
+	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness, cfg, globalVars).(*managerImpl)
 	m.newProcessor = func(
 		info *model.ChangeFeedInfo,
 		status *model.ChangeFeedStatus,
@@ -68,7 +69,7 @@ func (s *managerTester) resetSuit(ctx context.Context,
 	globalVars *cdcContext.GlobalVars,
 	t *testing.T,
 ) {
-	s.manager = NewManager4Test(t, &s.liveness)
+	s.manager = NewManager4Test(t, &s.liveness, globalVars)
 	s.state = orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	captureInfoBytes, err := globalVars.CaptureInfo.Marshal()
 	require.Nil(t, err)
@@ -240,9 +241,10 @@ func TestClose(t *testing.T) {
 }
 
 func TestSendCommandError(t *testing.T) {
+	globalVars := cdcContext.NewGlobalVars4Test()
 	liveness := model.LivenessCaptureAlive
 	cfg := config.NewDefaultSchedulerConfig()
-	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg).(*managerImpl)
+	m := NewManager(&model.CaptureInfo{ID: "capture-test"}, nil, &liveness, cfg, globalVars).(*managerImpl)
 	ctx, cancel := context.WithCancel(context.TODO())
 	cancel()
 	// Use unbuffered channel to stable test.
