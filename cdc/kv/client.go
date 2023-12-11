@@ -73,6 +73,8 @@ const (
 	regionScheduleReload = false
 
 	resolveLockMinInterval = 10 * time.Second
+
+	scanRegionsConcurrency = 1024
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -432,6 +434,8 @@ func (s *eventFeedSession) eventFeed(ctx context.Context) error {
 	g.Go(func() error { return s.logSlowRegions(ctx) })
 
 	g.Go(func() error {
+		g, ctx := errgroup.WithContext(ctx)
+		g.SetLimit(scanRegionsConcurrency)
 		for {
 			select {
 			case <-ctx.Done():
