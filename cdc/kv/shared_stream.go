@@ -254,9 +254,9 @@ func (s *requestedStream) receive(
 
 func (s *requestedStream) send(ctx context.Context, c *SharedClient, rs *requestedStore) (err error) {
 	doSend := func(cc *sharedconn.ConnAndClient, req *cdcpb.ChangeDataRequest, subscriptionID SubscriptionID) error {
-		backoff := time.Since(time.UnixMilli(s.lastKvIsBusy.Load()))
-		if backoff < serverIsBusyBackoffInterval {
-			if err := util.Hang(ctx, backoff); err != nil {
+		lastKvIsBusy := time.Since(time.UnixMilli(s.lastKvIsBusy.Load()))
+		if lastKvIsBusy < serverIsBusyBackoffInterval {
+			if err := util.Hang(ctx, serverIsBusyBackoffInterval - lastKvIsBusy); err != nil {
 				return err
 			}
 		}
