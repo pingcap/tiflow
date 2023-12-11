@@ -322,9 +322,15 @@ type message struct {
 	// SchemaVersion is for the DDL, Bootstrap and DML event.
 	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
 
+	// E2E checksum related fields, only set when enable checksum functionality.
+	Checksum        string `json:"checksum,omitempty"`
+	OldChecksum     string `json:"oldChecksum,omitempty"`
+	Corrupted       bool   `json:"corrupted,omitempty"`
+	ChecksumVersion int    `json:"checksumVersion,omitempty"`
+
+	// Large message handle related fields, only set when enable large messge handle functionality.
 	// ClaimCheckLocation is only for the DML event.
 	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
-
 	// HandleKeyOnly is only for the DML event.
 	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
 }
