@@ -101,7 +101,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
 	SQLMode:                      defaultSQLMode,
-	SyncedStatus:                 &SyncedStatusConfig{SyncedCheckInterval: 5 * 60, CheckpointInterval: 5},
+	SyncedStatus:                 &SyncedStatusConfig{SyncedCheckInterval: 5 * 60, CheckpointInterval: 15},
 }
 
 // GetDefaultReplicaConfig returns the default replica config.

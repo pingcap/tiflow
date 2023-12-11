@@ -337,6 +337,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.SQLMode == "" {
 		info.Config.SQLMode = defaultConfig.SQLMode
 	}
+	if info.Config.SyncedStatus == nil {
+		info.Config.SyncedStatus = defaultConfig.SyncedStatus
+	}
 	info.RmUnusedFields()
 }
 

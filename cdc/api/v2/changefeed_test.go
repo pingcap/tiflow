@@ -1041,7 +1041,7 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Equal(t, false, resp.Synced)
 		require.Equal(t, "1970-01-01 08:00:00", resp.NowTs)
 		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, "+
-			"please recheck: [pd] failed to get cluster id. Besides the data is not finish syncing", resp.Info)
+			"please recheck. Besides the data is not finish syncing", resp.Info)
 	}
 
 	{
@@ -1066,7 +1066,7 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, false, resp.Synced)
 		require.Equal(t, "1970-01-01 08:00:00", resp.NowTs)
-		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck: [pd] failed to get cluster id. "+
+		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck. "+
 			"You can check the pd first, and if pd is available, means we don't finish sync data. "+
 			"If pd is not available, please check the whether we satisfy the condition that "+
 			"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than 300 secs. "+
