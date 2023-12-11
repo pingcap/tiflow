@@ -518,7 +518,7 @@ type Column struct {
 	Default   interface{}    `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
-	ApproximateBytes int `json:"-"`
+	ApproximateBytes int `json:"-" msg:"-"`
 }
 
 // RedoColumn stores Column change
@@ -689,6 +689,7 @@ type DDLEvent struct {
 	Done         atomic.Bool      `msg:"-"`
 	Charset      string           `msg:"-"`
 	Collate      string           `msg:"-"`
+	IsBootstrap  bool             `msg:"-"`
 }
 
 // FromJob fills the values with DDLEvent from DDL job

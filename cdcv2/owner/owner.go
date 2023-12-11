@@ -161,6 +161,7 @@ func NewOwner(
 		querier:            querier,
 		storage:            storage,
 		liveness:           liveness,
+		changefeedUUIDMap:  make(map[metadata.ChangefeedUUID]*changefeedImpl),
 	}
 }
 
@@ -208,15 +209,6 @@ func (o *Owner) Run(ctx cdcContext.Context) error {
 		case cf := <-o.captureObservation.OwnerChanges():
 			switch cf.OwnerState {
 			case metadata.SchedRemoving:
-				//stop changefeed
-				changefeed, exist := o.changefeedUUIDMap[cf.ChangefeedUUID]
-				if !exist {
-					log.Warn("changefeed not found when handle a job", zap.Any("job", cf))
-					continue
-				}
-				changefeed.Close(ctx)
-				delete(o.changefeedUUIDMap, cf.ChangefeedUUID)
-				_ = o.captureObservation.PostOwnerRemoved(cf.ChangefeedUUID, cf.TaskPosition)
 			case metadata.SchedLaunched:
 				if _, ok := o.changefeedUUIDMap[cf.ChangefeedUUID]; ok {
 					log.Panic("changefeed already launched", zap.Uint64("id", cf.ChangefeedUUID))

@@ -266,8 +266,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			MaxLogSize:            c.Consistent.MaxLogSize,
 			FlushIntervalInMs:     c.Consistent.FlushIntervalInMs,
 			MetaFlushIntervalInMs: c.Consistent.MetaFlushIntervalInMs,
+			EncodingWorkerNum:     c.Consistent.EncodingWorkerNum,
+			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               c.Consistent.Storage,
 			UseFileBackend:        c.Consistent.UseFileBackend,
+			Compression:           c.Consistent.Compression,
+			FlushConcurrency:      c.Consistent.FlushConcurrency,
 		}
 	}
 	if c.Sink != nil {
@@ -428,10 +432,13 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var cloudStorageConfig *config.CloudStorageConfig
 		if c.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &config.CloudStorageConfig{
-				WorkerCount:    c.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:  c.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:       c.Sink.CloudStorageConfig.FileSize,
-				OutputColumnID: c.Sink.CloudStorageConfig.OutputColumnID,
+				WorkerCount:         c.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       c.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            c.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID:      c.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  c.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: c.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:    c.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
 
@@ -449,6 +456,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			EnableKafkaSinkV2:                c.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         c.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: c.Sink.DeleteOnlyOutputHandleKeyColumns,
+			ContentCompatible:                c.Sink.ContentCompatible,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			PulsarConfig:                     pulsarConfig,
@@ -708,10 +716,13 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var cloudStorageConfig *CloudStorageConfig
 		if cloned.Sink.CloudStorageConfig != nil {
 			cloudStorageConfig = &CloudStorageConfig{
-				WorkerCount:    cloned.Sink.CloudStorageConfig.WorkerCount,
-				FlushInterval:  cloned.Sink.CloudStorageConfig.FlushInterval,
-				FileSize:       cloned.Sink.CloudStorageConfig.FileSize,
-				OutputColumnID: cloned.Sink.CloudStorageConfig.OutputColumnID,
+				WorkerCount:         cloned.Sink.CloudStorageConfig.WorkerCount,
+				FlushInterval:       cloned.Sink.CloudStorageConfig.FlushInterval,
+				FileSize:            cloned.Sink.CloudStorageConfig.FileSize,
+				OutputColumnID:      cloned.Sink.CloudStorageConfig.OutputColumnID,
+				FileExpirationDays:  cloned.Sink.CloudStorageConfig.FileExpirationDays,
+				FileCleanupCronSpec: cloned.Sink.CloudStorageConfig.FileCleanupCronSpec,
+				FlushConcurrency:    cloned.Sink.CloudStorageConfig.FlushConcurrency,
 			}
 		}
 
@@ -729,6 +740,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			EnableKafkaSinkV2:                cloned.Sink.EnableKafkaSinkV2,
 			OnlyOutputUpdatedColumns:         cloned.Sink.OnlyOutputUpdatedColumns,
 			DeleteOnlyOutputHandleKeyColumns: cloned.Sink.DeleteOnlyOutputHandleKeyColumns,
+			ContentCompatible:                cloned.Sink.ContentCompatible,
 			KafkaConfig:                      kafkaConfig,
 			MySQLConfig:                      mysqlConfig,
 			PulsarConfig:                     pulsarConfig,
@@ -749,8 +761,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			MaxLogSize:            cloned.Consistent.MaxLogSize,
 			FlushIntervalInMs:     cloned.Consistent.FlushIntervalInMs,
 			MetaFlushIntervalInMs: cloned.Consistent.MetaFlushIntervalInMs,
+			EncodingWorkerNum:     c.Consistent.EncodingWorkerNum,
+			FlushWorkerNum:        c.Consistent.FlushWorkerNum,
 			Storage:               cloned.Consistent.Storage,
 			UseFileBackend:        cloned.Consistent.UseFileBackend,
+			Compression:           cloned.Consistent.Compression,
+			FlushConcurrency:      cloned.Consistent.FlushConcurrency,
 		}
 	}
 	if cloned.Mounter != nil {
@@ -892,6 +908,7 @@ type SinkConfig struct {
 	EnableKafkaSinkV2                *bool               `json:"enable_kafka_sink_v2,omitempty"`
 	OnlyOutputUpdatedColumns         *bool               `json:"only_output_updated_columns,omitempty"`
 	DeleteOnlyOutputHandleKeyColumns *bool               `json:"delete_only_output_handle_key_columns"`
+	ContentCompatible                *bool               `json:"content_compatible"`
 	SafeMode                         *bool               `json:"safe_mode,omitempty"`
 	KafkaConfig                      *KafkaConfig        `json:"kafka_config,omitempty"`
 	PulsarConfig                     *PulsarConfig       `json:"pulsar_config,omitempty"`
@@ -942,8 +959,12 @@ type ConsistentConfig struct {
 	MaxLogSize            int64  `json:"max_log_size"`
 	FlushIntervalInMs     int64  `json:"flush_interval"`
 	MetaFlushIntervalInMs int64  `json:"meta_flush_interval"`
+	EncodingWorkerNum     int    `json:"encoding_worker_num"`
+	FlushWorkerNum        int    `json:"flush_worker_num"`
 	Storage               string `json:"storage,omitempty"`
 	UseFileBackend        bool   `json:"use_file_backend"`
+	Compression           string `json:"compression,omitempty"`
+	FlushConcurrency      int    `json:"flush_concurrency,omitempty"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
@@ -1186,10 +1207,13 @@ type MySQLConfig struct {
 
 // CloudStorageConfig represents a cloud storage sink configuration
 type CloudStorageConfig struct {
-	WorkerCount    *int    `json:"worker_count,omitempty"`
-	FlushInterval  *string `json:"flush_interval,omitempty"`
-	FileSize       *int    `json:"file_size,omitempty"`
-	OutputColumnID *bool   `json:"output_column_id,omitempty"`
+	WorkerCount         *int    `json:"worker_count,omitempty"`
+	FlushInterval       *string `json:"flush_interval,omitempty"`
+	FileSize            *int    `json:"file_size,omitempty"`
+	OutputColumnID      *bool   `json:"output_column_id,omitempty"`
+	FileExpirationDays  *int    `json:"file_expiration_days,omitempty"`
+	FileCleanupCronSpec *string `json:"file_cleanup_cron_spec,omitempty"`
+	FlushConcurrency    *int    `json:"flush_concurrency,omitempty"`
 }
 
 // ChangefeedStatus holds common information of a changefeed in cdc

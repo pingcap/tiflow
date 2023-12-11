@@ -36,6 +36,15 @@ var (
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 18),
 		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
 
+	// ExecWriteBytesGauge records the total number of bytes written by sink.
+	TotalWriteBytesCounter = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "ticdc",
+			Subsystem: "sink",
+			Name:      "write_bytes_total",
+			Help:      "Total number of bytes written by sink",
+		}, []string{"namespace", "changefeed", "type"}) // type is for `sinkType`
+
 	// LargeRowSizeHistogram records size of large rows.
 	LargeRowSizeHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -69,6 +78,7 @@ var (
 // InitMetrics registers all metrics in this file.
 func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(ExecBatchHistogram)
+	registry.MustRegister(TotalWriteBytesCounter)
 	registry.MustRegister(ExecDDLHistogram)
 	registry.MustRegister(LargeRowSizeHistogram)
 	registry.MustRegister(ExecutionErrorCounter)

@@ -218,6 +218,8 @@ type Syncer struct {
 		isQueryEvent  bool
 	}
 
+	cutOverLocation atomic.Pointer[binlog.Location]
+
 	handleJobFunc func(*job) (bool, error)
 	flushSeq      int64
 
@@ -1113,7 +1115,12 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 	skipCheckFlush := false
 	defer func() {
 		if !skipCheckFlush && err == nil {
-			err = s.flushIfOutdated()
+			if cutoverLocation := s.cutOverLocation.Load(); cutoverLocation != nil && binlog.CompareLocation(*cutoverLocation, job.currentLocation, s.cfg.EnableGTID) <= 0 {
+				err = s.flushJobs()
+				s.cutOverLocation.Store(nil)
+			} else {
+				err = s.flushIfOutdated()
+			}
 		}
 	}()
 
@@ -2428,6 +2435,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				case *replication.XIDEvent:
 					eventType = "XID"
 					needContinue, err2 = funcCommit()
+				case *replication.TableMapEvent:
+				case *replication.FormatDescriptionEvent:
 				default:
 					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
 				}
@@ -2435,6 +2444,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if needContinue {
 				continue
 			}
+		case *replication.TableMapEvent:
+		case *replication.FormatDescriptionEvent:
 		default:
 			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
 		}
