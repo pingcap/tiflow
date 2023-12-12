@@ -122,24 +122,15 @@ function run_normal_case_and_unavailable_pd() {
 	# case 2: test with unavailable pd
 	kill_pd
 
+	sleep 20
+
 	synced_status=$(curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced)
-	status=$(echo $synced_status | jq '.synced')
-	if [ $status != false ]; then
-		echo "synced status isn't correct"
+	error_code=$(echo $synced_status | jq -r '.error_code')
+	if [ $error_code != "CDC:ErrPDEtcdAPIError" ]; then
+		echo "error_code isn't correct"
 		exit 1
 	fi
-	info=$(echo $synced_status | jq -r '.info')
-	target_message="[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck: [pd] failed to get cluster id. \
-You can check the pd first, and if pd is available, means we don't finish sync data. \
-If pd is not available, please check the whether we satisfy the condition that \
-the time difference from lastSyncedTs to the current time from the time zone of pd is greater than 120 secs. \
-If it's satisfied, means the data syncing is totally finished"
-
-	if [ "$info" != "$target_message" ]; then
-		echo "synced status info is not correct"
-		exit 1
-	fi
-
+	
 	cleanup_process $CDC_BINARY
 	stop_tidb_cluster
 }
