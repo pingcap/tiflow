@@ -860,8 +860,7 @@ var (
 )
 
 const (
-	loadRegionRetryInterval     time.Duration  = 100 * time.Millisecond
-	resolveLockMinInterval      time.Duration  = 10 * time.Second
-	serverIsBusyBackoffInterval time.Duration  = 200 * time.Millisecond
-	invalidSubscriptionID       SubscriptionID = SubscriptionID(0)
+	loadRegionRetryInterval time.Duration  = 100 * time.Millisecond
+	resolveLockMinInterval  time.Duration  = 10 * time.Second
+	invalidSubscriptionID   SubscriptionID = SubscriptionID(0)
 )
