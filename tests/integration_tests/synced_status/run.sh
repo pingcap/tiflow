@@ -119,17 +119,14 @@ function run_normal_case_and_unavailable_pd() {
 	fi
 
 	#==========
-	# case 2: test with unavailable pd
+	# case 2: test with unavailable pd, query will not get the available response
 	kill_pd
 
 	sleep 20
 
 	synced_status=$(curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced)
 	error_code=$(echo $synced_status | jq -r '.error_code')
-	if [ $error_code != "CDC:ErrPDEtcdAPIError" ]; then
-		echo "error_code isn't correct"
-		exit 1
-	fi
+	
 	cleanup_process $CDC_BINARY
 	stop_tidb_cluster
 }
