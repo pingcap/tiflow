@@ -122,6 +122,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 			EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 			FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 			UseFileBackend:        useFileBackend,
+			GCIntervalInMs:        redo.MinGCIntervalInMs,
 		}
 		dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 		var eg errgroup.Group
@@ -232,6 +233,7 @@ func TestLogManagerInOwner(t *testing.T) {
 			EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 			FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 			UseFileBackend:        useFileBackend,
+			GCIntervalInMs:        redo.MinGCIntervalInMs,
 		}
 		startTs := model.Ts(10)
 		ddlMgr := NewDDLManager(model.DefaultChangeFeedID("test"), cfg, startTs)
@@ -279,6 +281,7 @@ func TestLogManagerError(t *testing.T) {
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 	logMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 	var eg errgroup.Group
@@ -334,6 +337,7 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		UseFileBackend:        useFileBackend,
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 	dmlMgr := NewDMLManager(model.DefaultChangeFeedID("test"), cfg)
 	var eg errgroup.Group

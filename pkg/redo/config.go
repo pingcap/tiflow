@@ -49,6 +49,9 @@ const (
 	// MinFlushIntervalInMs is the minimum flush interval for redo log.
 	MinFlushIntervalInMs = 50
 
+	// MinGCIntervalInMs defines the minimum GC interval in meta manager.
+	MinGCIntervalInMs = 10 // 10 milliseconds
+
 	// DefaultEncodingWorkerNum is the default number of encoding workers.
 	DefaultEncodingWorkerNum = 16
 	// DefaultEncodingInputChanSize is the default size of input channel for encoding worker.

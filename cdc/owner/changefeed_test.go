@@ -546,6 +546,7 @@ func TestRemoveChangefeed(t *testing.T) {
 		MetaFlushIntervalInMs: redo.DefaultMetaFlushIntervalInMs,
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 	ctx = cdcContext.WithChangefeedVars(ctx, &cdcContext.ChangefeedVars{
 		ID:   ctx.ChangefeedVars().ID,

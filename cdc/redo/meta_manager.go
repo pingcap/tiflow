@@ -76,6 +76,7 @@ type metaManager struct {
 	metricFlushLogDuration prometheus.Observer
 
 	flushIntervalInMs int64
+	GCIntervalInMs    int64
 }
 
 // NewDisabledMetaManager creates a disabled Meta Manager.
@@ -102,6 +103,7 @@ func NewMetaManager(
 		cfg:               cfg,
 		startTs:           checkpoint,
 		flushIntervalInMs: cfg.MetaFlushIntervalInMs,
+		GCIntervalInMs:    cfg.GCIntervalInMs,
 	}
 
 	if m.flushIntervalInMs < redo.MinFlushIntervalInMs {
@@ -507,7 +509,7 @@ func (m *metaManager) bgFlushMeta(egCtx context.Context) (err error) {
 
 // bgGC cleans stale files before the flushed checkpoint in background.
 func (m *metaManager) bgGC(egCtx context.Context) error {
-	ticker := time.NewTicker(time.Duration(redo.DefaultGCIntervalInMs) * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(m.GCIntervalInMs) * time.Millisecond)
 	defer ticker.Stop()
 
 	preCkpt := uint64(0)

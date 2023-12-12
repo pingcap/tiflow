@@ -79,6 +79,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 	m := NewMetaManager(changefeedID, cfg, startTs)
 
@@ -160,6 +161,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 	m := NewMetaManager(changefeedID, cfg, startTs)
 
@@ -252,7 +254,7 @@ func TestGCAndCleanup(t *testing.T) {
 	require.NoError(t, err)
 
 	checkGC := func(checkpointTs uint64) {
-		time.Sleep(time.Duration(redo.DefaultGCIntervalInMs) * time.Millisecond * 20)
+		time.Sleep(time.Duration(redo.MinGCIntervalInMs) * time.Millisecond * 20)
 		checkEqual := false
 		extStorage.WalkDir(ctx, nil, func(path string, size int64) error {
 			if strings.HasSuffix(path, redo.MetaEXT) {
@@ -292,6 +294,7 @@ func TestGCAndCleanup(t *testing.T) {
 		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
+		GCIntervalInMs:        redo.MinGCIntervalInMs,
 	}
 
 	m := NewMetaManager(changefeedID, cfg, startTs)
