@@ -130,7 +130,6 @@ function run_normal_case_and_unavailable_pd() {
 		echo "error_code isn't correct"
 		exit 1
 	fi
-	
 	cleanup_process $CDC_BINARY
 	stop_tidb_cluster
 }
