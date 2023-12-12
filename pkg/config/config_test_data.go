@@ -222,7 +222,8 @@ const (
       "quote": "\"",
       "null": "\\N",
       "include-commit-ts": true,
-      "binary-encoding-method":"base64"
+      "binary-encoding-method":"base64",
+      "output-old-value": false
     },
     "date-separator": "month",
     "enable-partition-separator": true,

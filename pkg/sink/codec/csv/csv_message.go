@@ -82,6 +82,7 @@ type csvMessage struct {
 	schemaName string
 	commitTs   uint64
 	columns    []any
+	preColumns []any
 	// newRecord indicates whether we encounter a new record.
 	newRecord bool
 }
@@ -101,17 +102,36 @@ func newCSVMessage(config *common.Config) *csvMessage {
 // Col5-n: one or more columns that represent the data to be changed.
 func (c *csvMessage) encode() []byte {
 	strBuilder := new(strings.Builder)
-	c.formatValue(c.opType.String(), strBuilder)
-	c.formatValue(c.tableName, strBuilder)
-	c.formatValue(c.schemaName, strBuilder)
-	if c.config.IncludeCommitTs {
-		c.formatValue(c.commitTs, strBuilder)
+	if c.opType == operationUpdate && c.config.OutputOldValue && len(c.preColumns) != 0 {
+		// Encode the old value first as a dedicated row.
+		c.encodeMeta("D", strBuilder)
+		c.encodeColumns(c.preColumns, strBuilder)
+
+		// Encode the after value as a dedicated row.
+		c.newRecord = true // reset newRecord to true, so that the first column will not start with delimiter.
+		c.encodeMeta("I", strBuilder)
+		c.encodeColumns(c.columns, strBuilder)
+	} else {
+		c.encodeMeta(c.opType.String(), strBuilder)
+		c.encodeColumns(c.columns, strBuilder)
 	}
-	for _, col := range c.columns {
-		c.formatValue(col, strBuilder)
-	}
-	strBuilder.WriteString(c.config.Terminator)
 	return []byte(strBuilder.String())
+}
+
+func (c *csvMessage) encodeMeta(opType string, b *strings.Builder) {
+	c.formatValue(opType, b)
+	c.formatValue(c.tableName, b)
+	c.formatValue(c.schemaName, b)
+	if c.config.IncludeCommitTs {
+		c.formatValue(c.commitTs, b)
+	}
+}
+
+func (c *csvMessage) encodeColumns(columns []any, b *strings.Builder) {
+	for _, col := range columns {
+		c.formatValue(col, b)
+	}
+	b.WriteString(c.config.Terminator)
 }
 
 func (c *csvMessage) decode(datums []types.Datum) error {
@@ -348,14 +368,30 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 		}
 	} else {
 		if e.PreColumns == nil {
+			// This is a insert operation.
 			csvMsg.opType = operationInsert
+			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.ColInfos)
+			if err != nil {
+				return nil, err
+			}
 		} else {
+			// This is a update operation.
 			csvMsg.opType = operationUpdate
-		}
-		// for insert and update operation, we only record the after columns.
-		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.ColInfos)
-		if err != nil {
-			return nil, err
+			if csvConfig.OutputOldValue {
+				if len(e.PreColumns) != len(e.Columns) {
+					return nil, cerror.WrapError(cerror.ErrCSVDecodeFailed,
+						fmt.Errorf("the column length of preColumns %d doesn't equal to that of columns %d",
+							len(e.PreColumns), len(e.Columns)))
+				}
+				csvMsg.preColumns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.ColInfos)
+				if err != nil {
+					return nil, err
+				}
+			}
+			csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.Columns, e.ColInfos)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	return csvMsg, nil
