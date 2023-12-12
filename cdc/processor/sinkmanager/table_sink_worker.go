@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -131,7 +131,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	allEventCount := 0
 
 	callbackIsPerformed := false
-	performCallback := func(pos engine.Position) {
+	performCallback := func(pos sorter.Position) {
 		if !callbackIsPerformed {
 			task.callback(pos)
 			callbackIsPerformed = true
@@ -253,8 +253,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 func (w *sinkWorker) fetchFromCache(
 	task *sinkTask, // task is read-only here.
-	lowerBound *engine.Position,
-	upperBound *engine.Position,
+	lowerBound *sorter.Position,
+	upperBound *sorter.Position,
 ) (cacheDrained bool, err error) {
 	newLowerBound := *lowerBound
 	newUpperBound := *upperBound

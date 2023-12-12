@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble"
 	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/atomic"
 	"go.uber.org/multierr"
@@ -53,7 +53,7 @@ type SortEngineFactory struct {
 	memQuotaInBytes uint64
 
 	mu      sync.Mutex
-	engines map[model.ChangeFeedID]engine.SortEngine
+	engines map[model.ChangeFeedID]sorter.SortEngine
 
 	wg     sync.WaitGroup
 	closed chan struct{}
@@ -69,7 +69,7 @@ type SortEngineFactory struct {
 
 // Create creates a SortEngine. If an engine with same ID already exists,
 // it will be returned directly.
-func (f *SortEngineFactory) Create(ID model.ChangeFeedID) (e engine.SortEngine, err error) {
+func (f *SortEngineFactory) Create(ID model.ChangeFeedID) (e sorter.SortEngine, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -137,7 +137,7 @@ func NewForPebble(dir string, memQuotaInBytes uint64, cfg *config.DBConfig) *Sor
 			engineType:      pebbleEngine,
 			dir:             dir,
 			memQuotaInBytes: memQuotaInBytes,
-			engines:         make(map[model.ChangeFeedID]engine.SortEngine),
+			engines:         make(map[model.ChangeFeedID]sorter.SortEngine),
 			closed:          make(chan struct{}),
 			pebbleConfig:    cfg,
 			dbInitialized:   atomic.NewBool(false),
@@ -169,19 +169,19 @@ func (f *SortEngineFactory) collectMetrics() {
 		for i, db := range f.dbs {
 			stats := db.Metrics()
 			id := strconv.Itoa(i + 1)
-			engine.OnDiskDataSize().WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
-			engine.InMemoryDataSize().WithLabelValues(id).Set(float64(stats.BlockCache.Size))
-			engine.IteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
-			engine.WriteDelayCount().WithLabelValues(id).
+			sorter.OnDiskDataSize().WithLabelValues(id).Set(float64(stats.DiskSpaceUsage()))
+			sorter.InMemoryDataSize().WithLabelValues(id).Set(float64(stats.BlockCache.Size))
+			sorter.IteratorGauge().WithLabelValues(id).Set(float64(stats.TableIters))
+			sorter.WriteDelayCount().WithLabelValues(id).
 				Set(float64(stdatomic.LoadUint64(&f.writeStalls[i].counter)))
 
-			metricLevelCount := engine.LevelCount().MustCurryWith(map[string]string{"id": id})
+			metricLevelCount := sorter.LevelCount().MustCurryWith(map[string]string{"id": id})
 			for level, metric := range stats.Levels {
 				metricLevelCount.WithLabelValues(fmt.Sprint(level)).Set(float64(metric.NumFiles))
 			}
-			engine.BlockCacheAccess().WithLabelValues(id, "hit").
+			sorter.BlockCacheAccess().WithLabelValues(id, "hit").
 				Set(float64(stats.BlockCache.Hits))
-			engine.BlockCacheAccess().WithLabelValues(id, "miss").
+			sorter.BlockCacheAccess().WithLabelValues(id, "miss").
 				Set(float64(stats.BlockCache.Misses))
 		}
 	}

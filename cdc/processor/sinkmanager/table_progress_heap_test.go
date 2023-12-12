@@ -16,7 +16,7 @@ package sinkmanager
 import (
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
@@ -27,21 +27,21 @@ func TestTableProgresses(t *testing.T) {
 	p := newTableProgresses()
 	p.push(&progress{
 		span: spanz.TableIDToComparableSpan(1),
-		nextLowerBoundPos: engine.Position{
+		nextLowerBoundPos: sorter.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		},
 	})
 	p.push(&progress{
 		span: spanz.TableIDToComparableSpan(3),
-		nextLowerBoundPos: engine.Position{
+		nextLowerBoundPos: sorter.Position{
 			StartTs:  2,
 			CommitTs: 2,
 		},
 	})
 	p.push(&progress{
 		span: spanz.TableIDToComparableSpan(2),
-		nextLowerBoundPos: engine.Position{
+		nextLowerBoundPos: sorter.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		},

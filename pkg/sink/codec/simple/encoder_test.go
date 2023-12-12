@@ -112,7 +112,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 		require.Equal(t, ddlEvent.CommitTs, event.StartTs)
 		require.Equal(t, ddlEvent.Query, event.Query)
 		require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
-		require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
+		require.Equal(t, len(ddlEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
 
 		item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 			ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
@@ -268,7 +268,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 		// Bootstrap event doesn't have query
 		require.Equal(t, "", event.Query)
 		require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
-		require.Equal(t, len(ddlEvent.TableInfo.Indices), len(event.TableInfo.Indices))
+		require.Equal(t, len(ddlEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
 
 		item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 			ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)

@@ -21,15 +21,15 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
 
 var (
-	_ engine.SortEngine    = (*EventSorter)(nil)
-	_ engine.EventIterator = (*EventIter)(nil)
+	_ sorter.SortEngine    = (*EventSorter)(nil)
+	_ sorter.EventIterator = (*EventIter)(nil)
 )
 
 // EventSorter accepts out-of-order raw kv entries and output sorted entries.
@@ -52,12 +52,12 @@ func New(_ context.Context) *EventSorter {
 	return &EventSorter{}
 }
 
-// IsTableBased implements engine.SortEngine.
+// IsTableBased implements sorter.SortEngine.
 func (s *EventSorter) IsTableBased() bool {
 	return true
 }
 
-// AddTable implements engine.SortEngine.
+// AddTable implements sorter.SortEngine.
 func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 	resolvedTs := startTs
 	if _, exists := s.tables.LoadOrStore(span, &tableSorter{resolvedTs: &resolvedTs}); exists {
@@ -65,14 +65,14 @@ func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 	}
 }
 
-// RemoveTable implements engine.SortEngine.
+// RemoveTable implements sorter.SortEngine.
 func (s *EventSorter) RemoveTable(span tablepb.Span) {
 	if _, exists := s.tables.LoadAndDelete(span); !exists {
 		log.Panic("remove an unexist table", zap.Stringer("span", &span))
 	}
 }
 
-// Add implements engine.SortEngine.
+// Add implements sorter.SortEngine.
 func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	value, exists := s.tables.Load(span)
 	if !exists {
@@ -89,15 +89,15 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 	}
 }
 
-// OnResolve implements engine.SortEngine.
+// OnResolve implements sorter.SortEngine.
 func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onResolves = append(s.onResolves, action)
 }
 
-// FetchByTable implements engine.SortEngine.
-func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound engine.Position) engine.EventIterator {
+// FetchByTable implements sorter.SortEngine.
+func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) sorter.EventIterator {
 	value, exists := s.tables.Load(span)
 	if !exists {
 		log.Panic("fetch events from an unexist table", zap.Stringer("span", &span))
@@ -106,14 +106,14 @@ func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound eng
 	return value.(*tableSorter).fetch(span, lowerBound, upperBound)
 }
 
-// FetchAllTables implements engine.SortEngine.
-func (s *EventSorter) FetchAllTables(lowerBound engine.Position) engine.EventIterator {
+// FetchAllTables implements sorter.SortEngine.
+func (s *EventSorter) FetchAllTables(lowerBound sorter.Position) sorter.EventIterator {
 	log.Panic("FetchAllTables should never be called")
 	return nil
 }
 
-// CleanByTable implements engine.SortEngine.
-func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound engine.Position) error {
+// CleanByTable implements sorter.SortEngine.
+func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound sorter.Position) error {
 	value, exists := s.tables.Load(span)
 	if !exists {
 		log.Panic("clean an unexist table", zap.Stringer("span", &span))
@@ -123,31 +123,31 @@ func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound engine.Position
 	return nil
 }
 
-// CleanAllTables implements engine.SortEngine.
-func (s *EventSorter) CleanAllTables(upperBound engine.Position) error {
+// CleanAllTables implements sorter.SortEngine.
+func (s *EventSorter) CleanAllTables(upperBound sorter.Position) error {
 	log.Panic("CleanAllTables should never be called")
 	return nil
 }
 
-// GetStatsByTable implements engine.SortEngine.
-func (s *EventSorter) GetStatsByTable(span tablepb.Span) engine.TableStats {
+// GetStatsByTable implements sorter.SortEngine.
+func (s *EventSorter) GetStatsByTable(span tablepb.Span) sorter.TableStats {
 	log.Panic("GetStatsByTable should never be called")
-	return engine.TableStats{}
+	return sorter.TableStats{}
 }
 
-// Close implements engine.SortEngine.
+// Close implements sorter.SortEngine.
 func (s *EventSorter) Close() error {
 	s.tables = spanz.SyncMap{}
 	return nil
 }
 
-// SlotsAndHasher implements engine.SortEngine.
+// SlotsAndHasher implements sorter.SortEngine.
 func (s *EventSorter) SlotsAndHasher() (slotCount int, hasher func(tablepb.Span, int) int) {
 	return 1, func(_ tablepb.Span, _ int) int { return 0 }
 }
 
 // Next implements sorter.EventIterator.
-func (s *EventIter) Next() (event *model.PolymorphicEvent, txnFinished engine.Position, err error) {
+func (s *EventIter) Next() (event *model.PolymorphicEvent, txnFinished sorter.Position, err error) {
 	if len(s.resolved) == 0 {
 		return
 	}
@@ -214,8 +214,8 @@ func (s *tableSorter) add(events ...*model.PolymorphicEvent) (resolvedTs model.T
 }
 
 func (s *tableSorter) fetch(
-	span tablepb.Span, lowerBound, upperBound engine.Position,
-) engine.EventIterator {
+	span tablepb.Span, lowerBound, upperBound sorter.Position,
+) sorter.EventIterator {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -238,7 +238,7 @@ func (s *tableSorter) fetch(
 	return iter
 }
 
-func (s *tableSorter) clean(span tablepb.Span, upperBound engine.Position) {
+func (s *tableSorter) clean(span tablepb.Span, upperBound sorter.Position) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {
