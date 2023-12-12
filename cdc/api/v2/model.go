@@ -106,10 +106,10 @@ type ChangefeedCommonInfo struct {
 // SyncedStatusConfig represents synced check interval config for a changefeed
 type SyncedStatusConfig struct {
 	// The minimum interval between the latest synced ts and now required to reach synced state
-	SyncedCheckInterval int64 `json:"synced-check-interval"`
+	SyncedCheckInterval int64 `json:"synced_check_interval"`
 	// The maximum interval between latest checkpoint ts and now or
 	// between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
-	CheckpointInterval int64 `json:"checkpoint-interval"`
+	CheckpointInterval int64 `json:"checkpoint_interval"`
 }
 
 // MarshalJSON marshal changefeed common info to json
