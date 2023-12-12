@@ -60,9 +60,11 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 	}
 
 	return &decoder{
-		config:  config,
-		storage: externalStorage,
-		memo:    newMemoryTableInfoProvider(),
+		config:       config,
+		storage:      externalStorage,
+		upstreamTiDB: db,
+
+		memo: newMemoryTableInfoProvider(),
 	}, nil
 }
 
