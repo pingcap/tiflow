@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func getChangefeedInfo() *model.ChangeFeedInfo {
@@ -211,6 +212,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	manager.UpdateBarrierTs(6, nil)
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(span)
+		log.Info("current value", zap.Uint64("checkpoint ts", s.CheckpointTs), zap.Uint64("last synced ts", s.LastSyncedTs))
 		return s.CheckpointTs == 6 && s.LastSyncedTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
