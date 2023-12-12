@@ -589,24 +589,6 @@ func (info *ChangeFeedInfo) DownstreamType() (DownstreamType, error) {
 	return Unknown, nil
 }
 
-// NeedSendBootstrapEvent returns true if the changefeed need to send bootstrap event.
-func (info *ChangeFeedInfo) NeedSendBootstrapEvent() (bool, error) {
-	downStreamType, err := info.DownstreamType()
-	if err != nil {
-		return false, errors.Trace(err)
-	}
-	if downStreamType != MQ {
-		return false, nil
-	}
-	if info.Config.Sink.Protocol == nil {
-		return false, nil
-	}
-	if *info.Config.Sink.Protocol == config.ProtocolSimple.String() {
-		return true, nil
-	}
-	return false, nil
-}
-
 func (info *ChangeFeedInfo) fixMemoryQuota() {
 	info.Config.FixMemoryQuota()
 }
