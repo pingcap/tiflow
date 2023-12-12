@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	tc "github.com/pingcap/check"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/stretchr/testify/require"
 )

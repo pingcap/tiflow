@@ -17,7 +17,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/util/filter"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 )

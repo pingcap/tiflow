@@ -18,8 +18,8 @@ import (
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/tidb/infoschema"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/stretchr/testify/require"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/raft/v3"

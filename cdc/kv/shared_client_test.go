@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/pingcap/kvproto/pkg/cdcpb"
-	"github.com/pingcap/tidb/store/mockstore/mockcopr"
+	"github.com/pingcap/tidb/pkg/store/mockstore/mockcopr"
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/cdc/model"

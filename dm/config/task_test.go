@@ -23,8 +23,8 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
+	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tidb/util/filter"
-	router "github.com/pingcap/tidb/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/terror"

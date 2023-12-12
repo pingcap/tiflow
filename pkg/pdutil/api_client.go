@@ -50,7 +50,7 @@ const (
 	// * `6e000000000000000000f8`, keys starts with "m".
 	// * `748000fffffffffffffe00000000000000f8`, the table prefix of
 	//   `tidb_ddl_job` table, which has the table ID 281474976710654,
-	//   see "github.com/pingcap/tidb/ddl.JobTableID"
+	//   see "github.com/pingcap/tidb/pkg/ddl.JobTableID"
 	addMetaJSON = `{
 		"sets": [
 			{

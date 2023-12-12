@@ -18,11 +18,11 @@ import (
 
 	"github.com/chaos-mesh/go-sqlsmith/util"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/format"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/opcode"
-	_ "github.com/pingcap/tidb/types/parser_driver" // import this to make the parser work
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/format"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/opcode"
+	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // import this to make the parser work
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/simulator/config"
 	"github.com/pingcap/tiflow/dm/simulator/mcp"
