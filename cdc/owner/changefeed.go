@@ -167,6 +167,8 @@ type changefeed struct {
 		opts ...observer.NewObserverOption,
 	) (observer.Observer, error)
 
+	lastDDLTs uint64 // Timestamp of the last executed DDL. Only used for tests.
+
 	// The latest changefeed info and status from meta storage. they are updated in every Tick.
 	latestInfo   *model.ChangeFeedInfo
 	latestStatus *model.ChangeFeedStatus
@@ -469,11 +471,17 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 	}
 
 	failpoint.Inject("ChangefeedOwnerDontUpdateCheckpoint", func() {
-		log.Info("owner won't update checkpoint because of failpoint",
-			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID),
-			zap.Uint64("keepCheckpoint", c.latestStatus.CheckpointTs),
-			zap.Uint64("skipCheckpoint", newCheckpointTs))
+		if c.lastDDLTs != 0 && c.latestStatus.CheckpointTs >= c.lastDDLTs {
+			log.Info("owner won't update checkpoint because of failpoint",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Uint64("keepCheckpoint", c.latestStatus.CheckpointTs),
+				zap.Uint64("skipCheckpoint", newCheckpointTs))
+			newCheckpointTs = c.latestStatus.CheckpointTs
+		}
+	})
+
+	failpoint.Inject("ChangefeedOwnerNotUpdateCheckpoint", func() {
 		newCheckpointTs = c.latestStatus.CheckpointTs
 	})
 

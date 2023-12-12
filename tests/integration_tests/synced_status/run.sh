@@ -268,7 +268,7 @@ function run_case_with_failpoint() {
 	cd $WORK_DIR
 
 	# make failpoint to block checkpoint-ts
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/ChangefeedOwnerDontUpdateCheckpoint=return(true)'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/owner/ChangefeedOwnerNotUpdateCheckpoint=return(true)'
 
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
