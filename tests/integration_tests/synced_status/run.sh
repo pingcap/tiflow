@@ -126,7 +126,6 @@ function run_normal_case_and_unavailable_pd() {
 
 	synced_status=$(curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced)
 	error_code=$(echo $synced_status | jq -r '.error_code')
-	
 	cleanup_process $CDC_BINARY
 	stop_tidb_cluster
 }
