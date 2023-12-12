@@ -225,20 +225,19 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	}
 
 	// Case 2: the table meta path is not empty.
-	if schemaFileCnt != 0 {
-		if lastVersion == 0 {
-			log.Warn("no table schema file found in an non-empty meta path",
-				zap.Any("versionedTableName", table),
-				zap.Uint32("checksum", checksum))
-		} else {
-			f.versionMap[table] = lastVersion
-			return nil
-		}
+	if schemaFileCnt != 0 && lastVersion != 0 {
+		f.versionMap[table] = lastVersion
+		return nil
 	}
 
 	// Case 3: the table meta path is empty, which happens when:
 	//  a. the table is existed before changefeed started. We need to write schema file to external storage.
 	//  b. the schema file is deleted by the consumer. We write schema file to external storage too.
+	if schemaFileCnt != 0 && lastVersion == 0 {
+		log.Warn("no table schema file found in an non-empty meta path",
+			zap.Any("versionedTableName", table),
+			zap.Uint32("checksum", checksum))
+	}
 	encodedDetail, err := def.MarshalWithQuery()
 	if err != nil {
 		return err
