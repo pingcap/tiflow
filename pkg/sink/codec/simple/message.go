@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"go.uber.org/zap"
 )
@@ -467,13 +468,26 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 		return nil, nil
 	}
 
+	var err error
 	switch ft.GetType() {
 	case mysql.TypeEnum:
 		if v, ok := value.(string); ok {
 			return v, nil
 		}
 		element := ft.GetElems()
-		number := value.(uint64)
+
+		var number uint64
+		switch v := value.(type) {
+		case uint64:
+			number = v
+		case []uint8:
+			number, err = strconv.ParseUint(string(v), 10, 64)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+		default:
+			log.Panic("unexpected type for enum value", zap.Any("value", value))
+		}
 		enumVar, err := tiTypes.ParseEnumValue(element, number)
 		if err != nil {
 			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
@@ -484,7 +498,16 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 			return v, nil
 		}
 		elements := ft.GetElems()
-		number := value.(uint64)
+
+		var number uint64
+		switch v := value.(type) {
+		case uint64:
+			number = v
+		case []uint8:
+			number, err = common.BinaryLiteralToInt(v)
+		default:
+			log.Panic("unexpected type for set value", zap.Any("value", value))
+		}
 		setVar, err := tiTypes.ParseSetValue(elements, number)
 		if err != nil {
 			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
