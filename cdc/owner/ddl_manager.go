@@ -138,7 +138,6 @@ func newDDLManager(
 	schema *schemaWrap4Owner,
 	redoManager redo.DDLManager,
 	redoMetaManager redo.MetaManager,
-	sinkType model.DownstreamType,
 	bdrMode bool,
 ) *ddlManager {
 	log.Info("owner create ddl manager",
@@ -146,8 +145,7 @@ func newDDLManager(
 		zap.String("changefeed", changefeedID.ID),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("checkpointTs", checkpointTs),
-		zap.Bool("bdrMode", bdrMode),
-		zap.Stringer("sinkType", sinkType))
+		zap.Bool("bdrMode", bdrMode))
 
 	return &ddlManager{
 		changfeedID:     changefeedID,
