@@ -333,7 +333,7 @@ func TestCheckOrWriteSchema(t *testing.T) {
 	// test schema file is invalid
 	err = os.WriteFile(filepath.Join(dir,
 		fmt.Sprintf("%s.tmp.%s", files[0].Name(), uuid.NewString())),
-		[]byte("invalid"), 0644)
+		[]byte("invalid"), 0o644)
 	require.NoError(t, err)
 	err = os.Remove(filepath.Join(dir, files[0].Name()))
 	require.NoError(t, err)
