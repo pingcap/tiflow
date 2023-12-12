@@ -32,7 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/kv"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
 	capturev2 "github.com/pingcap/tiflow/cdcv2/capture"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

@@ -24,8 +24,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/memory"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -126,7 +126,7 @@ func (suite *tableSinkWorkerSuite) TearDownSuite() {
 
 func (suite *tableSinkWorkerSuite) createWorker(
 	ctx context.Context, memQuota uint64, splitTxn bool,
-) (*sinkWorker, engine.SortEngine) {
+) (*sinkWorker, sorter.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	// Only sourcemanager.FetcyByTable is used, so NewForTest is fine.
 	sm := sourcemanager.NewForTest(suite.testChangefeedID, upstream.NewUpstream4Test(&MockPD{}),
@@ -144,7 +144,7 @@ func (suite *tableSinkWorkerSuite) createWorker(
 
 func (suite *tableSinkWorkerSuite) addEventsToSortEngine(
 	events []*model.PolymorphicEvent,
-	sortEngine engine.SortEngine,
+	sortEngine sorter.SortEngine,
 ) {
 	sortEngine.AddTable(suite.testSpan, 0)
 	for _, event := range events {
@@ -152,17 +152,17 @@ func (suite *tableSinkWorkerSuite) addEventsToSortEngine(
 	}
 }
 
-func genUpperBoundGetter(commitTs model.Ts) func(_ model.Ts) engine.Position {
-	return func(_ model.Ts) engine.Position {
-		return engine.Position{
+func genUpperBoundGetter(commitTs model.Ts) func(_ model.Ts) sorter.Position {
+	return func(_ model.Ts) sorter.Position {
+		return sorter.Position{
 			StartTs:  commitTs - 1,
 			CommitTs: commitTs,
 		}
 	}
 }
 
-func genLowerBound() engine.Position {
-	return engine.Position{
+func genLowerBound() sorter.Position {
+	return sorter.Position{
 		StartTs:  0,
 		CommitTs: 1,
 	}
@@ -198,12 +198,12 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredE
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 4,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 4,
 		}, lastWritePos.Next())
@@ -249,12 +249,12 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos, "we only write 3 events because of the memory quota")
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())
@@ -299,8 +299,8 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  0,
 			CommitTs: 0,
 		}, lastWritePos)
@@ -352,12 +352,12 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceWhenR
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 2,
 		}, lastWritePos.Next())
@@ -407,12 +407,12 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMe
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 2,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 2,
 		}, lastWritePos.Next())
@@ -460,12 +460,12 @@ func (suite *tableSinkWorkerSuite) TestTaskWithoutSplitTxnOnlyAdvanceWhenReachMa
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 4,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 4,
 		}, lastWritePos.Next())
@@ -509,12 +509,12 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  3,
 			CommitTs: 4,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  4,
 			CommitTs: 4,
 		}, lastWritePos.Next())
@@ -562,12 +562,12 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 	}()
 
 	wrapper, _ := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  3,
 			CommitTs: 4,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  4,
 			CommitTs: 4,
 		}, lastWritePos.Next())
@@ -612,12 +612,12 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	}()
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	callback := func(lastWritePos engine.Position) {
-		require.Equal(suite.T(), engine.Position{
+	callback := func(lastWritePos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  1,
 			CommitTs: 3,
 		}, lastWritePos)
-		require.Equal(suite.T(), engine.Position{
+		require.Equal(suite.T(), sorter.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		}, lastWritePos.Next())
@@ -649,12 +649,12 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 	}
 	e.Add(suite.testSpan, events...)
 	// Send another task to make sure the batchID is started from 2.
-	callback = func(_ engine.Position) {
+	callback = func(_ sorter.Position) {
 		cancel()
 	}
 	taskChan <- &sinkTask{
 		span: suite.testSpan,
-		lowerBound: engine.Position{
+		lowerBound: sorter.Position{
 			StartTs:  2,
 			CommitTs: 3,
 		},
@@ -701,7 +701,7 @@ func (suite *tableSinkWorkerSuite) TestFetchFromCacheWithFailure() {
 	defer sink.Close()
 
 	chShouldBeClosed := make(chan struct{}, 1)
-	callback := func(lastWritePos engine.Position) {
+	callback := func(lastWritePos sorter.Position) {
 		close(chShouldBeClosed)
 	}
 	taskChan <- &sinkTask{
@@ -744,7 +744,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 	defer sink.Close()
 
 	chShouldBeClosed := make(chan struct{}, 1)
-	callback := func(lastWritePos engine.Position) {
+	callback := func(lastWritePos sorter.Position) {
 		require.Equal(suite.T(), genLowerBound().Prev(), lastWritePos)
 		close(chShouldBeClosed)
 	}
@@ -771,10 +771,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithCache() {
 	}
 	w, e := suite.createWorker(ctx, 0, true)
 	w.eventCache = newRedoEventCache(suite.testChangefeedID, 1024*1024)
-	appender := w.eventCache.maybeCreateAppender(suite.testSpan, engine.Position{StartTs: 1, CommitTs: 3})
+	appender := w.eventCache.maybeCreateAppender(suite.testSpan, sorter.Position{StartTs: 1, CommitTs: 3})
 	appender.pushBatch(
 		[]*model.RowChangedEvent{events[0].Row, events[1].Row},
-		uint64(0), engine.Position{StartTs: 2, CommitTs: 4},
+		uint64(0), sorter.Position{StartTs: 2, CommitTs: 4},
 	)
 	defer w.sinkMemQuota.Close()
 	suite.addEventsToSortEngine(events, e)
@@ -792,13 +792,13 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithCache() {
 	defer sink.Close()
 
 	chShouldBeClosed := make(chan struct{}, 1)
-	callback := func(lastWrittenPos engine.Position) {
-		require.Equal(suite.T(), engine.Position{StartTs: 2, CommitTs: 4}, lastWrittenPos)
+	callback := func(lastWrittenPos sorter.Position) {
+		require.Equal(suite.T(), sorter.Position{StartTs: 2, CommitTs: 4}, lastWrittenPos)
 		close(chShouldBeClosed)
 	}
 	taskChan <- &sinkTask{
 		span:          suite.testSpan,
-		lowerBound:    engine.Position{StartTs: 1, CommitTs: 3},
+		lowerBound:    sorter.Position{StartTs: 1, CommitTs: 3},
 		getUpperBound: genUpperBoundGetter(4),
 		tableSink:     wrapper,
 		callback:      callback,

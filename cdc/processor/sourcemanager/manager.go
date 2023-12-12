@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
 	pullerwrapper "github.com/pingcap/tiflow/cdc/processor/sourcemanager/puller"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -68,7 +68,7 @@ type SourceManager struct {
 	// mg is the mounter group for mount the raw kv entry.
 	mg entry.MounterGroup
 	// engine is the source engine.
-	engine engine.SortEngine
+	engine sorter.SortEngine
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
 
@@ -84,7 +84,7 @@ func New(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
-	engine engine.SortEngine,
+	engine sorter.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
 	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
@@ -96,7 +96,7 @@ func NewForTest(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
-	engine engine.SortEngine,
+	engine sorter.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
 	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, pullerwrapper.NewPullerWrapperForTest)
@@ -106,7 +106,7 @@ func newSourceManager(
 	changefeedID model.ChangeFeedID,
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
-	engine engine.SortEngine,
+	engine sorter.SortEngine,
 	bdrMode bool,
 	multiplexing bool,
 	pullerWrapperCreator pullerWrapperCreator,
@@ -163,15 +163,15 @@ func (m *SourceManager) OnResolve(action func(tablepb.Span, model.Ts)) {
 
 // FetchByTable just wrap the engine's FetchByTable method.
 func (m *SourceManager) FetchByTable(
-	span tablepb.Span, lowerBound, upperBound engine.Position,
+	span tablepb.Span, lowerBound, upperBound sorter.Position,
 	quota *memquota.MemQuota,
-) *engine.MountedEventIter {
+) *sorter.MountedEventIter {
 	iter := m.engine.FetchByTable(span, lowerBound, upperBound)
-	return engine.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize, quota)
+	return sorter.NewMountedEventIter(m.changefeedID, iter, m.mg, defaultMaxBatchSize, quota)
 }
 
 // CleanByTable just wrap the engine's CleanByTable method.
-func (m *SourceManager) CleanByTable(span tablepb.Span, upperBound engine.Position) error {
+func (m *SourceManager) CleanByTable(span tablepb.Span, upperBound sorter.Position) error {
 	return m.engine.CleanByTable(span, upperBound)
 }
 
@@ -192,7 +192,7 @@ func (m *SourceManager) GetTablePullerStats(span tablepb.Span) puller.Stats {
 }
 
 // GetTableSorterStats returns the sorter stats of the table.
-func (m *SourceManager) GetTableSorterStats(span tablepb.Span) engine.TableStats {
+func (m *SourceManager) GetTableSorterStats(span tablepb.Span) sorter.TableStats {
 	return m.engine.GetStatsByTable(span)
 }
 

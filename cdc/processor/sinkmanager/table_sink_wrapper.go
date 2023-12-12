@@ -23,7 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
@@ -81,7 +81,7 @@ type tableSinkWrapper struct {
 	// lastCleanTime indicates the last time the table has been cleaned.
 	lastCleanTime time.Time
 
-	// rangeEventCounts is for clean the table engine.
+	// rangeEventCounts is for clean the table sorter.
 	// If rangeEventCounts[i].events is greater than 0, it means there must be
 	// events in the range (rangeEventCounts[i-1].lastPos, rangeEventCounts[i].lastPos].
 	rangeEventCounts   []rangeEventCount
@@ -90,12 +90,12 @@ type tableSinkWrapper struct {
 
 type rangeEventCount struct {
 	// firstPos and lastPos are used to merge many rangeEventCount into one.
-	firstPos engine.Position
-	lastPos  engine.Position
+	firstPos sorter.Position
+	lastPos  sorter.Position
 	events   int
 }
 
-func newRangeEventCount(pos engine.Position, events int) rangeEventCount {
+func newRangeEventCount(pos sorter.Position, events int) rangeEventCount {
 	return rangeEventCount{
 		firstPos: pos,
 		lastPos:  pos,
@@ -417,7 +417,7 @@ func (t *tableSinkWrapper) updateRangeEventCounts(eventCount rangeEventCount) {
 	}
 }
 
-func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, minEvents int) bool {
+func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound sorter.Position, minEvents int) bool {
 	t.rangeEventCountsMu.Lock()
 	defer t.rangeEventCountsMu.Unlock()
 
@@ -435,7 +435,7 @@ func (t *tableSinkWrapper) cleanRangeEventCounts(upperBound engine.Position, min
 	shouldClean := count >= minEvents
 
 	if !shouldClean {
-		// To reduce engine.CleanByTable calls.
+		// To reduce sorter.CleanByTable calls.
 		t.rangeEventCounts[idx-1].events = count
 		t.rangeEventCounts = t.rangeEventCounts[idx-1:]
 	} else {

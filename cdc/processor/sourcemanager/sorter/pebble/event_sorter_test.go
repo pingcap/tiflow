@@ -21,7 +21,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -72,7 +72,7 @@ func TestNoResolvedTs(t *testing.T) {
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(span, engine.Position{}, engine.Position{CommitTs: ts})
+		iter := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts})
 		event, _, err := iter.Next()
 		require.Nil(t, event)
 		require.Nil(t, err)
@@ -131,12 +131,12 @@ func TestEventFetch(t *testing.T) {
 	require.Equal(t, model.Ts(4), s.GetStatsByTable(span).ReceivedMaxResolvedTs)
 
 	sortedEvents := make([]*model.PolymorphicEvent, 0, len(inputEvents))
-	sortedPositions := make([]engine.Position, 0, len(inputEvents))
+	sortedPositions := make([]sorter.Position, 0, len(inputEvents))
 
 	timer := time.NewTimer(100 * time.Millisecond)
 	select {
 	case ts := <-resolvedTs:
-		iter := s.FetchByTable(span, engine.Position{}, engine.Position{CommitTs: ts, StartTs: ts - 1})
+		iter := s.FetchByTable(span, sorter.Position{}, sorter.Position{CommitTs: ts, StartTs: ts - 1})
 		for {
 			event, pos, err := iter.Next()
 			require.Nil(t, err)
@@ -156,7 +156,7 @@ func TestEventFetch(t *testing.T) {
 
 	require.Equal(t, inputEvents, sortedEvents)
 
-	expectPositions := []engine.Position{
+	expectPositions := []sorter.Position{
 		{CommitTs: 0, StartTs: 0},
 		{CommitTs: 2, StartTs: 1},
 		{CommitTs: 4, StartTs: 2},
@@ -179,6 +179,6 @@ func TestCleanData(t *testing.T) {
 
 	span := spanz.TableIDToComparableSpan(1)
 	s.AddTable(span, 0)
-	require.NoError(t, s.CleanByTable(spanz.TableIDToComparableSpan(2), engine.Position{}))
-	require.Nil(t, s.CleanByTable(span, engine.Position{}))
+	require.NoError(t, s.CleanByTable(spanz.TableIDToComparableSpan(2), sorter.Position{}))
+	require.Nil(t, s.CleanByTable(span, sorter.Position{}))
 }

@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
-	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/pebble"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	epebble "github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble"
 	"github.com/pingcap/tiflow/pkg/config"
 	"go.uber.org/zap"
 )
@@ -54,7 +54,7 @@ func createPebbleDBs(
 			}
 			opts.EventListener.CompactionEnd = func(job pebble.CompactionInfo) {
 				idstr := strconv.Itoa(id + 1)
-				x := engine.SorterCompactionDuration().WithLabelValues(idstr)
+				x := sorter.CompactionDuration().WithLabelValues(idstr)
 				x.Observe(job.TotalDuration.Seconds())
 			}
 		}
