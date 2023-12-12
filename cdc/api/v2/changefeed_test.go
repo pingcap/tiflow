@@ -1020,11 +1020,11 @@ func TestChangefeedSynced(t *testing.T) {
 	{
 
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
-		// case3: pd is offline，resolvedTs - checkpointTs > 5s
+		// case3: pd is offline，resolvedTs - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279,
 			LastSyncedTs:     1701153217279,
-			PullerResolvedTs: 1701153227279,
+			PullerResolvedTs: 1701153247279,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1101,11 +1101,11 @@ func TestChangefeedSynced(t *testing.T) {
 	}
 
 	{
-		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 5s, resolvedTs - checkpointTs < 5s
+		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153211279,
+			CheckpointTs:     1701153201279,
 			LastSyncedTs:     1701152217279,
-			PullerResolvedTs: 1701153211379,
+			PullerResolvedTs: 1701153201379,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1126,10 +1126,10 @@ func TestChangefeedSynced(t *testing.T) {
 	}
 
 	{
-		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 5s, resolvedTs - checkpointTs > 5s
+		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153211279,
-			LastSyncedTs:     1701152217279,
+			CheckpointTs:     1701153201279,
+			LastSyncedTs:     1701152207279,
 			PullerResolvedTs: 1701153218279,
 		}
 		w := httptest.NewRecorder()
