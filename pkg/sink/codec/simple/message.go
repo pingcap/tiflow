@@ -505,6 +505,9 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 			number = v
 		case []uint8:
 			number, err = common.BinaryLiteralToInt(v)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
 		default:
 			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
