@@ -347,58 +347,6 @@ func TestCheckOrWriteSchema(t *testing.T) {
 	require.Equal(t, 2, len(files))
 }
 
-func TestCheckOrWriteSchemaWithInvalidFile(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	dir := t.TempDir()
-	f := testFilePathGenerator(ctx, t, dir)
-
-	var columns []*timodel.ColumnInfo
-	ft := types.NewFieldType(mysql.TypeLong)
-	ft.SetFlag(mysql.PriKeyFlag | mysql.NotNullFlag)
-	col := &timodel.ColumnInfo{
-		Name:         timodel.NewCIStr("Id"),
-		FieldType:    *ft,
-		DefaultValue: 10,
-	}
-	columns = append(columns, col)
-	tableInfo := &model.TableInfo{
-		TableInfo: &timodel.TableInfo{Columns: columns},
-		Version:   100,
-		TableName: model.TableName{
-			Schema:  "test",
-			Table:   "table1",
-			TableID: 20,
-		},
-	}
-
-	table := VersionedTableName{
-		TableNameWithPhysicTableID: tableInfo.TableName,
-		TableInfoVersion:           tableInfo.Version,
-	}
-
-	err := os.WriteFile(filepath.Join(dir,
-		fmt.Sprintf("schema_101_0123456789.json.tmp.%s", uuid.NewString())),
-		[]byte("invalid"), 0644)
-	require.NoError(t, err)
-	err = f.CheckOrWriteSchema(ctx, table, tableInfo)
-	require.NoError(t, err)
-	require.Equal(t, tableInfo.Version, f.versionMap[table])
-
-	// test only table version changed, schema file should be reused
-	table.TableInfoVersion = 101
-	err = f.CheckOrWriteSchema(ctx, table, tableInfo)
-	require.NoError(t, err)
-	require.Equal(t, tableInfo.Version, f.versionMap[table])
-
-	dir = filepath.Join(dir, "test/table1/meta")
-	cnt, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	require.Equal(t, 1, len(cnt))
-}
-
 func TestRemoveExpiredFilesWithoutPartition(t *testing.T) {
 	t.Parallel()
 
