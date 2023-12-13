@@ -483,7 +483,7 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 		case []uint8:
 			number, err = strconv.ParseUint(string(v), 10, 64)
 			if err != nil {
-				log.Error("parse number for enum failed", zap.Any("number", number), zap.Error(err))
+				log.Error("parse number for enum failed", zap.Any("number", string(v)), zap.Error(err))
 				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 			}
 		default:
