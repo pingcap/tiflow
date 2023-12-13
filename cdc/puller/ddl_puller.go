@@ -663,6 +663,9 @@ func NewDDLPuller(ctx context.Context,
 }
 
 func (h *ddlPullerImpl) add2Pending(job *timodel.Job) {
+	if job == nil {
+		return
+	}
 	if job.ID == h.lastDDLJobID {
 		log.Warn("ignore duplicated DDL job",
 			zap.String("namespace", h.changefeedID.Namespace),
@@ -713,6 +716,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 					if entry.CRTs > atomic.LoadUint64(&h.resolvedTS) {
 						atomic.StoreUint64(&h.resolvedTS, entry.CRTs)
 						lastResolvedTsAdvancedTime = cc.Now()
+						continue
 					}
 				}
 				h.add2Pending(entry.Job)
