@@ -266,12 +266,18 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 		TableByName(res.SchemaName, res.BinlogInfo.TableInfo.Name.O)
 	require.True(s.t, ok)
 
+	ctx := context.Background()
+	snap, err := s.schemaStorage.GetSnapshot(ctx, res.BinlogInfo.FinishedTS-1)
+	require.NoError(s.t, err)
+	preTableInfo, _ := snap.PhysicalTableByID(res.TableID)
+
 	event := &model.DDLEvent{
-		StartTs:   res.StartTS,
-		CommitTs:  res.BinlogInfo.FinishedTS,
-		TableInfo: tableInfo,
-		Query:     res.Query,
-		Type:      res.Type,
+		StartTs:      res.StartTS,
+		CommitTs:     res.BinlogInfo.FinishedTS,
+		TableInfo:    tableInfo,
+		PreTableInfo: preTableInfo,
+		Query:        res.Query,
+		Type:         res.Type,
 	}
 
 	return event
