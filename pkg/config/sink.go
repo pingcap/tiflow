@@ -194,6 +194,8 @@ type CSVConfig struct {
 	IncludeCommitTs bool `toml:"include-commit-ts" json:"include-commit-ts"`
 	// encoding method of binary type
 	BinaryEncodingMethod string `toml:"binary-encoding-method" json:"binary-encoding-method"`
+	// output old value
+	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {

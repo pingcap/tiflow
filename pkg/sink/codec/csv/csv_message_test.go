@@ -742,6 +742,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		tableName  string
 		schemaName string
 		commitTs   uint64
+		preColumns []any
 		columns    []any
 	}
 	testCases := []struct {
@@ -784,6 +785,27 @@ func TestCSVMessageEncode(t *testing.T) {
 				columns:    []any{"a!b!c", "def"},
 			},
 			want: []byte(`U!table2!test!435661838416609281!a\!b\!c!def` + "\n"),
+		},
+		{
+			name: "csv encode values containing single-character delimter string, without quote mark, update with old value",
+			fields: fields{
+				config: &common.Config{
+					Delimiter:       "!",
+					Quote:           "",
+					Terminator:      "\n",
+					NullString:      "\\N",
+					IncludeCommitTs: true,
+					OutputOldValue:  true,
+				},
+				opType:     operationUpdate,
+				tableName:  "table2",
+				schemaName: "test",
+				commitTs:   435661838416609281,
+				preColumns: []any{"a!b!c", "abc"},
+				columns:    []any{"a!b!c", "def"},
+			},
+			want: []byte(`D!table2!test!435661838416609281!a\!b\!c!abc` + "\n" +
+				`I!table2!test!435661838416609281!a\!b\!c!def` + "\n"),
 		},
 		{
 			name: "csv encode values containing single-character delimter string, with quote mark",
@@ -903,6 +925,7 @@ func TestCSVMessageEncode(t *testing.T) {
 				schemaName: tc.fields.schemaName,
 				commitTs:   tc.fields.commitTs,
 				columns:    tc.fields.columns,
+				preColumns: tc.fields.preColumns,
 				newRecord:  true,
 			}
 

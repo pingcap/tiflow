@@ -326,6 +326,8 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	// FinishedTS is only set when the job is synced,
 	// but we can use the entry's ts here
 	job.StartTS = startTs
+	// Since ddl in stateDone is not contain the FinishedTS,
+	// we need to set it as the txn's commit ts.
 	job.BinlogInfo.FinishedTS = CRTs
 	return job, nil
 }
@@ -373,7 +375,7 @@ func datum2Column(
 				zap.String("column", colInfo.Name.String()))
 		}
 
-		defaultValue := GetDDLDefaultDefinition(colInfo)
+		defaultValue := GetColumnDefaultValue(colInfo)
 		offset := tableInfo.RowColumnsOffset[colID]
 		rawCols[offset] = colDatums
 		cols[offset] = &model.Column{
@@ -736,8 +738,8 @@ func getDefaultOrZeroValue(col *timodel.ColumnInfo) (types.Datum, any, int, stri
 	return d, v, size, warn, err
 }
 
-// GetDDLDefaultDefinition returns the default definition of a column.
-func GetDDLDefaultDefinition(col *timodel.ColumnInfo) interface{} {
+// GetColumnDefaultValue returns the default definition of a column.
+func GetColumnDefaultValue(col *timodel.ColumnInfo) interface{} {
 	defaultValue := col.GetDefaultValue()
 	if defaultValue == nil {
 		defaultValue = col.GetOriginDefaultValue()

@@ -1014,7 +1014,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	for _, tc := range testCases {
 		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
-		val = GetDDLDefaultDefinition(&tc.ColInfo)
+		val = GetColumnDefaultValue(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
 	}
 }
