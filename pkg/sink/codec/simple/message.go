@@ -487,27 +487,26 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 			log.Panic("unexpected type for enum value", zap.Any("value", value))
 		}
 	case mysql.TypeSet:
-		if v, ok := value.(string); ok {
-			return v, nil
-		}
-		elements := ft.GetElems()
+		var (
+			number uint64
+			err    error
+		)
 		switch v := value.(type) {
 		case uint64:
-			setVar, err := tiTypes.ParseSetValue(elements, v)
-			if err != nil {
-				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-			}
-			return setVar.Name, nil
+			number = v
 		case []uint8:
-			number, err := common.BinaryLiteralToInt(v)
+			number, err = common.BinaryLiteralToInt(v)
 			if err != nil {
-				log.Error("parse number for set failed", zap.Any("value", v), zap.Error(err))
 				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 			}
-			value = number
 		default:
 			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
+		setValue, err := tiTypes.ParseSetValue(ft.GetElems(), number)
+		if err != nil {
+			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+		return setValue.Name, nil
 	case mysql.TypeBit:
 		switch v := value.(type) {
 		case []uint8:
