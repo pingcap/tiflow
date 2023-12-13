@@ -468,56 +468,46 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 		return nil, nil
 	}
 
-	var err error
 	switch ft.GetType() {
 	case mysql.TypeEnum:
 		if v, ok := value.(string); ok {
 			return v, nil
 		}
 		element := ft.GetElems()
-
-		var number uint64
 		switch v := value.(type) {
 		case uint64:
-			number = v
-		case []uint8:
-			number, err = strconv.ParseUint(string(v), 10, 64)
+			enumVar, err := tiTypes.ParseEnumValue(element, v)
 			if err != nil {
-				log.Error("parse number for enum failed", zap.Any("number", string(v)), zap.Error(err))
 				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 			}
+			return enumVar.Name, nil
+		case []uint8:
+			return string(v), nil
 		default:
 			log.Panic("unexpected type for enum value", zap.Any("value", value))
 		}
-		enumVar, err := tiTypes.ParseEnumValue(element, number)
-		if err != nil {
-			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-		}
-		return enumVar.Name, nil
 	case mysql.TypeSet:
 		if v, ok := value.(string); ok {
 			return v, nil
 		}
 		elements := ft.GetElems()
-
-		var number uint64
 		switch v := value.(type) {
 		case uint64:
-			number = v
-		case []uint8:
-			number, err = common.BinaryLiteralToInt(v)
+			setVar, err := tiTypes.ParseSetValue(elements, v)
 			if err != nil {
-				log.Error("parse number for set failed", zap.Any("number", number), zap.Error(err))
 				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 			}
+			return setVar.Name, nil
+		case []uint8:
+			number, err := common.BinaryLiteralToInt(v)
+			if err != nil {
+				log.Error("parse number for set failed", zap.Any("value", v), zap.Error(err))
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			return number, nil
 		default:
 			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
-		setVar, err := tiTypes.ParseSetValue(elements, number)
-		if err != nil {
-			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-		}
-		return setVar.Name, nil
 	default:
 	}
 
