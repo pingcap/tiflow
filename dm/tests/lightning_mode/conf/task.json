@@ -3,7 +3,7 @@
         "name": "test",
         "task_mode": "all",
         "shard_mode": "pessimistic",
-        "meta_schema": "dm-meta",
+        "meta_schema": "dm_meta",
         "enhance_online_schema_change": true,
         "on_duplicate": "error",
         "ignore_checking_items": [
@@ -20,29 +20,15 @@
                 "source": {
                     "source_name": "mysql-replica-01",
                     "schema": "lightning_mode",
-                    "table": "*"
-                },
-                "target": {
-                    "schema": "lightning_mode",
-                    "table": "*"
-                },
-                "binlog_filter_rule": [
-                    "rule-1"
-                ]
+                    "table": ""
+                }
             },
             {
                 "source": {
                     "source_name": "mysql-replica-02",
                     "schema": "lightning_mode",
                     "table": ""
-                },
-                "target": {
-                    "schema": "lightning_mode",
-                    "table": ""
-                },
-                "binlog_filter_rule": [
-                    "rule-1"
-                ]
+                }
             }
         ],
         "source_config": {
