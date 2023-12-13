@@ -1007,10 +1007,6 @@ func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
 			if jobEntry.OpType == model.OpTypeResolved {
 				d.schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
 			}
-			err := jobEntry.Err
-			if err != nil {
-				return errors.Trace(err)
-			}
 		}
 	})
 	return g.Wait()

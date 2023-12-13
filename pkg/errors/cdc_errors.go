@@ -935,7 +935,7 @@ var (
 	)
 
 	ErrHandleDDLFailed = errors.Normalize(
-		"handle ddl failed, job: %s, query: %s, startTs: %d. "+
+		"handle ddl failed, query: %s, startTs: %d. "+
 			"If you want to skip this DDL and continue with replication, "+
 			"you can manually execute this DDL downstream. Afterwards, "+
 			"add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.",

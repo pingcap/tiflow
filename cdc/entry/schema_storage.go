@@ -176,11 +176,6 @@ func (s *schemaStorageImpl) GetLastSnapshot() *schema.Snapshot {
 
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
 func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
-	if s.skipJob(job) {
-		s.schemaVersion = job.BinlogInfo.SchemaVersion
-		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
-		return nil
-	}
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	var snap *schema.Snapshot
@@ -189,7 +184,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
 		// Unexecuted DDL jobs should have largest schemaVersions.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
-			log.Info("ignore foregone DDL",
+			log.Info("schemaStorage: ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("DDL", job.Query),
@@ -205,26 +200,25 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = schema.NewEmptySnapshot(s.forceReplicate)
 	}
 	if err := snap.HandleDDL(job); err != nil {
-		log.Error("handle DDL failed",
+		log.Error("schemaStorage: update snapshot by the DDL job failed",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
 			zap.String("DDL", job.Query),
-			zap.Stringer("job", job), zap.Error(err),
 			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-			zap.String("role", s.role.String()))
+			zap.String("role", s.role.String()),
+			zap.Error(err))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL",
-		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID),
-		zap.String("DDL", job.Query),
-		zap.Stringer("job", job),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-		zap.String("role", s.role.String()))
-
 	s.snaps = append(s.snaps, snap)
 	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
+	log.Info("schemaStorage: update snapshot by the DDL job",
+		zap.String("namespace", s.id.Namespace),
+		zap.String("changefeed", s.id.ID),
+		zap.String("DDL", job.Query),
+		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+		zap.Uint64("schemaVersion", uint64(s.schemaVersion)),
+		zap.String("role", s.role.String()))
 	return nil
 }
 
@@ -274,23 +268,6 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 	lastSchemaTs = s.snaps[0].CurrentTs()
 	atomic.StoreUint64(&s.gcTs, lastSchemaTs)
 	return
-}
-
-// SkipJob skip the job should not be executed
-// TiDB write DDL Binlog for every DDL Job,
-// we must ignore jobs that are cancelled or rollback
-// For older version TiDB, it writes DDL Binlog in the txn
-// that the state of job is changed to *synced*
-// Now, it writes DDL Binlog in the txn that the state of
-// job is changed to *done* (before change to *synced*)
-// At state *done*, it will be always and only changed to *synced*.
-func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
-	log.Debug("handle DDL new commit",
-		zap.String("DDL", job.Query), zap.Stringer("job", job),
-		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID),
-		zap.String("role", s.role.String()))
-	return !job.IsDone()
 }
 
 // MockSchemaStorage is for tests.
