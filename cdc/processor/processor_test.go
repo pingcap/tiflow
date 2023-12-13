@@ -112,8 +112,7 @@ func newProcessor4Test(
 	return p
 }
 
-func initProcessor4Test(
-	ctx context.Context, t *testing.T, liveness *model.Liveness, enableRedo bool,
+func initProcessor4Test(t *testing.T, liveness *model.Liveness, enableRedo bool,
 	globalVars *cdcContext.GlobalVars, changefeedVars *cdcContext.ChangefeedVars,
 ) (*processor, *orchestrator.ReactorStateTester, *orchestrator.ChangefeedReactorState) {
 	changefeedInfo := `
@@ -220,7 +219,7 @@ func TestTableExecutorAddingTableIndirectly(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 
 	// init tick
 	checkChangefeedNormal(changefeed)
@@ -309,7 +308,7 @@ func TestTableExecutorAddingTableIndirectlyWithRedoEnabled(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 
 	// init tick
 	checkChangefeedNormal(changefeed)
@@ -408,7 +407,7 @@ func TestProcessorError(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 
 	// init tick
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
@@ -433,7 +432,7 @@ func TestProcessorError(t *testing.T) {
 	require.Nil(t, p.Close())
 	tester.MustApplyPatches()
 
-	p, tester, changefeed = initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed = initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
 	err, _ = p.Tick(ctx, changefeed.Info, changefeed.Status)
 	require.Nil(t, err)
@@ -455,9 +454,8 @@ func TestProcessorError(t *testing.T) {
 
 func TestProcessorExit(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
-	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// var err error
 	// init tick
 	checkChangefeedNormal(changefeed)
@@ -483,7 +481,7 @@ func TestProcessorClose(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
 	checkChangefeedNormal(changefeed)
 	createTaskPosition(changefeed, p.captureInfo)
@@ -522,7 +520,7 @@ func TestProcessorClose(t *testing.T) {
 	require.Nil(t, p.sourceManager.r)
 	require.Nil(t, p.agent)
 
-	p, tester, changefeed = initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed = initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
 	checkChangefeedNormal(changefeed)
 	createTaskPosition(changefeed, p.captureInfo)
@@ -568,7 +566,7 @@ func TestPositionDeleted(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	// init tick
 	checkChangefeedNormal(changefeed)
 	createTaskPosition(changefeed, p.captureInfo)
@@ -612,7 +610,7 @@ func TestSchemaGC(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 
 	var err error
 	// init tick
@@ -675,7 +673,7 @@ func TestUpdateBarrierTs(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	changefeed.PatchStatus(func(status *model.ChangeFeedStatus) (*model.ChangeFeedStatus, bool, error) {
 		status.CheckpointTs = 5
 		return status, true, nil
@@ -729,7 +727,7 @@ func TestProcessorLiveness(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 
 	// First tick for creating position.
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)
@@ -765,7 +763,7 @@ func TestProcessorDostNotStuckInInit(t *testing.T) {
 	globalVars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	liveness := model.LivenessCaptureAlive
-	p, tester, changefeed := initProcessor4Test(ctx, t, &liveness, false, globalVars, changefeedVars)
+	p, tester, changefeed := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 
 	// First tick for creating position.
 	err, _ := p.Tick(ctx, changefeed.Info, changefeed.Status)

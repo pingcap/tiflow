@@ -94,7 +94,7 @@ func newOwner4Test(
 	return o
 }
 
-func createOwner4Test(ctx context.Context, globalVars *cdcContext.GlobalVars, t *testing.T) (*ownerImpl, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
+func createOwner4Test(globalVars *cdcContext.GlobalVars, t *testing.T) (*ownerImpl, *orchestrator.GlobalReactorState, *orchestrator.ReactorStateTester) {
 	pdClient := &gc.MockPDClient{
 		UpdateServiceGCSafePointFunc: func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error) {
 			return safePoint, nil
@@ -158,7 +158,7 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	owner, state, tester := createOwner4Test(ctx, globalVars, t)
+	owner, state, tester := createOwner4Test(globalVars, t)
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
 	changefeedInfo := &model.ChangeFeedInfo{
@@ -227,7 +227,7 @@ func TestCreateRemoveChangefeed(t *testing.T) {
 func TestStopChangefeed(t *testing.T) {
 	globalVars := cdcContext.NewGlobalVars4Test()
 	ctx := context.Background()
-	owner, state, tester := createOwner4Test(ctx, globalVars, t)
+	owner, state, tester := createOwner4Test(globalVars, t)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -272,11 +272,9 @@ func TestStopChangefeed(t *testing.T) {
 
 func TestAdminJob(t *testing.T) {
 	globalVars := cdcContext.NewGlobalVars4Test()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	done1 := make(chan error, 1)
-	owner, _, _ := createOwner4Test(ctx, globalVars, t)
+	owner, _, _ := createOwner4Test(globalVars, t)
 	owner.EnqueueJob(model.AdminJob{
 		CfID: model.DefaultChangeFeedID("test-changefeed1"),
 		Type: model.AdminResume,
@@ -327,7 +325,7 @@ func TestHandleJobsDontBlock(t *testing.T) {
 	globalVars := cdcContext.NewGlobalVars4Test()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	owner, state, tester := createOwner4Test(ctx, globalVars, t)
+	owner, state, tester := createOwner4Test(globalVars, t)
 
 	statusProvider := owner.StatusProvider()
 	// work well

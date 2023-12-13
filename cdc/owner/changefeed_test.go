@@ -188,8 +188,7 @@ func (m *mockScheduler) DrainCapture(target model.CaptureID) (int, error) {
 // Close closes the scheduler and releases resources.
 func (m *mockScheduler) Close(ctx context.Context) {}
 
-func createChangefeed4Test(ctx context.Context,
-	globalVars *cdcContext.GlobalVars,
+func createChangefeed4Test(globalVars *cdcContext.GlobalVars,
 	changefeedVars *cdcContext.ChangefeedVars,
 	t *testing.T,
 ) (
@@ -260,7 +259,7 @@ func createChangefeed4Test(ctx context.Context,
 
 func TestPreCheck(t *testing.T) {
 	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
-	_, captures, tester, state := createChangefeed4Test(context.Background(), globalvars, changefeedVars, t)
+	_, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	state.CheckCaptureAlive(globalvars.CaptureInfo.ID)
 	preflightCheck(state, captures)
 	tester.MustApplyPatches()
@@ -283,7 +282,7 @@ func TestPreCheck(t *testing.T) {
 func TestInitialize(t *testing.T) {
 	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
-	cf, captures, tester, state := createChangefeed4Test(ctx, globalvars, changefeedVars, t)
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	defer cf.Close(ctx)
 	// pre check
 	state.CheckCaptureAlive(globalvars.CaptureInfo.ID)
@@ -300,7 +299,7 @@ func TestInitialize(t *testing.T) {
 func TestChangefeedHandleError(t *testing.T) {
 	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
-	cf, captures, tester, state := createChangefeed4Test(ctx, globalvars, changefeedVars, t)
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	defer cf.Close(ctx)
 	// pre check
 	state.CheckCaptureAlive(globalvars.CaptureInfo.ID)
@@ -331,7 +330,7 @@ func TestExecDDL(t *testing.T) {
 	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	changefeedVars.Info.StartTs = startTs
 	ctx := context.Background()
-	cf, captures, tester, state := createChangefeed4Test(ctx, globalvars, changefeedVars, t)
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	cf.upstream.KVStorage = helper.Storage()
 	defer cf.Close(ctx)
 	tickTwoTime := func() {
@@ -416,7 +415,7 @@ func TestEmitCheckpointTs(t *testing.T) {
 	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	changefeedVars.Info.StartTs = startTs
 	ctx := context.Background()
-	cf, captures, tester, state := createChangefeed4Test(ctx, globalvars, changefeedVars, t)
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	cf.upstream.KVStorage = helper.Storage()
 
 	defer cf.Close(ctx)
@@ -483,7 +482,7 @@ func TestSyncPoint(t *testing.T) {
 	changefeedVars.Info.Config.SyncPointInterval = util.AddressOf(1 * time.Second)
 	// SyncPoint option is only available for MySQL compatible database.
 	changefeedVars.Info.SinkURI = "mysql://"
-	cf, captures, tester, state := createChangefeed4Test(ctx, globalvars, changefeedVars, t)
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -516,7 +515,7 @@ func TestFinished(t *testing.T) {
 	globalvars, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
 	ctx := context.Background()
 	changefeedVars.Info.TargetTs = changefeedVars.Info.StartTs + 1000
-	cf, captures, tester, state := createChangefeed4Test(ctx, globalvars, changefeedVars, t)
+	cf, captures, tester, state := createChangefeed4Test(globalvars, changefeedVars, t)
 	defer cf.Close(ctx)
 
 	// pre check
@@ -557,7 +556,7 @@ func TestRemoveChangefeed(t *testing.T) {
 		EncodingWorkerNum:     redo.DefaultEncodingWorkerNum,
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 	}
-	testChangefeedReleaseResource(t, ctx, globalVars, changefeedVars, cancel, dir, true /*expectedInitialized*/)
+	testChangefeedReleaseResource(ctx, t, globalVars, changefeedVars, cancel, dir, true /*expectedInitialized*/)
 }
 
 func TestRemovePausedChangefeed(t *testing.T) {
@@ -575,12 +574,12 @@ func TestRemovePausedChangefeed(t *testing.T) {
 		Storage:           filepath.Join("nfs://", dir),
 		FlushIntervalInMs: redo.DefaultFlushIntervalInMs,
 	}
-	testChangefeedReleaseResource(t, ctx, globalVars, changefeedVars, cancel, dir, false /*expectedInitialized*/)
+	testChangefeedReleaseResource(ctx, t, globalVars, changefeedVars, cancel, dir, false /*expectedInitialized*/)
 }
 
 func testChangefeedReleaseResource(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	globalVars *cdcContext.GlobalVars,
 	changefeedVars *cdcContext.ChangefeedVars,
 	cancel context.CancelFunc,
@@ -588,7 +587,7 @@ func testChangefeedReleaseResource(
 	expectedInitialized bool,
 ) {
 	var err error
-	cf, captures, tester, state := createChangefeed4Test(ctx, globalVars, changefeedVars, t)
+	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedVars, t)
 
 	// pre check
 	state.CheckCaptureAlive(globalVars.CaptureInfo.ID)
@@ -632,7 +631,7 @@ func TestBarrierAdvance(t *testing.T) {
 		}
 		changefeedVars.Info.SinkURI = "mysql://"
 
-		cf, captures, tester, state := createChangefeed4Test(ctx, globalVars, changefeedVars, t)
+		cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedVars, t)
 		defer cf.Close(ctx)
 
 		// The changefeed load the info from etcd.
