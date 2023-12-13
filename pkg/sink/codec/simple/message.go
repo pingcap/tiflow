@@ -509,12 +509,15 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
 	case mysql.TypeBit:
-		rawValue := value.([]uint8)
-		bitValue, err := common.BinaryLiteralToInt(rawValue)
-		if err != nil {
-			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		switch v := value.(type) {
+		case []uint8:
+			bitValue, err := common.BinaryLiteralToInt(v)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			value = bitValue
+		default:
 		}
-		value = bitValue
 	default:
 	}
 
