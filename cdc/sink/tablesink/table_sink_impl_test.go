@@ -38,9 +38,6 @@ type mockEventSink struct {
 
 func (m *mockEventSink) WriteEvents(rows ...*dmlsink.TxnCallbackableEvent) error {
 	m.events = append(m.events, rows...)
-	// for _, event := range rows {
-	// 	event.Callback()
-	// }
 	return nil
 }
 

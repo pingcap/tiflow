@@ -896,12 +896,24 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 	})
 }
 
+// transformer timestamp to readable format
 func transformerTime(timestamp int64) string {
 	location := time.Local
 	tm := time.Unix((timestamp / 1000), 0).In(location)
 	return tm.Format("2006-01-02 15:04:05")
 }
 
+// synced get the synced status of a changefeed
+// @Summary Get synced status
+// @Description get the synced status of a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id  path  string  true  "changefeed_id"
+// @Param namespace query string false "default"
+// @Success 200 {object} SyncedStatus
+// @Failure 500,400 {object} model.HTTPError
+// @Router /api/v2/changefeeds/{changefeed_id}/synced [get]
 func (h *OpenAPIV2) synced(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -922,7 +934,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		return
 	}
 
-	log.Info("Get changefeed synced status:", zap.Any("status", status))
+	log.Info("Get changefeed synced status:", zap.Any("status", status), zap.Any("changefeedID", changefeedID))
 
 	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
 	if (status.SyncedCheckInterval != 0) && (status.CheckpointInterval != 0) {
@@ -930,6 +942,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval = status.SyncedCheckInterval
 	}
 
+	// get pd client
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
@@ -944,7 +957,8 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	defer cancel()
 
 	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-	if err != nil { // pd 不可用
+	if err != nil {
+		// pd is unavailable
 		var message string
 		if (status.PullerResolvedTs - status.CheckpointTs) > cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 { // 5s
 			message = fmt.Sprintf("%s. Besides the data is not finish syncing", terror.Message(err))
@@ -966,15 +980,12 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	}
 	defer pdClient.Close()
 
+	// get time from pd
 	physicalNow, _, _ := pdClient.GetTS(ctx)
 
-	log.Info("time info", zap.Int64("physical", physicalNow), zap.Int64("checkpointTs", status.CheckpointTs),
-		zap.Int64("pullerResolvedTs", status.PullerResolvedTs), zap.Int64("LastSyncedTs", status.LastSyncedTs),
-		zap.Int64("SyncedCheckInterval", cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval),
-		zap.Int64("CheckpointInterval", cfg.ReplicaConfig.SyncedStatus.CheckpointInterval))
-
 	if (physicalNow-status.LastSyncedTs > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000) &&
-		(physicalNow-status.CheckpointTs < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000) { // 达到 synced 严格条件
+		(physicalNow-status.CheckpointTs < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000) {
+		// reach strict synced  condition
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           true,
 			SinkCheckpointTs: transformerTime(status.CheckpointTs),
@@ -984,9 +995,9 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			Info:             "Data syncing is finished",
 		})
 	} else if physicalNow-status.LastSyncedTs > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
-		// lastSyncedTs 条件达到，checkpoint-ts 未达到
+		// lastSyncedTs reach the synced condition, while checkpoint-ts doesn't
 		var message string
-		if (status.PullerResolvedTs - status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 { // 5s
+		if (status.PullerResolvedTs - status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
 			message = fmt.Sprintf("Please check whether pd is health and tikv region is all available. " +
 				"If pd is not health or tikv region is not available, the data syncing is finished. " +
 				" Otherwise the data syncing is not finished, please wait")
@@ -1001,7 +1012,8 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			NowTs:            transformerTime(physicalNow),
 			Info:             message,
 		})
-	} else { // lastSyncedTs 条件未达到
+	} else {
+		// lastSyncedTs doesn't reach the synced condition
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
 			SinkCheckpointTs: transformerTime(status.CheckpointTs),

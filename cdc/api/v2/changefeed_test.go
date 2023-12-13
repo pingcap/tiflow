@@ -1021,7 +1021,7 @@ func TestChangefeedSynced(t *testing.T) {
 
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
 		// case3: pd is offline，resolvedTs - checkpointTs > 15s
-		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279,
 			LastSyncedTs:     1701153217279,
 			PullerResolvedTs: 1701153247279,
@@ -1046,8 +1046,8 @@ func TestChangefeedSynced(t *testing.T) {
 
 	{
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
-		// case4: pd is offline，resolvedTs - checkpointTs < 5s
-		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+		// case4: pd is offline，resolvedTs - checkpointTs < 15s
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279,
 			LastSyncedTs:     1701153217279,
 			PullerResolvedTs: 1701153217479,
@@ -1077,8 +1077,8 @@ func TestChangefeedSynced(t *testing.T) {
 	pdClient.logicTime = 1000
 	pdClient.timestamp = 1701153217279
 	{
-		// case5: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs < 5s
-		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+		// case5: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs < 15s
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217209,
 			LastSyncedTs:     1701152217279,
 			PullerResolvedTs: 1701153217229,
@@ -1102,7 +1102,7 @@ func TestChangefeedSynced(t *testing.T) {
 
 	{
 		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs < 15s
-		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153201279,
 			LastSyncedTs:     1701152217279,
 			PullerResolvedTs: 1701153201379,
@@ -1127,7 +1127,7 @@ func TestChangefeedSynced(t *testing.T) {
 
 	{
 		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs > 15s
-		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153201279,
 			LastSyncedTs:     1701152207279,
 			PullerResolvedTs: 1701153218279,
@@ -1150,7 +1150,7 @@ func TestChangefeedSynced(t *testing.T) {
 
 	{
 		// case8: pdTs - lastSyncedTs < 5min
-		statusProvider.changeFeedSyncedStatusForAPI = &model.ChangeFeedSyncedStatusForAPI{
+		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279,
 			LastSyncedTs:     1701153213279,
 			PullerResolvedTs: 1701153217279,

@@ -526,20 +526,6 @@ LOOP2:
 		c.resolvedTs = checkpointTs
 	}
 
-	// if c.lastSyncedTs == 0 {
-	// 	// Set LastSyncedTs with current pd time when do initialize.
-
-	// 	// we don't save lastSyncedTs in etcd because we want to reduce the number of etcd write.
-	// 	// Based on the assumption that owner will not be replaced frequently,
-	// 	// and we only change owners when oom or some panic happens,
-	// 	// use pd time to initialize lastSyncedTs can work well enough.
-	// 	// Even if there are no more data send into ticdc after changing owner,
-	// 	// we just need to wait synced-check-time to reach synced = true.
-	// 	// We regard the situation never happens that owner is replaced frequently and then leading to
-	// 	// lastSyncedTs always increase even if there are no more data send into ticdc.
-	// 	c.lastSyncedTs = uint64(oracle.GetPhysical(c.upstream.PDClock.CurrentTime()))
-	// }
-
 	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {

@@ -171,7 +171,6 @@ func (m *mockScheduler) Tick(
 	barrier *schedulepb.BarrierWithMinTs,
 ) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs model.Ts, err error) {
 	m.currentTables = currentTables
-	// todo:这边到底应该 mock 一个什么呢
 	return barrier.MinTableBarrierTs, barrier.GlobalBarrierTs, scheduler.CheckpointCannotProceed, scheduler.CheckpointCannotProceed, nil
 }
 

@@ -62,14 +62,14 @@ func (c *mockPDClient) Close() {}
 
 type mockStatusProvider struct {
 	owner.StatusProvider
-	changefeedStatus             *model.ChangeFeedStatusForAPI
-	changefeedInfo               *model.ChangeFeedInfo
-	processors                   []*model.ProcInfoSnap
-	taskStatus                   map[model.CaptureID]*model.TaskStatus
-	changefeedInfos              map[model.ChangeFeedID]*model.ChangeFeedInfo
-	changefeedStatuses           map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI
-	changeFeedSyncedStatusForAPI *model.ChangeFeedSyncedStatusForAPI
-	err                          error
+	changefeedStatus       *model.ChangeFeedStatusForAPI
+	changefeedInfo         *model.ChangeFeedInfo
+	processors             []*model.ProcInfoSnap
+	taskStatus             map[model.CaptureID]*model.TaskStatus
+	changefeedInfos        map[model.ChangeFeedID]*model.ChangeFeedInfo
+	changefeedStatuses     map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI
+	changeFeedSyncedStatus *model.ChangeFeedSyncedStatusForAPI
+	err                    error
 }
 
 // GetChangeFeedStatus returns a changefeeds' runtime status.
@@ -121,12 +121,12 @@ func (m *mockStatusProvider) GetAllChangeFeedStatuses(_ context.Context) (
 	return m.changefeedStatuses, m.err
 }
 
-// GetChangeFeedSyncedStatusForAPI returns a mock changefeed status.
+// GetChangeFeedSyncedStatus returns a mock changefeed status.
 func (m *mockStatusProvider) GetChangeFeedSyncedStatus(_ context.Context, changefeedID model.ChangeFeedID) (
 	*model.ChangeFeedSyncedStatusForAPI,
 	error,
 ) {
-	return m.changeFeedSyncedStatusForAPI, m.err
+	return m.changeFeedSyncedStatus, m.err
 }
 
 func (m *mockStatusProvider) IsChangefeedOwner(_ context.Context, id model.ChangeFeedID) (bool, error) {
