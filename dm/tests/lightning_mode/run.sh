@@ -89,7 +89,7 @@ function run() {
 	run_sql_tidb "drop database if exists lightning_mode;"
 	run_sql_tidb "drop database if exists dm_meta;"
 
-	task_conf=`cat $cur/conf/task.json`
+	task_conf=$(cat $cur/conf/task.json)
 	curl -X POST http://127.0.0.1:8261/api/v1/tasks -H "Content-Type: application/json" -d "$task_conf"
 
 	# use sync_diff_inspector to check full dump loader
