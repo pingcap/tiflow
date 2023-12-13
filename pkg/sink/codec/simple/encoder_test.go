@@ -53,19 +53,19 @@ func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
-	sql := `create table test.t(
-    	id int primary key,
-    	name varchar(255) not null,
-    	age int,
-    	email varchar(255) not null,
-    	key idx_name(name),
-    	key idx_name_email(name, email))`
+	sql := `create table test.t(id int primary key,name varchar(255) not null,age int,email varchar(255) not null,key idx_name_email(name, email))`
 	ddlEvent := helper.DDL2Event(sql)
 
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	enc := NewBuilder(codecConfig).Build()
 
 	m, err := enc.EncodeDDLEvent(ddlEvent)
+	require.NoError(t, err)
+
+	sql = `rename table test.t to test.abc`
+	ddlEvent = helper.DDL2Event(sql)
+
+	m, err = enc.EncodeDDLEvent(ddlEvent)
 	require.NoError(t, err)
 
 	dec := NewDecoder()

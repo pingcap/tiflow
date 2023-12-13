@@ -195,6 +195,7 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
+	Version uint64          `json:"version"`
 	Columns []*columnSchema `json:"columns"`
 	Indexes []*IndexSchema  `json:"indexes"`
 }
@@ -220,7 +221,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 		indexes = append(indexes, index)
 	}
 
-	// Sometime the primary key is not in the index, we need to find it manually.
+	// Sometimes the primary key is not in the index, we need to find it manually.
 	if !pkInIndexes {
 		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
 		if len(pkColumns) != 0 {
@@ -240,6 +241,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	return &TableSchema{
 		Columns: columns,
 		Indexes: indexes,
+		Version: tableInfo.UpdateTS,
 	}
 }
 
@@ -339,16 +341,18 @@ type message struct {
 	Type     EventType `json:"type"`
 	CommitTs uint64    `json:"commitTs"`
 	BuildTs  int64     `json:"buildTs"`
+	// SchemaVersion is for the DML event.
+	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
 	Old map[string]interface{} `json:"old,omitempty"`
-	// TableSchema is for the DDL and Bootstrap event.
-	TableSchema *TableSchema `json:"tableSchema,omitempty"`
 	// SQL is only for the DDL event.
 	SQL string `json:"sql,omitempty"`
-	// SchemaVersion is for the DDL, Bootstrap and DML event.
-	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
+	// PreTableSchema holds schema information before the DDL executed.
+	PreTableSchema *TableSchema `json:"preTableSchema,omitempty"`
+	// TableSchema is for the DDL and Bootstrap event.
+	TableSchema *TableSchema `json:"tableSchema,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
@@ -362,29 +366,33 @@ func newResolvedMessage(ts uint64) *message {
 
 func newDDLMessage(ddl *model.DDLEvent) *message {
 	var (
-		database      string
-		table         string
-		schema        *TableSchema
-		schemaVersion uint64
+		database  string
+		table     string
+		schema    *TableSchema
+		preSchema *TableSchema
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
 		schema = newTableSchema(ddl.TableInfo)
 		database = ddl.TableInfo.TableName.Schema
 		table = ddl.TableInfo.TableName.Table
-		schemaVersion = ddl.TableInfo.UpdateTS
+	}
+	if !ddl.IsBootstrap {
+		if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
+			preSchema = newTableSchema(ddl.PreTableInfo)
+		}
 	}
 
 	msg := &message{
-		Version:       defaultVersion,
-		Database:      database,
-		Table:         table,
-		Type:          DDLType,
-		CommitTs:      ddl.CommitTs,
-		BuildTs:       time.Now().UnixMilli(),
-		SQL:           ddl.Query,
-		TableSchema:   schema,
-		SchemaVersion: schemaVersion,
+		Version:        defaultVersion,
+		Database:       database,
+		Table:          table,
+		Type:           DDLType,
+		CommitTs:       ddl.CommitTs,
+		BuildTs:        time.Now().UnixMilli(),
+		SQL:            ddl.Query,
+		TableSchema:    schema,
+		PreTableSchema: preSchema,
 	}
 	if ddl.IsBootstrap {
 		msg.Type = BootstrapType

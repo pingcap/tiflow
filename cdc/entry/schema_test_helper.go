@@ -262,7 +262,8 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 	require.NoError(s.t, err)
 	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	tableInfo, ok := s.schemaStorage.GetLastSnapshot().TableByName(res.SchemaName, res.TableName)
+	tableInfo, ok := s.schemaStorage.GetLastSnapshot().
+		TableByName(res.SchemaName, res.BinlogInfo.TableInfo.Name.O)
 	require.True(s.t, ok)
 
 	event := &model.DDLEvent{
