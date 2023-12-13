@@ -20,6 +20,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/kv"
@@ -237,4 +238,50 @@ func TestPullerRawKV(t *testing.T) {
 	store.Close()
 	cancel()
 	wg.Wait()
+}
+
+type fakeFrontier struct {
+	resolvedTs uint64
+}
+
+func (f *fakeFrontier) Forward(regionID uint64, span tablepb.Span, ts uint64) {
+}
+
+func (f *fakeFrontier) Frontier() uint64 {
+	return f.resolvedTs
+}
+
+func (f *fakeFrontier) String() string {
+	return ""
+}
+
+func (f *fakeFrontier) Entries(fn func(key []byte, ts uint64)) {
+}
+
+func TestDetectResolvedTsStuck(t *testing.T) {
+	plr := &pullerImpl{}
+	plr.cfg = &config.ServerConfig{
+		Debug: &config.DebugConfig{Puller: &config.PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        0,
+		}},
+	}
+	// detectResolvedTsStuck should return nil if the detection is disabled.
+	require.Nil(t, plr.detectResolvedTsStuck())
+
+	plr.cfg.Debug.Puller.EnableResolvedTsStuckDetection = true
+	plr.cfg.Debug.Puller.ResolvedTsStuckInterval = config.TomlDuration(time.Duration(5) * time.Minute)
+	plr.startResolvedTs = 10
+	tsTrack := &fakeFrontier{resolvedTs: 10}
+	plr.tsTracker = tsTrack
+	plr.lastForwardTime = time.Now().Add(-10 * time.Minute)
+	// detectResolvedTsStuck should return nil if the resolved ts is not forward
+	require.Nil(t, plr.detectResolvedTsStuck())
+
+	plr.lastForwardTime = time.Now()
+	tsTrack.resolvedTs = 20
+	// detectResolvedTsStuck should return nil if the resolved ts is forward but not stuck
+	require.Nil(t, plr.detectResolvedTsStuck())
+	plr.lastForwardTime = time.Now().Add(-5 * time.Minute)
+	require.NotNil(t, plr.detectResolvedTsStuck())
 }
