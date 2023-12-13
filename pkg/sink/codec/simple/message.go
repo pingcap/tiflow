@@ -504,10 +504,17 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 				log.Error("parse number for set failed", zap.Any("value", v), zap.Error(err))
 				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 			}
-			return number, nil
+			value = number
 		default:
 			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
+	case mysql.TypeBit:
+		rawValue := value.([]uint8)
+		bitValue, err := common.BinaryLiteralToInt(rawValue)
+		if err != nil {
+			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+		value = bitValue
 	default:
 	}
 
@@ -567,9 +574,10 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 	case mysql.TypeBit:
 		value, err = strconv.ParseUint(data, 10, 64)
 		if err != nil {
-			log.Panic("invalid column value for bit or set",
+			log.Error("invalid column value for bit",
 				zap.String("name", name), zap.Any("data", data),
 				zap.Any("type", fieldType.GetType()), zap.Error(err))
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
 		value, err = strconv.ParseInt(data, 10, 64)
