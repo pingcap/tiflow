@@ -20,16 +20,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/hack"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/hack"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/tikv/pd/pkg/utils/tsoutil"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type dbzCodec struct {
@@ -238,8 +237,7 @@ func (c *dbzCodec) writeDebeziumField(writer *util.JSONWriter, col *model.Column
 		// > Represents the time value in microseconds and does not include
 		// > time zone information. MySQL allows M to be in the range of 0-6.
 		if v, ok := col.Value.(string); ok {
-			ctx := &stmtctx.StatementContext{}
-			d, _, _, err := types.StrToDuration(ctx, v, ft.GetDecimal())
+			d, _, _, err := types.StrToDuration(types.DefaultStmtNoWarningContext, v, ft.GetDecimal())
 			if err != nil {
 				return cerror.WrapError(
 					cerror.ErrDebeziumEncodeFailed,
@@ -288,7 +286,7 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 	jWriter := util.BorrowJSONWriter(dest)
 	defer util.ReturnJSONWriter(jWriter)
 
-	commitTime, _ := tsoutil.ParseTS(e.CommitTs)
+	commitTime := oracle.GetTimeFromTS(e.CommitTs)
 
 	var err error
 
