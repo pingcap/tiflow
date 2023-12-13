@@ -84,6 +84,7 @@ type dataType struct {
 	Zerofill bool `json:"zerofill,omitempty"`
 }
 
+// newColumnSchema converts from TiDB ColumnInfo to columnSchema.
 func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
 	tp := dataType{
 		MySQLType: types.TypeToStr(col.GetType(), col.GetCharset()),
@@ -99,11 +100,12 @@ func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
 		ID:       col.ID,
 		Name:     col.Name.O,
 		DataType: tp,
-		Nullable: mysql.HasNotNullFlag(col.GetFlag()),
-		Default:  entry.GetDDLDefaultDefinition(col),
+		Nullable: !mysql.HasNotNullFlag(col.GetFlag()),
+		Default:  entry.GetColumnDefaultValue(col),
 	}
 }
 
+// newTiColumnInfo uses columnSchema and IndexSchema to construct a tidb column info.
 func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.ColumnInfo {
 	col := new(timodel.ColumnInfo)
 	col.Name = timodel.NewCIStr(column.Name)
@@ -162,17 +164,18 @@ func newIndexSchema(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) *In
 		Unique:  index.Unique,
 		Primary: index.Primary,
 	}
-
 	for _, col := range index.Columns {
 		indexSchema.Columns = append(indexSchema.Columns, col.Name.O)
 		colInfo := columns[col.Offset]
-		if mysql.HasNotNullFlag(colInfo.GetFlag()) {
-			indexSchema.Nullable = false
+		// An index is not null when all columns of aer not null
+		if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
+			indexSchema.Nullable = true
 		}
 	}
 	return indexSchema
 }
 
+// newTiIndexInfo convert IndexSchema to a tidb index info.
 func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 	indexColumns := make([]*timodel.IndexColumn, len(indexSchema.Columns))
 	for i, col := range indexSchema.Columns {
@@ -196,7 +199,7 @@ type TableSchema struct {
 	Indexes []*IndexSchema  `json:"indexes"`
 }
 
-func newTableSchema(tableInfo *timodel.TableInfo) *TableSchema {
+func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		columns = append(columns, newColumnSchema(col))
@@ -207,9 +210,31 @@ func newTableSchema(tableInfo *timodel.TableInfo) *TableSchema {
 		return int(columns[i].ID) < int(columns[j].ID)
 	})
 
+	pkInIndexes := false
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
-		indexes = append(indexes, newIndexSchema(idx, tableInfo.Columns))
+		index := newIndexSchema(idx, tableInfo.Columns)
+		if index.Primary {
+			pkInIndexes = true
+		}
+		indexes = append(indexes, index)
+	}
+
+	// Sometime the primary key is not in the index, we need to find it manually.
+	if !pkInIndexes {
+		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
+		if len(pkColumns) != 0 {
+			index := &IndexSchema{
+				Name:     "primary",
+				Nullable: false,
+				Primary:  true,
+				Unique:   true,
+			}
+			for col := range pkColumns {
+				index.Columns = append(index.Columns, col)
+			}
+			indexes = append(indexes, index)
+		}
 	}
 
 	return &TableSchema{
@@ -218,6 +243,7 @@ func newTableSchema(tableInfo *timodel.TableInfo) *TableSchema {
 	}
 }
 
+// newTableInfo converts from TableSchema to TableInfo.
 func newTableInfo(msg *message) *model.TableInfo {
 	info := &model.TableInfo{
 		TableName: model.TableName{
@@ -244,6 +270,7 @@ func newTableInfo(msg *message) *model.TableInfo {
 	return info
 }
 
+// newDDLEvent converts from message to DDLEvent.
 func newDDLEvent(msg *message) *model.DDLEvent {
 	tableInfo := newTableInfo(msg)
 	return &model.DDLEvent{
@@ -254,6 +281,7 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 	}
 }
 
+// buildRowChangedEvent converts from message to RowChangedEvent.
 func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
@@ -341,7 +369,7 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
-		schema = newTableSchema(ddl.TableInfo.TableInfo)
+		schema = newTableSchema(ddl.TableInfo)
 		database = ddl.TableInfo.TableName.Schema
 		table = ddl.TableInfo.TableName.Table
 		schemaVersion = ddl.TableInfo.UpdateTS

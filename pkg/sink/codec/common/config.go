@@ -16,6 +16,7 @@ package common
 import (
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/imdario/mergo"
@@ -70,9 +71,13 @@ type Config struct {
 	IncludeCommitTs      bool
 	Terminator           string
 	BinaryEncodingMethod string
+	OutputOldValue       bool
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
+
+	// Currently only Debezium protocol is aware of the time zone
+	TimeZone *time.Location
 }
 
 // NewConfig return a Config for codec
@@ -94,6 +99,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
+
+		TimeZone: time.Local,
 	}
 }
 
@@ -191,6 +198,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.NullString = replicaConfig.Sink.CSVConfig.NullString
 			c.IncludeCommitTs = replicaConfig.Sink.CSVConfig.IncludeCommitTs
 			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
+			c.OutputOldValue = replicaConfig.Sink.CSVConfig.OutputOldValue
 		}
 		if replicaConfig.Sink.KafkaConfig != nil && replicaConfig.Sink.KafkaConfig.LargeMessageHandle != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle

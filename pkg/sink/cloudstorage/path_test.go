@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	timodel "github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/parser/types"
@@ -325,9 +326,25 @@ func TestCheckOrWriteSchema(t *testing.T) {
 	require.Equal(t, tableInfo.Version, f.versionMap[table])
 
 	dir = filepath.Join(dir, "test/table1/meta")
-	cnt, err := os.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(cnt))
+	require.Equal(t, 1, len(files))
+
+	// test schema file is invalid
+	err = os.WriteFile(filepath.Join(dir,
+		fmt.Sprintf("%s.tmp.%s", files[0].Name(), uuid.NewString())),
+		[]byte("invalid"), 0o644)
+	require.NoError(t, err)
+	err = os.Remove(filepath.Join(dir, files[0].Name()))
+	require.NoError(t, err)
+	delete(f.versionMap, table)
+	err = f.CheckOrWriteSchema(ctx, table, tableInfo)
+	require.NoError(t, err)
+	require.Equal(t, table.TableInfoVersion, f.versionMap[table])
+
+	files, err = os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(files))
 }
 
 func TestRemoveExpiredFilesWithoutPartition(t *testing.T) {
