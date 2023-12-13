@@ -221,6 +221,11 @@ error = '''
 unflatten datume data
 '''
 
+["CDC:ErrDebeziumEncodeFailed"]
+error = '''
+debezium encode failed
+'''
+
 ["CDC:ErrDecodeFailed"]
 error = '''
 decode failed: %s
