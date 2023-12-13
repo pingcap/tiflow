@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	tifilter "github.com/pingcap/tidb/pkg/util/table-filter"
+	tifilter "github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"

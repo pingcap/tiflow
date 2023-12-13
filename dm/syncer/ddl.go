@@ -29,10 +29,9 @@ import (
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	tidbmock "github.com/pingcap/tidb/pkg/util/mock"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
-	filter "github.com/pingcap/tidb/pkg/util/table-filter"
-	tablefilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -79,7 +78,7 @@ type DDLWorker struct {
 	collationCompatible        string
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
-	baList                     *tablefilter.Filter
+	baList                     *filter.Filter
 
 	getTableInfo            func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
 	getDBInfoFromDownstream func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error)

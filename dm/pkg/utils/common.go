@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
-	"github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -198,7 +197,7 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 		_ = variables.SetSystemVar(k, v)
 		if strings.EqualFold(k, "time_zone") {
 			loc, _ := ParseTimeZone(v)
-			variables.StmtCtx.TimeZone = loc
+			variables.StmtCtx.SetTimeZone(loc)
 		}
 	}
 

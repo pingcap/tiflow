@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/store/driver"
-
 	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tiflow/tests/integration_tests/util"
 	"github.com/tikv/client-go/v2/oracle"

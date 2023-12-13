@@ -111,9 +111,7 @@ func NewMounter(schemaStorage SchemaStorage,
 		integrity: integrity,
 
 		encoder: &rowcodec.Encoder{},
-		sctx: &stmtctx.StatementContext{
-			TimeZone: tz,
-		},
+		sctx:    stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 
@@ -651,7 +649,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		v, err := datum.GetBinaryLiteral().ToInt(nil)
+		v, err := datum.GetBinaryLiteral().ToInt(types.DefaultStmtNoWarningContext)
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,

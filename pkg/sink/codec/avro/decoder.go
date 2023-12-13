@@ -57,7 +57,7 @@ func NewDecoder(
 		config:  config,
 		topic:   topic,
 		schemaM: schemaM,
-		sc:      &stmtctx.StatementContext{TimeZone: tz},
+		sc:      stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 

@@ -26,7 +26,7 @@ import (
 	dlog "github.com/pingcap/tidb/dumpling/log"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util"
-	filter "github.com/pingcap/tidb/pkg/util/table-filter"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
