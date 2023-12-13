@@ -214,8 +214,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 		s := manager.GetTableStats(span)
 		log.Info("current value", zap.Uint64("checkpointTs", s.CheckpointTs),
 			zap.Uint64("lastSyncedTs", s.LastSyncedTs))
-		// return s.CheckpointTs == 6 && s.LastSyncedTs == 4
-		return s.CheckpointTs == 6
+		return s.CheckpointTs == 6 && s.LastSyncedTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
