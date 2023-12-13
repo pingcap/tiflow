@@ -256,7 +256,6 @@ func (f *fakeFrontier) String() string {
 }
 
 func (f *fakeFrontier) Entries(fn func(key []byte, ts uint64)) {
-
 }
 
 func TestDetectResolvedTsStuck(t *testing.T) {
