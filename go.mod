@@ -122,7 +122,7 @@ require (
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.4.5
-	gorm.io/gorm v1.25.5
+	gorm.io/gorm v1.24.5
 	upper.io/db.v3 v3.7.1+incompatible
 )
 
@@ -397,3 +397,5 @@ replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 
 replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20231213065948-336e064b488d
+
+replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
