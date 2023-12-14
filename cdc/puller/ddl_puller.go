@@ -142,7 +142,8 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.String("query", job.Query),
-		zap.Uint64("startTs", job.StartTS))
+		zap.Uint64("startTs", job.StartTS),
+		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 	return nil
 }
 
@@ -391,7 +392,9 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
-				zap.String("query", job.Query))
+				zap.String("query", job.Query),
+				zap.Uint64("startTs", job.StartTS),
+				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		}
 		if err != nil {
 			log.Warn("handle ddl job failed",
@@ -400,6 +403,8 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
 				zap.String("query", job.Query),
+				zap.Uint64("startTs", job.StartTS),
+				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Error(err))
 		}
 	}()
@@ -412,9 +417,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
+			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS),
-			zap.Uint64("pullerResolvedTs", p.getResolvedTs()),
-			zap.String("query", job.Query))
+			zap.String("query", job.Query),
+			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
 		return true, nil
 	}
 
@@ -489,7 +495,9 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		log.Info("ddl puller receive rename table ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("query", job.Query))
+			zap.String("query", job.Query),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 	default:
 		// nil means it is a schema ddl job, it's no need to fill the table name.
 		if job.BinlogInfo.TableInfo != nil {
@@ -720,7 +728,7 @@ func (h *ddlPullerImpl) Run(ctx context.Context) error {
 						continue
 					}
 				}
-				h.add2Pending(e.Job)
+				h.addToPending(e.Job)
 			}
 		}
 	})
