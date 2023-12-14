@@ -663,7 +663,7 @@ func NewDDLPuller(ctx context.Context,
 	}
 }
 
-func (h *ddlPullerImpl) add2Pending(job *timodel.Job) {
+func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 	if job == nil {
 		return
 	}
