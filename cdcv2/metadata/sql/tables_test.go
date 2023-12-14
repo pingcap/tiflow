@@ -41,19 +41,11 @@ func TestAutoMigrateTables(t *testing.T) {
 	backendDB, db, mock := newMockDB(t)
 	defer backendDB.Close()
 
-	mockSchmaFn := func(_ string) {
-		mock.ExpectQuery("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-			"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1").WillReturnRows(
-			sqlmock.NewRows([]string{"SCHEMA_NAME"}))
-	}
-
-	mockSchmaFn("upstream")
 	mock.ExpectExec("CREATE TABLE `upstream` (`id` bigint(20) unsigned,`endpoints` text NOT NULL," +
 		"`config` text,`version` bigint(20) unsigned NOT NULL,`update_at` datetime(6) NOT NULL," +
 		"PRIMARY KEY (`id`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	mockSchmaFn("changefeed_info")
 	mock.ExpectExec("CREATE TABLE `changefeed_info` (`uuid` bigint(20) unsigned,`namespace` varchar(128) NOT NULL," +
 		"`id` varchar(128) NOT NULL,`upstream_id` bigint(20) unsigned NOT NULL,`sink_uri` text NOT NULL," +
 		"`start_ts` bigint(20) unsigned NOT NULL,`target_ts` bigint(20) unsigned NOT NULL,`config` longtext NOT NULL," +
@@ -61,19 +53,16 @@ func TestAutoMigrateTables(t *testing.T) {
 		"PRIMARY KEY (`uuid`),UNIQUE INDEX `namespace` (`namespace`,`id`),INDEX `upstream_id` (`upstream_id`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	mockSchmaFn("changefeed_state")
 	mock.ExpectExec("CREATE TABLE `changefeed_state` (`changefeed_uuid` bigint(20) unsigned,`state` text NOT NULL," +
 		"`warning` text,`error` text,`version` bigint(20) unsigned NOT NULL,`update_at` datetime(6) NOT NULL," +
 		"PRIMARY KEY (`changefeed_uuid`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	mockSchmaFn("schedule")
 	mock.ExpectExec("CREATE TABLE `schedule` (`changefeed_uuid` bigint(20) unsigned,`owner` varchar(128)," +
 		"`owner_state` text NOT NULL,`processors` text,`task_position` text NOT NULL,`version` bigint(20) unsigned NOT NULL," +
 		"`update_at` datetime(6) NOT NULL,PRIMARY KEY (`changefeed_uuid`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	mockSchmaFn("progress")
 	mock.ExpectExec("CREATE TABLE `progress` (`capture_id` varchar(128),`progress` longtext," +
 		"`version` bigint(20) unsigned NOT NULL,`update_at` datetime(6) NOT NULL,PRIMARY KEY (`capture_id`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
