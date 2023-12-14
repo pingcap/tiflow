@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -362,8 +363,9 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 	}
 
 	// If changefeed is in BDRMode, skip ddl.
-	if m.BDRMode {
-		log.Info("changefeed is in BDRMode, skip a ddl event",
+	if m.BDRMode && m.executingDDL.BDRRole != string(ast.BDRRolePrimary) {
+		log.Info("changefeed is in BDRMode and "+
+			"the DDL is not executed by Primary Cluster, skip it",
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("ID", m.changfeedID.ID),
 			zap.Any("ddlEvent", m.executingDDL))
@@ -576,10 +578,6 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 			zap.Uint64("ddlResolvedTs", m.ddlResolvedTs),
 		)
 		return
-	}
-
-	if m.BDRMode {
-		ts = m.ddlResolvedTs
 	}
 
 	log.Debug("snapshotTs", zap.Uint64("ts", ts))

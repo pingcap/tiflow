@@ -88,9 +88,9 @@ require (
 	github.com/swaggo/swag v1.16.2
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20231201024404-0ff16620f6c0
+	github.com/tikv/client-go/v2 v2.0.8-0.20231204074048-e80e9ca1fe66
 	github.com/tikv/pd v1.1.0-beta.0.20231212061647-ab97b9a267f3
-	github.com/tikv/pd/client v0.0.0-20231130081618-862eee18738e
+	github.com/tikv/pd/client v0.0.0-20231204034622-259435d93ae2
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -397,3 +397,7 @@ replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 
 replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20231213065948-336e064b488d
+
+replace github.com/pingcap/tidb => github.com/okJiang/tidb v1.1.0-beta.0.20231214020035-13e94466d459
+
+replace github.com/pingcap/tidb/pkg/parser => github.com/okJiang/tidb/pkg/parser v0.0.0-20231214020035-13e94466d459

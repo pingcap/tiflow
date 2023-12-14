@@ -48,12 +48,19 @@ func TestWriteDDLEvent(t *testing.T) {
 		require.Nil(t, err)
 		mock.ExpectQuery("select tidb_version()").
 			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+		mock.ExpectQuery("select tidb_version()").
+			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+		mock.ExpectExec("SET SESSION tidb_cdc_write_source = 1").WillReturnResult(sqlmock.NewResult(1, 0))
+
 		mock.ExpectBegin()
 		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("SET SESSION tidb_cdc_write_source = 0").WillReturnResult(sqlmock.NewResult(1, 0))
 		mock.ExpectExec("ALTER TABLE test.t1 ADD COLUMN a int").WillReturnResult(sqlmock.NewResult(1, 1))
 		mock.ExpectCommit()
+
 		mock.ExpectBegin()
 		mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
+		mock.ExpectExec("SET SESSION tidb_cdc_write_source = 0").WillReturnResult(sqlmock.NewResult(1, 0))
 		mock.ExpectExec("ALTER TABLE test.t1 ADD COLUMN a int").
 			WillReturnError(&dmysql.MySQLError{
 				Number: uint16(infoschema.ErrColumnExists.Code()),
@@ -163,6 +170,10 @@ func TestAsyncExecAddIndex(t *testing.T) {
 		require.Nil(t, err)
 		mock.ExpectQuery("select tidb_version()").
 			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+		mock.ExpectQuery("select tidb_version()").WillReturnError(&dmysql.MySQLError{
+			Number:  1305,
+			Message: "FUNCTION test.tidb_version does not exist",
+		})
 		mock.ExpectBegin()
 		mock.ExpectExec("USE `test`;").
 			WillReturnResult(sqlmock.NewResult(1, 1))

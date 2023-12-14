@@ -16,16 +16,20 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
 	"time"
 
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -85,6 +89,11 @@ func NewDDLSink(
 	}
 
 	cfg.IsTiDB, err = pmysql.CheckIsTiDB(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +210,18 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		}
 	}
 
+	// we try to set cdc write source for the ddl
+	if err = m.setWriteSource(pctx, tx); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			if errors.Cause(rbErr) != context.Canceled {
+				log.Error("Failed to rollback",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID), zap.Error(err))
+			}
+		}
+		return err
+	}
+
 	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Failed to rollback", zap.String("sql", ddl.Query),
@@ -306,4 +327,25 @@ func (m *DDLSink) asyncExecAddIndexDDLIfTimeout(ctx context.Context, ddl *model.
 			zap.String("ddl", ddl.Query))
 		return nil
 	}
+}
+
+// setWriteSource sets write source for the transaction.
+func (m *DDLSink) setWriteSource(ctx context.Context, txn *sql.Tx) error {
+	// we only set write source when donwstream is TiDB and write source is existed.
+	if !m.cfg.IsWriteSourceExisted {
+		return nil
+	}
+	// downstream is TiDB, set system variables.
+	// We should always try to set this variable, and ignore the error if
+	// downstream does not support this variable, it is by design.
+	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", m.cfg.SourceID)
+	_, err := txn.ExecContext(ctx, query)
+	if err != nil {
+		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
+			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
