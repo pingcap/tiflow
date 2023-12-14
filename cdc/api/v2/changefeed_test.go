@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	tidbkv "github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/controller"
 	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"

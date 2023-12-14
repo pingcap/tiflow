@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/planner/core"
+	"github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -318,9 +318,7 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 		},
 	}
 
-	sessCtx := utils.NewSessionCtx(map[string]string{
-		"time_zone": "System",
-	})
+	sessCtx := utils.ZeroSessionCtx
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
@@ -436,7 +434,7 @@ func TestShouldSkipDMLError(t *testing.T) {
 	}
 
 	sessCtx := utils.NewSessionCtx(map[string]string{
-		"time_zone": "System",
+		"time_zone": "UTC",
 	})
 
 	for _, tc := range testCases {
@@ -629,7 +627,7 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 	}
 
 	sessCtx := utils.NewSessionCtx(map[string]string{
-		"time_zone": "System",
+		"time_zone": "UTC",
 	})
 
 	for _, tc := range testCases {
