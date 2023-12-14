@@ -321,7 +321,7 @@ func parseJob(v []byte, startTs, CRTs uint64) (*timodel.Job, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// TiDB write DDL Binlog for every DDL Job,
+	One DDL has multiple states from start to finish, but TiCDC only listens to and processes Job with the "Done" status. Other Job statuses should be ignored.
 	// we must ignore jobs that are cancelled or rollback
 	// For older version TiDB, it writes DDL Binlog in the txn
 	// that the state of job is changed to *synced*
