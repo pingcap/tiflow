@@ -362,7 +362,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return nil
 	}
 
-	// If changefeed is in BDRMode, skip ddl.
+	// If changefeed is in BDRMode and the ddl is not sent by BDRRolePrimary role, skip it.
 	if m.BDRMode && m.executingDDL.BDRRole != string(ast.BDRRolePrimary) {
 		log.Info("changefeed is in BDRMode and "+
 			"the DDL is not executed by Primary Cluster, skip it",
