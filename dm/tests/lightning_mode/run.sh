@@ -94,7 +94,7 @@ function run() {
 	# create task
 	curl -X POST http://127.0.0.1:8261/api/v1/tasks -H "Content-Type: application/json" -d "$task_conf"
 	# start task
-	curl -X POST http://127.0.0.1:8261/api/v1/tasks/test/start -H "Content-Type: application/json"
+	curl -X POST http://127.0.0.1:8261/api/v1/tasks/test/start
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
