@@ -132,7 +132,7 @@ func (h *SQLTestHelper) ScanTable() []*model.RowChangedEvent {
 func requireDebeziumJSONEq(t *testing.T, dbzOutput []byte, tiCDCOutput []byte) {
 	var (
 		ignoredRecordPaths = map[string]bool{
-			`{map[string]any}["schema"]`:                             true,
+			// `{map[string]any}["schema"]`:                             true,
 			`{map[string]any}["payload"].(map[string]any)["source"]`: true,
 			`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
 		}
@@ -178,7 +178,7 @@ func TestDataTypes(t *testing.T) {
 	rows := helper.ScanTable()
 	cfg := common.NewConfig(config.ProtocolDebezium)
 	cfg.TimeZone = time.UTC
-	encoder := NewBatchEncoderBuilder(cfg).Build()
+	encoder := NewBatchEncoderBuilder(cfg, "dbserver1").Build()
 	for _, row := range rows {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
 		require.Nil(t, err)
