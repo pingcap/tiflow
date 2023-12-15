@@ -157,6 +157,7 @@ func New(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
+	totalQuota := changefeedInfo.Config.MemoryQuota
 	if redoDMLMgr != nil && redoDMLMgr.Enabled() {
 		m.redoDMLMgr = redoDMLMgr
 		m.redoProgressHeap = newTableProgresses()
@@ -164,16 +165,17 @@ func New(
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
 
-		redoQuota := uint64(float64(changefeedInfo.Config.MemoryQuota*changefeedInfo.Config.Consistent.MemoryQuotaPercentage) / 100)
-		sinkQuota := changefeedInfo.Config.MemoryQuota - redoQuota
+		consistentMemoryUsage := changefeedInfo.Config.Consistent.MemoryUsage
+		redoQuota := totalQuota * 100 / consistentMemoryUsage.MemoryQuotaPercentage
+		sinkQuota := totalQuota - redoQuota
 		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, sinkQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
-		eventCache := uint64(float64(redoQuota*changefeedInfo.Config.Consistent.EventCachePercentage) / 100)
+		eventCache := redoQuota * consistentMemoryUsage.EventCachePercentage / 100
 		if eventCache > 0 {
 			m.eventCache = newRedoEventCache(changefeedID, eventCache)
 		}
 	} else {
-		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota, "sink")
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, totalQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
 	}
 

@@ -35,6 +35,12 @@ type ConsistentConfig struct {
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
 	Compression           string `toml:"compression" json:"compression"`
 	FlushConcurrency      int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
+
+	MemoryUsage *ConsistentMemoryUsage `toml:"memory-usage" json:"memory-usage"`
+}
+
+// ConsistentMemoryUsage represents memory usage of Consistent module.
+type ConsistentMemoryUsage struct {
 	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 will be used for redo events.
 	MemoryQuotaPercentage uint64 `toml:"memory-quota-percentage" json:"memory-quota-percentage"`
 	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 * EventCachePercentage / 100
