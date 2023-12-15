@@ -21,6 +21,13 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// Common columns count of an index are 1, 2, 3 and 4, index contains more than 4 columns are
+	// not that common, so we use 4 as the common index column count. It will be used to pre-allocate
+	// slice space.
+	COMMON_INDEX_COLUMNS_COUNT = 4
+)
+
 // SameTypeTargetAndColumns check whether two row changes have same type, target
 // and columns, so they can be merged to a multi-value DML.
 func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
@@ -83,8 +90,7 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 	buf.WriteString(first.targetTable.QuoteString())
 	buf.WriteString(" WHERE (")
 
-	whereColumns, _ := first.whereColumnsAndValues()
-	allArgs := make([]interface{}, 0, len(changes)*len(whereColumns))
+	allArgs := make([]interface{}, 0, len(changes)*COMMON_INDEX_COLUMNS_COUNT)
 
 	for i, c := range changes {
 		if i > 0 {
