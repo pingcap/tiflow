@@ -85,6 +85,7 @@ func (w *JSONWriter) Buffer() []byte {
 	return w.stream.Buffer()
 }
 
+// WriteRaw writes a raw string directly into the output.
 func (w *JSONWriter) WriteRaw(b string) {
 	w.stream.WriteRaw(b)
 }
@@ -119,6 +120,7 @@ func (w *JSONWriter) WriteObject(objectFieldsWriteFn func()) {
 	w.needPrependComma = lastNeedPrependComma
 }
 
+// WriteArray writes [......].
 func (w *JSONWriter) WriteArray(arrayElementsWriteFn func()) {
 	lastNeedPrependComma := w.needPrependComma
 	w.needPrependComma = false
@@ -227,6 +229,7 @@ func (w *JSONWriter) WriteObjectField(fieldName string, objectFieldsWriteFn func
 	w.WriteObject(objectFieldsWriteFn)
 }
 
+// WriteArrayField writes a array field like "<fieldName>":[......].
 func (w *JSONWriter) WriteArrayField(fieldName string, arrayElementsWriteFn func()) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -237,7 +240,7 @@ func (w *JSONWriter) WriteArrayField(fieldName string, arrayElementsWriteFn func
 	w.WriteArray(arrayElementsWriteFn)
 }
 
-// WriteNullField writes a array field like "<fieldName>":null.
+// WriteNullField writes a null field like "<fieldName>":null.
 func (w *JSONWriter) WriteNullField(fieldName string) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -248,6 +251,7 @@ func (w *JSONWriter) WriteNullField(fieldName string) {
 	w.stream.WriteNil()
 }
 
+// WriteBoolElement writes a bool array element like ,<value>.
 func (w *JSONWriter) WriteBoolElement(value bool) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -257,6 +261,7 @@ func (w *JSONWriter) WriteBoolElement(value bool) {
 	w.stream.WriteBool(value)
 }
 
+// WriteIntElement writes a int array element like ,<value>.
 func (w *JSONWriter) WriteIntElement(value int) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -266,6 +271,7 @@ func (w *JSONWriter) WriteIntElement(value int) {
 	w.stream.WriteInt(value)
 }
 
+// WriteInt64Element writes a int64 array element like ,<value>.
 func (w *JSONWriter) WriteInt64Element(value int64) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -275,6 +281,7 @@ func (w *JSONWriter) WriteInt64Element(value int64) {
 	w.stream.WriteInt64(value)
 }
 
+// WriteUint64Element writes a uint64 array element like ,<value>.
 func (w *JSONWriter) WriteUint64Element(value uint64) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -284,6 +291,7 @@ func (w *JSONWriter) WriteUint64Element(value uint64) {
 	w.stream.WriteUint64(value)
 }
 
+// WriteFloat64Element writes a float64 array element like ,<value>.
 func (w *JSONWriter) WriteFloat64Element(value float64) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -293,6 +301,7 @@ func (w *JSONWriter) WriteFloat64Element(value float64) {
 	w.stream.WriteFloat64(value)
 }
 
+// WriteStringElement writes a string array element like ,"<value>".
 func (w *JSONWriter) WriteStringElement(value string) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -302,6 +311,7 @@ func (w *JSONWriter) WriteStringElement(value string) {
 	w.stream.WriteString(value)
 }
 
+// WriteBase64StringElement writes a base64 string array element like ,"<value>".
 func (w *JSONWriter) WriteBase64StringElement(b []byte) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -311,6 +321,7 @@ func (w *JSONWriter) WriteBase64StringElement(b []byte) {
 	w.WriteBase64String(b)
 }
 
+// WriteAnyElement writes a array element like ,<value>.
 func (w *JSONWriter) WriteAnyElement(value any) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -320,6 +331,7 @@ func (w *JSONWriter) WriteAnyElement(value any) {
 	w.stream.WriteVal(value)
 }
 
+// WriteObjectElement writes a object array element like ,{......}.
 func (w *JSONWriter) WriteObjectElement(objectFieldsWriteFn func()) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -329,6 +341,7 @@ func (w *JSONWriter) WriteObjectElement(objectFieldsWriteFn func()) {
 	w.WriteObject(objectFieldsWriteFn)
 }
 
+// WriteArrayElement writes a array array element like ,[......].
 func (w *JSONWriter) WriteArrayElement(arrayElementsWriteFn func()) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -338,6 +351,7 @@ func (w *JSONWriter) WriteArrayElement(arrayElementsWriteFn func()) {
 	w.WriteArray(arrayElementsWriteFn)
 }
 
+// WriteNullElement writes a null array element like ,null.
 func (w *JSONWriter) WriteNullElement() {
 	if w.needPrependComma {
 		w.stream.WriteMore()

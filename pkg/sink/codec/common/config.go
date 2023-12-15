@@ -78,6 +78,9 @@ type Config struct {
 
 	// Currently only Debezium protocol is aware of the time zone
 	TimeZone *time.Location
+
+	// Debezium only
+	DebeziumDisableSchema bool
 }
 
 // NewConfig return a Config for codec
@@ -138,6 +141,8 @@ type urlConfig struct {
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
 	ContentCompatible        *bool  `form:"content-compatible"`
+
+	DebeziumDisableSchema *bool `form:"debezium-disable-schema"`
 }
 
 // Apply fill the Config
@@ -228,6 +233,10 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		if c.ContentCompatible {
 			c.OnlyOutputUpdatedColumns = true
 		}
+	}
+
+	if urlParameter.DebeziumDisableSchema != nil {
+		c.DebeziumDisableSchema = *urlParameter.DebeziumDisableSchema
 	}
 
 	return nil

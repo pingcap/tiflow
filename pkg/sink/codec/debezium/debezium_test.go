@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"github.com/tikv/client-go/v2/oracle"
 )
 
@@ -129,10 +130,15 @@ func (h *SQLTestHelper) ScanTable() []*model.RowChangedEvent {
 	return ret
 }
 
-func requireDebeziumJSONEq(t *testing.T, dbzOutput []byte, tiCDCOutput []byte) {
+type debeziumSuite struct {
+	suite.Suite
+	disableSchema bool
+}
+
+func (s *debeziumSuite) requireDebeziumJSONEq(dbzOutput []byte, tiCDCOutput []byte) {
 	var (
 		ignoredRecordPaths = map[string]bool{
-			// `{map[string]any}["schema"]`:                             true,
+			`{map[string]any}["schema"]`:                             s.disableSchema,
 			`{map[string]any}["payload"].(map[string]any)["source"]`: true,
 			`{map[string]any}["payload"].(map[string]any)["ts_ms"]`:  true,
 		}
@@ -148,28 +154,39 @@ func requireDebeziumJSONEq(t *testing.T, dbzOutput []byte, tiCDCOutput []byte) {
 	)
 
 	var objDbzOutput map[string]any
-	require.Nil(t, json.Unmarshal(dbzOutput, &objDbzOutput), "Failed to unmarshal Debezium JSON")
+	s.Require().Nil(json.Unmarshal(dbzOutput, &objDbzOutput), "Failed to unmarshal Debezium JSON")
 
 	var objTiCDCOutput map[string]any
-	require.Nil(t, json.Unmarshal(tiCDCOutput, &objTiCDCOutput), "Failed to unmarshal TiCDC JSON")
+	s.Require().Nil(json.Unmarshal(tiCDCOutput, &objTiCDCOutput), "Failed to unmarshal TiCDC JSON")
 
 	if diff := cmp.Diff(objDbzOutput, objTiCDCOutput, compareOpt); diff != "" {
-		require.Fail(t, "JSON is not equal", "Diff (-debezium, +ticdc):\n"+diff)
-		t.FailNow()
+		s.Failf("JSON is not equal", "Diff (-debezium, +ticdc):\n%s", diff)
 	}
 }
 
-func TestDataTypes(t *testing.T) {
+func TestDebeziumSuiteEnableSchema(t *testing.T) {
+	suite.Run(t, &debeziumSuite{
+		disableSchema: false,
+	})
+}
+
+func TestDebeziumSuiteDisableSchema(t *testing.T) {
+	suite.Run(t, &debeziumSuite{
+		disableSchema: true,
+	})
+}
+
+func (s *debeziumSuite) TestDataTypes() {
 	dataDDL, err := os.ReadFile("testdata/datatype.ddl.sql")
-	require.Nil(t, err)
+	s.Require().Nil(err)
 
 	dataDML, err := os.ReadFile("testdata/datatype.dml.sql")
-	require.Nil(t, err)
+	s.Require().Nil(err)
 
 	dataDbzOutput, err := os.ReadFile("testdata/datatype.dbz.json")
-	require.Nil(t, err)
+	s.Require().Nil(err)
 
-	helper := NewSQLTestHelper(t, "foo", string(dataDDL))
+	helper := NewSQLTestHelper(s.T(), "foo", string(dataDDL))
 
 	helper.MustExec(`SET sql_mode='';`)
 	helper.MustExec(`SET time_zone='UTC';`)
@@ -178,13 +195,14 @@ func TestDataTypes(t *testing.T) {
 	rows := helper.ScanTable()
 	cfg := common.NewConfig(config.ProtocolDebezium)
 	cfg.TimeZone = time.UTC
+	cfg.DebeziumDisableSchema = s.disableSchema
 	encoder := NewBatchEncoderBuilder(cfg, "dbserver1").Build()
 	for _, row := range rows {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", row, nil)
-		require.Nil(t, err)
+		s.Require().Nil(err)
 	}
 
 	messages := encoder.Build()
-	require.Len(t, messages, 1)
-	requireDebeziumJSONEq(t, dataDbzOutput, messages[0].Value)
+	s.Require().Len(messages, 1)
+	s.requireDebeziumJSONEq(dataDbzOutput, messages[0].Value)
 }
