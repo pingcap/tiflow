@@ -166,10 +166,15 @@ func New(
 		m.redoWorkerAvailable = make(chan struct{}, 1)
 
 		consistentMemoryUsage := changefeedInfo.Config.Consistent.MemoryUsage
-		redoQuota := totalQuota * 100 / consistentMemoryUsage.MemoryQuotaPercentage
+		if consistentMemoryUsage == nil {
+			consistentMemoryUsage = config.GetDefaultReplicaConfig().Consistent.MemoryUsage
+		}
+
+		redoQuota := totalQuota * consistentMemoryUsage.MemoryQuotaPercentage / 100
 		sinkQuota := totalQuota - redoQuota
 		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, sinkQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
+
 		eventCache := redoQuota * consistentMemoryUsage.EventCachePercentage / 100
 		if eventCache > 0 {
 			m.eventCache = newRedoEventCache(changefeedID, eventCache)
