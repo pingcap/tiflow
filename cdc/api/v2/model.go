@@ -273,11 +273,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			Compression:           c.Consistent.Compression,
 			FlushConcurrency:      c.Consistent.FlushConcurrency,
 		}
-	}
-	if c.Consistent.MemoryUsage != nil {
-		res.Consistent.MemoryUsage = &config.ConsistentMemoryUsage{
-			MemoryQuotaPercentage: c.Consistent.MemoryUsage.MemoryQuotaPercentage,
-			EventCachePercentage:  c.Consistent.MemoryUsage.EventCachePercentage,
+		if c.Consistent.MemoryUsage != nil {
+			res.Consistent.MemoryUsage = &config.ConsistentMemoryUsage{
+				MemoryQuotaPercentage: c.Consistent.MemoryUsage.MemoryQuotaPercentage,
+				EventCachePercentage:  c.Consistent.MemoryUsage.EventCachePercentage,
+			}
 		}
 	}
 	if c.Sink != nil {
@@ -774,13 +774,14 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Compression:           cloned.Consistent.Compression,
 			FlushConcurrency:      cloned.Consistent.FlushConcurrency,
 		}
-	}
-	if cloned.Consistent.MemoryUsage != nil {
-		res.Consistent.MemoryUsage = &ConsistentMemoryUsage{
-			MemoryQuotaPercentage: cloned.Consistent.MemoryUsage.MemoryQuotaPercentage,
-			EventCachePercentage:  cloned.Consistent.MemoryUsage.EventCachePercentage,
+		if cloned.Consistent.MemoryUsage != nil {
+			res.Consistent.MemoryUsage = &ConsistentMemoryUsage{
+				MemoryQuotaPercentage: cloned.Consistent.MemoryUsage.MemoryQuotaPercentage,
+				EventCachePercentage:  cloned.Consistent.MemoryUsage.EventCachePercentage,
+			}
 		}
 	}
+
 	if cloned.Mounter != nil {
 		res.Mounter = &MounterConfig{
 			WorkerNum: cloned.Mounter.WorkerNum,
