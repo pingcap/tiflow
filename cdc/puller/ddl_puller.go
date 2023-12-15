@@ -418,7 +418,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
 			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("jobFinishedTS", job.BinlogInfo.FinishedTS),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 			zap.String("query", job.Query),
 			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
 		return true, nil
@@ -495,9 +495,11 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		log.Info("ddl puller receive rename table ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
 			zap.String("query", job.Query),
 			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
 	default:
 		// nil means it is a schema ddl job, it's no need to fill the table name.
 		if job.BinlogInfo.TableInfo != nil {
@@ -690,6 +692,8 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 	log.Info("ddl puller receives new pending job",
 		zap.String("namespace", h.changefeedID.Namespace),
 		zap.String("changefeed", h.changefeedID.ID),
+		zap.String("schema", job.SchemaName),
+		zap.String("table", job.TableName),
 		zap.String("query", job.Query),
 		zap.Int64("jobID", job.ID))
 }

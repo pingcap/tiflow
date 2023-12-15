@@ -203,8 +203,10 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		log.Error("schemaStorage: update snapshot by the DDL job failed",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
-			zap.String("DDL", job.Query),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.String("query", job.Query),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 			zap.String("role", s.role.String()),
 			zap.Error(err))
 		return errors.Trace(err)
@@ -215,8 +217,10 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	log.Info("schemaStorage: update snapshot by the DDL job",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
-		zap.String("DDL", job.Query),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+		zap.String("schema", job.SchemaName),
+		zap.String("table", job.TableName),
+		zap.String("query", job.Query),
+		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 		zap.Uint64("schemaVersion", uint64(s.schemaVersion)),
 		zap.String("role", s.role.String()))
 	return nil
