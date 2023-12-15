@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"

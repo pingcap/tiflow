@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"go.uber.org/zap"

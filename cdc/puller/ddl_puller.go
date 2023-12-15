@@ -22,9 +22,9 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"

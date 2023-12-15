@@ -25,7 +25,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"

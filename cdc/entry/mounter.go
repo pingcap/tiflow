@@ -25,14 +25,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/table"
-	"github.com/pingcap/tidb/tablecodec"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/kv"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/tablecodec"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
@@ -111,9 +111,7 @@ func NewMounter(schemaStorage SchemaStorage,
 		integrity: integrity,
 
 		encoder: &rowcodec.Encoder{},
-		sctx: &stmtctx.StatementContext{
-			TimeZone: tz,
-		},
+		sctx:    stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 
@@ -661,7 +659,7 @@ func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
 		return v, int(sizeOfV), "", nil
 	case mysql.TypeBit:
 		// Encode bits as integers to avoid pingcap/tidb#10988 (which also affects MySQL itself)
-		v, err := datum.GetBinaryLiteral().ToInt(nil)
+		v, err := datum.GetBinaryLiteral().ToInt(types.DefaultStmtNoWarningContext)
 		const sizeOfV = unsafe.Sizeof(v)
 		return v, int(sizeOfV), "", err
 	case mysql.TypeString, mysql.TypeVarString, mysql.TypeVarchar,

@@ -22,8 +22,8 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timeta "github.com/pingcap/tidb/meta"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timeta "github.com/pingcap/tidb/pkg/meta"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	schema "github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

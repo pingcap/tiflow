@@ -15,9 +15,9 @@ package sqlmodel
 
 import (
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 )
 
 // WhereHandle is used to generate a WHERE clause in SQL.

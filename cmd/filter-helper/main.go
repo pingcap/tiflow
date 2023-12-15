@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
