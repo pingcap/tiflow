@@ -138,12 +138,6 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 	case p.outputCh <- jobEntry:
 	}
 
-	log.Info("one new ddl job is put into output channel",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID),
-		zap.String("query", job.Query),
-		zap.Uint64("startTs", job.StartTS),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 	return nil
 }
 
