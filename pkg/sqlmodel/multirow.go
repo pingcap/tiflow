@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	// Common columns count of an index are 1, 2, 3 and 4, index contains more than 4 columns are
-	// not that common, so we use 4 as the common index column count. It will be used to pre-allocate
-	// slice space.
+	// CommonIndexColumnsCount: common columns count of an index are 1, 2, 3 and 4,
+	// index contains more than 4 columns are not that common, so we use 4 as the
+	// common index column count. It will be used to pre-allocate slice space.
 	CommonIndexColumnsCount = 4
 )
 
