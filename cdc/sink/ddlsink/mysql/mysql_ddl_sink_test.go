@@ -23,8 +23,8 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/tidb/infoschema"
-	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"

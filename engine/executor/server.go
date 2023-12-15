@@ -22,8 +22,8 @@ import (
 
 	grpcprometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/gctuner"
-	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tidb/pkg/util/gctuner"
+	"github.com/pingcap/tidb/pkg/util/memory"
 	"github.com/pingcap/tiflow/dm/common"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/executor/server"

@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -925,6 +925,7 @@ type CSVConfig struct {
 	NullString           string `json:"null"`
 	IncludeCommitTs      bool   `json:"include_commit_ts"`
 	BinaryEncodingMethod string `json:"binary_encoding_method"`
+	OutputOldValue       bool   `json:"output_old_value"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config

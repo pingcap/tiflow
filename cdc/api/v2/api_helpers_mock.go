@@ -10,7 +10,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	kv "github.com/pingcap/tidb/kv"
+	kv "github.com/pingcap/tidb/pkg/kv"
 	controller "github.com/pingcap/tiflow/cdc/controller"
 	model "github.com/pingcap/tiflow/cdc/model"
 	config "github.com/pingcap/tiflow/pkg/config"

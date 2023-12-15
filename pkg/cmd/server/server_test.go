@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	ticonfig "github.com/pingcap/tidb/config"
+	ticonfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
