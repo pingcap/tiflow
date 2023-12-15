@@ -54,21 +54,15 @@ func TestInitialize(t *testing.T) {
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `project_infos` (`seq_id` bigint unsigned AUTO_INCREMENT," +
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
 		"`id` varchar(128) not null,`name` varchar(128) not null,PRIMARY KEY (`seq_id`)," +
 		"UNIQUE INDEX `uidx_id` (`id`))")).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `project_operations` (`seq_id` bigint unsigned AUTO_INCREMENT," +
 		"`project_id` varchar(128) not null,`operation` varchar(16) not null,`job_id` varchar(128) not null," +
 		"`created_at` datetime(3) NULL,PRIMARY KEY (`seq_id`),INDEX `idx_op` (`project_id`,`created_at`))")).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(
 		"CREATE TABLE `master_meta` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 			"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,"+
@@ -84,8 +78,6 @@ func TestInitialize(t *testing.T) {
 		".*", // sequence of indexes are nondeterministic
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(
 		"CREATE TABLE `worker_statuses` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 			"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,"+
@@ -101,8 +93,6 @@ func TestInitialize(t *testing.T) {
 		".*", // sequence of indexes are nondeterministic
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(
 		"CREATE TABLE `resource_meta` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 			"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,"+
@@ -113,16 +103,10 @@ func TestInitialize(t *testing.T) {
 		".*", // sequence of indexes are nondeterministic
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).
-		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT,`created_at` datetime(3) NULL," +
 		"`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`))")).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery(regexp.QuoteMeta(
-		"SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-			"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1"),
-	).WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(
 		"CREATE TABLE `job_ops` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 			"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,"+
@@ -131,10 +115,6 @@ func TestInitialize(t *testing.T) {
 		".*", // sequence of indexes are nondeterministic
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery(regexp.QuoteMeta(
-		"SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-			"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1"),
-	).WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(
 		"CREATE TABLE `executors` (`seq_id` bigint unsigned AUTO_INCREMENT," +
 			"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL," +
@@ -143,9 +123,6 @@ func TestInitialize(t *testing.T) {
 			"UNIQUE INDEX `uni_id` (`id`))"),
 	).WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT," +
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1," +
 		"PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`))")).
@@ -175,9 +152,6 @@ func TestInitEpochModel(t *testing.T) {
 
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).AddRow("5.7.35-log"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta("CREATE TABLE `logic_epoches` (`seq_id` bigint unsigned AUTO_INCREMENT," +
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`job_id` varchar(128) not null,`epoch` bigint not null default 1," +
 		"PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`))")).

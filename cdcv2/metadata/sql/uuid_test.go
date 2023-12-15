@@ -34,9 +34,6 @@ func TestORMUUIDGeneratorInitFail(t *testing.T) {
 	defer cancel()
 
 	// auto migrate
-	mock.ExpectQuery("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1").WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec("CREATE TABLE `logic_epoch` (`task_id` varchar(128),`epoch` bigint(20) unsigned NOT NULL," +
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,PRIMARY KEY (`task_id`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -66,9 +63,6 @@ func TestORMUUIDGenerator(t *testing.T) {
 	gen := newORMUUIDGenerator(taskCDCChangefeedUUID, db)
 
 	// auto migrate
-	mock.ExpectQuery("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1").WillReturnRows(
-		sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec("CREATE TABLE `logic_epoch` (`task_id` varchar(128),`epoch` bigint(20) unsigned NOT NULL," +
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,PRIMARY KEY (`task_id`))").
 		WillReturnResult(sqlmock.NewResult(0, 0))
