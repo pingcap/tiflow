@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -107,10 +106,6 @@ func resetDB(db *DBHelper) {
 	db.MustExec("create database `" + *dbName + "`;")
 	db.MustExec("use `" + *dbName + "`;")
 }
-
-var (
-	regexpExpectRows = regexp.MustCompile(`TICDC_TEST_EXPECT_ROWS:(\d+)`)
-)
 
 func runTestCase(testCasePath string) bool {
 	resetDB(dbMySQL)
