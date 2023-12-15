@@ -25,7 +25,7 @@ const (
 	// Common columns count of an index are 1, 2, 3 and 4, index contains more than 4 columns are
 	// not that common, so we use 4 as the common index column count. It will be used to pre-allocate
 	// slice space.
-	COMMON_INDEX_COLUMNS_COUNT = 4
+	CommonIndexColumnsCount = 4
 )
 
 // SameTypeTargetAndColumns check whether two row changes have same type, target
@@ -90,7 +90,7 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 	buf.WriteString(first.targetTable.QuoteString())
 	buf.WriteString(" WHERE (")
 
-	allArgs := make([]interface{}, 0, len(changes)*COMMON_INDEX_COLUMNS_COUNT)
+	allArgs := make([]interface{}, 0, len(changes)*CommonIndexColumnsCount)
 
 	for i, c := range changes {
 		if i > 0 {
