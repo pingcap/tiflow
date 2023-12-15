@@ -31,9 +31,9 @@ import (
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb-tools/pkg/column-mapping"
 	"github.com/pingcap/tidb/br/pkg/lightning/config"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/util/filter"
-	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -345,9 +345,6 @@ func (m *LoaderConfig) adjust() error {
 		m.PoolSize = defaultPoolSize
 	}
 
-	if m.OnDuplicateLogical == "" && m.OnDuplicate != "" {
-		m.OnDuplicateLogical = m.OnDuplicate
-	}
 	if m.OnDuplicateLogical == "" {
 		m.OnDuplicateLogical = OnDuplicateReplace
 	}

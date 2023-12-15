@@ -18,7 +18,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +38,7 @@ type tableSinkAdvancer struct {
 	usedMem uint64
 	// Used to record the last written position.
 	// We need to use it to update the lower bound of the table sink.
-	lastPos engine.Position
+	lastPos sorter.Position
 	// Buffer the events to be written to the table sink.
 	events []*model.RowChangedEvent
 
@@ -250,7 +250,7 @@ func (a *tableSinkAdvancer) tryMoveToNextTxn(commitTs model.Ts) {
 
 // finish finishes the table sink task.
 // It will move the table sink task to the upperBound position.
-func (a *tableSinkAdvancer) finish(upperBound engine.Position) error {
+func (a *tableSinkAdvancer) finish(upperBound sorter.Position) error {
 	a.lastPos = upperBound
 	a.currTxnCommitTs = upperBound.CommitTs
 	a.lastTxnCommitTs = upperBound.CommitTs

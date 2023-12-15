@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -32,6 +33,8 @@ type ConsistentConfig struct {
 	FlushWorkerNum        int    `toml:"flush-worker-num" json:"flush-worker-num"`
 	Storage               string `toml:"storage" json:"storage"`
 	UseFileBackend        bool   `toml:"use-file-backend" json:"use-file-backend"`
+	Compression           string `toml:"compression" json:"compression"`
+	FlushConcurrency      int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
 	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 will be used for redo events.
 	MemoryQuotaPercentage uint64 `toml:"memory-quota-percentage" json:"memory-quota-percentage"`
 	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 * EventCachePercentage / 100
@@ -65,6 +68,11 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
 			fmt.Sprintf("The consistent.meta-flush-interval:%d must be equal or greater than %d",
 				c.MetaFlushIntervalInMs, redo.MinFlushIntervalInMs))
+	}
+	if len(c.Compression) > 0 &&
+		c.Compression != compression.None && c.Compression != compression.LZ4 {
+		return cerror.ErrInvalidReplicaConfig.FastGenByArgs(
+			fmt.Sprintf("The consistent.compression:%s must be 'none' or 'lz4'", c.Compression))
 	}
 
 	if c.EncodingWorkerNum == 0 {

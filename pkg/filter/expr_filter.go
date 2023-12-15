@@ -20,14 +20,14 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/expression"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/planner/core"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/chunk"
-	tfilter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/planner/core"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/chunk"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -332,7 +332,7 @@ func (r *dmlExprFilterRule) skipDMLByExpression(
 
 	row := chunk.MutRowFromDatums(rowData).ToRow()
 
-	d, err := expr.Eval(row)
+	d, err := expr.Eval(r.sessCtx, row)
 	if err != nil {
 		log.Error("failed to eval expression", zap.Error(err))
 		return false, errors.Trace(err)

@@ -24,7 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -96,6 +96,7 @@ func newSinkWorker(
 }
 
 func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask) error {
+	failpoint.Inject("SinkWorkerTaskHandlePause", func() { <-ctx.Done() })
 	for {
 		select {
 		case <-ctx.Done():
@@ -130,7 +131,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 	allEventCount := 0
 
 	callbackIsPerformed := false
-	performCallback := func(pos engine.Position) {
+	performCallback := func(pos sorter.Position) {
 		if !callbackIsPerformed {
 			task.callback(pos)
 			callbackIsPerformed = true
@@ -169,25 +170,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			// events have been reported. Then we can continue the table
 			// at the checkpoint position.
 			case tablesink.SinkInternalError:
-				task.tableSink.closeAndClearTableSink()
 				// After the table sink is cleared all pending events are sent out or dropped.
 				// So we can re-add the table into sinkMemQuota.
 				w.sinkMemQuota.ClearTable(task.tableSink.span)
-
-				// Restart the table sink based on the checkpoint position.
-				if err := task.tableSink.restart(ctx); err == nil {
-					checkpointTs := task.tableSink.getCheckpointTs()
-					ckpt := checkpointTs.ResolvedMark()
-					lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
-					performCallback(lastWrittenPos)
-					log.Info("table sink has been restarted",
-						zap.String("namespace", w.changefeedID.Namespace),
-						zap.String("changefeed", w.changefeedID.ID),
-						zap.Stringer("span", &task.span),
-						zap.Any("lastWrittenPos", lastWrittenPos),
-						zap.String("sinkError", finalErr.Error()))
-					finalErr = err
-				}
+				performCallback(advancer.lastPos)
+				finalErr = nil
 			default:
 			}
 		}
@@ -266,8 +253,8 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 func (w *sinkWorker) fetchFromCache(
 	task *sinkTask, // task is read-only here.
-	lowerBound *engine.Position,
-	upperBound *engine.Position,
+	lowerBound *sorter.Position,
+	upperBound *sorter.Position,
 ) (cacheDrained bool, err error) {
 	newLowerBound := *lowerBound
 	newUpperBound := *upperBound

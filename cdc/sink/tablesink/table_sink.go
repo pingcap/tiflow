@@ -37,6 +37,8 @@ type TableSink interface {
 	Close()
 	// AsyncClose closes the table sink asynchronously. Returns true if it's closed.
 	AsyncClose() bool
+	// CheckHealth checks whether the associated sink backend is healthy or not.
+	CheckHealth() error
 }
 
 // SinkInternalError means the error comes from sink internal.

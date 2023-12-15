@@ -42,12 +42,24 @@ const (
 	minFlushInterval = 2 * time.Second
 	// the upper limit of flush-interval.
 	maxFlushInterval = 10 * time.Minute
+	// defaultFlushConcurrency is the default value of flush-concurrency.
+	defaultFlushConcurrency = 1
+	// the lower limit of flush-concurrency.
+	minFlushConcurrency = 1
+	// the upper limit of flush-concurrency.
+	maxFlushConcurrency = 512
 	// defaultFileSize is the default value of file-size.
 	defaultFileSize = 64 * 1024 * 1024
 	// the lower limit of file size
 	minFileSize = 1024 * 1024
 	// the upper limit of file size
 	maxFileSize = 512 * 1024 * 1024
+
+	// disable file cleanup by default
+	defaultFileExpirationDays = 0
+	// Second | Minute | Hour | Dom | Month | DowOptional
+	// `0 0 2 * * ?` means 2:00:00 AM every day
+	defaultFileCleanupCronSpec = "0 0 2 * * *"
 )
 
 type urlConfig struct {
@@ -63,16 +75,21 @@ type Config struct {
 	FileSize                 int
 	FileIndexWidth           int
 	DateSeparator            string
+	FileExpirationDays       int
+	FileCleanupCronSpec      string
 	EnablePartitionSeparator bool
 	OutputColumnID           bool
+	FlushConcurrency         int
 }
 
 // NewConfig returns the default cloud storage sink config.
 func NewConfig() *Config {
 	return &Config{
-		WorkerCount:   defaultWorkerCount,
-		FlushInterval: defaultFlushInterval,
-		FileSize:      defaultFileSize,
+		WorkerCount:         defaultWorkerCount,
+		FlushInterval:       defaultFlushInterval,
+		FileSize:            defaultFileSize,
+		FileExpirationDays:  defaultFileExpirationDays,
+		FileCleanupCronSpec: defaultFileCleanupCronSpec,
 	}
 }
 
@@ -117,10 +134,20 @@ func (c *Config) Apply(
 	c.FileIndexWidth = util.GetOrZero(replicaConfig.Sink.FileIndexWidth)
 	if replicaConfig.Sink.CloudStorageConfig != nil {
 		c.OutputColumnID = util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.OutputColumnID)
+		if replicaConfig.Sink.CloudStorageConfig.FileExpirationDays != nil {
+			c.FileExpirationDays = *replicaConfig.Sink.CloudStorageConfig.FileExpirationDays
+		}
+		if replicaConfig.Sink.CloudStorageConfig.FileCleanupCronSpec != nil {
+			c.FileCleanupCronSpec = *replicaConfig.Sink.CloudStorageConfig.FileCleanupCronSpec
+		}
+		c.FlushConcurrency = util.GetOrZero(replicaConfig.Sink.CloudStorageConfig.FlushConcurrency)
 	}
 
 	if c.FileIndexWidth < config.MinFileIndexWidth || c.FileIndexWidth > config.MaxFileIndexWidth {
 		c.FileIndexWidth = config.DefaultFileIndexWidth
+	}
+	if c.FlushConcurrency < minFlushConcurrency || c.FlushConcurrency > maxFlushConcurrency {
+		c.FlushConcurrency = defaultFlushConcurrency
 	}
 
 	return nil

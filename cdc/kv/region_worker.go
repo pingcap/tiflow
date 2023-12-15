@@ -41,6 +41,7 @@ import (
 var (
 	regionWorkerPool workerpool.WorkerPool
 	workerPoolOnce   sync.Once
+	workerPoolLock   sync.Mutex
 	// The magic number here is keep the same with some magic numbers in some
 	// other components in TiCDC, including worker pool task chan size, mounter
 	// chan size etc.
@@ -113,6 +114,8 @@ type regionWorker struct {
 
 	// how many pending input events
 	inputPending int32
+
+	pendingRegions *syncRegionFeedStateMap
 }
 
 func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetrics {
@@ -146,6 +149,7 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetric
 
 func newRegionWorker(
 	ctx context.Context, changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+	pendingRegions *syncRegionFeedStateMap,
 ) *regionWorker {
 	return &regionWorker{
 		parentCtx:     ctx,
@@ -160,6 +164,8 @@ func newRegionWorker(
 		concurrency:   int(s.client.config.KVClient.WorkerConcurrent),
 		metrics:       newRegionWorkerMetrics(changefeedID),
 		inputPending:  0,
+
+		pendingRegions: pendingRegions,
 	}
 }
 
@@ -195,7 +201,7 @@ func (w *regionWorker) checkShouldExit() error {
 	empty := w.checkRegionStateEmpty()
 	// If there is no region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
-	if empty {
+	if empty && w.pendingRegions.len() == 0 {
 		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
@@ -407,6 +413,8 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 
 func (w *regionWorker) initPoolHandles() {
 	handles := make([]workerpool.EventHandle, 0, w.concurrency)
+	workerPoolLock.Lock()
+	defer workerPoolLock.Unlock()
 	for i := 0; i < w.concurrency; i++ {
 		poolHandle := regionWorkerPool.RegisterEvent(func(ctx context.Context, eventI interface{}) error {
 			event := eventI.(*regionStatefulEvent)
@@ -862,6 +870,8 @@ func getWorkerPoolSize() (size int) {
 func InitWorkerPool() {
 	workerPoolOnce.Do(func() {
 		size := getWorkerPoolSize()
+		workerPoolLock.Lock()
+		defer workerPoolLock.Unlock()
 		regionWorkerPool = workerpool.NewDefaultWorkerPool(size)
 	})
 }

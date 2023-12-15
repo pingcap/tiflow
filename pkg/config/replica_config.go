@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -88,6 +88,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
+		Compression:           "",
 		MemoryQuotaPercentage: 50,
 		EventCachePercentage:  0,
 	},

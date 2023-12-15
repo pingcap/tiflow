@@ -29,7 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/processor"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"

@@ -244,7 +244,7 @@ func (s *SharedClient) Run(ctx context.Context) error {
 		s.workers = append(s.workers, worker)
 	}
 
-	g.Go(func() error { return s.handleRequestRanges(ctx, g) })
+	g.Go(func() error { return s.handleRequestRanges(ctx) })
 	g.Go(func() error { return s.dispatchRequest(ctx) })
 	g.Go(func() error { return s.requestRegionToStore(ctx, g) })
 	g.Go(func() error { return s.handleErrors(ctx) })
@@ -427,7 +427,9 @@ func (s *SharedClient) broadcastRequest(r *requestedStore, sri singleRegionInfo)
 	}
 }
 
-func (s *SharedClient) handleRequestRanges(ctx context.Context, g *errgroup.Group) error {
+func (s *SharedClient) handleRequestRanges(ctx context.Context) error {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(scanRegionsConcurrency)
 	for {
 		select {
 		case <-ctx.Done():
@@ -598,6 +600,11 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
 			return nil
 		}
+		if innerErr.GetServerIsBusy() != nil {
+			metricKvIsBusyCounter.Inc()
+			s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
+			return nil
+		}
 		if duplicated := innerErr.GetDuplicateRequest(); duplicated != nil {
 			metricFeedDuplicateRequestCounter.Inc()
 			// TODO(qupeng): It's better to add a new machanism to deregister one region.
@@ -694,7 +701,7 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 }
 
 func (s *SharedClient) logSlowRegions(ctx context.Context) error {
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
@@ -702,15 +709,18 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
+		log.Info("event feed starts to check locked regions",
+			zap.String("namespace", s.changefeed.Namespace),
+			zap.String("changefeed", s.changefeed.ID))
 
 		currTime := s.pdClock.CurrentTime()
 		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
 			if attr.SlowestRegion.Initialized {
-				ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
-					log.Info("event feed finds a slow region",
+					log.Info("event feed finds a initialized slow region",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Any("subscriptionID", subscriptionID),
@@ -718,6 +728,12 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 				}
 			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
 				log.Info("event feed initializes a region too slow",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Any("subscriptionID", subscriptionID),
+					zap.Any("slowRegion", attr.SlowestRegion))
+			} else if currTime.Sub(ckptTime) > 10*time.Minute {
+				log.Info("event feed finds a uninitialized slow region",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),

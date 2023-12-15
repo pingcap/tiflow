@@ -21,7 +21,7 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -223,7 +223,7 @@ func (suite *redoLogAdvancerSuite) TestTryMoveMoveToNextTxn() {
 	// Initial state.
 	require.Equal(suite.T(), uint64(0), advancer.lastTxnCommitTs)
 	require.Equal(suite.T(), uint64(0), advancer.currTxnCommitTs)
-	pos := engine.Position{StartTs: 1, CommitTs: 3}
+	pos := sorter.Position{StartTs: 1, CommitTs: 3}
 	// Append 1 event with commit ts 1
 	advancer.appendEvents([]*model.RowChangedEvent{
 		{CommitTs: 1},
@@ -249,7 +249,7 @@ func (suite *redoLogAdvancerSuite) TestTryMoveMoveToNextTxn() {
 	require.Equal(suite.T(), uint64(2), advancer.currTxnCommitTs)
 
 	// Set pos to a commit fence
-	pos = engine.Position{
+	pos = sorter.Position{
 		StartTs:  2,
 		CommitTs: 3,
 	}
@@ -268,7 +268,7 @@ func (suite *redoLogAdvancerSuite) TestAdvance() {
 	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
 	require.NotNil(suite.T(), advancer)
 
-	pos := engine.Position{StartTs: 1, CommitTs: 3}
+	pos := sorter.Position{StartTs: 1, CommitTs: 3}
 	// 1. append 1 event with commit ts 1
 	advancer.appendEvents([]*model.RowChangedEvent{
 		{CommitTs: 1},
@@ -306,7 +306,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
 	require.NotNil(suite.T(), advancer)
 
-	pos := engine.Position{StartTs: 1, CommitTs: 2}
+	pos := sorter.Position{StartTs: 1, CommitTs: 2}
 	// 1. append 1 event with commit ts 2
 	advancer.appendEvents([]*model.RowChangedEvent{
 		{CommitTs: 2},
@@ -321,7 +321,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 		}, 256)
 	}
 	require.Equal(suite.T(), uint64(1024), advancer.usedMem)
-	pos = engine.Position{StartTs: 2, CommitTs: 3}
+	pos = sorter.Position{StartTs: 2, CommitTs: 3}
 	advancer.tryMoveToNextTxn(3, pos)
 
 	require.Equal(suite.T(), uint64(1024), advancer.pendingTxnSize)
@@ -356,7 +356,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeAnd
 	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
 	require.NotNil(suite.T(), advancer)
 
-	pos := engine.Position{StartTs: 1, CommitTs: 2}
+	pos := sorter.Position{StartTs: 1, CommitTs: 2}
 	// 1. append 1 event with commit ts 2
 	advancer.appendEvents([]*model.RowChangedEvent{
 		{CommitTs: 2},
@@ -371,7 +371,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeAnd
 		}, 256)
 	}
 	require.Equal(suite.T(), uint64(768), advancer.usedMem)
-	pos = engine.Position{StartTs: 1, CommitTs: 3}
+	pos = sorter.Position{StartTs: 1, CommitTs: 3}
 	advancer.tryMoveToNextTxn(3, pos)
 
 	// 3. Try advance with txn is not finished.
@@ -400,7 +400,7 @@ func (suite *redoLogAdvancerSuite) TestFinish() {
 	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
 	require.NotNil(suite.T(), advancer)
 
-	pos := engine.Position{StartTs: 1, CommitTs: 2}
+	pos := sorter.Position{StartTs: 1, CommitTs: 2}
 	// 1. append 1 event with commit ts 2
 	advancer.appendEvents([]*model.RowChangedEvent{
 		{CommitTs: 2},
@@ -415,7 +415,7 @@ func (suite *redoLogAdvancerSuite) TestFinish() {
 		}, 256)
 	}
 	require.Equal(suite.T(), uint64(768), advancer.usedMem)
-	pos = engine.Position{StartTs: 1, CommitTs: 3}
+	pos = sorter.Position{StartTs: 1, CommitTs: 3}
 	advancer.tryMoveToNextTxn(3, pos)
 
 	require.Equal(suite.T(), uint64(2), advancer.lastTxnCommitTs)
@@ -450,7 +450,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 	advancer := newRedoLogAdvancer(task, memoryQuota, 768, manager)
 	require.NotNil(suite.T(), advancer)
 
-	pos := engine.Position{StartTs: 1, CommitTs: 2}
+	pos := sorter.Position{StartTs: 1, CommitTs: 2}
 	// 1. append 1 event with commit ts 2
 	advancer.appendEvents([]*model.RowChangedEvent{
 		{CommitTs: 2},
@@ -465,11 +465,11 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 		}, 256)
 	}
 	require.Equal(suite.T(), uint64(1024), advancer.usedMem)
-	pos = engine.Position{StartTs: 1, CommitTs: 3}
+	pos = sorter.Position{StartTs: 1, CommitTs: 3}
 	advancer.tryMoveToNextTxn(3, pos)
 
 	// 3. Last pos is a commit fence.
-	advancer.lastPos = engine.Position{
+	advancer.lastPos = sorter.Position{
 		StartTs:  2,
 		CommitTs: 3,
 	}

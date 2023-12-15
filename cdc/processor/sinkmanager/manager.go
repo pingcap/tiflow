@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
@@ -49,7 +49,7 @@ const (
 	sinkWorkerNum               = 8
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
-	// engine.CleanByTable can be expensive. So it's necessary to reduce useless calls.
+	// sorter.CleanByTable can be expensive. So it's necessary to reduce useless calls.
 	cleanTableInterval  = 5 * time.Second
 	cleanTableMinEvents = 128
 )
@@ -444,7 +444,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 						return true
 					}
 
-					cleanPos := engine.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
+					cleanPos := sorter.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
 					if !sink.cleanRangeEventCounts(cleanPos, cleanTableMinEvents) {
 						return true
 					}
@@ -474,13 +474,13 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 	}()
 }
 
-func (m *SinkManager) getUpperBound(tableSinkUpperBoundTs model.Ts) engine.Position {
+func (m *SinkManager) getUpperBound(tableSinkUpperBoundTs model.Ts) sorter.Position {
 	schemaTs := m.schemaStorage.ResolvedTs()
 	if schemaTs != math.MaxUint64 && tableSinkUpperBoundTs > schemaTs+1 {
 		// schemaTs == math.MaxUint64 means it's in tests.
 		tableSinkUpperBoundTs = schemaTs + 1
 	}
-	return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
+	return sorter.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 }
 
 // generateSinkTasks generates tasks to fetch data from the source manager.
@@ -533,13 +533,50 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 			slowestTableProgress := progs[i]
 			lowerBound := slowestTableProgress.nextLowerBoundPos
 			upperBound := m.getUpperBound(tableSink.getUpperBoundTs())
-			// The table has no available progress.
-			if lowerBound.Compare(upperBound) >= 0 {
+
+			if !tableSink.initTableSink() {
+				// The table hasn't been attached to a sink.
 				m.sinkProgressHeap.push(slowestTableProgress)
 				continue
 			}
-			// The table hasn't been attached to a sink.
-			if !tableSink.initTableSink() {
+
+			if sinkErr := tableSink.checkTableSinkHealth(); sinkErr != nil {
+				switch errors.Cause(sinkErr).(type) {
+				case tablesink.SinkInternalError:
+					tableSink.closeAndClearTableSink()
+					if restartErr := tableSink.restart(ctx); restartErr == nil {
+						// Restart the table sink based on the checkpoint position.
+						ckpt := tableSink.getCheckpointTs().ResolvedMark()
+						lastWrittenPos := sorter.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+						p := &progress{
+							span:              tableSink.span,
+							nextLowerBoundPos: lastWrittenPos.Next(),
+							version:           slowestTableProgress.version,
+						}
+						m.sinkProgressHeap.push(p)
+						log.Info("table sink has been restarted",
+							zap.String("namespace", m.changefeedID.Namespace),
+							zap.String("changefeed", m.changefeedID.ID),
+							zap.Stringer("span", &tableSink.span),
+							zap.Any("lastWrittenPos", lastWrittenPos),
+							zap.String("sinkError", sinkErr.Error()))
+					} else {
+						m.sinkProgressHeap.push(slowestTableProgress)
+						log.Warn("table sink restart fail",
+							zap.String("namespace", m.changefeedID.Namespace),
+							zap.String("changefeed", m.changefeedID.ID),
+							zap.Stringer("span", &tableSink.span),
+							zap.String("sinkError", sinkErr.Error()),
+							zap.Error(restartErr))
+					}
+				default:
+					return sinkErr
+				}
+				continue
+			}
+
+			// The table has no available progress.
+			if lowerBound.Compare(upperBound) >= 0 {
 				m.sinkProgressHeap.push(slowestTableProgress)
 				continue
 			}
@@ -560,7 +597,7 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 				lowerBound:    lowerBound,
 				getUpperBound: m.getUpperBound,
 				tableSink:     tableSink,
-				callback: func(lastWrittenPos engine.Position) {
+				callback: func(lastWrittenPos sorter.Position) {
 					p := &progress{
 						span:              tableSink.span,
 						nextLowerBoundPos: lastWrittenPos.Next(),
@@ -692,7 +729,7 @@ func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
 				lowerBound:    lowerBound,
 				getUpperBound: m.getUpperBound,
 				tableSink:     tableSink,
-				callback: func(lastWrittenPos engine.Position) {
+				callback: func(lastWrittenPos sorter.Position) {
 					p := &progress{
 						span:              tableSink.span,
 						nextLowerBoundPos: lastWrittenPos.Next(),
@@ -844,13 +881,13 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 
 	m.sinkProgressHeap.push(&progress{
 		span:              span,
-		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
+		nextLowerBoundPos: sorter.Position{StartTs: 0, CommitTs: startTs + 1},
 		version:           tableSink.(*tableSinkWrapper).version,
 	})
 	if m.redoDMLMgr != nil {
 		m.redoProgressHeap.push(&progress{
 			span:              span,
-			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
+			nextLowerBoundPos: sorter.Position{StartTs: 0, CommitTs: startTs + 1},
 			version:           tableSink.(*tableSinkWrapper).version,
 		})
 	}

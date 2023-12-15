@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -208,17 +208,16 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 	})
 	tester.MustApplyPatches()
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID,
-		state.Info, state.Status, newFeedStateManager(up, state), up,
+		state.Info, state.Status, NewFeedStateManager(up, state), up,
 		// new ddl puller
 		func(ctx context.Context,
-			replicaConfig *config.ReplicaConfig,
 			up *upstream.Upstream,
 			startTs uint64,
 			changefeed model.ChangeFeedID,
 			schemaStorage entry.SchemaStorage,
 			filter filter.Filter,
-		) (puller.DDLPuller, error) {
-			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}, nil
+		) puller.DDLPuller {
+			return &mockDDLPuller{resolvedTs: startTs - 1, schemaStorage: schemaStorage}
 		},
 		// new ddl ddlSink
 		func(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
@@ -641,7 +640,7 @@ func TestBarrierAdvance(t *testing.T) {
 		if i == 1 {
 			cf.ddlManager.ddlResolvedTs += 10
 		}
-		_, barrier, err := cf.ddlManager.tick(ctx, state.Status.CheckpointTs, nil)
+		_, barrier, err := cf.ddlManager.tick(ctx, state.Status.CheckpointTs)
 
 		require.Nil(t, err)
 
@@ -668,7 +667,7 @@ func TestBarrierAdvance(t *testing.T) {
 
 			// Then the last tick barrier must be advanced correctly.
 			cf.ddlManager.ddlResolvedTs += 1000000000000
-			_, barrier, err = cf.ddlManager.tick(ctx, state.Status.CheckpointTs+10, nil)
+			_, barrier, err = cf.ddlManager.tick(ctx, state.Status.CheckpointTs+10)
 			require.Nil(t, err)
 			err = cf.handleBarrier(ctx, state.Info, state.Status, barrier)
 

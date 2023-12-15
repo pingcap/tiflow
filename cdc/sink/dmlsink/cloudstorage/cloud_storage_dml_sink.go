@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -36,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	putil "github.com/pingcap/tiflow/pkg/util"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -208,6 +210,11 @@ func (s *DMLSink) run(ctx context.Context) error {
 			return worker.run(ctx)
 		})
 	}
+
+	log.Info("dml worker started", zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.Int("workerCount", len(s.workers)),
+		zap.Any("config", s.workers[0].config))
 
 	return eg.Wait()
 }

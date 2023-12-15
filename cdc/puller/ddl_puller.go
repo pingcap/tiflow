@@ -23,9 +23,9 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/kv/sharedconn"
@@ -211,10 +211,7 @@ func (p *ddlJobPullerImpl) initJobTableMeta() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	snap, err := kv.GetSnapshotMeta(p.kvStorage, version.Ver)
-	if err != nil {
-		return errors.Trace(err)
-	}
+	snap := kv.GetSnapshotMeta(p.kvStorage, version.Ver)
 
 	dbInfos, err := snap.ListDatabases()
 	if err != nil {
@@ -580,18 +577,11 @@ func NewDDLJobPuller(
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
-	isOwner bool,
-) (DDLJobPuller, error) {
+) DDLJobPuller {
 	pdCli := up.PDClient
 	regionCache := up.RegionCache
 	kvStorage := up.KVStorage
 	pdClock := up.PDClock
-
-	if isOwner {
-		changefeed.ID += "_owner_ddl_puller"
-	} else {
-		changefeed.ID += "_processor_ddl_puller"
-	}
 
 	spans := spanz.GetAllDDLSpan()
 	for i := range spans {
@@ -639,7 +629,7 @@ func NewDDLJobPuller(
 		)
 	}
 
-	return jobPuller, nil
+	return jobPuller
 }
 
 // DDLPuller is the interface for DDL Puller, used by owner only.
@@ -671,26 +661,19 @@ type ddlPullerImpl struct {
 
 // NewDDLPuller return a puller for DDL Event
 func NewDDLPuller(ctx context.Context,
-	replicaConfig *config.ReplicaConfig,
 	up *upstream.Upstream,
 	startTs uint64,
 	changefeed model.ChangeFeedID,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
-) (DDLPuller, error) {
+) DDLPuller {
 	var puller DDLJobPuller
-	var err error
-
 	// storage can be nil only in the test
 	if up.KVStorage != nil {
-		puller, err = NewDDLJobPuller(
+		changefeed.ID += "_owner_ddl_puller"
+		puller = NewDDLJobPuller(
 			ctx, up, startTs, config.GetGlobalServerConfig(),
-			changefeed, schemaStorage, filter,
-			true, /* isOwner */
-		)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+			changefeed, schemaStorage, filter)
 	}
 
 	return &ddlPullerImpl{
@@ -699,7 +682,7 @@ func NewDDLPuller(ctx context.Context,
 		cancel:       func() {},
 		clock:        clock.New(),
 		changefeedID: changefeed,
-	}, nil
+	}
 }
 
 func (h *ddlPullerImpl) handleDDLJobEntry(jobEntry *model.DDLJobEntry) error {
