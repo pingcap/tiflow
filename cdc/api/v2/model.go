@@ -273,6 +273,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			Compression:           c.Consistent.Compression,
 			FlushConcurrency:      c.Consistent.FlushConcurrency,
 		}
+		if c.Consistent.MemoryUsage != nil {
+			res.Consistent.MemoryUsage = &config.ConsistentMemoryUsage{
+				MemoryQuotaPercentage: c.Consistent.MemoryUsage.MemoryQuotaPercentage,
+				EventCachePercentage:  c.Consistent.MemoryUsage.EventCachePercentage,
+			}
+		}
 	}
 	if c.Sink != nil {
 		var dispatchRules []*config.DispatchRule
@@ -768,7 +774,14 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Compression:           cloned.Consistent.Compression,
 			FlushConcurrency:      cloned.Consistent.FlushConcurrency,
 		}
+		if cloned.Consistent.MemoryUsage != nil {
+			res.Consistent.MemoryUsage = &ConsistentMemoryUsage{
+				MemoryQuotaPercentage: cloned.Consistent.MemoryUsage.MemoryQuotaPercentage,
+				EventCachePercentage:  cloned.Consistent.MemoryUsage.EventCachePercentage,
+			}
+		}
 	}
+
 	if cloned.Mounter != nil {
 		res.Mounter = &MounterConfig{
 			WorkerNum: cloned.Mounter.WorkerNum,
@@ -966,6 +979,14 @@ type ConsistentConfig struct {
 	UseFileBackend        bool   `json:"use_file_backend"`
 	Compression           string `json:"compression,omitempty"`
 	FlushConcurrency      int    `json:"flush_concurrency,omitempty"`
+
+	MemoryUsage *ConsistentMemoryUsage `json:"memory_usage"`
+}
+
+// ConsistentMemoryUsage represents memory usage of Consistent module.
+type ConsistentMemoryUsage struct {
+	MemoryQuotaPercentage uint64 `json:"memory_quota_percentage"`
+	EventCachePercentage  uint64 `json:"event_cache_percentage"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
