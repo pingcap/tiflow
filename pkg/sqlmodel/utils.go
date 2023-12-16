@@ -50,15 +50,6 @@ func valuesHolder(n int) string {
 	return builder.String()
 }
 
-func isGenerated(columns []*timodel.ColumnInfo, name timodel.CIStr) bool {
-	for _, col := range columns {
-		if col.Name.L == name.L {
-			return col.IsGenerated()
-		}
-	}
-	return false
-}
-
 // generatedColumnsNameSet returns a set of generated columns' name.
 func generatedColumnsNameSet(columns []*timodel.ColumnInfo) map[string]struct{} {
 	m := make(map[string]struct{})
