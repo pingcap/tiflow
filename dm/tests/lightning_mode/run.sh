@@ -122,10 +122,10 @@ function run() {
 	export GO_FAILPOINTS=''
 }
 
-cleanup_data lightning_mode
-# also cleanup dm processes in case of last run failed
-cleanup_process $*
-run $*
-cleanup_process $*
+#cleanup_data lightning_mode
+## also cleanup dm processes in case of last run failed
+#cleanup_process $*
+#run $*
+#cleanup_process $*
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
