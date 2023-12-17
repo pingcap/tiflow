@@ -188,7 +188,6 @@ func New(
 	}
 
 	m.ready = make(chan struct{})
-<<<<<<< HEAD
 	m.wg.Add(1) // So `SinkManager.Close` will also wait the subroutine.
 	go func() {
 		if err := m.run(ctx, warnChan); err != nil && errors.Cause(err) != context.Canceled {
@@ -200,9 +199,6 @@ func New(
 	}()
 	<-m.ready
 	return m, nil
-=======
-	return m
->>>>>>> 844b41bed4 (redo(cdc): custom redo event cache and disable it by default (#10139))
 }
 
 func (m *SinkManager) run(ctx context.Context, warnings ...chan<- error) (err error) {
