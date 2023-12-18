@@ -48,7 +48,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		schema,
 		redo.NewDisabledDDLManager(),
 		redo.NewDisabledMetaManager(),
-		model.DB, false, false)
+		false)
 	return res
 }
 

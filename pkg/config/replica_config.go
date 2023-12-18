@@ -89,6 +89,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Storage:               "",
 		UseFileBackend:        false,
 		Compression:           "",
+		MemoryUsage: &ConsistentMemoryUsage{
+			MemoryQuotaPercentage: 50,
+			EventCachePercentage:  0,
+		},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,

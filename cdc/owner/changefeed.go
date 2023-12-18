@@ -634,16 +634,6 @@ LOOP2:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
-	downstreamType, err := c.latestInfo.DownstreamType()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	needSendBootstrapEvent, err := c.latestInfo.NeedSendBootstrapEvent()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
@@ -653,10 +643,7 @@ LOOP2:
 		c.schema,
 		c.redoDDLMgr,
 		c.redoMetaMgr,
-		downstreamType,
-		util.GetOrZero(c.latestInfo.Config.BDRMode),
-		needSendBootstrapEvent,
-	)
+		util.GetOrZero(c.latestInfo.Config.BDRMode))
 
 	// create scheduler
 	cfg := *c.cfg
