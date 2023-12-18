@@ -21,7 +21,7 @@ import (
 )
 
 // NewLargeEvent4Test creates large events for test
-func NewLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
+func NewLargeEvent4Test(t *testing.T) (*model.DDLEvent, *model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -78,7 +78,7 @@ func NewLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChanged
 	 	setT set('a', 'b', 'c'),
 	 	bitT bit(10),
 	 	jsonT json)`
-	_ = helper.DDL2Event(sql)
+	ddlEvent := helper.DDL2Event(sql)
 
 	sql = `insert into test.t values(
 		127,
@@ -142,5 +142,5 @@ func NewLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChanged
 	deleteE.PreColumns = deleteE.Columns
 	deleteE.Columns = nil
 
-	return insert, &update, &deleteE
+	return ddlEvent, insert, &update, &deleteE
 }
