@@ -137,7 +137,6 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 		return ctx.Err()
 	case p.outputCh <- jobEntry:
 	}
-
 	return nil
 }
 
@@ -379,6 +378,43 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return false, nil
 	}
 
+	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
+		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
+		log.Info("ddl job finishedTs less than puller resolvedTs,"+
+			"discard the ddl job",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			zap.String("query", job.Query),
+			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
+		return true, nil
+	}
+
+	snap := p.schemaStorage.GetLastSnapshot()
+	if err = snap.FillSchemaName(job); err != nil {
+		log.Info("failed to fill schema name for ddl job",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.String("query", job.Query),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.Error(err))
+		discard, fErr := p.filter.
+			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
+		if fErr != nil {
+			return false, errors.Trace(fErr)
+		}
+		if discard {
+			return true, nil
+		}
+		return true, errors.Trace(err)
+	}
+
 	defer func() {
 		if skip && err == nil {
 			log.Info("ddl job schema or table does not match, discard it",
@@ -403,45 +439,19 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		}
 	}()
 
-	if job.BinlogInfo.FinishedTS <= p.getResolvedTs() ||
-		job.BinlogInfo.SchemaVersion <= p.schemaVersion {
-		log.Info("ddl job finishedTs less than puller resolvedTs,"+
-			"discard the ddl job",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			zap.String("query", job.Query),
-			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
-		return true, nil
-	}
-
-	snap := p.schemaStorage.GetLastSnapshot()
-	if err = snap.FillSchemaName(job); err != nil {
-		log.Info("failed to fill schema name for ddl job",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
-			zap.Error(err))
-		discard, fErr := p.filter.
-			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
-		if fErr != nil {
-			return false, errors.Trace(fErr)
-		}
-		if discard {
-			return true, nil
-		}
-		return true, errors.Trace(err)
-	}
-
 	switch job.Type {
 	case timodel.ActionRenameTables:
 		skip, err = p.handleRenameTables(job)
 		if err != nil {
+			log.Warn("handle rename tables ddl job failed",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.String("schema", job.SchemaName),
+				zap.String("table", job.TableName),
+				zap.String("query", job.Query),
+				zap.Uint64("startTs", job.StartTS),
+				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+				zap.Error(err))
 			return true, errors.Trace(err)
 		}
 	case timodel.ActionRenameTable:
@@ -675,7 +685,12 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 		log.Warn("ignore duplicated DDL job",
 			zap.String("namespace", h.changefeedID.Namespace),
 			zap.String("changefeed", h.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+
 			zap.String("query", job.Query),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 			zap.Int64("jobID", job.ID))
 		return
 	}
@@ -689,6 +704,8 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 		zap.String("schema", job.SchemaName),
 		zap.String("table", job.TableName),
 		zap.String("query", job.Query),
+		zap.Uint64("startTs", job.StartTS),
+		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 		zap.Int64("jobID", job.ID))
 }
 

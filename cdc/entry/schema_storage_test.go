@@ -881,10 +881,10 @@ func TestSchemaStorage(t *testing.T) {
 		require.Nil(t, err)
 
 		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		}
 
 		for _, job := range jobs {
