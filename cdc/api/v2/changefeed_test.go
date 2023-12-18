@@ -1018,13 +1018,12 @@ func TestChangefeedSynced(t *testing.T) {
 	statusProvider.err = nil
 	statusProvider.changefeedInfo = cfInfo
 	{
-
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
 		// case3: pd is offline，resolvedTs - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153217279,
-			LastSyncedTs:     1701153217279,
-			PullerResolvedTs: 1701153247279,
+			CheckpointTs:     1701153217279 << 18,
+			LastSyncedTs:     1701153217279 << 18,
+			PullerResolvedTs: 1701153247279 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1039,7 +1038,6 @@ func TestChangefeedSynced(t *testing.T) {
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.Nil(t, err)
 		require.Equal(t, false, resp.Synced)
-		require.Equal(t, "1970-01-01 08:00:00", resp.NowTs)
 		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, "+
 			"please recheck. Besides the data is not finish syncing", resp.Info)
 	}
@@ -1048,9 +1046,9 @@ func TestChangefeedSynced(t *testing.T) {
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
 		// case4: pd is offline，resolvedTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153217279,
-			LastSyncedTs:     1701153217279,
-			PullerResolvedTs: 1701153217479,
+			CheckpointTs:     1701153217279 << 18,
+			LastSyncedTs:     1701153217279 << 18,
+			PullerResolvedTs: 1701153217479 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1065,7 +1063,6 @@ func TestChangefeedSynced(t *testing.T) {
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.Nil(t, err)
 		require.Equal(t, false, resp.Synced)
-		require.Equal(t, "1970-01-01 08:00:00", resp.NowTs)
 		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck. "+
 			"You can check the pd first, and if pd is available, means we don't finish sync data. "+
 			"If pd is not available, please check the whether we satisfy the condition that "+
@@ -1079,9 +1076,9 @@ func TestChangefeedSynced(t *testing.T) {
 	{
 		// case5: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153217209,
-			LastSyncedTs:     1701152217279,
-			PullerResolvedTs: 1701153217229,
+			CheckpointTs:     1701153217209 << 18,
+			LastSyncedTs:     1701152217279 << 18,
+			PullerResolvedTs: 1701153217229 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1096,16 +1093,15 @@ func TestChangefeedSynced(t *testing.T) {
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.Nil(t, err)
 		require.Equal(t, true, resp.Synced)
-		require.Equal(t, "2023-11-28 14:33:37", resp.NowTs)
 		require.Equal(t, "Data syncing is finished", resp.Info)
 	}
 
 	{
 		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153201279,
-			LastSyncedTs:     1701152217279,
-			PullerResolvedTs: 1701153201379,
+			CheckpointTs:     1701153201279 << 18,
+			LastSyncedTs:     1701152217279 << 18,
+			PullerResolvedTs: 1701153201379 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1120,17 +1116,19 @@ func TestChangefeedSynced(t *testing.T) {
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.Nil(t, err)
 		require.Equal(t, false, resp.Synced)
-		require.Equal(t, "Please check whether pd is health and tikv region is all available. "+
-			"If pd is not health or tikv region is not available, the data syncing is finished. "+
+		require.Equal(t, "Please check whether pd is healthy and tikv region is all available. "+
+			"If pd is not healthy or tikv region is not available, the data syncing is finished. "+
+			"Because in this case, the resolvedTs will not advance anymore, "+
+			"thus we only need to care whether last_synced_ts is more than 300 secs from the current time."+
 			" Otherwise the data syncing is not finished, please wait", resp.Info)
 	}
 
 	{
 		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153201279,
-			LastSyncedTs:     1701152207279,
-			PullerResolvedTs: 1701153218279,
+			CheckpointTs:     1701153201279 << 18,
+			LastSyncedTs:     1701152207279 << 18,
+			PullerResolvedTs: 1701153218279 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(
@@ -1151,9 +1149,9 @@ func TestChangefeedSynced(t *testing.T) {
 	{
 		// case8: pdTs - lastSyncedTs < 5min
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
-			CheckpointTs:     1701153217279,
-			LastSyncedTs:     1701153213279,
-			PullerResolvedTs: 1701153217279,
+			CheckpointTs:     1701153217279 << 18,
+			LastSyncedTs:     1701153213279 << 18,
+			PullerResolvedTs: 1701153217279 << 18,
 		}
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequestWithContext(

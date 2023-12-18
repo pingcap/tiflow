@@ -1048,12 +1048,12 @@ type ChangeFeedInfo struct {
 
 // SyncedStatus describes the detail of a changefeed's synced status
 type SyncedStatus struct {
-	Synced           bool   `json:"synced"`
-	SinkCheckpointTs string `json:"sink_checkpoint_ts"`
-	PullerResolvedTs string `json:"puller_resolved_ts"`
-	LastSyncedTs     string `json:"last_synced_ts"`
-	NowTs            string `json:"now_ts"`
-	Info             string `json:"info"`
+	Synced           bool           `json:"synced"`
+	SinkCheckpointTs model.JSONTime `json:"sink_checkpoint_ts"`
+	PullerResolvedTs model.JSONTime `json:"puller_resolved_ts"`
+	LastSyncedTs     model.JSONTime `json:"last_synced_ts"`
+	NowTs            model.JSONTime `json:"now_ts"`
+	Info             string         `json:"info"`
 }
 
 // RunningError represents some running error from cdc components,

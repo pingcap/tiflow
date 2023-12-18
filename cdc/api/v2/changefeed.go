@@ -960,7 +960,8 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	if err != nil {
 		// pd is unavailable
 		var message string
-		if (status.PullerResolvedTs - status.CheckpointTs) > cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 { // 5s
+		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) >
+			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
 			message = fmt.Sprintf("%s. Besides the data is not finish syncing", terror.Message(err))
 		} else {
 			message = fmt.Sprintf("%s. You can check the pd first, and if pd is available, means we don't finish sync data. "+
@@ -970,10 +971,10 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
-			SinkCheckpointTs: transformerTime(status.CheckpointTs),
-			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
-			LastSyncedTs:     transformerTime(status.LastSyncedTs),
-			NowTs:            transformerTime(0),
+			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+			NowTs:            model.JSONTime(time.Unix(0, 0)),
 			Info:             message,
 		})
 		return
@@ -983,43 +984,46 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	// get time from pd
 	physicalNow, _, _ := pdClient.GetTS(ctx)
 
-	if (physicalNow-status.LastSyncedTs > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000) &&
-		(physicalNow-status.CheckpointTs < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000) {
+	if (physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000) &&
+		(physicalNow-oracle.ExtractPhysical(status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000) {
 		// reach strict synced  condition
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           true,
-			SinkCheckpointTs: transformerTime(status.CheckpointTs),
-			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
-			LastSyncedTs:     transformerTime(status.LastSyncedTs),
-			NowTs:            transformerTime(physicalNow),
+			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
 			Info:             "Data syncing is finished",
 		})
-	} else if physicalNow-status.LastSyncedTs > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
+	} else if physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
 		// lastSyncedTs reach the synced condition, while checkpoint-ts doesn't
 		var message string
-		if (status.PullerResolvedTs - status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
-			message = fmt.Sprintf("Please check whether pd is health and tikv region is all available. " +
-				"If pd is not health or tikv region is not available, the data syncing is finished. " +
-				" Otherwise the data syncing is not finished, please wait")
+		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) <
+			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
+			message = fmt.Sprintf("Please check whether pd is healthy and tikv region is all available. "+
+				"If pd is not healthy or tikv region is not available, the data syncing is finished. "+
+				"Because in this case, the resolvedTs will not advance anymore, "+
+				"thus we only need to care whether last_synced_ts is more than %v secs from the current time."+
+				" Otherwise the data syncing is not finished, please wait", cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval)
 		} else {
 			message = "The data syncing is not finished, please wait"
 		}
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
-			SinkCheckpointTs: transformerTime(status.CheckpointTs),
-			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
-			LastSyncedTs:     transformerTime(status.LastSyncedTs),
-			NowTs:            transformerTime(physicalNow),
+			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
 			Info:             message,
 		})
 	} else {
 		// lastSyncedTs doesn't reach the synced condition
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
-			SinkCheckpointTs: transformerTime(status.CheckpointTs),
-			PullerResolvedTs: transformerTime(status.PullerResolvedTs),
-			LastSyncedTs:     transformerTime(status.LastSyncedTs),
-			NowTs:            transformerTime(physicalNow),
+			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
 			Info:             "The data syncing is not finished, please wait",
 		})
 	}

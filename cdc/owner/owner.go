@@ -32,7 +32,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -605,9 +604,9 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			return nil
 		}
 		ret := &model.ChangeFeedSyncedStatusForAPI{}
-		ret.LastSyncedTs = oracle.ExtractPhysical(cfReactor.lastSyncedTs)
-		ret.CheckpointTs = oracle.ExtractPhysical(cfReactor.latestStatus.CheckpointTs)
-		ret.PullerResolvedTs = oracle.ExtractPhysical(cfReactor.pullerResolvedTs)
+		ret.LastSyncedTs = cfReactor.lastSyncedTs
+		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		ret.PullerResolvedTs = cfReactor.pullerResolvedTs
 
 		if cfReactor.latestInfo == nil {
 			ret.CheckpointInterval = 0
