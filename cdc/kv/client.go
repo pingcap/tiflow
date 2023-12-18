@@ -1123,14 +1123,10 @@ func (s *eventFeedSession) receiveFromStream(
 					zap.Int("resolvedRegionCount", regionCount))
 			}
 
-			if len(cevent.Events) != 0 {
-				if entries, ok := cevent.Events[0].Event.(*cdcpb.Event_Entries_); ok && len(entries.Entries.Entries) > 0 {
-					commitTs := entries.Entries.Entries[0].CommitTs
-					if maxCommitTs < commitTs {
-						maxCommitTs = commitTs
-					}
-				}
+			if commitTs := getChangeDataEventCommitTs(cevent); commitTs > 0 && maxCommitTs < commitTs {
+				maxCommitTs = commitTs
 			}
+
 			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
 			if err != nil {
 				return err
