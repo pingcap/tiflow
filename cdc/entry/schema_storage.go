@@ -74,8 +74,8 @@ func NewSchemaStorage(
 ) (SchemaStorage, error) {
 	var (
 		snap    *schema.Snapshot
-		err     error
 		version int64
+		err     error
 	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
@@ -89,19 +89,14 @@ func NewSchemaStorage(
 			return nil, errors.Trace(err)
 		}
 	}
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	schema := &schemaStorageImpl{
+	return &schemaStorageImpl{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
 		forceReplicate: forceReplicate,
 		id:             id,
 		schemaVersion:  version,
 		role:           role,
-	}
-	return schema, nil
+	}, nil
 }
 
 // getSnapshot returns the snapshot which currentTs is less than(but most close to)
