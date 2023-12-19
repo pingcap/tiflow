@@ -352,8 +352,10 @@ type message struct {
 	Database string    `json:"database,omitempty"`
 	Table    string    `json:"table,omitempty"`
 	Type     EventType `json:"type"`
-	CommitTs uint64    `json:"commitTs"`
-	BuildTs  int64     `json:"buildTs"`
+	// SQL is only for the DDL event.
+	SQL      string `json:"sql,omitempty"`
+	CommitTs uint64 `json:"commitTs"`
+	BuildTs  int64  `json:"buildTs"`
 	// SchemaVersion is for the DML event.
 	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
 
@@ -362,16 +364,20 @@ type message struct {
 	// HandleKeyOnly is only for the DML event.
 	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
 
+	// E2E checksum related fields, only set when enable checksum functionality.
+	Checksum        string `json:"checksum,omitempty"`
+	OldChecksum     string `json:"oldChecksum,omitempty"`
+	Corrupted       bool   `json:"corrupted,omitempty"`
+	ChecksumVersion int    `json:"checksumVersion,omitempty"`
+
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
 	Old map[string]interface{} `json:"old,omitempty"`
-	// SQL is only for the DDL event.
-	SQL string `json:"sql,omitempty"`
-	// PreTableSchema holds schema information before the DDL executed.
-	PreTableSchema *TableSchema `json:"preTableSchema,omitempty"`
 	// TableSchema is for the DDL and Bootstrap event.
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
+	// PreTableSchema holds schema information before the DDL executed.
+	PreTableSchema *TableSchema `json:"preTableSchema,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {

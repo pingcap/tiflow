@@ -78,6 +78,9 @@ func TestEncodeDDLEvent(t *testing.T) {
 	sql = `rename table test.t to test.abc`
 	renameTableDDLEvent := helper.DDL2Event(sql)
 
+	sql = `insert into test.abc values (2, "anna", "female", "anna@abc.com")`
+	insertEvent2 := helper.DML2Event(sql, "test", "abc")
+
 	helper.Tk().MustExec("drop table test.abc")
 
 	ctx := context.Background()
@@ -166,6 +169,32 @@ func TestEncodeDDLEvent(t *testing.T) {
 		require.Equal(t, len(renameTableDDLEvent.TableInfo.Columns), len(event.TableInfo.Columns))
 		require.Equal(t, len(renameTableDDLEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
 		require.NotNil(t, event.PreTableInfo)
+
+		item = dec.memo.Read(renameTableDDLEvent.TableInfo.TableName.Schema,
+			renameTableDDLEvent.TableInfo.TableName.Table, renameTableDDLEvent.TableInfo.UpdateTS)
+		require.NotNil(t, item)
+
+		err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent2, func() {})
+		require.NoError(t, err)
+
+		messages = enc.Build()
+		require.Len(t, messages, 1)
+
+		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
+
+		decodedRow, err = dec.NextRowChangedEvent()
+		require.NoError(t, err)
+		require.Equal(t, decodedRow.CommitTs, insertEvent.CommitTs)
+		require.Equal(t, decodedRow.Table.Schema, insertEvent.Table.Schema)
+		require.Equal(t, decodedRow.Table.Table, insertEvent.Table.Table)
+		require.Nil(t, decodedRow.PreColumns)
 	}
 }
 
