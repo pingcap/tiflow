@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -44,6 +45,11 @@ type SchemaStorage interface {
 	GetLastSnapshot() *schema.Snapshot
 	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
 	HandleDDLJob(job *timodel.Job) error
+
+	BuildDDLEvents(
+		ctx context.Context, job *timodel.Job,
+	) (ddlEvents []*model.DDLEvent, err error)
+
 	// AdvanceResolvedTs advances the resolved ts
 	AdvanceResolvedTs(ts uint64)
 	// ResolvedTs returns the resolved ts of the schema storage
@@ -60,10 +66,14 @@ type schemaStorageImpl struct {
 	resolvedTs    uint64
 	schemaVersion int64
 
+	filter filter.Filter
+
 	forceReplicate bool
 
 	id   model.ChangeFeedID
 	role util.Role
+
+	metricIgnoreDDLEventCounter prometheus.Counter
 }
 
 // NewSchemaStorage creates a new schema storage
@@ -97,9 +107,12 @@ func NewSchemaStorage(
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
 		forceReplicate: forceReplicate,
+		filter:         filter,
 		id:             id,
 		schemaVersion:  version,
 		role:           role,
+		metricIgnoreDDLEventCounter: ignoredDDLEventCounter.
+			WithLabelValues(id.Namespace, id.ID),
 	}
 	return schema, nil
 }
@@ -293,6 +306,170 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	return !job.IsDone()
 }
 
+func (s *schemaStorageImpl) BuildDDLEvents(
+	ctx context.Context, job *timodel.Job,
+) (ddlEvents []*model.DDLEvent, err error) {
+	switch job.Type {
+	case timodel.ActionRenameTables:
+		// The result contains more than one DDLEvent for a rename tables job.
+		ddlEvents, err = s.buildRenameEvents(ctx, job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	default:
+		// parse preTableInfo
+		preSnap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		preTableInfo, err := preSnap.PreTableInfo(job)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+
+		// parse tableInfo
+		var tableInfo *model.TableInfo
+		err = preSnap.FillSchemaName(job)
+		if err != nil {
+			log.Error("build DDL event fail", zap.Any("job", job), zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+		// TODO: find a better way to refactor this. For example, drop table job should not
+		// have table info.
+		if job.BinlogInfo != nil && job.BinlogInfo.TableInfo != nil {
+			tableInfo = model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
+
+			// TODO: remove this after job is fixed by TiDB.
+			// ref: https://github.com/pingcap/tidb/issues/43819
+			if job.Type == timodel.ActionExchangeTablePartition {
+				oldTableInfo, ok := preSnap.PhysicalTableByID(job.BinlogInfo.TableInfo.ID)
+				if !ok {
+					return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(job.TableID)
+				}
+				tableInfo.SchemaID = oldTableInfo.SchemaID
+				tableInfo.TableName = oldTableInfo.TableName
+			}
+		} else {
+			// Just retrieve the schema name for a DDL job that does not contain TableInfo.
+			// Currently supported by cdc are: ActionCreateSchema, ActionDropSchema,
+			// and ActionModifySchemaCharsetAndCollate.
+			tableInfo = &model.TableInfo{
+				TableName: model.TableName{Schema: job.SchemaName},
+				Version:   job.BinlogInfo.FinishedTS,
+			}
+		}
+		event := new(model.DDLEvent)
+		event.FromJob(job, preTableInfo, tableInfo)
+		ddlEvents = append(ddlEvents, event)
+	}
+	return s.filterDDLEvents(ddlEvents)
+}
+
+// TODO: find a better way to refactor this function.
+// buildRenameEvents gets a list of DDLEvent from a rename tables DDL job.
+func (s *schemaStorageImpl) buildRenameEvents(
+	ctx context.Context, job *timodel.Job,
+) ([]*model.DDLEvent, error) {
+	var (
+		oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
+		newTableNames, oldSchemaNames           []*timodel.CIStr
+		ddlEvents                               []*model.DDLEvent
+	)
+	err := job.DecodeArgs(&oldSchemaIDs, &newSchemaIDs,
+		&newTableNames, &oldTableIDs, &oldSchemaNames)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	multiTableInfos := job.BinlogInfo.MultipleTableInfos
+	if len(multiTableInfos) != len(oldSchemaIDs) ||
+		len(multiTableInfos) != len(newSchemaIDs) ||
+		len(multiTableInfos) != len(newTableNames) ||
+		len(multiTableInfos) != len(oldTableIDs) ||
+		len(multiTableInfos) != len(oldSchemaNames) {
+		return nil, cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
+	}
+
+	preSnap, err := s.GetSnapshot(ctx, job.BinlogInfo.FinishedTS-1)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	for i, tableInfo := range multiTableInfos {
+		newSchema, ok := preSnap.SchemaByID(newSchemaIDs[i])
+		if !ok {
+			return nil, cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(
+				newSchemaIDs[i])
+		}
+		newSchemaName := newSchema.Name.O
+		oldSchemaName := oldSchemaNames[i].O
+		event := new(model.DDLEvent)
+		preTableInfo, ok := preSnap.PhysicalTableByID(tableInfo.ID)
+		if !ok {
+			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(
+				job.TableID)
+		}
+
+		tableInfo := model.WrapTableInfo(newSchemaIDs[i], newSchemaName,
+			job.BinlogInfo.FinishedTS, tableInfo)
+		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
+		ddlEvents = append(ddlEvents, event)
+	}
+
+	return ddlEvents, nil
+}
+
+// TODO: delete this function after integration test passed.
+func (s *schemaStorageImpl) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
+	res := make([]*model.DDLEvent, 0, len(ddlEvents))
+	for _, event := range ddlEvents {
+		var (
+			ignored bool
+			err     error
+		)
+		if event.Type == timodel.ActionRenameTable {
+			ignored, err = s.filter.ShouldDiscardDDL(
+				event.StartTs,
+				event.Type,
+				event.PreTableInfo.TableName.Schema,
+				event.PreTableInfo.TableName.Table,
+				event.Query)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		} else {
+			ignored, err = s.filter.ShouldDiscardDDL(
+				event.StartTs,
+				event.Type,
+				event.TableInfo.TableName.Schema,
+				event.TableInfo.TableName.Table,
+				event.Query)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
+		if ignored {
+			s.metricIgnoreDDLEventCounter.Inc()
+			log.Error(
+				"ignored DDL event should not be sent to owner"+
+					"please report a bug to TiCDC if you see this log"+
+					"but it is no harm to your replication",
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
+				zap.String("query", event.Query),
+				zap.String("type", event.Type.String()),
+				zap.String("schema", event.TableInfo.TableName.Schema),
+				zap.String("table", event.TableInfo.TableName.Table),
+				zap.Uint64("startTs", event.StartTs),
+				zap.Uint64("commitTs", event.CommitTs),
+			)
+			continue
+		}
+		res = append(res, event)
+	}
+	return res, nil
+}
+
 // MockSchemaStorage is for tests.
 type MockSchemaStorage struct {
 	Resolved uint64
@@ -311,6 +488,12 @@ func (s *MockSchemaStorage) GetLastSnapshot() *schema.Snapshot {
 // HandleDDLJob implements SchemaStorage.
 func (s *MockSchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	return nil
+}
+
+func (s *MockSchemaStorage) BuildDDLEvents(
+	_ context.Context, _ *timodel.Job,
+) (ddlEvents []*model.DDLEvent, err error) {
+	return nil, nil
 }
 
 // AdvanceResolvedTs implements SchemaStorage.
