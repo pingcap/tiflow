@@ -125,6 +125,15 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 		if skip {
 			return nil
 		}
+		log.Info("a new ddl job is received",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			zap.String("query", job.Query),
+			zap.Any("job", job))
 	}
 
 	jobEntry := &model.DDLJobEntry{
@@ -393,28 +402,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return true, nil
 	}
 
-	snap := p.schemaStorage.GetLastSnapshot()
-	if err = snap.FillSchemaName(job); err != nil {
-		log.Info("failed to fill schema name for ddl job",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
-			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-			zap.Error(err))
-		discard, fErr := p.filter.
-			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
-		if fErr != nil {
-			return false, errors.Trace(fErr)
-		}
-		if discard {
-			return true, nil
-		}
-		return true, errors.Trace(err)
-	}
-
 	defer func() {
 		if skip && err == nil {
 			log.Info("ddl job schema or table does not match, discard it",
@@ -438,6 +425,28 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.Error(err))
 		}
 	}()
+
+	snap := p.schemaStorage.GetLastSnapshot()
+	if err = snap.FillSchemaName(job); err != nil {
+		log.Info("failed to fill schema name for ddl job",
+			zap.String("namespace", p.changefeedID.Namespace),
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.String("query", job.Query),
+			zap.Uint64("startTs", job.StartTS),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.Error(err))
+		discard, fErr := p.filter.
+			ShouldDiscardDDL(job.StartTS, job.Type, job.SchemaName, job.TableName, job.Query)
+		if fErr != nil {
+			return false, errors.Trace(fErr)
+		}
+		if discard {
+			return true, nil
+		}
+		return true, errors.Trace(err)
+	}
 
 	switch job.Type {
 	case timodel.ActionRenameTables:
