@@ -49,6 +49,8 @@ const (
 	apiOpVarChangefeedID = "changefeed_id"
 	// apiOpVarNamespace is the key of changefeed namespace in HTTP API
 	apiOpVarNamespace = "namespace"
+	// timeout for pd client
+	timeout = 30 * time.Second
 )
 
 // createChangefeed handles create changefeed request,
@@ -925,10 +927,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		return
 	}
 
-	status, err := h.capture.StatusProvider().GetChangeFeedSyncedStatus(
-		ctx,
-		changefeedID,
-	)
+	status, err := h.capture.StatusProvider().GetChangeFeedSyncedStatus(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -942,7 +941,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval = status.SyncedCheckInterval
 	}
 
-	// get pd client
+	// try to get pd client to get pd time, and determine synced status based on the pd time
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
@@ -953,20 +952,23 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 	}
 	credential := cfg.PDConfig.toCredential()
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
 	if err != nil {
-		// pd is unavailable
+		// case 1. we can't get pd client, pd may be unavailable.
+		//         if pullerResolvedTs - checkpointTs > checkpointInterval, data is not synced
+		//         otherwise, if pd is unavailable, we decide data whether is synced based on
+		//         the time difference between current time and lastSyncedTs.
 		var message string
 		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) >
 			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
 			message = fmt.Sprintf("%s. Besides the data is not finish syncing", terror.Message(err))
 		} else {
-			message = fmt.Sprintf("%s. You can check the pd first, and if pd is available, means we don't finish sync data. "+
-				"If pd is not available, please check the whether we satisfy the condition that "+
-				"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than %v secs. "+
+			message = fmt.Sprintf("%s. You should check the pd status first. If pd status is normal, means we don't finish sync data. "+
+				"If pd is offline, please check the whether we satisfy the condition that "+
+				"the time difference from lastSyncedTs to the current time in the time zone of pd is greater than %v secs. "+
 				"If it's satisfied, means the data syncing is totally finished", err, cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval)
 		}
 		c.JSON(http.StatusOK, SyncedStatus{
@@ -980,13 +982,14 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		return
 	}
 	defer pdClient.Close()
-
 	// get time from pd
 	physicalNow, _, _ := pdClient.GetTS(ctx)
 
+	// We can normally get pd time. Thus we determine synced status based on physicalNow, lastSyncedTs, checkpointTs and pullerResolvedTs
 	if (physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000) &&
 		(physicalNow-oracle.ExtractPhysical(status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000) {
-		// reach strict synced  condition
+		// case 2: If physcialNow - lastSyncedTs > SyncedCheckInterval && physcialNow - CheckpointTs < CheckpointInterval
+		//         --> reach strict synced status
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           true,
 			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
@@ -996,15 +999,20 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			Info:             "Data syncing is finished",
 		})
 	} else if physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
-		// lastSyncedTs reach the synced condition, while checkpoint-ts doesn't
+		// case 3: If physcialNow - lastSyncedTs > SyncedCheckInterval && physcialNow - CheckpointTs > CheckpointInterval
+		//         we should consider the situation that pd or tikv region is not healthy to block the advancing resolveTs.
+		//         if pullerResolvedTs - checkpointTs > CheckpointInterval-->  data is not synced
+		//         otherwise, if pd & tikv is healthy --> data is not synced
+		//                    if not healthy --> data is synced
 		var message string
 		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) <
 			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
-			message = fmt.Sprintf("Please check whether pd is healthy and tikv region is all available. "+
-				"If pd is not healthy or tikv region is not available, the data syncing is finished. "+
-				"Because in this case, the resolvedTs will not advance anymore, "+
-				"thus we only need to care whether last_synced_ts is more than %v secs from the current time."+
-				" Otherwise the data syncing is not finished, please wait", cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval)
+			message = fmt.Sprintf("Please check whether pd is healthy and tikv region is all available. " +
+				"If pd is not healthy or tikv region is not available, the data syncing is finished. " +
+				"When pd is offline means that pd is not healthy. For tikv region, you can check the grafana info " +
+				"in 'TiKV-Details-Resolved-Ts-Max Leader Resolved TS gap'. If the gap is a large value, such as a few minutes, " +
+				"it means some regions in tikv are unavailable. " +
+				" Otherwise the data syncing is not finished, please wait")
 		} else {
 			message = "The data syncing is not finished, please wait"
 		}
@@ -1017,7 +1025,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			Info:             message,
 		})
 	} else {
-		// lastSyncedTs doesn't reach the synced condition
+		// case	4: If physcialNow - lastSyncedTs < SyncedCheckInterval --> data is not synced
 		c.JSON(http.StatusOK, SyncedStatus{
 			Synced:           false,
 			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),

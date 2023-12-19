@@ -178,6 +178,9 @@ function run_case_with_unavailable_tikv() {
 	info=$(echo $synced_status | jq -r '.info')
 	target_message="Please check whether pd is healthy and tikv region is all available. \
 If pd is not healthy or tikv region is not available, the data syncing is finished. \
+When pd is offline means that pd is not healthy. For tikv region, you can check the grafana info \
+in 'TiKV-Details-Resolved-Ts-Max Leader Resolved TS gap'. If the gap is a large value, such as a few minutes, \
+it means some regions in tikv are unavailable. \
 Otherwise the data syncing is not finished, please wait"
 
 	if [ "$info" != "$target_message" ]; then
@@ -274,8 +277,9 @@ function run_case_with_failpoint() {
 	info=$(echo $synced_status | jq -r '.info')
 	target_message="Please check whether pd is healthy and tikv region is all available. \
 If pd is not healthy or tikv region is not available, the data syncing is finished. \
-Because in this case, the resolvedTs will not advance anymore, \
-thus we only need to care whether last_synced_ts is more than 120 secs from the current time. \
+When pd is offline means that pd is not healthy. For tikv region, you can check the grafana info \
+in 'TiKV-Details-Resolved-Ts-Max Leader Resolved TS gap'. If the gap is a large value, such as a few minutes, \
+it means some regions in tikv are unavailable. \
 Otherwise the data syncing is not finished, please wait"
 	if [ "$info" != "$target_message" ]; then
 		echo "synced status info is not correct"

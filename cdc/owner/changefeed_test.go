@@ -169,9 +169,14 @@ func (m *mockScheduler) Tick(
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	barrier *schedulepb.BarrierWithMinTs,
-) (newCheckpointTs, newResolvedTs, newLastSyncedTs, newPullerResolvedTs model.Ts, err error) {
+) (watermark schedulepb.Watermark, err error) {
 	m.currentTables = currentTables
-	return barrier.MinTableBarrierTs, barrier.GlobalBarrierTs, scheduler.CheckpointCannotProceed, scheduler.CheckpointCannotProceed, nil
+	return schedulepb.Watermark{
+		CheckpointTs:     barrier.MinTableBarrierTs,
+		ResolvedTs:       barrier.GlobalBarrierTs,
+		LastSyncedTs:     scheduler.CheckpointCannotProceed,
+		PullerResolvedTs: scheduler.CheckpointCannotProceed,
+	}, nil
 }
 
 // MoveTable is used to trigger manual table moves.

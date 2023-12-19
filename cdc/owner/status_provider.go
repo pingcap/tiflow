@@ -27,6 +27,7 @@ type StatusProvider interface {
 	// GetChangeFeedStatus returns a changefeeds' runtime status.
 	GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error)
 
+	// GetChangeFeedSyncedStatus returns a changefeeds' synced status.
 	GetChangeFeedSyncedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedSyncedStatusForAPI, error)
 
 	// GetChangeFeedInfo returns a changefeeds' info.

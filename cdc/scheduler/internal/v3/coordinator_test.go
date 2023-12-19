@@ -251,7 +251,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 	ctx := context.Background()
 	currentTables := []model.TableID{1, 2, 3}
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
-	_, _, _, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
+	_, err := coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
 	require.Nil(t, err)
 	msgs := trans.SendBuffer
 	require.Len(t, msgs, 2)
@@ -283,7 +283,7 @@ func TestCoordinatorHeartbeat(t *testing.T) {
 		},
 	})
 	trans.SendBuffer = []*schedulepb.Message{}
-	_, _, _, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
+	_, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
 	msgs = trans.SendBuffer
@@ -324,7 +324,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 	ctx := context.Background()
 	currentTables := []model.TableID{1, 2, 3}
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
-	_, _, _, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
+	_, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
 	require.Nil(t, err)
 	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
@@ -340,7 +340,7 @@ func TestCoordinatorAddCapture(t *testing.T) {
 		HeartbeatResponse: &schedulepb.HeartbeatResponse{},
 	})
 	trans.SendBuffer = []*schedulepb.Message{}
-	_, _, _, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
+	_, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
 	require.Nil(t, err)
 	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
@@ -381,7 +381,7 @@ func TestCoordinatorRemoveCapture(t *testing.T) {
 	ctx := context.Background()
 	currentTables := []model.TableID{1, 2, 3}
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
-	_, _, _, _, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
+	_, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
 	require.Nil(t, err)
 	msgs = trans.SendBuffer
 	require.Len(t, msgs, 1)
@@ -456,7 +456,7 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 	ctx := context.Background()
 	currentTables := []model.TableID{1, 2}
 	aliveCaptures := map[model.CaptureID]*model.CaptureInfo{"a": {}, "b": {}}
-	_, _, _, _, err := coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
+	_, err := coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(0))
 	require.Nil(t, err)
 
 	// Initialize captures.
@@ -509,13 +509,13 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 			},
 		},
 	})
-	cts, rts, lastSyncedTs, pullerResolvedTs, err := coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(5))
+	watermark, err := coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(5))
 	require.Nil(t, err)
 	require.True(t, coord.captureM.CheckAllCaptureInitialized())
-	require.EqualValues(t, 2, cts)
-	require.EqualValues(t, 4, rts)
-	require.EqualValues(t, 4, lastSyncedTs)
-	require.EqualValues(t, 5, pullerResolvedTs)
+	require.EqualValues(t, 2, watermark.CheckpointTs)
+	require.EqualValues(t, 4, watermark.ResolvedTs)
+	require.EqualValues(t, 4, watermark.LastSyncedTs)
+	require.EqualValues(t, 5, watermark.PullerResolvedTs)
 
 	// Checkpoint should be advanced even if there is an uninitialized capture.
 	aliveCaptures["c"] = &model.CaptureInfo{}
@@ -560,13 +560,13 @@ func TestCoordinatorAdvanceCheckpoint(t *testing.T) {
 			},
 		},
 	})
-	cts, rts, lastSyncedTs, pullerResolvedTs, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(5))
+	watermark, err = coord.poll(ctx, 0, currentTables, aliveCaptures, schedulepb.NewBarrierWithMinTs(5))
 	require.Nil(t, err)
 	require.False(t, coord.captureM.CheckAllCaptureInitialized())
-	require.EqualValues(t, 3, cts)
-	require.EqualValues(t, 5, rts)
-	require.EqualValues(t, 6, lastSyncedTs)
-	require.EqualValues(t, 7, pullerResolvedTs)
+	require.EqualValues(t, 3, watermark.CheckpointTs)
+	require.EqualValues(t, 5, watermark.ResolvedTs)
+	require.EqualValues(t, 6, watermark.LastSyncedTs)
+	require.EqualValues(t, 7, watermark.PullerResolvedTs)
 }
 
 func TestCoordinatorDropMsgIfChangefeedEpochMismatch(t *testing.T) {

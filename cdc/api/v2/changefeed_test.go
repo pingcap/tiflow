@@ -1118,8 +1118,9 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Equal(t, false, resp.Synced)
 		require.Equal(t, "Please check whether pd is healthy and tikv region is all available. "+
 			"If pd is not healthy or tikv region is not available, the data syncing is finished. "+
-			"Because in this case, the resolvedTs will not advance anymore, "+
-			"thus we only need to care whether last_synced_ts is more than 300 secs from the current time."+
+			"When pd is offline means that pd is not healthy. For tikv region, you can check the grafana info "+
+			"in 'TiKV-Details-Resolved-Ts-Max Leader Resolved TS gap'. If the gap is a large value, such as a few minutes, "+
+			"it means some regions in tikv are unavailable. "+
 			" Otherwise the data syncing is not finished, please wait", resp.Info)
 	}
 
