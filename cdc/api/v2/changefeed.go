@@ -29,7 +29,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -898,13 +897,6 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 	})
 }
 
-// transformer timestamp to readable format
-func transformerTime(timestamp int64) string {
-	location := time.Local
-	tm := time.Unix((timestamp / 1000), 0).In(location)
-	return tm.Format("2006-01-02 15:04:05")
-}
-
 // synced get the synced status of a changefeed
 // @Summary Get synced status
 // @Description get the synced status of a changefeed
@@ -964,7 +956,7 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		var message string
 		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) >
 			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
-			message = fmt.Sprintf("%s. Besides the data is not finish syncing", terror.Message(err))
+			message = fmt.Sprintf("%s. Besides the data is not finish syncing", err.Error())
 		} else {
 			message = fmt.Sprintf("%s. You should check the pd status first. If pd status is normal, means we don't finish sync data. "+
 				"If pd is offline, please check the whether we satisfy the condition that "+
@@ -998,7 +990,10 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
 			Info:             "Data syncing is finished",
 		})
-	} else if physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
+		return
+	}
+
+	if physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
 		// case 3: If physcialNow - lastSyncedTs > SyncedCheckInterval && physcialNow - CheckpointTs > CheckpointInterval
 		//         we should consider the situation that pd or tikv region is not healthy to block the advancing resolveTs.
 		//         if pullerResolvedTs - checkpointTs > CheckpointInterval-->  data is not synced
@@ -1024,17 +1019,18 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
 			Info:             message,
 		})
-	} else {
-		// case	4: If physcialNow - lastSyncedTs < SyncedCheckInterval --> data is not synced
-		c.JSON(http.StatusOK, SyncedStatus{
-			Synced:           false,
-			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
-			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
-			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
-			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
-			Info:             "The data syncing is not finished, please wait",
-		})
+		return
 	}
+
+	// case	4: If physcialNow - lastSyncedTs < SyncedCheckInterval --> data is not synced
+	c.JSON(http.StatusOK, SyncedStatus{
+		Synced:           false,
+		SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+		PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+		LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+		NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
+		Info:             "The data syncing is not finished, please wait",
+	})
 }
 
 func toAPIModel(
