@@ -41,7 +41,7 @@ func TestBuildCanalJSONRowEventEncoder(t *testing.T) {
 }
 
 func TestDMLE2E(t *testing.T) {
-	insertEvent, updateEvent, deleteEvent := utils.NewLargeEvent4Test(t)
+	_, insertEvent, updateEvent, deleteEvent := utils.NewLargeEvent4Test(t)
 
 	ctx := context.Background()
 
@@ -126,7 +126,7 @@ func TestDMLE2E(t *testing.T) {
 }
 
 func TestCanalJSONCompressionE2E(t *testing.T) {
-	insertEvent, _, _ := utils.NewLargeEvent4Test(t)
+	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t)
 
 	codecConfig := common.NewConfig(config.ProtocolCanalJSON)
 	codecConfig.EnableTiDBExtension = true
@@ -217,7 +217,7 @@ func TestCanalJSONClaimCheckE2E(t *testing.T) {
 	require.NoError(t, err)
 	encoder := builder.Build()
 
-	insertEvent, _, _ := utils.NewLargeEvent4Test(t)
+	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t)
 	err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
 	require.NoError(t, err)
 
@@ -269,7 +269,7 @@ func TestNewCanalJSONMessageHandleKeyOnly4LargeMessage(t *testing.T) {
 	require.NoError(t, err)
 	encoder := builder.Build()
 
-	insertEvent, _, _ := utils.NewLargeEvent4Test(t)
+	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t)
 	err = encoder.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
 	require.NoError(t, err)
 
@@ -351,7 +351,7 @@ func TestBatching(t *testing.T) {
 	encoder := builder.Build()
 	require.NotNil(t, encoder)
 
-	_, updateEvent, _ := utils.NewLargeEvent4Test(t)
+	_, _, updateEvent, _ := utils.NewLargeEvent4Test(t)
 	updateCase := *updateEvent
 	for i := 1; i <= 1000; i++ {
 		ts := uint64(i)
@@ -629,7 +629,7 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 
 	encoder := builder.Build()
 
-	insertEvent, _, _ := utils.NewLargeEvent4Test(t)
+	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t)
 	err = encoder.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
 	require.NoError(t, err)
 
@@ -666,7 +666,7 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 }
 
 func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
-	insertEvent, _, _ := utils.NewLargeEvent4Test(t)
+	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t)
 	ctx := context.Background()
 
 	for _, encodeEnable := range []bool{false, true} {

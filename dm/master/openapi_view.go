@@ -27,7 +27,7 @@ import (
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master/workerrpc"
 	"github.com/pingcap/tiflow/dm/openapi"

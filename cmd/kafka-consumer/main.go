@@ -630,7 +630,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		}
 		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic, c.tz)
 	case config.ProtocolSimple:
-		decoder = simple.NewDecoder()
+		decoder, err = simple.NewDecoder(ctx, c.codecConfig, c.upstreamTiDB)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}

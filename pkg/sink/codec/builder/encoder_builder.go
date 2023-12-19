@@ -51,7 +51,7 @@ func NewRowEventEncoderBuilder(
 	case config.ProtocolDebezium:
 		return debezium.NewBatchEncoderBuilder(cfg), nil
 	case config.ProtocolSimple:
-		return simple.NewBuilder(cfg), nil
+		return simple.NewBuilder(ctx, cfg)
 	default:
 		return nil, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(cfg.Protocol)
 	}

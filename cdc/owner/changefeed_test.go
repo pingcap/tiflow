@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -138,10 +138,6 @@ func (m *mockDDLSink) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	defer m.mu.Unlock()
 	m.mu.checkpointTs = ts
 	m.mu.currentTables = tables
-}
-
-func (m *mockDDLSink) emitBootstrapEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	return nil
 }
 
 func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo) {

@@ -21,14 +21,15 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	tiTypes "github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	tiTypes "github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"go.uber.org/zap"
 )
@@ -355,6 +356,12 @@ type message struct {
 	BuildTs  int64     `json:"buildTs"`
 	// SchemaVersion is for the DML event.
 	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
+
+	// ClaimCheckLocation is only for the DML event.
+	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
+	// HandleKeyOnly is only for the DML event.
+	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
+
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
@@ -409,7 +416,9 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 	return msg
 }
 
-func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
+func newDMLMessage(
+	event *model.RowChangedEvent, onlyHandleKey bool,
+) (*message, error) {
 	m := &message{
 		Version:       defaultVersion,
 		Database:      event.Table.Schema,
@@ -417,27 +426,28 @@ func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 		CommitTs:      event.CommitTs,
 		BuildTs:       time.Now().UnixMilli(),
 		SchemaVersion: event.TableInfo.UpdateTS,
+		HandleKeyOnly: onlyHandleKey,
 	}
 	var err error
 	if event.IsInsert() {
 		m.Type = InsertType
-		m.Data, err = formatColumns(event.Columns, event.ColInfos)
+		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsDelete() {
 		m.Type = DeleteType
-		m.Old, err = formatColumns(event.PreColumns, event.ColInfos)
+		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsUpdate() {
 		m.Type = UpdateType
-		m.Data, err = formatColumns(event.Columns, event.ColInfos)
+		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
-		m.Old, err = formatColumns(event.PreColumns, event.ColInfos)
+		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
@@ -449,10 +459,16 @@ func newDMLMessage(event *model.RowChangedEvent) (*message, error) {
 }
 
 func formatColumns(
-	columns []*model.Column, columnInfos []rowcodec.ColInfo,
+	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
 	for idx, col := range columns {
+		if col == nil {
+			continue
+		}
+		if onlyHandleKey && !col.Flag.IsHandleKey() {
+			continue
+		}
 		value, err := encodeValue(col.Value, columnInfos[idx].Ft)
 		if err != nil {
 			return nil, err
@@ -473,23 +489,41 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 			return v, nil
 		}
 		element := ft.GetElems()
-		number := value.(uint64)
-		enumVar, err := tiTypes.ParseEnumValue(element, number)
-		if err != nil {
-			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		switch v := value.(type) {
+		case uint64:
+			enumVar, err := tiTypes.ParseEnumValue(element, v)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			return enumVar.Name, nil
+		case []uint8:
+			return string(v), nil
+		default:
+			log.Panic("unexpected type for enum value", zap.Any("value", value))
 		}
-		return enumVar.Name, nil
 	case mysql.TypeSet:
-		if v, ok := value.(string); ok {
-			return v, nil
+		switch v := value.(type) {
+		case uint64:
+			setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			return setValue.Name, nil
+		case []uint8:
+			return string(v), nil
+		default:
+			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
-		elements := ft.GetElems()
-		number := value.(uint64)
-		setVar, err := tiTypes.ParseSetValue(elements, number)
-		if err != nil {
-			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+	case mysql.TypeBit:
+		switch v := value.(type) {
+		case []uint8:
+			bitValue, err := common.BinaryLiteralToInt(v)
+			if err != nil {
+				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			value = bitValue
+		default:
 		}
-		return setVar.Name, nil
 	default:
 	}
 
@@ -544,49 +578,56 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		return result, nil
 	}
 
+	var err error
 	switch fieldType.GetType() {
 	case mysql.TypeBit:
-		val, err := strconv.ParseUint(data, 10, 64)
+		value, err = strconv.ParseUint(data, 10, 64)
 		if err != nil {
-			log.Panic("invalid column value for bit or set",
+			log.Error("invalid column value for bit",
 				zap.String("name", name), zap.Any("data", data),
 				zap.Any("type", fieldType.GetType()), zap.Error(err))
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = val
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24:
-		val, err := strconv.ParseInt(data, 10, 64)
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
+		value, err = strconv.ParseInt(data, 10, 64)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = val
+	case mysql.TypeLonglong:
+		value, err = strconv.ParseInt(data, 10, 64)
+		if err != nil {
+			value, err = strconv.ParseUint(data, 10, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		}
 	case mysql.TypeFloat:
-		val, err := strconv.ParseFloat(data, 32)
+		value, err = strconv.ParseFloat(data, 32)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = val
 	case mysql.TypeDouble:
-		val, err := strconv.ParseFloat(data, 64)
+		value, err = strconv.ParseFloat(data, 64)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = val
 	case mysql.TypeEnum:
 		element := fieldType.GetElems()
 		enumVar, err := tiTypes.ParseEnumName(element, data, fieldType.GetCharset())
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = enumVar.Value
+		value = enumVar.Value
 	case mysql.TypeSet:
 		elements := fieldType.GetElems()
 		setVar, err := tiTypes.ParseSetName(elements, data, fieldType.GetCharset())
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		result.Value = setVar.Value
+		value = setVar.Value
 	default:
 	}
 
+	result.Value = value
 	return result, nil
 }

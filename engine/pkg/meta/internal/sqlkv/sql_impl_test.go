@@ -58,9 +58,6 @@ func mockGetDBConn(t *testing.T, table string) (*sql.DB, sqlmock.Sqlmock) {
 	mock.ExpectQuery("SELECT VERSION()").
 		WillReturnRows(sqlmock.NewRows([]string{"VERSION()"}).
 			AddRow("5.7.35-log"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT SCHEMA_NAME from Information_schema.SCHEMATA " +
-		"where SCHEMA_NAME LIKE ? ORDER BY SCHEMA_NAME=? DESC limit 1")).
-		WillReturnRows(sqlmock.NewRows([]string{"SCHEMA_NAME"}))
 	mock.ExpectExec(regexp.QuoteMeta(fmt.Sprintf("CREATE TABLE `%s` (`seq_id` bigint unsigned AUTO_INCREMENT,"+
 		"`created_at` datetime(3) NULL,`updated_at` datetime(3) NULL,`meta_key` varbinary(2048) not null,`meta_value` longblob,"+
 		"`job_id` varchar(64) not null,PRIMARY KEY (`seq_id`),UNIQUE INDEX `uidx_jk` (`job_id`,`meta_key`))", table))).
