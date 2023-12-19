@@ -303,7 +303,7 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowC
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
-			Schema: msg.Database,
+			Schema: msg.Schema,
 			Table:  msg.Table,
 		},
 		TableInfo: tableInfo,
@@ -350,10 +350,10 @@ func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*type
 
 type message struct {
 	Version int `json:"version"`
-	// Scheme and Table is empty for the resolved ts event.
-	Database string    `json:"database,omitempty"`
-	Table    string    `json:"table,omitempty"`
-	Type     EventType `json:"type"`
+	// Schema and Table is empty for the resolved ts event.
+	Schema string    `json:"schema,omitempty"`
+	Table  string    `json:"table,omitempty"`
+	Type   EventType `json:"type"`
 	// SQL is only for the DDL event.
 	SQL      string `json:"sql,omitempty"`
 	CommitTs uint64 `json:"commitTs"`
@@ -429,7 +429,7 @@ func newDMLMessage(
 ) (*message, error) {
 	m := &message{
 		Version:       defaultVersion,
-		Database:      event.Table.Schema,
+		Schema:        event.Table.Schema,
 		Table:         event.Table.Table,
 		CommitTs:      event.CommitTs,
 		BuildTs:       time.Now().UnixMilli(),
