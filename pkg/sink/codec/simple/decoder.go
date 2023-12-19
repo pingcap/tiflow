@@ -121,6 +121,7 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)
+	d.memo.Write(ddl.PreTableInfo)
 
 	return ddl, nil
 }
@@ -142,6 +143,9 @@ func newMemoryTableInfoProvider() *memoryTableInfoProvider {
 }
 
 func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
+	if info == nil {
+		return
+	}
 	key := cacheKey{
 		schema: info.TableName.Schema,
 		table:  info.TableName.Table,

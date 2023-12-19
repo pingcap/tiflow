@@ -62,12 +62,6 @@ func TestEncodeDDLEvent(t *testing.T) {
 	m, err := enc.EncodeDDLEvent(ddlEvent)
 	require.NoError(t, err)
 
-	sql = `rename table test.t to test.abc`
-	ddlEvent = helper.DDL2Event(sql)
-
-	m, err = enc.EncodeDDLEvent(ddlEvent)
-	require.NoError(t, err)
-
 	dec := NewDecoder()
 	err = dec.AddKeyValue(m.Key, m.Value)
 	require.NoError(t, err)
@@ -87,6 +81,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.Equal(t, ddlEvent.Query, event.Query)
 	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
 	require.Equal(t, len(ddlEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
+	require.Nil(t, event.PreTableInfo)
 
 	item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
 		ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
@@ -116,6 +111,32 @@ func TestEncodeDDLEvent(t *testing.T) {
 	require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
 	require.Equal(t, decodedRow.Table.Table, row.Table.Table)
 	require.Nil(t, decodedRow.PreColumns)
+
+	sql = `rename table test.t to test.abc`
+	ddlEvent = helper.DDL2Event(sql)
+
+	m, err = enc.EncodeDDLEvent(ddlEvent)
+	require.NoError(t, err)
+
+	err = dec.AddKeyValue(m.Key, m.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err = dec.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, model.MessageTypeDDL, messageType)
+	require.NotEqual(t, 0, dec.msg.BuildTs)
+
+	event, err = dec.NextDDLEvent()
+	require.NoError(t, err)
+	require.Equal(t, ddlEvent.CommitTs, event.CommitTs)
+	// because we don't we don't set startTs in the encoded message,
+	// so the startTs is equal to commitTs
+	require.Equal(t, ddlEvent.CommitTs, event.StartTs)
+	require.Equal(t, ddlEvent.Query, event.Query)
+	require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
+	require.Equal(t, len(ddlEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
+	require.NotNil(t, event.PreTableInfo)
 }
 
 func TestEncoderOtherTypes(t *testing.T) {

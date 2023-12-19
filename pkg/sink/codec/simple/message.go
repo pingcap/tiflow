@@ -195,9 +195,11 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
-	Version uint64          `json:"version"`
-	Columns []*columnSchema `json:"columns"`
-	Indexes []*IndexSchema  `json:"indexes"`
+	Database string          `json:"database"`
+	Table    string          `json:"table"`
+	Version  uint64          `json:"version"`
+	Columns  []*columnSchema `json:"columns"`
+	Indexes  []*IndexSchema  `json:"indexes"`
 }
 
 func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
@@ -239,34 +241,34 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	}
 
 	return &TableSchema{
-		Columns: columns,
-		Indexes: indexes,
-		Version: tableInfo.UpdateTS,
+		Database: tableInfo.TableName.Schema,
+		Table:    tableInfo.TableName.Table,
+		Version:  tableInfo.UpdateTS,
+		Columns:  columns,
+		Indexes:  indexes,
 	}
 }
 
 // newTableInfo converts from TableSchema to TableInfo.
-func newTableInfo(msg *message) *model.TableInfo {
+func newTableInfo(m *TableSchema) *model.TableInfo {
 	info := &model.TableInfo{
 		TableName: model.TableName{
-			Schema: msg.Database,
-			Table:  msg.Table,
+			Schema: m.Database,
+			Table:  m.Table,
 		},
 		TableInfo: &timodel.TableInfo{
-			Name:     timodel.NewCIStr(msg.Table),
-			UpdateTS: msg.SchemaVersion,
+			Name:     timodel.NewCIStr(m.Table),
+			UpdateTS: m.Version,
 		},
 	}
 
-	if msg.TableSchema != nil {
-		for _, col := range msg.TableSchema.Columns {
-			tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
-			info.Columns = append(info.Columns, tiCol)
-		}
-		for _, idx := range msg.TableSchema.Indexes {
-			index := newTiIndexInfo(idx)
-			info.Indices = append(info.Indices, index)
-		}
+	for _, col := range m.Columns {
+		tiCol := newTiColumnInfo(col, m.Indexes)
+		info.Columns = append(info.Columns, tiCol)
+	}
+	for _, idx := range m.Indexes {
+		index := newTiIndexInfo(idx)
+		info.Indices = append(info.Indices, index)
 	}
 
 	return info
@@ -274,12 +276,22 @@ func newTableInfo(msg *message) *model.TableInfo {
 
 // newDDLEvent converts from message to DDLEvent.
 func newDDLEvent(msg *message) *model.DDLEvent {
-	tableInfo := newTableInfo(msg)
+	var (
+		tableInfo    *model.TableInfo
+		preTableInfo *model.TableInfo
+	)
+	if msg.TableSchema != nil {
+		tableInfo = newTableInfo(msg.TableSchema)
+	}
+	if msg.PreTableSchema != nil {
+		preTableInfo = newTableInfo(msg.PreTableSchema)
+	}
 	return &model.DDLEvent{
-		StartTs:   msg.CommitTs,
-		CommitTs:  msg.CommitTs,
-		TableInfo: tableInfo,
-		Query:     msg.SQL,
+		StartTs:      msg.CommitTs,
+		CommitTs:     msg.CommitTs,
+		TableInfo:    tableInfo,
+		PreTableInfo: preTableInfo,
+		Query:        msg.SQL,
 	}
 }
 
@@ -366,18 +378,15 @@ func newResolvedMessage(ts uint64) *message {
 
 func newDDLMessage(ddl *model.DDLEvent) *message {
 	var (
-		database  string
-		table     string
 		schema    *TableSchema
 		preSchema *TableSchema
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
 		schema = newTableSchema(ddl.TableInfo)
-		database = ddl.TableInfo.TableName.Schema
-		table = ddl.TableInfo.TableName.Table
 	}
 	if !ddl.IsBootstrap {
+		// `PreTableInfo` may not exist for some DDL, such as `create table`
 		if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
 			preSchema = newTableSchema(ddl.PreTableInfo)
 		}
@@ -385,8 +394,6 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 
 	msg := &message{
 		Version:        defaultVersion,
-		Database:       database,
-		Table:          table,
 		Type:           DDLType,
 		CommitTs:       ddl.CommitTs,
 		BuildTs:        time.Now().UnixMilli(),
