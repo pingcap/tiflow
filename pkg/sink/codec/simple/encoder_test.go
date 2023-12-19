@@ -69,6 +69,12 @@ func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
+	ddl := helper.DDL2Event(`drop database if exists test`)
+	require.NotNil(t, ddl)
+
+	ddl = helper.DDL2Event(`create database test`)
+	ddl = helper.DDL2Event(`use test`)
+
 	sql := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
 	createTableDDLEvent := helper.DDL2Event(sql)
 

@@ -305,7 +305,6 @@ func (r *Manager) handleMessageDispatchTableResponse(
 	case *schedulepb.DispatchTableResponse_AddTable:
 		status = resp.AddTable.Status
 	case *schedulepb.DispatchTableResponse_RemoveTable:
-		status = resp.RemoveTable.Status
 	default:
 		log.Warn("schedulerv3: ignore unknown dispatch table response",
 			zap.String("namespace", r.changefeedID.Namespace),
