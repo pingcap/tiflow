@@ -368,7 +368,8 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 			"the DDL is not executed by Primary Cluster, skip it",
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("ID", m.changfeedID.ID),
-			zap.Any("ddlEvent", m.executingDDL))
+			zap.Any("ddlEvent", m.executingDDL),
+			zap.String("bdrRole", m.executingDDL.BDRRole))
 		tableName := m.executingDDL.TableInfo.TableName
 		// Set it to nil first to accelerate GC.
 		m.pendingDDLs[tableName][0] = nil
@@ -404,6 +405,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		tableName := m.executingDDL.TableInfo.TableName
 		log.Info("execute a ddl event successfully",
 			zap.String("ddl", m.executingDDL.Query),
+			zap.String("namespace", m.executingDDL.BDRRole),
 			zap.Uint64("commitTs", m.executingDDL.CommitTs),
 			zap.Stringer("table", tableName),
 		)
