@@ -43,7 +43,7 @@ func TestEncodeCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 		enc := builder.Build()
 
-		checkpoint := 23
+		checkpoint := 446266400629063682
 		m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
 		require.NoError(t, err)
 
@@ -191,9 +191,9 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 		decodedRow, err = dec.NextRowChangedEvent()
 		require.NoError(t, err)
-		require.Equal(t, decodedRow.CommitTs, insertEvent.CommitTs)
-		require.Equal(t, decodedRow.Table.Schema, insertEvent.Table.Schema)
-		require.Equal(t, decodedRow.Table.Table, insertEvent.Table.Table)
+		require.Equal(t, decodedRow.CommitTs, insertEvent2.CommitTs)
+		require.Equal(t, decodedRow.Table.Schema, insertEvent2.Table.Schema)
+		require.Equal(t, decodedRow.Table.Table, insertEvent2.Table.Table)
 		require.Nil(t, decodedRow.PreColumns)
 	}
 }
