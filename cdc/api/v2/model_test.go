@@ -20,7 +20,7 @@ import (
 	"time"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
@@ -69,6 +69,10 @@ var defaultAPIConfig = &ReplicaConfig{
 		FlushWorkerNum:        redo.DefaultFlushWorkerNum,
 		Storage:               "",
 		UseFileBackend:        false,
+		MemoryUsage: &ConsistentMemoryUsage{
+			MemoryQuotaPercentage: 50,
+			EventCachePercentage:  0,
+		},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: config.GetDefaultReplicaConfig().
