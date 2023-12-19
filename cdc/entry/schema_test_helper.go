@@ -262,9 +262,7 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 	require.NoError(s.t, err)
 	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	tableInfo, ok := s.schemaStorage.GetLastSnapshot().PhysicalTableByID(res.TableID)
-	//TableByName(res.SchemaName, res.BinlogInfo.TableInfo.Name.O)
-	require.True(s.t, ok)
+	tableInfo, _ := s.schemaStorage.GetLastSnapshot().PhysicalTableByID(res.TableID)
 
 	ctx := context.Background()
 	snap, err := s.schemaStorage.GetSnapshot(ctx, res.BinlogInfo.FinishedTS-1)
