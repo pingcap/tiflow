@@ -87,7 +87,7 @@ func New[E dmlsink.TableEvent, P dmlsink.Appender[E]](
 		eventAppender:             appender,
 		eventBuffer:               make([]E, 0, 1024),
 		state:                     state.TableSinkSinking,
-		lastSyncedTs:              LastSyncedTsRecord{lastSyncedTs: 0},
+		lastSyncedTs:              LastSyncedTsRecord{lastSyncedTs: startTs},
 		metricsTableSinkTotalRows: totalRowsCounter,
 	}
 }
