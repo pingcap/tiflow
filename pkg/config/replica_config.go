@@ -82,6 +82,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Storage:               "",
 		UseFileBackend:        false,
 		Compression:           "",
+		MemoryUsage: &ConsistentMemoryUsage{
+			MemoryQuotaPercentage: 50,
+			EventCachePercentage:  0,
+		},
 	},
 	ChangefeedErrorStuckDuration: time.Minute * 30,
 	SQLMode:                      defaultSQLMode,
