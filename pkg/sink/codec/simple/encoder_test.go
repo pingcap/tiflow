@@ -69,6 +69,10 @@ func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
+	dropDatabaseDDLEvent := helper.DDL2Event(`drop database if exists test`)
+	createDatabaseDDLEvent := helper.DDL2Event(`create database test`)
+	useDatabaseDDLEvent := helper.DDL2Event(`use test`)
+
 	sql := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
 	createTableDDLEvent := helper.DDL2Event(sql)
 
@@ -95,10 +99,10 @@ func TestEncodeDDLEvent(t *testing.T) {
 		require.NoError(t, err)
 		enc := builder.Build()
 
-		m, err := enc.EncodeDDLEvent(createTableDDLEvent)
+		dec, err := NewDecoder(ctx, codecConfig, nil)
 		require.NoError(t, err)
 
-		dec, err := NewDecoder(ctx, codecConfig, nil)
+		m, err := enc.EncodeDDLEvent(dropDatabaseDDLEvent)
 		require.NoError(t, err)
 
 		err = dec.AddKeyValue(m.Key, m.Value)
@@ -111,6 +115,63 @@ func TestEncodeDDLEvent(t *testing.T) {
 		require.NotEqual(t, 0, dec.msg.BuildTs)
 
 		event, err := dec.NextDDLEvent()
+		require.NoError(t, err)
+		require.Equal(t, dropDatabaseDDLEvent.CommitTs, event.CommitTs)
+		require.Equal(t, dropDatabaseDDLEvent.Query, event.Query)
+		require.NotNil(t, event.TableInfo)
+		require.NotNil(t, event.TableInfo.TableName)
+
+		m, err = enc.EncodeDDLEvent(createDatabaseDDLEvent)
+		require.NoError(t, err)
+
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
+
+		event, err = dec.NextDDLEvent()
+		require.NoError(t, err)
+		require.Equal(t, createDatabaseDDLEvent.CommitTs, event.CommitTs)
+		require.Equal(t, createDatabaseDDLEvent.Query, event.Query)
+		require.NotNil(t, event.TableInfo)
+		require.NotNil(t, event.TableInfo.TableName)
+
+		m, err = enc.EncodeDDLEvent(useDatabaseDDLEvent)
+		require.NoError(t, err)
+
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
+
+		event, err = dec.NextDDLEvent()
+		require.NoError(t, err)
+		require.Equal(t, useDatabaseDDLEvent.CommitTs, event.CommitTs)
+		require.Equal(t, useDatabaseDDLEvent.Query, event.Query)
+		require.NotNil(t, event.TableInfo)
+		require.NotNil(t, event.TableInfo.TableName)
+
+		m, err = enc.EncodeDDLEvent(createTableDDLEvent)
+		require.NoError(t, err)
+
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
+
+		event, err = dec.NextDDLEvent()
 		require.NoError(t, err)
 		require.Equal(t, createTableDDLEvent.CommitTs, event.CommitTs)
 		// because we don't we don't set startTs in the encoded message,

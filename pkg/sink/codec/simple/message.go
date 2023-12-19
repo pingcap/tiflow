@@ -224,7 +224,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 		indexes = append(indexes, index)
 	}
 
-	// Sometimes the primary key is not in the index, we need to find it manually.
+	// sometimes the primary key is not in the index, we need to find it manually.
 	if !pkInIndexes {
 		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
 		if len(pkColumns) != 0 {
@@ -252,14 +252,24 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 
 // newTableInfo converts from TableSchema to TableInfo.
 func newTableInfo(m *TableSchema) *model.TableInfo {
+	var (
+		database      string
+		table         string
+		schemaVersion uint64
+	)
+	if m != nil {
+		database = m.Database
+		table = m.Table
+		schemaVersion = m.Version
+	}
 	info := &model.TableInfo{
 		TableName: model.TableName{
-			Schema: m.Database,
-			Table:  m.Table,
+			Schema: database,
+			Table:  table,
 		},
 		TableInfo: &timodel.TableInfo{
-			Name:     timodel.NewCIStr(m.Table),
-			UpdateTS: m.Version,
+			Name:     timodel.NewCIStr(table),
+			UpdateTS: schemaVersion,
 		},
 	}
 
@@ -277,16 +287,8 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 
 // newDDLEvent converts from message to DDLEvent.
 func newDDLEvent(msg *message) *model.DDLEvent {
-	var (
-		tableInfo    *model.TableInfo
-		preTableInfo *model.TableInfo
-	)
-	if msg.TableSchema != nil {
-		tableInfo = newTableInfo(msg.TableSchema)
-	}
-	if msg.PreTableSchema != nil {
-		preTableInfo = newTableInfo(msg.PreTableSchema)
-	}
+	tableInfo := newTableInfo(msg.TableSchema)
+	preTableInfo := newTableInfo(msg.PreTableSchema)
 	return &model.DDLEvent{
 		StartTs:      msg.CommitTs,
 		CommitTs:     msg.CommitTs,
