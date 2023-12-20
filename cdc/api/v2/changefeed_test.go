@@ -1017,7 +1017,7 @@ func TestChangefeedSynced(t *testing.T) {
 	statusProvider.err = nil
 	statusProvider.changefeedInfo = cfInfo
 	{
-		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
+		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
 		// case3: pd is offline，resolvedTs - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279 << 18,
@@ -1042,7 +1042,7 @@ func TestChangefeedSynced(t *testing.T) {
 	}
 
 	{
-		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerror.ErrAPIGetPDClientFailed).Times(1)
+		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
 		// case4: pd is offline，resolvedTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279 << 18,
