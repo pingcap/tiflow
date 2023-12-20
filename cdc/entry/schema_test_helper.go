@@ -261,8 +261,7 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 	ver, err := s.storage.CurrentVersion(oracle.GlobalTxnScope)
 	require.NoError(s.t, err)
 	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
-
-	//tableInfo, _ := s.schemaStorage.GetLastSnapshot().TableByName(res.SchemaName, res.TableName)
+	
 	var tableInfo *model.TableInfo
 	if res.BinlogInfo != nil && res.BinlogInfo.TableInfo != nil {
 		tableInfo = model.WrapTableInfo(res.SchemaID, res.SchemaName, res.BinlogInfo.FinishedTS, res.BinlogInfo.TableInfo)
