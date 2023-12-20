@@ -22,9 +22,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timeta "github.com/pingcap/tidb/pkg/meta"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
-	schema "github.com/pingcap/tiflow/cdc/entry/schema"
+	"github.com/pingcap/tiflow/cdc/entry/schema"
+	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -78,32 +79,21 @@ type schemaStorageImpl struct {
 
 // NewSchemaStorage creates a new schema storage
 func NewSchemaStorage(
-	meta *timeta.Meta, startTs uint64,
+	storage tidbkv.Storage, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
 	role util.Role, filter filter.Filter,
 ) (SchemaStorage, error) {
-	var (
-		snap    *schema.Snapshot
-		err     error
-		version int64
-	)
-	if meta == nil {
-		snap = schema.NewEmptySnapshot(forceReplicate)
-	} else {
-		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		version, err = schema.GetSchemaVersion(meta)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	meta := kv.GetSnapshotMeta(storage, startTs)
+	snap, err := schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
+	version, err := schema.GetSchemaVersion(meta)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	schema := &schemaStorageImpl{
+	result := &schemaStorageImpl{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
 		forceReplicate: forceReplicate,
@@ -114,7 +104,7 @@ func NewSchemaStorage(
 		metricIgnoreDDLEventCounter: ignoredDDLEventCounter.
 			WithLabelValues(id.Namespace, id.ID),
 	}
-	return schema, nil
+	return result, nil
 }
 
 // getSnapshot returns the snapshot which currentTs is less than(but most close to)

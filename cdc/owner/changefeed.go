@@ -571,7 +571,7 @@ LOOP2:
 	c.schema, err = newSchemaWrap4Owner(
 		c.upstream.KVStorage,
 		ddlStartTs,
-		c.latestInfo.Config,
+		c.latestInfo.Config.ForceReplicate,
 		c.id,
 		f)
 	if err != nil {

@@ -19,11 +19,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
-	timeta "github.com/pingcap/tidb/pkg/meta"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -31,33 +28,26 @@ import (
 
 type schemaWrap4Owner struct {
 	entry.SchemaStorage
-	filter filter.Filter
-	config *config.ReplicaConfig
-	id     model.ChangeFeedID
+	filter         filter.Filter
+	forceReplicate bool
+	id             model.ChangeFeedID
 }
 
 func newSchemaWrap4Owner(
 	kvStorage tidbkv.Storage, startTs model.Ts,
-	config *config.ReplicaConfig, id model.ChangeFeedID,
+	forceReplicate bool, id model.ChangeFeedID,
 	filter filter.Filter,
 ) (*schemaWrap4Owner, error) {
-	var meta *timeta.Meta
-	if kvStorage != nil {
-		meta = kv.GetSnapshotMeta(kvStorage, startTs)
-	}
-
 	schemaStorage, err := entry.NewSchemaStorage(
-		meta, startTs, config.ForceReplicate, id, util.RoleOwner, filter)
+		kvStorage, startTs, forceReplicate, id, util.RoleOwner, filter)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	// It is no matter to use an empty as timezone here because schemaWrap4Owner
 	// doesn't use expression filter's method.
-
 	schema := &schemaWrap4Owner{
 		SchemaStorage: schemaStorage,
 		filter:        filter,
-		config:        config,
 		id:            id,
 	}
 	return schema, nil
@@ -135,7 +125,7 @@ func (s *schemaWrap4Owner) shouldIgnoreTable(t *model.TableInfo) bool {
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
 		return true
 	}
-	if !t.IsEligible(s.config.ForceReplicate) {
+	if !t.IsEligible(s.forceReplicate) {
 		// Sequence is not supported yet, and always ineligible.
 		// Skip Warn to avoid confusion.
 		// See https://github.com/pingcap/tiflow/issues/4559

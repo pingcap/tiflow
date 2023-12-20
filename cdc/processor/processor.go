@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -710,12 +709,11 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		ddlStartTs = checkpointTs - 1
 	}
 
-	meta := kv.GetSnapshotMeta(p.upstream.KVStorage, ddlStartTs)
 	f, err := filter.NewFilter(p.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
 		forceReplicate, p.changefeedID, util.RoleProcessor, f)
 	if err != nil {
 		return errors.Trace(err)
