@@ -23,9 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
@@ -734,8 +732,6 @@ func TestResolvedTsStuck(t *testing.T) {
 	)
 	require.Nil(t, err)
 	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
-	mockClock := clock.NewMock()
-	p.(*ddlPullerImpl).clock = mockClock
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 	var wg sync.WaitGroup
@@ -759,18 +755,6 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(t, p, 30)
 	require.Equal(t, 0, logs.Len())
-
-	mockClock.Add(2 * ddlPullerStuckWarnDuration)
-	for i := 0; i < 20; i++ {
-		mockClock.Add(time.Second)
-		if logs.Len() > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-		if i == 19 {
-			t.Fatal("warning log not printed")
-		}
-	}
 
 	mockPuller.appendResolvedTs(40)
 	waitResolvedTsGrowing(t, p, 40)

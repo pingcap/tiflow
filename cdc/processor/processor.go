@@ -720,10 +720,9 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 	}
 
 	serverCfg := config.GetGlobalServerConfig()
-
 	changefeedID := model.DefaultChangeFeedID(p.changefeedID.ID + "_processor_ddl_puller")
 	ddlPuller := puller.NewDDLJobPuller(
-		ctx, p.upstream, ddlStartTs, serverCfg, changefeedID, schemaStorage, f,
+		ctx, p.upstream, ddlStartTs, serverCfg, changefeedID, schemaStorage, p.filter,
 	)
 	p.ddlHandler.r = &ddlHandler{puller: ddlPuller, schemaStorage: schemaStorage}
 	return nil
@@ -1004,10 +1003,6 @@ func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
 			failpoint.Inject("processorDDLResolved", nil)
 			if jobEntry.OpType == model.OpTypeResolved {
 				d.schemaStorage.AdvanceResolvedTs(jobEntry.CRTs)
-			}
-			err := jobEntry.Err
-			if err != nil {
-				return errors.Trace(err)
 			}
 		}
 	})
