@@ -95,16 +95,24 @@ func NewSchemaStorage(
 	forceReplicate bool, id model.ChangeFeedID,
 	role util.Role, filter filter.Filter,
 ) (SchemaStorage, error) {
-	meta := kv.GetSnapshotMeta(storage, startTs)
-	snap, err := schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
-	if err != nil {
-		return nil, errors.Trace(err)
+	var (
+		snap    *schema.Snapshot
+		version int64
+		err     error
+	)
+	if storage == nil {
+		snap = schema.NewEmptySnapshot(forceReplicate)
+	} else {
+		meta := kv.GetSnapshotMeta(storage, startTs)
+		snap, err = schema.NewSnapshotFromMeta(meta, startTs, forceReplicate, filter)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		version, err = schema.GetSchemaVersion(meta)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
-	version, err := schema.GetSchemaVersion(meta)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
 	result := &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
