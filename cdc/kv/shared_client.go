@@ -817,6 +817,8 @@ type sharedClientMetrics struct {
 }
 
 func (s *SharedClient) initMetrics() {
+	eventFeedGauge.Inc()
+
 	s.metrics.regionLockDuration = regionConnectDuration.
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID, "lock")
 	s.metrics.regionLocateDuration = regionConnectDuration.
@@ -834,6 +836,8 @@ func (s *SharedClient) initMetrics() {
 }
 
 func (s *SharedClient) clearMetrics() {
+	eventFeedGauge.Dec()
+
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "lock")
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "locate")
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "connect")
