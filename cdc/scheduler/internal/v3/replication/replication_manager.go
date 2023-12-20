@@ -676,7 +676,6 @@ func (r *Manager) AdvanceCheckpoint(
 			watermark.LastSyncedTs = checkpointCannotProceed
 			watermark.PullerResolvedTs = checkpointCannotProceed
 			limitBarrierWithRedo(&watermark)
-			return watermark
 		}
 		return schedulepb.Watermark{
 			CheckpointTs:     checkpointCannotProceed,
