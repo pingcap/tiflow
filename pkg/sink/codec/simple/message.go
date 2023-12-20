@@ -273,6 +273,10 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 		},
 	}
 
+	if m == nil {
+		return info
+	}
+
 	for _, col := range m.Columns {
 		tiCol := newTiColumnInfo(col, m.Indexes)
 		info.Columns = append(info.Columns, tiCol)
