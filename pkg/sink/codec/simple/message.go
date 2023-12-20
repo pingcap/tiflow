@@ -291,12 +291,14 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 
 // newDDLEvent converts from message to DDLEvent.
 func newDDLEvent(msg *message) *model.DDLEvent {
-	tableInfo := newTableInfo(msg.TableSchema)
-	preTableInfo := newTableInfo(msg.PreTableSchema)
+	var preTableInfo *model.TableInfo
+	if msg.PreTableSchema != nil {
+		preTableInfo = newTableInfo(msg.PreTableSchema)
+	}
 	return &model.DDLEvent{
 		StartTs:      msg.CommitTs,
 		CommitTs:     msg.CommitTs,
-		TableInfo:    tableInfo,
+		TableInfo:    newTableInfo(msg.TableSchema),
 		PreTableInfo: preTableInfo,
 		Query:        msg.SQL,
 	}

@@ -262,12 +262,21 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 	require.NoError(s.t, err)
 	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	tableInfo, _ := s.schemaStorage.GetLastSnapshot().TableByName(res.SchemaName, res.TableName)
-
+	//tableInfo, _ := s.schemaStorage.GetLastSnapshot().TableByName(res.SchemaName, res.TableName)
+	var tableInfo *model.TableInfo
+	if res.BinlogInfo != nil && res.BinlogInfo.TableInfo != nil {
+		tableInfo = model.WrapTableInfo(res.SchemaID, res.SchemaName, res.BinlogInfo.FinishedTS, res.BinlogInfo.TableInfo)
+	} else {
+		tableInfo = &model.TableInfo{
+			TableName: model.TableName{Schema: res.SchemaName},
+			Version:   res.BinlogInfo.FinishedTS,
+		}
+	}
 	ctx := context.Background()
 	snap, err := s.schemaStorage.GetSnapshot(ctx, res.BinlogInfo.FinishedTS-1)
 	require.NoError(s.t, err)
-	preTableInfo, _ := snap.PhysicalTableByID(res.TableID)
+	preTableInfo, err := snap.PreTableInfo(res)
+	require.NoError(s.t, err)
 
 	event := &model.DDLEvent{
 		StartTs:      res.StartTS,
