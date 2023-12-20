@@ -557,7 +557,7 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	info.State = model.StateStopped
 	dir := t.TempDir()
 	// Field `Consistent` is valid only when the downstream
-	// is MySQL compatible  Database
+	// is MySQL compatible  Schema
 	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
