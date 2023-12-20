@@ -53,14 +53,14 @@ type SchemaStorage interface {
 		ts model.Ts,
 	) ([]model.TableID, error)
 
+	// AllTables returns table info of all tables that are being replicated.
+	AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error)
+
 	// BuildDDLEvents by parsing the DDL job
 	BuildDDLEvents(ctx context.Context, job *timodel.Job) (ddlEvents []*model.DDLEvent, err error)
 
 	// IsIneligibleTable returns whether the table is ineligible to the replicated
 	IsIneligibleTable(ctx context.Context, tableID model.TableID, ts model.Ts) (bool, error)
-
-	// AllTables returns table info of all tables that are being replicated.
-	AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error)
 
 	// AdvanceResolvedTs advances the resolved ts
 	AdvanceResolvedTs(ts uint64)
@@ -72,8 +72,9 @@ type SchemaStorage interface {
 }
 
 type schemaStorage struct {
-	snaps         []*schema.Snapshot
-	snapsMu       sync.RWMutex
+	snaps   []*schema.Snapshot
+	snapsMu sync.RWMutex
+
 	gcTs          uint64
 	resolvedTs    uint64
 	schemaVersion int64
@@ -302,21 +303,22 @@ func (s *schemaStorage) shouldIgnoreTable(t *model.TableInfo) bool {
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
 		return true
 	}
-	if !t.IsEligible(s.forceReplicate) {
-		// Sequence is not supported yet, and always ineligible.
-		// Skip Warn to avoid confusion.
-		// See https://github.com/pingcap/tiflow/issues/4559
-		if !t.IsSequence() {
-			log.Warn("skip ineligible table",
-				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID),
-				zap.Int64("tableID", t.ID),
-				zap.Stringer("tableName", t.TableName),
-			)
-		}
-		return true
+	if t.IsEligible(s.forceReplicate) {
+		return false
 	}
-	return false
+
+	// Sequence is not supported yet, and always ineligible.
+	// Skip Warn to avoid confusion.
+	// See https://github.com/pingcap/tiflow/issues/4559
+	if !t.IsSequence() {
+		log.Warn("skip ineligible table",
+			zap.String("namespace", s.id.Namespace),
+			zap.String("changefeed", s.id.ID),
+			zap.Int64("tableID", t.ID),
+			zap.Stringer("tableName", t.TableName),
+		)
+	}
+	return true
 }
 
 // IsIneligibleTable returns whether the table is ineligible.
@@ -566,14 +568,17 @@ type MockSchemaStorage struct {
 	Resolved uint64
 }
 
+// AllPhysicalTables implements SchemaStorage.
 func (s *MockSchemaStorage) AllPhysicalTables(ctx context.Context, ts model.Ts) ([]model.TableID, error) {
 	return nil, nil
 }
 
+// IsIneligibleTable implements SchemaStorage.
 func (s *MockSchemaStorage) IsIneligibleTable(ctx context.Context, tableID model.TableID, ts model.Ts) (bool, error) {
 	return true, nil
 }
 
+// AllTables implements SchemaStorage.
 func (s *MockSchemaStorage) AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error) {
 	return nil, nil
 }
@@ -593,6 +598,7 @@ func (s *MockSchemaStorage) HandleDDLJob(job *timodel.Job) error {
 	return nil
 }
 
+// BuildDDLEvents implements SchemaStorage.
 func (s *MockSchemaStorage) BuildDDLEvents(
 	_ context.Context, _ *timodel.Job,
 ) (ddlEvents []*model.DDLEvent, err error) {
