@@ -74,7 +74,6 @@ type DDLJobEntry struct {
 	Job    *timodel.Job
 	OpType OpType
 	CRTs   uint64
-	Err    error
 }
 
 // TaskPosition records the process information of a capture

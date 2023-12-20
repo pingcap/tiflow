@@ -74,8 +74,8 @@ func NewSchemaStorage(
 ) (SchemaStorage, error) {
 	var (
 		snap    *schema.Snapshot
-		err     error
 		version int64
+		err     error
 	)
 	if meta == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
@@ -89,19 +89,14 @@ func NewSchemaStorage(
 			return nil, errors.Trace(err)
 		}
 	}
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	schema := &schemaStorageImpl{
+	return &schemaStorageImpl{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
 		forceReplicate: forceReplicate,
 		id:             id,
 		schemaVersion:  version,
 		role:           role,
-	}
-	return schema, nil
+	}, nil
 }
 
 // getSnapshot returns the snapshot which currentTs is less than(but most close to)
@@ -189,7 +184,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		// We use schemaVersion to check if an already-executed DDL job is processed for a second time.
 		// Unexecuted DDL jobs should have largest schemaVersions.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() || job.BinlogInfo.SchemaVersion <= s.schemaVersion {
-			log.Info("ignore foregone DDL",
+			log.Info("schemaStorage: ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
 				zap.String("DDL", job.Query),
@@ -205,26 +200,29 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 		snap = schema.NewEmptySnapshot(s.forceReplicate)
 	}
 	if err := snap.HandleDDL(job); err != nil {
-		log.Error("handle DDL failed",
+		log.Error("schemaStorage: update snapshot by the DDL job failed",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
-			zap.String("DDL", job.Query),
-			zap.Stringer("job", job), zap.Error(err),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-			zap.String("role", s.role.String()))
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.String("query", job.Query),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+			zap.String("role", s.role.String()),
+			zap.Error(err))
 		return errors.Trace(err)
 	}
-	log.Info("handle DDL",
-		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID),
-		zap.String("DDL", job.Query),
-		zap.Stringer("job", job),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-		zap.String("role", s.role.String()))
-
 	s.snaps = append(s.snaps, snap)
 	s.schemaVersion = job.BinlogInfo.SchemaVersion
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
+	log.Info("schemaStorage: update snapshot by the DDL job",
+		zap.String("namespace", s.id.Namespace),
+		zap.String("changefeed", s.id.ID),
+		zap.String("schema", job.SchemaName),
+		zap.String("table", job.TableName),
+		zap.String("query", job.Query),
+		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+		zap.Uint64("schemaVersion", uint64(s.schemaVersion)),
+		zap.String("role", s.role.String()))
 	return nil
 }
 
