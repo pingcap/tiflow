@@ -126,7 +126,7 @@ type requestedTable struct {
 	stopped atomic.Bool
 
 	// To handle lock resolvings.
-	postUpdateRegionResolvedTs func(regionID uint64, state *regionlock.LockedRange)
+	postUpdateRegionResolvedTs func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span) bool
 	staleLocksVersion          atomic.Uint64
 }
 
@@ -770,12 +770,13 @@ func (s *SharedClient) newRequestedTable(
 		eventCh:        eventCh,
 	}
 
-	rt.postUpdateRegionResolvedTs = func(regionID uint64, state *regionlock.LockedRange) {
+	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) bool {
 		maxVersion := rt.staleLocksVersion.Load()
 		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
 			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
 		}
+		return true
 	}
 	return rt
 }

@@ -15,11 +15,14 @@ package frontier
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/kv/regionlock"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
@@ -434,4 +437,99 @@ func TestFrontierEntries(t *testing.T) {
 	require.Equal(t, uint64(100), slowestTs)
 	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
 	require.Equal(t, []byte("b"), []byte(slowestRange.EndKey))
+}
+
+type DebugFrontier struct {
+	f Frontier
+}
+
+func (d DebugFrontier) Forward(regionID uint64, span tablepb.Span, ts uint64) {
+	fmt.Printf("forward(%d, [%s,%s), %d)\n", regionID, spanz.HexKey(span.StartKey), spanz.HexKey(span.EndKey), ts)
+	d.f.Forward(regionID, span, ts)
+}
+
+func (d DebugFrontier) Frontier() uint64 {
+	return d.f.Frontier()
+}
+
+func TestRandomMergeAndSplit(t *testing.T) {
+	t.Parallel()
+
+	start, end := spanz.GetTableRange(8616)
+	rangelock := regionlock.NewRegionRangeLock(1, start, end, 100, "")
+	frontier := DebugFrontier{NewFrontier(100, tablepb.Span{StartKey: start, EndKey: end})}
+	ctx := context.Background()
+
+	var nextRegionID uint64 = 0
+	var nextVersion uint64 = 0
+
+	nextRegionID += 1
+	nextVersion += 1
+	lockRes := rangelock.LockRange(ctx, start, end, nextRegionID, nextVersion)
+
+	newResolvedTs := lockRes.LockedRange.CheckpointTs.Add(1)
+	frontier.Forward(1, tablepb.Span{StartKey: start, EndKey: end}, newResolvedTs)
+	require.Equal(t, uint64(101), frontier.Frontier())
+
+	for {
+		totalLockedRanges := rangelock.LockedRanges()
+		mergeOrSplit := "split"
+		if totalLockedRanges > 1 && rand.Intn(2) > 0 {
+			mergeOrSplit = "merge"
+		}
+
+		if mergeOrSplit == "split" {
+			var r1, r2 lockedRegion
+			selected := rand.Intn(totalLockedRanges)
+			count := 0
+			rangelock.CollectLockedRangeAttrs(func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span) bool {
+				if count == selected {
+					ts := state.CheckpointTs.Load()
+					startKey := span.StartKey
+					endKey := span.EndKey
+					r1 = lockedRegion{regionID, version, startKey, endKey, ts}
+					return false
+				}
+				count += 1
+				return true
+			})
+
+			rangelock.UnlockRange(r1.startKey, r1.endKey, r1.regionID, r1.version)
+
+			r2 = r1.split(&nextRegionID)
+			nextVersion += 1
+			ts := r1.ts + 1
+			rangelock.LockRange(ctx, r1.startKey, r1.endKey, r1.regionID, nextVersion).LockedRange.CheckpointTs.Store(ts)
+			rangelock.LockRange(ctx, r2.startKey, r2.endKey, r2.regionID, nextVersion).LockedRange.CheckpointTs.Store(ts)
+
+			frontier.Forward(r1.regionID, tablepb.Span{StartKey: r1.startKey, EndKey: r1.endKey}, ts)
+			frontier.Forward(r2.regionID, tablepb.Span{StartKey: r2.startKey, EndKey: r2.endKey}, ts)
+			_ = frontier.Frontier()
+		}
+	}
+}
+
+type lockedRegion struct {
+	regionID uint64
+	version  uint64
+	startKey []byte
+	endKey   []byte
+	ts       uint64
+}
+
+func (r *lockedRegion) split(regionIDGen *uint64) (s lockedRegion) {
+	*regionIDGen += 1
+
+	s.regionID = *regionIDGen
+	s.version = r.version
+	s.startKey = r.startKey
+	s.ts = r.ts
+
+	s.endKey = make([]byte, len(r.startKey)+1)
+	copy(s.endKey, r.startKey)
+	s.endKey[len(s.endKey)-1] = '1'
+
+	r.startKey = make([]byte, len(s.endKey))
+	copy(r.startKey, s.endKey)
+	return
 }
