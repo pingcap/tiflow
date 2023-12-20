@@ -47,9 +47,20 @@ type SchemaStorage interface {
 	// HandleDDLJob creates a new snapshot in storage and handles the ddl job
 	HandleDDLJob(job *timodel.Job) error
 
-	BuildDDLEvents(
-		ctx context.Context, job *timodel.Job,
-	) (ddlEvents []*model.DDLEvent, err error)
+	// AllPhysicalTables returns the table IDs of all tables and partition tables.
+	AllPhysicalTables(
+		ctx context.Context,
+		ts model.Ts,
+	) ([]model.TableID, error)
+
+	// BuildDDLEvents by parsing the DDL job
+	BuildDDLEvents(ctx context.Context, job *timodel.Job) (ddlEvents []*model.DDLEvent, err error)
+
+	// IsIneligibleTable returns whether the table is ineligible to the replicated
+	IsIneligibleTable(ctx context.Context, tableID model.TableID, ts model.Ts) (bool, error)
+
+	// AllTables returns table info of all tables that are being replicated.
+	AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error)
 
 	// AdvanceResolvedTs advances the resolved ts
 	AdvanceResolvedTs(ts uint64)
@@ -234,6 +245,92 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 	return nil
 }
 
+// AllPhysicalTables returns the table IDs of all tables and partition tables.
+func (s *schemaStorageImpl) AllPhysicalTables(
+	ctx context.Context,
+	ts model.Ts,
+) ([]model.TableID, error) {
+	// NOTE: it's better to pre-allocate the vector. However, in the current implementation
+	// we can't know how many valid tables in the snapshot.
+	res := make([]model.TableID, 0)
+	snap, err := s.GetSnapshot(ctx, ts)
+	if err != nil {
+		return nil, err
+	}
+
+	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		if s.shouldIgnoreTable(tblInfo) {
+			return
+		}
+		if pi := tblInfo.GetPartitionInfo(); pi != nil {
+			for _, partition := range pi.Definitions {
+				res = append(res, partition.ID)
+			}
+		} else {
+			res = append(res, tblInfo.ID)
+		}
+	})
+	log.Debug("get new schema snapshot",
+		zap.Uint64("ts", ts),
+		zap.Uint64("snapTs", snap.CurrentTs()),
+		zap.Any("tables", res),
+		zap.String("snapshot", snap.DumpToString()))
+
+	return res, nil
+}
+
+// AllTables returns table info of all tables that are being replicated.
+func (s *schemaStorageImpl) AllTables(
+	ctx context.Context, ts model.Ts,
+) ([]*model.TableInfo, error) {
+	tables := make([]*model.TableInfo, 0)
+	snap, err := s.GetSnapshot(ctx, ts)
+	if err != nil {
+		return nil, err
+	}
+	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		if !s.shouldIgnoreTable(tblInfo) {
+			tables = append(tables, tblInfo)
+		}
+	})
+	return tables, nil
+}
+
+func (s *schemaStorageImpl) shouldIgnoreTable(t *model.TableInfo) bool {
+	schemaName := t.TableName.Schema
+	tableName := t.TableName.Table
+	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
+		return true
+	}
+	if !t.IsEligible(s.forceReplicate) {
+		// Sequence is not supported yet, and always ineligible.
+		// Skip Warn to avoid confusion.
+		// See https://github.com/pingcap/tiflow/issues/4559
+		if !t.IsSequence() {
+			log.Warn("skip ineligible table",
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
+				zap.Int64("tableID", t.ID),
+				zap.Stringer("tableName", t.TableName),
+			)
+		}
+		return true
+	}
+	return false
+}
+
+// IsIneligibleTable returns whether the table is ineligible.
+// It uses the snapshot of the given ts to check the table.
+func (s *schemaStorageImpl) IsIneligibleTable(
+	ctx context.Context, tableID model.TableID, ts model.Ts,
+) (bool, error) {
+	snap, err := s.GetSnapshot(ctx, ts)
+	if err != nil {
+		return false, err
+	}
+	return snap.IsIneligibleTableID(tableID), nil
+}
+
 // AdvanceResolvedTs advances the resolved. Not thread safe.
 // NOTE: SHOULD NOT call it concurrently
 func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
@@ -299,6 +396,7 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 	return !job.IsDone()
 }
 
+// BuildDDLEvents by parsing the DDL job
 func (s *schemaStorageImpl) BuildDDLEvents(
 	ctx context.Context, job *timodel.Job,
 ) (ddlEvents []*model.DDLEvent, err error) {
@@ -466,6 +564,18 @@ func (s *schemaStorageImpl) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*mod
 // MockSchemaStorage is for tests.
 type MockSchemaStorage struct {
 	Resolved uint64
+}
+
+func (s *MockSchemaStorage) AllPhysicalTables(ctx context.Context, ts model.Ts) ([]model.TableID, error) {
+	return nil, nil
+}
+
+func (s *MockSchemaStorage) IsIneligibleTable(ctx context.Context, tableID model.TableID, ts model.Ts) (bool, error) {
+	return true, nil
+}
+
+func (s *MockSchemaStorage) AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error) {
+	return nil, nil
 }
 
 // GetSnapshot implements SchemaStorage.

@@ -99,7 +99,7 @@ type changefeed struct {
 	redoDDLMgr  redo.DDLManager
 	redoMetaMgr redo.MetaManager
 
-	schema    *schemaWrap4Owner
+	schema    entry.SchemaStorage
 	ddlSink   DDLSink
 	ddlPuller puller.DDLPuller
 	// The changefeed will start a backend goroutine in the function `initialize`
@@ -568,12 +568,9 @@ LOOP2:
 	if err != nil {
 		return errors.Trace(err)
 	}
-	c.schema, err = newSchemaWrap4Owner(
-		c.upstream.KVStorage,
-		ddlStartTs,
-		c.latestInfo.Config.ForceReplicate,
-		c.id,
-		f)
+	c.schema, err = entry.NewSchemaStorage(
+		c.upstream.KVStorage, ddlStartTs,
+		c.latestInfo.Config.ForceReplicate, c.id, util.RoleOwner, f)
 	if err != nil {
 		return errors.Trace(err)
 	}
