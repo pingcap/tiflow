@@ -71,7 +71,7 @@ type SchemaStorage interface {
 	DoGC(ts uint64) (lastSchemaTs uint64)
 }
 
-type schemaStorageImpl struct {
+type schemaStorage struct {
 	snaps         []*schema.Snapshot
 	snapsMu       sync.RWMutex
 	gcTs          uint64
@@ -104,7 +104,7 @@ func NewSchemaStorage(
 		return nil, errors.Trace(err)
 	}
 
-	result := &schemaStorageImpl{
+	result := &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
 		forceReplicate: forceReplicate,
@@ -120,7 +120,7 @@ func NewSchemaStorage(
 
 // getSnapshot returns the snapshot which currentTs is less than(but most close to)
 // or equal to the ts.
-func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
+func (s *schemaStorage) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 	gcTs := atomic.LoadUint64(&s.gcTs)
 	if ts < gcTs {
 		// Unexpected error, caller should fail immediately.
@@ -150,7 +150,7 @@ func (s *schemaStorageImpl) getSnapshot(ts uint64) (*schema.Snapshot, error) {
 }
 
 // GetSnapshot returns the snapshot which of ts is specified
-func (s *schemaStorageImpl) GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error) {
+func (s *schemaStorage) GetSnapshot(ctx context.Context, ts uint64) (*schema.Snapshot, error) {
 	var snap *schema.Snapshot
 
 	// The infinite retry here is a temporary solution to the `ErrSchemaStorageUnresolved` caused by
@@ -182,14 +182,14 @@ func isRetryable(err error) bool {
 }
 
 // GetLastSnapshot returns the last snapshot
-func (s *schemaStorageImpl) GetLastSnapshot() *schema.Snapshot {
+func (s *schemaStorage) GetLastSnapshot() *schema.Snapshot {
 	s.snapsMu.RLock()
 	defer s.snapsMu.RUnlock()
 	return s.snaps[len(s.snaps)-1]
 }
 
 // HandleDDLJob creates a new snapshot in storage and handles the ddl job
-func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
+func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	if s.skipJob(job) {
 		s.schemaVersion = job.BinlogInfo.SchemaVersion
 		s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
@@ -246,7 +246,7 @@ func (s *schemaStorageImpl) HandleDDLJob(job *timodel.Job) error {
 }
 
 // AllPhysicalTables returns the table IDs of all tables and partition tables.
-func (s *schemaStorageImpl) AllPhysicalTables(
+func (s *schemaStorage) AllPhysicalTables(
 	ctx context.Context,
 	ts model.Ts,
 ) ([]model.TableID, error) {
@@ -280,7 +280,7 @@ func (s *schemaStorageImpl) AllPhysicalTables(
 }
 
 // AllTables returns table info of all tables that are being replicated.
-func (s *schemaStorageImpl) AllTables(
+func (s *schemaStorage) AllTables(
 	ctx context.Context, ts model.Ts,
 ) ([]*model.TableInfo, error) {
 	tables := make([]*model.TableInfo, 0)
@@ -296,7 +296,7 @@ func (s *schemaStorageImpl) AllTables(
 	return tables, nil
 }
 
-func (s *schemaStorageImpl) shouldIgnoreTable(t *model.TableInfo) bool {
+func (s *schemaStorage) shouldIgnoreTable(t *model.TableInfo) bool {
 	schemaName := t.TableName.Schema
 	tableName := t.TableName.Table
 	if s.filter.ShouldIgnoreTable(schemaName, tableName) {
@@ -321,7 +321,7 @@ func (s *schemaStorageImpl) shouldIgnoreTable(t *model.TableInfo) bool {
 
 // IsIneligibleTable returns whether the table is ineligible.
 // It uses the snapshot of the given ts to check the table.
-func (s *schemaStorageImpl) IsIneligibleTable(
+func (s *schemaStorage) IsIneligibleTable(
 	ctx context.Context, tableID model.TableID, ts model.Ts,
 ) (bool, error) {
 	snap, err := s.GetSnapshot(ctx, ts)
@@ -333,19 +333,19 @@ func (s *schemaStorageImpl) IsIneligibleTable(
 
 // AdvanceResolvedTs advances the resolved. Not thread safe.
 // NOTE: SHOULD NOT call it concurrently
-func (s *schemaStorageImpl) AdvanceResolvedTs(ts uint64) {
+func (s *schemaStorage) AdvanceResolvedTs(ts uint64) {
 	if ts > s.ResolvedTs() {
 		atomic.StoreUint64(&s.resolvedTs, ts)
 	}
 }
 
 // ResolvedTs returns the resolved ts of the schema storage
-func (s *schemaStorageImpl) ResolvedTs() uint64 {
+func (s *schemaStorage) ResolvedTs() uint64 {
 	return atomic.LoadUint64(&s.resolvedTs)
 }
 
 // DoGC removes snaps which of ts less than this specified ts
-func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
+func (s *schemaStorage) DoGC(ts uint64) (lastSchemaTs uint64) {
 	s.snapsMu.Lock()
 	defer s.snapsMu.Unlock()
 	var startIdx int
@@ -387,7 +387,7 @@ func (s *schemaStorageImpl) DoGC(ts uint64) (lastSchemaTs uint64) {
 // Now, it writes DDL Binlog in the txn that the state of
 // job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
-func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
+func (s *schemaStorage) skipJob(job *timodel.Job) bool {
 	log.Debug("handle DDL new commit",
 		zap.String("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
@@ -397,7 +397,7 @@ func (s *schemaStorageImpl) skipJob(job *timodel.Job) bool {
 }
 
 // BuildDDLEvents by parsing the DDL job
-func (s *schemaStorageImpl) BuildDDLEvents(
+func (s *schemaStorage) BuildDDLEvents(
 	ctx context.Context, job *timodel.Job,
 ) (ddlEvents []*model.DDLEvent, err error) {
 	switch job.Type {
@@ -458,7 +458,7 @@ func (s *schemaStorageImpl) BuildDDLEvents(
 
 // TODO: find a better way to refactor this function.
 // buildRenameEvents gets a list of DDLEvent from a rename tables DDL job.
-func (s *schemaStorageImpl) buildRenameEvents(
+func (s *schemaStorage) buildRenameEvents(
 	ctx context.Context, job *timodel.Job,
 ) ([]*model.DDLEvent, error) {
 	var (
@@ -511,7 +511,7 @@ func (s *schemaStorageImpl) buildRenameEvents(
 }
 
 // TODO: delete this function after integration test passed.
-func (s *schemaStorageImpl) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
+func (s *schemaStorage) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
 	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	for _, event := range ddlEvents {
 		var (
