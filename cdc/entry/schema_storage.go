@@ -48,10 +48,7 @@ type SchemaStorage interface {
 	HandleDDLJob(job *timodel.Job) error
 
 	// AllPhysicalTables returns the table IDs of all tables and partition tables.
-	AllPhysicalTables(
-		ctx context.Context,
-		ts model.Ts,
-	) ([]model.TableID, error)
+	AllPhysicalTables(ctx context.Context, ts model.Ts) ([]model.TableID, error)
 
 	// AllTables returns table info of all tables that are being replicated.
 	AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error)
@@ -255,10 +252,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 }
 
 // AllPhysicalTables returns the table IDs of all tables and partition tables.
-func (s *schemaStorage) AllPhysicalTables(
-	ctx context.Context,
-	ts model.Ts,
-) ([]model.TableID, error) {
+func (s *schemaStorage) AllPhysicalTables(ctx context.Context, ts model.Ts) ([]model.TableID, error) {
 	// NOTE: it's better to pre-allocate the vector. However, in the current implementation
 	// we can't know how many valid tables in the snapshot.
 	res := make([]model.TableID, 0)
@@ -289,9 +283,7 @@ func (s *schemaStorage) AllPhysicalTables(
 }
 
 // AllTables returns table info of all tables that are being replicated.
-func (s *schemaStorage) AllTables(
-	ctx context.Context, ts model.Ts,
-) ([]*model.TableInfo, error) {
+func (s *schemaStorage) AllTables(ctx context.Context, ts model.Ts) ([]*model.TableInfo, error) {
 	tables := make([]*model.TableInfo, 0)
 	snap, err := s.GetSnapshot(ctx, ts)
 	if err != nil {
@@ -524,30 +516,16 @@ func (s *schemaStorage) buildRenameEvents(
 func (s *schemaStorage) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
 	res := make([]*model.DDLEvent, 0, len(ddlEvents))
 	for _, event := range ddlEvents {
-		var (
-			ignored bool
-			err     error
-		)
+		schemaName := event.TableInfo.TableName.Schema
+		table := event.TableInfo.TableName.Table
 		if event.Type == timodel.ActionRenameTable {
-			ignored, err = s.filter.ShouldDiscardDDL(
-				event.StartTs,
-				event.Type,
-				event.PreTableInfo.TableName.Schema,
-				event.PreTableInfo.TableName.Table,
-				event.Query)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-		} else {
-			ignored, err = s.filter.ShouldDiscardDDL(
-				event.StartTs,
-				event.Type,
-				event.TableInfo.TableName.Schema,
-				event.TableInfo.TableName.Table,
-				event.Query)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
+			schemaName = event.PreTableInfo.TableName.Schema
+			table = event.PreTableInfo.TableName.Table
+		}
+
+		ignored, err := s.filter.ShouldDiscardDDL(event.StartTs, event.Type, schemaName, table, event.Query)
+		if err != nil {
+			return nil, errors.Trace(err)
 		}
 		if ignored {
 			s.metricIgnoreDDLEventCounter.Inc()
