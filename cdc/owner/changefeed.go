@@ -422,6 +422,10 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		}
 	})
 
+	failpoint.Inject("ChangefeedOwnerNotUpdateCheckpoint", func() {
+		watermark.CheckpointTs = c.state.Status.CheckpointTs
+	})
+
 	c.updateStatus(watermark.CheckpointTs, barrier.MinTableBarrierTs)
 	c.updateMetrics(currentTs, watermark.CheckpointTs, c.resolvedTs)
 
