@@ -44,7 +44,7 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 }
 
 type txnFinishedEvent struct {
-	node         *internal.Node
+	node           *internal.Node
 	sortedKeysHash []uint64
 }
 
@@ -73,7 +73,7 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 
 // Add pushes a transaction to the ConflictDetector.
 //
-// NOTE: if multiple threads access this concurrently, 
+// NOTE: if multiple threads access this concurrently,
 // Txn.GenSortedDedupKeysHash must be sorted by the slot index.
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
