@@ -81,7 +81,7 @@ func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
 
 // Add adds a txnEvent to the worker.
 // The worker will call postTxnExecuted() after the txn executed.
-// The postTxnExecuted will remove the txn related Node in the conflict detector's 
+// The postTxnExecuted will remove the txn related Node in the conflict detector's
 // dependency graph and resolve related dependencies for these transacitons
 // which depend on this executed txn.
 func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) {
