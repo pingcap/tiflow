@@ -31,6 +31,7 @@ type Frontier interface {
 	Forward(regionID uint64, span tablepb.Span, ts uint64)
 	Frontier() uint64
 	String() string
+	SpanString(span tablepb.Span) string
 	Entries(fn func(key []byte, ts uint64))
 }
 
@@ -158,6 +159,32 @@ func (s *spanFrontier) String() string {
 		} else {
 			buf.WriteString(fmt.Sprintf("[%s @ %d] ", key, ts))
 		}
+	})
+	return buf.String()
+}
+
+// SpanString returns the string of the span's frontier.
+func (s *spanFrontier) SpanString(span tablepb.Span) string {
+	var buf strings.Builder
+	idx := 0
+	s.spanList.Entries(func(n *skipListNode) bool {
+		key := n.Key()
+		nextKey := []byte{}
+		if n.Next() != nil {
+			nextKey = n.Next().Key()
+		}
+		if idx == 0 || // head
+			bytes.Equal(key, span.StartKey) || // current sapn
+			bytes.Equal(nextKey, span.StartKey) || // the previous sapn
+			bytes.Equal(key, span.EndKey) { // the next span
+			buf.WriteString(fmt.Sprintf("[%s @ %d] ", n.Key(), n.Value().key))
+		}
+
+		if n.Value().key == math.MaxUint64 {
+			buf.WriteString(fmt.Sprintf("[%s @ Max] ", n.Key()))
+		}
+		idx++
+		return true
 	})
 	return buf.String()
 }

@@ -200,6 +200,12 @@ func TestSpanFrontierFallback(t *testing.T) {
 	// Bump, here we meet resolved ts fall back, where 10 is less than f.Frontier()
 	// But there is no data loss actually.
 	// f.Forward(spAC, 10)
+
+	spEF := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
+	f.Forward(0, spEF, 30)
+	require.Equal(t, uint64(20), f.Frontier())
+	require.Equal(t, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [e @ 30] [f @ Max] `, f.String())
+	require.Equal(t, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [f @ Max] `, f.SpanString(spCD))
 }
 
 func TestMinMax(t *testing.T) {
