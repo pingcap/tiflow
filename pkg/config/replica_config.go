@@ -101,6 +101,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
 	SQLMode:                      defaultSQLMode,
+	SyncedStatus:                 &SyncedStatusConfig{SyncedCheckInterval: 5 * 60, CheckpointInterval: 15},
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -141,10 +142,40 @@ type replicaConfig struct {
 	Sink               *SinkConfig       `toml:"sink" json:"sink"`
 	Consistent         *ConsistentConfig `toml:"consistent" json:"consistent"`
 	// Scheduler is the configuration for scheduler.
+<<<<<<< HEAD
 	Scheduler                    *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
 	Integrity                    *integrity.Config          `toml:"integrity" json:"integrity"`
 	ChangefeedErrorStuckDuration *time.Duration             `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
 	SQLMode                      string                     `toml:"sql-mode" json:"sql-mode"`
+=======
+	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
+	// Integrity is only available when the downstream is MQ.
+	Integrity                    *integrity.Config   `toml:"integrity" json:"integrity"`
+	ChangefeedErrorStuckDuration *time.Duration      `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	SQLMode                      string              `toml:"sql-mode" json:"sql-mode"`
+	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
+}
+
+// Value implements the driver.Valuer interface
+func (c ReplicaConfig) Value() (driver.Value, error) {
+	cfg, err := c.Marshal()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: refactor the meaningless type conversion.
+	return []byte(cfg), nil
+}
+
+// Scan implements the sql.Scanner interface
+func (c *ReplicaConfig) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New("type assertion to []byte failed")
+	}
+
+	return c.UnmarshalJSON(b)
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
