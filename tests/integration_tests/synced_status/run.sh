@@ -74,13 +74,13 @@ function run_normal_case_and_unavailable_pd() {
 		exit 1
 	fi
 	# the timestamp for puller_resolved_ts is 0 when do data insert
-	if [ "$puller_resolved_ts" != "1970-01-01 08:00:00" ]; then
-		echo "puller_resolved_ts is not 1970-01-01 08:00:00"
+	if [ "$puller_resolved_ts" != "1970-01-01 08:00:00.000" ]; then
+		echo "puller_resolved_ts is not 1970-01-01 08:00:00.000"
 		exit 1
 	fi
 	# the timestamp for last_synced_ts is 0 when do data insert
-	if [ "$last_synced_ts" != "1970-01-01 08:00:00" ]; then
-		echo "last_synced_ts is not 1970-01-01 08:00:00"
+	if [ "$last_synced_ts" != "1970-01-01 08:00:00.000" ]; then
+		echo "last_synced_ts is not 1970-01-01 08:00:00.000"
 		exit 1
 	fi
 

@@ -1063,8 +1063,8 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Nil(t, err)
 		require.Equal(t, false, resp.Synced)
 		require.Equal(t, "[CDC:ErrAPIGetPDClientFailed]failed to get PDClient to connect PD, please recheck. "+
-			"You can check the pd first, and if pd is available, means we don't finish sync data. "+
-			"If pd is offline, please check the whether we satisfy the condition that "+
+			"You should check the pd status first. If pd status is normal, means we don't finish sync data. "+
+			"If pd is offline, please check whether we satisfy the condition that "+
 			"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than 300 secs. "+
 			"If it's satisfied, means the data syncing is totally finished", resp.Info)
 	}

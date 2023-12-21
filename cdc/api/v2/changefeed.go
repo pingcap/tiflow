@@ -959,8 +959,8 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 			message = fmt.Sprintf("%s. Besides the data is not finish syncing", err.Error())
 		} else {
 			message = fmt.Sprintf("%s. You should check the pd status first. If pd status is normal, means we don't finish sync data. "+
-				"If pd is offline, please check the whether we satisfy the condition that "+
-				"the time difference from lastSyncedTs to the current time in the time zone of pd is greater than %v secs. "+
+				"If pd is offline, please check whether we satisfy the condition that "+
+				"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than %v secs. "+
 				"If it's satisfied, means the data syncing is totally finished", err, cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval)
 		}
 		c.JSON(http.StatusOK, SyncedStatus{
