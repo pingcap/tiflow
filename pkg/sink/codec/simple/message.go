@@ -196,8 +196,11 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
-	Columns []*columnSchema `json:"columns"`
-	Indexes []*IndexSchema  `json:"indexes"`
+	Database string          `json:"database"`
+	Table    string          `json:"table"`
+	Version  uint64          `json:"version"`
+	Columns  []*columnSchema `json:"columns"`
+	Indexes  []*IndexSchema  `json:"indexes"`
 }
 
 func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
@@ -221,7 +224,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 		indexes = append(indexes, index)
 	}
 
-	// Sometime the primary key is not in the index, we need to find it manually.
+	// sometimes the primary key is not in the index, we need to find it manually.
 	if !pkInIndexes {
 		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
 		if len(pkColumns) != 0 {
@@ -239,33 +242,48 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	}
 
 	return &TableSchema{
-		Columns: columns,
-		Indexes: indexes,
+		Database: tableInfo.TableName.Schema,
+		Table:    tableInfo.TableName.Table,
+		Version:  tableInfo.UpdateTS,
+		Columns:  columns,
+		Indexes:  indexes,
 	}
 }
 
 // newTableInfo converts from TableSchema to TableInfo.
-func newTableInfo(msg *message) *model.TableInfo {
+func newTableInfo(m *TableSchema) *model.TableInfo {
+	var (
+		database      string
+		table         string
+		schemaVersion uint64
+	)
+	if m != nil {
+		database = m.Database
+		table = m.Table
+		schemaVersion = m.Version
+	}
 	info := &model.TableInfo{
 		TableName: model.TableName{
-			Schema: msg.Database,
-			Table:  msg.Table,
+			Schema: database,
+			Table:  table,
 		},
 		TableInfo: &timodel.TableInfo{
-			Name:     timodel.NewCIStr(msg.Table),
-			UpdateTS: msg.SchemaVersion,
+			Name:     timodel.NewCIStr(table),
+			UpdateTS: schemaVersion,
 		},
 	}
 
-	if msg.TableSchema != nil {
-		for _, col := range msg.TableSchema.Columns {
-			tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
-			info.Columns = append(info.Columns, tiCol)
-		}
-		for _, idx := range msg.TableSchema.Indexes {
-			index := newTiIndexInfo(idx)
-			info.Indices = append(info.Indices, index)
-		}
+	if m == nil {
+		return info
+	}
+
+	for _, col := range m.Columns {
+		tiCol := newTiColumnInfo(col, m.Indexes)
+		info.Columns = append(info.Columns, tiCol)
+	}
+	for _, idx := range m.Indexes {
+		index := newTiIndexInfo(idx)
+		info.Indices = append(info.Indices, index)
 	}
 
 	return info
@@ -273,12 +291,16 @@ func newTableInfo(msg *message) *model.TableInfo {
 
 // newDDLEvent converts from message to DDLEvent.
 func newDDLEvent(msg *message) *model.DDLEvent {
-	tableInfo := newTableInfo(msg)
+	var preTableInfo *model.TableInfo
+	if msg.PreTableSchema != nil {
+		preTableInfo = newTableInfo(msg.PreTableSchema)
+	}
 	return &model.DDLEvent{
-		StartTs:   msg.CommitTs,
-		CommitTs:  msg.CommitTs,
-		TableInfo: tableInfo,
-		Query:     msg.SQL,
+		StartTs:      msg.CommitTs,
+		CommitTs:     msg.CommitTs,
+		TableInfo:    newTableInfo(msg.TableSchema),
+		PreTableInfo: preTableInfo,
+		Query:        msg.SQL,
 	}
 }
 
@@ -287,7 +309,7 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowC
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
-			Schema: msg.Database,
+			Schema: msg.Schema,
 			Table:  msg.Table,
 		},
 		TableInfo: tableInfo,
@@ -334,28 +356,36 @@ func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*type
 
 type message struct {
 	Version int `json:"version"`
-	// Scheme and Table is empty for the resolved ts event.
-	Database string    `json:"database,omitempty"`
-	Table    string    `json:"table,omitempty"`
-	Type     EventType `json:"type"`
-	CommitTs uint64    `json:"commitTs"`
-	BuildTs  int64     `json:"buildTs"`
+	// Schema and Table is empty for the resolved ts event.
+	Schema string    `json:"schema,omitempty"`
+	Table  string    `json:"table,omitempty"`
+	Type   EventType `json:"type"`
+	// SQL is only for the DDL event.
+	SQL      string `json:"sql,omitempty"`
+	CommitTs uint64 `json:"commitTs"`
+	BuildTs  int64  `json:"buildTs"`
+	// SchemaVersion is for the DML event.
+	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
+
+	// ClaimCheckLocation is only for the DML event.
+	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
+	// HandleKeyOnly is only for the DML event.
+	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
+
+	// E2E checksum related fields, only set when enable checksum functionality.
+	Checksum        string `json:"checksum,omitempty"`
+	OldChecksum     string `json:"oldChecksum,omitempty"`
+	Corrupted       bool   `json:"corrupted,omitempty"`
+	ChecksumVersion int    `json:"checksumVersion,omitempty"`
+
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
 	Old map[string]interface{} `json:"old,omitempty"`
 	// TableSchema is for the DDL and Bootstrap event.
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
-	// SQL is only for the DDL event.
-	SQL string `json:"sql,omitempty"`
-	// SchemaVersion is for the DDL, Bootstrap and DML event.
-	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
-
-	// ClaimCheckLocation is only for the DML event.
-	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
-
-	// HandleKeyOnly is only for the DML event.
-	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
+	// PreTableSchema holds schema information before the DDL executed.
+	PreTableSchema *TableSchema `json:"preTableSchema,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
@@ -369,29 +399,28 @@ func newResolvedMessage(ts uint64) *message {
 
 func newDDLMessage(ddl *model.DDLEvent) *message {
 	var (
-		database      string
-		table         string
-		schema        *TableSchema
-		schemaVersion uint64
+		schema    *TableSchema
+		preSchema *TableSchema
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
 		schema = newTableSchema(ddl.TableInfo)
-		database = ddl.TableInfo.TableName.Schema
-		table = ddl.TableInfo.TableName.Table
-		schemaVersion = ddl.TableInfo.UpdateTS
+	}
+	if !ddl.IsBootstrap {
+		// `PreTableInfo` may not exist for some DDL, such as `create table`
+		if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
+			preSchema = newTableSchema(ddl.PreTableInfo)
+		}
 	}
 
 	msg := &message{
-		Version:       defaultVersion,
-		Database:      database,
-		Table:         table,
-		Type:          DDLType,
-		CommitTs:      ddl.CommitTs,
-		BuildTs:       time.Now().UnixMilli(),
-		SQL:           ddl.Query,
-		TableSchema:   schema,
-		SchemaVersion: schemaVersion,
+		Version:        defaultVersion,
+		Type:           DDLType,
+		CommitTs:       ddl.CommitTs,
+		BuildTs:        time.Now().UnixMilli(),
+		SQL:            ddl.Query,
+		TableSchema:    schema,
+		PreTableSchema: preSchema,
 	}
 	if ddl.IsBootstrap {
 		msg.Type = BootstrapType
@@ -406,7 +435,7 @@ func newDMLMessage(
 ) (*message, error) {
 	m := &message{
 		Version:       defaultVersion,
-		Database:      event.Table.Schema,
+		Schema:        event.Table.Schema,
 		Table:         event.Table.Table,
 		CommitTs:      event.CommitTs,
 		BuildTs:       time.Now().UnixMilli(),

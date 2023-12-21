@@ -132,7 +132,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
+						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -196,7 +197,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Consistent: config.GetDefaultReplicaConfig().Consistent,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
+						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -265,7 +267,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Integrity:  config.GetDefaultReplicaConfig().Integrity,
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
+						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -361,6 +364,7 @@ func TestPatchInfo(t *testing.T) {
 			Integrity:                    defaultConfig.Integrity,
 			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
 			SQLMode:                      defaultConfig.SQLMode,
+			SyncedStatus:                 defaultConfig.SyncedStatus,
 		},
 	}
 	cfInfo.RmUnusedFields()
@@ -384,6 +388,7 @@ func TestPatchInfo(t *testing.T) {
 			Integrity:                    defaultConfig.Integrity,
 			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
 			SQLMode:                      defaultConfig.SQLMode,
+			SyncedStatus:                 defaultConfig.SyncedStatus,
 		},
 	}
 	cfInfo.RmUnusedFields()
