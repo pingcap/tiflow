@@ -337,6 +337,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.SQLMode == "" {
 		info.Config.SQLMode = defaultConfig.SQLMode
 	}
+	if info.Config.SyncedStatus == nil {
+		info.Config.SyncedStatus = defaultConfig.SyncedStatus
+	}
 	info.RmUnusedFields()
 }
 
@@ -627,4 +630,13 @@ func (t DownstreamType) String() string {
 type ChangeFeedStatusForAPI struct {
 	ResolvedTs   uint64 `json:"resolved-ts"`
 	CheckpointTs uint64 `json:"checkpoint-ts"`
+}
+
+// ChangeFeedSyncedStatusForAPI uses to transfer the synced status of changefeed for API.
+type ChangeFeedSyncedStatusForAPI struct {
+	CheckpointTs        uint64 `json:"checkpoint-ts"`
+	LastSyncedTs        uint64 `json:"last-sync-time"`
+	PullerResolvedTs    uint64 `json:"puller-resolved-ts"`
+	SyncedCheckInterval int64  `json:"synced-check-interval"`
+	CheckpointInterval  int64  `json:"checkpoint-interval"`
 }

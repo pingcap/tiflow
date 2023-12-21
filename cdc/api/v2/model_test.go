@@ -83,7 +83,8 @@ var defaultAPIConfig = &ReplicaConfig{
 	},
 	ChangefeedErrorStuckDuration: &JSONDuration{*config.
 		GetDefaultReplicaConfig().ChangefeedErrorStuckDuration},
-	SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+	SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
+	SyncedStatus: (*SyncedStatusConfig)(config.GetDefaultReplicaConfig().SyncedStatus),
 }
 
 func TestDefaultReplicaConfig(t *testing.T) {

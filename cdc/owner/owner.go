@@ -475,6 +475,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			ret[cfID].CheckpointTs = cfReactor.state.Status.CheckpointTs
 		}
 		query.Data = ret
+<<<<<<< HEAD
 	case QueryAllChangeFeedInfo:
 		ret := map[model.ChangeFeedID]*model.ChangeFeedInfo{}
 		for cfID, cfReactor := range o.changefeeds {
@@ -485,6 +486,36 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 				ret[cfID] = &model.ChangeFeedInfo{}
 				continue
 			}
+=======
+	case QueryChangeFeedSyncedStatus:
+		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
+		if !ok {
+			query.Data = nil
+			return nil
+		}
+		ret := &model.ChangeFeedSyncedStatusForAPI{}
+		ret.LastSyncedTs = cfReactor.lastSyncedTs
+		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		ret.PullerResolvedTs = cfReactor.pullerResolvedTs
+
+		if cfReactor.latestInfo == nil {
+			ret.CheckpointInterval = 0
+			ret.SyncedCheckInterval = 0
+		} else {
+			ret.CheckpointInterval = cfReactor.latestInfo.Config.SyncedStatus.CheckpointInterval
+			ret.SyncedCheckInterval = cfReactor.latestInfo.Config.SyncedStatus.SyncedCheckInterval
+		}
+		query.Data = ret
+	case QueryChangefeedInfo:
+		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
+		if !ok {
+			query.Data = nil
+			return nil
+		}
+		if cfReactor.latestInfo == nil {
+			query.Data = &model.ChangeFeedInfo{}
+		} else {
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 			var err error
 			ret[cfID], err = cfReactor.state.Info.Clone()
 			if err != nil {
