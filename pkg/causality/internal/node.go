@@ -125,7 +125,7 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 			panic("you cannot depend on yourself")
 		}
 
-		// The target node might be removed or modified in other places, for exmaple
+		// The target node might be removed or modified in other places, for example
 		// after its corresponding transaction has been executed.
 		target.mu.Lock()
 		defer target.mu.Unlock()
