@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
-	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -82,8 +81,6 @@ type schemaStorage struct {
 
 	id   model.ChangeFeedID
 	role util.Role
-
-	metricIgnoreDDLEventCounter prometheus.Counter
 }
 
 // NewSchemaStorage creates a new schema storage
@@ -118,8 +115,6 @@ func NewSchemaStorage(
 		id:             id,
 		schemaVersion:  version,
 		role:           role,
-		metricIgnoreDDLEventCounter: ignoredDDLEventCounter.
-			WithLabelValues(id.Namespace, id.ID),
 	}
 	return result, nil
 }
@@ -455,7 +450,7 @@ func (s *schemaStorage) BuildDDLEvents(
 		event.FromJob(job, preTableInfo, tableInfo)
 		ddlEvents = append(ddlEvents, event)
 	}
-	return s.filterDDLEvents(ddlEvents)
+	return ddlEvents, nil
 }
 
 // TODO: find a better way to refactor this function.
@@ -510,43 +505,6 @@ func (s *schemaStorage) buildRenameEvents(
 	}
 
 	return ddlEvents, nil
-}
-
-// TODO: delete this function after integration test passed.
-func (s *schemaStorage) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
-	res := make([]*model.DDLEvent, 0, len(ddlEvents))
-	for _, event := range ddlEvents {
-		schemaName := event.TableInfo.TableName.Schema
-		table := event.TableInfo.TableName.Table
-		if event.Type == timodel.ActionRenameTable {
-			schemaName = event.PreTableInfo.TableName.Schema
-			table = event.PreTableInfo.TableName.Table
-		}
-
-		ignored, err := s.filter.ShouldDiscardDDL(event.StartTs, event.Type, schemaName, table, event.Query)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if ignored {
-			s.metricIgnoreDDLEventCounter.Inc()
-			log.Error(
-				"ignored DDL event should not be sent to owner"+
-					"please report a bug to TiCDC if you see this log"+
-					"but it is no harm to your replication",
-				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID),
-				zap.String("query", event.Query),
-				zap.String("type", event.Type.String()),
-				zap.String("schema", event.TableInfo.TableName.Schema),
-				zap.String("table", event.TableInfo.TableName.Table),
-				zap.Uint64("startTs", event.StartTs),
-				zap.Uint64("commitTs", event.CommitTs),
-			)
-			continue
-		}
-		res = append(res, event)
-	}
-	return res, nil
 }
 
 // MockSchemaStorage is for tests.
