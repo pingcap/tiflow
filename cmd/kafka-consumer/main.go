@@ -492,7 +492,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 
 	c.codecConfig = common.NewConfig(o.protocol)
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
-	c.codecConfig.EnableRowChecksum = o.enableRowChecksum
+	c.codecConfig.EnableRowChecksum = o.replicaConfig.Integrity.Enabled()
 	if c.codecConfig.Protocol == config.ProtocolAvro {
 		c.codecConfig.AvroEnableWatermark = true
 	}
