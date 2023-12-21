@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"go.uber.org/zap"
@@ -204,15 +205,14 @@ type TableSchema struct {
 }
 
 func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
+	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
+		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
+	})
+
 	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		columns = append(columns, newColumnSchema(col))
 	}
-
-	// sort by column by its id
-	sort.SliceStable(columns, func(i, j int) bool {
-		return int(columns[i].ID) < int(columns[j].ID)
-	})
 
 	pkInIndexes := false
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
@@ -234,7 +234,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 				Primary:  true,
 				Unique:   true,
 			}
-			for col := range pkColumns {
+			for _, col := range pkColumns {
 				index.Columns = append(index.Columns, col)
 			}
 			indexes = append(indexes, index)
@@ -305,7 +305,7 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 }
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
-func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowChangedEvent, error) {
+func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChecksum bool) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
@@ -332,7 +332,35 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowC
 	}
 	result.PreColumns = columns
 
-	result.WithHandlePrimaryFlag(tableInfo.GetPrimaryKeyColumnNames())
+	primaryKeySet := make(map[string]struct{})
+	for _, name := range tableInfo.GetPrimaryKeyColumnNames() {
+		primaryKeySet[name] = struct{}{}
+	}
+	result.WithHandlePrimaryFlag(primaryKeySet)
+
+	if enableRowChecksum && msg.Checksum != nil {
+		var previous, current uint64
+		if msg.Checksum.Previous != "" {
+			previous, err = strconv.ParseUint(msg.Checksum.Previous, 10, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		}
+
+		if msg.Checksum.Current != "" {
+			current, err = strconv.ParseUint(msg.Checksum.Current, 10, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		}
+
+		result.Checksum = &integrity.Checksum{
+			Previous:  uint32(previous),
+			Current:   uint32(current),
+			Corrupted: msg.Checksum.Corrupted,
+			Version:   msg.Checksum.Version,
+		}
+	}
 
 	return result, nil
 }
@@ -354,6 +382,13 @@ func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*type
 	return result, nil
 }
 
+type checksum struct {
+	Version   int    `json:"version"`
+	Corrupted bool   `json:"corrupted"`
+	Current   string `json:"current"`
+	Previous  string `json:"previous"`
+}
+
 type message struct {
 	Version int `json:"version"`
 	// Schema and Table is empty for the resolved ts event.
@@ -373,10 +408,7 @@ type message struct {
 	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
 
 	// E2E checksum related fields, only set when enable checksum functionality.
-	Checksum        string `json:"checksum,omitempty"`
-	OldChecksum     string `json:"oldChecksum,omitempty"`
-	Corrupted       bool   `json:"corrupted,omitempty"`
-	ChecksumVersion int    `json:"checksumVersion,omitempty"`
+	Checksum *checksum `json:"checksum,omitempty"`
 
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
@@ -470,10 +502,12 @@ func newDMLMessage(
 	}
 
 	if config.EnableRowChecksum && event.Checksum != nil {
-		m.Checksum = strconv.FormatUint(uint64(event.Checksum.Current), 10)
-		m.OldChecksum = strconv.FormatUint(uint64(event.Checksum.Previous), 10)
-		m.Corrupted = event.Checksum.Corrupted
-		m.Version = event.Checksum.Version
+		m.Checksum = &checksum{
+			Version:   event.Checksum.Version,
+			Corrupted: event.Checksum.Corrupted,
+			Current:   strconv.FormatUint(uint64(event.Checksum.Current), 10),
+			Previous:  strconv.FormatUint(uint64(event.Checksum.Previous), 10),
+		}
 	}
 
 	return m, nil
