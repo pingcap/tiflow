@@ -48,7 +48,7 @@ type Node struct {
 	// Immutable fields.
 	id int64
 
-	// Set the callback that the node is resolved.
+	// Called when all dependencies are resolved.
 	OnResolved func(id workerID)
 	// Set the id generator to get a random ID.
 	RandWorkerID func() workerID
@@ -56,10 +56,10 @@ type Node struct {
 	OnNotified func(callback func())
 
 	// Following fields are used for notifying a node's dependers lock-free.
-	totalDependees    int32
-	resolvedDependees int32
-	removedDependees  int32
-	resolvedList      []int64
+	totalDependencies    int32
+	resolvedDependencies int32
+	removedDependencies  int32
+	resolvedList         []int64
 
 	// Following fields are protected by `mu`.
 	mu sync.Mutex
@@ -87,9 +87,9 @@ func NewNode() (ret *Node) {
 		ret.id = genNextNodeID()
 		ret.OnResolved = nil
 		ret.RandWorkerID = nil
-		ret.totalDependees = 0
-		ret.resolvedDependees = 0
-		ret.removedDependees = 0
+		ret.totalDependencies = 0
+		ret.resolvedDependencies = 0
+		ret.removedDependencies = 0
 		ret.resolvedList = nil
 		ret.assignedTo = unassigned
 		ret.removed = false
@@ -105,7 +105,7 @@ func (n *Node) NodeID() int64 {
 }
 
 // DependOn implements interface internal.SlotNode.
-func (n *Node) DependOn(unresolvedDeps map[int64]*Node, resolvedDeps int) {
+func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int) {
 	resolvedDependees, removedDependees := int32(0), int32(0)
 
 	depend := func(target *Node) {
@@ -113,28 +113,35 @@ func (n *Node) DependOn(unresolvedDeps map[int64]*Node, resolvedDeps int) {
 			// For a given Node, every dependency corresponds to a target.
 			// If target is nil it means the dependency doesn't conflict
 			// with any other nodes. However it's still necessary to track
-			// it because Node.tryResolve needs to know it.
-			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependees, 1)
+			// it because Node.tryResolve needs to counting the number of
+			// resolved dependencies.
+			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependencies, 1)
 			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], assignedToAny)
-			removedDependees = stdatomic.AddInt32(&n.removedDependees, 1)
+			removedDependees = stdatomic.AddInt32(&n.removedDependencies, 1)
 			return
 		}
 
 		if target.id == n.id {
 			panic("you cannot depend on yourself")
 		}
-		// Lock target and insert `n` into target.dependers.
+
+		// The target node might be removed or modified in other places, for exmaple
+		// after its corresponding transaction has been executed,
 		target.mu.Lock()
 		defer target.mu.Unlock()
 
 		if target.assignedTo != unassigned {
 			// The target has already been assigned to a worker.
-			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependees, 1)
+			// In this case, record the worker ID in `resolvedList`, and this node
+			// probably can be sent to the same worker and executed sequentially.
+			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependencies, 1)
 			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], target.assignedTo)
 		}
+
+		// Add the node to the target's dependers if the target has not been removed.
 		if target.removed {
 			// The target has already been removed.
-			removedDependees = stdatomic.AddInt32(&n.removedDependees, 1)
+			removedDependees = stdatomic.AddInt32(&n.removedDependencies, 1)
 		} else if _, exist := target.getOrCreateDependers().ReplaceOrInsert(n); exist {
 			// Should never depend on a target redundantly.
 			panic("should never exist")
@@ -143,19 +150,20 @@ func (n *Node) DependOn(unresolvedDeps map[int64]*Node, resolvedDeps int) {
 
 	// Re-allocate ID in `DependOn` instead of creating the node, because the node can be
 	// pending in slots after it's created.
+	// ?: why gen new ID here?
 	n.id = genNextNodeID()
 
 	// `totalDependees` and `resolvedList` must be initialized before depending on any targets.
-	n.totalDependees = int32(len(unresolvedDeps) + resolvedDeps)
-	n.resolvedList = make([]int64, 0, n.totalDependees)
-	for i := 0; i < int(n.totalDependees); i++ {
+	n.totalDependencies = int32(len(dependencyNodes) + noDependencyKeyCnt)
+	n.resolvedList = make([]int64, 0, n.totalDependencies)
+	for i := 0; i < int(n.totalDependencies); i++ {
 		n.resolvedList = append(n.resolvedList, unassigned)
 	}
 
-	for _, target := range unresolvedDeps {
-		depend(target)
+	for _, node := range dependencyNodes {
+		depend(node)
 	}
-	for i := 0; i < resolvedDeps; i++ {
+	for i := 0; i < noDependencyKeyCnt; i++ {
 		depend(nil)
 	}
 
@@ -171,7 +179,7 @@ func (n *Node) Remove() {
 	if n.dependers != nil {
 		// `mu` must be holded during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
-			removedDependees := stdatomic.AddInt32(&node.removedDependees, 1)
+			removedDependees := stdatomic.AddInt32(&node.removedDependencies, 1)
 			node.maybeResolve(0, removedDependees)
 			return true
 		})
@@ -217,9 +225,9 @@ func (n *Node) assignTo(workerID int64) bool {
 	if n.dependers != nil {
 		// `mu` must be holded during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
-			resolvedDependees := stdatomic.AddInt32(&node.resolvedDependees, 1)
-			stdatomic.StoreInt64(&node.resolvedList[resolvedDependees-1], n.assignedTo)
-			node.maybeResolve(resolvedDependees, 0)
+			resolvedDependencies := stdatomic.AddInt32(&node.resolvedDependencies, 1)
+			stdatomic.StoreInt64(&node.resolvedList[resolvedDependencies-1], n.assignedTo)
+			node.maybeResolve(resolvedDependencies, 0)
 			return true
 		})
 	}
@@ -227,14 +235,16 @@ func (n *Node) assignTo(workerID int64) bool {
 	return true
 }
 
-func (n *Node) maybeResolve(resolvedDependees, removedDependees int32) {
-	if workerNum, ok := n.tryResolve(resolvedDependees, removedDependees); ok {
+func (n *Node) maybeResolve(resolvedDependencies, removedDependencies int32) {
+	if workerNum, ok := n.tryResolve(resolvedDependencies, removedDependencies); ok {
 		if workerNum < 0 {
 			panic("Node.tryResolve must return a valid worker ID")
 		}
 		if n.OnNotified != nil {
+			// Notify the conflict detector background worker to assign the node to the worker asynchronously.
 			n.OnNotified(func() { n.assignTo(workerNum) })
 		} else {
+			// Assign the node to the worker directly.
 			n.assignTo(workerNum)
 		}
 	}
@@ -252,31 +262,42 @@ func (n *Node) tryResolve(resolvedDependees, removedDependees int32) (int64, boo
 	return assignedTo, resolved
 }
 
-func (n *Node) doResolve(resolvedDependees, removedDependees int32) (int64, bool) {
-	if n.totalDependees == 0 {
+func (n *Node) doResolve(resolvedDependencies, removedDependencies int32) (int64, bool) {
+	if n.totalDependencies == 0 {
 		// No conflicts, can select any workers.
 		return assignedToAny, true
 	}
 
-	if resolvedDependees == n.totalDependees {
+	if resolvedDependencies == n.totalDependencies {
 		firstDep := stdatomic.LoadInt64(&n.resolvedList[0])
 		hasDiffDep := false
-		for i := 1; i < int(n.totalDependees); i++ {
+		for i := 1; i < int(n.totalDependencies); i++ {
 			curr := stdatomic.LoadInt64(&n.resolvedList[i])
+			// // Todo: simplify assign to logic, only resolve dependencies nodes after
+			// // corresponding transactions are executed.
+			// //
+			// // In DependOn, depend(nil) set resolvedList[i] to assignedToAny
+			// // for these no dependecy keys.
+			// if curr == assignedToAny {
+			// 	continue
+			// }
 			if firstDep != curr {
 				hasDiffDep = true
 				break
 			}
 		}
 		if !hasDiffDep {
-			// If all dependees are assigned to one same worker, we can assign
-			// this node to the same worker directly.
+			// If all dependency nodes are assigned to the same worker, we can assign
+			// this node to the same worker directly, and they will execute sequentially.
+			// On the other hand, if dependency nodes are assigned to different workers,
+			// This node has to wait all dependency txn executed and all depencecy nodes
+			// are removed.
 			return firstDep, true
 		}
 	}
 
 	// All dependees are removed, so assign the node to any worker is fine.
-	if removedDependees == n.totalDependees {
+	if removedDependencies == n.totalDependencies {
 		return assignedToAny, true
 	}
 
