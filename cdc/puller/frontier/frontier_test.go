@@ -559,7 +559,7 @@ func (r *lockedRegion) split(regionIDGen *uint64, versionGen *uint64) (s lockedR
 }
 
 func (r *lockedRegion) merge(s lockedRegion, versionGen *uint64) {
-	if bytes.Compare(r.startKey, s.endKey) != 0 {
+	if !bytes.Equal(r.startKey, s.endKey) {
 		panic("bad merge")
 	}
 

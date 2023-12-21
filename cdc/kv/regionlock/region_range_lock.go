@@ -486,6 +486,7 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 ) (r CollectedLockedRangeAttrs) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	r.LockedRegionCount = l.rangeLock.Len()
 	r.FastestRegion.CheckpointTs = 0
 	r.SlowestRegion.CheckpointTs = math.MaxUint64
 
@@ -522,9 +523,10 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 
 // CollectedLockedRangeAttrs returns by `RegionRangeLock.CollectedLockedRangeAttrs`.
 type CollectedLockedRangeAttrs struct {
-	Holes         []tablepb.Span
-	FastestRegion LockedRangeAttrs
-	SlowestRegion LockedRangeAttrs
+	Holes             []tablepb.Span
+	LockedRegionCount int
+	FastestRegion     LockedRangeAttrs
+	SlowestRegion     LockedRangeAttrs
 }
 
 // LockedRangeAttrs is like `LockedRange`, but only contains some read-only attributes.
