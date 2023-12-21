@@ -79,7 +79,7 @@ func (s *Slots[E]) Add(elem E, hashes []uint64) {
 		} else {
 			noDependecyCnt += 1
 		}
-		// Add this node to the slot, make sure new comming nodes with the same hash should
+		// Add this node to the slot, make sure new coming nodes with the same hash should
 		// depend on this node.
 		s.slots[slotIdx].nodes[hash] = elem
 	}
