@@ -13,19 +13,15 @@
 
 package causality
 
-type (
-	keyHash = uint64
-)
-
 type txnEvent interface {
 	// OnConflictResolved is called when the event leaves ConflictDetector.
 	OnConflictResolved()
 
-	// keyHashes are in range [0, math.MaxUint64) and must be deduped.
+	// Hashes are in range [0, math.MaxUint64) and must be deduped.
 	//
 	// NOTE: if the conflict detector is accessed by multiple threads concurrently,
-	// GenSortedKeysHash must also be sorted based on `key % numSlots`.
-	GenSortedKeysHash(numSlots uint64) []keyHash
+	// GenSortedDedupKeysHash must also be sorted based on `key % numSlots`.
+	GenSortedDedupKeysHash(numSlots uint64) []uint64
 }
 
 type worker[Txn txnEvent] interface {

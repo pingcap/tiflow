@@ -41,8 +41,8 @@ func (e *txnEvent) OnConflictResolved() {
 	e.conflictResolved = time.Now()
 }
 
-// GenSortedKeysHash implements causality.txnEvent interface.
-func (e *txnEvent) GenSortedKeysHash(numSlots uint64) []uint64 {
+// GenSortedDedupKeysHash implements causality.txnEvent interface.
+func (e *txnEvent) GenSortedDedupKeysHash(numSlots uint64) []uint64 {
 	hashes := genTxnKeys(e.TxnCallbackableEvent.Event)
 
 	// Sort and dedup hashes.
