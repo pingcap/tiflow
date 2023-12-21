@@ -315,18 +315,13 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChe
 		TableInfo: tableInfo,
 	}
 
-	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
-	for _, columnInfo := range tableInfo.Columns {
-		fieldTypeMap[columnInfo.Name.O] = &columnInfo.FieldType
-	}
-
-	columns, err := decodeColumns(msg.Data, fieldTypeMap)
+	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
 	result.Columns = columns
 
-	columns, err = decodeColumns(msg.Old, fieldTypeMap)
+	columns, err = decodeColumns(msg.Old, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
@@ -345,10 +340,19 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChe
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 			}
+
+			err = common.VerifyChecksum(result.PreColumns, previous)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
 		}
 
 		if msg.Checksum.Current != "" {
 			current, err = strconv.ParseUint(msg.Checksum.Current, 10, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+			err = common.VerifyChecksum(result.Columns, current)
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 			}
@@ -360,20 +364,43 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChe
 			Corrupted: msg.Checksum.Corrupted,
 			Version:   msg.Checksum.Version,
 		}
+
+		if msg.Checksum.Corrupted {
+			log.Warn("cdc detect checksum corrupted",
+				zap.String("schema", msg.Schema),
+				zap.String("table", msg.Table))
+			for _, col := range result.PreColumns {
+				log.Info("data corrupted, print each previous column for debugging",
+					zap.String("name", col.Name),
+					zap.Any("type", col.Type),
+					zap.Any("charset", col.Charset),
+					zap.Any("flag", col.Flag),
+					zap.Any("value", col.Value),
+					zap.Any("default", col.Default))
+			}
+			for _, col := range result.Columns {
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", col.Name),
+					zap.Any("type", col.Type),
+					zap.Any("charset", col.Charset),
+					zap.Any("flag", col.Flag),
+					zap.Any("value", col.Value),
+					zap.Any("default", col.Default))
+			}
+		}
 	}
 
 	return result, nil
 }
 
-func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*types.FieldType) ([]*model.Column, error) {
+func decodeColumns(rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo) ([]*model.Column, error) {
 	var result []*model.Column
-	for name, value := range rawData {
-		fieldType, ok := fieldTypeMap[name]
+	for _, info := range columnInfos {
+		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Error("cannot found the fieldType for the column", zap.String("column", name))
-			return nil, cerror.ErrDecodeFailed.GenWithStack("cannot found the fieldType for the column %s", name)
+			log.Error("cannot found the value for the column", zap.String("column", info.Name.O))
 		}
-		col, err := decodeColumn(name, value, fieldType)
+		col, err := decodeColumn(info.Name.O, value, &info.FieldType)
 		if err != nil {
 			return nil, err
 		}
