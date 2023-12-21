@@ -329,85 +329,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.SQLMode == "" {
 		info.Config.SQLMode = defaultConfig.SQLMode
 	}
-<<<<<<< HEAD
-=======
 	if info.Config.SyncedStatus == nil {
 		info.Config.SyncedStatus = defaultConfig.SyncedStatus
 	}
-	info.RmUnusedFields()
-}
-
-// RmUnusedFields removes unnecessary fields based on the downstream type and
-// the protocol. Since we utilize a common changefeed configuration template,
-// certain fields may not be utilized for certain protocols.
-func (info *ChangeFeedInfo) RmUnusedFields() {
-	uri, err := url.Parse(info.SinkURI)
-	if err != nil {
-		log.Warn(
-			"failed to parse the sink uri",
-			zap.Error(err),
-			zap.Any("sinkUri", info.SinkURI),
-		)
-		return
-	}
-	// blackhole is for testing purpose, no need to remove fields
-	if sink.IsBlackHoleScheme(uri.Scheme) {
-		return
-	}
-	if !sink.IsMQScheme(uri.Scheme) {
-		info.rmMQOnlyFields()
-	} else {
-		// remove schema registry for MQ downstream with
-		// protocol other than avro
-		if util.GetOrZero(info.Config.Sink.Protocol) != config.ProtocolAvro.String() {
-			info.Config.Sink.SchemaRegistry = nil
-		}
-	}
-
-	if !sink.IsStorageScheme(uri.Scheme) {
-		info.rmStorageOnlyFields()
-	}
-
-	if !sink.IsMySQLCompatibleScheme(uri.Scheme) {
-		info.rmDBOnlyFields()
-	} else {
-		// remove fields only being used by MQ and Storage downstream
-		info.Config.Sink.Protocol = nil
-		info.Config.Sink.Terminator = nil
-	}
-}
-
-func (info *ChangeFeedInfo) rmMQOnlyFields() {
-	log.Info("since the downstream is not a MQ, remove MQ only fields",
-		zap.String("namespace", info.Namespace),
-		zap.String("changefeed", info.ID))
-	info.Config.Sink.DispatchRules = nil
-	info.Config.Sink.SchemaRegistry = nil
-	info.Config.Sink.EncoderConcurrency = nil
-	info.Config.Sink.EnableKafkaSinkV2 = nil
-	info.Config.Sink.OnlyOutputUpdatedColumns = nil
-	info.Config.Sink.DeleteOnlyOutputHandleKeyColumns = nil
-	info.Config.Sink.ContentCompatible = nil
-	info.Config.Sink.KafkaConfig = nil
-}
-
-func (info *ChangeFeedInfo) rmStorageOnlyFields() {
-	info.Config.Sink.CSVConfig = nil
-	info.Config.Sink.DateSeparator = nil
-	info.Config.Sink.EnablePartitionSeparator = nil
-	info.Config.Sink.FileIndexWidth = nil
-	info.Config.Sink.CloudStorageConfig = nil
-}
-
-func (info *ChangeFeedInfo) rmDBOnlyFields() {
-	info.Config.EnableSyncPoint = nil
-	info.Config.BDRMode = nil
-	info.Config.SyncPointInterval = nil
-	info.Config.SyncPointRetention = nil
-	info.Config.Consistent = nil
-	info.Config.Sink.SafeMode = nil
-	info.Config.Sink.MySQLConfig = nil
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.

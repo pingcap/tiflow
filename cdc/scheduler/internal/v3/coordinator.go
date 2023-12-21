@@ -300,11 +300,7 @@ func (c *coordinator) poll(
 	if !c.captureM.CheckAllCaptureInitialized() {
 		// Skip generating schedule tasks for replication manager,
 		// as not all capture are initialized.
-<<<<<<< HEAD
-		newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables, pdTime, barrier, c.redoMetaManager)
-=======
-		watermark = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
+		watermark = c.replicationM.AdvanceCheckpoint(currentTables, pdTime, barrier, c.redoMetaManager)
 		// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
 		// when redo is enabled
 		msgs = c.captureM.Tick(c.replicationM.ReplicationSets(),
@@ -347,11 +343,7 @@ func (c *coordinator) poll(
 	msgBuf = append(msgBuf, msgs...)
 
 	// Checkpoint calculation
-<<<<<<< HEAD
-	newCheckpointTs, newResolvedTs = c.replicationM.AdvanceCheckpoint(currentTables, pdTime, barrier, c.redoMetaManager)
-=======
-	watermark = c.replicationM.AdvanceCheckpoint(&c.tableRanges, pdTime, barrier, c.redoMetaManager)
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
+	watermark = c.replicationM.AdvanceCheckpoint(currentTables, pdTime, barrier, c.redoMetaManager)
 
 	// tick capture manager after checkpoint calculation to take account resolvedTs in barrier
 	// when redo is enabled

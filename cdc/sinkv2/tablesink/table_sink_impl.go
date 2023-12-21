@@ -133,14 +133,9 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 			return SinkInternalError{err}
 		}
 		// We have to record the event ID for the callback.
-<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl.go
-		ce := &eventsink.CallbackableEvent[E]{
-			Event:     ev,
-			Callback:  e.progressTracker.addEvent(),
-=======
 		postEventFlushFunc := e.progressTracker.addEvent()
 		evCommitTs := ev.GetCommitTs()
-		ce := &dmlsink.CallbackableEvent[E]{
+		ce := &eventsink.CallbackableEvent[E]{
 			Event: ev,
 			Callback: func() {
 				// Due to multi workers will call this callback concurrently,
@@ -156,7 +151,6 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 				}
 				postEventFlushFunc()
 			},
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133)):cdc/sink/tablesink/table_sink_impl.go
 			SinkState: &e.state,
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
@@ -183,7 +177,7 @@ func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 // GetLastSyncedTs returns the last synced ts of table sink.
 // lastSyncedTs means the biggest commits of all the events
 // that have been flushed to the downstream.
-func (e *EventTableSink[E, P]) GetLastSyncedTs() model.Ts {
+func (e *EventTableSink[E]) GetLastSyncedTs() model.Ts {
 	return e.lastSyncedTs.getLastSyncedTs()
 }
 

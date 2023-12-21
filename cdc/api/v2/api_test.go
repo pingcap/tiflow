@@ -48,13 +48,8 @@ func (m *mockPDClient) UpdateServiceGCSafePoint(ctx context.Context,
 }
 
 // GetTS of mockPDClient returns a mock tso
-<<<<<<< HEAD
-func (m *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
-	return m.logicTime, m.timestamp, nil
-=======
 func (c *mockPDClient) GetTS(ctx context.Context) (int64, int64, error) {
 	return c.timestamp, c.logicTime, nil
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 }
 
 // GetClusterID of mockPDClient returns a mock ClusterID
@@ -125,8 +120,6 @@ func (m *mockStatusProvider) GetAllChangeFeedStatuses(_ context.Context) (
 ) {
 	return m.changefeedStatuses, m.err
 }
-<<<<<<< HEAD
-=======
 
 // GetChangeFeedSyncedStatus returns a mock changefeed status.
 func (m *mockStatusProvider) GetChangeFeedSyncedStatus(_ context.Context, changefeedID model.ChangeFeedID) (
@@ -135,8 +128,3 @@ func (m *mockStatusProvider) GetChangeFeedSyncedStatus(_ context.Context, change
 ) {
 	return m.changeFeedSyncedStatus, m.err
 }
-
-func (m *mockStatusProvider) IsChangefeedOwner(_ context.Context, id model.ChangeFeedID) (bool, error) {
-	return true, nil
-}
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))

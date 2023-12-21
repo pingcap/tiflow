@@ -43,13 +43,8 @@ const (
 	apiOpVarChangefeedState = "state"
 	// apiOpVarChangefeedID is the key of changefeed ID in HTTP API
 	apiOpVarChangefeedID = "changefeed_id"
-<<<<<<< HEAD
-=======
-	// apiOpVarNamespace is the key of changefeed namespace in HTTP API
-	apiOpVarNamespace = "namespace"
 	// timeout for pd client
 	timeout = 30 * time.Second
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 )
 
 // createChangefeed handles create changefeed request,
@@ -770,8 +765,7 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 func (h *OpenAPIV2) synced(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	namespace := getNamespaceValueWithDefault(c)
-	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))

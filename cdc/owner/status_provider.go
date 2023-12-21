@@ -30,13 +30,11 @@ type StatusProvider interface {
 	// GetChangeFeedStatus returns a changefeeds' runtime status.
 	GetChangeFeedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedStatusForAPI, error)
 
-<<<<<<< HEAD
 	// GetAllChangeFeedInfo returns all changefeeds' info.
 	GetAllChangeFeedInfo(ctx context.Context) (map[model.ChangeFeedID]*model.ChangeFeedInfo, error)
-=======
+
 	// GetChangeFeedSyncedStatus returns a changefeeds' synced status.
 	GetChangeFeedSyncedStatus(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedSyncedStatusForAPI, error)
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 
 	// GetChangeFeedInfo returns a changefeeds' info.
 	GetChangeFeedInfo(ctx context.Context, changefeedID model.ChangeFeedID) (*model.ChangeFeedInfo, error)
@@ -70,17 +68,8 @@ const (
 	QueryCaptures
 	// QueryHealth is the type of query cluster health info.
 	QueryHealth
-<<<<<<< HEAD
-=======
-	// QueryOwner is the type of query changefeed owner
-	QueryOwner
-	// QueryChangefeedInfo is the type of query changefeed info
-	QueryChangefeedInfo
-	// QueryChangeFeedStatuses is the type of query changefeed status
-	QueryChangeFeedStatuses
 	// QueryChangeFeedSyncedStatus is the type of query changefeed synced status
 	QueryChangeFeedSyncedStatus
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 )
 
 // Query wraps query command and return results.

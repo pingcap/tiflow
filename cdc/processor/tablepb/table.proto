@@ -54,14 +54,9 @@ enum TableState {
 }
 
 message Checkpoint {
-<<<<<<< HEAD
     uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
     uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
-=======
-    uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "Ts"];
-    uint64 resolved_ts = 2 [(gogoproto.casttype) = "Ts"];
-    uint64 last_synced_ts = 3 [(gogoproto.casttype) = "Ts"];
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
+    uint64 last_synced_ts = 3 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
 }
 
 // Stats holds a statistic for a table.

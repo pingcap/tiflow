@@ -15,12 +15,7 @@ package owner
 
 import (
 	"context"
-<<<<<<< HEAD
-=======
-	"fmt"
 	"math"
-	"strings"
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 	"sync"
 	"time"
 
@@ -363,14 +358,9 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 		return nil
 	}
 
-<<<<<<< HEAD
-	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
-		ctx, preCheckpointTs, allPhysicalTables, captures, barrier)
-=======
 	watermark, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
 		barrier)
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -397,13 +387,8 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
-<<<<<<< HEAD
-	if newCheckpointTs == scheduler.CheckpointCannotProceed {
-		if c.state.Status != nil {
-=======
 	if watermark.CheckpointTs == scheduler.CheckpointCannotProceed {
-		if c.latestStatus != nil {
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
+		if c.state.Status != nil {
 			// We should keep the metrics updated even if the scheduler cannot
 			// advance the watermarks for now.
 			c.updateMetrics(currentTs, c.state.Status.CheckpointTs, c.resolvedTs)
@@ -431,33 +416,16 @@ func (c *changefeed) tick(ctx cdcContext.Context, captures map[model.CaptureID]*
 			log.Info("owner won't update checkpoint because of failpoint",
 				zap.String("namespace", c.id.Namespace),
 				zap.String("changefeed", c.id.ID),
-<<<<<<< HEAD
 				zap.Uint64("keepCheckpoint", c.state.Status.CheckpointTs),
-				zap.Uint64("skipCheckpoint", newCheckpointTs))
-			newCheckpointTs = c.state.Status.CheckpointTs
+				zap.Uint64("skipCheckpoint", watermark.CheckpointTs))
+			watermark.CheckpointTs = c.state.Status.CheckpointTs
 		}
 	})
 
-	c.updateStatus(newCheckpointTs, barrier.MinTableBarrierTs)
-	c.updateMetrics(currentTs, newCheckpointTs, c.resolvedTs)
+	c.updateStatus(watermark.CheckpointTs, barrier.MinTableBarrierTs)
+	c.updateMetrics(currentTs, watermark.CheckpointTs, c.resolvedTs)
 
 	return nil
-=======
-				zap.Uint64("keepCheckpoint", c.latestStatus.CheckpointTs),
-				zap.Uint64("skipCheckpoint", watermark.CheckpointTs))
-			watermark.CheckpointTs = c.latestStatus.CheckpointTs
-		}
-	})
-
-	failpoint.Inject("ChangefeedOwnerNotUpdateCheckpoint", func() {
-		watermark.CheckpointTs = c.latestStatus.CheckpointTs
-	})
-
-	c.updateMetrics(currentTs, watermark.CheckpointTs, c.resolvedTs)
-	c.tickDownstreamObserver(ctx)
-
-	return watermark.CheckpointTs, barrier.MinTableBarrierTs, nil
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
@@ -495,11 +463,7 @@ LOOP2:
 		c.resolvedTs = checkpointTs
 	}
 
-<<<<<<< HEAD
 	minTableBarrierTs := c.state.Status.MinTableBarrierTs
-=======
-	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))

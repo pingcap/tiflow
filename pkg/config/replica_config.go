@@ -122,56 +122,16 @@ type replicaConfig struct {
 	// BDR(Bidirectional Replication) is a feature that allows users to
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.
-<<<<<<< HEAD
-	BDRMode                      bool              `toml:"bdr-mode" json:"bdr-mode"`
-	SyncPointInterval            time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
-	SyncPointRetention           time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
-	Filter                       *FilterConfig     `toml:"filter" json:"filter"`
-	Mounter                      *MounterConfig    `toml:"mounter" json:"mounter"`
-	Sink                         *SinkConfig       `toml:"sink" json:"sink"`
-	Consistent                   *ConsistentConfig `toml:"consistent" json:"consistent"`
-	ChangefeedErrorStuckDuration time.Duration     `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
-	SQLMode                      string            `toml:"sql-mode" json:"sql-mode,omitempty"`
-=======
-	BDRMode *bool `toml:"bdr-mode" json:"bdr-mode,omitempty"`
-	// SyncPointInterval is only available when the downstream is DB.
-	SyncPointInterval *time.Duration `toml:"sync-point-interval" json:"sync-point-interval,omitempty"`
-	// SyncPointRetention is only available when the downstream is DB.
-	SyncPointRetention *time.Duration `toml:"sync-point-retention" json:"sync-point-retention,omitempty"`
-	Filter             *FilterConfig  `toml:"filter" json:"filter"`
-	Mounter            *MounterConfig `toml:"mounter" json:"mounter"`
-	Sink               *SinkConfig    `toml:"sink" json:"sink"`
-	// Consistent is only available for DB downstream with redo feature enabled.
-	Consistent *ConsistentConfig `toml:"consistent" json:"consistent,omitempty"`
-	// Scheduler is the configuration for scheduler.
-	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
-	// Integrity is only available when the downstream is MQ.
-	Integrity                    *integrity.Config   `toml:"integrity" json:"integrity"`
-	ChangefeedErrorStuckDuration *time.Duration      `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
-	SQLMode                      string              `toml:"sql-mode" json:"sql-mode"`
+	BDRMode                      bool                `toml:"bdr-mode" json:"bdr-mode"`
+	SyncPointInterval            time.Duration       `toml:"sync-point-interval" json:"sync-point-interval"`
+	SyncPointRetention           time.Duration       `toml:"sync-point-retention" json:"sync-point-retention"`
+	Filter                       *FilterConfig       `toml:"filter" json:"filter"`
+	Mounter                      *MounterConfig      `toml:"mounter" json:"mounter"`
+	Sink                         *SinkConfig         `toml:"sink" json:"sink"`
+	Consistent                   *ConsistentConfig   `toml:"consistent" json:"consistent"`
+	ChangefeedErrorStuckDuration time.Duration       `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	SQLMode                      string              `toml:"sql-mode" json:"sql-mode,omitempty"`
 	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
-}
-
-// Value implements the driver.Valuer interface
-func (c ReplicaConfig) Value() (driver.Value, error) {
-	cfg, err := c.Marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: refactor the meaningless type conversion.
-	return []byte(cfg), nil
-}
-
-// Scan implements the sql.Scanner interface
-func (c *ReplicaConfig) Scan(value interface{}) error {
-	b, ok := value.([]byte)
-	if !ok {
-		return errors.New("type assertion to []byte failed")
-	}
-
-	return c.UnmarshalJSON(b)
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig

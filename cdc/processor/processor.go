@@ -435,6 +435,7 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 			Checkpoint: tablepb.Checkpoint{
 				CheckpointTs: sinkStats.CheckpointTs,
 				ResolvedTs:   sinkStats.ResolvedTs,
+				LastSyncedTs: sinkStats.LastSyncedTs,
 			},
 			State: state,
 			Stats: stats,
@@ -454,14 +455,9 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 	return tablepb.TableStatus{
 		TableID: tableID,
 		Checkpoint: tablepb.Checkpoint{
-<<<<<<< HEAD
 			CheckpointTs: table.CheckpointTs(),
 			ResolvedTs:   table.ResolvedTs(),
-=======
-			CheckpointTs: sinkStats.CheckpointTs,
-			ResolvedTs:   sinkStats.ResolvedTs,
-			LastSyncedTs: sinkStats.LastSyncedTs,
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
+			LastSyncedTs: 0, // we don't support non pullBasedSinking mode to get LastSyncedTs
 		},
 		State: table.State(),
 		Stats: stats,

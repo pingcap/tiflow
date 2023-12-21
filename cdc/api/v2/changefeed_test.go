@@ -941,8 +941,6 @@ func TestPauseChangefeed(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "{}", w.Body.String())
 }
-<<<<<<< HEAD
-=======
 
 func TestChangefeedSynced(t *testing.T) {
 	syncedInfo := testCase{url: "/api/v2/changefeeds/%s/synced?namespace=abc", method: "GET"}
@@ -1150,32 +1148,3 @@ func TestChangefeedSynced(t *testing.T) {
 		require.Equal(t, "The data syncing is not finished, please wait", resp.Info)
 	}
 }
-
-func TestHasRunningImport(t *testing.T) {
-	integration.BeforeTestExternal(t)
-	testEtcdCluster := integration.NewClusterV3(
-		t, &integration.ClusterConfig{Size: 1},
-	)
-	defer testEtcdCluster.Terminate(t)
-
-	ctx := context.Background()
-	client := testEtcdCluster.RandClient()
-	hasImport := hasRunningImport(ctx, client)
-	require.NoError(t, hasImport)
-
-	lease, err := client.Lease.Grant(ctx, 3*60)
-	require.NoError(t, err)
-
-	_, err = client.KV.Put(
-		ctx, filepath.Join(RegisterImportTaskPrefix, "pitr"),
-		"", clientv3.WithLease(lease.ID),
-	)
-	require.NoError(t, err)
-
-	hasImport = hasRunningImport(ctx, client)
-	require.NotNil(t, hasImport)
-	require.Contains(
-		t, hasImport.Error(), "There are lightning/restore tasks running",
-	)
-}
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
