@@ -482,7 +482,7 @@ type LockedRange struct {
 
 // CollectLockedRangeAttrs collects locked range attributes.
 func (l *RegionRangeLock) CollectLockedRangeAttrs(
-	action func(regionID, version uint64, state *LockedRange, span tablepb.Span) bool,
+	action func(regionID, version uint64, state *LockedRange, span tablepb.Span),
 ) (r CollectedLockedRangeAttrs) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -491,10 +491,9 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 
 	lastEnd := l.totalSpan.StartKey
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
-		keepFetchMore := true
 		if action != nil {
 			span := tablepb.Span{StartKey: item.startKey, EndKey: item.endKey}
-			keepFetchMore = action(item.regionID, item.version, &item.state, span)
+			action(item.regionID, item.version, &item.state, span)
 		}
 		if spanz.EndCompare(lastEnd, item.startKey) < 0 {
 			r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: item.startKey})
@@ -513,7 +512,7 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 			r.SlowestRegion.Created = item.state.Created
 		}
 		lastEnd = item.endKey
-		return keepFetchMore
+		return true
 	})
 	if spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0 {
 		r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: l.totalSpan.EndKey})
