@@ -106,7 +106,7 @@ func (n *Node) NodeID() int64 {
 
 // DependOn implements interface internal.SlotNode.
 func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int) {
-	resolvedDependees, removedDependees := int32(0), int32(0)
+	resolvedDependencies, removedDependencies := int32(0), int32(0)
 
 	depend := func(target *Node) {
 		if target == nil {
@@ -115,9 +115,9 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 			// with any other nodes. However it's still necessary to track
 			// it because Node.tryResolve needs to counting the number of
 			// resolved dependencies.
-			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependencies, 1)
-			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], assignedToAny)
-			removedDependees = stdatomic.AddInt32(&n.removedDependencies, 1)
+			resolvedDependencies = stdatomic.AddInt32(&n.resolvedDependencies, 1)
+			stdatomic.StoreInt64(&n.resolvedList[resolvedDependencies-1], assignedToAny)
+			removedDependencies = stdatomic.AddInt32(&n.removedDependencies, 1)
 			return
 		}
 
@@ -126,7 +126,7 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 		}
 
 		// The target node might be removed or modified in other places, for exmaple
-		// after its corresponding transaction has been executed,
+		// after its corresponding transaction has been executed.
 		target.mu.Lock()
 		defer target.mu.Unlock()
 
@@ -134,14 +134,14 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 			// The target has already been assigned to a worker.
 			// In this case, record the worker ID in `resolvedList`, and this node
 			// probably can be sent to the same worker and executed sequentially.
-			resolvedDependees = stdatomic.AddInt32(&n.resolvedDependencies, 1)
-			stdatomic.StoreInt64(&n.resolvedList[resolvedDependees-1], target.assignedTo)
+			resolvedDependencies = stdatomic.AddInt32(&n.resolvedDependencies, 1)
+			stdatomic.StoreInt64(&n.resolvedList[resolvedDependencies-1], target.assignedTo)
 		}
 
 		// Add the node to the target's dependers if the target has not been removed.
 		if target.removed {
 			// The target has already been removed.
-			removedDependees = stdatomic.AddInt32(&n.removedDependencies, 1)
+			removedDependencies = stdatomic.AddInt32(&n.removedDependencies, 1)
 		} else if _, exist := target.getOrCreateDependers().ReplaceOrInsert(n); exist {
 			// Should never depend on a target redundantly.
 			panic("should never exist")
@@ -153,7 +153,7 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 	// ?: why gen new ID here?
 	n.id = genNextNodeID()
 
-	// `totalDependees` and `resolvedList` must be initialized before depending on any targets.
+	// `totalDependcies` and `resolvedList` must be initialized before depending on any targets.
 	n.totalDependencies = int32(len(dependencyNodes) + noDependencyKeyCnt)
 	n.resolvedList = make([]int64, 0, n.totalDependencies)
 	for i := 0; i < int(n.totalDependencies); i++ {
@@ -167,7 +167,7 @@ func (n *Node) DependOn(dependencyNodes map[int64]*Node, noDependencyKeyCnt int)
 		depend(nil)
 	}
 
-	n.maybeResolve(resolvedDependees, removedDependees)
+	n.maybeResolve(resolvedDependencies, removedDependencies)
 }
 
 // Remove implements interface internal.SlotNode.
@@ -179,8 +179,8 @@ func (n *Node) Remove() {
 	if n.dependers != nil {
 		// `mu` must be holded during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
-			removedDependees := stdatomic.AddInt32(&node.removedDependencies, 1)
-			node.maybeResolve(0, removedDependees)
+			removedDependencies := stdatomic.AddInt32(&node.removedDependencies, 1)
+			node.maybeResolve(0, removedDependencies)
 			return true
 		})
 		n.dependers.Clear(true)
@@ -254,8 +254,8 @@ func (n *Node) maybeResolve(resolvedDependencies, removedDependencies int32) {
 // Returns (_, false) if there is a conflict,
 // returns (rand, true) if there is no conflict,
 // returns (N, true) if only worker N can be used.
-func (n *Node) tryResolve(resolvedDependees, removedDependees int32) (int64, bool) {
-	assignedTo, resolved := n.doResolve(resolvedDependees, removedDependees)
+func (n *Node) tryResolve(resolvedDependencies, removedDependencies int32) (int64, bool) {
+	assignedTo, resolved := n.doResolve(resolvedDependencies, removedDependencies)
 	if resolved && assignedTo == assignedToAny {
 		assignedTo = n.RandWorkerID()
 	}
@@ -296,7 +296,7 @@ func (n *Node) doResolve(resolvedDependencies, removedDependencies int32) (int64
 		}
 	}
 
-	// All dependees are removed, so assign the node to any worker is fine.
+	// All dependcies are removed, so assign the node to any worker is fine.
 	if removedDependencies == n.totalDependencies {
 		return assignedToAny, true
 	}
