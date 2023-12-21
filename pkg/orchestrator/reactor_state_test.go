@@ -131,7 +131,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
+						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -185,7 +186,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
+						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -244,7 +246,8 @@ func TestChangefeedStateUpdate(t *testing.T) {
 						Consistent: &config.ConsistentConfig{Level: "normal", Storage: "local"},
 						ChangefeedErrorStuckDuration: config.
 							GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
-						SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+						SQLMode:      config.GetDefaultReplicaConfig().SQLMode,
+						SyncedStatus: config.GetDefaultReplicaConfig().SyncedStatus,
 					},
 				},
 				Status: &model.ChangeFeedStatus{CheckpointTs: 421980719742451713},
@@ -329,6 +332,7 @@ func TestPatchInfo(t *testing.T) {
 		SinkURI: "123",
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
+<<<<<<< HEAD
 			Filter:     defaultConfig.Filter,
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
@@ -336,6 +340,17 @@ func TestPatchInfo(t *testing.T) {
 			ChangefeedErrorStuckDuration: config.
 				GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 			SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+=======
+			Filter:                       defaultConfig.Filter,
+			Mounter:                      defaultConfig.Mounter,
+			Sink:                         defaultConfig.Sink,
+			Consistent:                   defaultConfig.Consistent,
+			Scheduler:                    defaultConfig.Scheduler,
+			Integrity:                    defaultConfig.Integrity,
+			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
+			SQLMode:                      defaultConfig.SQLMode,
+			SyncedStatus:                 defaultConfig.SyncedStatus,
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
@@ -348,6 +363,7 @@ func TestPatchInfo(t *testing.T) {
 		StartTs: 6,
 		Engine:  model.SortUnified,
 		Config: &config.ReplicaConfig{
+<<<<<<< HEAD
 			Filter:     defaultConfig.Filter,
 			Mounter:    defaultConfig.Mounter,
 			Sink:       defaultConfig.Sink,
@@ -355,6 +371,17 @@ func TestPatchInfo(t *testing.T) {
 			ChangefeedErrorStuckDuration: config.
 				GetDefaultReplicaConfig().ChangefeedErrorStuckDuration,
 			SQLMode: config.GetDefaultReplicaConfig().SQLMode,
+=======
+			Filter:                       defaultConfig.Filter,
+			Mounter:                      defaultConfig.Mounter,
+			Sink:                         defaultConfig.Sink,
+			Consistent:                   defaultConfig.Consistent,
+			Scheduler:                    defaultConfig.Scheduler,
+			Integrity:                    defaultConfig.Integrity,
+			ChangefeedErrorStuckDuration: defaultConfig.ChangefeedErrorStuckDuration,
+			SQLMode:                      defaultConfig.SQLMode,
+			SyncedStatus:                 defaultConfig.SyncedStatus,
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 		},
 	})
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {

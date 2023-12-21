@@ -15,6 +15,7 @@ package replication
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -605,6 +606,14 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(10),
 					ResolvedTs:   model.Ts(20),
+					LastSyncedTs: model.Ts(15),
+				},
+				Stats: tablepb.Stats{
+					StageCheckpoints: map[string]tablepb.Checkpoint{
+						"puller-egress": {
+							ResolvedTs: model.Ts(30),
+						},
+					},
 				},
 			},
 		}, model.ChangeFeedID{})
@@ -619,6 +628,14 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(15),
 					ResolvedTs:   model.Ts(30),
+					LastSyncedTs: model.Ts(20),
+				},
+				Stats: tablepb.Stats{
+					StageCheckpoints: map[string]tablepb.Checkpoint{
+						"puller-egress": {
+							ResolvedTs: model.Ts(40),
+						},
+					},
 				},
 			},
 		}, model.ChangeFeedID{})
@@ -628,6 +645,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	redoMetaManager := &mockRedoMetaManager{enable: false}
 	// no tables are replicating, resolvedTs should be advanced to globalBarrierTs and checkpoint
 	// should be advanced to minTableBarrierTs.
+<<<<<<< HEAD
 	currentTables := []model.TableID{}
 	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now(),
 		schedulepb.NewBarrierWithMinTs(5), redoMetaManager)
@@ -647,6 +665,33 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 		schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, checkpointCannotProceed, checkpoint)
 	require.Equal(t, checkpointCannotProceed, resolved)
+=======
+	currentTables := &TableRanges{}
+	watermark := r.AdvanceCheckpoint(
+		currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(5), redoMetaManager)
+	require.Equal(t, model.Ts(5), watermark.CheckpointTs)
+	require.Equal(t, model.Ts(5), watermark.ResolvedTs)
+	require.Equal(t, model.Ts(0), watermark.LastSyncedTs)
+	require.Equal(t, model.Ts(math.MaxUint64), watermark.PullerResolvedTs)
+
+	// all tables are replicating
+	currentTables.UpdateTables([]model.TableID{1, 2})
+	watermark = r.AdvanceCheckpoint(
+		currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, model.Ts(10), watermark.CheckpointTs)
+	require.Equal(t, model.Ts(20), watermark.ResolvedTs)
+	require.Equal(t, model.Ts(20), watermark.LastSyncedTs)
+	require.Equal(t, model.Ts(30), watermark.PullerResolvedTs)
+
+	// some table not exist yet.
+	currentTables.UpdateTables([]model.TableID{1, 2, 3})
+	watermark = r.AdvanceCheckpoint(
+		currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, checkpointCannotProceed, watermark.CheckpointTs)
+	require.Equal(t, checkpointCannotProceed, watermark.ResolvedTs)
+	require.Equal(t, checkpointCannotProceed, watermark.LastSyncedTs)
+	require.Equal(t, checkpointCannotProceed, watermark.PullerResolvedTs)
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 
 	rs, err = NewReplicationSet(model.TableID(3), model.Ts(5),
 		map[model.CaptureID]*tablepb.TableStatus{
@@ -656,6 +701,14 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(5),
 					ResolvedTs:   model.Ts(40),
+					LastSyncedTs: model.Ts(30),
+				},
+				Stats: tablepb.Stats{
+					StageCheckpoints: map[string]tablepb.Checkpoint{
+						"puller-egress": {
+							ResolvedTs: model.Ts(50),
+						},
+					},
 				},
 			},
 			"2": {
@@ -664,15 +717,33 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(5),
 					ResolvedTs:   model.Ts(40),
+					LastSyncedTs: model.Ts(32),
+				},
+				Stats: tablepb.Stats{
+					StageCheckpoints: map[string]tablepb.Checkpoint{
+						"puller-egress": {
+							ResolvedTs: model.Ts(50),
+						},
+					},
 				},
 			},
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
+<<<<<<< HEAD
 	r.tables[model.TableID(3)] = rs
 	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(),
 		schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, model.Ts(5), checkpoint)
 	require.Equal(t, model.Ts(20), resolved)
+=======
+	r.spans.ReplaceOrInsert(span3, rs)
+	watermark = r.AdvanceCheckpoint(
+		currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, model.Ts(5), watermark.CheckpointTs)
+	require.Equal(t, model.Ts(20), watermark.ResolvedTs)
+	require.Equal(t, model.Ts(32), watermark.LastSyncedTs)
+	require.Equal(t, model.Ts(30), watermark.PullerResolvedTs)
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 
 	currentTables = append(currentTables, 4)
 	rs, err = NewReplicationSet(model.TableID(4), model.Ts(3),
@@ -683,16 +754,90 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(3),
 					ResolvedTs:   model.Ts(10),
+					LastSyncedTs: model.Ts(5),
+				},
+				Stats: tablepb.Stats{
+					StageCheckpoints: map[string]tablepb.Checkpoint{
+						"puller-egress": {
+							ResolvedTs: model.Ts(12),
+						},
+					},
 				},
 			},
 		}, model.ChangeFeedID{})
 	require.NoError(t, err)
+<<<<<<< HEAD
 	r.tables[model.TableID(4)] = rs
 	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(),
 		schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
 	require.Equal(t, model.Ts(3), checkpoint)
 	require.Equal(t, model.Ts(10), resolved)
 
+=======
+	r.spans.ReplaceOrInsert(span4, rs)
+	watermark = r.AdvanceCheckpoint(
+		currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, model.Ts(3), watermark.CheckpointTs)
+	require.Equal(t, model.Ts(10), watermark.ResolvedTs)
+	require.Equal(t, model.Ts(32), watermark.LastSyncedTs)
+	require.Equal(t, model.Ts(12), watermark.PullerResolvedTs)
+
+	// Split table 5 into 2 spans.
+	currentTables.UpdateTables([]model.TableID{1, 2, 3, 4, 5})
+	span5_1 := spanz.TableIDToComparableSpan(5)
+	span5_1.EndKey = append(span5_1.StartKey, 0)
+	span5_2 := spanz.TableIDToComparableSpan(5)
+	span5_2.StartKey = append(span5_2.StartKey, 0)
+	for _, span := range []tablepb.Span{span5_1, span5_2} {
+		rs, err = NewReplicationSet(span, model.Ts(3),
+			map[model.CaptureID]*tablepb.TableStatus{
+				"1": {
+					Span:  span,
+					State: tablepb.TableStatePrepared,
+					Checkpoint: tablepb.Checkpoint{
+						CheckpointTs: model.Ts(3),
+						ResolvedTs:   model.Ts(10),
+						LastSyncedTs: model.Ts(8),
+					},
+					Stats: tablepb.Stats{
+						StageCheckpoints: map[string]tablepb.Checkpoint{
+							"puller-egress": {
+								ResolvedTs: model.Ts(11),
+							},
+						},
+					},
+				},
+			}, model.ChangeFeedID{})
+		require.NoError(t, err)
+		r.spans.ReplaceOrInsert(span, rs)
+	}
+	watermark = r.AdvanceCheckpoint(
+		currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, model.Ts(3), watermark.CheckpointTs)
+	require.Equal(t, model.Ts(10), watermark.ResolvedTs)
+	require.Equal(t, model.Ts(32), watermark.LastSyncedTs)
+	require.Equal(t, model.Ts(11), watermark.PullerResolvedTs)
+
+	// The start span is missing
+	rs5_1, _ := r.spans.Delete(span5_1)
+	watermark = r.AdvanceCheckpoint(
+		currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, checkpointCannotProceed, watermark.CheckpointTs)
+	require.Equal(t, checkpointCannotProceed, watermark.ResolvedTs)
+	require.Equal(t, checkpointCannotProceed, watermark.LastSyncedTs)
+	require.Equal(t, checkpointCannotProceed, watermark.PullerResolvedTs)
+
+	// The end span is missing
+	r.spans.ReplaceOrInsert(span5_1, rs5_1)
+	r.spans.Delete(span5_2)
+	watermark = r.AdvanceCheckpoint(
+		currentTables, time.Now(), schedulepb.NewBarrierWithMinTs(30), redoMetaManager)
+	require.Equal(t, checkpointCannotProceed, watermark.CheckpointTs)
+	require.Equal(t, checkpointCannotProceed, watermark.ResolvedTs)
+	require.Equal(t, checkpointCannotProceed, watermark.LastSyncedTs)
+	require.Equal(t, checkpointCannotProceed, watermark.PullerResolvedTs)
+
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 	// redo is enabled
 	currentTables = append(currentTables[:0], 4)
 	rs, err = NewReplicationSet(model.TableID(4), model.Ts(3),
@@ -703,6 +848,14 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(10),
 					ResolvedTs:   model.Ts(15),
+					LastSyncedTs: model.Ts(12),
+				},
+				Stats: tablepb.Stats{
+					StageCheckpoints: map[string]tablepb.Checkpoint{
+						"puller-egress": {
+							ResolvedTs: model.Ts(16),
+						},
+					},
 				},
 			},
 		}, model.ChangeFeedID{})
@@ -711,10 +864,19 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	barrier := schedulepb.NewBarrierWithMinTs(30)
 	redoMetaManager.enable = true
 	redoMetaManager.resolvedTs = 9
+<<<<<<< HEAD
 	redoMetaManager.checkpointTs = 9
 	checkpoint, resolved = r.AdvanceCheckpoint(currentTables, time.Now(), barrier, redoMetaManager)
 	require.Equal(t, model.Ts(9), resolved)
 	require.Equal(t, model.Ts(9), checkpoint)
+=======
+	watermark = r.AdvanceCheckpoint(
+		currentTables, time.Now(), barrier, redoMetaManager)
+	require.Equal(t, model.Ts(9), watermark.ResolvedTs)
+	require.Equal(t, model.Ts(9), watermark.CheckpointTs)
+	require.Equal(t, model.Ts(12), watermark.LastSyncedTs)
+	require.Equal(t, model.Ts(16), watermark.PullerResolvedTs)
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 	require.Equal(t, model.Ts(9), barrier.GetGlobalBarrierTs())
 }
 
@@ -729,6 +891,14 @@ func TestReplicationManagerAdvanceCheckpointWithRedoEnabled(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(10),
 					ResolvedTs:   model.Ts(20),
+					LastSyncedTs: model.Ts(12),
+				},
+				Stats: tablepb.Stats{
+					StageCheckpoints: map[string]tablepb.Checkpoint{
+						"puller-egress": {
+							ResolvedTs: model.Ts(26),
+						},
+					},
 				},
 			},
 		}, model.ChangeFeedID{})
@@ -743,6 +913,14 @@ func TestReplicationManagerAdvanceCheckpointWithRedoEnabled(t *testing.T) {
 				Checkpoint: tablepb.Checkpoint{
 					CheckpointTs: model.Ts(15),
 					ResolvedTs:   model.Ts(30),
+					LastSyncedTs: model.Ts(18),
+				},
+				Stats: tablepb.Stats{
+					StageCheckpoints: map[string]tablepb.Checkpoint{
+						"puller-egress": {
+							ResolvedTs: model.Ts(39),
+						},
+					},
 				},
 			},
 		}, model.ChangeFeedID{})
@@ -754,9 +932,13 @@ func TestReplicationManagerAdvanceCheckpointWithRedoEnabled(t *testing.T) {
 	// some table not exist yet with redo is enabled.
 	currentTables := []model.TableID{1, 2, 3}
 	barrier := schedulepb.NewBarrierWithMinTs(30)
-	checkpoint, resolved := r.AdvanceCheckpoint(currentTables, time.Now(), barrier, redoMetaManager)
-	require.Equal(t, checkpointCannotProceed, checkpoint)
-	require.Equal(t, checkpointCannotProceed, resolved)
+	watermark := r.AdvanceCheckpoint(
+		currentTables,
+		time.Now(), barrier, redoMetaManager)
+	require.Equal(t, checkpointCannotProceed, watermark.CheckpointTs)
+	require.Equal(t, checkpointCannotProceed, watermark.ResolvedTs)
+	require.Equal(t, checkpointCannotProceed, watermark.LastSyncedTs)
+	require.Equal(t, checkpointCannotProceed, watermark.PullerResolvedTs)
 	require.Equal(t, uint64(25), barrier.Barrier.GetGlobalBarrierTs())
 }
 

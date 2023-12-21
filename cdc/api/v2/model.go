@@ -100,6 +100,15 @@ type ChangefeedCommonInfo struct {
 	RunningError   *model.RunningError `json:"error"`
 }
 
+// SyncedStatusConfig represents synced check interval config for a changefeed
+type SyncedStatusConfig struct {
+	// The minimum interval between the latest synced ts and now required to reach synced state
+	SyncedCheckInterval int64 `json:"synced_check_interval"`
+	// The maximum interval between latest checkpoint ts and now or
+	// between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
+	CheckpointInterval int64 `json:"checkpoint_interval"`
+}
+
 // MarshalJSON marshal changefeed common info to json
 // we need to set feed state to normal if it is uninitialized and pending to warning
 // to hide the detail of uninitialized and pending state from user
@@ -185,6 +194,7 @@ type ReplicaConfig struct {
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
 	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
 
+<<<<<<< HEAD
 	Filter     *FilterConfig     `json:"filter"`
 	Mounter    *MounterConfig    `json:"mounter"`
 	Sink       *SinkConfig       `json:"sink"`
@@ -192,6 +202,17 @@ type ReplicaConfig struct {
 
 	ChangefeedErrorStuckDuration *JSONDuration `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
 	SQLMode                      string        `json:"sql_mode,omitempty"`
+=======
+	Filter                       *FilterConfig              `json:"filter"`
+	Mounter                      *MounterConfig             `json:"mounter"`
+	Sink                         *SinkConfig                `json:"sink"`
+	Consistent                   *ConsistentConfig          `json:"consistent,omitempty"`
+	Scheduler                    *ChangefeedSchedulerConfig `json:"scheduler"`
+	Integrity                    *IntegrityConfig           `json:"integrity"`
+	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty"`
+	SQLMode                      string                     `json:"sql_mode,omitempty"`
+	SyncedStatus                 *SyncedStatusConfig        `json:"synced_status,omitempty"`
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -362,6 +383,31 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			WorkerNum: c.Mounter.WorkerNum,
 		}
 	}
+<<<<<<< HEAD
+=======
+	if c.Scheduler != nil {
+		res.Scheduler = &config.ChangefeedSchedulerConfig{
+			EnableTableAcrossNodes: c.Scheduler.EnableTableAcrossNodes,
+			RegionThreshold:        c.Scheduler.RegionThreshold,
+			WriteKeyThreshold:      c.Scheduler.WriteKeyThreshold,
+		}
+	}
+	if c.Integrity != nil {
+		res.Integrity = &integrity.Config{
+			IntegrityCheckLevel:   c.Integrity.IntegrityCheckLevel,
+			CorruptionHandleLevel: c.Integrity.CorruptionHandleLevel,
+		}
+	}
+	if c.ChangefeedErrorStuckDuration != nil {
+		res.ChangefeedErrorStuckDuration = &c.ChangefeedErrorStuckDuration.duration
+	}
+	if c.SyncedStatus != nil {
+		res.SyncedStatus = &config.SyncedStatusConfig{
+			SyncedCheckInterval: c.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  c.SyncedStatus.CheckpointInterval,
+		}
+	}
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 	return res
 }
 
@@ -524,6 +570,32 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			WorkerNum: cloned.Mounter.WorkerNum,
 		}
 	}
+<<<<<<< HEAD
+=======
+	if cloned.Scheduler != nil {
+		res.Scheduler = &ChangefeedSchedulerConfig{
+			EnableTableAcrossNodes: cloned.Scheduler.EnableTableAcrossNodes,
+			RegionThreshold:        cloned.Scheduler.RegionThreshold,
+			WriteKeyThreshold:      cloned.Scheduler.WriteKeyThreshold,
+		}
+	}
+
+	if cloned.Integrity != nil {
+		res.Integrity = &IntegrityConfig{
+			IntegrityCheckLevel:   cloned.Integrity.IntegrityCheckLevel,
+			CorruptionHandleLevel: cloned.Integrity.CorruptionHandleLevel,
+		}
+	}
+	if cloned.ChangefeedErrorStuckDuration != nil {
+		res.ChangefeedErrorStuckDuration = &JSONDuration{*cloned.ChangefeedErrorStuckDuration}
+	}
+	if cloned.SyncedStatus != nil {
+		res.SyncedStatus = &SyncedStatusConfig{
+			SyncedCheckInterval: cloned.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  cloned.SyncedStatus.CheckpointInterval,
+		}
+	}
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 	return res
 }
 
@@ -763,6 +835,16 @@ type ChangeFeedInfo struct {
 	CheckpointTs   uint64                    `json:"checkpoint_ts"`
 	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
+}
+
+// SyncedStatus describes the detail of a changefeed's synced status
+type SyncedStatus struct {
+	Synced           bool           `json:"synced"`
+	SinkCheckpointTs model.JSONTime `json:"sink_checkpoint_ts"`
+	PullerResolvedTs model.JSONTime `json:"puller_resolved_ts"`
+	LastSyncedTs     model.JSONTime `json:"last_synced_ts"`
+	NowTs            model.JSONTime `json:"now_ts"`
+	Info             string         `json:"info"`
 }
 
 // RunningError represents some running error from cdc components,

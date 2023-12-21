@@ -56,6 +56,7 @@ const (
 type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
+	LastSyncedTs model.Ts
 	BarrierTs    model.Ts
 }
 
@@ -1017,8 +1018,14 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
+<<<<<<< HEAD
 	m.sinkMemQuota.Release(tableID, checkpointTs)
 	m.redoMemQuota.Release(tableID, checkpointTs)
+=======
+	lastSyncedTs := tableSink.getLastSyncedTs()
+	m.sinkMemQuota.Release(span, checkpointTs)
+	m.redoMemQuota.Release(span, checkpointTs)
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 
 	advanceTimeoutInSec := m.changefeedInfo.Config.Sink.AdvanceTimeoutInSec
 	if advanceTimeoutInSec <= 0 {
@@ -1059,6 +1066,7 @@ func (m *SinkManager) GetTableStats(tableID model.TableID) TableStats {
 	return TableStats{
 		CheckpointTs: checkpointTs.ResolvedMark(),
 		ResolvedTs:   resolvedTs,
+		LastSyncedTs: lastSyncedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
 	}
 }

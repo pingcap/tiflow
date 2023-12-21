@@ -15,6 +15,7 @@ package tablesink
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -30,6 +31,21 @@ var (
 	_ TableSink = (*EventTableSink[*model.SingleTableTxn])(nil)
 )
 
+// LastSyncedTsRecord is used to record the last synced ts of table sink with lock
+// lastSyncedTs means the biggest commits of the events
+// that have been flushed to the downstream.
+type LastSyncedTsRecord struct {
+	sync.Mutex
+	lastSyncedTs model.Ts
+}
+
+// getLastSyncedTs get value from LastSyncedTsRecord
+func (r *LastSyncedTsRecord) getLastSyncedTs() model.Ts {
+	r.Lock()
+	defer r.Unlock()
+	return r.lastSyncedTs
+}
+
 // EventTableSink is a table sink that can write events.
 type EventTableSink[E eventsink.TableEvent] struct {
 	changefeedID model.ChangeFeedID
@@ -44,6 +60,8 @@ type EventTableSink[E eventsink.TableEvent] struct {
 	// NOTICE: It is ordered by commitTs.
 	eventBuffer []E
 	state       state.TableSinkState
+
+	lastSyncedTs LastSyncedTsRecord
 
 	// For dataflow metrics.
 	metricsTableSinkTotalRows prometheus.Counter
@@ -69,6 +87,7 @@ func New[E eventsink.TableEvent](
 		eventAppender:             appender,
 		eventBuffer:               make([]E, 0, 1024),
 		state:                     state.TableSinkSinking,
+		lastSyncedTs:              LastSyncedTsRecord{lastSyncedTs: startTs},
 		metricsTableSinkTotalRows: totalRowsCounter,
 	}
 }
@@ -114,9 +133,30 @@ func (e *EventTableSink[E]) UpdateResolvedTs(resolvedTs model.ResolvedTs) error 
 			return SinkInternalError{err}
 		}
 		// We have to record the event ID for the callback.
+<<<<<<< HEAD:cdc/sinkv2/tablesink/table_sink_impl.go
 		ce := &eventsink.CallbackableEvent[E]{
 			Event:     ev,
 			Callback:  e.progressTracker.addEvent(),
+=======
+		postEventFlushFunc := e.progressTracker.addEvent()
+		evCommitTs := ev.GetCommitTs()
+		ce := &dmlsink.CallbackableEvent[E]{
+			Event: ev,
+			Callback: func() {
+				// Due to multi workers will call this callback concurrently,
+				// we need to add lock to protect lastSyncedTs
+				// we need make a performance test for it
+				{
+					e.lastSyncedTs.Lock()
+					defer e.lastSyncedTs.Unlock()
+
+					if e.lastSyncedTs.lastSyncedTs < evCommitTs {
+						e.lastSyncedTs.lastSyncedTs = evCommitTs
+					}
+				}
+				postEventFlushFunc()
+			},
+>>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133)):cdc/sink/tablesink/table_sink_impl.go
 			SinkState: &e.state,
 		}
 		resolvedCallbackableEvents = append(resolvedCallbackableEvents, ce)
@@ -138,6 +178,13 @@ func (e *EventTableSink[E]) GetCheckpointTs() model.ResolvedTs {
 		}
 	}
 	return e.progressTracker.advance()
+}
+
+// GetLastSyncedTs returns the last synced ts of table sink.
+// lastSyncedTs means the biggest commits of all the events
+// that have been flushed to the downstream.
+func (e *EventTableSink[E, P]) GetLastSyncedTs() model.Ts {
+	return e.lastSyncedTs.getLastSyncedTs()
 }
 
 // Close closes the table sink.
