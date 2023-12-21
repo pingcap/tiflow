@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package engine
+package sorter
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
@@ -105,23 +105,23 @@ var (
 
 /* Some metrics are shared in pipeline sorter and pull-based-sink sort engine */
 
-// SorterCompactionDuration returns sorterCompactDurationHistogram.
-func SorterCompactionDuration() *prometheus.HistogramVec {
+// CompactionDuration returns sorterCompactDurationHistogram.
+func CompactionDuration() *prometheus.HistogramVec {
 	return sorterCompactDurationHistogram
 }
 
-// SorterWriteDuration returns sorterWriteDurationHistogram.
-func SorterWriteDuration() *prometheus.HistogramVec {
+// WriteDuration returns sorterWriteDurationHistogram.
+func WriteDuration() *prometheus.HistogramVec {
 	return sorterWriteDurationHistogram
 }
 
-// SorterWriteBytes returns sorterWriteBytesHistogram.
-func SorterWriteBytes() *prometheus.HistogramVec {
+// WriteBytes returns sorterWriteBytesHistogram.
+func WriteBytes() *prometheus.HistogramVec {
 	return sorterWriteBytesHistogram
 }
 
-// SorterIterReadDuration returns sorterIterReadDurationHistogram.
-func SorterIterReadDuration() *prometheus.HistogramVec {
+// IterReadDuration returns sorterIterReadDurationHistogram.
+func IterReadDuration() *prometheus.HistogramVec {
 	return sorterIterReadDurationHistogram
 }
 

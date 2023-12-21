@@ -20,15 +20,15 @@ import (
 	"testing"
 	"time"
 
-	ticonfig "github.com/pingcap/tidb/config"
-	tiddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/domain"
-	"github.com/pingcap/tidb/kv"
-	timeta "github.com/pingcap/tidb/meta"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/testkit"
+	ticonfig "github.com/pingcap/tidb/pkg/config"
+	tiddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/domain"
+	"github.com/pingcap/tidb/pkg/kv"
+	timeta "github.com/pingcap/tidb/pkg/meta"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/session"
+	"github.com/pingcap/tidb/pkg/store/mockstore"
+	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -262,15 +262,28 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 	require.NoError(s.t, err)
 	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	tableInfo, ok := s.schemaStorage.GetLastSnapshot().TableByName(res.SchemaName, res.TableName)
-	require.True(s.t, ok)
+	var tableInfo *model.TableInfo
+	if res.BinlogInfo != nil && res.BinlogInfo.TableInfo != nil {
+		tableInfo = model.WrapTableInfo(res.SchemaID, res.SchemaName, res.BinlogInfo.FinishedTS, res.BinlogInfo.TableInfo)
+	} else {
+		tableInfo = &model.TableInfo{
+			TableName: model.TableName{Schema: res.SchemaName},
+			Version:   res.BinlogInfo.FinishedTS,
+		}
+	}
+	ctx := context.Background()
+	snap, err := s.schemaStorage.GetSnapshot(ctx, res.BinlogInfo.FinishedTS-1)
+	require.NoError(s.t, err)
+	preTableInfo, err := snap.PreTableInfo(res)
+	require.NoError(s.t, err)
 
 	event := &model.DDLEvent{
-		StartTs:   res.StartTS,
-		CommitTs:  res.BinlogInfo.FinishedTS,
-		TableInfo: tableInfo,
-		Query:     res.Query,
-		Type:      res.Type,
+		StartTs:      res.StartTS,
+		CommitTs:     res.BinlogInfo.FinishedTS,
+		TableInfo:    tableInfo,
+		PreTableInfo: preTableInfo,
+		Query:        res.Query,
+		Type:         res.Type,
 	}
 
 	return event

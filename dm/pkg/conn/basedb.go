@@ -27,7 +27,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"

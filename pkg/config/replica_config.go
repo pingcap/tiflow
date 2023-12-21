@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/pkg/config/outdated"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -89,6 +89,10 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Storage:               "",
 		UseFileBackend:        false,
 		Compression:           "",
+		MemoryUsage: &ConsistentMemoryUsage{
+			MemoryQuotaPercentage: 50,
+			EventCachePercentage:  0,
+		},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -101,6 +105,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	ChangefeedErrorStuckDuration: util.AddressOf(time.Minute * 30),
 	SQLMode:                      defaultSQLMode,
+	SyncedStatus:                 &SyncedStatusConfig{SyncedCheckInterval: 5 * 60, CheckpointInterval: 15},
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -150,9 +155,10 @@ type replicaConfig struct {
 	// Scheduler is the configuration for scheduler.
 	Scheduler *ChangefeedSchedulerConfig `toml:"scheduler" json:"scheduler"`
 	// Integrity is only available when the downstream is MQ.
-	Integrity                    *integrity.Config `toml:"integrity" json:"integrity"`
-	ChangefeedErrorStuckDuration *time.Duration    `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
-	SQLMode                      string            `toml:"sql-mode" json:"sql-mode"`
+	Integrity                    *integrity.Config   `toml:"integrity" json:"integrity"`
+	ChangefeedErrorStuckDuration *time.Duration      `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	SQLMode                      string              `toml:"sql-mode" json:"sql-mode"`
+	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
 }
 
 // Value implements the driver.Valuer interface

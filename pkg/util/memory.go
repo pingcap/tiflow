@@ -19,7 +19,7 @@ import (
 
 	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/memory"
+	"github.com/pingcap/tidb/pkg/util/memory"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/shirou/gopsutil/v3/mem"
 	"go.uber.org/zap"

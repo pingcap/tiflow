@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -140,10 +140,6 @@ func (m *mockDDLSink) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	m.mu.currentTables = tables
 }
 
-func (m *mockDDLSink) emitBootstrapEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	return nil
-}
-
 func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -169,9 +165,14 @@ func (m *mockScheduler) Tick(
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	barrier *schedulepb.BarrierWithMinTs,
-) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+) (watermark schedulepb.Watermark, err error) {
 	m.currentTables = currentTables
-	return barrier.MinTableBarrierTs, barrier.GlobalBarrierTs, nil
+	return schedulepb.Watermark{
+		CheckpointTs:     barrier.MinTableBarrierTs,
+		ResolvedTs:       barrier.GlobalBarrierTs,
+		LastSyncedTs:     scheduler.CheckpointCannotProceed,
+		PullerResolvedTs: scheduler.CheckpointCannotProceed,
+	}, nil
 }
 
 // MoveTable is used to trigger manual table moves.
@@ -208,7 +209,7 @@ func createChangefeed4Test(ctx cdcContext.Context, t *testing.T,
 	})
 	tester.MustApplyPatches()
 	cf := newChangefeed4Test(ctx.ChangefeedVars().ID,
-		state.Info, state.Status, newFeedStateManager(up, state), up,
+		state.Info, state.Status, NewFeedStateManager(up, state), up,
 		// new ddl puller
 		func(ctx context.Context,
 			up *upstream.Upstream,
@@ -561,7 +562,7 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	info.State = model.StateStopped
 	dir := t.TempDir()
 	// Field `Consistent` is valid only when the downstream
-	// is MySQL compatible  Database
+	// is MySQL compatible  Schema
 	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",

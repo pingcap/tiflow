@@ -16,11 +16,11 @@ package model
 import (
 	"fmt"
 
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tidb/table/tables"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/table/tables"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 )
 
 const (
@@ -66,6 +66,18 @@ type TableInfo struct {
 	// HandleIndexTableIneligible(-2) : the table is not eligible
 	HandleIndexID int64
 
+	// IndexColumnsOffset store the offset of the columns in row changed events for
+	// unique index and primary key
+	// The reason why we need this is that the Indexes in TableInfo
+	// will not contain the PK if it is create in statement like:
+	// create table t (a int primary key, b int unique key);
+	// Every element in first dimension is a index, and the second dimension is the columns offset
+	// for example:
+	// table has 3 columns: a, b, c
+	// pk: a
+	// index1: a, b
+	// index2: a, c
+	// indexColumnsOffset: [[0], [0, 1], [0, 2]]
 	IndexColumnsOffset [][]int
 	// rowColInfos extend the model.ColumnInfo with some extra information
 	// it's the same length and order with the model.TableInfo.Columns

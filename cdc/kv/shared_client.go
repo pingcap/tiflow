@@ -600,6 +600,11 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 			s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
 			return nil
 		}
+		if innerErr.GetServerIsBusy() != nil {
+			metricKvIsBusyCounter.Inc()
+			s.scheduleRegionRequest(ctx, errInfo.singleRegionInfo)
+			return nil
+		}
 		if duplicated := innerErr.GetDuplicateRequest(); duplicated != nil {
 			metricFeedDuplicateRequestCounter.Inc()
 			// TODO(qupeng): It's better to add a new machanism to deregister one region.
@@ -812,6 +817,8 @@ type sharedClientMetrics struct {
 }
 
 func (s *SharedClient) initMetrics() {
+	eventFeedGauge.Inc()
+
 	s.metrics.regionLockDuration = regionConnectDuration.
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID, "lock")
 	s.metrics.regionLocateDuration = regionConnectDuration.
@@ -829,6 +836,8 @@ func (s *SharedClient) initMetrics() {
 }
 
 func (s *SharedClient) clearMetrics() {
+	eventFeedGauge.Dec()
+
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "lock")
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "locate")
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "connect")

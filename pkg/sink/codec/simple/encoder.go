@@ -63,9 +63,6 @@ func (e *encoder) AppendRowChangedEvent(
 		Protocol: config.ProtocolSimple,
 		Callback: callback,
 	}
-
-	log.Info("simple encode DML message", zap.Int("length", result.Length()))
-
 	result.IncRowsCount()
 	if result.Length() <= e.config.MaxMessageBytes {
 		e.messages = append(e.messages, result)
@@ -161,7 +158,6 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 	}
 	result := common.NewDDLMsg(config.ProtocolSimple, nil, value, event)
 
-	log.Info("simple encode DDL message", zap.Int("length", result.Length()))
 	if result.Length() > e.config.MaxMessageBytes {
 		log.Error("DDL message is too large for simple",
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),

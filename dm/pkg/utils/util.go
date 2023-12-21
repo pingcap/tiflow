@@ -26,7 +26,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"

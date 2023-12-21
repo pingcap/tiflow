@@ -16,6 +16,7 @@ package owner
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -93,6 +94,13 @@ type changefeed struct {
 	barriers         *barriers
 	feedStateManager FeedStateManager
 	resolvedTs       model.Ts
+
+	// lastSyncedTs is the lastest resolvedTs that has been synced to downstream.
+	// pullerResolvedTs is the minimum resolvedTs of all pullers.
+	// we don't need to initialize lastSyncedTs and pullerResolvedTs specially
+	// because it will be updated in tick.
+	lastSyncedTs     model.Ts
+	pullerResolvedTs model.Ts
 
 	// ddl related fields
 	ddlManager  *ddlManager
@@ -408,11 +416,28 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 		return 0, 0, nil
 	}
 
-	newCheckpointTs, newResolvedTs, err := c.scheduler.Tick(
+	watermark, err := c.scheduler.Tick(
 		ctx, preCheckpointTs, allPhysicalTables, captures,
 		barrier)
 	if err != nil {
 		return 0, 0, errors.Trace(err)
+	}
+	if c.lastSyncedTs < watermark.LastSyncedTs {
+		c.lastSyncedTs = watermark.LastSyncedTs
+	} else if c.lastSyncedTs > watermark.LastSyncedTs {
+		log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
+			zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
+			zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
+	}
+
+	if watermark.PullerResolvedTs != scheduler.CheckpointCannotProceed && watermark.PullerResolvedTs != math.MaxUint64 {
+		if watermark.PullerResolvedTs > c.pullerResolvedTs {
+			c.pullerResolvedTs = watermark.PullerResolvedTs
+		} else if watermark.PullerResolvedTs < c.pullerResolvedTs {
+			log.Warn("the newPullerResolvedTs should not be smaller than c.pullerResolvedTs",
+				zap.Uint64("c.pullerResolvedTs", c.pullerResolvedTs),
+				zap.Uint64("newPullerResolvedTs", watermark.PullerResolvedTs))
+		}
 	}
 
 	pdTime := c.upstream.PDClock.CurrentTime()
@@ -420,7 +445,7 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 
 	// CheckpointCannotProceed implies that not all tables are being replicated normally,
 	// so in that case there is no need to advance the global watermarks.
-	if newCheckpointTs == scheduler.CheckpointCannotProceed {
+	if watermark.CheckpointTs == scheduler.CheckpointCannotProceed {
 		if c.latestStatus != nil {
 			// We should keep the metrics updated even if the scheduler cannot
 			// advance the watermarks for now.
@@ -431,13 +456,13 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 
 	log.Debug("owner prepares to update status",
 		zap.Uint64("prevResolvedTs", c.resolvedTs),
-		zap.Uint64("newResolvedTs", newResolvedTs),
-		zap.Uint64("newCheckpointTs", newCheckpointTs),
+		zap.Uint64("newResolvedTs", watermark.ResolvedTs),
+		zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 	// resolvedTs should never regress.
-	if newResolvedTs > c.resolvedTs {
-		c.resolvedTs = newResolvedTs
+	if watermark.ResolvedTs > c.resolvedTs {
+		c.resolvedTs = watermark.ResolvedTs
 	}
 
 	// MinTableBarrierTs should never regress
@@ -451,15 +476,19 @@ func (c *changefeed) tick(ctx cdcContext.Context,
 				zap.String("namespace", c.id.Namespace),
 				zap.String("changefeed", c.id.ID),
 				zap.Uint64("keepCheckpoint", c.latestStatus.CheckpointTs),
-				zap.Uint64("skipCheckpoint", newCheckpointTs))
-			newCheckpointTs = c.latestStatus.CheckpointTs
+				zap.Uint64("skipCheckpoint", watermark.CheckpointTs))
+			watermark.CheckpointTs = c.latestStatus.CheckpointTs
 		}
 	})
 
-	c.updateMetrics(currentTs, newCheckpointTs, c.resolvedTs)
+	failpoint.Inject("ChangefeedOwnerNotUpdateCheckpoint", func() {
+		watermark.CheckpointTs = c.latestStatus.CheckpointTs
+	})
+
+	c.updateMetrics(currentTs, watermark.CheckpointTs, c.resolvedTs)
 	c.tickDownstreamObserver(ctx)
 
-	return newCheckpointTs, barrier.MinTableBarrierTs, nil
+	return watermark.CheckpointTs, barrier.MinTableBarrierTs, nil
 }
 
 func (c *changefeed) initialize(ctx cdcContext.Context) (err error) {
@@ -496,6 +525,7 @@ LOOP2:
 	if c.resolvedTs == 0 {
 		c.resolvedTs = checkpointTs
 	}
+
 	minTableBarrierTs := c.latestStatus.MinTableBarrierTs
 
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
@@ -634,16 +664,6 @@ LOOP2:
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID))
 
-	downstreamType, err := c.latestInfo.DownstreamType()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	needSendBootstrapEvent, err := c.latestInfo.NeedSendBootstrapEvent()
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	c.ddlManager = newDDLManager(
 		c.id,
 		ddlStartTs,
@@ -653,10 +673,7 @@ LOOP2:
 		c.schema,
 		c.redoDDLMgr,
 		c.redoMetaMgr,
-		downstreamType,
-		util.GetOrZero(c.latestInfo.Config.BDRMode),
-		needSendBootstrapEvent,
-	)
+		util.GetOrZero(c.latestInfo.Config.BDRMode))
 
 	// create scheduler
 	cfg := *c.cfg
