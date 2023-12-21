@@ -261,31 +261,12 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 	require.NoError(s.t, err)
 	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	var tableInfo *model.TableInfo
-	if res.BinlogInfo != nil && res.BinlogInfo.TableInfo != nil {
-		tableInfo = model.WrapTableInfo(res.SchemaID, res.SchemaName, res.BinlogInfo.FinishedTS, res.BinlogInfo.TableInfo)
-	} else {
-		tableInfo = &model.TableInfo{
-			TableName: model.TableName{Schema: res.SchemaName},
-			Version:   res.BinlogInfo.FinishedTS,
-		}
-	}
 	ctx := context.Background()
-	snap, err := s.schemaStorage.GetSnapshot(ctx, res.BinlogInfo.FinishedTS-1)
-	require.NoError(s.t, err)
-	preTableInfo, err := snap.PreTableInfo(res)
+
+	events, err := s.schemaStorage.BuildDDLEvents(ctx, res)
 	require.NoError(s.t, err)
 
-	event := &model.DDLEvent{
-		StartTs:      res.StartTS,
-		CommitTs:     res.BinlogInfo.FinishedTS,
-		TableInfo:    tableInfo,
-		PreTableInfo: preTableInfo,
-		Query:        res.Query,
-		Type:         res.Type,
-	}
-
-	return event
+	return events[0]
 }
 
 // Storage returns the tikv storage
