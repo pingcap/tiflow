@@ -65,7 +65,11 @@ func sortAndDedupHashes(hashes []uint64, numSlots uint64) []uint64 {
 	last := hashes[0]
 	j := 1
 	for i, hash := range hashes {
-		if i == 0 || hash == last {
+		if i == 0 {
+			// skip first one, start checking duplication from 2nd one
+			continue
+		}
+		if hash == last {
 			continue
 		}
 		last = hash
