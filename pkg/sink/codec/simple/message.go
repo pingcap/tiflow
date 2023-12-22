@@ -233,9 +233,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 				Nullable: false,
 				Primary:  true,
 				Unique:   true,
-			}
-			for _, col := range pkColumns {
-				index.Columns = append(index.Columns, col)
+				Columns:  pkColumns,
 			}
 			indexes = append(indexes, index)
 		}
