@@ -215,7 +215,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	manager.schemaStorage.AdvanceResolvedTs(6)
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(span)
-		log.Info("checkpoint ts", zap.Uint64("checkpoint ts", s.CheckpointTs), zap.Uint64("last synced ts", s.LastSyncedTs))
+		log.Info("checkpoint ts", zap.Uint64("checkpointTs", s.CheckpointTs), zap.Uint64("lastSyncedTs", s.LastSyncedTs))
 		return s.CheckpointTs == 6 && s.LastSyncedTs == 4
 	}, 5*time.Second, 50*time.Millisecond)
 }
