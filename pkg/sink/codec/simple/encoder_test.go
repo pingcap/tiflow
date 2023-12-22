@@ -78,8 +78,7 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	createTableDDL, insertEvent, _, _ := utils.NewLargeEvent4Test(t, replicaConfig)
 	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(createTableDDL.TableInfo.Columns), func(i, j int) {
-		createTableDDL.TableInfo.Columns[i], createTableDDL.TableInfo.Columns[j] =
-			createTableDDL.TableInfo.Columns[j], createTableDDL.TableInfo.Columns[i]
+		createTableDDL.TableInfo.Columns[i], createTableDDL.TableInfo.Columns[j] = createTableDDL.TableInfo.Columns[j], createTableDDL.TableInfo.Columns[i]
 	})
 
 	ctx := context.Background()
@@ -135,8 +134,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 	sql := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
 	createTableDDLEvent := helper.DDL2Event(sql)
 	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(createTableDDLEvent.TableInfo.Columns), func(i, j int) {
-		createTableDDLEvent.TableInfo.Columns[i], createTableDDLEvent.TableInfo.Columns[j] =
-			createTableDDLEvent.TableInfo.Columns[j], createTableDDLEvent.TableInfo.Columns[i]
+		createTableDDLEvent.TableInfo.Columns[i], createTableDDLEvent.TableInfo.Columns[j] = createTableDDLEvent.TableInfo.Columns[j], createTableDDLEvent.TableInfo.Columns[i]
 	})
 
 	sql = `insert into test.t values (1, "jack", "male", "jack@abc.com")`
