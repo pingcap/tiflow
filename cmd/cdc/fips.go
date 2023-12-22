@@ -18,10 +18,4 @@ package main
 
 import (
 	_ "crypto/tls/fipsonly"
-	//
-	"github.com/pingcap/tiflow/pkg/version"
 )
-
-func init() {
-	version.ReleaseVersion += "-fips"
-}
