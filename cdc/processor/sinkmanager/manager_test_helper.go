@@ -61,7 +61,7 @@ func CreateManagerWithMemEngine(
 		}
 	}
 
-	sortEngine := memory.New(context.Background())
+	sortEngine := memory.New(ctx)
 	up := upstream.NewUpstream4Test(&MockPD{})
 	mg := &entry.MockMountGroup{}
 	schemaStorage := &entry.MockSchemaStorage{Resolved: math.MaxUint64}
