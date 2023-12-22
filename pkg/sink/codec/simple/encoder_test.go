@@ -71,9 +71,6 @@ func TestEncodeCheckpoint(t *testing.T) {
 }
 
 func TestEncodeDMLEnableChecksum(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
-	defer helper.Close()
-
 	replicaConfig := config.GetDefaultReplicaConfig()
 	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	createTableDDL, insertEvent, _, _ := utils.NewLargeEvent4Test(t, replicaConfig)
@@ -85,46 +82,54 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.EnableRowChecksum = true
 
-	builder, err := NewBuilder(ctx, codecConfig)
-	require.NoError(t, err)
-	enc := builder.Build()
+	for _, compressionType := range []string{
+		compression.None,
+		compression.Snappy,
+		compression.LZ4,
+	} {
+		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
-	dec, err := NewDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
+		b, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := b.Build()
 
-	m, err := enc.EncodeDDLEvent(createTableDDL)
-	require.NoError(t, err)
+		dec, err := NewDecoder(ctx, codecConfig, nil)
+		require.NoError(t, err)
 
-	err = dec.AddKeyValue(m.Key, m.Value)
-	require.NoError(t, err)
+		m, err := enc.EncodeDDLEvent(createTableDDL)
+		require.NoError(t, err)
 
-	messageType, hasNext, err := dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeDDL, messageType)
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
 
-	_, err = dec.NextDDLEvent()
-	require.NoError(t, err)
+		messageType, hasNext, err := dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
 
-	err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
-	require.NoError(t, err)
+		_, err = dec.NextDDLEvent()
+		require.NoError(t, err)
 
-	messages := enc.Build()
-	require.Len(t, messages, 1)
+		err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+		require.NoError(t, err)
 
-	err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-	require.NoError(t, err)
+		messages := enc.Build()
+		require.Len(t, messages, 1)
 
-	messageType, hasNext, err = dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeRow, messageType)
+		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+		require.NoError(t, err)
 
-	decodedRow, err := dec.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.Equal(t, insertEvent.Checksum.Current, decodedRow.Checksum.Current)
-	require.Equal(t, insertEvent.Checksum.Previous, decodedRow.Checksum.Previous)
-	require.False(t, decodedRow.Checksum.Corrupted)
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, messageType)
+
+		decodedRow, err := dec.NextRowChangedEvent()
+		require.NoError(t, err)
+		require.Equal(t, insertEvent.Checksum.Current, decodedRow.Checksum.Current)
+		require.Equal(t, insertEvent.Checksum.Previous, decodedRow.Checksum.Previous)
+		require.False(t, decodedRow.Checksum.Corrupted)
+	}
 }
 
 func TestEncodeDDLEvent(t *testing.T) {

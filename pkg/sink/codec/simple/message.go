@@ -333,27 +333,27 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChe
 
 	if enableRowChecksum && msg.Checksum != nil {
 		var previous, current uint64
-		if msg.Checksum.Previous != "" {
-			previous, err = strconv.ParseUint(msg.Checksum.Previous, 10, 64)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-			}
-
-			err = common.VerifyChecksum(result.PreColumns, previous)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-			}
+		previous, err = strconv.ParseUint(msg.Checksum.Previous, 10, 64)
+		if err != nil {
+			log.Error("cannot parse the previous checksum value",
+				zap.String("previous", msg.Checksum.Previous))
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 
-		if msg.Checksum.Current != "" {
-			current, err = strconv.ParseUint(msg.Checksum.Current, 10, 64)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-			}
-			err = common.VerifyChecksum(result.Columns, current)
-			if err != nil {
-				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-			}
+		err = common.VerifyChecksum(result.PreColumns, previous)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+
+		current, err = strconv.ParseUint(msg.Checksum.Current, 10, 64)
+		if err != nil {
+			log.Error("cannot parse the current checksum value",
+				zap.String("previous", msg.Checksum.Previous))
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		err = common.VerifyChecksum(result.Columns, current)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 
 		result.Checksum = &integrity.Checksum{
@@ -392,6 +392,9 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChe
 }
 
 func decodeColumns(rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo) ([]*model.Column, error) {
+	if rawData == nil {
+		return nil, nil
+	}
 	var result []*model.Column
 	for _, info := range columnInfos {
 		value, ok := rawData[info.Name.O]
