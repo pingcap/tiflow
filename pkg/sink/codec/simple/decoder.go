@@ -137,11 +137,11 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return d.assembleHandleKeyOnlyRowChangedEvent(d.msg)
 	}
 
-	tableInfo := d.memo.Read(d.msg.Database, d.msg.Table, d.msg.SchemaVersion)
+	tableInfo := d.memo.Read(d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	if tableInfo == nil {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"cannot found the table info, schema: %s, table: %s, version: %d",
-			d.msg.Database, d.msg.Table, d.msg.SchemaVersion)
+			d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	}
 
 	event, err := buildRowChangedEvent(d.msg, tableInfo)
@@ -180,11 +180,11 @@ func (d *decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 }
 
 func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowChangedEvent, error) {
-	tableInfo := d.memo.Read(m.Database, m.Table, m.SchemaVersion)
+	tableInfo := d.memo.Read(m.Schema, m.Table, m.SchemaVersion)
 	if tableInfo == nil {
 		return nil, cerror.ErrCodecDecode.GenWithStack(
 			"cannot found the table info, schema: %s, table: %s, version: %d",
-			m.Database, m.Table, m.SchemaVersion)
+			m.Schema, m.Table, m.SchemaVersion)
 	}
 
 	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
@@ -194,7 +194,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 
 	result := &message{
 		Version:       defaultVersion,
-		Database:      m.Database,
+		Schema:        m.Schema,
 		Table:         m.Table,
 		Type:          m.Type,
 		CommitTs:      m.CommitTs,
@@ -204,7 +204,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 	ctx := context.Background()
 	switch m.Type {
 	case InsertType:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Database, m.Table, m.Data)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +214,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		}
 		result.Data = data
 	case UpdateType:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Database, m.Table, m.Data)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs, m.Schema, m.Table, m.Data)
 		if err != nil {
 			return nil, err
 		}
@@ -224,7 +224,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		}
 		result.Data = data
 
-		holder, err = common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Database, m.Table, m.Old)
+		holder, err = common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +234,7 @@ func (d *decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 		}
 		result.Old = old
 	case DeleteType:
-		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Database, m.Table, m.Old)
+		holder, err := common.SnapshotQuery(ctx, d.upstreamTiDB, m.CommitTs-1, m.Schema, m.Table, m.Old)
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +263,7 @@ func (d *decoder) buildData(
 		if !ok {
 			return nil, cerror.ErrCodecDecode.GenWithStack(
 				"cannot found the field type, schema: %s, table: %s, column: %s",
-				d.msg.Database, d.msg.Table, col.Name())
+				d.msg.Schema, d.msg.Table, col.Name())
 		}
 		value, err := encodeValue(value, fieldType)
 		if err != nil {
@@ -285,6 +285,7 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)
+	d.memo.Write(ddl.PreTableInfo)
 
 	return ddl, nil
 }
@@ -306,6 +307,9 @@ func newMemoryTableInfoProvider() *memoryTableInfoProvider {
 }
 
 func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
+	if info == nil {
+		return
+	}
 	key := cacheKey{
 		schema: info.TableName.Schema,
 		table:  info.TableName.Table,

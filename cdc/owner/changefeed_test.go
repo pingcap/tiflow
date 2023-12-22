@@ -165,9 +165,14 @@ func (m *mockScheduler) Tick(
 	currentTables []model.TableID,
 	captures map[model.CaptureID]*model.CaptureInfo,
 	barrier *schedulepb.BarrierWithMinTs,
-) (newCheckpointTs, newResolvedTs model.Ts, err error) {
+) (watermark schedulepb.Watermark, err error) {
 	m.currentTables = currentTables
-	return barrier.MinTableBarrierTs, barrier.GlobalBarrierTs, nil
+	return schedulepb.Watermark{
+		CheckpointTs:     barrier.MinTableBarrierTs,
+		ResolvedTs:       barrier.GlobalBarrierTs,
+		LastSyncedTs:     scheduler.CheckpointCannotProceed,
+		PullerResolvedTs: scheduler.CheckpointCannotProceed,
+	}, nil
 }
 
 // MoveTable is used to trigger manual table moves.
@@ -557,7 +562,7 @@ func TestRemovePausedChangefeed(t *testing.T) {
 	info.State = model.StateStopped
 	dir := t.TempDir()
 	// Field `Consistent` is valid only when the downstream
-	// is MySQL compatible  Database
+	// is MySQL compatible  Schema
 	info.SinkURI = "mysql://"
 	info.Config.Consistent = &config.ConsistentConfig{
 		Level:             "eventual",
