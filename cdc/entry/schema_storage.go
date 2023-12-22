@@ -55,7 +55,8 @@ type SchemaStorage interface {
 	// BuildDDLEvents by parsing the DDL job
 	BuildDDLEvents(ctx context.Context, job *timodel.Job) (ddlEvents []*model.DDLEvent, err error)
 
-	// IsIneligibleTable returns whether the table is ineligible to the replicated
+	// IsIneligibleTable returns whether the table is ineligible.
+	// Ineligible means that the table does not have a primary key or unique key.
 	IsIneligibleTable(ctx context.Context, tableID model.TableID, ts model.Ts) (bool, error)
 
 	// AdvanceResolvedTs advances the resolved ts
