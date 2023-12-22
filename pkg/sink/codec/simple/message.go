@@ -431,7 +431,7 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 }
 
 func newDMLMessage(
-	event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool,
+	event *model.RowChangedEvent, onlyHandleKey bool,
 ) (*message, error) {
 	m := &message{
 		Version:       defaultVersion,
@@ -467,13 +467,6 @@ func newDMLMessage(
 		}
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
-	}
-
-	if config.EnableRowChecksum && event.Checksum != nil {
-		m.Checksum = strconv.FormatUint(uint64(event.Checksum.Current), 10)
-		m.OldChecksum = strconv.FormatUint(uint64(event.Checksum.Previous), 10)
-		m.Corrupted = event.Checksum.Corrupted
-		m.Version = event.Checksum.Version
 	}
 
 	return m, nil

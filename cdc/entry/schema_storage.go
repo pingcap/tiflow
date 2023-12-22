@@ -95,6 +95,7 @@ func NewSchemaStorage(
 		version int64
 		err     error
 	)
+	// storage may be nil in some unit test cases.
 	if storage == nil {
 		snap = schema.NewEmptySnapshot(forceReplicate)
 	} else {
@@ -108,7 +109,7 @@ func NewSchemaStorage(
 			return nil, errors.Trace(err)
 		}
 	}
-	result := &schemaStorage{
+	return &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
 		forceReplicate: forceReplicate,
@@ -116,8 +117,7 @@ func NewSchemaStorage(
 		id:             id,
 		schemaVersion:  version,
 		role:           role,
-	}
-	return result, nil
+	}, nil
 }
 
 // getSnapshot returns the snapshot which currentTs is less than(but most close to)

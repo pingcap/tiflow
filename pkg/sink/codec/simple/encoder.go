@@ -39,7 +39,7 @@ type encoder struct {
 func (e *encoder) AppendRowChangedEvent(
 	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	m, err := newDMLMessage(event, e.config, false)
+	m, err := newDMLMessage(event, false)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func (e *encoder) AppendRowChangedEvent(
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
-	m, err = newDMLMessage(event, e.config, true)
+	m, err = newDMLMessage(event, true)
 	if err != nil {
 		return err
 	}
