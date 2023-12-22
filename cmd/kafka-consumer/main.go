@@ -492,7 +492,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 
 	c.codecConfig = common.NewConfig(o.protocol)
 	c.codecConfig.EnableTiDBExtension = o.enableTiDBExtension
-	c.codecConfig.EnableRowChecksum = o.replicaConfig.Integrity.Enabled()
+	c.codecConfig.EnableRowChecksum = o.enableRowChecksum
 	if c.codecConfig.Protocol == config.ProtocolAvro {
 		c.codecConfig.AvroEnableWatermark = true
 	}
@@ -515,6 +515,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 			return nil, cerror.Trace(err)
 		}
 		c.eventRouter = eventRouter
+		c.codecConfig.EnableRowChecksum = o.replicaConfig.Integrity.Enabled()
 	}
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
