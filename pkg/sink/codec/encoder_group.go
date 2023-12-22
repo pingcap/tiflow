@@ -38,10 +38,9 @@ const (
 type EncoderGroup interface {
 	// Run start the group
 	Run(ctx context.Context) error
-	// AddEvents add events into the group, handled by one of the encoders
-	// all input events should belong to the same topic and partition, this should be guaranteed by the caller
-	AddEvents(ctx context.Context, topic string, partition int32,
-		partitionKey string, events ...*dmlsink.RowChangeCallbackableEvent) error
+	// AddEvents add events into the group and encode them by one of the encoders in the group.
+	// Note: The caller should make sure all events should belong to the same topic and partition.
+	AddEvents(ctx context.Context, key TopicPartitionKey, events ...*dmlsink.RowChangeCallbackableEvent) error
 	// Output returns a channel produce futures
 	Output() <-chan *future
 }
@@ -50,7 +49,9 @@ type encoderGroup struct {
 	changefeedID model.ChangeFeedID
 
 	builder RowEventEncoderBuilder
-	count   int
+	// concurrency is the number of encoder pipelines to run
+	concurrency int
+	// inputCh is the input channel for each encoder pipeline
 	inputCh []chan *future
 	index   uint64
 
@@ -59,25 +60,25 @@ type encoderGroup struct {
 
 // NewEncoderGroup creates a new EncoderGroup instance
 func NewEncoderGroup(builder RowEventEncoderBuilder,
-	count int, changefeedID model.ChangeFeedID,
+	concurrency int, changefeedID model.ChangeFeedID,
 ) *encoderGroup {
-	if count <= 0 {
-		count = config.DefaultEncoderGroupConcurrency
+	if concurrency <= 0 {
+		concurrency = config.DefaultEncoderGroupConcurrency
 	}
 
-	inputCh := make([]chan *future, count)
-	for i := 0; i < count; i++ {
+	inputCh := make([]chan *future, concurrency)
+	for i := 0; i < concurrency; i++ {
 		inputCh[i] = make(chan *future, defaultInputChanSize)
 	}
 
 	return &encoderGroup{
 		changefeedID: changefeedID,
 
-		builder:  builder,
-		count:    count,
-		inputCh:  inputCh,
-		index:    0,
-		outputCh: make(chan *future, defaultInputChanSize*count),
+		builder:     builder,
+		concurrency: concurrency,
+		inputCh:     inputCh,
+		index:       0,
+		outputCh:    make(chan *future, defaultInputChanSize*concurrency),
 	}
 }
 
@@ -89,7 +90,7 @@ func (g *encoderGroup) Run(ctx context.Context) error {
 			zap.String("changefeed", g.changefeedID.ID))
 	}()
 	eg, ctx := errgroup.WithContext(ctx)
-	for i := 0; i < g.count; i++ {
+	for i := 0; i < g.concurrency; i++ {
 		idx := i
 		eg.Go(func() error {
 			return g.runEncoder(ctx, idx)
@@ -113,7 +114,7 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 			metric.Set(float64(len(inputCh)))
 		case future := <-inputCh:
 			for _, event := range future.events {
-				err := encoder.AppendRowChangedEvent(ctx, future.Topic, event.Event, event.Callback)
+				err := encoder.AppendRowChangedEvent(ctx, future.Key.Topic, event.Event, event.Callback)
 				if err != nil {
 					return errors.Trace(err)
 				}
@@ -126,13 +127,11 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 
 func (g *encoderGroup) AddEvents(
 	ctx context.Context,
-	topic string,
-	partition int32,
-	partitionKey string,
+	key TopicPartitionKey,
 	events ...*dmlsink.RowChangeCallbackableEvent,
 ) error {
-	future := newFuture(topic, partition, partitionKey, events...)
-	index := atomic.AddUint64(&g.index, 1) % uint64(g.count)
+	future := newFuture(key, events...)
+	index := atomic.AddUint64(&g.index, 1) % uint64(g.concurrency)
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -158,26 +157,22 @@ func (g *encoderGroup) cleanMetrics() {
 	common.CleanMetrics(g.changefeedID)
 }
 
+// future is a wrapper of the result of encoding events
+// It's used to notify the caller that the result is ready.
 type future struct {
-	Topic        string
-	Partition    int32
-	PartitionKey string
-	events       []*dmlsink.RowChangeCallbackableEvent
-	Messages     []*common.Message
-
-	done chan struct{}
+	Key      TopicPartitionKey
+	events   []*dmlsink.RowChangeCallbackableEvent
+	Messages []*common.Message
+	done     chan struct{}
 }
 
-func newFuture(topic string, partition int32, partitionKey string,
+func newFuture(key TopicPartitionKey,
 	events ...*dmlsink.RowChangeCallbackableEvent,
 ) *future {
 	return &future{
-		Topic:        topic,
-		Partition:    partition,
-		PartitionKey: partitionKey,
-		events:       events,
-
-		done: make(chan struct{}),
+		Key:    key,
+		events: events,
+		done:   make(chan struct{}),
 	}
 }
 

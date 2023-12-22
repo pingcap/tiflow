@@ -83,3 +83,10 @@ func IsColumnValueEqual(preValue, updatedValue interface{}) bool {
 	// the value type should be the same
 	return preValue == updatedValue
 }
+
+// TopicPartitionKey contains the topic and partition key of the message.
+type TopicPartitionKey struct {
+	Topic        string
+	Partition    int32
+	PartitionKey string
+}
