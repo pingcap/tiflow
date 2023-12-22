@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+<<<<<<< Updated upstream
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/ddl/schematracker"
 	"github.com/pingcap/tidb/pkg/executor"
@@ -37,6 +38,24 @@ import (
 	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tidb/pkg/util/sqlexec"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+=======
+	"github.com/pingcap/tidb/ddl"
+	"github.com/pingcap/tidb/ddl/schematracker"
+	"github.com/pingcap/tidb/executor"
+	"github.com/pingcap/tidb/infoschema"
+	"github.com/pingcap/tidb/kv"
+	"github.com/pingcap/tidb/meta/autoid"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/sessionctx/variable"
+	"github.com/pingcap/tidb/util/chunk"
+	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tidb/util/sqlexec"
+>>>>>>> Stashed changes
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -464,6 +483,17 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
+
+	// suppress ErrTooLongKey
+	strictSQLModeBackup := dt.se.GetSessionVars().StrictSQLMode
+	dt.se.GetSessionVars().StrictSQLMode = false
+	// support drop PK
+	enableClusteredIndexBackup := dt.se.GetSessionVars().EnableClusteredIndex
+	dt.se.GetSessionVars().EnableClusteredIndex = variable.ClusteredIndexDefModeOff
+	defer func() {
+		dt.se.GetSessionVars().StrictSQLMode = strictSQLModeBackup
+		dt.se.GetSessionVars().EnableClusteredIndex = enableClusteredIndexBackup
+	}()
 
 	ti, err := ddl.BuildTableInfoWithStmt(dt.se, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
 	if err != nil {
