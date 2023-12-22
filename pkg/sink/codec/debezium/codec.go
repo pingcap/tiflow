@@ -334,7 +334,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 				"unexpected column value type %T for set column %s",
 				col.Value,
 				col.Name)
-
 		}
 
 		setVar, err := types.ParseSetValue(ft.GetElems(), v)
