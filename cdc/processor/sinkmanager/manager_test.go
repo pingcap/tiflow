@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -216,6 +217,7 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(span)
 		log.Info("checkpoint ts", zap.Uint64("checkpointTs", s.CheckpointTs), zap.Uint64("lastSyncedTs", s.LastSyncedTs))
+		fmt.Printf("debug checkpoint ts %d, lastSyncedTs %d\n", s.CheckpointTs, s.LastSyncedTs)
 		return s.CheckpointTs == 6 && s.LastSyncedTs == 4
 	}, 5*time.Second, 50*time.Millisecond)
 }
