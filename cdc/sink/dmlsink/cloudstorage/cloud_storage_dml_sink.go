@@ -166,8 +166,8 @@ func NewDMLSink(ctx context.Context,
 
 	// create defragmenter.
 	// The defragmenter is used to defragment the out-of-order encoded messages from encoding workers and
-	// sends encoded messages to related dmlWorkers. Messages of the same table will be sent to the same
-	// dmlWorker.
+	// sends encoded messages to related dmlWorkers in order. Messages of the same table will be sent to
+	// the same dmlWorker.
 	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
 
 	s.wg.Add(1)
