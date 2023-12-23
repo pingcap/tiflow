@@ -154,8 +154,7 @@ func NewDMLSink(ctx context.Context,
 		encoder := encoderBuilder.Build()
 		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedCh)
 	}
-	// create defragmenter.
-	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
+
 	// create a group of dml workers.
 	clock := clock.New()
 	for i := 0; i < cfg.WorkerCount; i++ {
@@ -164,6 +163,12 @@ func NewDMLSink(ctx context.Context,
 			inputCh, clock, s.statistics)
 		workerChannels[i] = inputCh
 	}
+
+	// create defragmenter.
+	// The defragmenter is used to defragment the out-of-order encoded messages from encoding workers and
+	// sends encoded messages to related dmlWorkers. Messages of the same table will be sent to the same
+	// dmlWorker.
+	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
 
 	s.wg.Add(1)
 	go func() {
