@@ -28,6 +28,45 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEncodeCheckpointAvro(t *testing.T) {
+	t.Parallel()
+
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	codecConfig.EncodingFormat = common.EncodingFormatAvro
+	ctx := context.Background()
+	for _, compressionType := range []string{
+		compression.None,
+		compression.Snappy,
+		compression.LZ4,
+	} {
+		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+		builder, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := builder.Build()
+
+		checkpoint := 446266400629063682
+		m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
+		require.NoError(t, err)
+
+		dec, err := NewDecoder(ctx, codecConfig, nil)
+		require.NoError(t, err)
+
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err := dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeResolved, messageType)
+		require.NotEqual(t, 0, dec.msg.BuildTs)
+
+		ts, err := dec.NextResolvedEvent()
+		require.NoError(t, err)
+		require.Equal(t, uint64(checkpoint), ts)
+	}
+
+}
+
 func TestEncodeCheckpoint(t *testing.T) {
 	t.Parallel()
 

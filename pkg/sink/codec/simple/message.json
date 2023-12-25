@@ -1,0 +1,38 @@
+{
+    "namespace": "com.pingcap.simple.avro",
+    "type": "record",
+    "name": "Message",
+    "fields": [
+        {
+            "name": "version",
+            "type": "int"
+        },
+        {
+            "name": "schema",
+            "default": null,
+            "type": ["null", "string"]
+        },
+        {
+            "name": "table",
+            "default": null,
+            "type": ["null", "string"]
+        },
+        {
+            "name": "type",
+            "type": "string"
+        },
+        {
+            "name": "sql",
+            "default": null,
+            "type": ["null", "string"]
+        },
+        {
+            "name": "commitTs",
+            "type": "long"
+        },
+        {
+            "name": "buildTs",
+            "type": "long"
+        }
+    ]
+}

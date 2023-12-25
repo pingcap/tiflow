@@ -76,9 +76,21 @@ type Config struct {
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
 
+	// for the simple protocol, can be "json" and "avro", default to "json"
+	EncodingFormat encodingFormatType
+
 	// Currently only Debezium protocol is aware of the time zone
 	TimeZone *time.Location
 }
+
+type encodingFormatType string
+
+const (
+	// EncodingFormatJSON is the json format
+	EncodingFormatJSON encodingFormatType = "json"
+	// EncodingFormatAvro is the avro format
+	EncodingFormatAvro encodingFormatType = "avro"
+)
 
 // NewConfig return a Config for codec
 func NewConfig(protocol config.Protocol) *Config {
@@ -99,6 +111,8 @@ func NewConfig(protocol config.Protocol) *Config {
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
+
+		EncodingFormat: EncodingFormatJSON,
 
 		TimeZone: time.Local,
 	}

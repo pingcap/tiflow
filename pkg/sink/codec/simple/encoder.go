@@ -16,7 +16,9 @@ package simple
 import (
 	"context"
 	"encoding/json"
+	"os"
 
+	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -33,6 +35,7 @@ type encoder struct {
 
 	config     *common.Config
 	claimCheck *claimcheck.ClaimCheck
+	avroCodec  *goavro.Codec
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
@@ -44,16 +47,21 @@ func (e *encoder) AppendRowChangedEvent(
 		return err
 	}
 
-	value, err := json.Marshal(m)
+	value, err := e.avroCodec.BinaryFromNative(nil, m)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
 
-	value, err = common.Compress(e.config.ChangefeedID,
-		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return err
-	}
+	//value, err := json.Marshal(m)
+	//if err != nil {
+	//	return cerror.WrapError(cerror.ErrEncodeFailed, err)
+	//}
+	//
+	//value, err = common.Compress(e.config.ChangefeedID,
+	//	e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	//if err != nil {
+	//	return err
+	//}
 
 	result := &common.Message{
 		Value:    value,
@@ -132,11 +140,24 @@ func (e *encoder) Build() []*common.Message {
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	m := newResolvedMessage(ts)
-	value, err := json.Marshal(m)
+	var (
+		value []byte
+		err   error
+	)
+
+	switch e.config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		m := newResolvedMessage(ts)
+		value, err = json.Marshal(m)
+	case common.EncodingFormatAvro:
+		m := newResolvedMessageMap(ts)
+		value, err = e.avroCodec.BinaryFromNative(nil, m)
+	}
+
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
+
 	value, err = common.Compress(e.config.ChangefeedID,
 		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
@@ -148,16 +169,22 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
 	m := newDDLMessage(event)
-	value, err := json.Marshal(m)
+
+	value, err := e.avroCodec.BinaryFromNative(nil, m)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
 
-	value, err = common.Compress(e.config.ChangefeedID,
-		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	if err != nil {
-		return nil, err
-	}
+	//value, err := json.Marshal(m)
+	//if err != nil {
+	//	return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+	//}
+	//
+	//value, err = common.Compress(e.config.ChangefeedID,
+	//	e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	//if err != nil {
+	//	return nil, err
+	//}
 	result := common.NewDDLMsg(config.ProtocolSimple, nil, value, event)
 
 	if result.Length() > e.config.MaxMessageBytes {
@@ -173,6 +200,7 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 type builder struct {
 	config     *common.Config
 	claimCheck *claimcheck.ClaimCheck
+	avroCodec  *goavro.Codec
 }
 
 // NewBuilder returns a new builder
@@ -188,9 +216,20 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 			return nil, errors.Trace(err)
 		}
 	}
+
+	schema, err := os.ReadFile("message.json")
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	avroCodec, err := goavro.NewCodec(string(schema))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &builder{
 		config:     config,
 		claimCheck: claimCheck,
+		avroCodec:  avroCodec,
 	}, nil
 }
 
@@ -200,6 +239,7 @@ func (b *builder) Build() codec.RowEventEncoder {
 		messages:   make([]*common.Message, 0, 1),
 		config:     b.config,
 		claimCheck: b.claimCheck,
+		avroCodec:  b.avroCodec,
 	}
 }
 

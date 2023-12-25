@@ -397,6 +397,15 @@ func newResolvedMessage(ts uint64) *message {
 	}
 }
 
+func newResolvedMessageMap(ts uint64) map[string]interface{} {
+	return map[string]interface{}{
+		"version":  defaultVersion,
+		"type":     string(WatermarkType),
+		"commitTs": int64(ts),
+		"buildTs":  time.Now().UnixMilli(),
+	}
+}
+
 func newDDLMessage(ddl *model.DDLEvent) *message {
 	var (
 		schema    *TableSchema
