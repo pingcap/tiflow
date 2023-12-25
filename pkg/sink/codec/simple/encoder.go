@@ -43,6 +43,7 @@ func (e *encoder) AppendRowChangedEvent(
 	if err != nil {
 		return err
 	}
+
 	value, err := json.Marshal(m)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
