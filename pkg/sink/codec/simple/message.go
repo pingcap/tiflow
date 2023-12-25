@@ -406,6 +406,28 @@ func newResolvedMessageMap(ts uint64) map[string]interface{} {
 	}
 }
 
+func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
+	eventType := DDLType
+	query := ddl.Query
+	if ddl.IsBootstrap {
+		eventType = BootstrapType
+		query = ""
+	}
+	result := map[string]interface{}{
+		"version":        defaultVersion,
+		"type":           string(eventType),
+		"commitTs":       int64(ddl.CommitTs),
+		"buildTs":        time.Now().UnixMilli(),
+		"tableSchema":    nil,
+		"preTableSchema": nil,
+	}
+	if query != "" {
+		result["sql"] = query
+	}
+
+	return result
+}
+
 func newDDLMessage(ddl *model.DDLEvent) *message {
 	var (
 		schema    *TableSchema

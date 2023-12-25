@@ -168,23 +168,28 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	m := newDDLMessage(event)
+	var (
+		value []byte
+		err   error
+	)
+	switch e.config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		m := newDDLMessage(event)
+		value, err = json.Marshal(m)
+	case common.EncodingFormatAvro:
+		m := newDDLMessageMap(event)
+		value, err = e.avroCodec.BinaryFromNative(nil, m)
 
-	value, err := e.avroCodec.BinaryFromNative(nil, m)
+	}
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
 
-	//value, err := json.Marshal(m)
-	//if err != nil {
-	//	return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
-	//}
-	//
-	//value, err = common.Compress(e.config.ChangefeedID,
-	//	e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	//if err != nil {
-	//	return nil, err
-	//}
+	value, err = common.Compress(e.config.ChangefeedID,
+		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return nil, err
+	}
 	result := common.NewDDLMsg(config.ProtocolSimple, nil, value, event)
 
 	if result.Length() > e.config.MaxMessageBytes {
