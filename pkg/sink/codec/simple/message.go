@@ -197,11 +197,11 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
-	Database string          `json:"database"`
-	Table    string          `json:"table"`
-	Version  uint64          `json:"version"`
-	Columns  []*columnSchema `json:"columns"`
-	Indexes  []*IndexSchema  `json:"indexes"`
+	Schema  string          `json:"schema"`
+	Table   string          `json:"table"`
+	Version uint64          `json:"version"`
+	Columns []*columnSchema `json:"columns"`
+	Indexes []*IndexSchema  `json:"indexes"`
 }
 
 func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
@@ -240,11 +240,11 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 	}
 
 	return &TableSchema{
-		Database: tableInfo.TableName.Schema,
-		Table:    tableInfo.TableName.Table,
-		Version:  tableInfo.UpdateTS,
-		Columns:  columns,
-		Indexes:  indexes,
+		Schema:  tableInfo.TableName.Schema,
+		Table:   tableInfo.TableName.Table,
+		Version: tableInfo.UpdateTS,
+		Columns: columns,
+		Indexes: indexes,
 	}
 }
 
@@ -256,7 +256,7 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 		schemaVersion uint64
 	)
 	if m != nil {
-		database = m.Database
+		database = m.Schema
 		table = m.Table
 		schemaVersion = m.Version
 	}
