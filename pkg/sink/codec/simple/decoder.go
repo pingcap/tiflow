@@ -144,7 +144,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	}
 
-	event, err := buildRowChangedEvent(d.msg, tableInfo)
+	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
 	if err != nil {
 		return nil, err
 	}
