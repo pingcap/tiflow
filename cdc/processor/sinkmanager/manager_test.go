@@ -184,8 +184,6 @@ func TestRemoveTable(t *testing.T) {
 }
 
 func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
