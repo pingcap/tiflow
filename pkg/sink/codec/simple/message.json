@@ -1,49 +1,208 @@
-{
+[
+  {
     "namespace": "com.pingcap.simple.avro",
+    "name": "DataType",
     "type": "record",
-    "name": "Message",
+    "docs": "each column's mysql type information",
     "fields": [
-        {
-            "name": "version",
-            "type": "int"
-        },
-        {
-          "name": "type",
-          "type": "enum",
-          "symbols": ["WATERMARK", "DDL", "BOOTSTRAP", "INSERT", "UPDATE", "DELETE"]
-        },
-        {
-            "name": "schema",
-            "default": null,
-            "type": ["null", "string"]
-        },
-        {
-            "name": "table",
-            "default": null,
-            "type": ["null", "string"]
-        },
-        {
-            "name": "sql",
-            "default": null,
-            "type": ["null", "string"]
-        },
-        {
-          "name": "commitTs",
-          "type": "long"
-        },
-        {
-          "name": "buildTs",
-          "type": "long"
-        },
-        {
-          "name": "tableSchema",
-          "default": null,
-          "type": ["map"]
-        },
-        {
-          "name": "preTableSchema",
-          "default": null,
-          "type": ["map"]
-        }
+      {
+        "name": "mysqlType",
+        "type": "string"
+      },
+      {
+        "name": "charset",
+        "type": "string"
+      },
+      {
+        "name": "collate",
+        "type": "string"
+      },
+      {
+        "name": "length",
+        "type": ["null", "int"],
+        "default": null
+      },
+      {
+        "name": "decimal",
+        "type": ["null", "int"],
+        "default": null
+      },
+      {
+        "name": "elements",
+        "type": "array",
+        "items": "string"
+      },
+      {
+        "name": "unsigned",
+        "type": ["null", "boolean"],
+        "default": null
+      },
+      {
+        "name": "zerofill",
+        "type": ["null", "boolean"],
+        "default": null
+      }
     ]
-}
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "ColumnSchema",
+    "type": "record",
+    "docs": "each column's schema information",
+    "fields": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "dataType",
+        "type": "com.pingcap.simple.avro.DataType"
+      },
+      {
+        "name": "nullable",
+        "type": "boolean"
+      },
+      {
+        "name": "defaultValue",
+        "type": ["null", "string"],
+        "default": null
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "IndexSchema",
+    "type": "record",
+    "docs": "each index's schema information",
+    "fields": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "unique",
+        "type": "boolean"
+      },
+      {
+        "name": "primary",
+        "type": "boolean"
+      },
+      {
+        "name": "nullable",
+        "type": "boolean"
+      },
+      {
+        "name": "columns",
+        "type": {
+          "type": "array",
+          "items": "string"
+        }
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "TableSchema",
+    "type": "record",
+    "docs": "table schema information",
+    "fields": [
+      {
+        "name": "schema",
+        "type": "string"
+      },
+      {
+        "name": "table",
+        "type": "string"
+      },
+      {
+        "name": "version",
+        "type": "long"
+      },
+      {
+        "name": "columns",
+        "type": {
+          "type": "array",
+          "items": "com.pingcap.simple.avro.ColumnSchema"
+        }
+      },
+      {
+        "name": "indexes",
+        "type": {
+          "type": "array",
+          "items": "com.pingcap.simple.avro.IndexSchema"
+        }
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Message",
+    "type": "record",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "type",
+        "type": "enum",
+        "symbols": [
+          "WATERMARK",
+          "DDL",
+          "BOOTSTRAP",
+          "INSERT",
+          "UPDATE",
+          "DELETE"
+        ]
+      },
+      {
+        "name": "schema",
+        "default": null,
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      {
+        "name": "table",
+        "default": null,
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      {
+        "name": "sql",
+        "default": null,
+        "type": [
+          "null",
+          "string"
+        ]
+      },
+      {
+        "name": "commitTs",
+        "type": "long"
+      },
+      {
+        "name": "buildTs",
+        "type": "long"
+      },
+      {
+        "name": "tableSchema",
+        "default": null,
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.TableSchema"
+        ]
+      },
+      {
+        "name": "preTableSchema",
+        "default": null,
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.TableSchema"
+        ]
+      }
+    ]
+  }
+]
