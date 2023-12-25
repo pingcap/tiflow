@@ -63,7 +63,7 @@ func calculateChecksum(columns []*model.Column) (uint64, error) {
 	return uint64(checksum), nil
 }
 
-// buildChecksumBytes append value the buf, mysqlType is used to convert value interface to concrete type.
+// buildChecksumBytes append value to the buf, mysqlType is used to convert value interface to concrete type.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L308
 func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, error) {
 	if value == nil {
