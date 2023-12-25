@@ -8,6 +8,11 @@
             "type": "int"
         },
         {
+          "name": "type",
+          "type": "enum",
+          "symbols": ["WATERMARK", "DDL", "BOOTSTRAP", "INSERT", "UPDATE", "DELETE"]
+        },
+        {
             "name": "schema",
             "default": null,
             "type": ["null", "string"]
@@ -18,21 +23,27 @@
             "type": ["null", "string"]
         },
         {
-            "name": "type",
-            "type": "string"
-        },
-        {
             "name": "sql",
             "default": null,
             "type": ["null", "string"]
         },
         {
-            "name": "commitTs",
-            "type": "long"
+          "name": "commitTs",
+          "type": "long"
         },
         {
-            "name": "buildTs",
-            "type": "long"
+          "name": "buildTs",
+          "type": "long"
+        },
+        {
+          "name": "tableSchema",
+          "default": null,
+          "type": ["map"]
+        },
+        {
+          "name": "preTableSchema",
+          "default": null,
+          "type": ["map"]
         }
     ]
 }
