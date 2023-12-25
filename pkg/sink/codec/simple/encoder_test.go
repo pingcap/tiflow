@@ -16,13 +16,18 @@ package simple
 import (
 	"context"
 	"database/sql"
+	"math/rand"
+	"sort"
 	"testing"
+	"time"
 
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/stretchr/testify/require"
@@ -104,12 +109,77 @@ func TestEncodeCheckpoint(t *testing.T) {
 	}
 }
 
+func TestEncodeDMLEnableChecksum(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	createTableDDL, insertEvent, _, _ := utils.NewLargeEvent4Test(t, replicaConfig)
+	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(createTableDDL.TableInfo.Columns), func(i, j int) {
+		createTableDDL.TableInfo.Columns[i], createTableDDL.TableInfo.Columns[j] = createTableDDL.TableInfo.Columns[j], createTableDDL.TableInfo.Columns[i]
+	})
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	codecConfig.EnableRowChecksum = true
+
+	for _, compressionType := range []string{
+		compression.None,
+		compression.Snappy,
+		compression.LZ4,
+	} {
+		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+
+		b, err := NewBuilder(ctx, codecConfig)
+		require.NoError(t, err)
+		enc := b.Build()
+
+		dec, err := NewDecoder(ctx, codecConfig, nil)
+		require.NoError(t, err)
+
+		m, err := enc.EncodeDDLEvent(createTableDDL)
+		require.NoError(t, err)
+
+		err = dec.AddKeyValue(m.Key, m.Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err := dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeDDL, messageType)
+
+		_, err = dec.NextDDLEvent()
+		require.NoError(t, err)
+
+		err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+		require.NoError(t, err)
+
+		messages := enc.Build()
+		require.Len(t, messages, 1)
+
+		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+		require.NoError(t, err)
+
+		messageType, hasNext, err = dec.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, messageType)
+
+		decodedRow, err := dec.NextRowChangedEvent()
+		require.NoError(t, err)
+		require.Equal(t, insertEvent.Checksum.Current, decodedRow.Checksum.Current)
+		require.Equal(t, insertEvent.Checksum.Previous, decodedRow.Checksum.Previous)
+		require.False(t, decodedRow.Checksum.Corrupted)
+	}
+}
+
 func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
 	sql := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
 	createTableDDLEvent := helper.DDL2Event(sql)
+	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(createTableDDLEvent.TableInfo.Columns), func(i, j int) {
+		createTableDDLEvent.TableInfo.Columns[i], createTableDDLEvent.TableInfo.Columns[j] = createTableDDLEvent.TableInfo.Columns[j], createTableDDLEvent.TableInfo.Columns[i]
+	})
 
 	sql = `insert into test.t values (1, "jack", "male", "jack@abc.com")`
 	insertEvent := helper.DML2Event(sql, "test", "t")
@@ -148,6 +218,16 @@ func TestEncodeDDLEvent(t *testing.T) {
 		require.True(t, hasNext)
 		require.Equal(t, model.MessageTypeDDL, messageType)
 		require.NotEqual(t, 0, dec.msg.BuildTs)
+
+		columnSchemas := dec.msg.TableSchema.Columns
+		sortedColumns := make([]*timodel.ColumnInfo, len(createTableDDLEvent.TableInfo.Columns))
+		copy(sortedColumns, createTableDDLEvent.TableInfo.Columns)
+		sort.Slice(sortedColumns, func(i, j int) bool {
+			return sortedColumns[i].ID < sortedColumns[j].ID
+		})
+		for idx, column := range sortedColumns {
+			require.Equal(t, column.Name.O, columnSchemas[idx].Name)
+		}
 
 		event, err := dec.NextDDLEvent()
 		require.NoError(t, err)
@@ -394,7 +474,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 }
 
 func TestDMLEventCompressionE2E(t *testing.T) {
-	ddlEvent, insertEvent, _, _ := utils.NewLargeEvent4Test(t)
+	ddlEvent, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	ctx := context.Background()
 	for _, compressionType := range []string{
@@ -463,7 +543,7 @@ func TestDMLEventCompressionE2E(t *testing.T) {
 }
 
 func TestDMLMessageTooLarge(t *testing.T) {
-	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t)
+	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.MaxMessageBytes = 100
@@ -477,7 +557,7 @@ func TestDMLMessageTooLarge(t *testing.T) {
 }
 
 func TestLargerMessageHandleClaimCheck(t *testing.T) {
-	ddlEvent, _, updateEvent, _ := utils.NewLargeEvent4Test(t)
+	ddlEvent, _, updateEvent, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	ctx := context.Background()
 	for _, compressionType := range []string{
@@ -562,7 +642,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 }
 
 func TestLargeMessageHandleKeyOnly(t *testing.T) {
-	_, _, updateEvent, _ := utils.NewLargeEvent4Test(t)
+	_, _, updateEvent, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
