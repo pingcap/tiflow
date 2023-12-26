@@ -98,37 +98,8 @@ func (e Expression) Substitute(schema, table string) string {
 		return topicName
 	}
 }
-<<<<<<< HEAD:cdc/sink/mq/dispatcher/topic/expression.go
-=======
-
-// PulsarValidate checks whether a pulsar topic name is valid or not.
-func (e Expression) PulsarValidate() error {
-	// validate the topic expression
-	topicName := string(e)
-
-	if len(topicName) == 0 {
-		return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
-			"topic name is empty")
-	}
-
-	// if not full name, must be simple name
-	if !pulsarTopicNameREFull.MatchString(topicName) {
-		if strings.Contains(topicName, "/") {
-			return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
-				"it should be in the format of a <topic> and topic name must contain '{schema}'" +
-					"and simple topic name must not contain '/'")
-		}
-	} else if !pulsarTopicNameRE.MatchString(topicName) {
-		return errors.ErrPulsarInvalidTopicExpression.GenWithStackByArgs(
-			"it should be in the format of <tenant>/<namespace>/<topic> or <topic> " +
-				"and topic name must contain '{schema}'")
-	}
-
-	return nil
-}
 
 // IsHardCode checks whether a topic name is hard code or not.
 func IsHardCode(topicName string) bool {
 	return hardCodeTopicNameRe.MatchString(topicName)
 }
->>>>>>> ef7a972df8 (kafka(ticdc): event router allow hard code topics and set the schema optional in the topic expression (#9755)):cdc/sink/dmlsink/mq/dispatcher/topic/expression.go

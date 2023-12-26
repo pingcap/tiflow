@@ -27,64 +27,8 @@ import (
 func TestEventRouter(t *testing.T) {
 	t.Parallel()
 
-	d, err := NewEventRouter(config.GetDefaultReplicaConfig(), "test")
-	require.Nil(t, err)
-	require.Equal(t, "test", d.GetDefaultTopic())
-	topicDispatcher, partitionDispatcher := d.matchDispatcher("test", "test")
-	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
-
-	d, err = NewEventRouter(&config.ReplicaConfig{
-		Sink: &config.SinkConfig{
-			DispatchRules: []*config.DispatchRule{
-				{
-					Matcher:       []string{"test_default1.*"},
-					PartitionRule: "default",
-				},
-				{
-					Matcher:       []string{"test_default2.*"},
-					PartitionRule: "unknown-dispatcher",
-				},
-				{
-					Matcher:       []string{"test_table.*"},
-					PartitionRule: "table",
-					TopicRule:     "hello_{schema}_world",
-				},
-				{
-					Matcher:       []string{"test_index_value.*"},
-					PartitionRule: "index-value",
-					TopicRule:     "{schema}_world",
-				},
-				{
-					Matcher:       []string{"test.*"},
-					PartitionRule: "rowid",
-					TopicRule:     "hello_{schema}",
-				},
-				{
-					Matcher:       []string{"*.*", "!*.test"},
-					PartitionRule: "ts",
-					TopicRule:     "{schema}_{table}",
-				},
-				// rule-6: hard code the topic
-				{
-					Matcher:       []string{"hard_code_schema.*"},
-					PartitionRule: "default",
-					TopicRule:     "hard_code_topic",
-				},
-			},
-		},
-<<<<<<< HEAD:cdc/sink/mq/dispatcher/event_router_test.go
-	}, "")
-	require.Nil(t, err)
-=======
-	}
-}
-
-func TestEventRouter(t *testing.T) {
-	t.Parallel()
-
 	replicaConfig := config.GetDefaultReplicaConfig()
-	d, err := NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "test", sink.KafkaScheme)
+	d, err := NewEventRouter(replicaConfig, "test")
 	require.NoError(t, err)
 	require.Equal(t, "test", d.GetDefaultTopic())
 
@@ -96,7 +40,7 @@ func TestEventRouter(t *testing.T) {
 	require.Equal(t, d.defaultTopic, actual)
 
 	replicaConfig = newReplicaConfig4DispatcherTest()
-	d, err = NewEventRouter(replicaConfig, config.ProtocolCanalJSON, "", sink.KafkaScheme)
+	d, err = NewEventRouter(replicaConfig, "")
 	require.NoError(t, err)
 
 	// no matched, use the default
@@ -125,7 +69,6 @@ func TestEventRouter(t *testing.T) {
 	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
 
 	// match rule-4
->>>>>>> ef7a972df8 (kafka(ticdc): event router allow hard code topics and set the schema optional in the topic expression (#9755)):cdc/sink/dmlsink/mq/dispatcher/event_router_test.go
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("test", "table1")
 	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
@@ -134,32 +77,10 @@ func TestEventRouter(t *testing.T) {
 	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.TsDispatcher{}, partitionDispatcher)
 
-<<<<<<< HEAD:cdc/sink/mq/dispatcher/event_router_test.go
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("sbs", "test")
-	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
-
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_default1", "test")
-	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
-
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_default2", "test")
-	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
-
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_table", "test")
-	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.TableDispatcher{}, partitionDispatcher)
-
-	topicDispatcher, partitionDispatcher = d.matchDispatcher("test_index_value", "test")
-	require.IsType(t, &topic.DynamicTopicDispatcher{}, topicDispatcher)
-	require.IsType(t, &partition.IndexValueDispatcher{}, partitionDispatcher)
-=======
 	// match rule-6
 	topicDispatcher, partitionDispatcher = d.matchDispatcher("hard_code_schema", "test")
 	require.IsType(t, &topic.StaticTopicDispatcher{}, topicDispatcher)
 	require.IsType(t, &partition.DefaultDispatcher{}, partitionDispatcher)
->>>>>>> ef7a972df8 (kafka(ticdc): event router allow hard code topics and set the schema optional in the topic expression (#9755)):cdc/sink/dmlsink/mq/dispatcher/event_router_test.go
 }
 
 func TestGetActiveTopics(t *testing.T) {
