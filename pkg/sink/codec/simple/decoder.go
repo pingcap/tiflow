@@ -103,10 +103,10 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	var m message
+	m := new(message)
 	switch d.config.EncodingFormat {
 	case common.EncodingFormatJSON:
-		if err := json.Unmarshal(d.value, &m); err != nil {
+		if err := json.Unmarshal(d.value, m); err != nil {
 			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 	case common.EncodingFormatAvro:
@@ -114,17 +114,12 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		if err != nil {
 			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		rawValues, ok := native.(map[string]interface{})
-		if !ok {
-			return model.MessageTypeUnknown, false, cerror.ErrDecodeFailed.GenWithStack(
-				"cannot convert the avro message to map")
+		m, err = newMessageFromAvroNative(native)
+		if err != nil {
+			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-		rawValues = rawValues["com.pingcap.simple.avro.Message"].(map[string]interface{})
-		m.Type = WatermarkType
-		m.CommitTs = uint64(rawValues["commitTs"].(int64))
-		m.BuildTs = rawValues["buildTs"].(int64)
 	}
-	d.msg = &m
+	d.msg = m
 	d.value = nil
 
 	switch d.msg.Type {

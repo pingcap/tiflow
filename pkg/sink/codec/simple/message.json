@@ -19,13 +19,11 @@
       },
       {
         "name": "length",
-        "type": ["null", "int"],
-        "default": null
+        "type": "int"
       },
       {
         "name": "decimal",
-        "type": ["null", "int"],
-        "default": null
+        "type": "int"
       },
       {
         "name": "elements",
@@ -34,13 +32,11 @@
       },
       {
         "name": "unsigned",
-        "type": ["null", "boolean"],
-        "default": null
+        "type": "boolean"
       },
       {
         "name": "zerofill",
-        "type": ["null", "boolean"],
-        "default": null
+        "type": "boolean"
       }
     ]
   },
@@ -63,7 +59,7 @@
         "type": "boolean"
       },
       {
-        "name": "defaultValue",
+        "name": "default",
         "type": ["null", "int", "long", "float", "double", "string", "boolean", "bytes"],
         "default": null
       }

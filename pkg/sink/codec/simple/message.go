@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -459,35 +458,6 @@ func newResolvedMessage(ts uint64) *message {
 	}
 }
 
-func newResolvedMessageMap(ts uint64) interface{} {
-	return goavro.Union("com.pingcap.simple.avro.Message", map[string]interface{}{
-		"version":  defaultVersion,
-		"type":     string(WatermarkType),
-		"commitTs": int64(ts),
-		"buildTs":  time.Now().UnixMilli(),
-	})
-}
-
-func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
-	eventType := DDLType
-	if ddl.IsBootstrap {
-		eventType = BootstrapType
-	}
-	result := map[string]interface{}{
-		"version":        defaultVersion,
-		"type":           string(eventType),
-		"commitTs":       int64(ddl.CommitTs),
-		"buildTs":        time.Now().UnixMilli(),
-		"tableSchema":    nil,
-		"preTableSchema": nil,
-	}
-	if eventType == DDLType {
-		result["sql"] = goavro.Union("string", ddl.Query)
-	}
-
-	return goavro.Union("com.pingcap.simple.avro.Message", result)
-}
-
 func newDDLMessage(ddl *model.DDLEvent) *message {
 	var (
 		schema    *TableSchema
@@ -519,68 +489,6 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 	}
 
 	return msg
-}
-
-func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool) map[string]interface{} {
-	m := map[string]interface{}{
-		"version":       defaultVersion,
-		"commitTs":      int64(event.CommitTs),
-		"buildTs":       time.Now().UnixMilli(),
-		"schemaVersion": event.TableInfo.UpdateTS,
-	}
-
-	if onlyHandleKey {
-		m["handleKeyOnly"] = true
-	}
-
-	var claimCheckLocation string
-	if claimCheckLocation != "" {
-		m["claimCheckLocation"] = claimCheckLocation
-	}
-
-	if config.EnableRowChecksum && event.Checksum != nil {
-		m["checksum"] = map[string]interface{}{
-			"version":   event.Checksum.Version,
-			"corrupted": event.Checksum.Corrupted,
-			"current":   strconv.FormatUint(uint64(event.Checksum.Current), 10),
-			"previous":  strconv.FormatUint(uint64(event.Checksum.Previous), 10),
-		}
-	}
-
-	if event.IsInsert() {
-		m["data"] = collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
-		m["type"] = string(InsertType)
-	} else if event.IsDelete() {
-		m["old"] = collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
-		m["type"] = string(DeleteType)
-	} else if event.IsUpdate() {
-		m["data"] = collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
-		m["old"] = collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
-		m["type"] = string(UpdateType)
-	} else {
-		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
-	}
-
-	return m
-}
-
-func collectColumns(columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool) map[string]interface{} {
-	result := make(map[string]interface{}, len(columns))
-	for idx, col := range columns {
-		if col == nil {
-			continue
-		}
-		if onlyHandleKey && !col.Flag.IsHandleKey() {
-			continue
-		}
-		// todo: is it necessary to encode values into string ?
-		value, err := encodeValue(col.Value, columnInfos[idx].Ft)
-		if err != nil {
-			log.Panic("encode value failed", zap.Error(err))
-		}
-		result[col.Name] = value
-	}
-	return result
 }
 
 func newDMLMessage(
