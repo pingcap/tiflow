@@ -24,11 +24,60 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func newReplicaConfig4DispatcherTest() *config.ReplicaConfig {
+	return &config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				// rule-0
+				{
+					Matcher:       []string{"test_default1.*"},
+					PartitionRule: "default",
+				},
+				// rule-1
+				{
+					Matcher:       []string{"test_default2.*"},
+					PartitionRule: "unknown-dispatcher",
+				},
+				// rule-2
+				{
+					Matcher:       []string{"test_table.*"},
+					PartitionRule: "table",
+					TopicRule:     "hello_{schema}_world",
+				},
+				// rule-3
+				{
+					Matcher:       []string{"test_index_value.*"},
+					PartitionRule: "index-value",
+					TopicRule:     "{schema}_world",
+				},
+				// rule-4
+				{
+					Matcher:       []string{"test.*"},
+					PartitionRule: "rowid",
+					TopicRule:     "hello_{schema}",
+				},
+				// rule-5
+				{
+					Matcher:       []string{"*.*", "!*.test"},
+					PartitionRule: "ts",
+					TopicRule:     "{schema}_{table}",
+				},
+				// rule-6: hard code the topic
+				{
+					Matcher:       []string{"hard_code_schema.*"},
+					PartitionRule: "default",
+					TopicRule:     "hard_code_topic",
+				},
+			},
+		},
+	}
+}
+
 func TestEventRouter(t *testing.T) {
 	t.Parallel()
 
 	replicaConfig := config.GetDefaultReplicaConfig()
-	d, err := NewEventRouter(replicaConfig, "test")
+	d, err := NewEventRouter(replicaConfig, "test", config.ProtocolCanalJSON)
 	require.NoError(t, err)
 	require.Equal(t, "test", d.GetDefaultTopic())
 
@@ -40,7 +89,7 @@ func TestEventRouter(t *testing.T) {
 	require.Equal(t, d.defaultTopic, actual)
 
 	replicaConfig = newReplicaConfig4DispatcherTest()
-	d, err = NewEventRouter(replicaConfig, "")
+	d, err = NewEventRouter(replicaConfig, "", config.ProtocolCanalJSON)
 	require.NoError(t, err)
 
 	// no matched, use the default
@@ -119,7 +168,7 @@ func TestGetActiveTopics(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 	names := []model.TableName{
 		{Schema: "test_default1", Table: "table"},
@@ -169,7 +218,7 @@ func TestGetTopicForRowChange(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 
 	topicName := d.GetTopicForRowChange(&model.RowChangedEvent{
@@ -230,7 +279,7 @@ func TestGetPartitionForRowChange(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 
 	p := d.GetPartitionForRowChange(&model.RowChangedEvent{
@@ -298,7 +347,7 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 
 	tests := []struct {
@@ -359,7 +408,7 @@ func TestGetTopicForDDL(t *testing.T) {
 				},
 			},
 		},
-	}, "test")
+	}, "test", config.ProtocolCanalJSON)
 	require.Nil(t, err)
 
 	tests := []struct {
