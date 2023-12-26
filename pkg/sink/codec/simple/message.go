@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -458,21 +459,19 @@ func newResolvedMessage(ts uint64) *message {
 	}
 }
 
-func newResolvedMessageMap(ts uint64) map[string]interface{} {
-	return map[string]interface{}{
+func newResolvedMessageMap(ts uint64) interface{} {
+	return goavro.Union("com.pingcap.simple.avro.Message", map[string]interface{}{
 		"version":  defaultVersion,
-		"type":     WatermarkType,
+		"type":     string(WatermarkType),
 		"commitTs": int64(ts),
 		"buildTs":  time.Now().UnixMilli(),
-	}
+	})
 }
 
 func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 	eventType := DDLType
-	query := ddl.Query
 	if ddl.IsBootstrap {
 		eventType = BootstrapType
-		query = ""
 	}
 	result := map[string]interface{}{
 		"version":        defaultVersion,
@@ -482,8 +481,8 @@ func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 		"tableSchema":    nil,
 		"preTableSchema": nil,
 	}
-	if query != "" {
-		result["sql"] = query
+	if eventType == DDLType {
+		result["sql"] = ddl.Query
 	}
 
 	return result
@@ -550,14 +549,14 @@ func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyH
 
 	if event.IsInsert() {
 		m["data"] = collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
-		m["type"] = InsertType
+		m["type"] = string(InsertType)
 	} else if event.IsDelete() {
 		m["old"] = collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
-		m["type"] = DeleteType
+		m["type"] = string(DeleteType)
 	} else if event.IsUpdate() {
 		m["data"] = collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		m["old"] = collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
-		m["type"] = UpdateType
+		m["type"] = string(UpdateType)
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}

@@ -119,6 +119,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 			return model.MessageTypeUnknown, false, cerror.ErrDecodeFailed.GenWithStack(
 				"cannot convert the avro message to map")
 		}
+		rawValues = rawValues["com.pingcap.simple.avro.Message"].(map[string]interface{})
 		m.Type = WatermarkType
 		m.CommitTs = uint64(rawValues["commitTs"].(int64))
 		m.BuildTs = rawValues["buildTs"].(int64)
