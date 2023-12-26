@@ -112,7 +112,8 @@ const (
     "ca-path": "",
     "cert-path": "",
     "key-path": "",
-    "cert-allowed-cn": null
+    "cert-allowed-cn": null,
+    "mtls": false
   },
   "per-table-memory-quota": 10485760,
   "kv-client": {
