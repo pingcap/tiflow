@@ -468,7 +468,7 @@ func newResolvedMessageMap(ts uint64) interface{} {
 	})
 }
 
-func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
+func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
 	eventType := DDLType
 	if ddl.IsBootstrap {
 		eventType = BootstrapType
@@ -482,10 +482,10 @@ func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 		"preTableSchema": nil,
 	}
 	if eventType == DDLType {
-		result["sql"] = ddl.Query
+		result["sql"] = goavro.Union("string", ddl.Query)
 	}
 
-	return result
+	return goavro.Union("com.pingcap.simple.avro.Message", result)
 }
 
 func newDDLMessage(ddl *model.DDLEvent) *message {

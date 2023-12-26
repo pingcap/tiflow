@@ -77,19 +77,19 @@ type Config struct {
 	OnlyOutputUpdatedColumns bool
 
 	// for the simple protocol, can be "json" and "avro", default to "json"
-	EncodingFormat encodingFormatType
+	EncodingFormat EncodingFormatType
 
 	// Currently only Debezium protocol is aware of the time zone
 	TimeZone *time.Location
 }
 
-type encodingFormatType string
+type EncodingFormatType string
 
 const (
 	// EncodingFormatJSON is the json format
-	EncodingFormatJSON encodingFormatType = "json"
+	EncodingFormatJSON EncodingFormatType = "json"
 	// EncodingFormatAvro is the avro format
-	EncodingFormatAvro encodingFormatType = "avro"
+	EncodingFormatAvro EncodingFormatType = "avro"
 )
 
 // NewConfig return a Config for codec

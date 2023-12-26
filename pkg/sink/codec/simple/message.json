@@ -203,10 +203,7 @@
       {
         "name": "sql",
         "default": null,
-        "type": [
-          "null",
-          "string"
-        ]
+        "type": ["null", "string"]
       },
       {
         "name": "commitTs",
