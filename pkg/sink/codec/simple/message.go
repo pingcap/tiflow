@@ -411,10 +411,11 @@ func decodeColumns(rawData map[string]interface{}, columnInfos []*timodel.Column
 }
 
 type checksum struct {
-	Version   int    `json:"version"`
-	Corrupted bool   `json:"corrupted"`
-	Current   string `json:"current"`
-	Previous  string `json:"previous"`
+	Version   int  `json:"version"`
+	Corrupted bool `json:"corrupted"`
+	// todo: can we use uint64 to store the checksum value ?
+	Current  string `json:"current"`
+	Previous string `json:"previous"`
 }
 
 type message struct {
@@ -460,7 +461,7 @@ func newResolvedMessage(ts uint64) *message {
 func newResolvedMessageMap(ts uint64) map[string]interface{} {
 	return map[string]interface{}{
 		"version":  defaultVersion,
-		"type":     string(WatermarkType),
+		"type":     WatermarkType,
 		"commitTs": int64(ts),
 		"buildTs":  time.Now().UnixMilli(),
 	}
@@ -519,6 +520,68 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 	}
 
 	return msg
+}
+
+func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool) map[string]interface{} {
+	m := map[string]interface{}{
+		"version":       defaultVersion,
+		"commitTs":      int64(event.CommitTs),
+		"buildTs":       time.Now().UnixMilli(),
+		"schemaVersion": event.TableInfo.UpdateTS,
+	}
+
+	if onlyHandleKey {
+		m["handleKeyOnly"] = true
+	}
+
+	var claimCheckLocation string
+	if claimCheckLocation != "" {
+		m["claimCheckLocation"] = claimCheckLocation
+	}
+
+	if config.EnableRowChecksum && event.Checksum != nil {
+		m["checksum"] = map[string]interface{}{
+			"version":   event.Checksum.Version,
+			"corrupted": event.Checksum.Corrupted,
+			"current":   strconv.FormatUint(uint64(event.Checksum.Current), 10),
+			"previous":  strconv.FormatUint(uint64(event.Checksum.Previous), 10),
+		}
+	}
+
+	if event.IsInsert() {
+		m["data"] = collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		m["type"] = InsertType
+	} else if event.IsDelete() {
+		m["old"] = collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		m["type"] = DeleteType
+	} else if event.IsUpdate() {
+		m["data"] = collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		m["old"] = collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		m["type"] = UpdateType
+	} else {
+		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
+	}
+
+	return m
+}
+
+func collectColumns(columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool) map[string]interface{} {
+	result := make(map[string]interface{}, len(columns))
+	for idx, col := range columns {
+		if col == nil {
+			continue
+		}
+		if onlyHandleKey && !col.Flag.IsHandleKey() {
+			continue
+		}
+		// todo: is it necessary to encode values into string ?
+		value, err := encodeValue(col.Value, columnInfos[idx].Ft)
+		if err != nil {
+			log.Panic("encode value failed", zap.Error(err))
+		}
+		result[col.Name] = value
+	}
+	return result
 }
 
 func newDMLMessage(

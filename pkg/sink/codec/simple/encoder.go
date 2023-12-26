@@ -42,26 +42,34 @@ type encoder struct {
 func (e *encoder) AppendRowChangedEvent(
 	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	m, err := newDMLMessage(event, e.config, false)
-	if err != nil {
-		return err
-	}
+	var (
+		value []byte
+		err   error
+	)
 
-	value, err := e.avroCodec.BinaryFromNative(nil, m)
+	switch e.config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		m, err := newDMLMessage(event, e.config, false)
+		if err != nil {
+			return err
+		}
+		value, err = json.Marshal(m)
+	case common.EncodingFormatAvro:
+		m := newDMLMessageMap(event, e.config, false)
+		if err != nil {
+			return err
+		}
+		value, err = e.avroCodec.BinaryFromNative(nil, m)
+	}
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
 
-	//value, err := json.Marshal(m)
-	//if err != nil {
-	//	return cerror.WrapError(cerror.ErrEncodeFailed, err)
-	//}
-	//
-	//value, err = common.Compress(e.config.ChangefeedID,
-	//	e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
-	//if err != nil {
-	//	return err
-	//}
+	value, err = common.Compress(e.config.ChangefeedID,
+		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
+	if err != nil {
+		return err
+	}
 
 	result := &common.Message{
 		Value:    value,
@@ -87,7 +95,7 @@ func (e *encoder) AppendRowChangedEvent(
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
-	m, err = newDMLMessage(event, e.config, true)
+	m, err := newDMLMessage(event, e.config, true)
 	if err != nil {
 		return err
 	}
