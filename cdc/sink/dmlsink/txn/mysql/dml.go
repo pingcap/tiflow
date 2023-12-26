@@ -16,7 +16,7 @@ package mysql
 import (
 	"strings"
 
-	"github.com/pingcap/tidb/parser/charset"
+	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/quotes"
 )

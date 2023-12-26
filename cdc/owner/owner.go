@@ -597,6 +597,25 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		ret.ResolvedTs = cfReactor.resolvedTs
 		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
 		query.Data = ret
+	case QueryChangeFeedSyncedStatus:
+		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
+		if !ok {
+			query.Data = nil
+			return nil
+		}
+		ret := &model.ChangeFeedSyncedStatusForAPI{}
+		ret.LastSyncedTs = cfReactor.lastSyncedTs
+		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		ret.PullerResolvedTs = cfReactor.pullerResolvedTs
+
+		if cfReactor.latestInfo == nil {
+			ret.CheckpointInterval = 0
+			ret.SyncedCheckInterval = 0
+		} else {
+			ret.CheckpointInterval = cfReactor.latestInfo.Config.SyncedStatus.CheckpointInterval
+			ret.SyncedCheckInterval = cfReactor.latestInfo.Config.SyncedStatus.SyncedCheckInterval
+		}
+		query.Data = ret
 	case QueryChangefeedInfo:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]
 		if !ok {

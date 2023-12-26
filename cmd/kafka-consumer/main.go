@@ -515,6 +515,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 			return nil, cerror.Trace(err)
 		}
 		c.eventRouter = eventRouter
+		c.codecConfig.EnableRowChecksum = o.replicaConfig.Integrity.Enabled()
 	}
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
@@ -630,7 +631,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 		}
 		decoder = avro.NewDecoder(c.codecConfig, schemaM, c.option.topic, c.tz)
 	case config.ProtocolSimple:
-		decoder = simple.NewDecoder()
+		decoder, err = simple.NewDecoder(ctx, c.codecConfig, c.upstreamTiDB)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", c.codecConfig.Protocol))
 	}

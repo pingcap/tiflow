@@ -19,7 +19,7 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,8 +51,8 @@ type eventAppender struct {
 	pushCounts []byte
 
 	// Both of them are included.
-	lowerBound engine.Position
-	upperBound engine.Position
+	lowerBound sorter.Position
+	upperBound sorter.Position
 }
 
 type popResult struct {
@@ -69,10 +69,10 @@ type popResult struct {
 
 	// If success, upperBoundIfSuccess is the upperBound of poped events.
 	// The caller should fetch events (upperBoundIfSuccess, upperBound] from engine.
-	upperBoundIfSuccess engine.Position
+	upperBoundIfSuccess sorter.Position
 	// If fail, lowerBoundIfFail is the lowerBound of cached events.
 	// The caller should fetch events [lowerBound, lowerBoundIfFail) from engine.
-	lowerBoundIfFail engine.Position
+	lowerBoundIfFail sorter.Position
 }
 
 // newRedoEventCache creates a redoEventCache instance.
@@ -110,7 +110,7 @@ func (r *redoEventCache) clear() {
 }
 
 func (r *redoEventCache) maybeCreateAppender(
-	span tablepb.Span, lowerBound engine.Position,
+	span tablepb.Span, lowerBound sorter.Position,
 ) *eventAppender {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -133,7 +133,7 @@ func (r *redoEventCache) maybeCreateAppender(
 			item.broken = false
 			item.events = nil
 			item.lowerBound = lowerBound
-			item.upperBound = engine.Position{}
+			item.upperBound = sorter.Position{}
 		} else {
 			// The appender is still broken.
 			item = nil
@@ -148,7 +148,7 @@ func (r *redoEventCache) getAppender(span tablepb.Span) *eventAppender {
 	return r.tables.GetV(span)
 }
 
-func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResult) {
+func (e *eventAppender) pop(lowerBound, upperBound sorter.Position) (res popResult) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -184,7 +184,7 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	}
 
 	startIdx := sort.Search(e.readyCount, func(i int) bool {
-		pos := engine.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
+		pos := sorter.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
 		return pos.Compare(lowerBound) >= 0
 	})
 
@@ -193,7 +193,7 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	}
 
 	endIdx := sort.Search(e.readyCount, func(i int) bool {
-		pos := engine.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
+		pos := sorter.Position{CommitTs: e.events[i].CommitTs, StartTs: e.events[i].StartTs}
 		return pos.Compare(res.upperBoundIfSuccess) > 0
 	})
 	res.events = e.events[startIdx:endIdx]
@@ -210,7 +210,7 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 	// Update boundaries. Set upperBound to invalid if the range has been drained.
 	e.lowerBound = res.upperBoundIfSuccess.Next()
 	if e.lowerBound.Compare(e.upperBound) > 0 {
-		e.upperBound = engine.Position{}
+		e.upperBound = sorter.Position{}
 	}
 
 	atomic.AddUint64(&e.cache.allocated, ^(res.releaseSize - 1))
@@ -219,7 +219,7 @@ func (e *eventAppender) pop(lowerBound, upperBound engine.Position) (res popResu
 }
 
 // All events should come from one PolymorphicEvent.
-func (e *eventAppender) pushBatch(events []*model.RowChangedEvent, size uint64, txnFinished engine.Position) (bool, uint64) {
+func (e *eventAppender) pushBatch(events []*model.RowChangedEvent, size uint64, txnFinished sorter.Position) (bool, uint64) {
 	if len(events) == 0 {
 		return e.push(nil, size, txnFinished)
 	}
@@ -229,7 +229,7 @@ func (e *eventAppender) pushBatch(events []*model.RowChangedEvent, size uint64, 
 func (e *eventAppender) push(
 	event *model.RowChangedEvent,
 	size uint64,
-	txnFinished engine.Position,
+	txnFinished sorter.Position,
 	eventsInSameBatch ...*model.RowChangedEvent,
 ) (success bool, brokenSize uint64) {
 	e.mu.Lock()

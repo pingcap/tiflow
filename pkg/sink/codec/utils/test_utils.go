@@ -18,11 +18,12 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 )
 
 // NewLargeEvent4Test creates large events for test
-func NewLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
-	helper := entry.NewSchemaTestHelper(t)
+func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*model.DDLEvent, *model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
+	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
 
 	sql := `create table test.t(
@@ -78,7 +79,7 @@ func NewLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChanged
 	 	setT set('a', 'b', 'c'),
 	 	bitT bit(10),
 	 	jsonT json)`
-	_ = helper.DDL2Event(sql)
+	ddlEvent := helper.DDL2Event(sql)
 
 	sql = `insert into test.t values(
 		127,
@@ -142,5 +143,5 @@ func NewLargeEvent4Test(t *testing.T) (*model.RowChangedEvent, *model.RowChanged
 	deleteE.PreColumns = deleteE.Columns
 	deleteE.Columns = nil
 
-	return insert, &update, &deleteE
+	return ddlEvent, insert, &update, &deleteE
 }

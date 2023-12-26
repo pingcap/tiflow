@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/controller"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
 	controllerv2 "github.com/pingcap/tiflow/cdcv2/controller"
 	"github.com/pingcap/tiflow/cdcv2/metadata"
 	msql "github.com/pingcap/tiflow/cdcv2/metadata/sql"

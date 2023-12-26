@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/util/table-filter"
+	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -101,6 +101,15 @@ type ChangefeedCommonInfo struct {
 	CheckpointTSO  uint64              `json:"checkpoint_tso"`
 	CheckpointTime model.JSONTime      `json:"checkpoint_time"`
 	RunningError   *model.RunningError `json:"error"`
+}
+
+// SyncedStatusConfig represents synced check interval config for a changefeed
+type SyncedStatusConfig struct {
+	// The minimum interval between the latest synced ts and now required to reach synced state
+	SyncedCheckInterval int64 `json:"synced_check_interval"`
+	// The maximum interval between latest checkpoint ts and now or
+	// between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
+	CheckpointInterval int64 `json:"checkpoint_interval"`
 }
 
 // MarshalJSON marshal changefeed common info to json
@@ -195,6 +204,7 @@ type ReplicaConfig struct {
 	Integrity                    *IntegrityConfig           `json:"integrity"`
 	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty"`
 	SQLMode                      string                     `json:"sql_mode,omitempty"`
+	SyncedStatus                 *SyncedStatusConfig        `json:"synced_status,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -272,6 +282,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			UseFileBackend:        c.Consistent.UseFileBackend,
 			Compression:           c.Consistent.Compression,
 			FlushConcurrency:      c.Consistent.FlushConcurrency,
+		}
+		if c.Consistent.MemoryUsage != nil {
+			res.Consistent.MemoryUsage = &config.ConsistentMemoryUsage{
+				MemoryQuotaPercentage: c.Consistent.MemoryUsage.MemoryQuotaPercentage,
+				EventCachePercentage:  c.Consistent.MemoryUsage.EventCachePercentage,
+			}
 		}
 	}
 	if c.Sink != nil {
@@ -492,6 +508,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	}
 	if c.ChangefeedErrorStuckDuration != nil {
 		res.ChangefeedErrorStuckDuration = &c.ChangefeedErrorStuckDuration.duration
+	}
+	if c.SyncedStatus != nil {
+		res.SyncedStatus = &config.SyncedStatusConfig{
+			SyncedCheckInterval: c.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  c.SyncedStatus.CheckpointInterval,
+		}
 	}
 	return res
 }
@@ -768,7 +790,14 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			Compression:           cloned.Consistent.Compression,
 			FlushConcurrency:      cloned.Consistent.FlushConcurrency,
 		}
+		if cloned.Consistent.MemoryUsage != nil {
+			res.Consistent.MemoryUsage = &ConsistentMemoryUsage{
+				MemoryQuotaPercentage: cloned.Consistent.MemoryUsage.MemoryQuotaPercentage,
+				EventCachePercentage:  cloned.Consistent.MemoryUsage.EventCachePercentage,
+			}
+		}
 	}
+
 	if cloned.Mounter != nil {
 		res.Mounter = &MounterConfig{
 			WorkerNum: cloned.Mounter.WorkerNum,
@@ -790,6 +819,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 	if cloned.ChangefeedErrorStuckDuration != nil {
 		res.ChangefeedErrorStuckDuration = &JSONDuration{*cloned.ChangefeedErrorStuckDuration}
+	}
+	if cloned.SyncedStatus != nil {
+		res.SyncedStatus = &SyncedStatusConfig{
+			SyncedCheckInterval: cloned.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  cloned.SyncedStatus.CheckpointInterval,
+		}
 	}
 	return res
 }
@@ -925,6 +960,7 @@ type CSVConfig struct {
 	NullString           string `json:"null"`
 	IncludeCommitTs      bool   `json:"include_commit_ts"`
 	BinaryEncodingMethod string `json:"binary_encoding_method"`
+	OutputOldValue       bool   `json:"output_old_value"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config
@@ -965,6 +1001,14 @@ type ConsistentConfig struct {
 	UseFileBackend        bool   `json:"use_file_backend"`
 	Compression           string `json:"compression,omitempty"`
 	FlushConcurrency      int    `json:"flush_concurrency,omitempty"`
+
+	MemoryUsage *ConsistentMemoryUsage `json:"memory_usage"`
+}
+
+// ConsistentMemoryUsage represents memory usage of Consistent module.
+type ConsistentMemoryUsage struct {
+	MemoryQuotaPercentage uint64 `json:"memory_quota_percentage"`
+	EventCachePercentage  uint64 `json:"event_cache_percentage"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
@@ -1021,6 +1065,16 @@ type ChangeFeedInfo struct {
 	CheckpointTs   uint64                    `json:"checkpoint_ts"`
 	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
+}
+
+// SyncedStatus describes the detail of a changefeed's synced status
+type SyncedStatus struct {
+	Synced           bool           `json:"synced"`
+	SinkCheckpointTs model.JSONTime `json:"sink_checkpoint_ts"`
+	PullerResolvedTs model.JSONTime `json:"puller_resolved_ts"`
+	LastSyncedTs     model.JSONTime `json:"last_synced_ts"`
+	NowTs            model.JSONTime `json:"now_ts"`
+	Info             string         `json:"info"`
 }
 
 // RunningError represents some running error from cdc components,

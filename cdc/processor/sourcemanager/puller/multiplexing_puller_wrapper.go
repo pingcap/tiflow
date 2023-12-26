@@ -19,7 +19,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"go.uber.org/zap"
@@ -35,7 +35,7 @@ type MultiplexingWrapper struct {
 func NewMultiplexingPullerWrapper(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
-	eventSortEngine engine.SortEngine,
+	eventSortEngine sorter.SortEngine,
 	frontiers int,
 ) *MultiplexingWrapper {
 	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {

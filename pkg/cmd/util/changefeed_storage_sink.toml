@@ -15,3 +15,6 @@ quote = '"'
 null = '\N'
 # Include commit-ts in the row data. The default value is false.
 include-commit-ts = false
+# Ouptut Old Value, for example update statement will be replaced by a pair of delete and insert
+# in the CSV files to output the old value.
+output-old-value = false

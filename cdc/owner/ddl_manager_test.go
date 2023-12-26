@@ -19,13 +19,14 @@ import (
 	"fmt"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	config2 "github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +38,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 	cfg := config2.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(nil, startTs, cfg, changefeedID, f)
+	schema, err := entry.NewSchemaStorage(nil, startTs, cfg.ForceReplicate, changefeedID, util.RoleTester, f)
 	require.Equal(t, nil, err)
 	res := newDDLManager(
 		changefeedID,
@@ -48,7 +49,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		schema,
 		redo.NewDisabledDDLManager(),
 		redo.NewDisabledMetaManager(),
-		model.DB, false, false)
+		false)
 	return res
 }
 

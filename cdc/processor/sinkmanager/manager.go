@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/factory"
@@ -49,7 +49,7 @@ const (
 	sinkWorkerNum               = 8
 	redoWorkerNum               = 4
 	defaultGenerateTaskInterval = 100 * time.Millisecond
-	// engine.CleanByTable can be expensive. So it's necessary to reduce useless calls.
+	// sorter.CleanByTable can be expensive. So it's necessary to reduce useless calls.
 	cleanTableInterval  = 5 * time.Second
 	cleanTableMinEvents = 128
 )
@@ -58,6 +58,7 @@ const (
 type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
+	LastSyncedTs model.Ts
 	BarrierTs    model.Ts
 }
 
@@ -157,6 +158,7 @@ func New(
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}
 
+	totalQuota := changefeedInfo.Config.MemoryQuota
 	if redoDMLMgr != nil && redoDMLMgr.Enabled() {
 		m.redoDMLMgr = redoDMLMgr
 		m.redoProgressHeap = newTableProgresses()
@@ -164,18 +166,26 @@ func New(
 		m.redoTaskChan = make(chan *redoTask)
 		m.redoWorkerAvailable = make(chan struct{}, 1)
 
-		// Use 3/4 memory quota as redo quota, and 1/2 again for redo cache.
-		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota/4*1, "sink")
-		redoQuota := changefeedInfo.Config.MemoryQuota / 4 * 3
+		consistentMemoryUsage := changefeedInfo.Config.Consistent.MemoryUsage
+		if consistentMemoryUsage == nil {
+			consistentMemoryUsage = config.GetDefaultReplicaConfig().Consistent.MemoryUsage
+		}
+
+		redoQuota := totalQuota * consistentMemoryUsage.MemoryQuotaPercentage / 100
+		sinkQuota := totalQuota - redoQuota
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, sinkQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
-		m.eventCache = newRedoEventCache(changefeedID, redoQuota/2*1)
+
+		eventCache := redoQuota * consistentMemoryUsage.EventCachePercentage / 100
+		if eventCache > 0 {
+			m.eventCache = newRedoEventCache(changefeedID, eventCache)
+		}
 	} else {
-		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, changefeedInfo.Config.MemoryQuota, "sink")
+		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, totalQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
 	}
 
 	m.ready = make(chan struct{})
-
 	return m
 }
 
@@ -442,7 +452,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 						return true
 					}
 
-					cleanPos := engine.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
+					cleanPos := sorter.Position{StartTs: resolvedMark - 1, CommitTs: resolvedMark}
 					if !sink.cleanRangeEventCounts(cleanPos, cleanTableMinEvents) {
 						return true
 					}
@@ -472,13 +482,13 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 	}()
 }
 
-func (m *SinkManager) getUpperBound(tableSinkUpperBoundTs model.Ts) engine.Position {
+func (m *SinkManager) getUpperBound(tableSinkUpperBoundTs model.Ts) sorter.Position {
 	schemaTs := m.schemaStorage.ResolvedTs()
 	if schemaTs != math.MaxUint64 && tableSinkUpperBoundTs > schemaTs+1 {
 		// schemaTs == math.MaxUint64 means it's in tests.
 		tableSinkUpperBoundTs = schemaTs + 1
 	}
-	return engine.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
+	return sorter.Position{StartTs: tableSinkUpperBoundTs - 1, CommitTs: tableSinkUpperBoundTs}
 }
 
 // generateSinkTasks generates tasks to fetch data from the source manager.
@@ -545,7 +555,7 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 					if restartErr := tableSink.restart(ctx); restartErr == nil {
 						// Restart the table sink based on the checkpoint position.
 						ckpt := tableSink.getCheckpointTs().ResolvedMark()
-						lastWrittenPos := engine.Position{StartTs: ckpt - 1, CommitTs: ckpt}
+						lastWrittenPos := sorter.Position{StartTs: ckpt - 1, CommitTs: ckpt}
 						p := &progress{
 							span:              tableSink.span,
 							nextLowerBoundPos: lastWrittenPos.Next(),
@@ -595,7 +605,7 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 				lowerBound:    lowerBound,
 				getUpperBound: m.getUpperBound,
 				tableSink:     tableSink,
-				callback: func(lastWrittenPos engine.Position) {
+				callback: func(lastWrittenPos sorter.Position) {
 					p := &progress{
 						span:              tableSink.span,
 						nextLowerBoundPos: lastWrittenPos.Next(),
@@ -727,7 +737,7 @@ func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
 				lowerBound:    lowerBound,
 				getUpperBound: m.getUpperBound,
 				tableSink:     tableSink,
-				callback: func(lastWrittenPos engine.Position) {
+				callback: func(lastWrittenPos sorter.Position) {
 					p := &progress{
 						span:              tableSink.span,
 						nextLowerBoundPos: lastWrittenPos.Next(),
@@ -879,13 +889,13 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 
 	m.sinkProgressHeap.push(&progress{
 		span:              span,
-		nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
+		nextLowerBoundPos: sorter.Position{StartTs: 0, CommitTs: startTs + 1},
 		version:           tableSink.(*tableSinkWrapper).version,
 	})
 	if m.redoDMLMgr != nil {
 		m.redoProgressHeap.push(&progress{
 			span:              span,
-			nextLowerBoundPos: engine.Position{StartTs: 0, CommitTs: startTs + 1},
+			nextLowerBoundPos: sorter.Position{StartTs: 0, CommitTs: startTs + 1},
 			version:           tableSink.(*tableSinkWrapper).version,
 		})
 	}
@@ -998,6 +1008,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
+	lastSyncedTs := tableSink.getLastSyncedTs()
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
@@ -1040,6 +1051,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	return TableStats{
 		CheckpointTs: checkpointTs.ResolvedMark(),
 		ResolvedTs:   resolvedTs,
+		LastSyncedTs: lastSyncedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
 	}
 }
