@@ -112,6 +112,7 @@ func newProcessor4Test(
 	return p
 }
 
+// nolint
 func initProcessor4Test(t *testing.T, liveness *model.Liveness, enableRedo bool,
 	globalVars *cdcContext.GlobalVars, changefeedVars *cdcContext.ChangefeedVars,
 ) (*processor, *orchestrator.ReactorStateTester, *orchestrator.ChangefeedReactorState) {

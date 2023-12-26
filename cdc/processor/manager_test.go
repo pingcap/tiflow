@@ -65,8 +65,7 @@ func NewManager4Test(
 }
 
 //nolint:unused
-func (s *managerTester) resetSuit(ctx context.Context,
-	globalVars *cdcContext.GlobalVars,
+func (s *managerTester) resetSuit(globalVars *cdcContext.GlobalVars,
 	t *testing.T,
 ) {
 	s.manager = NewManager4Test(t, &s.liveness, globalVars)
@@ -84,7 +83,7 @@ func TestChangefeed(t *testing.T) {
 	globalVars := cdcContext.NewGlobalVars4Test()
 	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, globalVars, t)
+	s.resetSuit(globalVars, t)
 	var err error
 
 	// no changefeed
@@ -138,7 +137,7 @@ func TestDebugInfo(t *testing.T) {
 	globalVars := cdcContext.NewGlobalVars4Test()
 	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, globalVars, t)
+	s.resetSuit(globalVars, t)
 	var err error
 
 	// no changefeed
@@ -205,7 +204,7 @@ func TestClose(t *testing.T) {
 	globalVars := cdcContext.NewGlobalVars4Test()
 	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, globalVars, t)
+	s.resetSuit(globalVars, t)
 	var err error
 
 	// no changefeed
@@ -263,7 +262,7 @@ func TestManagerLiveness(t *testing.T) {
 	globalVars := cdcContext.NewGlobalVars4Test()
 	ctx := context.Background()
 	s := &managerTester{}
-	s.resetSuit(ctx, globalVars, t)
+	s.resetSuit(globalVars, t)
 	var err error
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")

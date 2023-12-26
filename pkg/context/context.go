@@ -50,8 +50,7 @@ type ChangefeedVars struct {
 	Info *model.ChangeFeedInfo
 }
 
-// NewGlobalVars4Test returns a new pipeline context for test, and use the
-// given context as parent context.
+// NewGlobalVars4Test returns a GlobalVars for test,
 func NewGlobalVars4Test() *GlobalVars {
 	return &GlobalVars{
 		CaptureInfo: &model.CaptureInfo{
@@ -66,6 +65,7 @@ func NewGlobalVars4Test() *GlobalVars {
 	}
 }
 
+// NewGlobalVarsAndChangefeedVars4Test returns GlobalVars and ChangefeedVars for ut
 func NewGlobalVarsAndChangefeedVars4Test() (*GlobalVars, *ChangefeedVars) {
 	return NewGlobalVars4Test(), &ChangefeedVars{
 		ID: model.DefaultChangeFeedID("changefeed-id-test"),

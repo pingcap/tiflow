@@ -593,19 +593,20 @@ func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
-	ctx := cdcContext.NewBackendContext4Test(true)
+	_, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
-	f, err := filter.NewFilter(ctx.ChangefeedVars().Info.Config, "")
+	f, err := filter.NewFilter(changefeedVars.Info.Config, "")
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		ctx.ChangefeedVars().Info.Config.ForceReplicate,
-		ctx.ChangefeedVars().ID,
+		changefeedVars.Info.Config.ForceReplicate,
+		changefeedVars.ID,
 		util.RoleTester,
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
+	p := NewDDLPuller(ctx, up, startTs, changefeedVars.ID, schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
 	var wg sync.WaitGroup
@@ -717,19 +718,20 @@ func TestResolvedTsStuck(t *testing.T) {
 
 	startTs := uint64(10)
 	mockPuller := newMockPuller(t, startTs)
-	ctx := cdcContext.NewBackendContext4Test(true)
+	_, changefeedVars := cdcContext.NewGlobalVarsAndChangefeedVars4Test()
+	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
-		ctx.ChangefeedVars().Info.Config.ForceReplicate,
-		ctx.ChangefeedVars().ID,
+		changefeedVars.Info.Config.ForceReplicate,
+		changefeedVars.ID,
 		util.RoleTester,
 		f,
 	)
 	require.Nil(t, err)
-	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
+	p := NewDDLPuller(ctx, up, startTs, changefeedVars.ID, schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 	var wg sync.WaitGroup
