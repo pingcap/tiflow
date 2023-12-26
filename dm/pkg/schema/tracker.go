@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/ddl"
 	"github.com/pingcap/tidb/ddl/schematracker"
 	"github.com/pingcap/tidb/executor"
@@ -36,6 +37,25 @@ import (
 	"github.com/pingcap/tidb/util/filter"
 	"github.com/pingcap/tidb/util/mock"
 	"github.com/pingcap/tidb/util/sqlexec"
+=======
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/ddl/schematracker"
+	"github.com/pingcap/tidb/pkg/executor"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/util/chunk"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tidb/pkg/util/mock"
+	"github.com/pingcap/tidb/pkg/util/sqlexec"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+>>>>>>> 2e729efee1 (dm: set enable cluster index to off for downstream tracker (#10346))
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -463,6 +483,17 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
+
+	// suppress ErrTooLongKey
+	strictSQLModeBackup := dt.se.GetSessionVars().StrictSQLMode
+	dt.se.GetSessionVars().StrictSQLMode = false
+	// support drop PK
+	enableClusteredIndexBackup := dt.se.GetSessionVars().EnableClusteredIndex
+	dt.se.GetSessionVars().EnableClusteredIndex = variable.ClusteredIndexDefModeOff
+	defer func() {
+		dt.se.GetSessionVars().StrictSQLMode = strictSQLModeBackup
+		dt.se.GetSessionVars().EnableClusteredIndex = enableClusteredIndexBackup
+	}()
 
 	ti, err := ddl.BuildTableInfoWithStmt(dt.se, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
 	if err != nil {
