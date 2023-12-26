@@ -147,6 +147,8 @@ func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
 func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool) map[string]interface{} {
 	m := map[string]interface{}{
 		"version":       defaultVersion,
+		"schema":        event.Table.Schema,
+		"table":         event.Table.Table,
 		"commitTs":      int64(event.CommitTs),
 		"buildTs":       time.Now().UnixMilli(),
 		"schemaVersion": event.TableInfo.UpdateTS,

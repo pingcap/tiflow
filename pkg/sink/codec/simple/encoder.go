@@ -95,20 +95,32 @@ func (e *encoder) AppendRowChangedEvent(
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
-	m, err := newDMLMessage(event, e.config, true)
-	if err != nil {
-		return err
-	}
-
-	if e.config.LargeMessageHandle.EnableClaimCheck() {
-		fileName := claimcheck.NewFileName()
-		m.ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
-		if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
-			return errors.Trace(err)
+	switch e.config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		m, err := newDMLMessage(event, e.config, true)
+		if err != nil {
+			return err
 		}
+		if e.config.LargeMessageHandle.EnableClaimCheck() {
+			fileName := claimcheck.NewFileName()
+			m.ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
+			if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
+				return errors.Trace(err)
+			}
+		}
+		value, err = json.Marshal(m)
+	case common.EncodingFormatAvro:
+		m := newDMLMessageMap(event, e.config, true)
+		if e.config.LargeMessageHandle.EnableClaimCheck() {
+			fileName := claimcheck.NewFileName()
+			m["claimCheckLocation"] = e.claimCheck.FileNameWithPrefix(fileName)
+			if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
+				return errors.Trace(err)
+			}
+		}
+		value, err = e.avroCodec.BinaryFromNative(nil, m)
 	}
 
-	value, err = json.Marshal(m)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
