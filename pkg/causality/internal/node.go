@@ -14,6 +14,7 @@
 package internal
 
 import (
+	"fmt"
 	"sync"
 	stdatomic "sync/atomic"
 
@@ -209,13 +210,11 @@ func (n *Node) checkReadiness() bool {
 	}
 
 	removedDependencies := stdatomic.LoadInt32(&n.removedDependencies)
-
-	// All dependcies are removed, so assign the node to any worker is fine.
-	if removedDependencies == n.totalDependencies {
-		return true
+	if removedDependencies > n.totalDependencies {
+		panic(fmt.Sprintf("removedDependencies %d > totalDependencies %d which is not expected",
+			removedDependencies, n.totalDependencies))
 	}
-
-	return false
+	return removedDependencies == n.totalDependencies
 }
 
 func (n *Node) getOrCreateDependers() *btree.BTreeG[*Node] {
