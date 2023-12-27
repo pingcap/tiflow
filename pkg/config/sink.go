@@ -165,6 +165,9 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+
+	SendBootstrapIntervalInSec *uint  `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
+	SendBootstrapInMsgCount    *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig

@@ -165,7 +165,6 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			txn.Callback()
 			continue
 		}
-
 		rowCallback := toRowCallback(txn.Callback, uint64(len(txn.Event.Rows)))
 		for _, row := range txn.Event.Rows {
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
@@ -197,7 +196,10 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			// So it is safe to send the event to a unbounded channel here.
 			s.alive.worker.msgChan.In() <- mqEvent{
 				key: codec.TopicPartitionKey{
-					Topic: topic, Partition: index, PartitionKey: key,
+					Topic:          topic,
+					Partition:      index,
+					PartitionKey:   key,
+					TotalPartition: partitionNum,
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
 					Event:     row,

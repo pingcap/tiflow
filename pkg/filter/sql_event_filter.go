@@ -175,7 +175,8 @@ func (f *sqlEventFilter) shouldSkipDDL(
 	}
 
 	rules := f.getRules(schema, table)
-	for _, rule := range rules {
+	for i, rule := range rules {
+		log.Info("fizz sql event filter handle ddl event", zap.Any("idx", i), zap.Any("rule", rule))
 		action, err := rule.bf.Filter(
 			binlogFilterSchemaPlaceholder,
 			binlogFilterTablePlaceholder,

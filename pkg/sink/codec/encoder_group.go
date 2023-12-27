@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,10 +57,14 @@ type encoderGroup struct {
 	index   uint64
 
 	outputCh chan *future
+
+	bootstrapWorker *bootstrapWorker
 }
 
 // NewEncoderGroup creates a new EncoderGroup instance
-func NewEncoderGroup(builder RowEventEncoderBuilder,
+func NewEncoderGroup(
+	cfg *config.SinkConfig,
+	builder RowEventEncoderBuilder,
 	concurrency int, changefeedID model.ChangeFeedID,
 ) *encoderGroup {
 	if concurrency <= 0 {
@@ -70,15 +75,38 @@ func NewEncoderGroup(builder RowEventEncoderBuilder,
 	for i := 0; i < concurrency; i++ {
 		inputCh[i] = make(chan *future, defaultInputChanSize)
 	}
+	outCh := make(chan *future, defaultInputChanSize)
+
+	var bootstrapWorker *bootstrapWorker
+	if *cfg.Protocol == config.ProtocolSimple.String() {
+		log.Info("fizz:bootstrap worker is enable for simple protocol, create it!")
+		sendBootstrapIntervalInSec := util.GetOrZero(cfg.SendBootstrapIntervalInSec)
+		if sendBootstrapIntervalInSec <= 0 {
+			sendBootstrapIntervalInSec = uint(defaultSendBootstrapInterval.Seconds())
+		}
+		msgCount := util.GetOrZero(cfg.SendBootstrapInMsgCount)
+		if msgCount <= 0 {
+			msgCount = defaultSendBootstrapInMsgCount
+		}
+		interval := time.Duration(sendBootstrapIntervalInSec) * time.Second
+		bootstrapWorker = newBootstrapWorker(
+			outCh,
+			builder,
+			interval,
+			msgCount,
+			defaultMaxInactiveDuration,
+		)
+	}
 
 	return &encoderGroup{
 		changefeedID: changefeedID,
 
-		builder:     builder,
-		concurrency: concurrency,
-		inputCh:     inputCh,
-		index:       0,
-		outputCh:    make(chan *future, defaultInputChanSize*concurrency),
+		builder:         builder,
+		concurrency:     concurrency,
+		inputCh:         inputCh,
+		index:           0,
+		outputCh:        outCh,
+		bootstrapWorker: bootstrapWorker,
 	}
 }
 
@@ -96,6 +124,13 @@ func (g *encoderGroup) Run(ctx context.Context) error {
 			return g.runEncoder(ctx, idx)
 		})
 	}
+
+	if g.bootstrapWorker != nil {
+		eg.Go(func() error {
+			return g.bootstrapWorker.run(ctx)
+		})
+	}
+
 	return eg.Wait()
 }
 
@@ -130,6 +165,14 @@ func (g *encoderGroup) AddEvents(
 	key TopicPartitionKey,
 	events ...*dmlsink.RowChangeCallbackableEvent,
 ) error {
+	// bootstrapWorker only not nil when the protocol is simple
+	if g.bootstrapWorker != nil {
+		err := g.bootstrapWorker.addEvent(ctx, key, events[0].Event)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	}
+
 	future := newFuture(key, events...)
 	index := atomic.AddUint64(&g.index, 1) % uint64(g.concurrency)
 	select {
