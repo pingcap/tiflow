@@ -297,7 +297,13 @@ func (w *worker) sendMessages(ctx context.Context) error {
 			if err = future.Ready(ctx); err != nil {
 				return errors.Trace(err)
 			}
+
 			for _, message := range future.Messages {
+				log.Info("fizz: MQ sink worker is sending message",
+					zap.Any("key", future.Key),
+					zap.Any("messageKey", message.Key),
+					zap.Any("messageValue", message.Value))
+
 				start := time.Now()
 				if err = w.statistics.RecordBatchExecution(func() (int, int64, error) {
 					message.SetPartitionKey(future.Key.PartitionKey)

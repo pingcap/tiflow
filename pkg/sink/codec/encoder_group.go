@@ -65,7 +65,8 @@ type encoderGroup struct {
 func NewEncoderGroup(
 	cfg *config.SinkConfig,
 	builder RowEventEncoderBuilder,
-	concurrency int, changefeedID model.ChangeFeedID,
+	concurrency int,
+	changefeedID model.ChangeFeedID,
 ) *encoderGroup {
 	if concurrency <= 0 {
 		concurrency = config.DefaultEncoderGroupConcurrency
@@ -75,7 +76,7 @@ func NewEncoderGroup(
 	for i := 0; i < concurrency; i++ {
 		inputCh[i] = make(chan *future, defaultInputChanSize)
 	}
-	outCh := make(chan *future, defaultInputChanSize)
+	outCh := make(chan *future, defaultInputChanSize*concurrency)
 
 	var bootstrapWorker *bootstrapWorker
 	if *cfg.Protocol == config.ProtocolSimple.String() {
@@ -99,8 +100,7 @@ func NewEncoderGroup(
 	}
 
 	return &encoderGroup{
-		changefeedID: changefeedID,
-
+		changefeedID:    changefeedID,
 		builder:         builder,
 		concurrency:     concurrency,
 		inputCh:         inputCh,
