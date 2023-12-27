@@ -36,8 +36,7 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	// nextWorkerID is used to dispatch transactions round-robin.
 	nextWorkerID atomic.Int64
 
-	// Used to run a background goroutine to GC or notify nodes.
-	notifiedNodes *chann.DrainableChann[func()]
+	// Used to run a background goroutine to GC.
 	garbageNodes  *chann.DrainableChann[txnFinishedEvent]
 	wg            sync.WaitGroup
 	closeCh       chan struct{}
@@ -57,7 +56,6 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 		workers:       workers,
 		slots:         internal.NewSlots[*internal.Node](numSlots),
 		numSlots:      numSlots,
-		notifiedNodes: chann.NewAutoDrainChann[func()](),
 		garbageNodes:  chann.NewAutoDrainChann[txnFinishedEvent](),
 		closeCh:       make(chan struct{}),
 	}
@@ -78,11 +76,12 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 	sortedKeysHash := txn.GenSortedDedupKeysHash(d.numSlots)
 	node := internal.NewNode()
-	node.OnResolved = func(workerID int64) {
+	// SendToWorker is called after all dependencies are removed.
+	node.SendToWorker = func(workerID int64) {
 		// This callback is called after the transaction is executed.
 		postTxnExecuted := func() {
 			// After this transaction is executed, we can remove the node from the graph,
-			// and resolve related dependencies for these transacitons which depend on this
+			// and remove related dependencies for these transacitons which depend on this
 			// executed transaction.
 			node.Remove()
 
@@ -90,11 +89,10 @@ func (d *ConflictDetector[Worker, Txn]) Add(txn Txn) {
 			// occupied related slots.
 			d.garbageNodes.In() <- txnFinishedEvent{node, sortedKeysHash}
 		}
-		// Send this txn to related worker as soon as all dependencies are resolved.
+		// Send this txn to related worker as soon as all dependencies are removed.
 		d.sendToWorker(txn, postTxnExecuted, workerID)
 	}
 	node.RandWorkerID = func() int64 { return d.nextWorkerID.Add(1) % int64(len(d.workers)) }
-	node.OnNotified = func(callback func()) { d.notifiedNodes.In() <- callback }
 	d.slots.Add(node, sortedKeysHash)
 }
 
@@ -106,17 +104,12 @@ func (d *ConflictDetector[Worker, Txn]) Close() {
 
 func (d *ConflictDetector[Worker, Txn]) runBackgroundTasks() {
 	defer func() {
-		d.notifiedNodes.CloseAndDrain()
 		d.garbageNodes.CloseAndDrain()
 	}()
 	for {
 		select {
 		case <-d.closeCh:
 			return
-		case notifyCallback := <-d.notifiedNodes.Out():
-			if notifyCallback != nil {
-				notifyCallback()
-			}
 		case event := <-d.garbageNodes.Out():
 			if event.node != nil {
 				d.slots.Free(event.node, event.sortedKeysHash)
