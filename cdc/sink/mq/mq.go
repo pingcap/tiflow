@@ -76,7 +76,7 @@ func newMqSink(
 		return nil, cerror.WrapError(cerror.ErrKafkaInvalidConfig, err)
 	}
 
-	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic)
+	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, defaultTopic, encoderConfig.Protocol)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
