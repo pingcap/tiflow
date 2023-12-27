@@ -128,7 +128,7 @@ func TestNodeResolveImmediately(t *testing.T) {
 	nodeD := NewNode()
 	nodeD.RandWorkerID = func() workerID { return workerID(100) }
 	nodeD.DependOn(map[int64]*Node{nodeB.NodeID(): nodeB, nodeC.NodeID(): nodeC}, 0)
-	// NodeD should not be unassigned before Node B and C are removed.
+	// NodeD should be unassigned before Node B and C are removed.
 	require.Equal(t, unassigned, nodeD.assignedWorkerID())
 	nodeB.Remove()
 	nodeC.Remove()
