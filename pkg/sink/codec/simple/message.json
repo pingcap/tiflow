@@ -149,11 +149,11 @@
       },
       {
         "name": "current",
-        "type": "string"
+        "type": "long"
       },
       {
         "name": "previous",
-        "type": "string"
+        "type": "long"
       }
     ]
   },

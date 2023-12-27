@@ -15,10 +15,8 @@ package simple
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -35,7 +33,7 @@ type encoder struct {
 
 	config     *common.Config
 	claimCheck *claimcheck.ClaimCheck
-	avroCodec  *goavro.Codec
+	marshaller Marshaller
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
@@ -43,24 +41,19 @@ func (e *encoder) AppendRowChangedEvent(
 	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
 	var (
-		value []byte
-		err   error
+		m   interface{}
+		err error
 	)
-
 	switch e.config.EncodingFormat {
 	case common.EncodingFormatJSON:
-		m, err := newDMLMessage(event, e.config, false)
+		m, err = newDMLMessage(event, e.config, false)
 		if err != nil {
 			return err
 		}
-		value, err = json.Marshal(m)
 	case common.EncodingFormatAvro:
-		m := newDMLMessageMap(event, e.config, false)
-		if err != nil {
-			return err
-		}
-		value, err = e.avroCodec.BinaryFromNative(nil, m)
+		m = newDMLMessageMap(event, e.config, false)
 	}
+	value, err := e.marshaller.Marshal(m)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
@@ -97,30 +90,29 @@ func (e *encoder) AppendRowChangedEvent(
 
 	switch e.config.EncodingFormat {
 	case common.EncodingFormatJSON:
-		m, err := newDMLMessage(event, e.config, true)
+		m, err = newDMLMessage(event, e.config, true)
 		if err != nil {
 			return err
 		}
 		if e.config.LargeMessageHandle.EnableClaimCheck() {
 			fileName := claimcheck.NewFileName()
-			m.ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
+			m.(*message).ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
 			if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
 				return errors.Trace(err)
 			}
 		}
-		value, err = json.Marshal(m)
 	case common.EncodingFormatAvro:
-		m := newDMLMessageMap(event, e.config, true)
+		m = newDMLMessageMap(event, e.config, true)
 		if e.config.LargeMessageHandle.EnableClaimCheck() {
 			fileName := claimcheck.NewFileName()
-			m["claimCheckLocation"] = e.claimCheck.FileNameWithPrefix(fileName)
+			m.(map[string]interface{})["claimCheckLocation"] = e.claimCheck.FileNameWithPrefix(fileName)
 			if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
 				return errors.Trace(err)
 			}
 		}
-		value, err = e.avroCodec.BinaryFromNative(nil, m)
 	}
 
+	value, err = e.marshaller.Marshal(m)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
@@ -160,20 +152,14 @@ func (e *encoder) Build() []*common.Message {
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	var (
-		value []byte
-		err   error
-	)
-
+	var m interface{}
 	switch e.config.EncodingFormat {
 	case common.EncodingFormatJSON:
-		m := newResolvedMessage(ts)
-		value, err = json.Marshal(m)
+		m = newResolvedMessage(ts)
 	case common.EncodingFormatAvro:
-		m := newResolvedMessageMap(ts)
-		value, err = e.avroCodec.BinaryFromNative(nil, m)
+		m = newResolvedMessageMap(ts)
 	}
-
+	value, err := e.marshaller.Marshal(m)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
@@ -188,19 +174,14 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	var (
-		value []byte
-		err   error
-	)
+	var m interface{}
 	switch e.config.EncodingFormat {
 	case common.EncodingFormatJSON:
-		m := newDDLMessage(event)
-		value, err = json.Marshal(m)
+		m = newDDLMessage(event)
 	case common.EncodingFormatAvro:
-		m := newDDLMessageMap(event)
-		value, err = e.avroCodec.BinaryFromNative(nil, m)
-
+		m = newDDLMessageMap(event)
 	}
+	value, err := e.marshaller.Marshal(m)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
@@ -225,7 +206,7 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 type builder struct {
 	config     *common.Config
 	claimCheck *claimcheck.ClaimCheck
-	avroCodec  *goavro.Codec
+	marshaller Marshaller
 }
 
 // NewBuilder returns a new builder
@@ -242,19 +223,25 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 		}
 	}
 
-	schema, err := os.ReadFile("message.json")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	avroCodec, err := goavro.NewCodec(string(schema))
-	if err != nil {
-		return nil, errors.Trace(err)
+	var marshaller Marshaller
+	switch config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		marshaller = newJSONMarshaller()
+	case common.EncodingFormatAvro:
+		schema, err := os.ReadFile("message.json")
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		marshaller, err = newAvroMarshaller(string(schema))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	return &builder{
 		config:     config,
 		claimCheck: claimCheck,
-		avroCodec:  avroCodec,
+		marshaller: marshaller,
 	}, nil
 }
 
@@ -264,7 +251,7 @@ func (b *builder) Build() codec.RowEventEncoder {
 		messages:   make([]*common.Message, 0, 1),
 		config:     b.config,
 		claimCheck: b.claimCheck,
-		avroCodec:  b.avroCodec,
+		marshaller: b.marshaller,
 	}
 }
 

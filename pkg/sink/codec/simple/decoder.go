@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -33,8 +32,9 @@ import (
 )
 
 type decoder struct {
-	config    *common.Config
-	avroCodec *goavro.Codec
+	config *common.Config
+
+	marshaller Marshaller
 
 	upstreamTiDB *sql.DB
 	storage      storage.ExternalStorage
@@ -63,18 +63,24 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	schema, err := os.ReadFile("message.json")
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	avroCodec, err := goavro.NewCodec(string(schema))
-	if err != nil {
-		return nil, errors.Trace(err)
+	var marshaller Marshaller
+	switch config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		marshaller = newJSONMarshaller()
+	case common.EncodingFormatAvro:
+		schema, err := os.ReadFile("message.json")
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		marshaller, err = newAvroMarshaller(string(schema))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 	}
 
 	return &decoder{
-		config:    config,
-		avroCodec: avroCodec,
+		config:     config,
+		marshaller: marshaller,
 
 		storage:      externalStorage,
 		upstreamTiDB: db,
@@ -106,11 +112,12 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	m := new(message)
 	switch d.config.EncodingFormat {
 	case common.EncodingFormatJSON:
-		if err := json.Unmarshal(d.value, m); err != nil {
+		if err := d.marshaller.Unmarshal(d.value, m); err != nil {
 			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 	case common.EncodingFormatAvro:
-		native, _, err := d.avroCodec.NativeFromBinary(d.value)
+		var native map[string]interface{}
+		err := d.marshaller.Unmarshal(d.value, &native)
 		if err != nil {
 			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}

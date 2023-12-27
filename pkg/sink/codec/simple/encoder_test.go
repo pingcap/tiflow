@@ -249,7 +249,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 				createTableDDLEvent.TableInfo.TableName.Table, createTableDDLEvent.TableInfo.UpdateTS)
 			require.NotNil(t, item)
 
-			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
+			err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
 			require.NoError(t, err)
 
 			messages := enc.Build()

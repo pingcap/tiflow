@@ -15,7 +15,6 @@ package simple
 
 import (
 	"sort"
-	"strconv"
 	"time"
 
 	"github.com/linkedin/goavro/v2"
@@ -144,32 +143,33 @@ func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
 	return goavro.Union("com.pingcap.simple.avro.Message", result)
 }
 
-func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool) map[string]interface{} {
+func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool) interface{} {
 	m := map[string]interface{}{
 		"version":       defaultVersion,
-		"schema":        event.Table.Schema,
-		"table":         event.Table.Table,
+		"schema":        goavro.Union("string", event.Table.Schema),
+		"table":         goavro.Union("string", event.Table.Table),
 		"commitTs":      int64(event.CommitTs),
 		"buildTs":       time.Now().UnixMilli(),
-		"schemaVersion": event.TableInfo.UpdateTS,
+		"schemaVersion": goavro.Union("long", int64(event.TableInfo.UpdateTS)),
 	}
 
 	if onlyHandleKey {
-		m["handleKeyOnly"] = true
+		m["handleKeyOnly"] = goavro.Union("boolean", true)
 	}
 
 	var claimCheckLocation string
 	if claimCheckLocation != "" {
-		m["claimCheckLocation"] = claimCheckLocation
+		m["claimCheckLocation"] = goavro.Union("string", claimCheckLocation)
 	}
 
 	if config.EnableRowChecksum && event.Checksum != nil {
-		m["checksum"] = map[string]interface{}{
+		cc := map[string]interface{}{
 			"version":   event.Checksum.Version,
 			"corrupted": event.Checksum.Corrupted,
-			"current":   strconv.FormatUint(uint64(event.Checksum.Current), 10),
-			"previous":  strconv.FormatUint(uint64(event.Checksum.Previous), 10),
+			"current":   event.Checksum.Current,
+			"previous":  event.Checksum.Previous,
 		}
+		m["checksum"] = goavro.Union("com.pingcap.simple.avro.Checksum", cc)
 	}
 
 	if event.IsInsert() {
@@ -186,12 +186,12 @@ func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyH
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	return m
+	return goavro.Union("com.pingcap.simple.avro.Message", m)
 }
 
 func collectColumns(columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool) map[string]interface{} {
 	result := make(map[string]interface{}, len(columns))
-	for idx, col := range columns {
+	for _, col := range columns {
 		if col == nil {
 			continue
 		}
@@ -199,11 +199,11 @@ func collectColumns(columns []*model.Column, columnInfos []rowcodec.ColInfo, onl
 			continue
 		}
 		// todo: is it necessary to encode values into string ?
-		value, err := encodeValue(col.Value, columnInfos[idx].Ft)
-		if err != nil {
-			log.Panic("encode value failed", zap.Error(err))
-		}
-		result[col.Name] = value
+		//value, err := encodeValue(col.Value, columnInfos[idx].Ft)
+		//if err != nil {
+		//	log.Panic("encode value failed", zap.Error(err))
+		//}
+		result[col.Name] = col.Value
 	}
 	return result
 }
