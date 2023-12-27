@@ -79,7 +79,7 @@ type Config struct {
 	// Currently only Debezium protocol is aware of the time zone
 	TimeZone *time.Location
 
-	// Debezium only
+	// Debezium only. Whether schema should be excluded in the output.
 	DebeziumDisableSchema bool
 }
 
@@ -264,6 +264,9 @@ func mergeConfig(
 				dest.AvroDecimalHandlingMode = codecConfig.AvroDecimalHandlingMode
 				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
 			}
+		}
+		if replicaConfig.Sink.DebeziumDisableSchema != nil {
+			dest.DebeziumDisableSchema = replicaConfig.Sink.DebeziumDisableSchema
 		}
 	}
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {
