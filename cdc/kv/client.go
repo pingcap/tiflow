@@ -919,6 +919,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 			zap.Int64("tableID", s.tableID),
 			zap.String("tableName", s.tableName),
 			zap.Uint64("regionID", errInfo.verID.GetID()),
+			zap.Stringer("span", &errInfo.span),
 			zap.Stringer("error", innerErr))
 
 		if notLeader := innerErr.GetNotLeader(); notLeader != nil {
@@ -1107,8 +1108,7 @@ func (s *eventFeedSession) receiveFromStream(
 			})
 			if err != nil {
 				if status.Code(errors.Cause(err)) == codes.Canceled {
-					log.Info(
-						"receive from stream canceled",
+					log.Info("receive from stream canceled",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Int64("tableID", s.tableID),
@@ -1116,8 +1116,7 @@ func (s *eventFeedSession) receiveFromStream(
 						zap.Uint64("storeID", storeID),
 						zap.String("store", addr))
 				} else {
-					log.Warn(
-						"failed to receive from stream",
+					log.Warn("failed to receive from stream",
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Int64("tableID", s.tableID),
@@ -1287,6 +1286,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 				zap.String("tableName", s.tableName),
 				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("requestID", event.RequestId),
+				zap.Stringer("span", &state.sri.span),
 				zap.Any("error", x.Error))
 		}
 
