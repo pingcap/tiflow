@@ -53,8 +53,14 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 			"name":     col.Name.O,
 			"dataType": mysqlType,
 			"nullable": !mysql.HasNotNullFlag(col.GetFlag()),
-			"default":  entry.GetColumnDefaultValue(col),
+			"default":  nil,
 		}
+		defaultValue := entry.GetColumnDefaultValue(col)
+		if defaultValue != nil {
+			// according to TiDB source code, the default value is converted to string if not nil.
+			column["default"] = goavro.Union("string", defaultValue)
+		}
+
 		columnsSchema = append(columnsSchema, column)
 	}
 
@@ -233,10 +239,18 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 			Zerofill:  rawDataType["zerofill"].(bool),
 		}
 
+		var defaultValue interface{}
+		rawDefault := raw["default"]
+		switch v := rawDefault.(type) {
+		case nil:
+		case map[string]interface{}:
+			defaultValue = v["string"].(string)
+		}
+
 		column := &columnSchema{
 			Name:     raw["name"].(string),
 			Nullable: raw["nullable"].(bool),
-			Default:  raw["default"],
+			Default:  defaultValue,
 			DataType: dt,
 		}
 		columns = append(columns, column)
