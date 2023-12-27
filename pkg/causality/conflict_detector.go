@@ -37,9 +37,9 @@ type ConflictDetector[Worker worker[Txn], Txn txnEvent] struct {
 	nextWorkerID atomic.Int64
 
 	// Used to run a background goroutine to GC.
-	garbageNodes  *chann.DrainableChann[txnFinishedEvent]
-	wg            sync.WaitGroup
-	closeCh       chan struct{}
+	garbageNodes *chann.DrainableChann[txnFinishedEvent]
+	wg           sync.WaitGroup
+	closeCh      chan struct{}
 }
 
 type txnFinishedEvent struct {
@@ -53,11 +53,11 @@ func NewConflictDetector[Worker worker[Txn], Txn txnEvent](
 	numSlots uint64,
 ) *ConflictDetector[Worker, Txn] {
 	ret := &ConflictDetector[Worker, Txn]{
-		workers:       workers,
-		slots:         internal.NewSlots[*internal.Node](numSlots),
-		numSlots:      numSlots,
-		garbageNodes:  chann.NewAutoDrainChann[txnFinishedEvent](),
-		closeCh:       make(chan struct{}),
+		workers:      workers,
+		slots:        internal.NewSlots[*internal.Node](numSlots),
+		numSlots:     numSlots,
+		garbageNodes: chann.NewAutoDrainChann[txnFinishedEvent](),
+		closeCh:      make(chan struct{}),
 	}
 
 	ret.wg.Add(1)
