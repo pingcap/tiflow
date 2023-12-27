@@ -77,7 +77,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	worker, p := newNonBatchEncodeWorker(ctx, t)
 	defer worker.close()
 
-	key := TopicPartitionKey{
+	key := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
@@ -136,7 +136,7 @@ func TestBatchEncode_Batch(t *testing.T) {
 	defer cancel()
 	worker, _ := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
-	key := TopicPartitionKey{
+	key := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
@@ -168,15 +168,15 @@ func TestBatchEncode_Batch(t *testing.T) {
 func TestBatchEncode_Group(t *testing.T) {
 	t.Parallel()
 
-	key1 := TopicPartitionKey{
+	key1 := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := TopicPartitionKey{
+	key2 := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
-	key3 := TopicPartitionKey{
+	key3 := codec.TopicPartitionKey{
 		Topic:     "test1",
 		Partition: 2,
 	}
@@ -272,11 +272,11 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 	_, _, colInfo := tableInfo.GetRowColInfos()
 
-	key1 := TopicPartitionKey{
+	key1 := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := TopicPartitionKey{
+	key2 := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
@@ -339,15 +339,15 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 }
 
 func TestBatchEncode_SendMessages(t *testing.T) {
-	key1 := TopicPartitionKey{
+	key1 := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := TopicPartitionKey{
+	key2 := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
-	key3 := TopicPartitionKey{
+	key3 := codec.TopicPartitionKey{
 		Topic:     "test1",
 		Partition: 2,
 	}
@@ -502,11 +502,11 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 }
 
 func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
-	key1 := TopicPartitionKey{
+	key1 := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := TopicPartitionKey{
+	key2 := codec.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}

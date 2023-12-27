@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func getChangefeedInfo() *model.ChangeFeedInfo {
@@ -94,6 +96,13 @@ func addTableAndAddEventsToSortEngine(
 			RawKV: &model.RawKVEntry{
 				OpType: model.OpTypeResolved,
 				CRTs:   4,
+			},
+		},
+		{
+			CRTs: 6,
+			RawKV: &model.RawKVEntry{
+				OpType: model.OpTypeResolved,
+				CRTs:   6,
 			},
 		},
 	}
@@ -177,8 +186,6 @@ func TestRemoveTable(t *testing.T) {
 }
 
 func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
@@ -198,10 +205,18 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		tableSink, ok := manager.tableSinks.Load(span)
-		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS.ResolvedMark() == 4
+		s := manager.GetTableStats(span)
+		return s.CheckpointTs == 4 && s.LastSyncedTs == 4
+	}, 5*time.Second, 10*time.Millisecond)
+
+	manager.UpdateBarrierTs(6, nil)
+	manager.UpdateReceivedSorterResolvedTs(span, 6)
+	manager.schemaStorage.AdvanceResolvedTs(6)
+	require.Eventually(t, func() bool {
+		s := manager.GetTableStats(span)
+		log.Info("checkpoint ts", zap.Uint64("checkpointTs", s.CheckpointTs), zap.Uint64("lastSyncedTs", s.LastSyncedTs))
+		fmt.Printf("debug checkpoint ts %d, lastSyncedTs %d\n", s.CheckpointTs, s.LastSyncedTs)
+		return s.CheckpointTs == 6 && s.LastSyncedTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -229,10 +244,8 @@ func TestGenerateTableSinkTaskWithResolvedTs(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		tableSink, ok := manager.tableSinks.Load(span)
-		require.True(t, ok)
-		checkpointTS := tableSink.(*tableSinkWrapper).getCheckpointTs()
-		return checkpointTS.ResolvedMark() == 3
+		s := manager.GetTableStats(span)
+		return s.CheckpointTs == 3 && s.LastSyncedTs == 3
 	}, 5*time.Second, 10*time.Millisecond)
 }
 
@@ -260,7 +273,7 @@ func TestGetTableStatsToReleaseMemQuota(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(span)
-		return manager.sinkMemQuota.GetUsedBytes() == 0 && s.CheckpointTs == 4
+		return manager.sinkMemQuota.GetUsedBytes() == 0 && s.CheckpointTs == 4 && s.LastSyncedTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
 

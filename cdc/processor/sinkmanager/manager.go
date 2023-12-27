@@ -58,6 +58,7 @@ const (
 type TableStats struct {
 	CheckpointTs model.Ts
 	ResolvedTs   model.Ts
+	LastSyncedTs model.Ts
 	BarrierTs    model.Ts
 }
 
@@ -1007,6 +1008,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	tableSink := value.(*tableSinkWrapper)
 
 	checkpointTs := tableSink.getCheckpointTs()
+	lastSyncedTs := tableSink.getLastSyncedTs()
 	m.sinkMemQuota.Release(span, checkpointTs)
 	m.redoMemQuota.Release(span, checkpointTs)
 
@@ -1049,6 +1051,7 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 	return TableStats{
 		CheckpointTs: checkpointTs.ResolvedMark(),
 		ResolvedTs:   resolvedTs,
+		LastSyncedTs: lastSyncedTs,
 		BarrierTs:    tableSink.barrierTs.Load(),
 	}
 }

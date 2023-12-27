@@ -398,3 +398,9 @@ replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20231213065948-336e064b488d
 
 replace gorm.io/driver/mysql v1.4.5 => gorm.io/driver/mysql v1.3.3
+
+// TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
+// Please remove these dependencies.
+replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
+
+replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67

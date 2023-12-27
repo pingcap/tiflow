@@ -515,6 +515,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 			return nil, cerror.Trace(err)
 		}
 		c.eventRouter = eventRouter
+		c.codecConfig.EnableRowChecksum = o.replicaConfig.Integrity.Enabled()
 	}
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)

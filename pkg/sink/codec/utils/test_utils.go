@@ -18,11 +18,12 @@ import (
 
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 )
 
 // NewLargeEvent4Test creates large events for test
-func NewLargeEvent4Test(t *testing.T) (*model.DDLEvent, *model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
-	helper := entry.NewSchemaTestHelper(t)
+func NewLargeEvent4Test(t *testing.T, replicaConfig *config.ReplicaConfig) (*model.DDLEvent, *model.RowChangedEvent, *model.RowChangedEvent, *model.RowChangedEvent) {
+	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
 
 	sql := `create table test.t(

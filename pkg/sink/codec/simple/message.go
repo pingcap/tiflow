@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"go.uber.org/zap"
@@ -196,20 +197,22 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 
 // TableSchema is the schema of the table.
 type TableSchema struct {
-	Columns []*columnSchema `json:"columns"`
-	Indexes []*IndexSchema  `json:"indexes"`
+	Database string          `json:"database"`
+	Table    string          `json:"table"`
+	Version  uint64          `json:"version"`
+	Columns  []*columnSchema `json:"columns"`
+	Indexes  []*IndexSchema  `json:"indexes"`
 }
 
 func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
+	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
+		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
+	})
+
 	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		columns = append(columns, newColumnSchema(col))
 	}
-
-	// sort by column by its id
-	sort.SliceStable(columns, func(i, j int) bool {
-		return int(columns[i].ID) < int(columns[j].ID)
-	})
 
 	pkInIndexes := false
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
@@ -221,7 +224,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 		indexes = append(indexes, index)
 	}
 
-	// Sometime the primary key is not in the index, we need to find it manually.
+	// sometimes the primary key is not in the index, we need to find it manually.
 	if !pkInIndexes {
 		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
 		if len(pkColumns) != 0 {
@@ -230,42 +233,55 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 				Nullable: false,
 				Primary:  true,
 				Unique:   true,
-			}
-			for col := range pkColumns {
-				index.Columns = append(index.Columns, col)
+				Columns:  pkColumns,
 			}
 			indexes = append(indexes, index)
 		}
 	}
 
 	return &TableSchema{
-		Columns: columns,
-		Indexes: indexes,
+		Database: tableInfo.TableName.Schema,
+		Table:    tableInfo.TableName.Table,
+		Version:  tableInfo.UpdateTS,
+		Columns:  columns,
+		Indexes:  indexes,
 	}
 }
 
 // newTableInfo converts from TableSchema to TableInfo.
-func newTableInfo(msg *message) *model.TableInfo {
+func newTableInfo(m *TableSchema) *model.TableInfo {
+	var (
+		database      string
+		table         string
+		schemaVersion uint64
+	)
+	if m != nil {
+		database = m.Database
+		table = m.Table
+		schemaVersion = m.Version
+	}
 	info := &model.TableInfo{
 		TableName: model.TableName{
-			Schema: msg.Database,
-			Table:  msg.Table,
+			Schema: database,
+			Table:  table,
 		},
 		TableInfo: &timodel.TableInfo{
-			Name:     timodel.NewCIStr(msg.Table),
-			UpdateTS: msg.SchemaVersion,
+			Name:     timodel.NewCIStr(table),
+			UpdateTS: schemaVersion,
 		},
 	}
 
-	if msg.TableSchema != nil {
-		for _, col := range msg.TableSchema.Columns {
-			tiCol := newTiColumnInfo(col, msg.TableSchema.Indexes)
-			info.Columns = append(info.Columns, tiCol)
-		}
-		for _, idx := range msg.TableSchema.Indexes {
-			index := newTiIndexInfo(idx)
-			info.Indices = append(info.Indices, index)
-		}
+	if m == nil {
+		return info
+	}
+
+	for _, col := range m.Columns {
+		tiCol := newTiColumnInfo(col, m.Indexes)
+		info.Columns = append(info.Columns, tiCol)
+	}
+	for _, idx := range m.Indexes {
+		index := newTiIndexInfo(idx)
+		info.Indices = append(info.Indices, index)
 	}
 
 	return info
@@ -273,57 +289,119 @@ func newTableInfo(msg *message) *model.TableInfo {
 
 // newDDLEvent converts from message to DDLEvent.
 func newDDLEvent(msg *message) *model.DDLEvent {
-	tableInfo := newTableInfo(msg)
+	var preTableInfo *model.TableInfo
+	if msg.PreTableSchema != nil {
+		preTableInfo = newTableInfo(msg.PreTableSchema)
+	}
 	return &model.DDLEvent{
-		StartTs:   msg.CommitTs,
-		CommitTs:  msg.CommitTs,
-		TableInfo: tableInfo,
-		Query:     msg.SQL,
+		StartTs:      msg.CommitTs,
+		CommitTs:     msg.CommitTs,
+		TableInfo:    newTableInfo(msg.TableSchema),
+		PreTableInfo: preTableInfo,
+		Query:        msg.SQL,
 	}
 }
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
-func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowChangedEvent, error) {
+func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChecksum bool) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
-			Schema: msg.Database,
+			Schema: msg.Schema,
 			Table:  msg.Table,
 		},
 		TableInfo: tableInfo,
 	}
 
-	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
-	for _, columnInfo := range tableInfo.Columns {
-		fieldTypeMap[columnInfo.Name.O] = &columnInfo.FieldType
-	}
-
-	columns, err := decodeColumns(msg.Data, fieldTypeMap)
+	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
 	result.Columns = columns
 
-	columns, err = decodeColumns(msg.Old, fieldTypeMap)
+	columns, err = decodeColumns(msg.Old, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
 	result.PreColumns = columns
 
-	result.WithHandlePrimaryFlag(tableInfo.GetPrimaryKeyColumnNames())
+	primaryKeySet := make(map[string]struct{})
+	for _, name := range tableInfo.GetPrimaryKeyColumnNames() {
+		primaryKeySet[name] = struct{}{}
+	}
+	result.WithHandlePrimaryFlag(primaryKeySet)
+
+	if enableRowChecksum && msg.Checksum != nil {
+		var previous, current uint64
+		previous, err = strconv.ParseUint(msg.Checksum.Previous, 10, 64)
+		if err != nil {
+			log.Error("cannot parse the previous checksum value",
+				zap.String("previous", msg.Checksum.Previous))
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+
+		err = common.VerifyChecksum(result.PreColumns, previous)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+
+		current, err = strconv.ParseUint(msg.Checksum.Current, 10, 64)
+		if err != nil {
+			log.Error("cannot parse the current checksum value",
+				zap.String("previous", msg.Checksum.Previous))
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		err = common.VerifyChecksum(result.Columns, current)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+
+		result.Checksum = &integrity.Checksum{
+			Previous:  uint32(previous),
+			Current:   uint32(current),
+			Corrupted: msg.Checksum.Corrupted,
+			Version:   msg.Checksum.Version,
+		}
+
+		if msg.Checksum.Corrupted {
+			log.Warn("cdc detect checksum corrupted",
+				zap.String("schema", msg.Schema),
+				zap.String("table", msg.Table))
+			for _, col := range result.PreColumns {
+				log.Info("data corrupted, print each previous column for debugging",
+					zap.String("name", col.Name),
+					zap.Any("type", col.Type),
+					zap.Any("charset", col.Charset),
+					zap.Any("flag", col.Flag),
+					zap.Any("value", col.Value),
+					zap.Any("default", col.Default))
+			}
+			for _, col := range result.Columns {
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", col.Name),
+					zap.Any("type", col.Type),
+					zap.Any("charset", col.Charset),
+					zap.Any("flag", col.Flag),
+					zap.Any("value", col.Value),
+					zap.Any("default", col.Default))
+			}
+		}
+	}
 
 	return result, nil
 }
 
-func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*types.FieldType) ([]*model.Column, error) {
+func decodeColumns(rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo) ([]*model.Column, error) {
+	if rawData == nil {
+		return nil, nil
+	}
 	var result []*model.Column
-	for name, value := range rawData {
-		fieldType, ok := fieldTypeMap[name]
+	for _, info := range columnInfos {
+		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Error("cannot found the fieldType for the column", zap.String("column", name))
-			return nil, cerror.ErrDecodeFailed.GenWithStack("cannot found the fieldType for the column %s", name)
+			log.Error("cannot found the value for the column", zap.String("column", info.Name.O))
 		}
-		col, err := decodeColumn(name, value, fieldType)
+		col, err := decodeColumn(info.Name.O, value, &info.FieldType)
 		if err != nil {
 			return nil, err
 		}
@@ -332,30 +410,42 @@ func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*type
 	return result, nil
 }
 
+type checksum struct {
+	Version   int    `json:"version"`
+	Corrupted bool   `json:"corrupted"`
+	Current   string `json:"current"`
+	Previous  string `json:"previous"`
+}
+
 type message struct {
 	Version int `json:"version"`
-	// Scheme and Table is empty for the resolved ts event.
-	Database string    `json:"database,omitempty"`
-	Table    string    `json:"table,omitempty"`
-	Type     EventType `json:"type"`
-	CommitTs uint64    `json:"commitTs"`
-	BuildTs  int64     `json:"buildTs"`
+	// Schema and Table is empty for the resolved ts event.
+	Schema string    `json:"schema,omitempty"`
+	Table  string    `json:"table,omitempty"`
+	Type   EventType `json:"type"`
+	// SQL is only for the DDL event.
+	SQL      string `json:"sql,omitempty"`
+	CommitTs uint64 `json:"commitTs"`
+	BuildTs  int64  `json:"buildTs"`
+	// SchemaVersion is for the DML event.
+	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
+
+	// ClaimCheckLocation is only for the DML event.
+	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
+	// HandleKeyOnly is only for the DML event.
+	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
+
+	// E2E checksum related fields, only set when enable checksum functionality.
+	Checksum *checksum `json:"checksum,omitempty"`
+
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
 	Old map[string]interface{} `json:"old,omitempty"`
 	// TableSchema is for the DDL and Bootstrap event.
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
-	// SQL is only for the DDL event.
-	SQL string `json:"sql,omitempty"`
-	// SchemaVersion is for the DDL, Bootstrap and DML event.
-	SchemaVersion uint64 `json:"schemaVersion,omitempty"`
-
-	// ClaimCheckLocation is only for the DML event.
-	ClaimCheckLocation string `json:"claimCheckLocation,omitempty"`
-
-	// HandleKeyOnly is only for the DML event.
-	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
+	// PreTableSchema holds schema information before the DDL executed.
+	PreTableSchema *TableSchema `json:"preTableSchema,omitempty"`
 }
 
 func newResolvedMessage(ts uint64) *message {
@@ -369,29 +459,28 @@ func newResolvedMessage(ts uint64) *message {
 
 func newDDLMessage(ddl *model.DDLEvent) *message {
 	var (
-		database      string
-		table         string
-		schema        *TableSchema
-		schemaVersion uint64
+		schema    *TableSchema
+		preSchema *TableSchema
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
 		schema = newTableSchema(ddl.TableInfo)
-		database = ddl.TableInfo.TableName.Schema
-		table = ddl.TableInfo.TableName.Table
-		schemaVersion = ddl.TableInfo.UpdateTS
+	}
+	if !ddl.IsBootstrap {
+		// `PreTableInfo` may not exist for some DDL, such as `create table`
+		if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
+			preSchema = newTableSchema(ddl.PreTableInfo)
+		}
 	}
 
 	msg := &message{
-		Version:       defaultVersion,
-		Database:      database,
-		Table:         table,
-		Type:          DDLType,
-		CommitTs:      ddl.CommitTs,
-		BuildTs:       time.Now().UnixMilli(),
-		SQL:           ddl.Query,
-		TableSchema:   schema,
-		SchemaVersion: schemaVersion,
+		Version:        defaultVersion,
+		Type:           DDLType,
+		CommitTs:       ddl.CommitTs,
+		BuildTs:        time.Now().UnixMilli(),
+		SQL:            ddl.Query,
+		TableSchema:    schema,
+		PreTableSchema: preSchema,
 	}
 	if ddl.IsBootstrap {
 		msg.Type = BootstrapType
@@ -402,11 +491,11 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 }
 
 func newDMLMessage(
-	event *model.RowChangedEvent, onlyHandleKey bool,
+	event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool,
 ) (*message, error) {
 	m := &message{
 		Version:       defaultVersion,
-		Database:      event.Table.Schema,
+		Schema:        event.Table.Schema,
 		Table:         event.Table.Table,
 		CommitTs:      event.CommitTs,
 		BuildTs:       time.Now().UnixMilli(),
@@ -438,6 +527,15 @@ func newDMLMessage(
 		}
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
+	}
+
+	if config.EnableRowChecksum && event.Checksum != nil {
+		m.Checksum = &checksum{
+			Version:   event.Checksum.Version,
+			Corrupted: event.Checksum.Corrupted,
+			Current:   strconv.FormatUint(uint64(event.Checksum.Current), 10),
+			Previous:  strconv.FormatUint(uint64(event.Checksum.Previous), 10),
+		}
 	}
 
 	return m, nil
