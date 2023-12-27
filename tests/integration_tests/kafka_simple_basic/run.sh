@@ -22,6 +22,9 @@ function run() {
 
 	cd $WORK_DIR
 
+	# upstream tidb cluster enable row level checksum
+	run_sql "set global tidb_enable_row_level_checksum=true" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
 	TOPIC_NAME="ticdc-simple-basic"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
@@ -30,7 +33,7 @@ function run() {
 		SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple"
 	fi
 
-	run_cdc_cli changefeed create --sink-uri="$SINK_URI"
+	run_cdc_cli changefeed create --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"
 	sleep 5 # wait for changefeed to start
 	# determine the sink uri and run corresponding consumer
 	# currently only kafka and pulsar are supported

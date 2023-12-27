@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/mock"
@@ -464,6 +465,17 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerInvalidCreateTableStmt.Delegate(err, createStr)
 	}
+
+	// suppress ErrTooLongKey
+	strictSQLModeBackup := dt.se.GetSessionVars().StrictSQLMode
+	dt.se.GetSessionVars().StrictSQLMode = false
+	// support drop PK
+	enableClusteredIndexBackup := dt.se.GetSessionVars().EnableClusteredIndex
+	dt.se.GetSessionVars().EnableClusteredIndex = variable.ClusteredIndexDefModeOff
+	defer func() {
+		dt.se.GetSessionVars().StrictSQLMode = strictSQLModeBackup
+		dt.se.GetSessionVars().EnableClusteredIndex = enableClusteredIndexBackup
+	}()
 
 	ti, err := ddl.BuildTableInfoWithStmt(dt.se, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
 	if err != nil {

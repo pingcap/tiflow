@@ -221,14 +221,14 @@ func (c *CSVConfig) validateAndAdjust() error {
 	case 0:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config delimiter cannot be empty"))
-	case 1, 2:
+	case 1, 2, 3:
 		if strings.ContainsRune(c.Delimiter, CR) || strings.ContainsRune(c.Delimiter, LF) {
 			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 				errors.New("csv config delimiter contains line break characters"))
 		}
 	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains more than two character, note that escape "+
+			errors.New("csv config delimiter contains more than three characters, note that escape "+
 				"sequences can only be used in double quotes in toml configuration items."))
 	}
 

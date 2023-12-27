@@ -343,6 +343,15 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "valid delimiter with 3 characters",
+			config: &CSVConfig{
+				Quote:                "\"",
+				Delimiter:            "|@|",
+				BinaryEncodingMethod: BinaryEncodingHex,
+			},
+			wantErr: "",
+		},
+		{
 			name: "delimiter is empty",
 			config: &CSVConfig{
 				Quote:     "'",
@@ -359,12 +368,12 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 			wantErr: "csv config delimiter contains line break characters",
 		},
 		{
-			name: "delimiter contains more than two characters",
+			name: "delimiter contains more than three characters",
 			config: &CSVConfig{
 				Quote:     "'",
-				Delimiter: "FEF",
+				Delimiter: "FEFA",
 			},
-			wantErr: "csv config delimiter contains more than two character, note that escape " +
+			wantErr: "csv config delimiter contains more than three characters, note that escape " +
 				"sequences can only be used in double quotes in toml configuration items.",
 		},
 		{

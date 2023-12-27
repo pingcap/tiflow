@@ -66,6 +66,11 @@ type eventFragment struct {
 
 // DMLSink is the cloud storage sink.
 // It will send the events to cloud storage systems.
+// Messages are encoded in the specific protocol and then sent to the defragmenter.
+// The data flow is as follows: **data** -> encodingWorkers -> defragmenter -> dmlWorkers -> external storage
+// The defragmenter will defragment the out-of-order encoded messages and sends encoded
+// messages to individual dmlWorkers.
+// The dmlWorkers will write the encoded messages to external storage in parallel between different tables.
 type DMLSink struct {
 	changefeedID model.ChangeFeedID
 	scheme       string
@@ -82,6 +87,8 @@ type DMLSink struct {
 	alive struct {
 		sync.RWMutex
 		// msgCh is a channel to hold eventFragment.
+		// The caller of WriteEvents will write eventFragment to msgCh and
+		// the encodingWorkers will read eventFragment from msgCh to encode events.
 		msgCh  *chann.DrainableChann[eventFragment]
 		isDead bool
 	}
@@ -146,16 +153,16 @@ func NewDMLSink(ctx context.Context,
 	}
 	s.alive.msgCh = chann.NewAutoDrainChann[eventFragment]()
 
-	encodedCh := make(chan eventFragment, defaultChannelSize)
+	encodedOutCh := make(chan eventFragment, defaultChannelSize)
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
 
 	// create a group of encoding workers.
 	for i := 0; i < defaultEncodingConcurrency; i++ {
 		encoder := encoderBuilder.Build()
-		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedCh)
+		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedOutCh)
 	}
 	// create defragmenter.
-	s.defragmenter = newDefragmenter(encodedCh, workerChannels)
+	s.defragmenter = newDefragmenter(encodedOutCh, workerChannels)
 	// create a group of dml workers.
 	clock := clock.New()
 	for i := 0; i < cfg.WorkerCount; i++ {

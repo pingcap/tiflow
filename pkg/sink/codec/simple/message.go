@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"go.uber.org/zap"
@@ -204,15 +205,14 @@ type TableSchema struct {
 }
 
 func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
+	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
+		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
+	})
+
 	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
 		columns = append(columns, newColumnSchema(col))
 	}
-
-	// sort by column by its id
-	sort.SliceStable(columns, func(i, j int) bool {
-		return int(columns[i].ID) < int(columns[j].ID)
-	})
 
 	pkInIndexes := false
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
@@ -233,9 +233,7 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 				Nullable: false,
 				Primary:  true,
 				Unique:   true,
-			}
-			for col := range pkColumns {
-				index.Columns = append(index.Columns, col)
+				Columns:  pkColumns,
 			}
 			indexes = append(indexes, index)
 		}
@@ -305,7 +303,7 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 }
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
-func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowChangedEvent, error) {
+func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChecksum bool) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
@@ -315,43 +313,108 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo) (*model.RowC
 		TableInfo: tableInfo,
 	}
 
-	fieldTypeMap := make(map[string]*types.FieldType, len(tableInfo.Columns))
-	for _, columnInfo := range tableInfo.Columns {
-		fieldTypeMap[columnInfo.Name.O] = &columnInfo.FieldType
-	}
-
-	columns, err := decodeColumns(msg.Data, fieldTypeMap)
+	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
 	result.Columns = columns
 
-	columns, err = decodeColumns(msg.Old, fieldTypeMap)
+	columns, err = decodeColumns(msg.Old, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
 	result.PreColumns = columns
 
-	result.WithHandlePrimaryFlag(tableInfo.GetPrimaryKeyColumnNames())
+	primaryKeySet := make(map[string]struct{})
+	for _, name := range tableInfo.GetPrimaryKeyColumnNames() {
+		primaryKeySet[name] = struct{}{}
+	}
+	result.WithHandlePrimaryFlag(primaryKeySet)
+
+	if enableRowChecksum && msg.Checksum != nil {
+		var previous, current uint64
+		previous, err = strconv.ParseUint(msg.Checksum.Previous, 10, 64)
+		if err != nil {
+			log.Error("cannot parse the previous checksum value",
+				zap.String("previous", msg.Checksum.Previous))
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+
+		err = common.VerifyChecksum(result.PreColumns, previous)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+
+		current, err = strconv.ParseUint(msg.Checksum.Current, 10, 64)
+		if err != nil {
+			log.Error("cannot parse the current checksum value",
+				zap.String("previous", msg.Checksum.Previous))
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		err = common.VerifyChecksum(result.Columns, current)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+
+		result.Checksum = &integrity.Checksum{
+			Previous:  uint32(previous),
+			Current:   uint32(current),
+			Corrupted: msg.Checksum.Corrupted,
+			Version:   msg.Checksum.Version,
+		}
+
+		if msg.Checksum.Corrupted {
+			log.Warn("cdc detect checksum corrupted",
+				zap.String("schema", msg.Schema),
+				zap.String("table", msg.Table))
+			for _, col := range result.PreColumns {
+				log.Info("data corrupted, print each previous column for debugging",
+					zap.String("name", col.Name),
+					zap.Any("type", col.Type),
+					zap.Any("charset", col.Charset),
+					zap.Any("flag", col.Flag),
+					zap.Any("value", col.Value),
+					zap.Any("default", col.Default))
+			}
+			for _, col := range result.Columns {
+				log.Info("data corrupted, print each column for debugging",
+					zap.String("name", col.Name),
+					zap.Any("type", col.Type),
+					zap.Any("charset", col.Charset),
+					zap.Any("flag", col.Flag),
+					zap.Any("value", col.Value),
+					zap.Any("default", col.Default))
+			}
+		}
+	}
 
 	return result, nil
 }
 
-func decodeColumns(rawData map[string]interface{}, fieldTypeMap map[string]*types.FieldType) ([]*model.Column, error) {
+func decodeColumns(rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo) ([]*model.Column, error) {
+	if rawData == nil {
+		return nil, nil
+	}
 	var result []*model.Column
-	for name, value := range rawData {
-		fieldType, ok := fieldTypeMap[name]
+	for _, info := range columnInfos {
+		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Error("cannot found the fieldType for the column", zap.String("column", name))
-			return nil, cerror.ErrDecodeFailed.GenWithStack("cannot found the fieldType for the column %s", name)
+			log.Error("cannot found the value for the column", zap.String("column", info.Name.O))
 		}
-		col, err := decodeColumn(name, value, fieldType)
+		col, err := decodeColumn(info.Name.O, value, &info.FieldType)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, col)
 	}
 	return result, nil
+}
+
+type checksum struct {
+	Version   int    `json:"version"`
+	Corrupted bool   `json:"corrupted"`
+	Current   string `json:"current"`
+	Previous  string `json:"previous"`
 }
 
 type message struct {
@@ -373,10 +436,7 @@ type message struct {
 	HandleKeyOnly bool `json:"handleKeyOnly,omitempty"`
 
 	// E2E checksum related fields, only set when enable checksum functionality.
-	Checksum        string `json:"checksum,omitempty"`
-	OldChecksum     string `json:"oldChecksum,omitempty"`
-	Corrupted       bool   `json:"corrupted,omitempty"`
-	ChecksumVersion int    `json:"checksumVersion,omitempty"`
+	Checksum *checksum `json:"checksum,omitempty"`
 
 	// Data is available for the Insert and Update event.
 	Data map[string]interface{} `json:"data,omitempty"`
@@ -431,7 +491,7 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 }
 
 func newDMLMessage(
-	event *model.RowChangedEvent, onlyHandleKey bool,
+	event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool,
 ) (*message, error) {
 	m := &message{
 		Version:       defaultVersion,
@@ -467,6 +527,15 @@ func newDMLMessage(
 		}
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
+	}
+
+	if config.EnableRowChecksum && event.Checksum != nil {
+		m.Checksum = &checksum{
+			Version:   event.Checksum.Version,
+			Corrupted: event.Checksum.Corrupted,
+			Current:   strconv.FormatUint(uint64(event.Checksum.Current), 10),
+			Previous:  strconv.FormatUint(uint64(event.Checksum.Previous), 10),
+		}
 	}
 
 	return m, nil

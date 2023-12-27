@@ -1001,6 +1001,11 @@ error = '''
 url format is invalid
 '''
 
+["CDC:ErrUnexpected"]
+error = '''
+cdc met unexpected error: %s
+'''
+
 ["CDC:ErrUnknownKVEventType"]
 error = '''
 unknown kv optype: %s, entry: %v
