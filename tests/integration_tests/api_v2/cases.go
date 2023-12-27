@@ -80,6 +80,7 @@ var customReplicaConfig = &ReplicaConfig{
 		EncoderConcurrency:       util.AddressOf(32),
 		EnablePartitionSeparator: util.AddressOf(true),
 		ContentCompatible:        util.AddressOf(true),
+		DebeziumDisableSchema:    util.AddressOf(false),
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
@@ -127,6 +128,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EncoderConcurrency:       util.AddressOf(32),
 		EnablePartitionSeparator: util.AddressOf(true),
 		ContentCompatible:        util.AddressOf(false),
+		DebeziumDisableSchema:    util.AddressOf(true),
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,

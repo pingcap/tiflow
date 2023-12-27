@@ -78,6 +78,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		ContentCompatible:                util.AddressOf(false),
 		TiDBSourceID:                     1,
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
+		DebeziumDisableSchema:            util.AddressOf(true),
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
