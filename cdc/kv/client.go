@@ -1170,7 +1170,7 @@ func (s *eventFeedSession) receiveFromStream(
 				maxCommitTs = commitTs
 			}
 
-			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions, addr)
+			err = s.sendRegionChangeEvents(ctx, cevent.Events, worker, pendingRegions)
 			if err != nil {
 				return err
 			}
@@ -1208,7 +1208,6 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 	events []*cdcpb.Event,
 	worker *regionWorker,
 	pendingRegions *syncRegionFeedStateMap,
-	addr string,
 ) error {
 	statefulEvents := make([][]*regionStatefulEvent, worker.concurrency)
 	for i := 0; i < worker.concurrency; i++ {
@@ -1229,8 +1228,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("regionID", event.RegionId),
 					zap.Uint64("oldRequestID", state.requestID),
-					zap.Uint64("requestID", event.RequestId),
-					zap.String("store", addr))
+					zap.Uint64("requestID", event.RequestId))
 				valid = false
 			} else if state.requestID > event.RequestId {
 				log.Warn("drop event due to event belongs to a stale request",
@@ -1240,8 +1238,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 					zap.String("tableName", s.tableName),
 					zap.Uint64("regionID", event.RegionId),
 					zap.Uint64("requestID", event.RequestId),
-					zap.Uint64("currRequestID", state.requestID),
-					zap.String("store", addr))
+					zap.Uint64("currRequestID", state.requestID))
 				continue
 			}
 		}
@@ -1259,12 +1256,19 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 					zap.Int64("tableID", s.tableID),
 					zap.String("tableName", s.tableName),
 					zap.Uint64("regionID", event.RegionId),
-					zap.Uint64("requestID", event.RequestId),
-					zap.String("store", addr))
+					zap.Uint64("requestID", event.RequestId))
 				continue
 			}
 			state.start()
 			worker.setRegionState(event.RegionId, state)
+			log.Info("event feeds puts state into region worker",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.Uint64("regionID", event.RegionId),
+				zap.Uint64("requestID", event.RequestId),
+				zap.Stringer("span", &state.sri.span))
 		} else if state.isStale() {
 			log.Warn("drop event due to region feed stopped",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -1272,8 +1276,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 				zap.Int64("tableID", s.tableID),
 				zap.String("tableName", s.tableName),
 				zap.Uint64("regionID", event.RegionId),
-				zap.Uint64("requestID", event.RequestId),
-				zap.String("store", addr))
+				zap.Uint64("requestID", event.RequestId))
 			continue
 		}
 
