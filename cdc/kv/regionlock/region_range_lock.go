@@ -523,8 +523,8 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 
 // CollectedLockedRangeAttrs returns by `RegionRangeLock.CollectedLockedRangeAttrs`.
 type CollectedLockedRangeAttrs struct {
-	Holes             []tablepb.Span
 	LockedRegionCount int
+	Holes             []tablepb.Span
 	FastestRegion     LockedRangeAttrs
 	SlowestRegion     LockedRangeAttrs
 }
