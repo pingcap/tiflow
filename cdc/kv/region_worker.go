@@ -636,7 +636,7 @@ func (w *regionWorker) handleEventEntry(
 			return false
 		}
 	}
-	return handleEventEntry(x, w.session.startTs, state, w.metrics, emit)
+	return handleEventEntry(x, w.session.startTs, state, w.metrics, emit, w.session.changefeed, w.session.tableID)
 }
 
 func handleEventEntry(
@@ -645,6 +645,8 @@ func handleEventEntry(
 	state *regionFeedState,
 	metrics *regionWorkerMetrics,
 	emit func(assembled model.RegionFeedEvent) bool,
+	changefeed model.ChangeFeedID,
+	tableID model.TableID,
 ) error {
 	regionID, regionSpan, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
@@ -660,6 +662,13 @@ func handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			metrics.metricPullEventInitializedCounter.Inc()
 			state.setInitialized()
+			log.Info("region is initialized",
+				zap.String("namespace", changefeed.Namespace),
+				zap.String("changefeed", changefeed.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("regionID", regionID),
+				zap.Uint64("requestID", state.requestID))
+
 			for _, cachedEvent := range state.matcher.matchCachedRow(true) {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
