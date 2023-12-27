@@ -60,7 +60,7 @@ func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQ
 	filter, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 
-	schemaStorage, err := entry.NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := entry.NewSchemaStorage(helper.Storage(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 

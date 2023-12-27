@@ -683,12 +683,13 @@ func (s *eventFeedSession) requestRegionToStore(
 		pendingRegions, ok := storePendingRegions[storeAddr]
 		if !ok {
 			// Should never happen
-			log.Panic("pending regions is not found for store",
+			log.Error("pending regions is not found for store",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
 				zap.String("tableName", s.tableName),
 				zap.String("store", storeAddr))
+			return cerror.ErrUnexpected.FastGenByArgs("pending regions is not found for store")
 		}
 
 		state := newRegionFeedState(sri, requestID)

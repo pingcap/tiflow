@@ -15,6 +15,7 @@ package sinkmanager
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func getChangefeedInfo() *model.ChangeFeedInfo {
@@ -184,8 +186,6 @@ func TestRemoveTable(t *testing.T) {
 }
 
 func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
-	t.Parallel()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	changefeedInfo := getChangefeedInfo()
 	manager, _, e := CreateManagerWithMemEngine(t, ctx, model.DefaultChangeFeedID("1"),
@@ -214,6 +214,8 @@ func TestGenerateTableSinkTaskWithBarrierTs(t *testing.T) {
 	manager.schemaStorage.AdvanceResolvedTs(6)
 	require.Eventually(t, func() bool {
 		s := manager.GetTableStats(span)
+		log.Info("checkpoint ts", zap.Uint64("checkpointTs", s.CheckpointTs), zap.Uint64("lastSyncedTs", s.LastSyncedTs))
+		fmt.Printf("debug checkpoint ts %d, lastSyncedTs %d\n", s.CheckpointTs, s.LastSyncedTs)
 		return s.CheckpointTs == 6 && s.LastSyncedTs == 4
 	}, 5*time.Second, 10*time.Millisecond)
 }
