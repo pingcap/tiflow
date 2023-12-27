@@ -40,11 +40,14 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 			"mysqlType": types.TypeToStr(col.GetType(), col.GetCharset()),
 			"charset":   col.GetCharset(),
 			"collate":   col.GetCollate(),
-			"length":    col.GetFlen(),
-			"decimal":   col.GetDecimal(),
-			"elements":  col.GetElems(),
-			"unsigned":  mysql.HasUnsignedFlag(col.GetFlag()),
-			"zerofill":  mysql.HasZerofillFlag(col.GetFlag()),
+			// todo: add detail description about length,
+			// for the text type, default length is 4294967295,
+			// it's out of the range, convert it to int32, make it -1.
+			"length":   int32(col.GetFlen()),
+			"decimal":  col.GetDecimal(),
+			"elements": col.GetElems(),
+			"unsigned": mysql.HasUnsignedFlag(col.GetFlag()),
+			"zerofill": mysql.HasZerofillFlag(col.GetFlag()),
 		}
 		column := map[string]interface{}{
 			"name":     col.Name.O,

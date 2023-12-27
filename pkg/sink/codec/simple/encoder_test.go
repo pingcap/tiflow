@@ -33,79 +33,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEncodeCheckpointAvro(t *testing.T) {
-	t.Parallel()
-
-	codecConfig := common.NewConfig(config.ProtocolSimple)
-	codecConfig.EncodingFormat = common.EncodingFormatAvro
-	ctx := context.Background()
-	for _, compressionType := range []string{
-		compression.None,
-		compression.Snappy,
-		compression.LZ4,
-	} {
-		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
-		builder, err := NewBuilder(ctx, codecConfig)
-		require.NoError(t, err)
-		enc := builder.Build()
-
-		checkpoint := 446266400629063682
-		m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
-		require.NoError(t, err)
-
-		dec, err := NewDecoder(ctx, codecConfig, nil)
-		require.NoError(t, err)
-
-		err = dec.AddKeyValue(m.Key, m.Value)
-		require.NoError(t, err)
-
-		messageType, hasNext, err := dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeResolved, messageType)
-		require.NotEqual(t, 0, dec.msg.BuildTs)
-
-		ts, err := dec.NextResolvedEvent()
-		require.NoError(t, err)
-		require.Equal(t, uint64(checkpoint), ts)
-	}
-
-}
-
 func TestEncodeCheckpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	for _, compressionType := range []string{
-		compression.None,
-		compression.Snappy,
-		compression.LZ4,
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
 	} {
-		codecConfig := common.NewConfig(config.ProtocolSimple)
-		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
-		builder, err := NewBuilder(ctx, codecConfig)
-		require.NoError(t, err)
-		enc := builder.Build()
+		codecConfig.EncodingFormat = format
 
-		checkpoint := 446266400629063682
-		m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
-		require.NoError(t, err)
+		for _, compressionType := range []string{
+			compression.None,
+			compression.Snappy,
+			compression.LZ4,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+			b, err := NewBuilder(ctx, codecConfig)
+			require.NoError(t, err)
+			enc := b.Build()
 
-		dec, err := NewDecoder(ctx, codecConfig, nil)
-		require.NoError(t, err)
+			checkpoint := 446266400629063682
+			m, err := enc.EncodeCheckpointEvent(uint64(checkpoint))
+			require.NoError(t, err)
 
-		err = dec.AddKeyValue(m.Key, m.Value)
-		require.NoError(t, err)
+			dec, err := NewDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
 
-		messageType, hasNext, err := dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeResolved, messageType)
-		require.NotEqual(t, 0, dec.msg.BuildTs)
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
 
-		ts, err := dec.NextResolvedEvent()
-		require.NoError(t, err)
-		require.Equal(t, uint64(checkpoint), ts)
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeResolved, messageType)
+			require.NotEqual(t, 0, dec.msg.BuildTs)
+
+			ts, err := dec.NextResolvedEvent()
+			require.NoError(t, err)
+			require.Equal(t, uint64(checkpoint), ts)
+		}
 	}
 }
 
@@ -120,54 +88,59 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.EnableRowChecksum = true
-
-	for _, compressionType := range []string{
-		compression.None,
-		compression.Snappy,
-		compression.LZ4,
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
 	} {
-		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+		codecConfig.EncodingFormat = format
+		for _, compressionType := range []string{
+			compression.None,
+			compression.Snappy,
+			compression.LZ4,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
-		b, err := NewBuilder(ctx, codecConfig)
-		require.NoError(t, err)
-		enc := b.Build()
+			b, err := NewBuilder(ctx, codecConfig)
+			require.NoError(t, err)
+			enc := b.Build()
 
-		dec, err := NewDecoder(ctx, codecConfig, nil)
-		require.NoError(t, err)
+			dec, err := NewDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
 
-		m, err := enc.EncodeDDLEvent(createTableDDL)
-		require.NoError(t, err)
+			m, err := enc.EncodeDDLEvent(createTableDDL)
+			require.NoError(t, err)
 
-		err = dec.AddKeyValue(m.Key, m.Value)
-		require.NoError(t, err)
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
 
-		messageType, hasNext, err := dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeDDL, messageType)
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
 
-		_, err = dec.NextDDLEvent()
-		require.NoError(t, err)
+			_, err = dec.NextDDLEvent()
+			require.NoError(t, err)
 
-		err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
-		require.NoError(t, err)
+			err = enc.AppendRowChangedEvent(ctx, "", insertEvent, func() {})
+			require.NoError(t, err)
 
-		messages := enc.Build()
-		require.Len(t, messages, 1)
+			messages := enc.Build()
+			require.Len(t, messages, 1)
 
-		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-		require.NoError(t, err)
+			err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+			require.NoError(t, err)
 
-		messageType, hasNext, err = dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeRow, messageType)
+			messageType, hasNext, err = dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeRow, messageType)
 
-		decodedRow, err := dec.NextRowChangedEvent()
-		require.NoError(t, err)
-		require.Equal(t, insertEvent.Checksum.Current, decodedRow.Checksum.Current)
-		require.Equal(t, insertEvent.Checksum.Previous, decodedRow.Checksum.Previous)
-		require.False(t, decodedRow.Checksum.Corrupted)
+			decodedRow, err := dec.NextRowChangedEvent()
+			require.NoError(t, err)
+			require.Equal(t, insertEvent.Checksum.Current, decodedRow.Checksum.Current)
+			require.Equal(t, insertEvent.Checksum.Previous, decodedRow.Checksum.Previous)
+			require.False(t, decodedRow.Checksum.Corrupted)
+		}
 	}
 }
 
@@ -192,8 +165,8 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 	helper.Tk().MustExec("drop table test.abc")
 
-	codecConfig := common.NewConfig(config.ProtocolSimple)
 	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolSimple)
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
 		common.EncodingFormatJSON,
@@ -414,136 +387,158 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 	helper.Tk().MustExec("drop table test.t")
 
 	ctx := context.Background()
-	for _, compressionType := range []string{
-		compression.None,
-		compression.Snappy,
-		compression.LZ4,
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
 	} {
-		codecConfig := common.NewConfig(config.ProtocolSimple)
-		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
-		builder, err := NewBuilder(ctx, codecConfig)
-		require.NoError(t, err)
-		enc := builder.Build()
+		codecConfig.EncodingFormat = format
+		for _, compressionType := range []string{
+			compression.None,
+			compression.Snappy,
+			compression.LZ4,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+			b, err := NewBuilder(ctx, codecConfig)
+			require.NoError(t, err)
+			enc := b.Build()
 
-		m, err := enc.EncodeDDLEvent(ddlEvent)
-		require.NoError(t, err)
+			m, err := enc.EncodeDDLEvent(ddlEvent)
+			require.NoError(t, err)
 
-		dec, err := NewDecoder(ctx, codecConfig, nil)
-		require.NoError(t, err)
+			dec, err := NewDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
 
-		err = dec.AddKeyValue(m.Key, m.Value)
-		require.NoError(t, err)
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
 
-		messageType, hasNext, err := dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeDDL, messageType)
-		require.NotEqual(t, 0, dec.msg.BuildTs)
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+			require.NotEqual(t, 0, dec.msg.BuildTs)
 
-		event, err := dec.NextDDLEvent()
-		require.NoError(t, err)
-		require.Equal(t, ddlEvent.CommitTs, event.CommitTs)
-		// because we don't we don't set startTs in the encoded message,
-		// so the startTs is equal to commitTs
-		require.Equal(t, ddlEvent.CommitTs, event.StartTs)
-		// Bootstrap event doesn't have query
-		require.Equal(t, "", event.Query)
-		require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
-		require.Equal(t, len(ddlEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
+			event, err := dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Equal(t, ddlEvent.CommitTs, event.CommitTs)
+			// because we don't we don't set startTs in the encoded message,
+			// so the startTs is equal to commitTs
+			require.Equal(t, ddlEvent.CommitTs, event.StartTs)
+			// Bootstrap event doesn't have query
+			require.Equal(t, "", event.Query)
+			require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
+			require.Equal(t, len(ddlEvent.TableInfo.Indices)+1, len(event.TableInfo.Indices))
 
-		item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
-			ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
-		require.NotNil(t, item)
+			item := dec.memo.Read(ddlEvent.TableInfo.TableName.Schema,
+				ddlEvent.TableInfo.TableName.Table, ddlEvent.TableInfo.UpdateTS)
+			require.NotNil(t, item)
 
-		err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
-		require.NoError(t, err)
+			err = enc.AppendRowChangedEvent(context.Background(), "", row, func() {})
+			require.NoError(t, err)
 
-		messages := enc.Build()
-		require.Len(t, messages, 1)
+			messages := enc.Build()
+			require.Len(t, messages, 1)
 
-		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-		require.NoError(t, err)
+			err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+			require.NoError(t, err)
 
-		messageType, hasNext, err = dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeRow, messageType)
-		require.NotEqual(t, 0, dec.msg.BuildTs)
+			messageType, hasNext, err = dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeRow, messageType)
+			require.NotEqual(t, 0, dec.msg.BuildTs)
 
-		decodedRow, err := dec.NextRowChangedEvent()
-		require.NoError(t, err)
-		require.Equal(t, decodedRow.CommitTs, row.CommitTs)
-		require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
-		require.Equal(t, decodedRow.Table.Table, row.Table.Table)
-		require.Nil(t, decodedRow.PreColumns)
+			decodedRow, err := dec.NextRowChangedEvent()
+			require.NoError(t, err)
+			require.Equal(t, decodedRow.CommitTs, row.CommitTs)
+			require.Equal(t, decodedRow.Table.Schema, row.Table.Schema)
+			require.Equal(t, decodedRow.Table.Table, row.Table.Table)
+			require.Nil(t, decodedRow.PreColumns)
+		}
 	}
 }
 
-func TestDMLEventCompressionE2E(t *testing.T) {
+func TestEncodeLargeEventsNormal(t *testing.T) {
 	ddlEvent, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	ctx := context.Background()
-	for _, compressionType := range []string{
-		compression.None,
-		compression.Snappy,
-		compression.LZ4,
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
 	} {
-		codecConfig := common.NewConfig(config.ProtocolSimple)
-		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
+		codecConfig.EncodingFormat = format
+		for _, compressionType := range []string{
+			compression.None,
+			compression.Snappy,
+			compression.LZ4,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
-		builder, err := NewBuilder(ctx, codecConfig)
-		require.NoError(t, err)
-		enc := builder.Build()
+			b, err := NewBuilder(ctx, codecConfig)
+			require.NoError(t, err)
+			enc := b.Build()
 
-		dec, err := NewDecoder(ctx, codecConfig, nil)
-		require.NoError(t, err)
+			dec, err := NewDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
 
-		m, err := enc.EncodeDDLEvent(ddlEvent)
-		require.NoError(t, err)
+			m, err := enc.EncodeDDLEvent(ddlEvent)
+			require.NoError(t, err)
 
-		err = dec.AddKeyValue(m.Key, m.Value)
-		require.NoError(t, err)
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
 
-		messageType, hasNext, err := dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeDDL, messageType)
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
 
-		_, err = dec.NextDDLEvent()
-		require.NoError(t, err)
+			obtainedDDL, err := dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.NotNil(t, obtainedDDL)
 
-		err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
-		require.NoError(t, err)
+			obtainedDefaultValues := make(map[string]interface{}, len(obtainedDDL.TableInfo.Columns))
+			for _, col := range obtainedDDL.TableInfo.Columns {
+				obtainedDefaultValues[col.Name.O] = col.DefaultValue
+			}
+			for _, col := range ddlEvent.TableInfo.Columns {
+				expectedDefaultValue := entry.GetColumnDefaultValue(col)
+				require.Equal(t, expectedDefaultValue, obtainedDefaultValues[col.Name.O])
+			}
 
-		messages := enc.Build()
-		require.Len(t, messages, 1)
+			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
+			require.NoError(t, err)
 
-		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-		require.NoError(t, err)
+			messages := enc.Build()
+			require.Len(t, messages, 1)
 
-		messageType, hasNext, err = dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeRow, messageType)
+			err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+			require.NoError(t, err)
 
-		decodedRow, err := dec.NextRowChangedEvent()
-		require.NoError(t, err)
+			messageType, hasNext, err = dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeRow, messageType)
 
-		require.Equal(t, decodedRow.CommitTs, insertEvent.CommitTs)
-		require.Equal(t, decodedRow.Table.Schema, insertEvent.Table.Schema)
-		require.Equal(t, decodedRow.Table.Table, insertEvent.Table.Table)
+			decodedRow, err := dec.NextRowChangedEvent()
+			require.NoError(t, err)
 
-		decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
-		for _, column := range decodedRow.Columns {
-			decodedColumns[column.Name] = column
-		}
-		for _, col := range insertEvent.Columns {
-			decoded, ok := decodedColumns[col.Name]
-			require.True(t, ok)
-			require.Equal(t, col.Type, decoded.Type)
-			require.Equal(t, col.Charset, decoded.Charset)
-			require.Equal(t, col.Collation, decoded.Collation)
-			require.EqualValues(t, col.Value, decoded.Value)
+			require.Equal(t, decodedRow.CommitTs, insertEvent.CommitTs)
+			require.Equal(t, decodedRow.Table.Schema, insertEvent.Table.Schema)
+			require.Equal(t, decodedRow.Table.Table, insertEvent.Table.Table)
+
+			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+			for _, column := range decodedRow.Columns {
+				decodedColumns[column.Name] = column
+			}
+			for _, col := range insertEvent.Columns {
+				decoded, ok := decodedColumns[col.Name]
+				require.True(t, ok)
+				require.Equal(t, col.Type, decoded.Type)
+				require.Equal(t, col.Charset, decoded.Charset)
+				require.Equal(t, col.Collation, decoded.Collation)
+				require.EqualValues(t, col.Value, decoded.Value)
+			}
 		}
 	}
 }
