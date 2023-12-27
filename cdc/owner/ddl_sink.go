@@ -443,10 +443,11 @@ func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 		return "", errors.Trace(err)
 	}
 	if len(stms) != 1 {
-		log.Panic("invalid ddlQuery statement size",
+		log.Error("invalid ddlQuery statement size",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.String("ddlQuery", ddl.Query))
+		return "", cerror.ErrUnexpected.FastGenByArgs("invalid ddlQuery statement size")
 	}
 	var sb strings.Builder
 	// translate TiDB feature to special comment
