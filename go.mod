@@ -68,11 +68,19 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
 	github.com/pingcap/kvproto v0.0.0-20230925123611-87bebcc0d071
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
+<<<<<<< HEAD
 	github.com/pingcap/tidb v1.1.0-beta.0.20231010115255-ec2731b8f539
 	github.com/pingcap/tidb-tools v0.0.0-20231010140451-6189b1bea2fd
 	github.com/pingcap/tidb/parser v0.0.0-20231010115255-ec2731b8f539
 	github.com/prometheus/client_golang v1.16.0
 	github.com/prometheus/client_model v0.4.0
+=======
+	github.com/pingcap/tidb v1.1.0-beta.0.20231212043317-b478056bbf73
+	github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20231212043317-b478056bbf73
+	github.com/prometheus/client_golang v1.17.0
+	github.com/prometheus/client_model v0.5.0
+>>>>>>> fdef38b920 (binlog-filter: log error instead of return it (#10380))
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
