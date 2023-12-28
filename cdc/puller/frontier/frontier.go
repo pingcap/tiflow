@@ -195,9 +195,9 @@ func (s *spanFrontier) SpanString(span tablepb.Span) string {
 		if n.Value().key == math.MaxUint64 {
 			buf.WriteString(fmt.Sprintf("[%d:%s @ Max] ", n.regionID, n.Key()))
 		} else if idx == 0 || // head
-			bytes.Equal(key, span.StartKey) || // current sapn
-			bytes.Equal(nextKey, span.StartKey) || // the previous sapn
-			bytes.Equal(key, span.EndKey) { // the next span
+			bytes.Equal(key, span.StartKey) || // start key sapn
+			bytes.Equal(nextKey, span.StartKey) || // the previous sapn of start key
+			bytes.Equal(key, span.EndKey) { // the end key span
 			buf.WriteString(fmt.Sprintf("[%d:%s @ %d] ", n.regionID, n.Key(), n.Value().key))
 		}
 		idx++
