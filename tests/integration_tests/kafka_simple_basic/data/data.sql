@@ -1,8 +1,4 @@
-drop database if exists test;
-create database test;
 use test;
-
-
 
 insert into tp_int()
 values ();
