@@ -865,8 +865,6 @@ github.com/pingcap/sysutil v1.0.1-0.20230407040306-fb007c5aff21 h1:QV6jqlfOkh8hq
 github.com/pingcap/sysutil v1.0.1-0.20230407040306-fb007c5aff21/go.mod h1:QYnjfA95ZaMefyl1NO8oPtKeb8pYUdnDVhQgf+qdpjM=
 github.com/pingcap/tidb v1.1.0-beta.0.20231212043317-b478056bbf73 h1:mj3ewOCcI0z8NcE5KWCYmq8f+S+yeC77OuxSuLBU5sc=
 github.com/pingcap/tidb v1.1.0-beta.0.20231212043317-b478056bbf73/go.mod h1:x3ROM4heOSAIf/nEVr9ac1+HfgkgydwQUrd8t5nFzjE=
-github.com/pingcap/tidb-tools v0.0.0-20231213042249-0e38c7873b5b h1:1opGBN77UXGFCl3Tx5wiYTAn74pQ7yuwBkqRnSLxSHI=
-github.com/pingcap/tidb-tools v0.0.0-20231213042249-0e38c7873b5b/go.mod h1:7m72uoBoTrr8JNNA7iFBH824j3clIJx34zlUWJ45Q6Y=
 github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6 h1:NJQd14hU0pLj8vS+vYtgFw4bXrFIXa/HfMdxALHtgVU=
 github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6/go.mod h1:7m72uoBoTrr8JNNA7iFBH824j3clIJx34zlUWJ45Q6Y=
 github.com/pingcap/tidb/pkg/parser v0.0.0-20231212043317-b478056bbf73 h1:9+OZA39uCJe4x2zzkM6Uv+bp8/93Ggp0S+YvTSvs35E=
