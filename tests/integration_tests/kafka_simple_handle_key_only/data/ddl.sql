@@ -1,3 +1,7 @@
+drop database if exists test;
+create database test;
+use test;
+
 create table t (
     id          int primary key auto_increment,
 
