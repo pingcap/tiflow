@@ -16,7 +16,6 @@ package simple
 import (
 	"encoding/base64"
 	"fmt"
-	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -305,7 +304,7 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
 func buildRowChangedEvent(
-	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool, avroFormat bool,
+	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool,
 ) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
@@ -316,13 +315,13 @@ func buildRowChangedEvent(
 		TableInfo: tableInfo,
 	}
 
-	columns, err := decodeColumns(msg.Data, tableInfo.Columns, avroFormat)
+	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
 	result.Columns = columns
 
-	columns, err = decodeColumns(msg.Old, tableInfo.Columns, avroFormat)
+	columns, err = decodeColumns(msg.Old, tableInfo.Columns)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +379,7 @@ func buildRowChangedEvent(
 }
 
 func decodeColumns(
-	rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo, avroFormat bool,
+	rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo,
 ) ([]*model.Column, error) {
 	if rawData == nil {
 		return nil, nil
@@ -392,7 +391,7 @@ func decodeColumns(
 			log.Error("cannot found the value for the column",
 				zap.String("column", info.Name.O))
 		}
-		col, err := decodeColumn(info.Name.O, value, &info.FieldType, avroFormat)
+		col, err := decodeColumn(info.Name.O, value, &info.FieldType)
 		if err != nil {
 			return nil, err
 		}
@@ -558,62 +557,46 @@ func encodeValue4Avro(
 	if value == nil {
 		return nil, "null", nil
 	}
-	switch ft.GetType() {
-	case mysql.TypeEnum:
-		switch v := value.(type) {
-		case uint64:
+
+	switch v := value.(type) {
+	case uint64:
+		switch ft.GetType() {
+		case mysql.TypeEnum:
 			enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
 			if err != nil {
 				return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 			}
 			return enumVar.Name, "string", nil
-		case []uint8:
-			return string(v), "string", nil
-		case string:
-			return v, "string", nil
-		default:
-			return nil, "", cerror.ErrEncodeFailed.GenWithStack(
-				"unexpected type %v, for enum value %v", reflect.TypeOf(value), value)
-		}
-	case mysql.TypeSet:
-		switch v := value.(type) {
-		case uint64:
+		case mysql.TypeSet:
 			setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
 			if err != nil {
 				return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 			}
 			return setValue.Name, "string", nil
-		case []uint8:
-			return string(v), "string", nil
 		default:
-			return nil, "", cerror.ErrEncodeFailed.GenWithStack(
-				"unexpected type %v, for set value %v", reflect.TypeOf(value), value)
-		}
-	case mysql.TypeBit:
-		switch v := value.(type) {
-		case uint64:
-			return []byte(tiTypes.NewBinaryLiteralFromUint(v, -1)), "bytes", nil
-		default:
-			return nil, "", cerror.ErrEncodeFailed.GenWithStack(
-				"unexpected type %v, for bit value %v", reflect.TypeOf(value), value)
-		}
-	case mysql.TypeJSON:
-		return value.(string), "string", nil
-	default:
-	}
 
-	// avro `long` only support `int64`, cannot support `uint64`, so we need to convert it to `string`
-
-	// todo: pay attention to value larger than the uint6
-	switch v := value.(type) {
+		}
+		// value too large, convert it to string
+		vv := int64(v)
+		if uint64(vv) != v {
+			return strconv.FormatUint(v, 10), "string", nil
+		}
+		return vv, "long", nil
 	case int64:
 		return v, "long", nil
 	case []byte:
-		// todo: pay attention to the Bit type
 		if mysql.HasBinaryFlag(ft.GetFlag()) {
 			return v, "bytes", nil
 		}
 		return string(v), "string", nil
+	case float32:
+		return v, "float", nil
+	case float64:
+		return v, "double", nil
+	case string:
+		return v, "string", nil
+	default:
+		log.Panic("unexpected type for avro value", zap.Any("value", value))
 	}
 
 	return value, "", nil
@@ -691,7 +674,7 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 	return result, nil
 }
 
-func decodeColumn(name string, value interface{}, fieldType *types.FieldType, avroFormat bool) (*model.Column, error) {
+func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*model.Column, error) {
 	result := &model.Column{
 		Type:      fieldType.GetType(),
 		Charset:   fieldType.GetCharset(),
@@ -733,6 +716,10 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType, av
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 			}
+		case uint64:
+			value = v
+		case int64:
+			value = v
 		default:
 			log.Panic("unexpected type for bit value", zap.Any("value", value))
 		}

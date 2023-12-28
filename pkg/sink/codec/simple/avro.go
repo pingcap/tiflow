@@ -316,50 +316,60 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 	m.CommitTs = uint64(rawValues["commitTs"].(int64))
 	m.BuildTs = rawValues["buildTs"].(int64)
 
-	switch eventType {
-	case WatermarkType:
-	case DDLType, BootstrapType:
-		m.SQL = rawValues["sql"].(map[string]interface{})["string"].(string)
-		if rawValues["tableSchema"] != nil {
-			rawTableSchema := rawValues["tableSchema"].(map[string]interface{})
-			rawTableSchema = rawTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
-			m.TableSchema = newTableSchemaFromAvroNative(rawTableSchema)
-		}
-		if rawValues["preTableSchema"] != nil {
-			rawPreTableSchema := rawValues["preTableSchema"].(map[string]interface{})
-			rawPreTableSchema = rawPreTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
-			m.PreTableSchema = newTableSchemaFromAvroNative(rawPreTableSchema)
-		}
-	case InsertType, UpdateType, DeleteType:
-		m.Schema = rawValues["schema"].(map[string]interface{})["string"].(string)
-		m.Table = rawValues["table"].(map[string]interface{})["string"].(string)
-		m.SchemaVersion = uint64(rawValues["schemaVersion"].(map[string]interface{})["long"].(int64))
+	rawSchemaValue := rawValues["schema"]
+	if rawSchemaValue != nil {
+		m.Schema = rawSchemaValue.(map[string]interface{})["string"].(string)
+	}
 
-		rawDataValues := rawValues["data"]
-		if rawDataValues != nil {
-			data := make(map[string]interface{})
-			rawDataMap := rawDataValues.(map[string]interface{})["map"].(map[string]interface{})
-			for key, value := range rawDataMap {
-				valueMap := value.(map[string]interface{})
-				for _, v := range valueMap {
-					data[key] = v
-				}
-			}
-			m.Data = data
-		}
+	rawTableValue := rawValues["table"]
+	if rawTableValue != nil {
+		m.Table = rawTableValue.(map[string]interface{})["string"].(string)
+	}
 
-		rawOldValues := rawValues["old"]
-		if rawOldValues != nil {
-			old := make(map[string]interface{})
-			rawOldMap := rawOldValues.(map[string]interface{})["map"].(map[string]interface{})
-			for key, value := range rawOldMap {
-				valueMap := value.(map[string]interface{})
-				for _, v := range valueMap {
-					old[key] = v
-				}
-			}
-			m.Old = old
+	rawSchemaVersionValue := rawValues["schemaVersion"]
+	if rawSchemaVersionValue != nil {
+		m.SchemaVersion = uint64(rawSchemaVersionValue.(map[string]interface{})["long"].(int64))
+	}
+
+	rawSQLValues := rawValues["sql"]
+	if rawSQLValues != nil {
+		m.SQL = rawSQLValues.(map[string]interface{})["string"].(string)
+	}
+
+	rawTableSchemaValues := rawValues["tableSchema"]
+	if rawTableSchemaValues != nil {
+		rawTableSchema := rawTableSchemaValues.(map[string]interface{})
+		rawTableSchema = rawTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
+		m.TableSchema = newTableSchemaFromAvroNative(rawTableSchema)
+	}
+
+	rawPreTableSchemaValue := rawValues["preTableSchema"]
+	if rawPreTableSchemaValue != nil {
+		rawPreTableSchema := rawPreTableSchemaValue.(map[string]interface{})
+		rawPreTableSchema = rawPreTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
+		m.PreTableSchema = newTableSchemaFromAvroNative(rawPreTableSchema)
+	}
+
+	m.Data = newDataMap(rawValues["data"])
+	m.Old = newDataMap(rawValues["old"])
+	return m, nil
+}
+
+func newDataMap(rawValues interface{}) map[string]interface{} {
+	if rawValues == nil {
+		return nil
+	}
+	data := make(map[string]interface{})
+	rawDataMap := rawValues.(map[string]interface{})["map"].(map[string]interface{})
+	for key, value := range rawDataMap {
+		if value == nil {
+			data[key] = nil
+			continue
+		}
+		valueMap := value.(map[string]interface{})
+		for _, v := range valueMap {
+			data[key] = v
 		}
 	}
-	return m, nil
+	return data
 }

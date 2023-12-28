@@ -178,8 +178,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			d.msg.Schema, d.msg.Table, d.msg.SchemaVersion)
 	}
 
-	avroFormat := d.config.EncodingFormat == common.EncodingFormatAvro
-	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum, avroFormat)
+	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum)
 	if err != nil {
 		return nil, err
 	}

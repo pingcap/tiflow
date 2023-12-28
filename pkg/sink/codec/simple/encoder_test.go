@@ -300,9 +300,22 @@ func TestEncoderOtherTypes(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
+	sql := `create table test.t(
+			a int primary key auto_increment,
+			b enum('a', 'b', 'c'),
+			c set('a', 'b', 'c'),
+			d bit(64),
+			e json)`
+	ddlEvent := helper.DDL2Event(sql)
+
+	sql = `insert into test.t() values (1, 'a', 'a,b', b'1000001', '{
+		  "key1": "value1",
+		  "key2": "value2"
+		}');`
+	row := helper.DML2Event(sql, "test", "t")
+
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
 		common.EncodingFormatJSON,
@@ -311,14 +324,6 @@ func TestEncoderOtherTypes(t *testing.T) {
 		b, err := NewBuilder(ctx, codecConfig)
 		require.NoError(t, err)
 		enc := b.Build()
-
-		sql := `create table test.t(
-			a int primary key auto_increment,
-			b enum('a', 'b', 'c'),
-			c set('a', 'b', 'c'),
-			d bit(64),
-			e json)`
-		ddlEvent := helper.DDL2Event(sql)
 
 		m, err := enc.EncodeDDLEvent(ddlEvent)
 		require.NoError(t, err)
@@ -336,12 +341,6 @@ func TestEncoderOtherTypes(t *testing.T) {
 
 		_, err = dec.NextDDLEvent()
 		require.NoError(t, err)
-
-		sql = `insert into test.t() values (1, 'a', 'a,b', b'1000001', '{
-		  "key1": "value1",
-		  "key2": "value2"
-		}');`
-		row := helper.DML2Event(sql, "test", "t")
 
 		err = enc.AppendRowChangedEvent(ctx, "", row, func() {})
 		require.NoError(t, err)
@@ -506,11 +505,12 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 
 			obtainedDefaultValues := make(map[string]interface{}, len(obtainedDDL.TableInfo.Columns))
 			for _, col := range obtainedDDL.TableInfo.Columns {
-				obtainedDefaultValues[col.Name.O] = col.DefaultValue
+				obtainedDefaultValues[col.Name.O] = entry.GetColumnDefaultValue(col)
 			}
 			for _, col := range ddlEvent.TableInfo.Columns {
-				expectedDefaultValue := entry.GetColumnDefaultValue(col)
-				require.Equal(t, expectedDefaultValue, obtainedDefaultValues[col.Name.O])
+				expected := entry.GetColumnDefaultValue(col)
+				obtained := obtainedDefaultValues[col.Name.O]
+				require.Equal(t, expected, obtained)
 			}
 
 			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
@@ -550,20 +550,43 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 	}
 }
 
+func TestDDLMessageTooLarge(t *testing.T) {
+	ddlEvent, _, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
+
+	codecConfig := common.NewConfig(config.ProtocolSimple)
+	codecConfig.MaxMessageBytes = 100
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
+	} {
+		codecConfig.EncodingFormat = format
+		b, err := NewBuilder(context.Background(), codecConfig)
+		require.NoError(t, err)
+		enc := b.Build()
+
+		_, err = enc.EncodeDDLEvent(ddlEvent)
+		require.ErrorIs(t, err, errors.ErrMessageTooLarge)
+	}
+}
+
 func TestDMLMessageTooLarge(t *testing.T) {
 	_, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.MaxMessageBytes = 100
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
+	} {
+		codecConfig.EncodingFormat = format
+		b, err := NewBuilder(context.Background(), codecConfig)
+		require.NoError(t, err)
+		enc := b.Build()
 
-	builder, err := NewBuilder(context.Background(), codecConfig)
-	require.NoError(t, err)
-	enc := builder.Build()
-
-	err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
-	require.ErrorIs(t, err, errors.ErrMessageTooLarge)
+		err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
+		require.ErrorIs(t, err, errors.ErrMessageTooLarge)
+	}
 }
-
 func TestLargerMessageHandleClaimCheck(t *testing.T) {
 	ddlEvent, _, updateEvent, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
@@ -578,9 +601,9 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 		codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/simple-claim-check"
 		codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
-		builder, err := NewBuilder(ctx, codecConfig)
+		b, err := NewBuilder(ctx, codecConfig)
 		require.NoError(t, err)
-		enc := builder.Build()
+		enc := b.Build()
 
 		m, err := enc.EncodeDDLEvent(ddlEvent)
 		require.NoError(t, err)
