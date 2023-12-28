@@ -169,7 +169,7 @@ func (s *spanFrontier) String() string {
 	return buf.String()
 }
 
-func (s *spanFrontier) StringWtihRegionID() string {
+func (s *spanFrontier) stringWtihRegionID() string {
 	var buf strings.Builder
 	s.spanList.Entries(func(n *skipListNode) bool {
 		if n.Value().key == math.MaxUint64 {

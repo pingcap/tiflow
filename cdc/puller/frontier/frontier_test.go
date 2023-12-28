@@ -225,9 +225,14 @@ func TestSpanString(t *testing.T) {
 	f.Forward(6, spFG, 25)
 	f.Forward(7, spGH, 35)
 	require.Equal(t, uint64(2), f.Frontier())
-	require.Equal(t, `[1:a @ 2] [2:b @ 5] [3:c @ 10] [4:d @ 20] [5:e @ 30] [6:f @ 25] [7:g @ 35] [0:h @ Max] `, f.StringWtihRegionID())
+	require.Equal(t, `[1:a @ 2] [2:b @ 5] [3:c @ 10] [4:d @ 20] [5:e @ 30] [6:f @ 25] [7:g @ 35] [0:h @ Max] `, f.stringWtihRegionID())
 	// Print 5 span: start, before, target span, next, end
 	require.Equal(t, `[1:a @ 2] [3:c @ 10] [4:d @ 20] [5:e @ 30] [0:h @ Max] `, f.SpanString(spDE))
+
+	spBH := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("h")}
+	f.Forward(8, spBH, 18)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[1:a @ 2] [8:b @ 18] [0:h @ Max] `, f.stringWtihRegionID())
 }
 
 func TestMinMax(t *testing.T) {
