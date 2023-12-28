@@ -26,15 +26,14 @@ import (
 )
 
 const (
-	bootstrapWorkerTickerInterval = 10 * time.Second
+	bootstrapWorkerTickerInterval = 5 * time.Second
 	bootstrapWorkerGCInterval     = 30 * time.Second
 
-	defaultSendBootstrapInterval   = 1 * time.Minute
-	defaultSendBootstrapInMsgCount = 1000
-	defaultMaxInactiveDuration     = 5 * time.Minute
+	defaultMaxInactiveDuration = 30 * time.Minute
 )
 
 type bootstrapWorker struct {
+	changefeedID            model.ChangeFeedID
 	activeTables            sync.Map
 	builder                 RowEventEncoderBuilder
 	sendBootstrapInterval   time.Duration
@@ -46,6 +45,7 @@ type bootstrapWorker struct {
 
 // newBootstrapWorker creates a new bootstrapGenerator instance
 func newBootstrapWorker(
+	changefeedID model.ChangeFeedID,
 	outCh chan<- *future,
 	builder RowEventEncoderBuilder,
 	sendBootstrapInterval time.Duration,
@@ -53,6 +53,7 @@ func newBootstrapWorker(
 	maxInactiveDuration time.Duration,
 ) *bootstrapWorker {
 	return &bootstrapWorker{
+		changefeedID:            changefeedID,
 		outCh:                   outCh,
 		builder:                 builder,
 		activeTables:            sync.Map{},
@@ -63,7 +64,6 @@ func newBootstrapWorker(
 }
 
 func (b *bootstrapWorker) run(ctx context.Context) error {
-	log.Info("fizz: bootstrap worker is started")
 	sendTicker := time.NewTicker(bootstrapWorkerTickerInterval)
 	defer sendTicker.Stop()
 	gcTicker := time.NewTicker(bootstrapWorkerGCInterval)
@@ -106,9 +106,6 @@ func (b *bootstrapWorker) addEvent(
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Info("fizz: a new table is added to the bootstrap worker, send bootstrap message immediately",
-			zap.String("topic", tb.topic),
-			zap.Int64("tableID", int64(tb.id)))
 	} else {
 		// If the table is already in the activeTables, update its status.
 		table.(*tableStatus).update(key, row)
@@ -127,9 +124,8 @@ func (b *bootstrapWorker) sendBootstrapMsg(ctx context.Context, table *tableStat
 		return nil
 	}
 	table.reset()
-	log.Info("fizz: bootstrap worker is sending bootstrap message", zap.Any("table", table.id))
 	tableInfo := table.tableInfo.Load().(*model.TableInfo)
-	events, err := b.generateEvents(ctx, table.topic, table.totalPartition.Load(), tableInfo)
+	events, err := b.generateEvents(table.topic, table.totalPartition.Load(), tableInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -138,17 +134,12 @@ func (b *bootstrapWorker) sendBootstrapMsg(ctx context.Context, table *tableStat
 		case <-ctx.Done():
 			return ctx.Err()
 		case b.outCh <- event:
-			log.Info("fizz: bootstrap message is sent",
-				zap.Any("msgKey", event.Key),
-				zap.Any("table", table.id))
 		}
 	}
-	log.Info("fizz: bootstrap message are sent", zap.Any("table", table.id))
 	return nil
 }
 
 func (b *bootstrapWorker) generateEvents(
-	ctx context.Context,
 	topic string,
 	totalPartition int32,
 	tableInfo *model.TableInfo,
@@ -188,7 +179,10 @@ func (b *bootstrapWorker) gcInactiveTables() {
 	b.activeTables.Range(func(key, value interface{}) bool {
 		table := value.(*tableStatus)
 		if !table.isActive(b.maxInactiveDuration) {
-			log.Info("fizz: a table is removed from the bootstrap worker", zap.Any("table", table.id))
+			log.Info("A table is removed from the bootstrap worker",
+				zap.Int64("tableID", table.id),
+				zap.String("topic", table.topic),
+				zap.Stringer("changefeed", b.changefeedID))
 			b.activeTables.Delete(key)
 		}
 		return true

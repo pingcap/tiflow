@@ -59,6 +59,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		ContentCompatible:                util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",

@@ -487,6 +487,13 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
 		}
 
+		if c.Sink.SendBootstrapIntervalInSec != nil {
+			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*c.Sink.SendBootstrapIntervalInSec)
+		}
+
+		if c.Sink.SendBootstrapInMsgCount != nil {
+			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*c.Sink.SendBootstrapInMsgCount)
+		}
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -776,6 +783,14 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
 		}
+
+		if cloned.Sink.SendBootstrapIntervalInSec != nil {
+			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*cloned.Sink.SendBootstrapIntervalInSec)
+		}
+
+		if cloned.Sink.SendBootstrapInMsgCount != nil {
+			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*cloned.Sink.SendBootstrapInMsgCount)
+		}
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
@@ -950,6 +965,8 @@ type SinkConfig struct {
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
+	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
+	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
 }
 
 // CSVConfig denotes the csv config

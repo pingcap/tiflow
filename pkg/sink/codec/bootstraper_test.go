@@ -20,6 +20,7 @@ import (
 
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,6 +51,8 @@ func getMockTableStatus() (TopicPartitionKey, *model.RowChangedEvent, *tableStat
 
 func TestShouldSendBootstrapMsg(t *testing.T) {
 	t.Parallel()
+	defaultSendBootstrapInterval := time.Duration(config.DefaultSendBootstrapIntervalInSec) * time.Second
+	defaultSendBootstrapInMsgCount := config.DefaultSendBootstrapInMsgCount
 
 	_, _, tb1 := getMockTableStatus()
 
@@ -63,7 +66,7 @@ func TestShouldSendBootstrapMsg(t *testing.T) {
 
 	// case 3: When the table receive message more than sendBootstrapInMsgCount,
 	// it should send bootstrap message
-	tb1.counter.Add(int32(defaultSendBootstrapInMsgCount))
+	tb1.counter.Add(defaultSendBootstrapInMsgCount)
 	require.True(t, tb1.shouldSendBootstrapMsg(defaultSendBootstrapInterval, defaultSendBootstrapInMsgCount))
 
 	// case 4: When the table does not send bootstrap message for a sendBootstrapInterval time,
@@ -92,13 +95,15 @@ func TestIsActive(t *testing.T) {
 func TestBootstrapWorker(t *testing.T) {
 	t.Parallel()
 	// new builder
+	cfID := model.DefaultChangeFeedID("test")
 	builder := &MockRowEventEncoderBuilder{}
-
 	outCh := make(chan *future, defaultInputChanSize)
-	worker := newBootstrapWorker(outCh,
+	worker := newBootstrapWorker(
+		cfID,
+		outCh,
 		builder,
-		defaultSendBootstrapInterval,
-		defaultSendBootstrapInMsgCount,
+		time.Duration(config.DefaultSendBootstrapIntervalInSec)*time.Second,
+		config.DefaultSendBootstrapInMsgCount,
 		defaultMaxInactiveDuration)
 
 	// Start the worker in a separate goroutine

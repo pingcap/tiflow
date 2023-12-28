@@ -2,17 +2,7 @@ drop database if exists test;
 create database test;
 use test;
 
-create table tp_int
-(
-    id          int auto_increment,
-    c_tinyint   tinyint   null,
-    c_smallint  smallint  null,
-    c_mediumint mediumint null,
-    c_int       int       null,
-    c_bigint    bigint    null,
-    constraint pk
-        primary key (id)
-);
+
 
 insert into tp_int()
 values ();
@@ -31,17 +21,7 @@ values (-128, -32768, -8388608, -2147483648, -9223372036854775808);
 update tp_int set c_int = 0, c_tinyint = 0 where c_smallint = 2;
 delete from tp_int where c_int = 0;
 
--- unsigned int
-create table tp_unsigned_int (
-    id          int auto_increment,
-    c_unsigned_tinyint   tinyint   unsigned null,
-    c_unsigned_smallint  smallint  unsigned null,
-    c_unsigned_mediumint mediumint unsigned null,
-    c_unsigned_int       int       unsigned null,
-    c_unsigned_bigint    bigint    unsigned null,
-    constraint pk
-        primary key (id)
-);
+
 
 insert into tp_unsigned_int()
 values ();
@@ -67,17 +47,7 @@ values (128, 32768, 8388608, 2147483648, 9223372036854775808);
 update tp_unsigned_int set c_unsigned_int = 0, c_unsigned_tinyint = 0 where c_unsigned_smallint = 65535;
 delete from tp_unsigned_int where c_unsigned_int = 0;
 
--- real
-create table tp_real
-(
-    id        int auto_increment,
-    c_float   float   null,
-    c_double  double  null,
-    c_decimal decimal null,
-    c_decimal_2 decimal(10, 4) null,
-    constraint pk
-        primary key (id)
-);
+
 
 insert into tp_real()
 values ();
@@ -90,16 +60,6 @@ values (-2.7182818284, -3.1415926, -8000, -179394.233);
 
 update tp_real set c_double = 2.333 where c_double = 2020.0303;
 
--- unsigned real
-create table tp_unsigned_real (
-    id                   int auto_increment,
-    c_unsigned_float     float unsigned   null,
-    c_unsigned_double    double unsigned  null,
-    c_unsigned_decimal   decimal unsigned null,
-    c_unsigned_decimal_2 decimal(10, 4) unsigned null,
-    constraint pk
-        primary key (id)
-);
 
 insert into tp_unsigned_real()
 values ();

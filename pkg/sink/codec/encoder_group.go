@@ -80,17 +80,19 @@ func NewEncoderGroup(
 
 	var bootstrapWorker *bootstrapWorker
 	if *cfg.Protocol == config.ProtocolSimple.String() {
-		log.Info("fizz:bootstrap worker is enable for simple protocol, create it!")
+		log.Info("Sending bootstrap event is enable for simple protocol, creating bootstrap worker...",
+			zap.Stringer("changefeed", changefeedID))
 		sendBootstrapIntervalInSec := util.GetOrZero(cfg.SendBootstrapIntervalInSec)
 		if sendBootstrapIntervalInSec <= 0 {
-			sendBootstrapIntervalInSec = uint(defaultSendBootstrapInterval.Seconds())
+			sendBootstrapIntervalInSec = config.DefaultSendBootstrapIntervalInSec
 		}
 		msgCount := util.GetOrZero(cfg.SendBootstrapInMsgCount)
 		if msgCount <= 0 {
-			msgCount = defaultSendBootstrapInMsgCount
+			msgCount = config.DefaultSendBootstrapInMsgCount
 		}
 		interval := time.Duration(sendBootstrapIntervalInSec) * time.Second
 		bootstrapWorker = newBootstrapWorker(
+			changefeedID,
 			outCh,
 			builder,
 			interval,

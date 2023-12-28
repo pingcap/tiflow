@@ -148,7 +148,6 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
 	m := newDDLMessage(event)
-	log.Info("fizz:encode ddl event", zap.Any("event", event))
 	value, err := json.Marshal(m)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)

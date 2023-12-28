@@ -81,6 +81,11 @@ const (
 
 	// DefaultEncoderGroupConcurrency is the default concurrency of encoder group.
 	DefaultEncoderGroupConcurrency = 32
+
+	// DefaultSendBootstrapIntervalInSec is the default interval to send bootstrap message.
+	DefaultSendBootstrapIntervalInSec = int64(120)
+	// DefaultSendBootstrapInMsgCount is the default number of messages to send bootstrap message.
+	DefaultSendBootstrapInMsgCount = int32(10000)
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -171,7 +176,7 @@ type SinkConfig struct {
 
 	// Simple Protocol only config.
 	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
-	SendBootstrapIntervalInSec *uint `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
+	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
 	// SendBootstrapInMsgCount is the number of messages to send bootstrap message.
 	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
 }
