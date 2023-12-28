@@ -125,6 +125,14 @@ func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 			break
 		}
 	}
+	if s.sri.requestedTable != nil {
+		s.sri.requestedTable.postUpdateRegionResolvedTs(
+			s.sri.verID.GetID(),
+			s.sri.verID.GetVer(),
+			state,
+			s.sri.span,
+		)
+	}
 }
 
 func (s *regionFeedState) getRegionInfo() singleRegionInfo {
