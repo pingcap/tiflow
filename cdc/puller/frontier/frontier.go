@@ -103,9 +103,11 @@ func (s *spanFrontier) insert(regionID uint64, span tablepb.Span, ts uint64) {
 			bytes.Equal(next.Key(), span.EndKey) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
 
-			s.cachedRegions[regionID] = seekRes.Node()
-			s.cachedRegions[regionID].regionID = regionID
-			s.cachedRegions[regionID].end = next.key
+			if regionID != fakeRegionID {
+				s.cachedRegions[regionID] = seekRes.Node()
+				s.cachedRegions[regionID].regionID = regionID
+				s.cachedRegions[regionID].end = next.key
+			}
 			return
 		}
 	}
