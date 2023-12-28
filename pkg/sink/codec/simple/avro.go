@@ -152,7 +152,9 @@ func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
 	return goavro.Union("com.pingcap.simple.avro.Message", result)
 }
 
-func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool) interface{} {
+func newDMLMessageMap(
+	event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool,
+) (interface{}, error) {
 	m := map[string]interface{}{
 		"version":       defaultVersion,
 		"schema":        goavro.Union("string", event.Table.Schema),
@@ -182,39 +184,56 @@ func newDMLMessageMap(event *model.RowChangedEvent, config *common.Config, onlyH
 	}
 
 	if event.IsInsert() {
-		m["data"] = collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		data, err := collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		if err != nil {
+			return nil, err
+		}
+		m["data"] = data
 		m["type"] = string(InsertType)
 	} else if event.IsDelete() {
-		m["old"] = collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		old, err := collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		if err != nil {
+			return nil, err
+		}
+		m["old"] = old
 		m["type"] = string(DeleteType)
 	} else if event.IsUpdate() {
-		m["data"] = collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
-		m["old"] = collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		data, err := collectColumns(event.Columns, event.ColInfos, onlyHandleKey)
+		if err != nil {
+			return nil, err
+		}
+		m["data"] = data
+		old, err := collectColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
+		if err != nil {
+			return nil, err
+		}
+		m["old"] = old
 		m["type"] = string(UpdateType)
 	} else {
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	return goavro.Union("com.pingcap.simple.avro.Message", m)
+	return goavro.Union("com.pingcap.simple.avro.Message", m), nil
 }
 
-func collectColumns(columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool) map[string]interface{} {
+func collectColumns(
+	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
+) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
-	for _, col := range columns {
+	for idx, col := range columns {
 		if col == nil {
 			continue
 		}
 		if onlyHandleKey && !col.Flag.IsHandleKey() {
 			continue
 		}
-		// todo: is it necessary to encode values into string ?
-		//value, err := encodeValue(col.Value, columnInfos[idx].Ft)
-		//if err != nil {
-		//	log.Panic("encode value failed", zap.Error(err))
-		//}
-		result[col.Name] = col.Value
+		value, avroType, err := encodeValue4Avro(col.Value, columnInfos[idx].Ft)
+		if err != nil {
+			return nil, err
+		}
+		result[col.Name] = goavro.Union(avroType, value)
 	}
-	return result
+	return result, nil
 }
 
 func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {

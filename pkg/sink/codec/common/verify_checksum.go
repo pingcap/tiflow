@@ -27,15 +27,15 @@ import (
 )
 
 // VerifyChecksum calculate the checksum value, and compare it with the expected one, return error if not identical.
-func VerifyChecksum(columns []*model.Column, expected uint64) error {
+func VerifyChecksum(columns []*model.Column, expected uint32) error {
 	checksum, err := calculateChecksum(columns)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	if checksum != expected {
 		log.Error("checksum mismatch",
-			zap.Uint64("expected", expected),
-			zap.Uint64("actual", checksum))
+			zap.Uint32("expected", expected),
+			zap.Uint32("actual", checksum))
 		return errors.New("checksum mismatch")
 	}
 
@@ -44,7 +44,7 @@ func VerifyChecksum(columns []*model.Column, expected uint64) error {
 
 // calculate the checksum, caller should make sure all columns is ordered by the column's id.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L294
-func calculateChecksum(columns []*model.Column) (uint64, error) {
+func calculateChecksum(columns []*model.Column) (uint32, error) {
 	var (
 		checksum uint32
 		err      error
@@ -60,7 +60,7 @@ func calculateChecksum(columns []*model.Column) (uint64, error) {
 		}
 		checksum = crc32.Update(checksum, crc32.IEEETable, buf)
 	}
-	return uint64(checksum), nil
+	return checksum, nil
 }
 
 // buildChecksumBytes append value to the buf, mysqlType is used to convert value interface to concrete type.

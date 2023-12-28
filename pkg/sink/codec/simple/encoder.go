@@ -47,12 +47,13 @@ func (e *encoder) AppendRowChangedEvent(
 	switch e.config.EncodingFormat {
 	case common.EncodingFormatJSON:
 		m, err = newDMLMessage(event, e.config, false)
-		if err != nil {
-			return err
-		}
 	case common.EncodingFormatAvro:
-		m = newDMLMessageMap(event, e.config, false)
+		m, err = newDMLMessageMap(event, e.config, false)
 	}
+	if err != nil {
+		return err
+	}
+
 	value, err := e.marshaller.Marshal(m)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
@@ -102,7 +103,10 @@ func (e *encoder) AppendRowChangedEvent(
 			}
 		}
 	case common.EncodingFormatAvro:
-		m = newDMLMessageMap(event, e.config, true)
+		m, err = newDMLMessageMap(event, e.config, true)
+		if err != nil {
+			return err
+		}
 		if e.config.LargeMessageHandle.EnableClaimCheck() {
 			fileName := claimcheck.NewFileName()
 			m.(map[string]interface{})["claimCheckLocation"] = e.claimCheck.FileNameWithPrefix(fileName)

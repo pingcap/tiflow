@@ -332,33 +332,18 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChe
 	result.WithHandlePrimaryFlag(primaryKeySet)
 
 	if enableRowChecksum && msg.Checksum != nil {
-		var previous, current uint64
-		previous, err = strconv.ParseUint(msg.Checksum.Previous, 10, 64)
-		if err != nil {
-			log.Error("cannot parse the previous checksum value",
-				zap.String("previous", msg.Checksum.Previous))
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-
-		err = common.VerifyChecksum(result.PreColumns, previous)
+		err = common.VerifyChecksum(result.PreColumns, msg.Checksum.Previous)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
-
-		current, err = strconv.ParseUint(msg.Checksum.Current, 10, 64)
-		if err != nil {
-			log.Error("cannot parse the current checksum value",
-				zap.String("previous", msg.Checksum.Previous))
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-		err = common.VerifyChecksum(result.Columns, current)
+		err = common.VerifyChecksum(result.Columns, msg.Checksum.Current)
 		if err != nil {
 			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 		}
 
 		result.Checksum = &integrity.Checksum{
-			Previous:  uint32(previous),
-			Current:   uint32(current),
+			Previous:  msg.Checksum.Previous,
+			Current:   msg.Checksum.Current,
 			Corrupted: msg.Checksum.Corrupted,
 			Version:   msg.Checksum.Version,
 		}
@@ -411,11 +396,10 @@ func decodeColumns(rawData map[string]interface{}, columnInfos []*timodel.Column
 }
 
 type checksum struct {
-	Version   int  `json:"version"`
-	Corrupted bool `json:"corrupted"`
-	// todo: can we use uint64 to store the checksum value ?
-	Current  string `json:"current"`
-	Previous string `json:"previous"`
+	Version   int    `json:"version"`
+	Corrupted bool   `json:"corrupted"`
+	Current   uint32 `json:"current"`
+	Previous  uint32 `json:"previous"`
 }
 
 type message struct {
@@ -534,8 +518,8 @@ func newDMLMessage(
 		m.Checksum = &checksum{
 			Version:   event.Checksum.Version,
 			Corrupted: event.Checksum.Corrupted,
-			Current:   strconv.FormatUint(uint64(event.Checksum.Current), 10),
-			Previous:  strconv.FormatUint(uint64(event.Checksum.Previous), 10),
+			Current:   event.Checksum.Current,
+			Previous:  event.Checksum.Previous,
 		}
 	}
 
@@ -562,6 +546,56 @@ func formatColumns(
 	return result, nil
 }
 
+func encodeValue4Avro(
+	value interface{}, ft *types.FieldType,
+) (interface{}, string, error) {
+	if value == nil {
+		return nil, "null", nil
+	}
+	switch ft.GetType() {
+	case mysql.TypeEnum:
+		switch v := value.(type) {
+		case uint64:
+			enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
+			if err != nil {
+				return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			return enumVar.Name, "string", nil
+		case []uint8:
+			return string(v), "string", nil
+		case string:
+			return v, "string", nil
+		default:
+			log.Panic("unexpected type for enum value", zap.Any("value", value))
+		}
+	case mysql.TypeSet:
+		switch v := value.(type) {
+		case uint64:
+			setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
+			if err != nil {
+				return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+			}
+			return setValue.Name, "string", nil
+		case []uint8:
+			return string(v), "string", nil
+		default:
+			log.Panic("unexpected type for set value", zap.Any("value", value))
+		}
+	//case mysql.TypeBit:
+	//	switch v := value.(type) {
+	//	case []uint8:
+	//		bitValue, err := common.BinaryLiteralToInt(v)
+	//		if err != nil {
+	//			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+	//		}
+	//		value = bitValue
+	//	default:
+	//	}
+	default:
+	}
+	return value, "", nil
+}
+
 func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 	if value == nil {
 		return nil, nil
@@ -569,19 +603,17 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 
 	switch ft.GetType() {
 	case mysql.TypeEnum:
-		if v, ok := value.(string); ok {
-			return v, nil
-		}
-		element := ft.GetElems()
 		switch v := value.(type) {
 		case uint64:
-			enumVar, err := tiTypes.ParseEnumValue(element, v)
+			enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
 			if err != nil {
 				return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
 			}
 			return enumVar.Name, nil
 		case []uint8:
 			return string(v), nil
+		case string:
+			return v, nil
 		default:
 			log.Panic("unexpected type for enum value", zap.Any("value", value))
 		}
