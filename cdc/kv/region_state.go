@@ -125,6 +125,17 @@ func (s *regionFeedState) updateResolvedTs(resolvedTs uint64) {
 			break
 		}
 	}
+<<<<<<< HEAD
+=======
+	if s.sri.requestedTable != nil {
+		s.sri.requestedTable.postUpdateRegionResolvedTs(
+			s.sri.verID.GetID(),
+			s.sri.verID.GetVer(),
+			state,
+			s.sri.span,
+		)
+	}
+>>>>>>> 8ca4b58dd3 (puller(cdc): more tests and logs for frontier and kv-client (#10333))
 }
 
 func (s *regionFeedState) getRegionInfo() singleRegionInfo {
