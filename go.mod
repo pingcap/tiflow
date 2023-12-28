@@ -51,6 +51,7 @@ require (
 	github.com/mattn/go-sqlite3 v2.0.2+incompatible // indirect
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
+<<<<<<< HEAD
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pingcap/check v0.0.0-20200212061837-5e12011dc712
 	github.com/pingcap/errors v0.11.5-0.20211224045212-9687c2b0f87c
@@ -62,6 +63,19 @@ require (
 	github.com/pingcap/tidb/parser v0.0.0-20220726050710-0eeb0bbba660
 	github.com/prometheus/client_golang v1.11.1
 	github.com/prometheus/client_model v0.2.0
+=======
+	github.com/pierrec/lz4/v4 v4.1.18
+	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
+	github.com/pingcap/errors v0.11.5-0.20221009092201-b66cddb77c32
+	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
+	github.com/pingcap/kvproto v0.0.0-20231204093812-96c40585233f
+	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
+	github.com/pingcap/tidb v1.1.0-beta.0.20231212043317-b478056bbf73
+	github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20231212043317-b478056bbf73
+	github.com/prometheus/client_golang v1.17.0
+	github.com/prometheus/client_model v0.5.0
+>>>>>>> fdef38b920 (binlog-filter: log error instead of return it (#10380))
 	github.com/r3labs/diff v1.1.0
 	github.com/rakyll/statik v0.1.7
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0
