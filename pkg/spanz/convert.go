@@ -14,12 +14,27 @@
 package spanz
 
 import (
+<<<<<<< HEAD
+=======
+	"fmt"
+	"reflect"
+>>>>>>> 8ca4b58dd3 (puller(cdc): more tests and logs for frontier and kv-client (#10333))
 	"sort"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 )
+
+// HexKey returns a hex string generated from the key.
+func HexKey(key []byte) string {
+	// TODO(qupeng): improve the function.
+	str := ""
+	for _, c := range key {
+		str += fmt.Sprintf("%02X", c)
+	}
+	return str
+}
 
 // ArrayToSpan converts an array of TableID to an array of Span.
 func ArrayToSpan(in []model.TableID) []tablepb.Span {

@@ -416,6 +416,13 @@ func (l *RegionRangeLock) UnlockRange(
 	return
 }
 
+// LockedRanges returns count of locked ranges.
+func (l *RegionRangeLock) LockedRanges() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.rangeLock.Len()
+}
+
 // RefCount returns how many ranges are locked.
 func (l *RegionRangeLock) RefCount() uint64 {
 	l.mu.Lock()
@@ -471,17 +478,19 @@ type LockedRange struct {
 
 // CollectLockedRangeAttrs collects locked range attributes.
 func (l *RegionRangeLock) CollectLockedRangeAttrs(
-	action func(regionID uint64, state *LockedRange),
+	action func(regionID, version uint64, state *LockedRange, span tablepb.Span),
 ) (r CollectedLockedRangeAttrs) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	r.LockedRegionCount = l.rangeLock.Len()
 	r.FastestRegion.CheckpointTs = 0
 	r.SlowestRegion.CheckpointTs = math.MaxUint64
 
 	lastEnd := l.totalSpan.Start
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
 		if action != nil {
-			action(item.regionID, &item.state)
+			span := tablepb.Span{StartKey: item.startKey, EndKey: item.endKey}
+			action(item.regionID, item.version, &item.state, span)
 		}
 		if EndCompare(lastEnd, item.startKey) < 0 {
 			r.Holes = append(r.Holes, ComparableSpan{Start: lastEnd, End: item.startKey})
@@ -510,9 +519,16 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 
 // CollectedLockedRangeAttrs returns by `RegionRangeLock.CollectedLockedRangeAttrs`.
 type CollectedLockedRangeAttrs struct {
+<<<<<<< HEAD:pkg/regionspan/region_range_lock.go
 	Holes         []ComparableSpan
 	FastestRegion LockedRangeAttrs
 	SlowestRegion LockedRangeAttrs
+=======
+	LockedRegionCount int
+	Holes             []tablepb.Span
+	FastestRegion     LockedRangeAttrs
+	SlowestRegion     LockedRangeAttrs
+>>>>>>> 8ca4b58dd3 (puller(cdc): more tests and logs for frontier and kv-client (#10333)):cdc/kv/regionlock/region_range_lock.go
 }
 
 // LockedRangeAttrs is like `LockedRange`, but only contains some read-only attributes.
