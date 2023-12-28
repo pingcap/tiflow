@@ -178,9 +178,9 @@ func TestEncodeDDLEvent(t *testing.T) {
 			compression.LZ4,
 		} {
 			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
-			builder, err := NewBuilder(ctx, codecConfig)
+			b, err := NewBuilder(ctx, codecConfig)
 			require.NoError(t, err)
-			enc := builder.Build()
+			enc := b.Build()
 
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)

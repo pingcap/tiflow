@@ -218,7 +218,7 @@ func newDMLMessageMap(
 
 func collectColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
-) (map[string]interface{}, error) {
+) (interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
 	for idx, col := range columns {
 		if col == nil {
@@ -233,7 +233,7 @@ func collectColumns(
 		}
 		result[col.Name] = goavro.Union(avroType, value)
 	}
-	return result, nil
+	return goavro.Union("map", result), nil
 }
 
 func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
@@ -308,19 +308,18 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 		return nil, cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro message to map")
 	}
 	rawValues = rawValues["com.pingcap.simple.avro.Message"].(map[string]interface{})
+
 	m := new(message)
-	switch EventType(rawValues["type"].(string)) {
+	eventType := EventType(rawValues["type"].(string))
+	m.Type = eventType
+	m.Version = int(rawValues["version"].(int32))
+	m.CommitTs = uint64(rawValues["commitTs"].(int64))
+	m.BuildTs = rawValues["buildTs"].(int64)
+
+	switch eventType {
 	case WatermarkType:
-		m.Type = WatermarkType
-		m.Version = int(rawValues["version"].(int32))
-		m.CommitTs = uint64(rawValues["commitTs"].(int64))
-		m.BuildTs = rawValues["buildTs"].(int64)
-	case DDLType:
-		m.Type = DDLType
-		m.Version = int(rawValues["version"].(int32))
+	case DDLType, BootstrapType:
 		m.SQL = rawValues["sql"].(map[string]interface{})["string"].(string)
-		m.CommitTs = uint64(rawValues["commitTs"].(int64))
-		m.BuildTs = rawValues["buildTs"].(int64)
 		if rawValues["tableSchema"] != nil {
 			rawTableSchema := rawValues["tableSchema"].(map[string]interface{})
 			rawTableSchema = rawTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
@@ -331,14 +330,36 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 			rawPreTableSchema = rawPreTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
 			m.PreTableSchema = newTableSchemaFromAvroNative(rawPreTableSchema)
 		}
-	case BootstrapType:
-		m.Type = BootstrapType
-	case InsertType:
-		m.Type = InsertType
-	case UpdateType:
-		m.Type = UpdateType
-	case DeleteType:
-		m.Type = DeleteType
+	case InsertType, UpdateType, DeleteType:
+		m.Schema = rawValues["schema"].(map[string]interface{})["string"].(string)
+		m.Table = rawValues["table"].(map[string]interface{})["string"].(string)
+		m.SchemaVersion = uint64(rawValues["schemaVersion"].(map[string]interface{})["long"].(int64))
+
+		rawDataValues := rawValues["data"]
+		if rawDataValues != nil {
+			data := make(map[string]interface{})
+			rawDataMap := rawDataValues.(map[string]interface{})["map"].(map[string]interface{})
+			for key, value := range rawDataMap {
+				valueMap := value.(map[string]interface{})
+				for _, v := range valueMap {
+					data[key] = v
+				}
+			}
+			m.Data = data
+		}
+
+		rawOldValues := rawValues["old"]
+		if rawOldValues != nil {
+			old := make(map[string]interface{})
+			rawOldMap := rawOldValues.(map[string]interface{})["map"].(map[string]interface{})
+			for key, value := range rawOldMap {
+				valueMap := value.(map[string]interface{})
+				for _, v := range valueMap {
+					old[key] = v
+				}
+			}
+			m.Old = old
+		}
 	}
 	return m, nil
 }

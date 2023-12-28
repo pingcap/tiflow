@@ -303,7 +303,9 @@ func newDDLEvent(msg *message) *model.DDLEvent {
 }
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
-func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChecksum bool) (*model.RowChangedEvent, error) {
+func buildRowChangedEvent(
+	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool, avroFormat bool,
+) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
@@ -313,13 +315,13 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChe
 		TableInfo: tableInfo,
 	}
 
-	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
+	columns, err := decodeColumns(msg.Data, tableInfo.Columns, avroFormat)
 	if err != nil {
 		return nil, err
 	}
 	result.Columns = columns
 
-	columns, err = decodeColumns(msg.Old, tableInfo.Columns)
+	columns, err = decodeColumns(msg.Old, tableInfo.Columns, avroFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +378,9 @@ func buildRowChangedEvent(msg *message, tableInfo *model.TableInfo, enableRowChe
 	return result, nil
 }
 
-func decodeColumns(rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo) ([]*model.Column, error) {
+func decodeColumns(
+	rawData map[string]interface{}, columnInfos []*timodel.ColumnInfo, avroFormat bool,
+) ([]*model.Column, error) {
 	if rawData == nil {
 		return nil, nil
 	}
@@ -384,9 +388,10 @@ func decodeColumns(rawData map[string]interface{}, columnInfos []*timodel.Column
 	for _, info := range columnInfos {
 		value, ok := rawData[info.Name.O]
 		if !ok {
-			log.Error("cannot found the value for the column", zap.String("column", info.Name.O))
+			log.Error("cannot found the value for the column",
+				zap.String("column", info.Name.O))
 		}
-		col, err := decodeColumn(info.Name.O, value, &info.FieldType)
+		col, err := decodeColumn(info.Name.O, value, &info.FieldType, avroFormat)
 		if err != nil {
 			return nil, err
 		}
@@ -581,7 +586,8 @@ func encodeValue4Avro(
 		default:
 			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
-	//case mysql.TypeBit:
+	case mysql.TypeBit:
+		log.Info("Debug encoding Bit type to Avro", zap.Any("value", value))
 	//	switch v := value.(type) {
 	//	case []uint8:
 	//		bitValue, err := common.BinaryLiteralToInt(v)
@@ -593,6 +599,21 @@ func encodeValue4Avro(
 	//	}
 	default:
 	}
+
+	// avro `long` only support `int64`, cannot support `uint64`, so we need to convert it to `string`
+
+	// todo: pay attention to value larger than the uint6
+	switch v := value.(type) {
+	case int64:
+		return v, "long", nil
+	case []byte:
+		// todo: pay attention to the Bit type
+		if mysql.HasBinaryFlag(ft.GetFlag()) {
+			return v, "bytes", nil
+		}
+		return string(v), "string", nil
+	}
+
 	return value, "", nil
 }
 
@@ -668,7 +689,7 @@ func encodeValue(value interface{}, ft *types.FieldType) (interface{}, error) {
 	return result, nil
 }
 
-func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*model.Column, error) {
+func decodeColumn(name string, value interface{}, fieldType *types.FieldType, avroFormat bool) (*model.Column, error) {
 	result := &model.Column{
 		Type:      fieldType.GetType(),
 		Charset:   fieldType.GetCharset(),
@@ -677,6 +698,10 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		Value:     value,
 	}
 	if value == nil {
+		return result, nil
+	}
+
+	if avroFormat {
 		return result, nil
 	}
 
