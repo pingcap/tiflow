@@ -292,6 +292,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					}
 					continue
 				}
+				lastSlowestRange = nil
 				lastResolvedTs = resolvedTs
 				lastAdvancedTime = time.Now()
 				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
