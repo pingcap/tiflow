@@ -200,12 +200,34 @@ func TestSpanFrontierFallback(t *testing.T) {
 	// Bump, here we meet resolved ts fall back, where 10 is less than f.Frontier()
 	// But there is no data loss actually.
 	// f.Forward(spAC, 10)
+}
 
+func TestSpanString(t *testing.T) {
+	t.Parallel()
+
+	spAB := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}
+	spBC := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}
+	spCD := tablepb.Span{StartKey: []byte("c"), EndKey: []byte("d")}
+	spDE := tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}
 	spEF := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
-	f.Forward(0, spEF, 30)
-	require.Equal(t, uint64(20), f.Frontier())
-	require.Equal(t, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [e @ 30] [f @ Max] `, f.String())
-	require.Equal(t, `[a @ 20] [b @ 20] [c @ 20] [d @ 20] [f @ Max] `, f.SpanString(spCD))
+	spFG := tablepb.Span{StartKey: []byte("f"), EndKey: []byte("g")}
+	spGH := tablepb.Span{StartKey: []byte("g"), EndKey: []byte("h")}
+
+	spAH := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("h")}
+	f := NewFrontier(1, spAH).(*spanFrontier)
+	require.Equal(t, `[0:a @ 1] [0:h @ Max] `, f.SpanString(spAH))
+
+	f.Forward(1, spAB, 2)
+	f.Forward(2, spBC, 5)
+	f.Forward(3, spCD, 10)
+	f.Forward(4, spDE, 20)
+	f.Forward(5, spEF, 30)
+	f.Forward(6, spFG, 25)
+	f.Forward(7, spGH, 35)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[1:a @ 2] [2:b @ 5] [3:c @ 10] [4:d @ 20] [5:e @ 30] [6:f @ 25] [7:g @ 35] [0:h @ Max] `, f.StringWtihRegionID())
+	// Print 5 span: start, before, target span, next, end
+	require.Equal(t, `[1:a @ 2] [3:c @ 10] [4:d @ 20] [5:e @ 30] [0:h @ Max] `, f.SpanString(spDE))
 }
 
 func TestMinMax(t *testing.T) {
