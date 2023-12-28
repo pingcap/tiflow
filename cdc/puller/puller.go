@@ -222,7 +222,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 					if lastSlowestRange != nil {
 						intersectSpan, err := spanz.Intersect(resolvedSpan.Span, *lastSlowestRange)
 						isEmptySpan := len(intersectSpan.StartKey) == 0 && len(intersectSpan.EndKey) == 0
-						if err != nil && !isEmptySpan {
+						if err == nil && !isEmptySpan {
 							if time.Since(lastCheckSlowestRangeTime) > 30*time.Second {
 								log.Info("resolved span is not in the slowest range",
 									zap.String("namespace", p.changefeed.Namespace),
