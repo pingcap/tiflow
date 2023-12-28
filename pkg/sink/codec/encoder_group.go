@@ -79,7 +79,8 @@ func NewEncoderGroup(
 	outCh := make(chan *future, defaultInputChanSize*concurrency)
 
 	var bootstrapWorker *bootstrapWorker
-	if *cfg.Protocol == config.ProtocolSimple.String() {
+	protocol := util.GetOrZero(cfg.Protocol)
+	if protocol == config.ProtocolSimple.String() {
 		log.Info("Sending bootstrap event is enable for simple protocol, creating bootstrap worker...",
 			zap.Stringer("changefeed", changefeedID))
 		sendBootstrapIntervalInSec := util.GetOrZero(cfg.SendBootstrapIntervalInSec)
