@@ -16,6 +16,7 @@ package simple
 import (
 	"encoding/base64"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -571,7 +572,8 @@ func encodeValue4Avro(
 		case string:
 			return v, "string", nil
 		default:
-			log.Panic("unexpected type for enum value", zap.Any("value", value))
+			return nil, "", cerror.ErrEncodeFailed.GenWithStack(
+				"unexpected type %v, for enum value %v", reflect.TypeOf(value), value)
 		}
 	case mysql.TypeSet:
 		switch v := value.(type) {
@@ -584,19 +586,19 @@ func encodeValue4Avro(
 		case []uint8:
 			return string(v), "string", nil
 		default:
-			log.Panic("unexpected type for set value", zap.Any("value", value))
+			return nil, "", cerror.ErrEncodeFailed.GenWithStack(
+				"unexpected type %v, for set value %v", reflect.TypeOf(value), value)
 		}
 	case mysql.TypeBit:
-		log.Info("Debug encoding Bit type to Avro", zap.Any("value", value))
-	//	switch v := value.(type) {
-	//	case []uint8:
-	//		bitValue, err := common.BinaryLiteralToInt(v)
-	//		if err != nil {
-	//			return "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-	//		}
-	//		value = bitValue
-	//	default:
-	//	}
+		switch v := value.(type) {
+		case uint64:
+			return []byte(tiTypes.NewBinaryLiteralFromUint(v, -1)), "bytes", nil
+		default:
+			return nil, "", cerror.ErrEncodeFailed.GenWithStack(
+				"unexpected type %v, for bit value %v", reflect.TypeOf(value), value)
+		}
+	case mysql.TypeJSON:
+		return value.(string), "string", nil
 	default:
 	}
 
@@ -701,71 +703,106 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType, av
 		return result, nil
 	}
 
-	if avroFormat {
-		return result, nil
-	}
-
-	data, ok := value.(string)
-	if !ok {
-		log.Panic("simple encode message should have type in `string`")
-	}
-
-	if mysql.HasBinaryFlag(fieldType.GetFlag()) {
-		v, err := base64.StdEncoding.DecodeString(data)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-		result.Value = v
-		return result, nil
-	}
-
 	var err error
-	switch fieldType.GetType() {
-	case mysql.TypeBit:
-		value, err = strconv.ParseUint(data, 10, 64)
-		if err != nil {
-			log.Error("invalid column value for bit",
-				zap.String("name", name), zap.Any("data", data),
-				zap.Any("type", fieldType.GetType()), zap.Error(err))
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
-		value, err = strconv.ParseInt(data, 10, 64)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-	case mysql.TypeLonglong:
-		value, err = strconv.ParseInt(data, 10, 64)
-		if err != nil {
-			value, err = strconv.ParseUint(data, 10, 64)
+	if mysql.HasBinaryFlag(fieldType.GetFlag()) {
+		switch v := value.(type) {
+		case string:
+			value, err = base64.StdEncoding.DecodeString(v)
 			if err != nil {
 				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
 			}
+		default:
+		}
+		result.Value = value
+		return result, nil
+	}
+
+	switch fieldType.GetType() {
+	case mysql.TypeBit:
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseUint(v, 10, 64)
+			if err != nil {
+				log.Error("invalid column value for bit",
+					zap.String("name", name), zap.Any("data", v),
+					zap.Any("type", fieldType.GetType()), zap.Error(err))
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		case []uint8:
+			value, err = common.BinaryLiteralToInt(v)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		default:
+			log.Panic("unexpected type for bit value", zap.Any("value", value))
+		}
+	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeInt24, mysql.TypeYear:
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		default:
+			value = v
+		}
+	case mysql.TypeLonglong:
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				value, err = strconv.ParseUint(v, 10, 64)
+				if err != nil {
+					return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+				}
+			}
+		default:
+			value = v
 		}
 	case mysql.TypeFloat:
-		value, err = strconv.ParseFloat(data, 32)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseFloat(v, 32)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		default:
+			value = v
 		}
 	case mysql.TypeDouble:
-		value, err = strconv.ParseFloat(data, 64)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			value, err = strconv.ParseFloat(v, 64)
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+		default:
+			value = v
 		}
 	case mysql.TypeEnum:
-		element := fieldType.GetElems()
-		enumVar, err := tiTypes.ParseEnumName(element, data, fieldType.GetCharset())
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			element := fieldType.GetElems()
+			enumVar, err := tiTypes.ParseEnumName(element, v, fieldType.GetCharset())
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+			value = enumVar.Value
+		case uint64:
+			log.Panic("unexpected type for enum value", zap.Any("value", value))
 		}
-		value = enumVar.Value
 	case mysql.TypeSet:
-		elements := fieldType.GetElems()
-		setVar, err := tiTypes.ParseSetName(elements, data, fieldType.GetCharset())
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		switch v := value.(type) {
+		case string:
+			elements := fieldType.GetElems()
+			setVar, err := tiTypes.ParseSetName(elements, v, fieldType.GetCharset())
+			if err != nil {
+				return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+			}
+			value = setVar.Value
+		case uint64:
+			log.Panic("unexpected type for set value", zap.Any("value", value))
 		}
-		value = setVar.Value
 	default:
 	}
 
