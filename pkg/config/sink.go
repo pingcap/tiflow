@@ -166,8 +166,14 @@ type SinkConfig struct {
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
 
-	SendBootstrapIntervalInSec *uint  `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
-	SendBootstrapInMsgCount    *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
+	// Debezium only. Whether schema should be excluded in the output.
+	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
+
+	// Simple Protocol only config.
+	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+	SendBootstrapIntervalInSec *uint `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
+	// SendBootstrapInMsgCount is the number of messages to send bootstrap message.
+	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -224,14 +230,14 @@ func (c *CSVConfig) validateAndAdjust() error {
 	case 0:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config delimiter cannot be empty"))
-	case 1, 2:
+	case 1, 2, 3:
 		if strings.ContainsRune(c.Delimiter, CR) || strings.ContainsRune(c.Delimiter, LF) {
 			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 				errors.New("csv config delimiter contains line break characters"))
 		}
 	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains more than two character, note that escape "+
+			errors.New("csv config delimiter contains more than three characters, note that escape "+
 				"sequences can only be used in double quotes in toml configuration items."))
 	}
 
