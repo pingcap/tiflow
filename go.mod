@@ -58,6 +58,7 @@ require (
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pierrec/lz4/v4 v4.1.17
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
+<<<<<<< HEAD
 	github.com/pingcap/errors v0.11.5-0.20220729040631-518f63d66278
 	github.com/pingcap/failpoint v0.0.0-20220423142525-ae43b7f4e5c3
 	github.com/pingcap/kvproto v0.0.0-20230928035022-1bdcc25ed63c
@@ -67,6 +68,17 @@ require (
 	github.com/pingcap/tidb/parser v0.0.0-20231124055343-a06279f27e4c
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
+=======
+	github.com/pingcap/errors v0.11.5-0.20221009092201-b66cddb77c32
+	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
+	github.com/pingcap/kvproto v0.0.0-20231204093812-96c40585233f
+	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
+	github.com/pingcap/tidb v1.1.0-beta.0.20231212043317-b478056bbf73
+	github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20231212043317-b478056bbf73
+	github.com/prometheus/client_golang v1.17.0
+	github.com/prometheus/client_model v0.5.0
+>>>>>>> fdef38b920 (binlog-filter: log error instead of return it (#10380))
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/robfig/cron v1.2.0
