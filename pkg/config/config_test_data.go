@@ -65,7 +65,8 @@ const (
       "large-message-handle-compression": "",
       "claim-check-storage-uri": ""
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -76,7 +77,11 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "memory-usage": {
+        "memory-quota-percentage": 50,
+        "event-cache-percentage": 0
+    }
   },
   "scheduler": {
     "enable-table-across-nodes": false,
@@ -87,7 +92,11 @@ const (
     "corruption-handle-level": "warn"
  },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+  "synced-status": {
+    "synced-check-interval": 300,
+    "checkpoint-interval": 15
+  }
 }`
 
 	testCfgTestServerConfigMarshal = `{
@@ -122,7 +131,8 @@ const (
     "ca-path": "",
     "cert-path": "",
     "key-path": "",
-    "cert-allowed-cn": null
+    "cert-allowed-cn": null,
+    "mtls": false
   },
   "per-table-memory-quota": 0,
   "kv-client": {
@@ -309,7 +319,8 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -320,7 +331,11 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "memory-usage": {
+        "memory-quota-percentage": 50,
+        "event-cache-percentage": 0
+    }
   },
   "scheduler": {
     "enable-table-across-nodes": true,
@@ -334,7 +349,11 @@ const (
     "corruption-handle-level": "warn"
   },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+  "synced-status": {
+    "synced-check-interval": 300,
+    "checkpoint-interval": 15
+  }
 }`
 
 	testCfgTestReplicaConfigMarshal2 = `{
@@ -462,7 +481,8 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -473,7 +493,11 @@ const (
     "encoding-worker-num": 16,
     "flush-worker-num": 8,
     "storage": "",
-    "use-file-backend": false
+    "use-file-backend": false,
+    "memory-usage": {
+        "memory-quota-percentage": 50,
+        "event-cache-percentage": 0
+    }
   },
   "scheduler": {
     "enable-table-across-nodes": true,
@@ -485,6 +509,10 @@ const (
     "corruption-handle-level": "warn"
   },
   "changefeed-error-stuck-duration": 1800000000000,
-  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+  "sql-mode":"ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION",
+  "synced-status": {
+    "synced-check-interval": 300,
+    "checkpoint-interval": 15
+  }
 }`
 )

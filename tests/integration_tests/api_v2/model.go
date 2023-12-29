@@ -244,6 +244,7 @@ type SinkConfig struct {
 	DateSeparator            string            `json:"date_separator,omitempty"`
 	EnablePartitionSeparator *bool             `json:"enable_partition_separator,omitempty"`
 	ContentCompatible        *bool             `json:"content_compatible"`
+	DebeziumDisableSchema    *bool             `json:"debezium_disable_schema,omitempty"`
 }
 
 // CSVConfig denotes the csv config

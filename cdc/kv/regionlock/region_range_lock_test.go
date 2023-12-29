@@ -219,3 +219,34 @@ func TestRangeTsMap(t *testing.T) {
 	mustGetMin("b", "e", 100)
 	mustGetMin("a", "z", 80)
 }
+
+func TestRegionRangeLockCollect(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	l := NewRegionRangeLock(1, []byte("a"), []byte("z"), 100, "")
+	attrs := l.CollectLockedRangeAttrs(nil)
+	require.Equal(t, 1, len(attrs.Holes))
+
+	l.LockRange(ctx, []byte("a"), []byte("m"), 1, 1).LockedRange.CheckpointTs.Add(1)
+	attrs = l.CollectLockedRangeAttrs(nil)
+	require.Equal(t, 1, len(attrs.Holes))
+	require.Equal(t, uint64(101), attrs.SlowestRegion.CheckpointTs)
+	require.Equal(t, uint64(101), attrs.FastestRegion.CheckpointTs)
+
+	l.LockRange(ctx, []byte("m"), []byte("z"), 2, 1).LockedRange.CheckpointTs.Add(2)
+	attrs = l.CollectLockedRangeAttrs(nil)
+	require.Equal(t, 0, len(attrs.Holes))
+	require.Equal(t, uint64(101), attrs.SlowestRegion.CheckpointTs)
+	require.Equal(t, uint64(102), attrs.FastestRegion.CheckpointTs)
+
+	l.UnlockRange([]byte("a"), []byte("m"), 1, 1)
+	attrs = l.CollectLockedRangeAttrs(nil)
+	require.Equal(t, 1, len(attrs.Holes))
+	require.Equal(t, uint64(102), attrs.SlowestRegion.CheckpointTs)
+	require.Equal(t, uint64(102), attrs.FastestRegion.CheckpointTs)
+
+	l.UnlockRange([]byte("m"), []byte("z"), 2, 1)
+	attrs = l.CollectLockedRangeAttrs(nil)
+	require.Equal(t, 1, len(attrs.Holes))
+}

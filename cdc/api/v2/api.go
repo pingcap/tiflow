@@ -63,6 +63,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	changefeedGroup.POST("/:changefeed_id/resume", changefeedOwnerMiddleware, api.resumeChangefeed)
 	changefeedGroup.POST("/:changefeed_id/pause", changefeedOwnerMiddleware, api.pauseChangefeed)
 	changefeedGroup.GET("/:changefeed_id/status", changefeedOwnerMiddleware, api.status)
+	changefeedGroup.GET("/:changefeed_id/synced", changefeedOwnerMiddleware, api.synced)
 
 	// capture apis
 	captureGroup := v2.Group("/captures")

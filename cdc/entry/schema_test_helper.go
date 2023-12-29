@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -56,16 +57,21 @@ func NewSchemaTestHelperWithReplicaConfig(
 	t *testing.T, replicaConfig *config.ReplicaConfig,
 ) *SchemaTestHelper {
 	store, err := mockstore.NewMockStore()
-	require.Nil(t, err)
+	require.NoError(t, err)
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		conf.AlterPrimaryKey = true
 	})
 	session.SetSchemaLease(0)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	domain.SetStatsUpdating(true)
 	tk := testkit.NewTestKit(t, store)
+
+	if replicaConfig.Integrity.IntegrityCheckLevel == integrity.CheckLevelCorrectness {
+		tk.MustExec("set global tidb_enable_row_level_checksum = 1")
+		tk.Session().GetSessionVars().EnableRowLevelChecksum = true
+	}
 
 	filter, err := filter.NewFilter(replicaConfig, "")
 	require.NoError(t, err)
@@ -75,9 +81,8 @@ func NewSchemaTestHelperWithReplicaConfig(
 
 	changefeedID := model.DefaultChangeFeedID("changefeed-testkit")
 
-	meta := timeta.NewSnapshotMeta(store.GetSnapshot(ver))
 	schemaStorage, err := NewSchemaStorage(
-		meta, ver.Ver, replicaConfig.ForceReplicate,
+		store, ver.Ver, replicaConfig.ForceReplicate,
 		changefeedID, util.RoleTester, filter)
 	require.NoError(t, err)
 
@@ -262,18 +267,12 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 	require.NoError(s.t, err)
 	s.schemaStorage.AdvanceResolvedTs(ver.Ver)
 
-	tableInfo, ok := s.schemaStorage.GetLastSnapshot().TableByName(res.SchemaName, res.TableName)
-	require.True(s.t, ok)
+	ctx := context.Background()
 
-	event := &model.DDLEvent{
-		StartTs:   res.StartTS,
-		CommitTs:  res.BinlogInfo.FinishedTS,
-		TableInfo: tableInfo,
-		Query:     res.Query,
-		Type:      res.Type,
-	}
+	events, err := s.schemaStorage.BuildDDLEvents(ctx, res)
+	require.NoError(s.t, err)
 
-	return event
+	return events[0]
 }
 
 // Storage returns the tikv storage

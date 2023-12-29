@@ -215,6 +215,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		ContentCompatible:                util.AddressOf(false),
 		Protocol:                         util.AddressOf("open-protocol"),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	}, cfg.Sink)
 }
 
@@ -249,6 +250,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		ContentCompatible:                util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	}, cfg.Sink)
 }
 

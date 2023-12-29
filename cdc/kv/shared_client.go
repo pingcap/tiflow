@@ -126,7 +126,7 @@ type requestedTable struct {
 	stopped atomic.Bool
 
 	// To handle lock resolvings.
-	postUpdateRegionResolvedTs func(regionID uint64, state *regionlock.LockedRange)
+	postUpdateRegionResolvedTs func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span)
 	staleLocksVersion          atomic.Uint64
 }
 
@@ -770,7 +770,7 @@ func (s *SharedClient) newRequestedTable(
 		eventCh:        eventCh,
 	}
 
-	rt.postUpdateRegionResolvedTs = func(regionID uint64, state *regionlock.LockedRange) {
+	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
 		maxVersion := rt.staleLocksVersion.Load()
 		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
@@ -817,6 +817,8 @@ type sharedClientMetrics struct {
 }
 
 func (s *SharedClient) initMetrics() {
+	eventFeedGauge.Inc()
+
 	s.metrics.regionLockDuration = regionConnectDuration.
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID, "lock")
 	s.metrics.regionLocateDuration = regionConnectDuration.
@@ -834,6 +836,8 @@ func (s *SharedClient) initMetrics() {
 }
 
 func (s *SharedClient) clearMetrics() {
+	eventFeedGauge.Dec()
+
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "lock")
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "locate")
 	regionConnectDuration.DeleteLabelValues(s.changefeed.Namespace, s.changefeed.ID, "connect")
