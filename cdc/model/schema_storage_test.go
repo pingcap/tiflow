@@ -190,7 +190,7 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 	require.Equal(t, 3, len(fts))
 	require.Equal(t, 3, len(colInfos))
 
-	require.True(t, info.ExistTableUniqueColumn())
+	require.True(t, info.HasUniqueColumn())
 
 	// check IsEligible
 	require.True(t, info.IsEligible(false))
