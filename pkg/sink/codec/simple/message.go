@@ -769,7 +769,7 @@ func decodeColumn(name string, value interface{}, fieldType *types.FieldType) (*
 		case uint64:
 			value = v
 		case int64:
-			value = v
+			value = uint64(v)
 		default:
 			log.Panic("unexpected type for bit value", zap.Any("value", value))
 		}

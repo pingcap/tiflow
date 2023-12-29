@@ -177,8 +177,8 @@ func newDMLMessageMap(
 		cc := map[string]interface{}{
 			"version":   event.Checksum.Version,
 			"corrupted": event.Checksum.Corrupted,
-			"current":   event.Checksum.Current,
-			"previous":  event.Checksum.Previous,
+			"current":   int64(event.Checksum.Current),
+			"previous":  int64(event.Checksum.Previous),
 		}
 		m["checksum"] = goavro.Union("com.pingcap.simple.avro.Checksum", cc)
 	}
@@ -350,9 +350,25 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 		m.PreTableSchema = newTableSchemaFromAvroNative(rawPreTableSchema)
 	}
 
+	m.Checksum = newChecksum(rawValues)
 	m.Data = newDataMap(rawValues["data"])
 	m.Old = newDataMap(rawValues["old"])
 	return m, nil
+}
+
+func newChecksum(raw map[string]interface{}) *checksum {
+	rawValue := raw["checksum"]
+	if rawValue == nil {
+		return nil
+	}
+	rawChecksum := rawValue.(map[string]interface{})
+	rawChecksum = rawChecksum["com.pingcap.simple.avro.Checksum"].(map[string]interface{})
+	return &checksum{
+		Version:   int(rawChecksum["version"].(int32)),
+		Corrupted: rawChecksum["corrupted"].(bool),
+		Current:   uint32(rawChecksum["current"].(int64)),
+		Previous:  uint32(rawChecksum["previous"].(int64)),
+	}
 }
 
 func newDataMap(rawValues interface{}) map[string]interface{} {
