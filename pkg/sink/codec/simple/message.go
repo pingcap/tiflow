@@ -87,7 +87,7 @@ type dataType struct {
 }
 
 // newColumnSchema converts from TiDB ColumnInfo to columnSchema.
-func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
+func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
 	tp := dataType{
 		MySQLType: types.TypeToStr(col.GetType(), col.GetCharset()),
 		Charset:   col.GetCharset(),
@@ -98,17 +98,27 @@ func newColumnSchema(col *timodel.ColumnInfo) *columnSchema {
 		Unsigned:  mysql.HasUnsignedFlag(col.GetFlag()),
 		Zerofill:  mysql.HasZerofillFlag(col.GetFlag()),
 	}
+	defaultValue := entry.GetColumnDefaultValue(col)
+	if defaultValue != nil && col.GetType() == mysql.TypeBit {
+		var err error
+		defaultValue, err = common.BinaryLiteralToInt([]byte(defaultValue.(string)))
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+	}
 	return &columnSchema{
 		ID:       col.ID,
 		Name:     col.Name.O,
 		DataType: tp,
 		Nullable: !mysql.HasNotNullFlag(col.GetFlag()),
-		Default:  entry.GetColumnDefaultValue(col),
-	}
+		Default:  defaultValue,
+	}, nil
 }
 
 // newTiColumnInfo uses columnSchema and IndexSchema to construct a tidb column info.
-func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.ColumnInfo {
+func newTiColumnInfo(
+	column *columnSchema, indexes []*IndexSchema,
+) (*timodel.ColumnInfo, error) {
 	col := new(timodel.ColumnInfo)
 	col.Name = timodel.NewCIStr(column.Name)
 
@@ -129,6 +139,25 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 		col.AddFlag(mysql.BinaryFlag)
 	}
 
+	if column.Nullable {
+		col.AddFlag(mysql.NotNullFlag)
+	}
+
+	defaultValue := column.Default
+	if defaultValue != nil && col.GetType() == mysql.TypeBit {
+		switch v := defaultValue.(type) {
+		case float64:
+			byteSize := (col.GetFlen() + 7) >> 3
+			defaultValue = tiTypes.NewBinaryLiteralFromUint(uint64(v), byteSize)
+			defaultValue = defaultValue.(tiTypes.BinaryLiteral).ToString()
+		default:
+		}
+	}
+	err := col.SetDefaultValue(defaultValue)
+	if err != nil {
+		return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+	}
+
 	for _, index := range indexes {
 		if index.Primary {
 			for _, name := range index.Columns {
@@ -141,13 +170,7 @@ func newTiColumnInfo(column *columnSchema, indexes []*IndexSchema) *timodel.Colu
 		}
 	}
 
-	if column.Nullable {
-		col.AddFlag(mysql.NotNullFlag)
-	}
-
-	col.DefaultValue = column.Default
-
-	return col
+	return col, nil
 }
 
 // IndexSchema is the schema of the index.
@@ -204,14 +227,18 @@ type TableSchema struct {
 	Indexes []*IndexSchema  `json:"indexes"`
 }
 
-func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
+func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
 		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
 	})
 
 	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
-		columns = append(columns, newColumnSchema(col))
+		colSchema, err := newColumnSchema(col)
+		if err != nil {
+			return nil, err
+		}
+		columns = append(columns, colSchema)
 	}
 
 	pkInIndexes := false
@@ -245,11 +272,11 @@ func newTableSchema(tableInfo *model.TableInfo) *TableSchema {
 		Version: tableInfo.UpdateTS,
 		Columns: columns,
 		Indexes: indexes,
-	}
+	}, nil
 }
 
 // newTableInfo converts from TableSchema to TableInfo.
-func newTableInfo(m *TableSchema) *model.TableInfo {
+func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
 	var (
 		database      string
 		table         string
@@ -272,11 +299,14 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 	}
 
 	if m == nil {
-		return info
+		return info, nil
 	}
 
 	for _, col := range m.Columns {
-		tiCol := newTiColumnInfo(col, m.Indexes)
+		tiCol, err := newTiColumnInfo(col, m.Indexes)
+		if err != nil {
+			return nil, err
+		}
 		info.Columns = append(info.Columns, tiCol)
 	}
 	for _, idx := range m.Indexes {
@@ -284,22 +314,35 @@ func newTableInfo(m *TableSchema) *model.TableInfo {
 		info.Indices = append(info.Indices, index)
 	}
 
-	return info
+	return info, nil
 }
 
 // newDDLEvent converts from message to DDLEvent.
-func newDDLEvent(msg *message) *model.DDLEvent {
-	var preTableInfo *model.TableInfo
+func newDDLEvent(msg *message) (*model.DDLEvent, error) {
+	var (
+		tableInfo    *model.TableInfo
+		preTableInfo *model.TableInfo
+		err          error
+	)
+
+	tableInfo, err = newTableInfo(msg.TableSchema)
+	if err != nil {
+		return nil, err
+	}
+
 	if msg.PreTableSchema != nil {
-		preTableInfo = newTableInfo(msg.PreTableSchema)
+		preTableInfo, err = newTableInfo(msg.PreTableSchema)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &model.DDLEvent{
 		StartTs:      msg.CommitTs,
 		CommitTs:     msg.CommitTs,
-		TableInfo:    newTableInfo(msg.TableSchema),
+		TableInfo:    tableInfo,
 		PreTableInfo: preTableInfo,
 		Query:        msg.SQL,
-	}
+	}, nil
 }
 
 // buildRowChangedEvent converts from message to RowChangedEvent.
@@ -447,19 +490,26 @@ func newResolvedMessage(ts uint64) *message {
 	}
 }
 
-func newDDLMessage(ddl *model.DDLEvent) *message {
+func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	var (
 		schema    *TableSchema
 		preSchema *TableSchema
+		err       error
 	)
 	// the tableInfo maybe nil if the DDL is `drop database`
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
-		schema = newTableSchema(ddl.TableInfo)
+		schema, err = newTableSchema(ddl.TableInfo)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if !ddl.IsBootstrap {
 		// `PreTableInfo` may not exist for some DDL, such as `create table`
 		if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
-			preSchema = newTableSchema(ddl.PreTableInfo)
+			preSchema, err = newTableSchema(ddl.PreTableInfo)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -477,7 +527,7 @@ func newDDLMessage(ddl *model.DDLEvent) *message {
 		msg.SQL = ""
 	}
 
-	return msg
+	return msg, nil
 }
 
 func newDMLMessage(

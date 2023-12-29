@@ -315,7 +315,10 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 			"not found ddl event message")
 	}
 
-	ddl := newDDLEvent(d.msg)
+	ddl, err := newDDLEvent(d.msg)
+	if err != nil {
+		return nil, err
+	}
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)

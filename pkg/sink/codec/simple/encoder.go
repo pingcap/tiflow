@@ -178,10 +178,16 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	var m interface{}
+	var (
+		m   interface{}
+		err error
+	)
 	switch e.config.EncodingFormat {
 	case common.EncodingFormatJSON:
-		m = newDDLMessage(event)
+		m, err = newDDLMessage(event)
+		if err != nil {
+			return nil, err
+		}
 	case common.EncodingFormatAvro:
 		m = newDDLMessageMap(event)
 	}

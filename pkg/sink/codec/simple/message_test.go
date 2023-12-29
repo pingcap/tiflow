@@ -108,7 +108,8 @@ func TestNewTableSchema(t *testing.T) {
 			},
 		},
 	}
-	got := newTableSchema(tableInfo)
+	got, err := newTableSchema(tableInfo)
+	require.NoError(t, err)
 	require.Equal(t, want, got)
 
 	// case 2: test for primary key is explicitly constraint
@@ -196,7 +197,8 @@ func TestNewTableSchema(t *testing.T) {
 			},
 		},
 	}
-	got = newTableSchema(tableInfo)
+	got, err = newTableSchema(tableInfo)
+	require.NoError(t, err)
 	require.Equal(t, want, got)
 
 	// case 3: test for all data types in TiDB
@@ -693,6 +695,7 @@ func TestNewTableSchema(t *testing.T) {
 			},
 		},
 	}
-	got = newTableSchema(tableInfo)
+	got, err = newTableSchema(tableInfo)
+	require.NoError(t, err)
 	require.Equal(t, want, got)
 }
