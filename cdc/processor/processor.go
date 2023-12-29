@@ -959,7 +959,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		ddlStartTs = checkpointTs - 1
 	}
 
-	kvCfg := config.GetGlobalServerConfig().KVClient
+	serverCfg := config.GetGlobalServerConfig()
 	stdCtx := contextutil.PutTableInfoInCtx(ctx, -1, puller.DDLPullerTableName)
 	stdCtx = contextutil.PutChangefeedIDInCtx(stdCtx, p.changefeedID)
 	stdCtx = contextutil.PutRoleInCtx(stdCtx, util.RoleProcessor)
@@ -987,7 +987,7 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 		p.upstream.KVStorage,
 		p.upstream.PDClock,
 		ddlStartTs,
-		kvCfg,
+		serverCfg,
 		p.changefeedID,
 		schemaStorage,
 		f,

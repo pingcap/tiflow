@@ -48,6 +48,9 @@ type DebugConfig struct {
 	// EnableNewSink enables the new sink.
 	// The default value is true.
 	EnableNewSink bool `toml:"enable-new-sink" json:"enable-new-sink"`
+
+	// EnableKVConnectBackOff enables the backoff for kv connect.
+	EnableKVConnectBackOff bool `toml:"enable-kv-connect-backoff" json:"enable-kv-connect-backoff"`
 }
 
 // ValidateAndAdjust validates and adjusts the debug configuration

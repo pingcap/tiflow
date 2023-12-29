@@ -155,9 +155,10 @@ var defaultServerConfig = &ServerConfig{
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler:           NewDefaultSchedulerConfig(),
-		EnableNewSink:       true,
-		EnablePullBasedSink: true,
+		Scheduler:              NewDefaultSchedulerConfig(),
+		EnableNewSink:          true,
+		EnablePullBasedSink:    true,
+		EnableKVConnectBackOff: false,
 	},
 	ClusterID:           "default",
 	MaxMemoryPercentage: DefaultMaxMemoryPercentage,
