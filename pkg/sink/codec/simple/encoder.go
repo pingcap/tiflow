@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -109,7 +110,8 @@ func (e *encoder) AppendRowChangedEvent(
 		}
 		if e.config.LargeMessageHandle.EnableClaimCheck() {
 			fileName := claimcheck.NewFileName()
-			m.(map[string]interface{})["claimCheckLocation"] = e.claimCheck.FileNameWithPrefix(fileName)
+			m.(map[string]interface{})["com.pingcap.simple.avro.Message"].(map[string]interface{})["claimCheckLocation"] =
+				goavro.Union("string", e.claimCheck.FileNameWithPrefix(fileName))
 			if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
 				return errors.Trace(err)
 			}

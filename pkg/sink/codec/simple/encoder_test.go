@@ -588,12 +588,12 @@ func TestDMLMessageTooLarge(t *testing.T) {
 		require.ErrorIs(t, err, errors.ErrMessageTooLarge)
 	}
 }
+
 func TestLargerMessageHandleClaimCheck(t *testing.T) {
 	ddlEvent, _, updateEvent, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	codecConfig.MaxMessageBytes = 500
 	codecConfig.LargeMessageHandle.LargeMessageHandleOption = config.LargeMessageHandleOptionClaimCheck
 	codecConfig.LargeMessageHandle.ClaimCheckStorageURI = "file:///tmp/simple-claim-check"
 	for _, format := range []common.EncodingFormatType{
@@ -606,6 +606,7 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 			compression.Snappy,
 			compression.LZ4,
 		} {
+			codecConfig.MaxMessageBytes = config.DefaultMaxMessageBytes
 			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
 			b, err := NewBuilder(ctx, codecConfig)

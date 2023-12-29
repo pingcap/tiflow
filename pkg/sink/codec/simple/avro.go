@@ -168,11 +168,6 @@ func newDMLMessageMap(
 		m["handleKeyOnly"] = goavro.Union("boolean", true)
 	}
 
-	var claimCheckLocation string
-	if claimCheckLocation != "" {
-		m["claimCheckLocation"] = goavro.Union("string", claimCheckLocation)
-	}
-
 	if config.EnableRowChecksum && event.Checksum != nil {
 		cc := map[string]interface{}{
 			"version":   event.Checksum.Version,
@@ -339,6 +334,11 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 	rawHandleKeyOnlyValue := rawValues["handleKeyOnly"]
 	if rawHandleKeyOnlyValue != nil {
 		m.HandleKeyOnly = rawHandleKeyOnlyValue.(map[string]interface{})["boolean"].(bool)
+	}
+
+	rawClaimCheckValue := rawValues["claimCheckLocation"]
+	if rawClaimCheckValue != nil {
+		m.ClaimCheckLocation = rawClaimCheckValue.(map[string]interface{})["string"].(string)
 	}
 
 	rawTableSchemaValues := rawValues["tableSchema"]

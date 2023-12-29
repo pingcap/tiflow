@@ -16,7 +16,6 @@ package simple
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"os"
 	"path/filepath"
 
@@ -203,13 +202,24 @@ func (d *decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 		return nil, err
 	}
 
-	var m message
-	err = json.Unmarshal(value, &m)
-	if err != nil {
-		return nil, err
+	m := new(message)
+	switch d.config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		if err = d.marshaller.Unmarshal(value, m); err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+	case common.EncodingFormatAvro:
+		var native map[string]interface{}
+		err = d.marshaller.Unmarshal(value, &native)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		m, err = newMessageFromAvroNative(native)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
 	}
-
-	d.msg = &m
+	d.msg = m
 	return d.NextRowChangedEvent()
 }
 
