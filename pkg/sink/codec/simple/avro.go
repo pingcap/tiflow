@@ -336,6 +336,11 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 		m.SQL = rawSQLValues.(map[string]interface{})["string"].(string)
 	}
 
+	rawHandleKeyOnlyValue := rawValues["handleKeyOnly"]
+	if rawHandleKeyOnlyValue != nil {
+		m.HandleKeyOnly = rawHandleKeyOnlyValue.(map[string]interface{})["boolean"].(bool)
+	}
+
 	rawTableSchemaValues := rawValues["tableSchema"]
 	if rawTableSchemaValues != nil {
 		rawTableSchema := rawTableSchemaValues.(map[string]interface{})
