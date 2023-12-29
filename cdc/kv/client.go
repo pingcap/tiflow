@@ -144,6 +144,7 @@ type CDCKVClient interface {
 		ts uint64,
 		lockResolver txnutil.LockResolver,
 		eventCh chan<- model.RegionFeedEvent,
+		enableTableMonitor bool,
 	) error
 
 	// RegionCount returns the number of captured regions.
@@ -276,8 +277,9 @@ func (c *CDCClient) EventFeed(
 	ctx context.Context, span tablepb.Span, ts uint64,
 	lockResolver txnutil.LockResolver,
 	eventCh chan<- model.RegionFeedEvent,
+	enableTableMonitor bool,
 ) error {
-	s := newEventFeedSession(c, span, lockResolver, ts, eventCh)
+	s := newEventFeedSession(c, span, lockResolver, ts, eventCh, enableTableMonitor)
 	return s.eventFeed(ctx)
 }
 
@@ -355,11 +357,10 @@ type eventFeedSession struct {
 
 	rangeLock *regionlock.RegionRangeLock
 
-	// To identify metrics of different eventFeedSession
-	id                string
-	regionChSizeGauge prometheus.Gauge
-	errChSizeGauge    prometheus.Gauge
-	rangeChSizeGauge  prometheus.Gauge
+	enableTableMonitor bool
+	regionChSizeGauge  prometheus.Gauge
+	errChSizeGauge     prometheus.Gauge
+	rangeChSizeGauge   prometheus.Gauge
 
 	streams          map[string]*eventFeedStream
 	streamsLock      sync.RWMutex
@@ -380,9 +381,9 @@ func newEventFeedSession(
 	lockResolver txnutil.LockResolver,
 	startTs uint64,
 	eventCh chan<- model.RegionFeedEvent,
+	enableTableMonitor bool,
 ) *eventFeedSession {
 	id := allocID()
-	idStr := strconv.FormatUint(id, 10)
 	rangeLock := regionlock.NewRegionRangeLock(
 		id, totalSpan.StartKey, totalSpan.EndKey, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
@@ -393,16 +394,19 @@ func newEventFeedSession(
 		tableID:    client.tableID,
 		tableName:  client.tableName,
 
-		totalSpan:         totalSpan,
-		eventCh:           eventCh,
-		rangeLock:         rangeLock,
-		lockResolver:      lockResolver,
-		id:                idStr,
-		regionChSizeGauge: clientChannelSize.WithLabelValues("region"),
-		errChSizeGauge:    clientChannelSize.WithLabelValues("err"),
-		rangeChSizeGauge:  clientChannelSize.WithLabelValues("range"),
-		streams:           make(map[string]*eventFeedStream),
-		streamsCanceller:  make(map[string]context.CancelFunc),
+		totalSpan:          totalSpan,
+		eventCh:            eventCh,
+		rangeLock:          rangeLock,
+		lockResolver:       lockResolver,
+		enableTableMonitor: enableTableMonitor,
+		regionChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
+			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "region"),
+		errChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
+			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "err"),
+		rangeChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
+			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "range"),
+		streams:          make(map[string]*eventFeedStream),
+		streamsCanceller: make(map[string]context.CancelFunc),
 		resolvedTsPool: sync.Pool{
 			New: func() any {
 				return &regionStatefulEvent{
@@ -1074,7 +1078,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		err := handleExit(worker.run())
+		err := handleExit(worker.run(s.enableTableMonitor))
 		if err != nil {
 			log.Error("region worker exited with error",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -1089,9 +1093,31 @@ func (s *eventFeedSession) receiveFromStream(
 	})
 
 	receiveEvents := func() error {
+		metricWorkerBusyRatio := workerBusyRatio.WithLabelValues(
+			s.changefeed.Namespace, s.changefeed.ID, strconv.FormatInt(s.tableID, 10), "event-receiver", addr)
+		metricsTicker := time.NewTicker(time.Second * 10)
+		defer metricsTicker.Stop()
+		var receiveTime time.Duration
+		startToWork := time.Now()
+
 		maxCommitTs := model.Ts(0)
 		for {
+			startToReceive := time.Now()
 			cevent, err := stream.Recv()
+
+			if s.enableTableMonitor {
+				receiveTime += time.Since(startToReceive)
+				select {
+				case <-metricsTicker.C:
+					now := time.Now()
+					// busyRatio indicates the actual working time (receive and decode grpc msg) of the worker.
+					busyRatio := int(receiveTime.Seconds() / now.Sub(startToWork).Seconds() * 1000)
+					metricWorkerBusyRatio.Add(float64(busyRatio))
+					startToWork = now
+					receiveTime = 0
+				default:
+				}
+			}
 
 			failpoint.Inject("kvClientRegionReentrantError", func(op failpoint.Value) {
 				if op.(string) == "error" {
