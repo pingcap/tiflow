@@ -888,7 +888,7 @@ func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 
 func (s *mysqlBackend) setSessionVariables(ctx context.Context, txn *sql.Tx) error {
 	// set time zone before executing the transaction.
-	query := fmt.Sprintf("SET time_zone = %s", s.cfg.Timezone)
+	query := fmt.Sprintf("SET SESSION time_zone = %s", s.cfg.Timezone)
 	_, err := txn.ExecContext(ctx, query)
 	return err
 }
