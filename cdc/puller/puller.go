@@ -165,6 +165,8 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 	lastResolvedTs := p.checkpointTs
 	lastAdvancedTime := time.Now()
 	lastLogSlowRangeTime := time.Now()
+	var lastSlowestRange *regionspan.ComparableSpan
+	lastCheckSlowestRangeTime := time.Now()
 	g.Go(func() error {
 		metricsTicker := time.NewTicker(15 * time.Second)
 		defer metricsTicker.Stop()
@@ -233,6 +235,26 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 							zap.Any("spans", p.spans),
 						)
 					}
+					if lastSlowestRange != nil {
+						intersectSpan, err := regionspan.Intersect(resolvedSpan.Span, *lastSlowestRange)
+						isEmptySpan := len(intersectSpan.Start) == 0 && len(intersectSpan.End) == 0
+						if err == nil && !isEmptySpan {
+							if time.Since(lastCheckSlowestRangeTime) > 30*time.Second {
+								log.Info("resolved span is not in the slowest range",
+									zap.String("namespace", p.changefeed.Namespace),
+									zap.String("changefeed", p.changefeed.ID),
+									zap.Int64("tableID", p.tableID),
+									zap.String("tableName", p.tableName),
+									zap.Uint64("resolvedTs", e.Resolved.ResolvedTs),
+									zap.Stringer("resolvedSpan", &resolvedSpan.Span),
+									zap.Stringer("slowestRange", lastSlowestRange),
+									zap.Uint64("resolvedTs", lastResolvedTs),
+									zap.String("tsTracker", p.tsTracker.SpanString(*lastSlowestRange)),
+								)
+								lastCheckSlowestRangeTime = time.Now()
+							}
+						}
+					}
 					// Forward is called in a single thread
 					p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.Resolved.ResolvedTs)
 				}
@@ -277,12 +299,16 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 							zap.Int64("tableID", p.tableID),
 							zap.String("tableName", p.tableName),
 							zap.Uint64("resolvedTs", resolvedTs),
+							zap.Uint64("lastResolvedTs", lastResolvedTs),
 							zap.Uint64("slowestRangeTs", slowestTs),
-							zap.Stringer("range", &slowestRange))
+							zap.Stringer("range", &slowestRange),
+							zap.String("tsTracker", p.tsTracker.SpanString(slowestRange)))
 						lastLogSlowRangeTime = time.Now()
+						lastSlowestRange = &slowestRange
 					}
 					continue
 				}
+				lastSlowestRange = nil
 				lastResolvedTs = resolvedTs
 				lastAdvancedTime = time.Now()
 				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
