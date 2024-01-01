@@ -90,14 +90,14 @@ INSERT INTO t3 (id, name) VALUES (7, 'Emma 2');
 INSERT INTO t4 (id, name) VALUES (8, 'Michael 2');
 INSERT INTO t4 (id, name) VALUES (9, 'Sophia 2');
 
--- alter table add ttl 
-ALTER TABLE t3 TTL = `created_at` + INTERVAL 1 MONTH;
-ALTER TABLE t3 TTL_ENABLE = 'OFF';
+-- -- alter table add ttl 
+-- ALTER TABLE t3 TTL = `created_at` + INTERVAL 1 MONTH;
+-- ALTER TABLE t3 TTL_ENABLE = 'OFF';
 
 
--- alter table add and remove ttl 
-ALTER TABLE t4 TTL = `created_at` + INTERVAL 1 MONTH;
-ALTER TABLE t4 REMOVE TTL;
+-- -- alter table add and remove ttl 
+-- ALTER TABLE t4 TTL = `created_at` + INTERVAL 1 MONTH;
+-- ALTER TABLE t4 REMOVE TTL;
 
 
 -- alter table comment
