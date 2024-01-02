@@ -71,7 +71,7 @@ const (
 	// QueryHealth is the type of query cluster health info.
 	QueryHealth
 	// QueryOwner is the type of query changefeed owner
-	QueryOwner = 6
+	QueryOwner
 	// QueryChangeFeedSyncedStatus is the type of query changefeed synced status
 	QueryChangeFeedSyncedStatus
 )
