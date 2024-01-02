@@ -1094,7 +1094,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 	receiveEvents := func() error {
 		metricWorkerBusyRatio := workerBusyRatio.WithLabelValues(
-			s.changefeed.Namespace, s.changefeed.ID, strconv.FormatInt(s.tableID, 10), "event-receiver", addr)
+			s.changefeed.Namespace, s.changefeed.ID, strconv.FormatInt(s.tableID, 10), addr, "event-receiver")
 		metricsTicker := time.NewTicker(time.Second * 10)
 		defer metricsTicker.Stop()
 		var receiveTime time.Duration
