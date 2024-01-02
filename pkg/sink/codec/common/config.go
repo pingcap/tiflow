@@ -152,6 +152,8 @@ type urlConfig struct {
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
 	ContentCompatible        *bool  `form:"content-compatible"`
+
+	EncodingFormatType *string `form:"encoding-format"`
 }
 
 // Apply fill the Config
@@ -244,6 +246,13 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		}
 	}
 
+	if c.Protocol == config.ProtocolSimple {
+		encodingFormat := EncodingFormatType(util.GetOrZero(urlParameter.EncodingFormatType))
+		if encodingFormat == EncodingFormatAvro {
+			c.EncodingFormat = EncodingFormatAvro
+		}
+	}
+
 	return nil
 }
 
@@ -268,6 +277,7 @@ func mergeConfig(
 				dest.AvroEnableWatermark = codecConfig.AvroEnableWatermark
 				dest.AvroDecimalHandlingMode = codecConfig.AvroDecimalHandlingMode
 				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
+				dest.EncodingFormatType = codecConfig.EncodingFormat
 			}
 		}
 	}

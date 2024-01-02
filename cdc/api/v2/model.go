@@ -362,6 +362,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
 					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
+					EncodingFormat:                 oldConfig.EncodingFormat,
 				}
 			}
 
@@ -621,6 +622,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 					AvroEnableWatermark:            oldConfig.AvroEnableWatermark,
 					AvroDecimalHandlingMode:        oldConfig.AvroDecimalHandlingMode,
 					AvroBigintUnsignedHandlingMode: oldConfig.AvroBigintUnsignedHandlingMode,
+					EncodingFormat:                 oldConfig.EncodingFormat,
 				}
 			}
 
@@ -1167,6 +1169,7 @@ type CodecConfig struct {
 	AvroEnableWatermark            *bool   `json:"avro_enable_watermark"`
 	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
+	EncodingFormat                 *string `json:"encoding_format,omitempty"`
 }
 
 // PulsarConfig represents a pulsar sink configuration

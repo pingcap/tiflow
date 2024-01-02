@@ -402,6 +402,7 @@ func TestMergeConfig(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(true),
 			AvroBigintUnsignedHandlingMode: aws.String("ab"),
 			AvroDecimalHandlingMode:        aws.String("cd"),
+			EncodingFormat:                 aws.String("json"),
 		},
 		LargeMessageHandle: &config.LargeMessageHandleConfig{
 			LargeMessageHandleOption: config.LargeMessageHandleOptionHandleKeyOnly,
@@ -440,6 +441,7 @@ func TestMergeConfig(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(false),
 			AvroBigintUnsignedHandlingMode: aws.String("adb"),
 			AvroDecimalHandlingMode:        aws.String("cde"),
+			EncodingFormat:                 aws.String("avro"),
 		},
 		LargeMessageHandle: &config.LargeMessageHandleConfig{
 			LargeMessageHandleOption: config.LargeMessageHandleOptionClaimCheck,
