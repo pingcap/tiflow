@@ -80,6 +80,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
 		SendBootstrapIntervalInSec:       util.AddressOf(DefaultSendBootstrapIntervalInSec),
 		SendBootstrapInMsgCount:          util.AddressOf(DefaultSendBootstrapInMsgCount),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",

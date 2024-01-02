@@ -61,6 +61,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
 		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",

@@ -246,6 +246,7 @@ type SinkConfig struct {
 	ContentCompatible          *bool             `json:"content_compatible"`
 	SendBootstrapIntervalInSec *int64            `json:"send_bootstrap_interval_in_sec,omitempty"`
 	SendBootstrapInMsgCount    *int32            `json:"send_bootstrap_in_msg_count,omitempty"`
+	DebeziumDisableSchema      *bool             `json:"debezium_disable_schema,omitempty"`
 }
 
 // CSVConfig denotes the csv config

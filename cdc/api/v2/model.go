@@ -486,6 +486,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		if c.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
 		}
+		if c.Sink.DebeziumDisableSchema != nil {
+			res.Sink.DebeziumDisableSchema = util.AddressOf(*c.Sink.DebeziumDisableSchema)
+		}
 
 		if c.Sink.SendBootstrapIntervalInSec != nil {
 			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*c.Sink.SendBootstrapIntervalInSec)
@@ -791,6 +794,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.SendBootstrapInMsgCount != nil {
 			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*cloned.Sink.SendBootstrapInMsgCount)
 		}
+
+		if cloned.Sink.DebeziumDisableSchema != nil {
+			res.Sink.DebeziumDisableSchema = util.AddressOf(*cloned.Sink.DebeziumDisableSchema)
+		}
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
@@ -967,6 +974,7 @@ type SinkConfig struct {
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
 	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
 	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
+	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
 }
 
 // CSVConfig denotes the csv config

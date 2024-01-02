@@ -217,6 +217,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
 		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	}, cfg.Sink)
 }
 
@@ -253,6 +254,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
 		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	}, cfg.Sink)
 }
 
