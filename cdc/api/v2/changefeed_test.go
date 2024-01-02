@@ -963,8 +963,8 @@ func TestChangefeedSynced(t *testing.T) {
 
 	cp.EXPECT().StatusProvider().Return(statusProvider).AnyTimes()
 	cp.EXPECT().IsReady().Return(true).AnyTimes()
-	cp.EXPECT().IsController().Return(true).AnyTimes()
 	cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+	cp.EXPECT().IsOwner().Return(true).AnyTimes()
 
 	pdClient := &mockPDClient{}
 	mockUpManager := upstream.NewManager4Test(pdClient)
