@@ -129,9 +129,9 @@ var defaultReplicaConfig = &ReplicaConfig{
 		EncoderConcurrency:         util.AddressOf(32),
 		EnablePartitionSeparator:   util.AddressOf(true),
 		ContentCompatible:          util.AddressOf(false),
-		DebeziumDisableSchema:      util.AddressOf(false),
 		SendBootstrapIntervalInSec: util.AddressOf(int64(120)),
 		SendBootstrapInMsgCount:    util.AddressOf(int32(10000)),
+		DebeziumDisableSchema:      util.AddressOf(false),
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
 		EnableTableAcrossNodes: false,
