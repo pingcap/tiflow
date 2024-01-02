@@ -427,10 +427,6 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 
 			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
-			require.Equal(t, ddlEvent.CommitTs, event.CommitTs)
-			// because we don't we don't set startTs in the encoded message,
-			// so the startTs is equal to commitTs
-			require.Equal(t, ddlEvent.CommitTs, event.StartTs)
 			// Bootstrap event doesn't have query
 			require.Equal(t, "", event.Query)
 			require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))

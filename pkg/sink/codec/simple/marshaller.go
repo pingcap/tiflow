@@ -25,8 +25,7 @@ type Marshaller interface {
 	Unmarshal(data []byte, v any) error
 }
 
-type jsonMarshaller struct {
-}
+type jsonMarshaller struct{}
 
 func newJSONMarshaller() *jsonMarshaller {
 	return &jsonMarshaller{}

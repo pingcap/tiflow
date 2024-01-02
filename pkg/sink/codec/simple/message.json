@@ -157,12 +157,100 @@
       }
     ]
   },
-
   {
     "namespace": "com.pingcap.simple.avro",
-    "name": "Message",
+    "name": "Watermark",
     "type": "record",
-    "docs": "the complete message format",
+    "docs": "the message format of the watermark event",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "type",
+        "type": "fixed",
+        "size": 9
+      },
+      {
+        "name": "commitTs",
+        "type": "long"
+      },
+      {
+        "name": "buildTs",
+        "type": "long"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Bootstrap",
+    "type": "record",
+    "docs": "the message format of the bootstrap event",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "type",
+        "type": "fixed",
+        "size": 9
+      },
+      {
+        "name": "buildTs",
+        "type": "long"
+      },
+      {
+        "name": "tableSchema",
+        "type": "com.pingcap.simple.avro.TableSchema"
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "DDL",
+    "type": "record",
+    "docs": "the message format of the DDL event",
+    "fields": [
+      {
+        "name": "version",
+        "type": "int"
+      },
+      {
+        "name": "type",
+        "type": "fixed",
+        "size": 3
+      },
+      {
+        "name": "sql",
+        "type": "string"
+      },
+      {
+        "name": "commitTs",
+        "type": "long"
+      },
+      {
+        "name": "buildTs",
+        "type": "long"
+      },
+      {
+        "name": "tableSchema",
+        "type": ["null", "com.pingcap.simple.avro.TableSchema"],
+        "default": null
+      },
+      {
+        "name": "preTableSchema",
+        "type": ["null", "com.pingcap.simple.avro.TableSchema"],
+        "default": null
+      }
+    ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "DML",
+    "type": "record",
+    "docs": "the message format of the DML event",
     "fields": [
       {
         "name": "version",
@@ -170,36 +258,20 @@
       },
       {
         "name": "schema",
-        "default": null,
-        "type": [
-          "null",
-          "string"
-        ]
+        "type": "string"
       },
       {
         "name": "table",
-        "default": null,
-        "type": [
-          "null",
-          "string"
-        ]
+        "type": "string"
       },
       {
         "name": "type",
         "type": "enum",
         "symbols": [
-          "WATERMARK",
-          "DDL",
-          "BOOTSTRAP",
           "INSERT",
           "UPDATE",
           "DELETE"
         ]
-      },
-      {
-        "name": "sql",
-        "default": null,
-        "type": ["null", "string"]
       },
       {
         "name": "commitTs",
@@ -211,18 +283,17 @@
       },
       {
         "name": "schemaVersion",
-        "type": ["null", "long"],
-        "default": null
+        "type": "long"
       },
       {
         "name": "claimCheckLocation",
-        "type": ["null", "string"],
-        "default": null
+        "type": "string",
+        "default": ""
       },
       {
         "name": "handleKeyOnly",
-        "type": ["null", "boolean"],
-        "default": null
+        "type": "boolean",
+        "default": false
       },
       {
         "name": "checksum",
@@ -246,22 +317,6 @@
           "default": null
         }],
         "default": null
-      },
-      {
-        "name": "tableSchema",
-        "default": null,
-        "type": [
-          "null",
-          "com.pingcap.simple.avro.TableSchema"
-        ]
-      },
-      {
-        "name": "preTableSchema",
-        "default": null,
-        "type": [
-          "null",
-          "com.pingcap.simple.avro.TableSchema"
-        ]
       }
     ]
   }

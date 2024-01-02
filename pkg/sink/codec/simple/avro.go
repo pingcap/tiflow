@@ -112,11 +112,11 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 		"indexes": indexesSchema,
 	}
 
-	return goavro.Union("com.pingcap.simple.avro.TableSchema", result)
+	return result
 }
 
 func newResolvedMessageMap(ts uint64) interface{} {
-	return goavro.Union("com.pingcap.simple.avro.Message", map[string]interface{}{
+	return goavro.Union("com.pingcap.simple.avro.Watermark", map[string]interface{}{
 		"version":  defaultVersion,
 		"type":     string(WatermarkType),
 		"commitTs": int64(ts),
@@ -124,32 +124,37 @@ func newResolvedMessageMap(ts uint64) interface{} {
 	})
 }
 
-func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
-	eventType := DDLType
-	if ddl.IsBootstrap {
-		eventType = BootstrapType
+func newBootstrapMessageMap(tableInfo *model.TableInfo) interface{} {
+	if tableInfo == nil || tableInfo.TableInfo == nil {
+		return nil
 	}
 	result := map[string]interface{}{
+		"version":     defaultVersion,
+		"type":        string(BootstrapType),
+		"tableSchema": newTableSchemaMap(tableInfo),
+		"buildTs":     time.Now().UnixMilli(),
+	}
+	return goavro.Union("com.pingcap.simple.avro.Bootstrap", result)
+}
+
+func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
+	result := map[string]interface{}{
 		"version":  defaultVersion,
-		"type":     string(eventType),
+		"type":     string(DDLType),
+		"sql":      ddl.Query,
 		"commitTs": int64(ddl.CommitTs),
 		"buildTs":  time.Now().UnixMilli(),
 	}
 
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
-		result["tableSchema"] = newTableSchemaMap(ddl.TableInfo)
+		tableSchema := newTableSchemaMap(ddl.TableInfo)
+		result["tableSchema"] = goavro.Union("com.pingcap.simple.avro.TableSchema", tableSchema)
 	}
-	if !ddl.IsBootstrap {
-		if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
-			result["preTableSchema"] = newTableSchemaMap(ddl.PreTableInfo)
-		}
+	if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
+		tableSchema := newTableSchemaMap(ddl.PreTableInfo)
+		result["preTableSchema"] = goavro.Union("com.pingcap.simple.avro.TableSchema", tableSchema)
 	}
-
-	if eventType == DDLType {
-		result["sql"] = goavro.Union("string", ddl.Query)
-	}
-
-	return goavro.Union("com.pingcap.simple.avro.Message", result)
+	return goavro.Union("com.pingcap.simple.avro.DDL", result)
 }
 
 func newDMLMessageMap(
@@ -157,15 +162,12 @@ func newDMLMessageMap(
 ) (interface{}, error) {
 	m := map[string]interface{}{
 		"version":       defaultVersion,
-		"schema":        goavro.Union("string", event.Table.Schema),
-		"table":         goavro.Union("string", event.Table.Table),
+		"schema":        event.Table.Schema,
+		"table":         event.Table.Table,
 		"commitTs":      int64(event.CommitTs),
 		"buildTs":       time.Now().UnixMilli(),
-		"schemaVersion": goavro.Union("long", int64(event.TableInfo.UpdateTS)),
-	}
-
-	if onlyHandleKey {
-		m["handleKeyOnly"] = goavro.Union("boolean", true)
+		"schemaVersion": int64(event.TableInfo.UpdateTS),
+		"handleKeyOnly": onlyHandleKey,
 	}
 
 	if config.EnableRowChecksum && event.Checksum != nil {
@@ -208,7 +210,7 @@ func newDMLMessageMap(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	return goavro.Union("com.pingcap.simple.avro.Message", m), nil
+	return goavro.Union("com.pingcap.simple.avro.DML", m), nil
 }
 
 func collectColumns(
@@ -302,59 +304,63 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 	if !ok {
 		return nil, cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro message to map")
 	}
-	rawValues = rawValues["com.pingcap.simple.avro.Message"].(map[string]interface{})
 
 	m := new(message)
-	eventType := EventType(rawValues["type"].(string))
-	m.Type = eventType
+	rawMessage := rawValues["com.pingcap.simple.avro.Watermark"]
+	if rawMessage != nil {
+		rawValues = rawMessage.(map[string]interface{})
+		m.Version = int(rawValues["version"].(int32))
+		m.Type = WatermarkType
+		m.CommitTs = uint64(rawValues["commitTs"].(int64))
+		m.BuildTs = rawValues["buildTs"].(int64)
+		return m, nil
+	}
+
+	rawMessage = rawValues["com.pingcap.simple.avro.Bootstrap"]
+	if rawMessage != nil {
+		rawValues = rawMessage.(map[string]interface{})
+		m.Version = int(rawValues["version"].(int32))
+		m.Type = BootstrapType
+		m.BuildTs = rawValues["buildTs"].(int64)
+		m.TableSchema = newTableSchemaFromAvroNative(rawValues["tableSchema"].(map[string]interface{}))
+		return m, nil
+	}
+
+	rawMessage = rawValues["com.pingcap.simple.avro.DDL"]
+	if rawMessage != nil {
+		rawValues = rawMessage.(map[string]interface{})
+		m.Version = int(rawValues["version"].(int32))
+		m.Type = DDLType
+		m.SQL = rawValues["sql"].(string)
+		m.CommitTs = uint64(rawValues["commitTs"].(int64))
+		m.BuildTs = rawValues["buildTs"].(int64)
+
+		rawTableSchemaValues := rawValues["tableSchema"]
+		if rawTableSchemaValues != nil {
+			rawTableSchema := rawTableSchemaValues.(map[string]interface{})
+			rawTableSchema = rawTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
+			m.TableSchema = newTableSchemaFromAvroNative(rawTableSchema)
+		}
+
+		rawPreTableSchemaValue := rawValues["preTableSchema"]
+		if rawPreTableSchemaValue != nil {
+			rawPreTableSchema := rawPreTableSchemaValue.(map[string]interface{})
+			rawPreTableSchema = rawPreTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
+			m.PreTableSchema = newTableSchemaFromAvroNative(rawPreTableSchema)
+		}
+		return m, nil
+	}
+
+	rawValues = rawValues["com.pingcap.simple.avro.DML"].(map[string]interface{})
+	m.Type = EventType(rawValues["type"].(string))
 	m.Version = int(rawValues["version"].(int32))
 	m.CommitTs = uint64(rawValues["commitTs"].(int64))
 	m.BuildTs = rawValues["buildTs"].(int64)
-
-	rawSchemaValue := rawValues["schema"]
-	if rawSchemaValue != nil {
-		m.Schema = rawSchemaValue.(map[string]interface{})["string"].(string)
-	}
-
-	rawTableValue := rawValues["table"]
-	if rawTableValue != nil {
-		m.Table = rawTableValue.(map[string]interface{})["string"].(string)
-	}
-
-	rawSchemaVersionValue := rawValues["schemaVersion"]
-	if rawSchemaVersionValue != nil {
-		m.SchemaVersion = uint64(rawSchemaVersionValue.(map[string]interface{})["long"].(int64))
-	}
-
-	rawSQLValues := rawValues["sql"]
-	if rawSQLValues != nil {
-		m.SQL = rawSQLValues.(map[string]interface{})["string"].(string)
-	}
-
-	rawHandleKeyOnlyValue := rawValues["handleKeyOnly"]
-	if rawHandleKeyOnlyValue != nil {
-		m.HandleKeyOnly = rawHandleKeyOnlyValue.(map[string]interface{})["boolean"].(bool)
-	}
-
-	rawClaimCheckValue := rawValues["claimCheckLocation"]
-	if rawClaimCheckValue != nil {
-		m.ClaimCheckLocation = rawClaimCheckValue.(map[string]interface{})["string"].(string)
-	}
-
-	rawTableSchemaValues := rawValues["tableSchema"]
-	if rawTableSchemaValues != nil {
-		rawTableSchema := rawTableSchemaValues.(map[string]interface{})
-		rawTableSchema = rawTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
-		m.TableSchema = newTableSchemaFromAvroNative(rawTableSchema)
-	}
-
-	rawPreTableSchemaValue := rawValues["preTableSchema"]
-	if rawPreTableSchemaValue != nil {
-		rawPreTableSchema := rawPreTableSchemaValue.(map[string]interface{})
-		rawPreTableSchema = rawPreTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
-		m.PreTableSchema = newTableSchemaFromAvroNative(rawPreTableSchema)
-	}
-
+	m.Schema = rawValues["schema"].(string)
+	m.Table = rawValues["table"].(string)
+	m.SchemaVersion = uint64(rawValues["schemaVersion"].(int64))
+	m.HandleKeyOnly = rawValues["handleKeyOnly"].(bool)
+	m.ClaimCheckLocation = rawValues["claimCheckLocation"].(string)
 	m.Checksum = newChecksum(rawValues)
 	m.Data = newDataMap(rawValues["data"])
 	m.Old = newDataMap(rawValues["old"])
