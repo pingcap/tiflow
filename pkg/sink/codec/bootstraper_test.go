@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getMockTableStatus() (TopicPartitionKey, *model.RowChangedEvent, *tableStatus) {
+func getMockTableStatus() (model.TopicPartitionKey, *model.RowChangedEvent, *tableStatistic) {
 	tableInfo := &model.TableInfo{
 		TableInfo: &timodel.TableInfo{
 			UpdateTS: 1,
@@ -35,7 +35,7 @@ func getMockTableStatus() (TopicPartitionKey, *model.RowChangedEvent, *tableStat
 		Table:   "t1",
 		TableID: 1,
 	}
-	key := TopicPartitionKey{
+	key := model.TopicPartitionKey{
 		Topic:          "test.t1",
 		Partition:      1,
 		TotalPartition: 3,
@@ -79,17 +79,17 @@ func TestIsActive(t *testing.T) {
 	t.Parallel()
 	key, row, tb1 := getMockTableStatus()
 	// case 1: A new added table should be active
-	require.True(t, tb1.isActive(defaultMaxInactiveDuration))
+	require.True(t, tb1.isInactive(defaultMaxInactiveDuration))
 
 	// case 2: A table which does not receive message for a long time should be inactive
 	tb1.lastMsgReceivedTime.Store(time.Now().Add(-defaultMaxInactiveDuration))
-	require.False(t, tb1.isActive(defaultMaxInactiveDuration))
+	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
 
 	// case 3: A table which receive message recently should be active
 	// Note: A table's update method will be call any time it receive message
 	// So use update method to simulate the table receive message
 	tb1.update(key, row)
-	require.True(t, tb1.isActive(defaultMaxInactiveDuration))
+	require.True(t, tb1.isInactive(defaultMaxInactiveDuration))
 }
 
 func TestBootstrapWorker(t *testing.T) {
@@ -101,8 +101,8 @@ func TestBootstrapWorker(t *testing.T) {
 	worker := newBootstrapWorker(
 		cfID,
 		outCh,
-		builder,
-		time.Duration(config.DefaultSendBootstrapIntervalInSec)*time.Second,
+		builder.Build(),
+		config.DefaultSendBootstrapIntervalInSec,
 		config.DefaultSendBootstrapInMsgCount,
 		defaultMaxInactiveDuration)
 

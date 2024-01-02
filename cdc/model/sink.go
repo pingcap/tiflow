@@ -912,3 +912,11 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 func (t *SingleTableTxn) ToWaitFlush() bool {
 	return t.FinishWg != nil
 }
+
+// TopicPartitionKey contains the topic and partition key of the message.
+type TopicPartitionKey struct {
+	Topic          string
+	Partition      int32
+	PartitionKey   string
+	TotalPartition int32
+}

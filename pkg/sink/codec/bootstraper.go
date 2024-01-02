@@ -1,4 +1,4 @@
-// Copyright 2022 PingCAP, Inc.
+// Copyright 2023 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ const (
 type bootstrapWorker struct {
 	changefeedID            model.ChangeFeedID
 	activeTables            sync.Map
-	builder                 RowEventEncoderBuilder
+	encoder                 RowEventEncoder
 	sendBootstrapInterval   time.Duration
 	sendBootstrapInMsgCount int32
 	// maxInactiveDuration is the max duration that a table can be inactive
@@ -43,21 +43,27 @@ type bootstrapWorker struct {
 	outCh               chan<- *future
 }
 
-// newBootstrapWorker creates a new bootstrapGenerator instance
+// newBootstrapWorker creates a new bootstrapWorker instance
 func newBootstrapWorker(
 	changefeedID model.ChangeFeedID,
 	outCh chan<- *future,
-	builder RowEventEncoderBuilder,
-	sendBootstrapInterval time.Duration,
+	encoder RowEventEncoder,
+	sendBootstrapInterval int64,
 	sendBootstrapInMsgCount int32,
 	maxInactiveDuration time.Duration,
 ) *bootstrapWorker {
+	log.Info("Sending bootstrap event is enable for simple protocol,"+
+		"and both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0"+
+		"enable bootstrap sending function",
+		zap.Stringer("changefeed", changefeedID),
+		zap.Int64("sendBootstrapIntervalInSec", sendBootstrapInterval),
+		zap.Int32("sendBootstrapInMsgCount", sendBootstrapInMsgCount))
 	return &bootstrapWorker{
 		changefeedID:            changefeedID,
 		outCh:                   outCh,
-		builder:                 builder,
+		encoder:                 encoder,
 		activeTables:            sync.Map{},
-		sendBootstrapInterval:   sendBootstrapInterval,
+		sendBootstrapInterval:   time.Duration(sendBootstrapInterval) * time.Second,
 		sendBootstrapInMsgCount: sendBootstrapInMsgCount,
 		maxInactiveDuration:     maxInactiveDuration,
 	}
@@ -65,18 +71,20 @@ func newBootstrapWorker(
 
 func (b *bootstrapWorker) run(ctx context.Context) error {
 	sendTicker := time.NewTicker(bootstrapWorkerTickerInterval)
-	defer sendTicker.Stop()
 	gcTicker := time.NewTicker(bootstrapWorkerGCInterval)
-	defer gcTicker.Stop()
-	errCh := make(chan error, 1)
+	defer func() {
+		gcTicker.Stop()
+		sendTicker.Stop()
+	}()
 
+	errCh := make(chan error, 1)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-sendTicker.C:
 			b.activeTables.Range(func(key, value interface{}) bool {
-				table := value.(*tableStatus)
+				table := value.(*tableStatistic)
 				err := b.sendBootstrapMsg(ctx, table)
 				if err != nil {
 					errCh <- err
@@ -94,7 +102,7 @@ func (b *bootstrapWorker) run(ctx context.Context) error {
 
 func (b *bootstrapWorker) addEvent(
 	ctx context.Context,
-	key TopicPartitionKey,
+	key model.TopicPartitionKey,
 	row *model.RowChangedEvent,
 ) error {
 	table, ok := b.activeTables.Load(row.Table.TableID)
@@ -108,7 +116,7 @@ func (b *bootstrapWorker) addEvent(
 		}
 	} else {
 		// If the table is already in the activeTables, update its status.
-		table.(*tableStatus).update(key, row)
+		table.(*tableStatistic).update(key, row)
 	}
 	return nil
 }
@@ -117,7 +125,7 @@ func (b *bootstrapWorker) addEvent(
 // 1. The time since last bootstrap message sent is larger than sendBootstrapInterval
 // 2. The received row event count since last bootstrap message sent is larger than sendBootstrapInMsgCount
 // Note: It is a blocking method, it will block if the outCh is full.
-func (b *bootstrapWorker) sendBootstrapMsg(ctx context.Context, table *tableStatus) error {
+func (b *bootstrapWorker) sendBootstrapMsg(ctx context.Context, table *tableStatistic) error {
 	if !table.shouldSendBootstrapMsg(
 		b.sendBootstrapInterval,
 		b.sendBootstrapInMsgCount) {
@@ -147,8 +155,7 @@ func (b *bootstrapWorker) generateEvents(
 	res := make([]*future, 0, int(totalPartition))
 	// Bootstrap messages of a table should be sent to all partitions.
 	for i := 0; i < int(totalPartition); i++ {
-		encoder := b.builder.Build()
-		msg, err := encoder.EncodeDDLEvent(&model.DDLEvent{
+		msg, err := b.encoder.EncodeDDLEvent(&model.DDLEvent{
 			StartTs:     0,
 			CommitTs:    0,
 			TableInfo:   tableInfo,
@@ -158,7 +165,7 @@ func (b *bootstrapWorker) generateEvents(
 			return nil, errors.Trace(err)
 		}
 
-		key := TopicPartitionKey{
+		key := model.TopicPartitionKey{
 			Topic:          topic,
 			Partition:      int32(i),
 			TotalPartition: totalPartition,
@@ -177,8 +184,8 @@ func (b *bootstrapWorker) generateEvents(
 
 func (b *bootstrapWorker) gcInactiveTables() {
 	b.activeTables.Range(func(key, value interface{}) bool {
-		table := value.(*tableStatus)
-		if !table.isActive(b.maxInactiveDuration) {
+		table := value.(*tableStatistic)
+		if table.isInactive(b.maxInactiveDuration) {
 			log.Info("A table is removed from the bootstrap worker",
 				zap.Int64("tableID", table.id),
 				zap.String("topic", table.topic),
@@ -189,8 +196,8 @@ func (b *bootstrapWorker) gcInactiveTables() {
 	})
 }
 
-// tableStatus is used to record the status of a table
-type tableStatus struct {
+// tableStatistic is used to record the statistics of a table
+type tableStatistic struct {
 	// id is the table's ID, it will not change
 	id int64
 	// topic is the table's topic, it will not change
@@ -215,8 +222,8 @@ type tableStatus struct {
 	tableInfo atomic.Value
 }
 
-func newTableStatus(key TopicPartitionKey, row *model.RowChangedEvent) *tableStatus {
-	res := &tableStatus{
+func newTableStatus(key model.TopicPartitionKey, row *model.RowChangedEvent) *tableStatistic {
+	res := &tableStatistic{
 		id:    row.Table.TableID,
 		topic: key.Topic,
 	}
@@ -229,7 +236,7 @@ func newTableStatus(key TopicPartitionKey, row *model.RowChangedEvent) *tableSta
 	return res
 }
 
-func (t *tableStatus) shouldSendBootstrapMsg(
+func (t *tableStatistic) shouldSendBootstrapMsg(
 	sendBootstrapInterval time.Duration,
 	sendBootstrapMsgCountInterval int32,
 ) bool {
@@ -238,7 +245,7 @@ func (t *tableStatus) shouldSendBootstrapMsg(
 		t.counter.Load() >= sendBootstrapMsgCountInterval
 }
 
-func (t *tableStatus) update(key TopicPartitionKey, row *model.RowChangedEvent) {
+func (t *tableStatistic) update(key model.TopicPartitionKey, row *model.RowChangedEvent) {
 	t.counter.Add(1)
 	t.lastMsgReceivedTime.Store(time.Now())
 
@@ -252,12 +259,12 @@ func (t *tableStatus) update(key TopicPartitionKey, row *model.RowChangedEvent) 
 	}
 }
 
-func (t *tableStatus) isActive(maxInactiveDuration time.Duration) bool {
+func (t *tableStatistic) isInactive(maxInactiveDuration time.Duration) bool {
 	lastMsgReceivedTime := t.lastMsgReceivedTime.Load().(time.Time)
-	return time.Since(lastMsgReceivedTime) < maxInactiveDuration
+	return time.Since(lastMsgReceivedTime) > maxInactiveDuration
 }
 
-func (t *tableStatus) reset() {
+func (t *tableStatistic) reset() {
 	t.lastSendTime.Store(time.Now())
 	t.counter.Store(0)
 }

@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -41,7 +40,7 @@ type EncoderGroup interface {
 	Run(ctx context.Context) error
 	// AddEvents add events into the group and encode them by one of the encoders in the group.
 	// Note: The caller should make sure all events should belong to the same topic and partition.
-	AddEvents(ctx context.Context, key TopicPartitionKey, events ...*dmlsink.RowChangeCallbackableEvent) error
+	AddEvents(ctx context.Context, key model.TopicPartitionKey, events ...*dmlsink.RowChangeCallbackableEvent) error
 	// Output returns a channel produce futures
 	Output() <-chan *future
 }
@@ -79,25 +78,13 @@ func NewEncoderGroup(
 	outCh := make(chan *future, defaultInputChanSize*concurrency)
 
 	var bootstrapWorker *bootstrapWorker
-	protocol := util.GetOrZero(cfg.Protocol)
-	if protocol == config.ProtocolSimple.String() {
-		log.Info("Sending bootstrap event is enable for simple protocol, creating bootstrap worker...",
-			zap.Stringer("changefeed", changefeedID))
-		sendBootstrapIntervalInSec := util.GetOrZero(cfg.SendBootstrapIntervalInSec)
-		if sendBootstrapIntervalInSec <= 0 {
-			sendBootstrapIntervalInSec = config.DefaultSendBootstrapIntervalInSec
-		}
-		msgCount := util.GetOrZero(cfg.SendBootstrapInMsgCount)
-		if msgCount <= 0 {
-			msgCount = config.DefaultSendBootstrapInMsgCount
-		}
-		interval := time.Duration(sendBootstrapIntervalInSec) * time.Second
+	if cfg.ShouldSendBootstrapMsg() {
 		bootstrapWorker = newBootstrapWorker(
 			changefeedID,
 			outCh,
-			builder,
-			interval,
-			msgCount,
+			builder.Build(),
+			*cfg.SendBootstrapIntervalInSec,
+			*cfg.SendBootstrapInMsgCount,
 			defaultMaxInactiveDuration,
 		)
 	}
@@ -165,7 +152,7 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 
 func (g *encoderGroup) AddEvents(
 	ctx context.Context,
-	key TopicPartitionKey,
+	key model.TopicPartitionKey,
 	events ...*dmlsink.RowChangeCallbackableEvent,
 ) error {
 	// bootstrapWorker only not nil when the protocol is simple
@@ -206,13 +193,13 @@ func (g *encoderGroup) cleanMetrics() {
 // future is a wrapper of the result of encoding events
 // It's used to notify the caller that the result is ready.
 type future struct {
-	Key      TopicPartitionKey
+	Key      model.TopicPartitionKey
 	events   []*dmlsink.RowChangeCallbackableEvent
 	Messages []*common.Message
 	done     chan struct{}
 }
 
-func newFuture(key TopicPartitionKey,
+func newFuture(key model.TopicPartitionKey,
 	events ...*dmlsink.RowChangeCallbackableEvent,
 ) *future {
 	return &future{

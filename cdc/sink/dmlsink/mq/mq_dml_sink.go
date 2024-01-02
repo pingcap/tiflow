@@ -195,7 +195,7 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			// We already limit the memory usage by MemoryQuota at SinkManager level.
 			// So it is safe to send the event to a unbounded channel here.
 			s.alive.worker.msgChan.In() <- mqEvent{
-				key: codec.TopicPartitionKey{
+				key: model.TopicPartitionKey{
 					Topic:          topic,
 					Partition:      index,
 					PartitionKey:   key,

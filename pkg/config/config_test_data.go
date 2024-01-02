@@ -67,7 +67,7 @@ const (
     },
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
-    "send-bootstrap-in-msg-count": 10000
+    "send-bootstrap-in-msg-count": 10000,
     "debezium-disable-schema": false
   },
   "consistent": {
@@ -323,7 +323,7 @@ const (
     },
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
-    "send-bootstrap-in-msg-count": 10000
+    "send-bootstrap-in-msg-count": 10000,
     "debezium-disable-schema": false
   },
   "consistent": {
@@ -487,7 +487,7 @@ const (
     },
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
-    "send-bootstrap-in-msg-count": 10000
+    "send-bootstrap-in-msg-count": 10000,
     "debezium-disable-schema": false
   },
   "consistent": {

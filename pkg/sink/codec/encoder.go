@@ -84,14 +84,6 @@ func IsColumnValueEqual(preValue, updatedValue interface{}) bool {
 	return preValue == updatedValue
 }
 
-// TopicPartitionKey contains the topic and partition key of the message.
-type TopicPartitionKey struct {
-	Topic          string
-	Partition      int32
-	PartitionKey   string
-	TotalPartition int32
-}
-
 // MockRowEventEncoderBuilder is a mock implementation of RowEventEncoderBuilder
 type MockRowEventEncoderBuilder struct{}
 
