@@ -487,6 +487,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		if c.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*c.Sink.AdvanceTimeoutInSec)
 		}
+		if c.Sink.DebeziumDisableSchema != nil {
+			res.Sink.DebeziumDisableSchema = util.AddressOf(*c.Sink.DebeziumDisableSchema)
+		}
 
 	}
 	if c.Mounter != nil {
@@ -778,6 +781,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
 		}
+		if cloned.Sink.DebeziumDisableSchema != nil {
+			res.Sink.DebeziumDisableSchema = util.AddressOf(*cloned.Sink.DebeziumDisableSchema)
+		}
 	}
 	if cloned.Consistent != nil {
 		res.Consistent = &ConsistentConfig{
@@ -952,6 +958,7 @@ type SinkConfig struct {
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
+	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
 }
 
 // CSVConfig denotes the csv config

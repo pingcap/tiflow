@@ -49,7 +49,7 @@ func NewRowEventEncoderBuilder(
 	case config.ProtocolCraft:
 		return craft.NewBatchEncoderBuilder(cfg), nil
 	case config.ProtocolDebezium:
-		return debezium.NewBatchEncoderBuilder(cfg), nil
+		return debezium.NewBatchEncoderBuilder(cfg, config.GetGlobalServerConfig().ClusterID), nil
 	case config.ProtocolSimple:
 		return simple.NewBuilder(ctx, cfg)
 	default:

@@ -81,6 +81,9 @@ type Config struct {
 
 	// Currently only Debezium protocol is aware of the time zone
 	TimeZone *time.Location
+
+	// Debezium only. Whether schema should be excluded in the output.
+	DebeziumDisableSchema bool
 }
 
 type EncodingFormatType string
@@ -153,7 +156,9 @@ type urlConfig struct {
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
 	ContentCompatible        *bool  `form:"content-compatible"`
 
-	EncodingFormatType *string `form:"encoding-format"`
+	DebeziumDisableSchema *bool `form:"debezium-disable-schema"
+  
+  EncodingFormatType *string `form:"encoding-format"`
 }
 
 // Apply fill the Config
@@ -251,6 +256,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		if encodingFormat == EncodingFormatAvro {
 			c.EncodingFormat = EncodingFormatAvro
 		}
+  }
+	if urlParameter.DebeziumDisableSchema != nil {
+		c.DebeziumDisableSchema = *urlParameter.DebeziumDisableSchema
 	}
 
 	return nil
@@ -279,6 +287,9 @@ func mergeConfig(
 				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
 				dest.EncodingFormatType = codecConfig.EncodingFormat
 			}
+		}
+		if replicaConfig.Sink.DebeziumDisableSchema != nil {
+			dest.DebeziumDisableSchema = replicaConfig.Sink.DebeziumDisableSchema
 		}
 	}
 	if err := mergo.Merge(dest, urlParameters, mergo.WithOverride); err != nil {

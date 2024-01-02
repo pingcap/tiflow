@@ -59,6 +59,7 @@ var defaultAPIConfig = &ReplicaConfig{
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		ContentCompatible:                util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",

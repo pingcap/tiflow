@@ -65,7 +65,8 @@ const (
       "large-message-handle-compression": "",
       "claim-check-storage-uri": ""
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -130,7 +131,8 @@ const (
     "ca-path": "",
     "cert-path": "",
     "key-path": "",
-    "cert-allowed-cn": null
+    "cert-allowed-cn": null,
+    "mtls": false
   },
   "per-table-memory-quota": 0,
   "kv-client": {
@@ -317,7 +319,8 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -478,7 +481,8 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",

@@ -165,6 +165,9 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+
+	// Debezium only. Whether schema should be excluded in the output.
+	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -221,14 +224,14 @@ func (c *CSVConfig) validateAndAdjust() error {
 	case 0:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config delimiter cannot be empty"))
-	case 1, 2:
+	case 1, 2, 3:
 		if strings.ContainsRune(c.Delimiter, CR) || strings.ContainsRune(c.Delimiter, LF) {
 			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 				errors.New("csv config delimiter contains line break characters"))
 		}
 	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains more than two character, note that escape "+
+			errors.New("csv config delimiter contains more than three characters, note that escape "+
 				"sequences can only be used in double quotes in toml configuration items."))
 	}
 
