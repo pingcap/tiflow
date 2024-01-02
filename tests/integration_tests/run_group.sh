@@ -39,13 +39,8 @@ groups=(
 	["G05"]='charset_gbk ddl_manager multi_source'
 	["G06"]='sink_retry changefeed_error ddl_sequence resourcecontrol'
 	["G07"]='kv_client_stream_reconnect cdc split_region'
-<<<<<<< HEAD
 	["G08"]='server_config_compatibility processor_err_chan changefeed_reconstruct multi_capture'
-	["G09"]='gc_safepoint changefeed_pause_resume cli savepoint'
-=======
-	["G08"]='processor_err_chan changefeed_reconstruct multi_capture'
 	["G09"]='gc_safepoint changefeed_pause_resume cli savepoint synced_status'
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 	["G10"]='default_value simple cdc_server_tips event_filter'
 	["G11"]='resolve_lock move_table autorandom generate_column'
 	["G12"]='many_pk_or_uk capture_session_done_during_task ddl_attributes'

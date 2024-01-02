@@ -49,7 +49,6 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
-<<<<<<< HEAD
 	changefeedGroup.Use(middleware.ForwardToOwnerMiddleware(api.capture))
 	changefeedGroup.GET("/:changefeed_id", api.getChangeFeed)
 	changefeedGroup.POST("", api.createChangefeed)
@@ -60,18 +59,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	changefeedGroup.POST("/:changefeed_id/resume", api.resumeChangefeed)
 	changefeedGroup.POST("/:changefeed_id/pause", api.pauseChangefeed)
 	changefeedGroup.GET("/:changefeed_id/status", api.status)
-=======
-	changefeedGroup.GET("/:changefeed_id", changefeedOwnerMiddleware, api.getChangeFeed)
-	changefeedGroup.POST("", controllerMiddleware, api.createChangefeed)
-	changefeedGroup.GET("", controllerMiddleware, api.listChangeFeeds)
-	changefeedGroup.PUT("/:changefeed_id", changefeedOwnerMiddleware, api.updateChangefeed)
-	changefeedGroup.DELETE("/:changefeed_id", controllerMiddleware, api.deleteChangefeed)
-	changefeedGroup.GET("/:changefeed_id/meta_info", changefeedOwnerMiddleware, api.getChangeFeedMetaInfo)
-	changefeedGroup.POST("/:changefeed_id/resume", changefeedOwnerMiddleware, api.resumeChangefeed)
-	changefeedGroup.POST("/:changefeed_id/pause", changefeedOwnerMiddleware, api.pauseChangefeed)
-	changefeedGroup.GET("/:changefeed_id/status", changefeedOwnerMiddleware, api.status)
-	changefeedGroup.GET("/:changefeed_id/synced", changefeedOwnerMiddleware, api.synced)
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
+	changefeedGroup.GET("/:changefeed_id/synced", api.synced)
 
 	// capture apis
 	captureGroup := v2.Group("/captures")

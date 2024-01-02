@@ -44,13 +44,8 @@ const (
 	apiOpVarChangefeedState = "state"
 	// apiOpVarChangefeedID is the key of changefeed ID in HTTP API
 	apiOpVarChangefeedID = "changefeed_id"
-<<<<<<< HEAD
-=======
-	// apiOpVarNamespace is the key of changefeed namespace in HTTP API
-	apiOpVarNamespace = "namespace"
 	// timeout for pd client
 	timeout = 30 * time.Second
->>>>>>> 058786f385 (TiCDC support checking if data is entirely replicated to Downstream (#10133))
 )
 
 // createChangefeed handles create changefeed request,
@@ -847,8 +842,7 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 func (h *OpenAPIV2) synced(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	namespace := getNamespaceValueWithDefault(c)
-	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
+	changefeedID := model.DefaultChangeFeedID(c.Param(apiOpVarChangefeedID))
 	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
 			changefeedID.ID))
@@ -938,12 +932,12 @@ func (h *OpenAPIV2) synced(c *gin.Context) {
 		var message string
 		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) <
 			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
-			message = fmt.Sprintf("Please check whether pd is healthy and tikv region is all available. " +
-				"If pd is not healthy or tikv region is not available, the data syncing is finished. " +
-				"When pd is offline means that pd is not healthy. For tikv region, you can check the grafana info " +
-				"in 'TiKV-Details-Resolved-Ts-Max Leader Resolved TS gap'. If the gap is a large value, such as a few minutes, " +
-				"it means some regions in tikv are unavailable. " +
-				" Otherwise the data syncing is not finished, please wait")
+			message = fmt.Sprintf("Please check whether PD is online and TiKV Regions are all available. " +
+				"If PD is offline or some TiKV regions are not available, it means that the data syncing process is complete. " +
+				"To check whether TiKV regions are all available, " +
+				"you can view 'TiKV-Details' > 'Resolved-Ts' > 'Max Leader Resolved TS gap' on Grafana. " +
+				"If the gap is large, such as a few minutes, it means that some regions in TiKV are unavailable. " +
+				"Otherwise, if the gap is small and PD is online, it means the data syncing is incomplete, so please wait")
 		} else {
 			message = "The data syncing is not finished, please wait"
 		}
