@@ -1261,6 +1261,15 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 				zap.Int64("tableID", s.tableID),
 				zap.String("tableName", s.tableName),
 				zap.Uint64("regionID", event.RegionId),
+				zap.Uint64("requestID", event.RequestId),
+				zap.Stringer("span", &state.sri.span))
+		} else if state.isStale() {
+			log.Warn("drop event due to region feed stopped",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.Uint64("regionID", event.RegionId),
 				zap.Uint64("requestID", event.RequestId))
 			continue
 		}
