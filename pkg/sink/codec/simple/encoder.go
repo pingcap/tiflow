@@ -124,14 +124,7 @@ func (e *encoder) Build() []*common.Message {
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	var m interface{}
-	switch e.config.EncodingFormat {
-	case common.EncodingFormatJSON:
-		m = newResolvedMessage(ts)
-	case common.EncodingFormatAvro:
-		m = newResolvedMessageMap(ts)
-	}
-	value, err := e.marshaller.Marshal(m)
+	value, err := e.marshaller.MarshalCheckpoint(ts)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
@@ -146,27 +139,7 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	var (
-		m   interface{}
-		err error
-	)
-	switch e.config.EncodingFormat {
-	case common.EncodingFormatJSON:
-		m, err = newDDLMessage(event)
-		if err != nil {
-			return nil, err
-		}
-	case common.EncodingFormatAvro:
-		if event.IsBootstrap {
-			m = newBootstrapMessageMap(event.TableInfo)
-		} else {
-			m = newDDLMessageMap(event)
-		}
-		if m == nil {
-			return nil, nil
-		}
-	}
-	value, err := e.marshaller.Marshal(m)
+	value, err := e.marshaller.MarshalDDLEvent(event)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}

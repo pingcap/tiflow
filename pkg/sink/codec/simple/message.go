@@ -490,6 +490,23 @@ func newResolvedMessage(ts uint64) *message {
 	}
 }
 
+func newBootstrapMessage(event *model.DDLEvent) (*message, error) {
+	if event.TableInfo == nil || event.TableInfo.TableInfo == nil {
+		return nil, nil
+	}
+	schema, err := newTableSchema(event.TableInfo)
+	if err != nil {
+		return nil, err
+	}
+	msg := &message{
+		Version:     defaultVersion,
+		Type:        BootstrapType,
+		BuildTs:     time.Now().UnixMilli(),
+		TableSchema: schema,
+	}
+	return msg, nil
+}
+
 func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	var (
 		schema    *TableSchema
@@ -503,16 +520,13 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 			return nil, err
 		}
 	}
-	if !ddl.IsBootstrap {
-		// `PreTableInfo` may not exist for some DDL, such as `create table`
-		if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
-			preSchema, err = newTableSchema(ddl.PreTableInfo)
-			if err != nil {
-				return nil, err
-			}
+	// `PreTableInfo` may not exist for some DDL, such as `create table`
+	if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
+		preSchema, err = newTableSchema(ddl.PreTableInfo)
+		if err != nil {
+			return nil, err
 		}
 	}
-
 	msg := &message{
 		Version:        defaultVersion,
 		Type:           DDLType,
@@ -522,11 +536,6 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 		TableSchema:    schema,
 		PreTableSchema: preSchema,
 	}
-	if ddl.IsBootstrap {
-		msg.Type = BootstrapType
-		msg.SQL = ""
-	}
-
 	return msg, nil
 }
 
