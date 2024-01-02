@@ -1115,12 +1115,12 @@ func TestChangefeedSynced(t *testing.T) {
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.Nil(t, err)
 		require.Equal(t, false, resp.Synced)
-		require.Equal(t, "Please check whether pd is healthy and tikv region is all available. "+
-			"If pd is not healthy or tikv region is not available, the data syncing is finished. "+
-			"When pd is offline means that pd is not healthy. For tikv region, you can check the grafana info "+
-			"in 'TiKV-Details-Resolved-Ts-Max Leader Resolved TS gap'. If the gap is a large value, such as a few minutes, "+
-			"it means some regions in tikv are unavailable. "+
-			" Otherwise the data syncing is not finished, please wait", resp.Info)
+		require.Equal(t, "Please check whether PD is online and TiKV Regions are all available. "+
+			"If PD is offline or some TiKV regions are not available, it means that the data syncing process is complete. "+
+			"To check whether TiKV regions are all available, you can view "+
+			"'TiKV-Details' > 'Resolved-Ts' > 'Max Leader Resolved TS gap' on Grafana. "+
+			"If the gap is large, such as a few minutes, it means that some regions in TiKV are unavailable. "+
+			"Otherwise, if the gap is small and PD is online, it means the data syncing is incomplete, so please wait", resp.Info)
 	}
 
 	{
