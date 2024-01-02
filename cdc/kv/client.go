@@ -250,7 +250,6 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 		log.Debug("created stream to store",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
-			zap.String("addr", addr),
 			zap.Int64("tableID", c.tableID),
 			zap.String("tableName", c.tableName),
 			zap.String("store", addr))
@@ -1215,6 +1214,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 					zap.Int64("tableID", s.tableID),
 					zap.String("tableName", s.tableName),
 					zap.Uint64("regionID", event.RegionId),
+					zap.Uint64("oldRequestID", state.requestID),
 					zap.Uint64("requestID", event.RequestId),
 					zap.Uint64("currRequestID", state.requestID))
 				valid = false
@@ -1225,7 +1225,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 					zap.Int64("tableID", s.tableID),
 					zap.String("tableName", s.tableName),
 					zap.Uint64("regionID", event.RegionId),
-					zap.Uint64("requestID", event.RequestId))
+					zap.Uint64("currRequestID", state.requestID))
 				continue
 			}
 		}
