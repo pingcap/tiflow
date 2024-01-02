@@ -76,6 +76,7 @@ var customReplicaConfig = &ReplicaConfig{
 			Delimiter:  config.Comma,
 			NullString: config.NULL,
 		},
+		DateSeparator:              "day",
 		EncoderConcurrency:         util.AddressOf(32),
 		EnablePartitionSeparator:   util.AddressOf(true),
 		ContentCompatible:          util.AddressOf(true),

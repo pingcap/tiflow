@@ -77,7 +77,7 @@ func (b *bootstrapWorker) run(ctx context.Context) error {
 		sendTicker.Stop()
 	}()
 
-	errCh := make(chan error, 1)
+	var err error
 	for {
 		select {
 		case <-ctx.Done():
@@ -85,17 +85,14 @@ func (b *bootstrapWorker) run(ctx context.Context) error {
 		case <-sendTicker.C:
 			b.activeTables.Range(func(key, value interface{}) bool {
 				table := value.(*tableStatistic)
-				err := b.sendBootstrapMsg(ctx, table)
-				if err != nil {
-					errCh <- err
-					return false
-				}
-				return true
+				err = b.sendBootstrapMsg(ctx, table)
+				return err == nil
 			})
+			if err != nil {
+				return errors.Trace(err)
+			}
 		case <-gcTicker.C:
 			b.gcInactiveTables()
-		case err := <-errCh:
-			return err
 		}
 	}
 }
@@ -155,12 +152,7 @@ func (b *bootstrapWorker) generateEvents(
 	res := make([]*future, 0, int(totalPartition))
 	// Bootstrap messages of a table should be sent to all partitions.
 	for i := 0; i < int(totalPartition); i++ {
-		msg, err := b.encoder.EncodeDDLEvent(&model.DDLEvent{
-			StartTs:     0,
-			CommitTs:    0,
-			TableInfo:   tableInfo,
-			IsBootstrap: true,
-		})
+		msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
