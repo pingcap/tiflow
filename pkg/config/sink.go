@@ -196,13 +196,15 @@ func (s *SinkConfig) MaskSensitiveData() {
 	}
 }
 
+// ShouldSendBootstrapMsg returns whether the sink should send bootstrap message.
+// Only enable bootstrap sending function for simple protocol
+// and when both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0
 func (s *SinkConfig) ShouldSendBootstrapMsg() bool {
 	if s == nil {
 		return false
 	}
 	protocol := util.GetOrZero(s.Protocol)
-	// Only enable bootstrap sending function for simple protocol
-	// and when both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0
+
 	return protocol == ProtocolSimple.String() &&
 		util.GetOrZero(s.SendBootstrapIntervalInSec) > 0 &&
 		util.GetOrZero(s.SendBootstrapInMsgCount) > 0
