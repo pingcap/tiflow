@@ -1327,8 +1327,8 @@ func (s *eventFeedSession) logSlowRegions(ctx context.Context) error {
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Int64("tableID", s.tableID),
-			zap.String("tableName", s.tableName))
-
+			zap.String("tableName", s.tableName),
+		)
 		if attr.SlowestRegion.Initialized {
 			if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
 				log.Info("event feed finds a initialized slow region",
