@@ -306,16 +306,15 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						lastLogSlowRangeTime = time.Now()
 						lastSlowestRange = &slowestRange
 					}
-					continue
+					lastSlowestRange = nil
+					lastResolvedTs = resolvedTs
+					lastAdvancedTime = time.Now()
+					err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
+					if err != nil {
+						return errors.Trace(err)
+					}
+					atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 				}
-				lastSlowestRange = nil
-				lastResolvedTs = resolvedTs
-				lastAdvancedTime = time.Now()
-				err := output(&model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved, RegionID: e.RegionID})
-				if err != nil {
-					return errors.Trace(err)
-				}
-				atomic.StoreUint64(&p.resolvedTs, resolvedTs)
 			}
 		}
 	})
