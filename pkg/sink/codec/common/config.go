@@ -156,9 +156,10 @@ type urlConfig struct {
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
 	ContentCompatible        *bool  `form:"content-compatible"`
 
-	DebeziumDisableSchema *bool `form:"debezium-disable-schema"
-  
-  EncodingFormatType *string `form:"encoding-format"`
+	DebeziumDisableSchema *bool `form:"debezium-disable-schema"`
+	// EncodingFormatType is only works for the simple protocol,
+	// can be `json` and `avro`, default to `json`.
+	EncodingFormatType *string `form:"encoding-format"`
 }
 
 // Apply fill the Config
@@ -256,7 +257,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		if encodingFormat == EncodingFormatAvro {
 			c.EncodingFormat = EncodingFormatAvro
 		}
-  }
+	}
 	if urlParameter.DebeziumDisableSchema != nil {
 		c.DebeziumDisableSchema = *urlParameter.DebeziumDisableSchema
 	}
