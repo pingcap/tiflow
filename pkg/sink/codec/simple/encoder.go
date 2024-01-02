@@ -40,23 +40,9 @@ type encoder struct {
 func (e *encoder) AppendRowChangedEvent(
 	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	var (
-		m   interface{}
-		err error
-	)
-	switch e.config.EncodingFormat {
-	case common.EncodingFormatJSON:
-		m, err = newDMLMessage(event, e.config, false)
-	case common.EncodingFormatAvro:
-		m, err = newDMLMessageMap(event, e.config, false)
-	}
+	value, err := e.marshaller.MarshalRowChangedEvent(event, e.config, false, "")
 	if err != nil {
 		return err
-	}
-
-	value, err := e.marshaller.Marshal(m)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
 
 	value, err = common.Compress(e.config.ChangefeedID,
@@ -89,34 +75,16 @@ func (e *encoder) AppendRowChangedEvent(
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
-	switch e.config.EncodingFormat {
-	case common.EncodingFormatJSON:
-		m, err = newDMLMessage(event, e.config, true)
-		if err != nil {
-			return err
-		}
-		if e.config.LargeMessageHandle.EnableClaimCheck() {
-			fileName := claimcheck.NewFileName()
-			m.(*message).ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
-			if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
-				return errors.Trace(err)
-			}
-		}
-	case common.EncodingFormatAvro:
-		m, err = newDMLMessageMap(event, e.config, true)
-		if err != nil {
-			return err
-		}
-		if e.config.LargeMessageHandle.EnableClaimCheck() {
-			fileName := claimcheck.NewFileName()
-			m.(map[string]interface{})["com.pingcap.simple.avro.DML"].(map[string]interface{})["claimCheckLocation"] = e.claimCheck.FileNameWithPrefix(fileName)
-			if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
-				return errors.Trace(err)
-			}
+	var claimCheckLocation string
+	if e.config.LargeMessageHandle.EnableClaimCheck() {
+		fileName := claimcheck.NewFileName()
+		claimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
+		if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
+			return errors.Trace(err)
 		}
 	}
 
-	value, err = e.marshaller.Marshal(m)
+	value, err = e.marshaller.MarshalRowChangedEvent(event, e.config, true, claimCheckLocation)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}

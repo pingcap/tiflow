@@ -158,16 +158,19 @@ func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
 }
 
 func newDMLMessageMap(
-	event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool,
+	event *model.RowChangedEvent, config *common.Config,
+	onlyHandleKey bool,
+	claimCheckFileName string,
 ) (interface{}, error) {
 	m := map[string]interface{}{
-		"version":       defaultVersion,
-		"schema":        event.Table.Schema,
-		"table":         event.Table.Table,
-		"commitTs":      int64(event.CommitTs),
-		"buildTs":       time.Now().UnixMilli(),
-		"schemaVersion": int64(event.TableInfo.UpdateTS),
-		"handleKeyOnly": onlyHandleKey,
+		"version":            defaultVersion,
+		"schema":             event.Table.Schema,
+		"table":              event.Table.Table,
+		"commitTs":           int64(event.CommitTs),
+		"buildTs":            time.Now().UnixMilli(),
+		"schemaVersion":      int64(event.TableInfo.UpdateTS),
+		"handleKeyOnly":      onlyHandleKey,
+		"claimCheckLocation": claimCheckFileName,
 	}
 
 	if config.EnableRowChecksum && event.Checksum != nil {
