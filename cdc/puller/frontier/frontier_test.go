@@ -200,6 +200,39 @@ func TestSpanFrontierFallback(t *testing.T) {
 	// f.Forward(spAC, 10)
 }
 
+func TestSpanString(t *testing.T) {
+	t.Parallel()
+
+	spAB := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}
+	spBC := regionspan.ComparableSpan{Start: []byte("b"), End: []byte("c")}
+	spCD := regionspan.ComparableSpan{Start: []byte("c"), End: []byte("d")}
+	spDE := regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")}
+	spEF := regionspan.ComparableSpan{Start: []byte("e"), End: []byte("f")}
+	spFG := regionspan.ComparableSpan{Start: []byte("f"), End: []byte("g")}
+	spGH := regionspan.ComparableSpan{Start: []byte("g"), End: []byte("h")}
+
+	spAH := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("h")}
+	f := NewFrontier(1, c, spAH).(*spanFrontier)
+	require.Equal(t, `[0:a @ 1] [0:h @ Max] `, f.SpanString(spAH))
+
+	f.Forward(1, spAB, 2)
+	f.Forward(2, spBC, 5)
+	f.Forward(3, spCD, 10)
+	f.Forward(4, spDE, 20)
+	f.Forward(5, spEF, 30)
+	f.Forward(6, spFG, 25)
+	f.Forward(7, spGH, 35)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[1:a @ 2] [2:b @ 5] [3:c @ 10] [4:d @ 20] [5:e @ 30] [6:f @ 25] [7:g @ 35] [0:h @ Max] `, f.stringWtihRegionID())
+	// Print 5 span: start, before, target span, next, end
+	require.Equal(t, `[1:a @ 2] [3:c @ 10] [4:d @ 20] [5:e @ 30] [0:h @ Max] `, f.SpanString(spDE))
+
+	spBH := regionspan.ComparableSpan{Start: []byte("b"), End: []byte("h")}
+	f.Forward(8, spBH, 18)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[1:a @ 2] [8:b @ 18] [0:h @ Max] `, f.stringWtihRegionID())
+}
+
 func TestMinMax(t *testing.T) {
 	t.Parallel()
 	var keyMin []byte
