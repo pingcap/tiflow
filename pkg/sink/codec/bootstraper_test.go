@@ -79,17 +79,17 @@ func TestIsActive(t *testing.T) {
 	t.Parallel()
 	key, row, tb1 := getMockTableStatus()
 	// case 1: A new added table should be active
-	require.True(t, tb1.isInactive(defaultMaxInactiveDuration))
+	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
 
 	// case 2: A table which does not receive message for a long time should be inactive
 	tb1.lastMsgReceivedTime.Store(time.Now().Add(-defaultMaxInactiveDuration))
-	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
+	require.True(t, tb1.isInactive(defaultMaxInactiveDuration))
 
 	// case 3: A table which receive message recently should be active
 	// Note: A table's update method will be call any time it receive message
 	// So use update method to simulate the table receive message
 	tb1.update(key, row)
-	require.True(t, tb1.isInactive(defaultMaxInactiveDuration))
+	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
 }
 
 func TestBootstrapWorker(t *testing.T) {
