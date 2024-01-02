@@ -144,8 +144,8 @@ var (
 		// actions: wait, run.
 		[]string{"namespace", "changefeed"})
 
-	workerBusyRatio = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
+	workerBusyRatio = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
 			Namespace: "ticdc",
 			Subsystem: "kvclient",
 			Name:      "region_worker_busy_ratio",

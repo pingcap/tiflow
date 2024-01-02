@@ -78,7 +78,7 @@ type regionWorkerMetrics struct {
 
 	metricQueueDuration prometheus.Observer
 
-	metricWorkerBusyRatio   prometheus.Counter
+	metricWorkerBusyRatio   prometheus.Gauge
 	metricWorkerChannelSize prometheus.Gauge
 }
 
@@ -475,8 +475,8 @@ func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool
 
 				now := time.Now()
 				// busyRatio indicates the actual working time of the worker.
-				busyRatio := int(processTime.Seconds() / now.Sub(startToWork).Seconds() * 1000)
-				w.metrics.metricWorkerBusyRatio.Add(float64(busyRatio))
+				busyRatio := processTime.Seconds() / now.Sub(startToWork).Seconds() * 100
+				w.metrics.metricWorkerBusyRatio.Set(busyRatio)
 				startToWork = now
 				processTime = 0
 			}

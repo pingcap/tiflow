@@ -1059,6 +1059,10 @@ func (s *eventFeedSession) receiveFromStream(
 
 	metricSendEventBatchResolvedSize := batchResolvedEventSize.
 		WithLabelValues(s.changefeed.Namespace, s.changefeed.ID)
+	metricReceiveBusyRatio := workerBusyRatio.WithLabelValues(
+		s.changefeed.Namespace, s.changefeed.ID, strconv.FormatInt(s.tableID, 10), addr, "event-receiver")
+	metricProcessBusyRatio := workerBusyRatio.WithLabelValues(
+		s.changefeed.Namespace, s.changefeed.ID, strconv.FormatInt(s.tableID, 10), addr, "event-processor")
 
 	// always create a new region worker, because `receiveFromStream` is ensured
 	// to call exactly once from outer code logic
@@ -1093,11 +1097,10 @@ func (s *eventFeedSession) receiveFromStream(
 	})
 
 	receiveEvents := func() error {
-		metricWorkerBusyRatio := workerBusyRatio.WithLabelValues(
-			s.changefeed.Namespace, s.changefeed.ID, strconv.FormatInt(s.tableID, 10), addr, "event-receiver")
-		metricsTicker := time.NewTicker(time.Second * 10)
+		metricsTicker := time.NewTicker(time.Second * 20)
 		defer metricsTicker.Stop()
 		var receiveTime time.Duration
+		var processTime time.Duration
 		startToWork := time.Now()
 
 		maxCommitTs := model.Ts(0)
@@ -1110,11 +1113,16 @@ func (s *eventFeedSession) receiveFromStream(
 				select {
 				case <-metricsTicker.C:
 					now := time.Now()
-					// busyRatio indicates the actual working time (receive and decode grpc msg) of the worker.
-					busyRatio := int(receiveTime.Seconds() / now.Sub(startToWork).Seconds() * 1000)
-					metricWorkerBusyRatio.Add(float64(busyRatio))
-					startToWork = now
+					// busyRatio indicates the blocking time (receive and decode grpc msg) of the worker.
+					busyRatio := receiveTime.Seconds() / now.Sub(startToWork).Seconds() * 100
+					metricReceiveBusyRatio.Set(busyRatio)
 					receiveTime = 0
+					// busyRatio indicates the working time (dispatch to region worker) of the worker.
+					busyRatio = processTime.Seconds() / now.Sub(startToWork).Seconds() * 100
+					metricProcessBusyRatio.Set(busyRatio)
+					processTime = 0
+
+					startToWork = now
 				default:
 				}
 			}
@@ -1177,6 +1185,7 @@ func (s *eventFeedSession) receiveFromStream(
 				return nil
 			}
 
+			startToProcess := time.Now()
 			size := cevent.Size()
 			if size > warnRecvMsgSizeThreshold {
 				regionCount := 0
@@ -1219,6 +1228,7 @@ func (s *eventFeedSession) receiveFromStream(
 					tsStat.commitTs.Store(maxCommitTs)
 				}
 			}
+			processTime += time.Since(startToProcess)
 		}
 	}
 	eg.Go(func() error {
