@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -227,10 +228,17 @@ func (c *captureImpl) reset(ctx context.Context, globalVars *cdcContext.GlobalVa
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
+	deployPath, err := os.Executable()
+	if err != nil {
+		deployPath = ""
+	}
 	c.info = &model.CaptureInfo{
-		ID:            uuid.New().String(),
-		AdvertiseAddr: c.config.AdvertiseAddr,
-		Version:       version.ReleaseVersion,
+		ID:             uuid.New().String(),
+		AdvertiseAddr:  c.config.AdvertiseAddr,
+		Version:        version.ReleaseVersion,
+		GitHash:        version.GitHash,
+		DeployPath:     deployPath,
+		StartTimestamp: time.Now().Unix(),
 	}
 
 	if c.upstreamManager != nil {

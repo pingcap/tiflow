@@ -27,7 +27,11 @@ type CaptureID = string
 type CaptureInfo struct {
 	ID            CaptureID `json:"id"`
 	AdvertiseAddr string    `json:"address"`
-	Version       string    `json:"version"`
+
+	Version        string `json:"version"`
+	GitHash        string `json:"git-hash"`
+	DeployPath     string `json:"deploy-path"`
+	StartTimestamp int64  `json:"start-timestamp"`
 }
 
 // Marshal using json.Marshal.
