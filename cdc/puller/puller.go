@@ -80,6 +80,8 @@ type pullerImpl struct {
 	lastForwardResolvedTs uint64
 	// startResolvedTs is the resolvedTs when puller is initialized
 	startResolvedTs uint64
+
+	enableTableMonitor bool
 }
 
 // New create a new Puller fetch event start from checkpointTs and put into buf.
@@ -96,6 +98,7 @@ func New(ctx context.Context,
 	tableID model.TableID,
 	tableName string,
 	filterLoop bool,
+	enableTableMonitor bool,
 ) Puller {
 	tikvStorage, ok := kvStorage.(tikv.Storage)
 	if !ok {
@@ -130,7 +133,8 @@ func New(ctx context.Context,
 		tableName:    tableName,
 		cfg:          cfg,
 
-		startResolvedTs: checkpointTs,
+		startResolvedTs:    checkpointTs,
+		enableTableMonitor: enableTableMonitor,
 	}
 	return p
 }
@@ -148,7 +152,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 		span := span
 
 		g.Go(func() error {
-			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, eventCh)
+			return p.kvCli.EventFeed(ctx, span, checkpointTs, lockResolver, eventCh, p.enableTableMonitor)
 		})
 	}
 
