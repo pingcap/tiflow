@@ -255,6 +255,10 @@ func (f *fakeFrontier) String() string {
 	return ""
 }
 
+func (f *fakeFrontier) SpanString(span tablepb.Span) string {
+	return ""
+}
+
 func (f *fakeFrontier) Entries(fn func(key []byte, ts uint64)) {
 }
 
