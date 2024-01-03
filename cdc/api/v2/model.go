@@ -1173,7 +1173,7 @@ type Capture struct {
 type CodecConfig struct {
 	EnableTiDBExtension            *bool   `json:"enable_tidb_extension,omitempty"`
 	MaxBatchSize                   *int    `json:"max_batch_size,omitempty"`
-	AvroEnableWatermark            *bool   `json:"avro_enable_watermark"`
+	AvroEnableWatermark            *bool   `json:"avro_enable_watermark,omitempty"`
 	AvroDecimalHandlingMode        *string `json:"avro_decimal_handling_mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `json:"avro_bigint_unsigned_handling_mode,omitempty"`
 	EncodingFormat                 *string `json:"encoding_format,omitempty"`
