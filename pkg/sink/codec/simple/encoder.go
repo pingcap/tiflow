@@ -15,7 +15,6 @@ package simple
 
 import (
 	"context"
-	"os"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -181,19 +180,9 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 		}
 	}
 
-	var marshaller marshaller
-	switch config.EncodingFormat {
-	case common.EncodingFormatJSON:
-		marshaller = newJSONMarshaller()
-	case common.EncodingFormatAvro:
-		schema, err := os.ReadFile("message.json")
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		marshaller, err = newAvroMarshaller(string(schema))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	marshaller, err := newMarshaller(config.EncodingFormat)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	return &builder{

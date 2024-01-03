@@ -16,7 +16,6 @@ package simple
 import (
 	"context"
 	"database/sql"
-	"os"
 	"path/filepath"
 
 	"github.com/pingcap/errors"
@@ -62,19 +61,9 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	var marshaller marshaller
-	switch config.EncodingFormat {
-	case common.EncodingFormatJSON:
-		marshaller = newJSONMarshaller()
-	case common.EncodingFormatAvro:
-		schema, err := os.ReadFile("./message.json")
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		marshaller, err = newAvroMarshaller(string(schema))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+	marshaller, err := newMarshaller(config.EncodingFormat)
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
 
 	return &decoder{

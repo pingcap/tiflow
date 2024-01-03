@@ -14,6 +14,7 @@
 package simple
 
 import (
+	_ "embed"
 	"encoding/json"
 
 	"github.com/linkedin/goavro/v2"
@@ -21,6 +22,9 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
+
+//go:embed message.json
+var avroSchemaBytes []byte
 
 type marshaller interface {
 	// MarshalCheckpoint marshals the checkpoint ts into bytes.
@@ -35,6 +39,25 @@ type marshaller interface {
 
 	// Unmarshal the bytes into the given value.
 	Unmarshal(data []byte, v any) error
+}
+
+func newMarshaller(format common.EncodingFormatType) (marshaller, error) {
+	var (
+		result marshaller
+		err    error
+	)
+	switch format {
+	case common.EncodingFormatJSON:
+		result = newJSONMarshaller()
+	case common.EncodingFormatAvro:
+		result, err = newAvroMarshaller(string(avroSchemaBytes))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	default:
+		return nil, errors.New("unknown encoding format")
+	}
+	return result, nil
 }
 
 type jsonMarshaller struct{}
