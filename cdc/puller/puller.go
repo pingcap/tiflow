@@ -306,6 +306,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 						lastLogSlowRangeTime = time.Now()
 						lastSlowestRange = &slowestRange
 					}
+					continue
 				}
 				lastSlowestRange = nil
 				lastResolvedTs = resolvedTs
