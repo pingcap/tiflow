@@ -67,7 +67,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 	case common.EncodingFormatJSON:
 		marshaller = newJSONMarshaller()
 	case common.EncodingFormatAvro:
-		schema, err := os.ReadFile("message.json")
+		schema, err := os.ReadFile("./message.json")
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
