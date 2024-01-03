@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 )
 
-type Marshaller interface {
+type marshaller interface {
 	// MarshalCheckpoint marshals the checkpoint ts into bytes.
 	MarshalCheckpoint(ts uint64) ([]byte, error)
 
@@ -43,7 +43,7 @@ func newJSONMarshaller() *jsonMarshaller {
 	return &jsonMarshaller{}
 }
 
-// MarshalCheckpoint implement the Marshaller interface
+// MarshalCheckpoint implement the marshaller interface
 func (m *jsonMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 	msg := newResolvedMessage(ts)
 	result, err := json.Marshal(msg)
@@ -53,7 +53,7 @@ func (m *jsonMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 	return result, nil
 }
 
-// MarshalDDLEvent implement the Marshaller interface
+// MarshalDDLEvent implement the marshaller interface
 func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) {
 	var (
 		msg *message
@@ -77,7 +77,7 @@ func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 	return value, nil
 }
 
-// MarshalRowChangedEvent implement the Marshaller interface
+// MarshalRowChangedEvent implement the marshaller interface
 func (m *jsonMarshaller) MarshalRowChangedEvent(
 	event *model.RowChangedEvent, config *common.Config,
 	handleKeyOnly bool,
@@ -96,7 +96,7 @@ func (m *jsonMarshaller) MarshalRowChangedEvent(
 	return value, nil
 }
 
-// Unmarshal implement the Marshaller interface
+// Unmarshal implement the marshaller interface
 func (m *jsonMarshaller) Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
@@ -115,12 +115,12 @@ func newAvroMarshaller(schema string) (*avroMarshaller, error) {
 	}, nil
 }
 
-// Marshal implement the Marshaller interface
+// Marshal implement the marshaller interface
 func (m *avroMarshaller) Marshal(v any) ([]byte, error) {
 	return m.codec.BinaryFromNative(nil, v)
 }
 
-// MarshalCheckpoint implement the Marshaller interface
+// MarshalCheckpoint implement the marshaller interface
 func (m *avroMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 	msg := newResolvedMessageMap(ts)
 	result, err := m.codec.BinaryFromNative(nil, msg)
@@ -130,7 +130,7 @@ func (m *avroMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 	return result, nil
 }
 
-// MarshalDDLEvent implement the Marshaller interface
+// MarshalDDLEvent implement the marshaller interface
 func (m *avroMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) {
 	var msg interface{}
 	if event.IsBootstrap {
@@ -148,7 +148,7 @@ func (m *avroMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 	return value, nil
 }
 
-// MarshalRowChangedEvent implement the Marshaller interface
+// MarshalRowChangedEvent implement the marshaller interface
 func (m *avroMarshaller) MarshalRowChangedEvent(
 	event *model.RowChangedEvent, config *common.Config,
 	handleKeyOnly bool, claimCheckFileName string,
@@ -164,7 +164,7 @@ func (m *avroMarshaller) MarshalRowChangedEvent(
 	return value, nil
 }
 
-// Unmarshal implement the Marshaller interface
+// Unmarshal implement the marshaller interface
 func (m *avroMarshaller) Unmarshal(data []byte, v any) error {
 	native, _, err := m.codec.NativeFromBinary(data)
 	if err != nil {

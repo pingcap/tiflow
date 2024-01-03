@@ -86,6 +86,7 @@ type Config struct {
 	DebeziumDisableSchema bool
 }
 
+// EncodingFormatType is the type of encoding format
 type EncodingFormatType string
 
 const (

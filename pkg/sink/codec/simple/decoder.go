@@ -33,7 +33,7 @@ import (
 type decoder struct {
 	config *common.Config
 
-	marshaller Marshaller
+	marshaller marshaller
 
 	upstreamTiDB *sql.DB
 	storage      storage.ExternalStorage
@@ -62,7 +62,7 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
-	var marshaller Marshaller
+	var marshaller marshaller
 	switch config.EncodingFormat {
 	case common.EncodingFormatJSON:
 		marshaller = newJSONMarshaller()

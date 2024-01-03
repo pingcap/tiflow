@@ -33,7 +33,7 @@ type encoder struct {
 
 	config     *common.Config
 	claimCheck *claimcheck.ClaimCheck
-	marshaller Marshaller
+	marshaller marshaller
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
@@ -164,7 +164,7 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 type builder struct {
 	config     *common.Config
 	claimCheck *claimcheck.ClaimCheck
-	marshaller Marshaller
+	marshaller marshaller
 }
 
 // NewBuilder returns a new builder
@@ -181,7 +181,7 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 		}
 	}
 
-	var marshaller Marshaller
+	var marshaller marshaller
 	switch config.EncodingFormat {
 	case common.EncodingFormatJSON:
 		marshaller = newJSONMarshaller()
