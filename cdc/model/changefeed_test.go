@@ -145,12 +145,24 @@ func TestVerifyAndComplete(t *testing.T) {
 		SinkURI: "blackhole://",
 		StartTs: 417257993615179777,
 		Config: &config.ReplicaConfig{
+<<<<<<< HEAD
 			MemoryQuota:        1073741824,
 			CaseSensitive:      false,
 			EnableOldValue:     true,
 			CheckGCSafePoint:   true,
 			SyncPointInterval:  time.Minute * 10,
 			SyncPointRetention: time.Hour * 24,
+=======
+			MemoryQuota:           1073741824,
+			CaseSensitive:         false,
+			CheckGCSafePoint:      true,
+			EnableSyncPoint:       util.AddressOf(false),
+			EnableTableMonitor:    util.AddressOf(false),
+			SyncPointInterval:     util.AddressOf(time.Minute * 10),
+			SyncPointRetention:    util.AddressOf(time.Hour * 24),
+			BDRMode:               util.AddressOf(false),
+			IgnoreIneligibleTable: false,
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 		},
 	}
 

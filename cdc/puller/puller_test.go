@@ -81,6 +81,7 @@ func (mc *mockCDCKVClient) EventFeed(
 	ts uint64,
 	lockResolver txnutil.LockResolver,
 	eventCh chan<- model.RegionFeedEvent,
+	enableTableMonitor bool,
 ) error {
 	for {
 		select {

@@ -35,6 +35,7 @@ type Wrapper interface {
 		up *upstream.Upstream,
 		eventSortEngine engine.SortEngine,
 		errChan chan<- error,
+		enableTableMonitor bool,
 	)
 	GetStats() puller.Stats
 	Close()
@@ -79,6 +80,7 @@ func (n *WrapperImpl) Start(
 	up *upstream.Upstream,
 	eventSortEngine engine.SortEngine,
 	errChan chan<- error,
+	enableTableMonitor bool,
 ) {
 	ctx, n.cancel = context.WithCancel(ctx)
 	errorHandler := func(err error) {
@@ -108,7 +110,11 @@ func (n *WrapperImpl) Start(
 		n.span.TableID,
 		n.tableName,
 		n.bdrMode,
+<<<<<<< HEAD
 		false,
+=======
+		enableTableMonitor,
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 	)
 
 	// Use errgroup to ensure all sub goroutines can exit without calling Close.

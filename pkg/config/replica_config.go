@@ -51,9 +51,17 @@ var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
+<<<<<<< HEAD
 	EnableSyncPoint:    false,
 	SyncPointInterval:  time.Minute * 10,
 	SyncPointRetention: time.Hour * 24,
+=======
+	EnableSyncPoint:    util.AddressOf(false),
+	EnableTableMonitor: util.AddressOf(false),
+	SyncPointInterval:  util.AddressOf(10 * time.Minute),
+	SyncPointRetention: util.AddressOf(24 * time.Hour),
+	BDRMode:            util.AddressOf(false),
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 	Filter: &FilterConfig{
 		Rules: []string{"*.*"},
 	},
@@ -129,7 +137,17 @@ type replicaConfig struct {
 	EnableOldValue   bool   `toml:"enable-old-value" json:"enable-old-value"`
 	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
+<<<<<<< HEAD
 	EnableSyncPoint  bool   `toml:"enable-sync-point" json:"enable-sync-point"`
+=======
+	// EnableSyncPoint is only available when the downstream is a Database.
+	EnableSyncPoint    *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
+	EnableTableMonitor *bool `toml:"enable-table-monitor" json:"enable-table-monitor"`
+	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
+	// not used in the changefeed's lifecycle.
+	IgnoreIneligibleTable bool `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
+
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 	// BDR(Bidirectional Replication) is a feature that allows users to
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.

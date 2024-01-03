@@ -71,7 +71,7 @@ var (
 			Subsystem: "kvclient",
 			Name:      "channel_size",
 			Help:      "size of each channel in kv client",
-		}, []string{"channel"})
+		}, []string{"namespace", "changefeed", "table", "type"})
 	clientRegionTokenSize = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "ticdc",
@@ -110,6 +110,57 @@ var (
 			Help:      "region events batch size",
 			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
 		})
+<<<<<<< HEAD
+=======
+
+	regionConnectDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_connect_duration",
+			Help:      "time of locating a region in ms",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
+		},
+		// actions: lock, locate, connect.
+		[]string{"namespace", "changefeed", "action"})
+
+	lockResolveDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "lock_resolve_duration",
+			Help:      "time of lock resolve in ms",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
+		},
+		// actions: wait, run.
+		[]string{"namespace", "changefeed", "action"})
+
+	regionWorkerQueueDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_worker_queue_duration",
+			Help:      "time of queue in region worker",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
+		},
+		// actions: wait, run.
+		[]string{"namespace", "changefeed"})
+
+	workerBusyRatio = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_worker_busy_ratio",
+			Help:      "Busy ratio (X ms in 1s) for region worker.",
+		}, []string{"namespace", "changefeed", "table", "store", "type"})
+	workerChannelSize = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "ticdc",
+			Subsystem: "kvclient",
+			Name:      "region_worker_channel_size",
+			Help:      "size of each channel in region worker",
+		}, []string{"namespace", "changefeed", "table", "store", "type"})
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 )
 
 // InitMetrics registers all metrics in the kv package
@@ -126,6 +177,14 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(batchResolvedEventSize)
 	registry.MustRegister(grpcPoolStreamGauge)
 	registry.MustRegister(regionEventsBatchSize)
+<<<<<<< HEAD
+=======
+	registry.MustRegister(regionConnectDuration)
+	registry.MustRegister(lockResolveDuration)
+	registry.MustRegister(regionWorkerQueueDuration)
+	registry.MustRegister(workerBusyRatio)
+	registry.MustRegister(workerChannelSize)
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 
 	// Register client metrics to registry.
 	registry.MustRegister(grpcMetrics)

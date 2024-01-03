@@ -53,6 +53,7 @@ type SourceManager struct {
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
 
+<<<<<<< HEAD
 	// pullerWrapperCreator is used to create a puller wrapper.
 	// Only used for testing.
 	pullerWrapperCreator func(changefeed model.ChangeFeedID,
@@ -61,6 +62,14 @@ type SourceManager struct {
 		startTs model.Ts,
 		bdrMode bool,
 	) pullerwrapper.Wrapper
+=======
+	// if `config.GetGlobalServerConfig().KVClient.EnableMultiplexing` is true `tablePullers`
+	// will be used. Otherwise `multiplexingPuller` will be used instead.
+	multiplexing       bool
+	enableTableMonitor bool
+	tablePullers       tablePullers
+	multiplexingPuller multiplexingPuller
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 }
 
 // New creates a new source manager.
@@ -70,7 +79,9 @@ func New(
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	bdrMode bool,
+	enableTableMonitor bool,
 ) *SourceManager {
+<<<<<<< HEAD
 	return &SourceManager{
 		ready:                make(chan struct{}),
 		changefeedID:         changefeedID,
@@ -81,6 +92,10 @@ func New(
 		bdrMode:              bdrMode,
 		pullerWrapperCreator: pullerwrapper.NewPullerWrapper,
 	}
+=======
+	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper, enableTableMonitor)
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 }
 
 // NewForTest creates a new source manager for testing.
@@ -91,6 +106,7 @@ func NewForTest(
 	engine engine.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
+<<<<<<< HEAD
 	return &SourceManager{
 		ready:                make(chan struct{}),
 		changefeedID:         changefeedID,
@@ -100,6 +116,30 @@ func NewForTest(
 		errChan:              make(chan error, 16),
 		bdrMode:              bdrMode,
 		pullerWrapperCreator: pullerwrapper.NewPullerWrapperForTest,
+=======
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, pullerwrapper.NewPullerWrapperForTest, false)
+}
+
+func newSourceManager(
+	changefeedID model.ChangeFeedID,
+	up *upstream.Upstream,
+	mg entry.MounterGroup,
+	engine sorter.SortEngine,
+	bdrMode bool,
+	multiplexing bool,
+	pullerWrapperCreator pullerWrapperCreator,
+	enableTableMonitor bool,
+) *SourceManager {
+	mgr := &SourceManager{
+		ready:              make(chan struct{}),
+		changefeedID:       changefeedID,
+		up:                 up,
+		mg:                 mg,
+		engine:             engine,
+		bdrMode:            bdrMode,
+		multiplexing:       multiplexing,
+		enableTableMonitor: enableTableMonitor,
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 	}
 }
 
@@ -107,9 +147,21 @@ func NewForTest(
 func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
+<<<<<<< HEAD
 	p := m.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
 	p.Start(m.ctx, m.up, m.engine, m.errChan)
 	m.pullers.Store(span, p)
+=======
+
+	if m.multiplexing {
+		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
+		return
+	}
+
+	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
+	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan, m.enableTableMonitor)
+	m.tablePullers.Store(span, p)
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 }
 
 // RemoveTable removes a table from the source manager. Stop puller and unregister table from the engine.

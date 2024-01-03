@@ -685,7 +685,12 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
+<<<<<<< HEAD
 		sortEngine, p.changefeed.Info.Config.BDRMode)
+=======
+		sortEngine, util.GetOrZero(p.latestInfo.Config.BDRMode),
+		util.GetOrZero(p.latestInfo.Config.EnableTableMonitor))
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.spawn(stdCtx)
 

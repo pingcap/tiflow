@@ -34,7 +34,13 @@ var defaultAPIConfig = &ReplicaConfig{
 	CaseSensitive:      false,
 	EnableOldValue:     true,
 	CheckGCSafePoint:   true,
+<<<<<<< HEAD
 	EnableSyncPoint:    false,
+=======
+	BDRMode:            util.AddressOf(false),
+	EnableSyncPoint:    util.AddressOf(false),
+	EnableTableMonitor: util.AddressOf(false),
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 	SyncPointInterval:  &JSONDuration{10 * time.Minute},
 	SyncPointRetention: &JSONDuration{24 * time.Hour},
 	Filter: &FilterConfig{

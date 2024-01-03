@@ -181,8 +181,14 @@ type ReplicaConfig struct {
 	ForceReplicate        bool   `json:"force_replicate"`
 	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
+<<<<<<< HEAD
 	EnableSyncPoint       bool   `json:"enable_sync_point"`
 	BDRMode               bool   `json:"bdr_mode"`
+=======
+	EnableSyncPoint       *bool  `json:"enable_sync_point,omitempty"`
+	EnableTableMonitor    *bool  `json:"enable_table_monitor,omitempty"`
+	BDRMode               *bool  `json:"bdr_mode,omitempty"`
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval" swaggertype:"string"`
 	SyncPointRetention *JSONDuration `json:"sync_point_retention" swaggertype:"string"`
@@ -212,6 +218,11 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
+<<<<<<< HEAD
+=======
+	res.EnableTableMonitor = c.EnableTableMonitor
+	res.IgnoreIneligibleTable = c.IgnoreIneligibleTable
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 	res.SQLMode = c.SQLMode
 	if c.SyncPointInterval != nil {
 		res.SyncPointInterval = c.SyncPointInterval.duration
@@ -459,8 +470,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: false,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
+<<<<<<< HEAD
 		SyncPointInterval:     &JSONDuration{cloned.SyncPointInterval},
 		SyncPointRetention:    &JSONDuration{cloned.SyncPointRetention},
+=======
+		EnableTableMonitor:    cloned.EnableTableMonitor,
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 		BDRMode:               cloned.BDRMode,
 		SQLMode:               cloned.SQLMode,
 	}

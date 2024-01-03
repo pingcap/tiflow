@@ -39,7 +39,11 @@ func NewPullerWrapperForTest(
 }
 
 func (d *dummyPullerWrapper) Start(ctx context.Context, up *upstream.Upstream,
+<<<<<<< HEAD
 	eventSortEngine engine.SortEngine, errCh chan<- error) {
+=======
+	eventSortEngine sorter.SortEngine, errCh chan<- error, enableTableMonitor bool) {
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 }
 
 func (d *dummyPullerWrapper) GetStats() puller.Stats {
