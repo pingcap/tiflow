@@ -25,7 +25,7 @@ groups=(
 	["G09"]="import_v10x sharding2 ha"
 	["G10"]="start_task print_status http_apis new_relay all_mode"
 	# `others others_2 others_3` tests of old pipeline
-	["G11"]="adjust_gtid async_checkpoint_flush binlog_parse case_sensitive”
+	["G11"]="adjust_gtid async_checkpoint_flush binlog_parse case_sensitive"
 	["G12"]="checkpoint_transaction check_task dm_syncer downstream_diff_index downstream_more_column"
 	["G13"]="drop_column_with_index duplicate_event expression_filter extend_column fake_rotate_event"
 	["G14"]="foreign_key full_mode gbk gtid ha_cases http_proxies lightning_load_task lightning_mode"
