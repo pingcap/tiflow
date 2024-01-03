@@ -168,9 +168,8 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 	o.protocol = protocol
 
 	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
 	if configFile != "" {
-		replicaConfig = config.GetDefaultReplicaConfig()
-		replicaConfig.Sink.Protocol = util.AddressOf(protocol.String())
 		err = cmdUtil.StrictDecodeFile(configFile, "kafka consumer", replicaConfig)
 		if err != nil {
 			return cerror.Trace(err)
@@ -178,8 +177,8 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 		if _, err = filter.VerifyTableRules(replicaConfig.Filter); err != nil {
 			return cerror.Trace(err)
 		}
-		o.replicaConfig = replicaConfig
 	}
+	o.replicaConfig = replicaConfig
 
 	o.codecConfig = common.NewConfig(protocol)
 	if err = o.codecConfig.Apply(upstreamURI, o.replicaConfig); err != nil {
@@ -474,13 +473,11 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		c.upstreamTiDB = db
 	}
 
-	if o.replicaConfig != nil {
-		eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
-		if err != nil {
-			return nil, cerror.Trace(err)
-		}
-		c.eventRouter = eventRouter
+	eventRouter, err := dispatcher.NewEventRouter(o.replicaConfig, o.protocol, o.topic, "kafka")
+	if err != nil {
+		return nil, cerror.Trace(err)
 	}
+	c.eventRouter = eventRouter
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
 	ctx, cancel := context.WithCancel(ctx)
