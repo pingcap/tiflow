@@ -254,9 +254,16 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 	}
 
 	if c.Protocol == config.ProtocolSimple {
-		encodingFormat := EncodingFormatType(util.GetOrZero(urlParameter.EncodingFormatType))
-		if encodingFormat == EncodingFormatAvro {
-			c.EncodingFormat = EncodingFormatAvro
+		s := util.GetOrZero(urlParameter.EncodingFormatType)
+		if s != "" {
+			encodingFormat := EncodingFormatType(s)
+			switch encodingFormat {
+			case EncodingFormatJSON, EncodingFormatAvro:
+				c.EncodingFormat = encodingFormat
+			default:
+				return cerror.ErrCodecInvalidConfig.GenWithStack(
+					"unsupported encoding format type: %s for the simple protocol", encodingFormat)
+			}
 		}
 	}
 	if urlParameter.DebeziumDisableSchema != nil {

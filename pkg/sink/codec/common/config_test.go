@@ -485,3 +485,31 @@ func TestApplyConfig4CanalJSON(t *testing.T) {
 	require.True(t, codecConfig.ContentCompatible)
 	require.True(t, codecConfig.OnlyOutputUpdatedColumns)
 }
+
+func TestConfig4Simple(t *testing.T) {
+	uri := "kafka://127.0.0.1:9092/abc?protocol=simple"
+	sinkURL, err := url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig := NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, EncodingFormatJSON, codecConfig.EncodingFormat)
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=simple&encoding-format=avro"
+	sinkURL, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig = NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, EncodingFormatAvro, codecConfig.EncodingFormat)
+
+	uri = "kafka://127.0.0.1:9092/abc?protocol=simple&encoding-format=xxx"
+	sinkURL, err = url.Parse(uri)
+	require.NoError(t, err)
+
+	codecConfig = NewConfig(config.ProtocolSimple)
+	err = codecConfig.Apply(sinkURL, config.GetDefaultReplicaConfig())
+	require.ErrorIs(t, err, cerror.ErrCodecInvalidConfig)
+}
