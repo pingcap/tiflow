@@ -75,6 +75,7 @@ type SourceManager struct {
 	// if `config.GetGlobalServerConfig().KVClient.EnableMultiplexing` is true `tablePullers`
 	// will be used. Otherwise `multiplexingPuller` will be used instead.
 	multiplexing       bool
+	enableTableMonitor bool
 	tablePullers       tablePullers
 	multiplexingPuller multiplexingPuller
 }
@@ -86,9 +87,10 @@ func New(
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
 	bdrMode bool,
+	enableTableMonitor bool,
 ) *SourceManager {
 	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper)
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper, enableTableMonitor)
 }
 
 // NewForTest creates a new source manager for testing.
@@ -99,7 +101,7 @@ func NewForTest(
 	engine engine.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, pullerwrapper.NewPullerWrapperForTest)
+	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, pullerwrapper.NewPullerWrapperForTest, false)
 }
 
 func newSourceManager(
@@ -110,15 +112,17 @@ func newSourceManager(
 	bdrMode bool,
 	multiplexing bool,
 	pullerWrapperCreator pullerWrapperCreator,
+	enableTableMonitor bool,
 ) *SourceManager {
 	mgr := &SourceManager{
-		ready:        make(chan struct{}),
-		changefeedID: changefeedID,
-		up:           up,
-		mg:           mg,
-		engine:       engine,
-		bdrMode:      bdrMode,
-		multiplexing: multiplexing,
+		ready:              make(chan struct{}),
+		changefeedID:       changefeedID,
+		up:                 up,
+		mg:                 mg,
+		engine:             engine,
+		bdrMode:            bdrMode,
+		multiplexing:       multiplexing,
+		enableTableMonitor: enableTableMonitor,
 	}
 	if !multiplexing {
 		mgr.tablePullers.errChan = make(chan error, 16)
@@ -138,7 +142,7 @@ func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs mo
 	}
 
 	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
-	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
+	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan, m.enableTableMonitor)
 	m.tablePullers.Store(span, p)
 }
 

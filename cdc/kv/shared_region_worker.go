@@ -74,7 +74,7 @@ func newSharedRegionWorker(c *SharedClient) *sharedRegionWorker {
 		client:        c,
 		inputCh:       make(chan statefulEvent, regionWorkerInputChanSize),
 		statesManager: newRegionStateManager(-1),
-		metrics:       newRegionWorkerMetrics(c.changefeed),
+		metrics:       newRegionWorkerMetrics(c.changefeed, "shared", "shared"),
 	}
 }
 

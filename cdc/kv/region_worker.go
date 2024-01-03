@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"reflect"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -75,6 +76,9 @@ type regionWorkerMetrics struct {
 	metricSendEventCommittedCounter prometheus.Counter
 
 	metricQueueDuration prometheus.Observer
+
+	metricWorkerBusyRatio   prometheus.Gauge
+	metricWorkerChannelSize prometheus.Gauge
 }
 
 /*
@@ -117,7 +121,7 @@ type regionWorker struct {
 	pendingRegions *syncRegionFeedStateMap
 }
 
-func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetrics {
+func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, storeAddr string) *regionWorkerMetrics {
 	metrics := &regionWorkerMetrics{}
 	metrics.metricReceivedEventSize = eventSize.WithLabelValues("received")
 	metrics.metricDroppedEventSize = eventSize.WithLabelValues("dropped")
@@ -143,6 +147,11 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID) *regionWorkerMetric
 	metrics.metricQueueDuration = regionWorkerQueueDuration.
 		WithLabelValues(changefeedID.Namespace, changefeedID.ID)
 
+	metrics.metricWorkerBusyRatio = workerBusyRatio.WithLabelValues(
+		changefeedID.Namespace, changefeedID.ID, tableID, storeAddr, "event-handler")
+	metrics.metricWorkerChannelSize = workerChannelSize.WithLabelValues(
+		changefeedID.Namespace, changefeedID.ID, tableID, storeAddr, "input")
+
 	return metrics
 }
 
@@ -161,7 +170,7 @@ func newRegionWorker(
 		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
 		storeAddr:     addr,
 		concurrency:   int(s.client.config.KVClient.WorkerConcurrent),
-		metrics:       newRegionWorkerMetrics(changefeedID),
+		metrics:       newRegionWorkerMetrics(changefeedID, strconv.FormatInt(s.tableID, 10), addr),
 		inputPending:  0,
 
 		pendingRegions: pendingRegions,
@@ -431,6 +440,7 @@ func (w *regionWorker) onHandleExit(err error) {
 	}
 }
 
+<<<<<<< HEAD
 func (w *regionWorker) eventHandler(ctx context.Context) error {
 	pollEvents := func() ([]*regionStatefulEvent, error) {
 		exitFn := func() error {
@@ -439,15 +449,44 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				zap.String("changefeed", w.session.client.changefeed.ID))
 			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 		}
+=======
+func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool) error {
+	exitFn := func() error {
+		log.Info("region worker closed by error",
+			zap.String("namespace", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.Int64("tableID", w.session.tableID),
+			zap.String("tableName", w.session.tableName))
+		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
+	}
+>>>>>>> 4c31fda8b3 (kvclient(ticdc): add worker busy monitor (#10389))
 
+	metricsTicker := time.NewTicker(tableMonitorInterval)
+	defer metricsTicker.Stop()
+	var processTime time.Duration
+	startToWork := time.Now()
+
+	highWatermarkMet := false
+	for {
 		select {
 		case <-ctx.Done():
-			return nil, errors.Trace(ctx.Err())
+			return errors.Trace(ctx.Err())
 		case err := <-w.errorCh:
-			return nil, errors.Trace(err)
+			return errors.Trace(err)
+		case <-metricsTicker.C:
+			if enableTableMonitor {
+				w.metrics.metricWorkerChannelSize.Set(float64(len(w.inputCh)))
+
+				now := time.Now()
+				// busyRatio indicates the actual working time of the worker.
+				busyRatio := processTime.Seconds() / now.Sub(startToWork).Seconds() * 100
+				w.metrics.metricWorkerBusyRatio.Set(busyRatio)
+				startToWork = now
+				processTime = 0
+			}
 		case events, ok := <-w.inputCh:
 			if !ok {
-				return nil, exitFn()
+				return exitFn()
 			}
 			if len(events) == 0 {
 				log.Panic("regionWorker.inputCh doesn't accept empty slice")
@@ -456,80 +495,74 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 				// event == nil means the region worker should exit and re-establish
 				// all existing regions.
 				if event == nil {
-					return nil, exitFn()
+					return exitFn()
 				}
 			}
-			return events, nil
-		}
-	}
 
-	highWatermarkMet := false
-	for {
-		events, err := pollEvents()
-		if err != nil {
-			return err
-		}
-		regionEventsBatchSize.Observe(float64(len(events)))
+			regionEventsBatchSize.Observe(float64(len(events)))
 
-		inputPending := atomic.LoadInt32(&w.inputPending)
-		if highWatermarkMet {
-			highWatermarkMet = int(inputPending) >= regionWorkerLowWatermark
-		} else {
-			highWatermarkMet = int(inputPending) >= regionWorkerHighWatermark
-		}
-		atomic.AddInt32(&w.inputPending, -int32(len(events)))
+			start := time.Now()
+			inputPending := atomic.LoadInt32(&w.inputPending)
+			if highWatermarkMet {
+				highWatermarkMet = int(inputPending) >= regionWorkerLowWatermark
+			} else {
+				highWatermarkMet = int(inputPending) >= regionWorkerHighWatermark
+			}
+			atomic.AddInt32(&w.inputPending, -int32(len(events)))
 
-		if highWatermarkMet {
-			// All events in one batch can be hashed into one handle slot.
-			slot := w.inputCalcSlot(events[0].regionID)
-			eventsX := make([]interface{}, 0, len(events))
-			for _, event := range events {
-				eventsX = append(eventsX, event)
-			}
-			err = w.handles[slot].AddEvents(ctx, eventsX)
-			if err != nil {
-				return err
-			}
-			// Principle: events from the same region must be processed linearly.
-			//
-			// When buffered events exceed high watermark, we start to use worker
-			// pool to improve throughput, and we need a mechanism to quit worker
-			// pool when buffered events are less than low watermark, which means
-			// we should have a way to know whether events sent to the worker pool
-			// are all processed.
-			// Send a dummy event to each worker pool handler, after each of these
-			// events are processed, we can ensure all events sent to worker pool
-			// from this region worker are processed.
-			finishedCallbackCh := make(chan struct{}, 1)
-			err = w.handles[slot].AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
-			if err != nil {
-				return err
-			}
-			select {
-			case <-ctx.Done():
-				return errors.Trace(ctx.Err())
-			case err = <-w.errorCh:
-				return err
-			case <-finishedCallbackCh:
-			}
-		} else {
-			// We measure whether the current worker is busy based on the input
-			// channel size. If the buffered event count is larger than the high
-			// watermark, we send events to worker pool to increase processing
-			// throughput. Otherwise, we process event in local region worker to
-			// ensure low processing latency.
-			for _, event := range events {
-				err = w.processEvent(ctx, event)
+			if highWatermarkMet {
+				// All events in one batch can be hashed into one handle slot.
+				slot := w.inputCalcSlot(events[0].regionID)
+				eventsX := make([]interface{}, 0, len(events))
+				for _, event := range events {
+					eventsX = append(eventsX, event)
+				}
+				err := w.handles[slot].AddEvents(ctx, eventsX)
 				if err != nil {
 					return err
 				}
+				// Principle: events from the same region must be processed linearly.
+				//
+				// When buffered events exceed high watermark, we start to use worker
+				// pool to improve throughput, and we need a mechanism to quit worker
+				// pool when buffered events are less than low watermark, which means
+				// we should have a way to know whether events sent to the worker pool
+				// are all processed.
+				// Send a dummy event to each worker pool handler, after each of these
+				// events are processed, we can ensure all events sent to worker pool
+				// from this region worker are processed.
+				finishedCallbackCh := make(chan struct{}, 1)
+				err = w.handles[slot].AddEvent(ctx, &regionStatefulEvent{finishedCallbackCh: finishedCallbackCh})
+				if err != nil {
+					return err
+				}
+				select {
+				case <-ctx.Done():
+					return errors.Trace(ctx.Err())
+				case err = <-w.errorCh:
+					return err
+				case <-finishedCallbackCh:
+				}
+			} else {
+				// We measure whether the current worker is busy based on the input
+				// channel size. If the buffered event count is larger than the high
+				// watermark, we send events to worker pool to increase processing
+				// throughput. Otherwise, we process event in local region worker to
+				// ensure low processing latency.
+				for _, event := range events {
+					err := w.processEvent(ctx, event)
+					if err != nil {
+						return err
+					}
+				}
 			}
-		}
-		for _, ev := range events {
-			// resolved ts event has been consumed, it is safe to put back.
-			if ev.resolvedTsEvent != nil {
-				w.session.resolvedTsPool.Put(ev)
+			for _, ev := range events {
+				// resolved ts event has been consumed, it is safe to put back.
+				if ev.resolvedTsEvent != nil {
+					w.session.resolvedTsPool.Put(ev)
+				}
 			}
+			processTime += time.Since(start)
 		}
 	}
 }
@@ -583,7 +616,7 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	}
 }
 
-func (w *regionWorker) run() error {
+func (w *regionWorker) run(enableTableMonitor bool) error {
 	defer func() {
 		for _, h := range w.handles {
 			h.Unregister()
@@ -608,7 +641,7 @@ func (w *regionWorker) run() error {
 		return handleError(w.checkErrorReconnect(w.resolveLock(ctx)))
 	})
 	wg.Go(func() error {
-		return handleError(w.eventHandler(ctx))
+		return handleError(w.eventHandler(ctx, enableTableMonitor))
 	})
 	_ = handleError(w.collectWorkpoolError(ctx))
 	_ = wg.Wait()
