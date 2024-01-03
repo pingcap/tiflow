@@ -75,6 +75,8 @@ const (
 	regionScheduleReload = false
 
 	scanRegionsConcurrency = 1024
+
+	tableMonitorInterval = 2 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -1097,8 +1099,6 @@ func (s *eventFeedSession) receiveFromStream(
 	})
 
 	receiveEvents := func() error {
-		metricsTicker := time.NewTicker(time.Second * 20)
-		defer metricsTicker.Stop()
 		var receiveTime time.Duration
 		var processTime time.Duration
 		startToWork := time.Now()
@@ -1110,20 +1110,18 @@ func (s *eventFeedSession) receiveFromStream(
 
 			if s.enableTableMonitor {
 				receiveTime += time.Since(startToReceive)
-				select {
-				case <-metricsTicker.C:
+				if time.Since(startToWork) >= tableMonitorInterval {
 					now := time.Now()
-					// busyRatio indicates the blocking time (receive and decode grpc msg) of the worker.
+					// Receive busyRatio indicates the blocking time (receive and decode grpc msg) of the worker.
 					busyRatio := receiveTime.Seconds() / now.Sub(startToWork).Seconds() * 100
 					metricReceiveBusyRatio.Set(busyRatio)
 					receiveTime = 0
-					// busyRatio indicates the working time (dispatch to region worker) of the worker.
+					// Process busyRatio indicates the working time (dispatch to region worker) of the worker.
 					busyRatio = processTime.Seconds() / now.Sub(startToWork).Seconds() * 100
 					metricProcessBusyRatio.Set(busyRatio)
 					processTime = 0
 
 					startToWork = now
-				default:
 				}
 			}
 

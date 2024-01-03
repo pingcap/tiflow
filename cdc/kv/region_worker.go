@@ -457,7 +457,7 @@ func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
 
-	metricsTicker := time.NewTicker(time.Second * 10)
+	metricsTicker := time.NewTicker(tableMonitorInterval)
 	defer metricsTicker.Stop()
 	var processTime time.Duration
 	startToWork := time.Now()
