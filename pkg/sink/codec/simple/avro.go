@@ -15,6 +15,7 @@ package simple
 
 import (
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/linkedin/goavro/v2"
@@ -216,6 +217,14 @@ func newDMLMessageMap(
 	return goavro.Union("com.pingcap.simple.avro.DML", m), nil
 }
 
+var (
+	columnMapPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+)
+
 func collectColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
 ) (interface{}, error) {
@@ -231,7 +240,13 @@ func collectColumns(
 		if err != nil {
 			return nil, err
 		}
-		result[col.Name] = goavro.Union(avroType, value)
+
+		unionMap, ok := columnMapPool.Get().(map[string]interface{})
+		if !ok {
+			unionMap = make(map[string]interface{})
+		}
+		unionMap[avroType] = value
+		result[col.Name] = unionMap
 	}
 	return goavro.Union("map", result), nil
 }

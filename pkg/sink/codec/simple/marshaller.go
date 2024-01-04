@@ -184,6 +184,27 @@ func (m *avroMarshaller) MarshalRowChangedEvent(
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
 	}
+
+	eventMap := msg.(map[string]interface{})
+	dataMap := eventMap["com.pingcap.simple.avro.DML"].(map[string]interface{})["data"]
+	if dataMap != nil {
+		dataMap := dataMap.(map[string]interface{})["map"].(map[string]interface{})
+		for _, col := range dataMap {
+			colMap := col.(map[string]interface{})
+			clear(colMap)
+			columnMapPool.Put(col)
+		}
+	}
+	oldDataMap := eventMap["com.pingcap.simple.avro.DML"].(map[string]interface{})["old"]
+	if oldDataMap != nil {
+		oldDataMap := oldDataMap.(map[string]interface{})["map"].(map[string]interface{})
+		for _, col := range oldDataMap {
+			colMap := col.(map[string]interface{})
+			clear(colMap)
+			columnMapPool.Put(col)
+		}
+	}
+
 	return value, nil
 }
 
