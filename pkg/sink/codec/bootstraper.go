@@ -56,7 +56,7 @@ func newBootstrapWorker(
 	sendBootstrapInMsgCount int32,
 	maxInactiveDuration time.Duration,
 ) *bootstrapWorker {
-	log.Info("Sending bootstrap event is enable for simple protocol,"+
+	log.Info("Sending bootstrap event is enabled for simple protocol,"+
 		"and both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0"+
 		"enable bootstrap sending function",
 		zap.Stringer("changefeed", changefeedID),
