@@ -304,7 +304,6 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("SET SESSION time_zone = \"UTC\"").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`,`b`) VALUES (?,?),(?,?)").
 			WithArgs(1, "test", 2, "test").
 			WillReturnResult(sqlmock.NewResult(2, 2))
@@ -431,7 +430,6 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("SET SESSION time_zone = \"UTC\"").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 			WithArgs(1, 2).
 			WillReturnError(errDatabaseNotExists)
@@ -503,7 +501,6 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("SET SESSION time_zone = \"UTC\"").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 			WithArgs(1, 2).
 			WillReturnError(errTableNotExists)
@@ -576,7 +573,6 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		db, mock := newTestMockDB(t)
 		for i := 0; i < 2; i++ {
 			mock.ExpectBegin()
-			mock.ExpectExec("SET SESSION time_zone = \"UTC\"").WillReturnResult(sqlmock.NewResult(0, 0))
 			mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
 				WillReturnError(errLockDeadlock)
@@ -639,7 +635,6 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("SET SESSION time_zone = \"UTC\"").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`) VALUES (?)").
 			WithArgs(1).
 			WillReturnResult(sqlmock.NewResult(1, 1))
@@ -818,7 +813,6 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		// normal db
 		db, mock := newTestMockDB(t)
 		mock.ExpectBegin()
-		mock.ExpectExec("SET SESSION time_zone = \"UTC\"").WillReturnResult(sqlmock.NewResult(0, 0))
 		mock.ExpectExec("INSERT INTO `s1`.`t1` (`a`,`b`) VALUES (?,?),(?,?)").WillDelayFor(1 * time.Second).
 			WillReturnError(&dmysql.MySQLError{Number: mysql.ErrNoSuchTable})
 		mock.ExpectClose()

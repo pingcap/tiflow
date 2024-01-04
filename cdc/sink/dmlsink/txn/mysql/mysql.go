@@ -764,19 +764,6 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			}
 
 			// Set session variables first and then execute the transaction.
-			// ref to https://github.com/pingcap/tiflow/issues/10393
-			if err = s.setSessionVariables(pctx, tx); err != nil {
-				err := logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
-					start, s.changefeed, "SET SESSION VARIABLES", dmls.rowCount, dmls.startTs)
-				if rbErr := tx.Rollback(); rbErr != nil {
-					if errors.Cause(rbErr) != context.Canceled {
-						log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
-					}
-				}
-				return 0, 0, err
-			}
-
 			// we try to set write source for each txn,
 			// so we can use it to trace the data source
 			if err = s.setWriteSource(pctx, tx); err != nil {
@@ -884,13 +871,6 @@ func getSQLErrCode(err error) (errors.ErrCode, bool) {
 // Only for testing.
 func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
-}
-
-func (s *mysqlBackend) setSessionVariables(ctx context.Context, txn *sql.Tx) error {
-	// set time zone before executing the transaction.
-	query := fmt.Sprintf("SET SESSION time_zone = %s", s.cfg.Timezone)
-	_, err := txn.ExecContext(ctx, query)
-	return err
 }
 
 // setWriteSource sets write source for the transaction.
