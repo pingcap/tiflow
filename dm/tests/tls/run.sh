@@ -309,6 +309,11 @@ function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 
 	# https://github.com/pingcap/dm/issues/1458
 	# check the log is not repeatedly printed
+	echo "master2"
+	cat $WORK_DIR/master2/log/dm-master.log
+	echo "master3"
+	cat $WORK_DIR/master3/log/dm-master.log
+	echo "master1"
 	check_log_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate" 1
 
 	echo "============================== test_master_ha_when_enable_tidb_and_only_ca_source_tls success =================================="
