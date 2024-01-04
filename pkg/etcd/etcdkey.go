@@ -24,6 +24,8 @@ import (
 )
 
 const (
+	// Note that tidb-dashboard depends on this prefix to filter out TiCDC keys.
+	// Ref: https://github.com/pingcap/tidb-dashboard/blob/1f39ee09c5352adbf23af8ec7e15020147ef9ca4/pkg/utils/topology/ticdc.go#L23
 	metaPrefix = "/__cdc_meta__"
 
 	ownerKey        = "/owner"
@@ -100,6 +102,9 @@ type CDCKey struct {
 }
 
 // BaseKey is the common prefix of the keys with cluster id in CDC
+//
+// Note that tidb-dashboard depends on this prefix to filter out TiCDC keys.
+// Ref: https://github.com/pingcap/tidb-dashboard/blob/1f39ee09c5352adbf23af8ec7e15020147ef9ca4/pkg/utils/topology/ticdc.go#L22
 func BaseKey(clusterID string) string {
 	return fmt.Sprintf("/tidb/cdc/%s", clusterID)
 }

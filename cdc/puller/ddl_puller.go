@@ -630,7 +630,7 @@ func NewDDLJobPuller(
 		jobPuller.puller.Puller = New(
 			ctx, pdCli, up.GrpcPool, regionCache, kvStorage, pdClock,
 			checkpointTs, spans, cfg, changefeed, -1, memorysorter.DDLPullerTableName,
-			ddlPullerFilterLoop,
+			ddlPullerFilterLoop, false,
 		)
 	}
 

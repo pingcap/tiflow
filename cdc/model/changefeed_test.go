@@ -250,6 +250,7 @@ func TestVerifyAndComplete(t *testing.T) {
 			CaseSensitive:         false,
 			CheckGCSafePoint:      true,
 			EnableSyncPoint:       util.AddressOf(false),
+			EnableTableMonitor:    util.AddressOf(false),
 			SyncPointInterval:     util.AddressOf(time.Minute * 10),
 			SyncPointRetention:    util.AddressOf(time.Hour * 24),
 			BDRMode:               util.AddressOf(false),

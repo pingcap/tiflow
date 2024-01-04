@@ -52,6 +52,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	CaseSensitive:      false,
 	CheckGCSafePoint:   true,
 	EnableSyncPoint:    util.AddressOf(false),
+	EnableTableMonitor: util.AddressOf(false),
 	SyncPointInterval:  util.AddressOf(10 * time.Minute),
 	SyncPointRetention: util.AddressOf(24 * time.Hour),
 	BDRMode:            util.AddressOf(false),
@@ -78,6 +79,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 		ContentCompatible:                util.AddressOf(false),
 		TiDBSourceID:                     1,
 		AdvanceTimeoutInSec:              util.AddressOf(DefaultAdvanceTimeoutInSec),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	},
 	Consistent: &ConsistentConfig{
 		Level:                 "none",
@@ -134,7 +136,8 @@ type replicaConfig struct {
 	ForceReplicate   bool   `toml:"force-replicate" json:"force-replicate"`
 	CheckGCSafePoint bool   `toml:"check-gc-safe-point" json:"check-gc-safe-point"`
 	// EnableSyncPoint is only available when the downstream is a Database.
-	EnableSyncPoint *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
+	EnableSyncPoint    *bool `toml:"enable-sync-point" json:"enable-sync-point,omitempty"`
+	EnableTableMonitor *bool `toml:"enable-table-monitor" json:"enable-table-monitor"`
 	// IgnoreIneligibleTable is used to store the user's config when creating a changefeed.
 	// not used in the changefeed's lifecycle.
 	IgnoreIneligibleTable bool `toml:"ignore-ineligible-table" json:"ignore-ineligible-table"`
