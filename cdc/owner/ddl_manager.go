@@ -333,8 +333,8 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return nil
 	}
 
-	// In a BDR mode cluster, TiCDC can receive DDLs from both Primary and Secondary TiDB.
-	// And CDC only executes the DDLs from Primary TiDB.
+	// In a BDR mode cluster, TiCDC can receive DDLs from all roles of TiDB.
+	// However, CDC only executes the DDLs from the TiDB that has BDRRolePrimary role.
 	if m.BDRMode && m.executingDDL.BDRRole != string(ast.BDRRolePrimary) {
 		log.Info("changefeed is in BDRMode and "+
 			"the DDL is not executed by Primary Cluster, skip it",
