@@ -30,6 +30,10 @@ const (
 	bootstrapWorkerGCInterval     = 30 * time.Second
 
 	defaultMaxInactiveDuration = 30 * time.Minute
+
+	// In the current implementation, the bootstrapWorker only sends bootstrap message
+	// to the first partition of the corresponding topic of the table.
+	defaultBootstrapPartitionIndex = 0
 )
 
 type bootstrapWorker struct {
@@ -113,7 +117,7 @@ func (b *bootstrapWorker) addEvent(
 		}
 	} else {
 		// If the table is already in the activeTables, update its status.
-		table.(*tableStatistic).update(key, row)
+		table.(*tableStatistic).update(row)
 	}
 	return nil
 }
@@ -130,48 +134,40 @@ func (b *bootstrapWorker) sendBootstrapMsg(ctx context.Context, table *tableStat
 	}
 	table.reset()
 	tableInfo := table.tableInfo.Load().(*model.TableInfo)
-	events, err := b.generateEvents(table.topic, table.totalPartition.Load(), tableInfo)
+	event, err := b.generateEvents(table.topic, tableInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	for _, event := range events {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case b.outCh <- event:
-		}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case b.outCh <- event:
 	}
 	return nil
 }
 
 func (b *bootstrapWorker) generateEvents(
 	topic string,
-	totalPartition int32,
 	tableInfo *model.TableInfo,
-) ([]*future, error) {
-	res := make([]*future, 0, int(totalPartition))
+) (*future, error) {
 	// Bootstrap messages of a table should be sent to all partitions.
-	for i := 0; i < int(totalPartition); i++ {
-		msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		key := model.TopicPartitionKey{
-			Topic:          topic,
-			Partition:      int32(i),
-			TotalPartition: totalPartition,
-		}
-
-		future := &future{
-			Key:  key,
-			done: make(chan struct{}),
-		}
-		future.Messages = append(future.Messages, msg)
-		close(future.done)
-		res = append(res, future)
+	msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
+	if err != nil {
+		return nil, errors.Trace(err)
 	}
-	return res, nil
+
+	key := model.TopicPartitionKey{
+		Topic:     topic,
+		Partition: defaultBootstrapPartitionIndex,
+	}
+
+	f := &future{
+		Key:  key,
+		done: make(chan struct{}),
+	}
+	f.Messages = append(f.Messages, msg)
+	close(f.done)
+	return f, nil
 }
 
 func (b *bootstrapWorker) gcInactiveTables() {
@@ -194,9 +190,6 @@ type tableStatistic struct {
 	id int64
 	// topic is the table's topic, it will not change
 	topic string
-	// All fields below are concurrently accessed, please use atomic operations.
-	// totalPartition is the total number of partitions of the table's topic
-	totalPartition atomic.Int32
 	// counter is the number of row event sent since last bootstrap message sent
 	// It is used to check if the bootstrap message should be sent
 	counter atomic.Int32
@@ -220,7 +213,6 @@ func newTableStatus(key model.TopicPartitionKey, row *model.RowChangedEvent) *ta
 		topic: key.Topic,
 	}
 	res.counter.Add(1)
-	res.totalPartition.Store(key.TotalPartition)
 	res.lastMsgReceivedTime.Store(time.Now())
 	res.lastSendTime.Store(time.Unix(0, 0))
 	res.version.Store(row.TableInfo.UpdateTS)
@@ -237,13 +229,9 @@ func (t *tableStatistic) shouldSendBootstrapMsg(
 		t.counter.Load() >= sendBootstrapMsgCountInterval
 }
 
-func (t *tableStatistic) update(key model.TopicPartitionKey, row *model.RowChangedEvent) {
+func (t *tableStatistic) update(row *model.RowChangedEvent) {
 	t.counter.Add(1)
 	t.lastMsgReceivedTime.Store(time.Now())
-
-	if t.totalPartition.Load() != key.TotalPartition {
-		t.totalPartition.Store(key.TotalPartition)
-	}
 
 	if t.version.Load() != row.TableInfo.UpdateTS {
 		t.version.Store(row.TableInfo.UpdateTS)

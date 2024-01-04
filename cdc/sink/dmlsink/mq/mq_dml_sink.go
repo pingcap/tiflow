@@ -196,10 +196,9 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			// So it is safe to send the event to a unbounded channel here.
 			s.alive.worker.msgChan.In() <- mqEvent{
 				key: model.TopicPartitionKey{
-					Topic:          topic,
-					Partition:      index,
-					PartitionKey:   key,
-					TotalPartition: partitionNum,
+					Topic:        topic,
+					Partition:    index,
+					PartitionKey: key,
 				},
 				rowEvent: &dmlsink.RowChangeCallbackableEvent{
 					Event:     row,

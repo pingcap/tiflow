@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -64,13 +65,12 @@ type encoderGroup struct {
 func NewEncoderGroup(
 	cfg *config.SinkConfig,
 	builder RowEventEncoderBuilder,
-	concurrency int,
 	changefeedID model.ChangeFeedID,
 ) *encoderGroup {
+	concurrency := util.GetOrZero(cfg.EncoderConcurrency)
 	if concurrency <= 0 {
 		concurrency = config.DefaultEncoderGroupConcurrency
 	}
-
 	inputCh := make([]chan *future, concurrency)
 	for i := 0; i < concurrency; i++ {
 		inputCh[i] = make(chan *future, defaultInputChanSize)

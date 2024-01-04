@@ -36,9 +36,8 @@ func getMockTableStatus() (model.TopicPartitionKey, *model.RowChangedEvent, *tab
 		TableID: 1,
 	}
 	key := model.TopicPartitionKey{
-		Topic:          "test.t1",
-		Partition:      1,
-		TotalPartition: 3,
+		Topic:     "test.t1",
+		Partition: 1,
 	}
 	row := &model.RowChangedEvent{
 		TableInfo: tableInfo,
@@ -77,7 +76,7 @@ func TestShouldSendBootstrapMsg(t *testing.T) {
 
 func TestIsActive(t *testing.T) {
 	t.Parallel()
-	key, row, tb1 := getMockTableStatus()
+	_, row, tb1 := getMockTableStatus()
 	// case 1: A new added table should be active
 	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
 
@@ -88,7 +87,7 @@ func TestIsActive(t *testing.T) {
 	// case 3: A table which receive message recently should be active
 	// Note: A table's update method will be call any time it receive message
 	// So use update method to simulate the table receive message
-	tb1.update(key, row)
+	tb1.update(row)
 	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
 }
 
@@ -129,10 +128,10 @@ func TestBootstrapWorker(t *testing.T) {
 		case future := <-outCh:
 			require.NotNil(t, future)
 			require.Equal(t, key.Topic, future.Key.Topic)
-			require.Equal(t, key.TotalPartition, future.Key.TotalPartition)
 			msgCount++
 		case <-sctx.Done():
-			require.Equal(t, key.TotalPartition, msgCount)
+			// The bootstrap event is only sent to the
+			require.Equal(t, 1, msgCount)
 			return
 		}
 	}

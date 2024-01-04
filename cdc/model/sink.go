@@ -928,8 +928,7 @@ func (t *SingleTableTxn) ToWaitFlush() bool {
 
 // TopicPartitionKey contains the topic and partition key of the message.
 type TopicPartitionKey struct {
-	Topic          string
-	Partition      int32
-	PartitionKey   string
-	TotalPartition int32
+	Topic        string
+	Partition    int32
+	PartitionKey string
 }

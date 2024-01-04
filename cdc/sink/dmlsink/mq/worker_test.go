@@ -45,7 +45,8 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
 	cfg := config.GetDefaultReplicaConfig()
-	encoderGroup := codec.NewEncoderGroup(cfg.Sink, encoderBuilder, encoderConcurrency, id)
+	cfg.Sink.EncoderConcurrency = &encoderConcurrency
+	encoderGroup := codec.NewEncoderGroup(cfg.Sink, encoderBuilder, id)
 	return newWorker(id, config.ProtocolOpen, p, encoderGroup, statistics), p
 }
 
@@ -60,7 +61,8 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
 	cfg := config.GetDefaultReplicaConfig()
-	encoderGroup := codec.NewEncoderGroup(cfg.Sink, encoderBuilder, encoderConcurrency, id)
+	cfg.Sink.EncoderConcurrency = &encoderConcurrency
+	encoderGroup := codec.NewEncoderGroup(cfg.Sink, encoderBuilder, id)
 	return newWorker(id, config.ProtocolOpen, p, encoderGroup, statistics), p
 }
 

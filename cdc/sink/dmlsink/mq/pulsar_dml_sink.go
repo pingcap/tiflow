@@ -121,8 +121,7 @@ func NewPulsarDMLSink(
 		return nil, cerror.WrapError(cerror.ErrPulsarInvalidConfig, err)
 	}
 
-	concurrency := tiflowutil.GetOrZero(replicaConfig.Sink.EncoderConcurrency)
-	encoderGroup := codec.NewEncoderGroup(replicaConfig.Sink, encoderBuilder, concurrency, changefeedID)
+	encoderGroup := codec.NewEncoderGroup(replicaConfig.Sink, encoderBuilder, changefeedID)
 
 	s := newDMLSink(ctx, changefeedID, p, nil, topicManager,
 		eventRouter, trans, encoderGroup, protocol, scheme, errCh)
