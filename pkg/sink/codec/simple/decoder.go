@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"path/filepath"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -291,18 +292,21 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 }
 
 // TableInfoProvider is used to store and read table info
+// It works like a schema cache when consuming simple protocol messages
+// It will store multiple versions of table info for a table
+// The table info which has the exact (schema, table, version) will be returned when reading
 type TableInfoProvider interface {
 	Write(info *model.TableInfo)
 	Read(schema, table string, version uint64) *model.TableInfo
 }
 
 type memoryTableInfoProvider struct {
-	memo map[cacheKey]*model.TableInfo
+	memo map[tableSchemaKey]*model.TableInfo
 }
 
 func newMemoryTableInfoProvider() *memoryTableInfoProvider {
 	return &memoryTableInfoProvider{
-		memo: make(map[cacheKey]*model.TableInfo),
+		memo: make(map[tableSchemaKey]*model.TableInfo),
 	}
 }
 
@@ -310,41 +314,76 @@ func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
 	if info == nil {
 		return
 	}
-	key := cacheKey{
-		schema: info.TableName.Schema,
-		table:  info.TableName.Table,
+	key := tableSchemaKey{
+		schema:  info.TableName.Schema,
+		table:   info.TableName.Table,
+		version: info.UpdateTS,
 	}
 
-	entry, ok := m.memo[key]
-	if ok && entry.UpdateTS >= info.UpdateTS {
-		log.Warn("table info not stored, since the updateTs is stale",
+	_, ok := m.memo[key]
+	if ok {
+		log.Warn("table info not stored, since it already exists",
 			zap.String("schema", info.TableName.Schema),
 			zap.String("table", info.TableName.Table),
-			zap.Uint64("oldUpdateTs", entry.UpdateTS),
-			zap.Uint64("updateTs", info.UpdateTS))
+			zap.Uint64("version", info.UpdateTS))
 		return
 	}
+
 	m.memo[key] = info
 	log.Info("table info stored",
 		zap.String("schema", info.TableName.Schema),
 		zap.String("table", info.TableName.Table),
-		zap.Uint64("updateTs", info.UpdateTS))
+		zap.Uint64("version", info.UpdateTS))
 }
 
+// Read returns the table info with the exact (schema, table, version)
+// Note: It's a blocking call, it will wait until the table info is stored
 func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *model.TableInfo {
-	key := cacheKey{
-		schema: schema,
-		table:  table,
+	key := tableSchemaKey{
+		schema:  schema,
+		table:   table,
+		version: version,
 	}
 
-	entry, ok := m.memo[key]
-	if ok && entry.UpdateTS == version {
-		return entry
+	// Note(dongmen): Since the decoder is only use in unit test for now,
+	// we don't need to consider the performance
+	// Just use a ticker to check if the table info is stored every second.
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	for {
+		entry, ok := m.memo[key]
+		if ok {
+			log.Info("table info read",
+				zap.String("schema", schema),
+				zap.String("table", table),
+				zap.Uint64("version", version))
+			return entry
+		}
+		select {
+		case <-ticker.C:
+			entry, ok := m.memo[key]
+			if ok {
+				log.Info("table info read",
+					zap.String("schema", schema),
+					zap.String("table", table),
+					zap.Uint64("version", version))
+				return entry
+			}
+		case <-ctx.Done():
+			log.Panic("table info read timeout",
+				zap.String("schema", schema),
+				zap.String("table", table),
+				zap.Uint64("version", version))
+			return nil
+		}
 	}
-	return nil
 }
 
-type cacheKey struct {
-	schema string
-	table  string
+type tableSchemaKey struct {
+	schema  string
+	table   string
+	version uint64
 }

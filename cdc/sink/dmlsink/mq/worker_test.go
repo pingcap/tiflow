@@ -44,7 +44,9 @@ func newBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlproduc
 	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
-	encoderGroup := codec.NewEncoderGroup(encoderBuilder, encoderConcurrency, id)
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.EncoderConcurrency = &encoderConcurrency
+	encoderGroup := codec.NewEncoderGroup(cfg.Sink, encoderBuilder, id)
 	return newWorker(id, config.ProtocolOpen, p, encoderGroup, statistics), p
 }
 
@@ -58,7 +60,9 @@ func newNonBatchEncodeWorker(ctx context.Context, t *testing.T) (*worker, dmlpro
 	require.NoError(t, err)
 	encoderConcurrency := 4
 	statistics := metrics.NewStatistics(ctx, id, sink.RowSink)
-	encoderGroup := codec.NewEncoderGroup(encoderBuilder, encoderConcurrency, id)
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.EncoderConcurrency = &encoderConcurrency
+	encoderGroup := codec.NewEncoderGroup(cfg.Sink, encoderBuilder, id)
 	return newWorker(id, config.ProtocolOpen, p, encoderGroup, statistics), p
 }
 
@@ -77,7 +81,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	worker, p := newNonBatchEncodeWorker(ctx, t)
 	defer worker.close()
 
-	key := codec.TopicPartitionKey{
+	key := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
@@ -136,7 +140,7 @@ func TestBatchEncode_Batch(t *testing.T) {
 	defer cancel()
 	worker, _ := newBatchEncodeWorker(ctx, t)
 	defer worker.close()
-	key := codec.TopicPartitionKey{
+	key := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
@@ -168,15 +172,15 @@ func TestBatchEncode_Batch(t *testing.T) {
 func TestBatchEncode_Group(t *testing.T) {
 	t.Parallel()
 
-	key1 := codec.TopicPartitionKey{
+	key1 := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := codec.TopicPartitionKey{
+	key2 := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
-	key3 := codec.TopicPartitionKey{
+	key3 := model.TopicPartitionKey{
 		Topic:     "test1",
 		Partition: 2,
 	}
@@ -272,11 +276,11 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 	tableInfo := model.WrapTableInfo(0, "test", 1, job.BinlogInfo.TableInfo)
 	_, _, colInfo := tableInfo.GetRowColInfos()
 
-	key1 := codec.TopicPartitionKey{
+	key1 := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := codec.TopicPartitionKey{
+	key2 := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
@@ -339,15 +343,15 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 }
 
 func TestBatchEncode_SendMessages(t *testing.T) {
-	key1 := codec.TopicPartitionKey{
+	key1 := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := codec.TopicPartitionKey{
+	key2 := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
-	key3 := codec.TopicPartitionKey{
+	key3 := model.TopicPartitionKey{
 		Topic:     "test1",
 		Partition: 2,
 	}
@@ -502,11 +506,11 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 }
 
 func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
-	key1 := codec.TopicPartitionKey{
+	key1 := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 1,
 	}
-	key2 := codec.TopicPartitionKey{
+	key2 := model.TopicPartitionKey{
 		Topic:     "test",
 		Partition: 2,
 	}
