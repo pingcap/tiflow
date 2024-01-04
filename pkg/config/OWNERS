@@ -1,0 +1,9 @@
+# See the OWNERS docs at https://go.k8s.io/owners
+filters:
+  # include *.go but ignore *_test.go files.
+  "^.*([^t]|[^s]t|[^e]st|[^t]est|[^_]test)[.]go$":
+    labels:
+      - affect-ticdc-config-docs
+    # * Enable and fill these fields if necessary.
+    # approvers: []
+    # reviewers: []
