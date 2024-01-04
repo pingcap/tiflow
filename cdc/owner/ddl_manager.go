@@ -333,7 +333,8 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return nil
 	}
 
-	// If changefeed is in BDRMode and the ddl is not sent by BDRRolePrimary role, skip it.
+	// In a BDR mode cluster, TiCDC can receive DDLs from both Primary and Secondary TiDB.
+	// And CDC only executes the DDLs from Primary TiDB.
 	if m.BDRMode && m.executingDDL.BDRRole != string(ast.BDRRolePrimary) {
 		log.Info("changefeed is in BDRMode and "+
 			"the DDL is not executed by Primary Cluster, skip it",
@@ -530,12 +531,8 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 
 // getSnapshotTs returns the ts that we should use
 // to get the snapshot of the schema, the rules are:
-// 1. If the changefeed is just started, we use the startTs,
+// If the changefeed is just started, we use the startTs,
 // otherwise we use the checkpointTs.
-// 2. If the changefeed is in BDRMode, we use the ddlManager.ddlResolvedTs.
-// Since TiCDC ignore the DDLs in BDRMode, we don't need to care about whether
-// the DDLs are executed or not. We should use the ddlResolvedTs to get the up-to-date
-// schema.
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
