@@ -35,7 +35,7 @@ func TestVersionComparison(t *testing.T) {
 		{"5.7.0", true, true, true, true},
 		{"5.8.0", true, true, true, true}, // although it does not exist
 		{"8.0.1", true, true, true, true},
-		{"8.1.0", true, true, false, false},
+		{"8.1.0", true, true, false, true},
 		{"255.255.255", true, true, false, false}, // max version
 	}
 
