@@ -21,6 +21,7 @@ const (
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "enable-table-monitor": false,
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
@@ -65,7 +66,8 @@ const (
       "large-message-handle-compression": "",
       "claim-check-storage-uri": ""
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -199,6 +201,7 @@ const (
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "enable-table-monitor": false,
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
@@ -318,7 +321,8 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",
@@ -361,6 +365,7 @@ const (
   "ignore-ineligible-table":false,
   "check-gc-safe-point": true,
   "enable-sync-point": false,
+  "enable-table-monitor": false,
   "bdr-mode": false,
   "sync-point-interval": 600000000000,
   "sync-point-retention": 86400000000000,
@@ -479,7 +484,8 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "debezium-disable-schema": false
   },
   "consistent": {
     "level": "none",

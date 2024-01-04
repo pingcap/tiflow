@@ -69,6 +69,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.Sink.ContentCompatible = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
 	conf.Sink.AdvanceTimeoutInSec = util.AddressOf(uint(150))
+	conf.Sink.DebeziumDisableSchema = util.AddressOf(false)
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
 		ReplicationFactor:            aws.Int16(1),
