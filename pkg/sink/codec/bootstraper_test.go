@@ -131,7 +131,7 @@ func TestBootstrapWorker(t *testing.T) {
 			msgCount++
 		case <-sctx.Done():
 			// The bootstrap event is only sent to the
-			require.Equal(t, 1, msgCount)
+			require.Equal(t, int32(1), msgCount)
 			return
 		}
 	}
