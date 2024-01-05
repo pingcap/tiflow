@@ -48,7 +48,7 @@ function run() {
 	run_sql "drop database test;" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	# create a new changefeed with avro encoding, set the start_ts before run the sql file.
-	TOPIC_NAME = "simple-handle-key-only-avro"
+	TOPIC_NAME="simple-handle-key-only-avro"
 	changefeed_id="simple-handle-key-only-avro"
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple&encoding-format=avro"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c ${changefeed_id} --config="$CUR/conf/changefeed.toml"
