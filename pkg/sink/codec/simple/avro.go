@@ -166,13 +166,11 @@ func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
 	}
 }
 
-var (
-	genericMapPool = sync.Pool{
-		New: func() any {
-			return make(map[string]interface{})
-		},
-	}
-)
+var genericMapPool = sync.Pool{
+	New: func() any {
+		return make(map[string]interface{})
+	},
+}
 
 func newDMLMessageMap(
 	event *model.RowChangedEvent, config *common.Config,
