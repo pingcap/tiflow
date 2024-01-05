@@ -286,13 +286,7 @@ func collectColumns(
 		result[col.Name] = genericMap
 	}
 
-	genericMap, ok := genericMapPool.Get().(map[string]interface{})
-	if !ok {
-		genericMap = make(map[string]interface{})
-	}
-	genericMap["map"] = result
-
-	return genericMap, nil
+	return goavro.Union("map", result), nil
 }
 
 func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
