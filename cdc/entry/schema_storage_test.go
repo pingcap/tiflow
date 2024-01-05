@@ -581,7 +581,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	err = storage.HandleDDLJob(job)
 	require.Nil(t, err)
 
-	require.Equal(t, storage.(*schemaStorageImpl).resolvedTs, uint64(140))
+	require.Equal(t, storage.(*schemaStorage).resolvedTs, uint64(140))
 	snap, err := storage.GetSnapshot(ctx, 100)
 	require.Nil(t, err)
 	_, exist := snap.SchemaByID(11)
@@ -881,10 +881,10 @@ func TestSchemaStorage(t *testing.T) {
 		require.Nil(t, err)
 
 		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
-		require.Nil(t, err)
+		require.NoError(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		}
 
 		for _, job := range jobs {

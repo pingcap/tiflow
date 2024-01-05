@@ -35,6 +35,9 @@ func TestNewTableSchema(t *testing.T) {
 	);`
 	tableInfo := helper.DDL2Event(sql).TableInfo
 	want := &TableSchema{
+		Database: tableInfo.TableName.Schema,
+		Table:    tableInfo.TableName.Table,
+		Version:  tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
 				ID:   1,
@@ -120,6 +123,9 @@ func TestNewTableSchema(t *testing.T) {
 	);`
 	tableInfo = helper.DDL2Event(sql).TableInfo
 	want = &TableSchema{
+		Database: tableInfo.TableName.Schema,
+		Table:    tableInfo.TableName.Table,
+		Version:  tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
 				ID:   1,
@@ -235,6 +241,9 @@ func TestNewTableSchema(t *testing.T) {
 		 tgen tinyint AS (t+1))` // 38
 	tableInfo = helper.DDL2Event(sql).TableInfo
 	want = &TableSchema{
+		Database: tableInfo.TableName.Schema,
+		Table:    tableInfo.TableName.Table,
+		Version:  tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
 				ID:   1,

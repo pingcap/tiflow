@@ -136,6 +136,172 @@ func (suite *JSONWriterTestSuite) TestObject() {
 	suite.Require().Equal(`{"foo":{"foo1":{"abc":null},"bar1":{}},"bar":{"foo2":{},"bar2":{}}}`, s)
 }
 
+func (suite *JSONWriterTestSuite) TestArray() {
+	var s string
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {})
+	})
+	suite.Require().Equal(`[]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteUint64Element(1)
+		})
+	})
+	suite.Require().Equal(`[1]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteUint64Element(1)
+			w.WriteUint64Element(2)
+		})
+	})
+	suite.Require().Equal(`[1,2]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteArrayElement(func() {})
+		})
+	})
+	suite.Require().Equal(`[[]]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteArrayElement(func() {})
+			w.WriteArrayElement(func() {})
+		})
+	})
+	suite.Require().Equal(`[[],[]]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteArrayElement(func() {
+				w.WriteArrayElement(func() {})
+			})
+			w.WriteArrayElement(func() {
+				w.WriteArrayElement(func() {})
+			})
+		})
+	})
+	suite.Require().Equal(`[[[]],[[]]]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteArrayElement(func() {
+				w.WriteArrayElement(func() {})
+				w.WriteArrayElement(func() {})
+			})
+			w.WriteArrayElement(func() {
+				w.WriteArrayElement(func() {})
+			})
+		})
+	})
+	suite.Require().Equal(`[[[],[]],[[]]]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteArrayElement(func() {
+				w.WriteArrayElement(func() {})
+				w.WriteArrayElement(func() {})
+			})
+			w.WriteArrayElement(func() {
+				w.WriteArrayElement(func() {})
+				w.WriteArrayElement(func() {})
+			})
+		})
+	})
+	suite.Require().Equal(`[[[],[]],[[],[]]]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteArrayElement(func() {
+				w.WriteArrayElement(func() {
+					w.WriteNullElement()
+				})
+				w.WriteArrayElement(func() {})
+			})
+			w.WriteArrayElement(func() {
+				w.WriteArrayElement(func() {})
+				w.WriteArrayElement(func() {})
+			})
+		})
+	})
+	suite.Require().Equal(`[[[null],[]],[[],[]]]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteObjectElement(func() {})
+		})
+	})
+	suite.Require().Equal(`[{}]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteObjectElement(func() {
+				w.WriteUint64Field("foo", 1)
+			})
+		})
+	})
+	suite.Require().Equal(`[{"foo":1}]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteObjectElement(func() {
+				w.WriteUint64Field("foo", 1)
+				w.WriteUint64Field("bar", 2)
+			})
+		})
+	})
+	suite.Require().Equal(`[{"foo":1,"bar":2}]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteArray(func() {
+			w.WriteObjectElement(func() {
+				w.WriteUint64Field("foo", 1)
+				w.WriteUint64Field("bar", 2)
+			})
+			w.WriteObjectElement(func() {
+				w.WriteUint64Field("The world is just a stage", 1)
+				w.WriteUint64Field("It's better to laugh than to cry", 2)
+			})
+		})
+	})
+	suite.Require().Equal(`[{"foo":1,"bar":2},{"The world is just a stage":1,"It's better to laugh than to cry":2}]`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteObject(func() {
+			w.WriteArrayField("values", func() {
+				w.WriteUint64Element(1)
+				w.WriteUint64Element(2)
+			})
+		})
+	})
+	suite.Require().Equal(`{"values":[1,2]}`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteObject(func() {
+			w.WriteArrayField("values", func() {
+				w.WriteUint64Element(1)
+				w.WriteUint64Element(2)
+			})
+			w.WriteUint64Field("foo", 1)
+		})
+	})
+	suite.Require().Equal(`{"values":[1,2],"foo":1}`, s)
+
+	s = suite.writeJSON(func(w *JSONWriter) {
+		w.WriteObject(func() {
+			w.WriteUint64Field("foo", 1)
+			w.WriteArrayField("values", func() {
+				w.WriteUint64Element(1)
+				w.WriteUint64Element(2)
+			})
+		})
+	})
+	suite.Require().Equal(`{"foo":1,"values":[1,2]}`, s)
+}
+
 func (suite *JSONWriterTestSuite) TestBase64() {
 	var s string
 

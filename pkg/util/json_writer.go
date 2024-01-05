@@ -85,6 +85,11 @@ func (w *JSONWriter) Buffer() []byte {
 	return w.stream.Buffer()
 }
 
+// WriteRaw writes a raw string directly into the output.
+func (w *JSONWriter) WriteRaw(b string) {
+	w.stream.WriteRaw(b)
+}
+
 // WriteBase64String writes a base64 string like "<value>".
 func (w *JSONWriter) WriteBase64String(b []byte) {
 	if w.out == nil {
@@ -112,6 +117,16 @@ func (w *JSONWriter) WriteObject(objectFieldsWriteFn func()) {
 	w.stream.WriteObjectStart()
 	objectFieldsWriteFn()
 	w.stream.WriteObjectEnd()
+	w.needPrependComma = lastNeedPrependComma
+}
+
+// WriteArray writes [......].
+func (w *JSONWriter) WriteArray(arrayElementsWriteFn func()) {
+	lastNeedPrependComma := w.needPrependComma
+	w.needPrependComma = false
+	w.stream.WriteArrayStart()
+	arrayElementsWriteFn()
+	w.stream.WriteArrayEnd()
 	w.needPrependComma = lastNeedPrependComma
 }
 
@@ -214,7 +229,18 @@ func (w *JSONWriter) WriteObjectField(fieldName string, objectFieldsWriteFn func
 	w.WriteObject(objectFieldsWriteFn)
 }
 
-// WriteNullField writes a array field like "<fieldName>":null.
+// WriteArrayField writes a array field like "<fieldName>":[......].
+func (w *JSONWriter) WriteArrayField(fieldName string, arrayElementsWriteFn func()) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.stream.WriteObjectField(fieldName)
+	w.WriteArray(arrayElementsWriteFn)
+}
+
+// WriteNullField writes a null field like "<fieldName>":null.
 func (w *JSONWriter) WriteNullField(fieldName string) {
 	if w.needPrependComma {
 		w.stream.WriteMore()
@@ -222,5 +248,115 @@ func (w *JSONWriter) WriteNullField(fieldName string) {
 		w.needPrependComma = true
 	}
 	w.stream.WriteObjectField(fieldName)
+	w.stream.WriteNil()
+}
+
+// WriteBoolElement writes a bool array element like ,<value>.
+func (w *JSONWriter) WriteBoolElement(value bool) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.stream.WriteBool(value)
+}
+
+// WriteIntElement writes a int array element like ,<value>.
+func (w *JSONWriter) WriteIntElement(value int) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.stream.WriteInt(value)
+}
+
+// WriteInt64Element writes a int64 array element like ,<value>.
+func (w *JSONWriter) WriteInt64Element(value int64) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.stream.WriteInt64(value)
+}
+
+// WriteUint64Element writes a uint64 array element like ,<value>.
+func (w *JSONWriter) WriteUint64Element(value uint64) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.stream.WriteUint64(value)
+}
+
+// WriteFloat64Element writes a float64 array element like ,<value>.
+func (w *JSONWriter) WriteFloat64Element(value float64) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.stream.WriteFloat64(value)
+}
+
+// WriteStringElement writes a string array element like ,"<value>".
+func (w *JSONWriter) WriteStringElement(value string) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.stream.WriteString(value)
+}
+
+// WriteBase64StringElement writes a base64 string array element like ,"<value>".
+func (w *JSONWriter) WriteBase64StringElement(b []byte) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.WriteBase64String(b)
+}
+
+// WriteAnyElement writes a array element like ,<value>.
+func (w *JSONWriter) WriteAnyElement(value any) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.stream.WriteVal(value)
+}
+
+// WriteObjectElement writes a object array element like ,{......}.
+func (w *JSONWriter) WriteObjectElement(objectFieldsWriteFn func()) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.WriteObject(objectFieldsWriteFn)
+}
+
+// WriteArrayElement writes a array array element like ,[......].
+func (w *JSONWriter) WriteArrayElement(arrayElementsWriteFn func()) {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
+	w.WriteArray(arrayElementsWriteFn)
+}
+
+// WriteNullElement writes a null array element like ,null.
+func (w *JSONWriter) WriteNullElement() {
+	if w.needPrependComma {
+		w.stream.WriteMore()
+	} else {
+		w.needPrependComma = true
+	}
 	w.stream.WriteNil()
 }

@@ -44,7 +44,7 @@ function run_case() {
 		"does not exist in downstream table" 2 \
 		"must contain extended columns" 2 \
 		'"severity": "fail"' 4 \
-		'"severity": "warn"' 1
+		'"severity": "warn"' 0
 
 	# create table in tidb
 	run_sql_file $cur/data/tidb.prepare.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD

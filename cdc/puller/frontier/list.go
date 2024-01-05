@@ -130,7 +130,7 @@ LevelLoop:
 }
 
 // InsertNextToNode insert the specified node after the seek seekTempResult
-func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonacciHeapNode) {
+func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonacciHeapNode, regionID uint64) {
 	if seekR.Node() != nil && !nextTo(seekR.Node(), key) {
 		log.Panic("the InsertNextToNode function can only append node to the seek result.")
 	}
@@ -139,13 +139,13 @@ func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonac
 		l.height = height
 	}
 	n := &skipListNode{
-		key:   key,
-		value: value,
-		nexts: make([]*skipListNode, height),
+		key:      key,
+		value:    value,
+		regionID: regionID,
+		nexts:    make([]*skipListNode, height),
 	}
 
 	for level := 0; level < height; level++ {
-
 		prev := seekR[level]
 		if prev == nil {
 			prev = &l.head
@@ -158,7 +158,7 @@ func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonac
 // Insert inserts the specified node
 func (l *skipList) Insert(key []byte, value *fibonacciHeapNode) {
 	seekR := l.Seek(key, make(seekResult, maxHeight))
-	l.InsertNextToNode(seekR, key, value)
+	l.InsertNextToNode(seekR, key, value, fakeRegionID)
 }
 
 // Remove removes the specified node after the seek seekTempResult

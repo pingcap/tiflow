@@ -732,10 +732,11 @@ func (s *mysqlBackend) sequenceExecute(
 
 func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
-		log.Panic("unexpected number of sqls and values",
+		log.Error("unexpected number of sqls and values",
 			zap.String("changefeed", s.changefeed),
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
+		return cerror.ErrUnexpected.FastGenByArgs("unexpected number of sqls and values")
 	}
 
 	start := time.Now()
@@ -761,6 +762,24 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
+			// Set session variables first and then execute the transaction.
+			// we try to set write source for each txn,
+			// so we can use it to trace the data source
+			if err = pmysql.SetWriteSource(pctx, s.cfg, tx); err != nil {
+				err := logDMLTxnErr(
+					cerror.WrapError(cerror.ErrMySQLTxnError, err),
+					start, s.changefeed,
+					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
+						s.cfg.SourceID),
+					dmls.rowCount, dmls.startTs)
+				if rbErr := tx.Rollback(); rbErr != nil {
+					if errors.Cause(rbErr) != context.Canceled {
+						log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
+					}
+				}
+				return 0, 0, err
+			}
+
 			// If interplated SQL size exceeds maxAllowedPacket, mysql driver will
 			// fall back to the sequantial way.
 			// error can be ErrPrepareMulti, ErrBadConn etc.
@@ -777,23 +796,6 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 				if err != nil {
 					return 0, 0, err
 				}
-			}
-
-			// we try to set write source for each txn,
-			// so we can use it to trace the data source
-			if err = s.setWriteSource(pctx, tx); err != nil {
-				err := logDMLTxnErr(
-					cerror.WrapError(cerror.ErrMySQLTxnError, err),
-					start, s.changefeed,
-					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
-						s.cfg.SourceID),
-					dmls.rowCount, dmls.startTs)
-				if rbErr := tx.Rollback(); rbErr != nil {
-					if errors.Cause(rbErr) != context.Canceled {
-						log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
-					}
-				}
-				return 0, 0, err
 			}
 
 			if err = tx.Commit(); err != nil {
@@ -868,25 +870,4 @@ func getSQLErrCode(err error) (errors.ErrCode, bool) {
 // Only for testing.
 func (s *mysqlBackend) setDMLMaxRetry(maxRetry uint64) {
 	s.dmlMaxRetry = maxRetry
-}
-
-// setWriteSource sets write source for the transaction.
-func (s *mysqlBackend) setWriteSource(ctx context.Context, txn *sql.Tx) error {
-	// we only set write source when donwstream is TiDB and write source is existed.
-	if !s.cfg.IsWriteSourceExisted {
-		return nil
-	}
-	// downstream is TiDB, set system variables.
-	// We should always try to set this variable, and ignore the error if
-	// downstream does not support this variable, it is by design.
-	query := fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source", s.cfg.SourceID)
-	_, err := txn.ExecContext(ctx, query)
-	if err != nil {
-		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok &&
-			mysqlErr.Number == mysql.ErrUnknownSystemVariable {
-			return nil
-		}
-		return err
-	}
-	return nil
 }

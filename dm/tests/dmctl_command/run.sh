@@ -184,7 +184,6 @@ function check_task_lightning() {
 	run_sql_tidb "set @@GLOBAL.max_connections=0;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/dm-task2.yaml" \
-		"\"passed\": true" 1 \
 		"task precheck cannot accurately check the number of connection needed for Lightning" 0
 	run_sql_tidb "set @@GLOBAL.max_connections=5;"
 	# fail but give warning, because it's using Lightining

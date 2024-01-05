@@ -54,7 +54,6 @@ type DDLSink interface {
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error)
-	emitBootstrapEvent(ctx context.Context, ddl *model.DDLEvent) error
 	emitSyncPoint(ctx context.Context, checkpointTs uint64) error
 	// close the ddlsink, cancel running goroutine.
 	close(ctx context.Context) error
@@ -385,22 +384,6 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 	return false, nil
 }
 
-// emitBootstrapEvent sent bootstrap event to downstream.
-// It is a synchronous operation.
-func (s *ddlSinkImpl) emitBootstrapEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	if !ddl.IsBootstrap {
-		return nil
-	}
-	err := s.sink.WriteDDLEvent(ctx, ddl)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	// TODO: change this log to debug level after testing complete.
-	log.Info("emit bootstrap event", zap.String("namespace", s.changefeedID.Namespace),
-		zap.String("changefeed", s.changefeedID.ID), zap.Any("bootstrapEvent", ddl))
-	return nil
-}
-
 func (s *ddlSinkImpl) emitSyncPoint(ctx context.Context, checkpointTs uint64) (err error) {
 	if checkpointTs == s.lastSyncPoint {
 		return nil
@@ -460,10 +443,11 @@ func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 		return "", errors.Trace(err)
 	}
 	if len(stms) != 1 {
-		log.Panic("invalid ddlQuery statement size",
+		log.Error("invalid ddlQuery statement size",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.String("ddlQuery", ddl.Query))
+		return "", cerror.ErrUnexpected.FastGenByArgs("invalid ddlQuery statement size")
 	}
 	var sb strings.Builder
 	// translate TiDB feature to special comment

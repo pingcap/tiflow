@@ -81,6 +81,11 @@ const (
 
 	// DefaultEncoderGroupConcurrency is the default concurrency of encoder group.
 	DefaultEncoderGroupConcurrency = 32
+
+	// DefaultSendBootstrapIntervalInSec is the default interval to send bootstrap message.
+	DefaultSendBootstrapIntervalInSec = int64(120)
+	// DefaultSendBootstrapInMsgCount is the default number of messages to send bootstrap message.
+	DefaultSendBootstrapInMsgCount = int32(10000)
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -165,6 +170,17 @@ type SinkConfig struct {
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+
+	// Simple Protocol only config, use to control the behavior of sending bootstrap message.
+	// Note: When one of the following conditions is set to negative value,
+	// bootstrap sending function will be disabled.
+	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
+	// SendBootstrapInMsgCount is the number of messages to send bootstrap message.
+	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
+
+	// Debezium only. Whether schema should be excluded in the output.
+	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -178,6 +194,20 @@ func (s *SinkConfig) MaskSensitiveData() {
 	if s.PulsarConfig != nil {
 		s.PulsarConfig.MaskSensitiveData()
 	}
+}
+
+// ShouldSendBootstrapMsg returns whether the sink should send bootstrap message.
+// Only enable bootstrap sending function for simple protocol
+// and when both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0
+func (s *SinkConfig) ShouldSendBootstrapMsg() bool {
+	if s == nil {
+		return false
+	}
+	protocol := util.GetOrZero(s.Protocol)
+
+	return protocol == ProtocolSimple.String() &&
+		util.GetOrZero(s.SendBootstrapIntervalInSec) > 0 &&
+		util.GetOrZero(s.SendBootstrapInMsgCount) > 0
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -221,14 +251,14 @@ func (c *CSVConfig) validateAndAdjust() error {
 	case 0:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 			errors.New("csv config delimiter cannot be empty"))
-	case 1, 2:
+	case 1, 2, 3:
 		if strings.ContainsRune(c.Delimiter, CR) || strings.ContainsRune(c.Delimiter, LF) {
 			return cerror.WrapError(cerror.ErrSinkInvalidConfig,
 				errors.New("csv config delimiter contains line break characters"))
 		}
 	default:
 		return cerror.WrapError(cerror.ErrSinkInvalidConfig,
-			errors.New("csv config delimiter contains more than two character, note that escape "+
+			errors.New("csv config delimiter contains more than three characters, note that escape "+
 				"sequences can only be used in double quotes in toml configuration items."))
 	}
 

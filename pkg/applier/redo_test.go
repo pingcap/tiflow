@@ -245,6 +245,10 @@ func getMockDB(t *testing.T) *sql.DB {
 		Number:  1305,
 		Message: "FUNCTION test.tidb_version does not exist",
 	})
+	mock.ExpectQuery("select tidb_version()").WillReturnError(&mysql.MySQLError{
+		Number:  1305,
+		Message: "FUNCTION test.tidb_version does not exist",
+	})
 
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
