@@ -68,10 +68,10 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20220801062533-2eaa32854a6c
 	github.com/pingcap/kvproto v0.0.0-20231222062942-c0c73f41d0b2
 	github.com/pingcap/log v1.1.1-0.20230317032135-a0d097d16e22
-	github.com/pingcap/tidb v1.1.0-beta.0.20231229064236-c766530a4664
+	github.com/pingcap/tidb v1.1.0-beta.0.20240105042433-54d8a1416ab0
 	github.com/pingcap/tidb-tools v0.0.0-20231228035519-c4bdf178b3d6
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20231229060758-e19e06e1bc19
-	github.com/prometheus/client_golang v1.17.0
+	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
@@ -90,7 +90,7 @@ require (
 	github.com/thanhpk/randstr v1.0.6
 	github.com/tikv/client-go/v2 v2.0.8-0.20231227070846-61c486af13a5
 	github.com/tikv/pd v1.1.0-beta.0.20231212061647-ab97b9a267f3
-	github.com/tikv/pd/client v0.0.0-20231227120157-cee6e63b9f06
+	github.com/tikv/pd/client v0.0.0-20240103101103-a4d2f1ca365a
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
