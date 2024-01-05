@@ -228,18 +228,11 @@ func newDMLMessageMap(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	genericMap, ok := genericMapPool.Get().(map[string]interface{})
-	if !ok {
-		genericMap = make(map[string]interface{})
-	}
-	genericMap["com.pingcap.simple.avro.DML"] = m
-
-	return genericMap, nil
+	return goavro.Union("com.pingcap.simple.avro.DML", m), nil
 }
 
 func recycleMap(m interface{}) {
-	msg := m.(map[string]interface{})
-	eventMap := msg["com.pingcap.simple.avro.DML"].(map[string]interface{})
+	eventMap := m.(map[string]interface{})["com.pingcap.simple.avro.DML"].(map[string]interface{})
 
 	checksumMap := eventMap["com.pingcap.simple.avro.Checksum"]
 	if checksumMap != nil {
@@ -267,9 +260,6 @@ func recycleMap(m interface{}) {
 			genericMapPool.Put(col)
 		}
 	}
-
-	clear(msg)
-	genericMapPool.Put(msg)
 }
 
 func collectColumns(
