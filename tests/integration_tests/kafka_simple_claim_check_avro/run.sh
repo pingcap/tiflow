@@ -21,13 +21,13 @@ function run() {
 	cd $WORK_DIR
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 
-	TOPIC_NAME="kafka-simple-claim-check"
+	TOPIC_NAME="kafka-simple-claim-check-avro"
 
 	# record tso before we create tables to skip the system table DDLs
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 
-	changefeed_id="kafka-simple-claim-check"
-	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple"
+	changefeed_id="kafka-simple-claim-check-avro"
+	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple&encoding-format=avro"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" -c ${changefeed_id} --config="$CUR/conf/changefeed.toml"
 	run_sql_file $CUR/data/ddl.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
@@ -35,7 +35,7 @@ function run() {
 
 	run_cdc_cli changefeed pause -c ${changefeed_id}
 
-	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple&max-message-bytes=2048"
+	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=simple&encoding-format=avro&max-message-bytes=2048"
 	run_cdc_cli changefeed update -c ${changefeed_id} --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml" --no-confirm
 	run_cdc_cli changefeed resume -c ${changefeed_id}
 
