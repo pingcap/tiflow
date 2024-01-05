@@ -158,6 +158,14 @@ func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
 	return goavro.Union("com.pingcap.simple.avro.DDL", result)
 }
 
+var (
+	genericMapPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+)
+
 func newDMLMessageMap(
 	event *model.RowChangedEvent, config *common.Config,
 	onlyHandleKey bool,
@@ -181,7 +189,13 @@ func newDMLMessageMap(
 			"current":   int64(event.Checksum.Current),
 			"previous":  int64(event.Checksum.Previous),
 		}
-		m["checksum"] = goavro.Union("com.pingcap.simple.avro.Checksum", cc)
+
+		genericMap, ok := genericMapPool.Get().(map[string]interface{})
+		if !ok {
+			genericMap = make(map[string]interface{})
+		}
+		genericMap["com.pingcap.simple.avro.Checksum"] = cc
+		m["checksum"] = genericMap
 	}
 
 	if event.IsInsert() {
@@ -214,16 +228,49 @@ func newDMLMessageMap(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	return goavro.Union("com.pingcap.simple.avro.DML", m), nil
+	genericMap, ok := genericMapPool.Get().(map[string]interface{})
+	if !ok {
+		genericMap = make(map[string]interface{})
+	}
+	genericMap["com.pingcap.simple.avro.DML"] = m
+
+	return genericMap, nil
 }
 
-var (
-	columnMapPool = sync.Pool{
-		New: func() any {
-			return make(map[string]interface{})
-		},
+func recycleMap(m interface{}) {
+	msg := m.(map[string]interface{})
+	eventMap := msg["com.pingcap.simple.avro.DML"].(map[string]interface{})
+
+	checksumMap := eventMap["com.pingcap.simple.avro.Checksum"]
+	if checksumMap != nil {
+		checksumMap := checksumMap.(map[string]interface{})
+		clear(checksumMap)
+		genericMapPool.Put(checksumMap)
 	}
-)
+
+	dataMap := eventMap["data"]
+	if dataMap != nil {
+		dataMap := dataMap.(map[string]interface{})["map"].(map[string]interface{})
+		for _, col := range dataMap {
+			colMap := col.(map[string]interface{})
+			clear(colMap)
+			genericMapPool.Put(col)
+		}
+	}
+
+	oldDataMap := eventMap["old"]
+	if oldDataMap != nil {
+		oldDataMap := oldDataMap.(map[string]interface{})["map"].(map[string]interface{})
+		for _, col := range oldDataMap {
+			colMap := col.(map[string]interface{})
+			clear(colMap)
+			genericMapPool.Put(col)
+		}
+	}
+
+	clear(msg)
+	genericMapPool.Put(msg)
+}
 
 func collectColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
@@ -241,14 +288,21 @@ func collectColumns(
 			return nil, err
 		}
 
-		unionMap, ok := columnMapPool.Get().(map[string]interface{})
+		genericMap, ok := genericMapPool.Get().(map[string]interface{})
 		if !ok {
-			unionMap = make(map[string]interface{})
+			genericMap = make(map[string]interface{})
 		}
-		unionMap[avroType] = value
-		result[col.Name] = unionMap
+		genericMap[avroType] = value
+		result[col.Name] = genericMap
 	}
-	return goavro.Union("map", result), nil
+
+	genericMap, ok := genericMapPool.Get().(map[string]interface{})
+	if !ok {
+		genericMap = make(map[string]interface{})
+	}
+	genericMap["map"] = result
+
+	return genericMap, nil
 }
 
 func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
