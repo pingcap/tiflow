@@ -24,6 +24,9 @@ import (
 const (
 	// BatchVersion1 represents the version of batch format
 	BatchVersion1 uint64 = 1
+
+	// MemBufShrinkThreshold represents the threshold of shrinking the buffer.
+	MemBufShrinkThreshold = 1024 * 1024
 )
 
 // DDLEventBatchEncoder is an abstraction for DDL event encoder.
