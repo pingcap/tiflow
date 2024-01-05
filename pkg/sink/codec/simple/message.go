@@ -16,6 +16,7 @@ package simple
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"time"
@@ -635,12 +636,10 @@ func encodeValue4Avro(
 		default:
 
 		}
-		// value too large, convert it to string
-		vv := int64(v)
-		if uint64(vv) != v {
+		if v > math.MaxInt64 {
 			return strconv.FormatUint(v, 10), "string", nil
 		}
-		return vv, "long", nil
+		return int64(v), "long", nil
 	case int64:
 		return v, "long", nil
 	case []byte:
