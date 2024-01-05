@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
@@ -59,7 +58,9 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 		defaultValue := entry.GetColumnDefaultValue(col)
 		if defaultValue != nil {
 			// according to TiDB source code, the default value is converted to string if not nil.
-			column["default"] = goavro.Union("string", defaultValue)
+			column["default"] = map[string]interface{}{
+				"string": defaultValue,
+			}
 		}
 
 		columnsSchema = append(columnsSchema, column)
@@ -116,26 +117,27 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 	return result
 }
 
-func newResolvedMessageMap(ts uint64) interface{} {
-	return goavro.Union("com.pingcap.simple.avro.Watermark", map[string]interface{}{
-		"version":  defaultVersion,
-		"type":     string(WatermarkType),
-		"commitTs": int64(ts),
-		"buildTs":  time.Now().UnixMilli(),
-	})
+func newResolvedMessageMap(ts uint64) map[string]interface{} {
+	return map[string]interface{}{
+		"com.pingcap.simple.avro.Watermark": map[string]interface{}{
+			"version":  defaultVersion,
+			"type":     string(WatermarkType),
+			"commitTs": int64(ts),
+			"buildTs":  time.Now().UnixMilli(),
+		},
+	}
 }
 
-func newBootstrapMessageMap(tableInfo *model.TableInfo) interface{} {
-	if tableInfo == nil || tableInfo.TableInfo == nil {
-		return nil
-	}
+func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 	result := map[string]interface{}{
 		"version":     defaultVersion,
 		"type":        string(BootstrapType),
 		"tableSchema": newTableSchemaMap(tableInfo),
 		"buildTs":     time.Now().UnixMilli(),
 	}
-	return goavro.Union("com.pingcap.simple.avro.Bootstrap", result)
+	return map[string]interface{}{
+		"com.pingcap.simple.avro.Bootstrap": result,
+	}
 }
 
 func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
@@ -149,13 +151,19 @@ func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
 
 	if ddl.TableInfo != nil && ddl.TableInfo.TableInfo != nil {
 		tableSchema := newTableSchemaMap(ddl.TableInfo)
-		result["tableSchema"] = goavro.Union("com.pingcap.simple.avro.TableSchema", tableSchema)
+		result["tableSchema"] = map[string]interface{}{
+			"com.pingcap.simple.avro.TableSchema": tableSchema,
+		}
 	}
 	if ddl.PreTableInfo != nil && ddl.PreTableInfo.TableInfo != nil {
 		tableSchema := newTableSchemaMap(ddl.PreTableInfo)
-		result["preTableSchema"] = goavro.Union("com.pingcap.simple.avro.TableSchema", tableSchema)
+		result["preTableSchema"] = map[string]interface{}{
+			"com.pingcap.simple.avro.TableSchema": tableSchema,
+		}
 	}
-	return goavro.Union("com.pingcap.simple.avro.DDL", result)
+	return map[string]interface{}{
+		"com.pingcap.simple.avro.DDL": result,
+	}
 }
 
 var (
@@ -170,7 +178,7 @@ func newDMLMessageMap(
 	event *model.RowChangedEvent, config *common.Config,
 	onlyHandleKey bool,
 	claimCheckFileName string,
-) (interface{}, error) {
+) (map[string]interface{}, error) {
 	m := map[string]interface{}{
 		"version":            defaultVersion,
 		"schema":             event.Table.Schema,
@@ -228,11 +236,13 @@ func newDMLMessageMap(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	return goavro.Union("com.pingcap.simple.avro.DML", m), nil
+	return map[string]interface{}{
+		"com.pingcap.simple.avro.DML": m,
+	}, nil
 }
 
-func recycleMap(m interface{}) {
-	eventMap := m.(map[string]interface{})["com.pingcap.simple.avro.DML"].(map[string]interface{})
+func recycleMap(m map[string]interface{}) {
+	eventMap := m["com.pingcap.simple.avro.DML"].(map[string]interface{})
 
 	checksumMap := eventMap["com.pingcap.simple.avro.Checksum"]
 	if checksumMap != nil {
@@ -264,7 +274,7 @@ func recycleMap(m interface{}) {
 
 func collectColumns(
 	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
-) (interface{}, error) {
+) (map[string]interface{}, error) {
 	result := make(map[string]interface{}, len(columns))
 	for idx, col := range columns {
 		if col == nil {
@@ -286,7 +296,9 @@ func collectColumns(
 		result[col.Name] = genericMap
 	}
 
-	return goavro.Union("map", result), nil
+	return map[string]interface{}{
+		"map": result,
+	}, nil
 }
 
 func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {

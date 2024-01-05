@@ -161,9 +161,6 @@ func (m *avroMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 	} else {
 		msg = newDDLMessageMap(event)
 	}
-	if msg == nil {
-		return nil, nil
-	}
 	value, err := m.codec.BinaryFromNative(nil, msg)
 	if err != nil {
 		return nil, errors.WrapError(errors.ErrEncodeFailed, err)
