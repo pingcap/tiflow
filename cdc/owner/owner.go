@@ -94,7 +94,6 @@ type Owner interface {
 	UpdateChangefeedAndUpstream(ctx context.Context,
 		upstreamInfo *model.UpstreamInfo,
 		changeFeedInfo *model.ChangeFeedInfo,
-		changeFeedID model.ChangeFeedID,
 	) error
 	UpdateChangefeed(ctx context.Context,
 		changeFeedInfo *model.ChangeFeedInfo) error
@@ -405,9 +404,8 @@ func (o *ownerImpl) AsyncStop() {
 func (o *ownerImpl) UpdateChangefeedAndUpstream(ctx context.Context,
 	upstreamInfo *model.UpstreamInfo,
 	changeFeedInfo *model.ChangeFeedInfo,
-	changeFeedID model.ChangeFeedID,
 ) error {
-	return o.etcdClient.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo, changeFeedID)
+	return o.etcdClient.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo)
 }
 
 func (o *ownerImpl) UpdateChangefeed(ctx context.Context,
