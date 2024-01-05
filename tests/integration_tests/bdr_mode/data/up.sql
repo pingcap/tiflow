@@ -1,4 +1,3 @@
-admin set bdr role local_only;
 drop database if exists `bdr_mode`;
 admin set bdr role primary;
 create database `bdr_mode`;
