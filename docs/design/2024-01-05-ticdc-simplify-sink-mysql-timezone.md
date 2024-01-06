@@ -71,9 +71,7 @@ From above description we can tell some potential problems with existing timezon
 
 Currently, there is just one timezone sensitive column type `TIMESTAMP`, both TiDB and MySQL will convert it as UTC values and then store them, and convert back from UTC to the current time zone for retrieval. For other time column types like `DATE` and `DATETIME`, both MySQL and TiDB treat them as other types like int, they are not timezone sensitive types, application layer should handle them correctly.
 
-```
-MySQL converts TIMESTAMP values from the current time zone to UTC for storage, and back from UTC to the current time zone for retrieval. (This does not occur for other types such as DATETIME.) By default, the current time zone for each connection is the server's time. The time zone can be set on a per-connection basis. As long as the time zone setting remains constant, you get back the same value you store. If you store a TIMESTAMP value, and then change the time zone and retrieve the value, the retrieved value is different from the value you stored. This occurs because the same time zone was not used for conversion in both directions. The current time zone is available as the value of the time_zone system variable.
-```
+*MySQL converts TIMESTAMP values from the current time zone to UTC for storage, and back from UTC to the current time zone for retrieval. (This does not occur for other types such as DATETIME.) By default, the current time zone for each connection is the server's time. The time zone can be set on a per-connection basis. As long as the time zone setting remains constant, you get back the same value you store. If you store a TIMESTAMP value, and then change the time zone and retrieve the value, the retrieved value is different from the value you stored. This occurs because the same time zone was not used for conversion in both directions. The current time zone is available as the value of the time_zone system variable.*
 
 ### MySQL binlog cross region replication case
 
