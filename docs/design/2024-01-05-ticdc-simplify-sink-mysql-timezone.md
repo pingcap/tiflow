@@ -45,7 +45,7 @@ else if sink-uri.time_zone is nil (case 3):
     sink.timezone = cdc-server.timezone
 ```
 
-From above description we can tell that some problems with existing timezone handling in CDC:
+From above description we can tell some potential problems with existing timezone handling in CDC:
 - Case 2 has a correctness risk for `TIMESTAMP` column types when the users don't set downstram MySQL as the same timezone with CDC server. But in the case of cross region replication, databases and machines in different regions may have different default timezone setting.
 - Users should carefully treat timezone setting for cdc servers, sink-uri and downstream MySQL/TiDB, this is a maintenance burden for users.
 
