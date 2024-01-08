@@ -151,7 +151,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 
 	if found {
-		if err := common.VerifyChecksum(event.Columns, expectedChecksum); err != nil {
+		if err := common.VerifyChecksum(event.Columns, uint32(expectedChecksum)); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}

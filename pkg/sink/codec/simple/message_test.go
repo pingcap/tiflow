@@ -35,9 +35,9 @@ func TestNewTableSchema(t *testing.T) {
 	);`
 	tableInfo := helper.DDL2Event(sql).TableInfo
 	want := &TableSchema{
-		Database: tableInfo.TableName.Schema,
-		Table:    tableInfo.TableName.Table,
-		Version:  tableInfo.UpdateTS,
+		Schema:  tableInfo.TableName.Schema,
+		Table:   tableInfo.TableName.Table,
+		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
 				ID:   1,
@@ -108,7 +108,8 @@ func TestNewTableSchema(t *testing.T) {
 			},
 		},
 	}
-	got := newTableSchema(tableInfo)
+	got, err := newTableSchema(tableInfo)
+	require.NoError(t, err)
 	require.Equal(t, want, got)
 
 	// case 2: test for primary key is explicitly constraint
@@ -123,9 +124,9 @@ func TestNewTableSchema(t *testing.T) {
 	);`
 	tableInfo = helper.DDL2Event(sql).TableInfo
 	want = &TableSchema{
-		Database: tableInfo.TableName.Schema,
-		Table:    tableInfo.TableName.Table,
-		Version:  tableInfo.UpdateTS,
+		Schema:  tableInfo.TableName.Schema,
+		Table:   tableInfo.TableName.Table,
+		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
 				ID:   1,
@@ -196,7 +197,8 @@ func TestNewTableSchema(t *testing.T) {
 			},
 		},
 	}
-	got = newTableSchema(tableInfo)
+	got, err = newTableSchema(tableInfo)
+	require.NoError(t, err)
 	require.Equal(t, want, got)
 
 	// case 3: test for all data types in TiDB
@@ -241,9 +243,9 @@ func TestNewTableSchema(t *testing.T) {
 		 tgen tinyint AS (t+1))` // 38
 	tableInfo = helper.DDL2Event(sql).TableInfo
 	want = &TableSchema{
-		Database: tableInfo.TableName.Schema,
-		Table:    tableInfo.TableName.Table,
-		Version:  tableInfo.UpdateTS,
+		Schema:  tableInfo.TableName.Schema,
+		Table:   tableInfo.TableName.Table,
+		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
 				ID:   1,
@@ -693,6 +695,7 @@ func TestNewTableSchema(t *testing.T) {
 			},
 		},
 	}
-	got = newTableSchema(tableInfo)
+	got, err = newTableSchema(tableInfo)
+	require.NoError(t, err)
 	require.Equal(t, want, got)
 }

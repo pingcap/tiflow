@@ -248,7 +248,7 @@ dispatcher failed
 
 ["CDC:ErrEncodeFailed"]
 error = '''
-encode failed: %s
+encode failed
 '''
 
 ["CDC:ErrEtcdIgnore"]

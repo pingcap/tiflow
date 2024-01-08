@@ -15,7 +15,6 @@ package simple
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
@@ -33,20 +32,16 @@ type encoder struct {
 
 	config     *common.Config
 	claimCheck *claimcheck.ClaimCheck
+	marshaller marshaller
 }
 
 // AppendRowChangedEvent implement the RowEventEncoder interface
 func (e *encoder) AppendRowChangedEvent(
 	ctx context.Context, _ string, event *model.RowChangedEvent, callback func(),
 ) error {
-	m, err := newDMLMessage(event, e.config, false)
+	value, err := e.marshaller.MarshalRowChangedEvent(event, e.config, false, "")
 	if err != nil {
 		return err
-	}
-
-	value, err := json.Marshal(m)
-	if err != nil {
-		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
 
 	value, err = common.Compress(e.config.ChangefeedID,
@@ -79,20 +74,16 @@ func (e *encoder) AppendRowChangedEvent(
 		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 	}
 
-	m, err = newDMLMessage(event, e.config, true)
-	if err != nil {
-		return err
-	}
-
+	var claimCheckLocation string
 	if e.config.LargeMessageHandle.EnableClaimCheck() {
 		fileName := claimcheck.NewFileName()
-		m.ClaimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
+		claimCheckLocation = e.claimCheck.FileNameWithPrefix(fileName)
 		if err = e.claimCheck.WriteMessage(ctx, result.Key, result.Value, fileName); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
-	value, err = json.Marshal(m)
+	value, err = e.marshaller.MarshalRowChangedEvent(event, e.config, true, claimCheckLocation)
 	if err != nil {
 		return cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
@@ -132,11 +123,11 @@ func (e *encoder) Build() []*common.Message {
 
 // EncodeCheckpointEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
-	m := newResolvedMessage(ts)
-	value, err := json.Marshal(m)
+	value, err := e.marshaller.MarshalCheckpoint(ts)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
+
 	value, err = common.Compress(e.config.ChangefeedID,
 		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
 	if err != nil {
@@ -147,8 +138,7 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 
 // EncodeDDLEvent implement the DDLEventBatchEncoder interface
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
-	m := newDDLMessage(event)
-	value, err := json.Marshal(m)
+	value, err := e.marshaller.MarshalDDLEvent(event)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
 	}
@@ -173,6 +163,7 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 type builder struct {
 	config     *common.Config
 	claimCheck *claimcheck.ClaimCheck
+	marshaller marshaller
 }
 
 // NewBuilder returns a new builder
@@ -188,9 +179,16 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 			return nil, errors.Trace(err)
 		}
 	}
+
+	marshaller, err := newMarshaller(config.EncodingFormat)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &builder{
 		config:     config,
 		claimCheck: claimCheck,
+		marshaller: marshaller,
 	}, nil
 }
 
@@ -200,6 +198,7 @@ func (b *builder) Build() codec.RowEventEncoder {
 		messages:   make([]*common.Message, 0, 1),
 		config:     b.config,
 		claimCheck: b.claimCheck,
+		marshaller: b.marshaller,
 	}
 }
 

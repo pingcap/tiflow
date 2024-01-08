@@ -16,10 +16,10 @@ package simple
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"path/filepath"
 	"time"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/types"
@@ -32,6 +32,8 @@ import (
 
 type decoder struct {
 	config *common.Config
+
+	marshaller marshaller
 
 	upstreamTiDB *sql.DB
 	storage      storage.ExternalStorage
@@ -60,8 +62,15 @@ func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*decode
 			GenWithStack("handle-key-only is enabled, but upstream TiDB is not provided")
 	}
 
+	marshaller, err := newMarshaller(config.EncodingFormat)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &decoder{
-		config:       config,
+		config:     config,
+		marshaller: marshaller,
+
 		storage:      externalStorage,
 		upstreamTiDB: db,
 
@@ -89,11 +98,24 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeUnknown, false, nil
 	}
 
-	var m message
-	if err := json.Unmarshal(d.value, &m); err != nil {
-		return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
+	m := new(message)
+	switch d.config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		if err := d.marshaller.Unmarshal(d.value, m); err != nil {
+			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+	case common.EncodingFormatAvro:
+		var native map[string]interface{}
+		err := d.marshaller.Unmarshal(d.value, &native)
+		if err != nil {
+			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		m, err = newMessageFromAvroNative(native)
+		if err != nil {
+			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
 	}
-	d.msg = &m
+	d.msg = m
 	d.value = nil
 
 	switch d.msg.Type {
@@ -170,13 +192,24 @@ func (d *decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 		return nil, err
 	}
 
-	var m message
-	err = json.Unmarshal(value, &m)
-	if err != nil {
-		return nil, err
+	m := new(message)
+	switch d.config.EncodingFormat {
+	case common.EncodingFormatJSON:
+		if err = d.marshaller.Unmarshal(value, m); err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+	case common.EncodingFormatAvro:
+		var native map[string]interface{}
+		err = d.marshaller.Unmarshal(value, &native)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
+		m, err = newMessageFromAvroNative(native)
+		if err != nil {
+			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
+		}
 	}
-
-	d.msg = &m
+	d.msg = m
 	return d.NextRowChangedEvent()
 }
 
@@ -282,7 +315,10 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 			"not found ddl event message")
 	}
 
-	ddl := newDDLEvent(d.msg)
+	ddl, err := newDDLEvent(d.msg)
+	if err != nil {
+		return nil, err
+	}
 	d.msg = nil
 
 	d.memo.Write(ddl.TableInfo)

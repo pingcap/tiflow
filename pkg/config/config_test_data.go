@@ -280,7 +280,8 @@ const (
         "max-batch-size": 100000,
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
-        "avro-bigint-unsigned-handling-mode": "string"
+        "avro-bigint-unsigned-handling-mode": "string",
+		"encoding-format": "json"
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",
@@ -445,7 +446,8 @@ const (
         "max-batch-size": 100000,
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
-        "avro-bigint-unsigned-handling-mode": "string"
+        "avro-bigint-unsigned-handling-mode": "string",
+        "encoding-format": "json"
       },
       "large-message-handle": {
         "large-message-handle-option": "handle-key-only",

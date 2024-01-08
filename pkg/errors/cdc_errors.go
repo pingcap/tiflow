@@ -113,7 +113,7 @@ var (
 
 	// codec related errors
 	ErrEncodeFailed = errors.Normalize(
-		"encode failed: %s",
+		"encode failed",
 		errors.RFCCodeText("CDC:ErrEncodeFailed"),
 	)
 	ErrDecodeFailed = errors.Normalize(
