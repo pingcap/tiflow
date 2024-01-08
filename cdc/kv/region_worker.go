@@ -203,6 +203,8 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	log.Info("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
 		zap.String("changefeed", w.session.client.changefeed.ID),
+		zap.Int64("tableID", w.session.tableID),
+		zap.String("tableName", w.session.tableName),
 		zap.Uint64("regionID", regionID),
 		zap.Uint64("requestID", state.requestID),
 		zap.Stringer("span", &state.sri.span),
@@ -384,6 +386,8 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 			log.Info("receive admin event",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
 				zap.String("changefeed", w.session.client.changefeed.ID),
+				zap.Int64("tableID", w.session.tableID),
+				zap.String("tableName", w.session.tableName),
 				zap.Stringer("event", event.changeEvent))
 		case *cdcpb.Event_Error:
 			err = w.handleSingleRegionError(
@@ -433,7 +437,9 @@ func (w *regionWorker) eventHandler(ctx context.Context) error {
 		exitFn := func() error {
 			log.Info("region worker closed by error",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
-				zap.String("changefeed", w.session.client.changefeed.ID))
+				zap.String("changefeed", w.session.client.changefeed.ID),
+				zap.Int64("tableID", w.session.tableID),
+				zap.String("tableName", w.session.tableName))
 			return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 		}
 
@@ -630,7 +636,7 @@ func (w *regionWorker) handleEventEntry(
 			return false
 		}
 	}
-	return handleEventEntry(x, w.session.startTs, state, w.metrics, emit)
+	return handleEventEntry(x, w.session.startTs, state, w.metrics, emit, w.session.changefeed, w.session.tableID)
 }
 
 func handleEventEntry(
@@ -639,6 +645,8 @@ func handleEventEntry(
 	state *regionFeedState,
 	metrics *regionWorkerMetrics,
 	emit func(assembled model.RegionFeedEvent) bool,
+	changefeed model.ChangeFeedID,
+	tableID model.TableID,
 ) error {
 	regionID, regionSpan, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
@@ -654,6 +662,14 @@ func handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			metrics.metricPullEventInitializedCounter.Inc()
 			state.setInitialized()
+			log.Info("region is initialized",
+				zap.String("namespace", changefeed.Namespace),
+				zap.String("changefeed", changefeed.ID),
+				zap.Int64("tableID", tableID),
+				zap.Uint64("regionID", regionID),
+				zap.Uint64("requestID", state.requestID),
+				zap.Stringer("span", &state.sri.span))
+
 			for _, cachedEvent := range state.matcher.matchCachedRow(true) {
 				revent, err := assembleRowEvent(regionID, cachedEvent)
 				if err != nil {
