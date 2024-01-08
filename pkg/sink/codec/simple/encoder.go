@@ -85,7 +85,7 @@ func (e *encoder) AppendRowChangedEvent(
 
 	value, err = e.marshaller.MarshalRowChangedEvent(event, e.config, true, claimCheckLocation)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrEncodeFailed, err)
+		return err
 	}
 	value, err = common.Compress(e.config.ChangefeedID,
 		e.config.LargeMessageHandle.LargeMessageHandleCompression, value)
@@ -125,7 +125,7 @@ func (e *encoder) Build() []*common.Message {
 func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	value, err := e.marshaller.MarshalCheckpoint(ts)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+		return nil, err
 	}
 
 	value, err = common.Compress(e.config.ChangefeedID,
@@ -140,7 +140,7 @@ func (e *encoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error) {
 	value, err := e.marshaller.MarshalDDLEvent(event)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrEncodeFailed, err)
+		return nil, err
 	}
 
 	value, err = common.Compress(e.config.ChangefeedID,

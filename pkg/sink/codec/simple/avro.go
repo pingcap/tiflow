@@ -362,13 +362,12 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 	}
 }
 
-func newMessageFromAvroNative(native interface{}) (*message, error) {
+func newMessageFromAvroNative(native interface{}, m *message) error {
 	rawValues, ok := native.(map[string]interface{})
 	if !ok {
-		return nil, cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro message to map")
+		return cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro message to map")
 	}
 
-	m := new(message)
 	rawMessage := rawValues["com.pingcap.simple.avro.Watermark"]
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
@@ -376,7 +375,7 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 		m.Type = WatermarkType
 		m.CommitTs = uint64(rawValues["commitTs"].(int64))
 		m.BuildTs = rawValues["buildTs"].(int64)
-		return m, nil
+		return nil
 	}
 
 	rawMessage = rawValues["com.pingcap.simple.avro.Bootstrap"]
@@ -386,7 +385,7 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 		m.Type = BootstrapType
 		m.BuildTs = rawValues["buildTs"].(int64)
 		m.TableSchema = newTableSchemaFromAvroNative(rawValues["tableSchema"].(map[string]interface{}))
-		return m, nil
+		return nil
 	}
 
 	rawMessage = rawValues["com.pingcap.simple.avro.DDL"]
@@ -411,7 +410,7 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 			rawPreTableSchema = rawPreTableSchema["com.pingcap.simple.avro.TableSchema"].(map[string]interface{})
 			m.PreTableSchema = newTableSchemaFromAvroNative(rawPreTableSchema)
 		}
-		return m, nil
+		return nil
 	}
 
 	rawValues = rawValues["com.pingcap.simple.avro.DML"].(map[string]interface{})
@@ -427,7 +426,7 @@ func newMessageFromAvroNative(native interface{}) (*message, error) {
 	m.Checksum = newChecksum(rawValues)
 	m.Data = newDataMap(rawValues["data"])
 	m.Old = newDataMap(rawValues["old"])
-	return m, nil
+	return nil
 }
 
 func newChecksum(raw map[string]interface{}) *checksum {
