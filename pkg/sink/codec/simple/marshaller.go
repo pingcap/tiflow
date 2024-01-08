@@ -194,5 +194,4 @@ func (m *avroMarshaller) Unmarshal(data []byte, v any) error {
 		return errors.Trace(err)
 	}
 	return nil
-
 }
