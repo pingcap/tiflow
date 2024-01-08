@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -332,12 +333,15 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return nil
 	}
 
-	// If changefeed is in BDRMode, skip ddl.
-	if m.BDRMode {
-		log.Info("changefeed is in BDRMode, skip a ddl event",
+	// In a BDR mode cluster, TiCDC can receive DDLs from all roles of TiDB.
+	// However, CDC only executes the DDLs from the TiDB that has BDRRolePrimary role.
+	if m.BDRMode && m.executingDDL.BDRRole != string(ast.BDRRolePrimary) {
+		log.Info("changefeed is in BDRMode and "+
+			"the DDL is not executed by Primary Cluster, skip it",
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("ID", m.changfeedID.ID),
-			zap.Any("ddlEvent", m.executingDDL))
+			zap.Any("ddlEvent", m.executingDDL),
+			zap.String("bdrRole", m.executingDDL.BDRRole))
 		tableName := m.executingDDL.TableInfo.TableName
 		// Set it to nil first to accelerate GC.
 		m.pendingDDLs[tableName][0] = nil
@@ -373,6 +377,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		tableName := m.executingDDL.TableInfo.TableName
 		log.Info("execute a ddl event successfully",
 			zap.String("ddl", m.executingDDL.Query),
+			zap.String("namespace", m.executingDDL.BDRRole),
 			zap.Uint64("commitTs", m.executingDDL.CommitTs),
 			zap.Stringer("table", tableName),
 		)
@@ -526,12 +531,8 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 
 // getSnapshotTs returns the ts that we should use
 // to get the snapshot of the schema, the rules are:
-// 1. If the changefeed is just started, we use the startTs,
+// If the changefeed is just started, we use the startTs,
 // otherwise we use the checkpointTs.
-// 2. If the changefeed is in BDRMode, we use the ddlManager.ddlResolvedTs.
-// Since TiCDC ignore the DDLs in BDRMode, we don't need to care about whether
-// the DDLs are executed or not. We should use the ddlResolvedTs to get the up-to-date
-// schema.
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
 
@@ -547,10 +548,6 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 			zap.Uint64("ddlResolvedTs", m.ddlResolvedTs),
 		)
 		return
-	}
-
-	if m.BDRMode {
-		ts = m.ddlResolvedTs
 	}
 
 	log.Debug("snapshotTs", zap.Uint64("ts", ts))

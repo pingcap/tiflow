@@ -233,18 +233,20 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 string            `json:"protocol,omitempty"`
-	SchemaRegistry           string            `json:"schema_registry,omitempty"`
-	CSVConfig                *CSVConfig        `json:"csv,omitempty"`
-	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector `json:"column_selectors,omitempty"`
-	TxnAtomicity             string            `json:"transaction_atomicity"`
-	EncoderConcurrency       *int              `json:"encoder_concurrency,omitempty"`
-	Terminator               string            `json:"terminator"`
-	DateSeparator            string            `json:"date_separator,omitempty"`
-	EnablePartitionSeparator *bool             `json:"enable_partition_separator,omitempty"`
-	ContentCompatible        *bool             `json:"content_compatible"`
-	DebeziumDisableSchema    *bool             `json:"debezium_disable_schema,omitempty"`
+	Protocol                   string            `json:"protocol,omitempty"`
+	SchemaRegistry             string            `json:"schema_registry,omitempty"`
+	CSVConfig                  *CSVConfig        `json:"csv,omitempty"`
+	DispatchRules              []*DispatchRule   `json:"dispatchers,omitempty"`
+	ColumnSelectors            []*ColumnSelector `json:"column_selectors,omitempty"`
+	TxnAtomicity               string            `json:"transaction_atomicity"`
+	EncoderConcurrency         *int              `json:"encoder_concurrency,omitempty"`
+	Terminator                 string            `json:"terminator"`
+	DateSeparator              string            `json:"date_separator,omitempty"`
+	EnablePartitionSeparator   *bool             `json:"enable_partition_separator,omitempty"`
+	ContentCompatible          *bool             `json:"content_compatible"`
+	SendBootstrapIntervalInSec *int64            `json:"send_bootstrap_interval_in_sec,omitempty"`
+	SendBootstrapInMsgCount    *int32            `json:"send_bootstrap_in_msg_count,omitempty"`
+	DebeziumDisableSchema      *bool             `json:"debezium_disable_schema,omitempty"`
 }
 
 // CSVConfig denotes the csv config

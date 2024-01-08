@@ -281,8 +281,8 @@ func IsColCDCVisible(col *model.ColumnInfo) bool {
 	return true
 }
 
-// ExistTableUniqueColumn returns whether the table has a unique column
-func (ti *TableInfo) ExistTableUniqueColumn() bool {
+// HasUniqueColumn returns whether the table has a unique column
+func (ti *TableInfo) HasUniqueColumn() bool {
 	return ti.hasUniqueColumn
 }
 
@@ -299,7 +299,7 @@ func (ti *TableInfo) IsEligible(forceReplicate bool) bool {
 	if ti.IsView() {
 		return true
 	}
-	return ti.ExistTableUniqueColumn()
+	return ti.HasUniqueColumn()
 }
 
 // IsIndexUnique returns whether the index is unique

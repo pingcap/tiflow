@@ -35,6 +35,7 @@ var defaultAPIConfig = &ReplicaConfig{
 	CheckGCSafePoint:   true,
 	BDRMode:            util.AddressOf(false),
 	EnableSyncPoint:    util.AddressOf(false),
+	EnableTableMonitor: util.AddressOf(false),
 	SyncPointInterval:  &JSONDuration{10 * time.Minute},
 	SyncPointRetention: &JSONDuration{24 * time.Hour},
 	Filter: &FilterConfig{
@@ -59,6 +60,8 @@ var defaultAPIConfig = &ReplicaConfig{
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
 		ContentCompatible:                util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
 		DebeziumDisableSchema:            util.AddressOf(false),
 	},
 	Consistent: &ConsistentConfig{

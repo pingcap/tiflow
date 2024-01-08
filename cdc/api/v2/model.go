@@ -191,6 +191,7 @@ type ReplicaConfig struct {
 	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
 	EnableSyncPoint       *bool  `json:"enable_sync_point,omitempty"`
+	EnableTableMonitor    *bool  `json:"enable_table_monitor,omitempty"`
 	BDRMode               *bool  `json:"bdr_mode,omitempty"`
 
 	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
@@ -221,6 +222,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.ForceReplicate = c.ForceReplicate
 	res.CheckGCSafePoint = c.CheckGCSafePoint
 	res.EnableSyncPoint = c.EnableSyncPoint
+	res.EnableTableMonitor = c.EnableTableMonitor
 	res.IgnoreIneligibleTable = c.IgnoreIneligibleTable
 	res.SQLMode = c.SQLMode
 	if c.SyncPointInterval != nil {
@@ -491,6 +493,13 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			res.Sink.DebeziumDisableSchema = util.AddressOf(*c.Sink.DebeziumDisableSchema)
 		}
 
+		if c.Sink.SendBootstrapIntervalInSec != nil {
+			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*c.Sink.SendBootstrapIntervalInSec)
+		}
+
+		if c.Sink.SendBootstrapInMsgCount != nil {
+			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*c.Sink.SendBootstrapInMsgCount)
+		}
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -533,6 +542,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		IgnoreIneligibleTable: cloned.IgnoreIneligibleTable,
 		CheckGCSafePoint:      cloned.CheckGCSafePoint,
 		EnableSyncPoint:       cloned.EnableSyncPoint,
+		EnableTableMonitor:    cloned.EnableTableMonitor,
 		BDRMode:               cloned.BDRMode,
 		SQLMode:               cloned.SQLMode,
 	}
@@ -781,6 +791,15 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Sink.AdvanceTimeoutInSec != nil {
 			res.Sink.AdvanceTimeoutInSec = util.AddressOf(*cloned.Sink.AdvanceTimeoutInSec)
 		}
+
+		if cloned.Sink.SendBootstrapIntervalInSec != nil {
+			res.Sink.SendBootstrapIntervalInSec = util.AddressOf(*cloned.Sink.SendBootstrapIntervalInSec)
+		}
+
+		if cloned.Sink.SendBootstrapInMsgCount != nil {
+			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*cloned.Sink.SendBootstrapInMsgCount)
+		}
+
 		if cloned.Sink.DebeziumDisableSchema != nil {
 			res.Sink.DebeziumDisableSchema = util.AddressOf(*cloned.Sink.DebeziumDisableSchema)
 		}
@@ -958,6 +977,8 @@ type SinkConfig struct {
 	MySQLConfig                      *MySQLConfig        `json:"mysql_config,omitempty"`
 	CloudStorageConfig               *CloudStorageConfig `json:"cloud_storage_config,omitempty"`
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
+	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
+	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
 	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
 }
 
