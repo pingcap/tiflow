@@ -539,7 +539,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 }
 
 func TestEncodeLargeEventsNormal(t *testing.T) {
-	ddlEvent, insertEvent, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
+	ddlEvent, insertEvent, updateEvent, deleteEvent := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
@@ -587,38 +587,53 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.Equal(t, expected, obtained)
 			}
 
-			err = enc.AppendRowChangedEvent(context.Background(), "", insertEvent, func() {})
-			require.NoError(t, err)
+			for _, event := range []*model.RowChangedEvent{insertEvent, updateEvent, deleteEvent} {
+				err = enc.AppendRowChangedEvent(ctx, "", event, func() {})
+				require.NoError(t, err)
 
-			messages := enc.Build()
-			require.Len(t, messages, 1)
+				messages := enc.Build()
+				require.Len(t, messages, 1)
 
-			err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-			require.NoError(t, err)
+				err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+				require.NoError(t, err)
 
-			messageType, hasNext, err = dec.HasNext()
-			require.NoError(t, err)
-			require.True(t, hasNext)
-			require.Equal(t, model.MessageTypeRow, messageType)
+				messageType, hasNext, err = dec.HasNext()
+				require.NoError(t, err)
+				require.True(t, hasNext)
+				require.Equal(t, model.MessageTypeRow, messageType)
 
-			decodedRow, err := dec.NextRowChangedEvent()
-			require.NoError(t, err)
+				decodedRow, err := dec.NextRowChangedEvent()
+				require.NoError(t, err)
 
-			require.Equal(t, decodedRow.CommitTs, insertEvent.CommitTs)
-			require.Equal(t, decodedRow.Table.Schema, insertEvent.Table.Schema)
-			require.Equal(t, decodedRow.Table.Table, insertEvent.Table.Table)
+				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
+				require.Equal(t, decodedRow.Table.Schema, event.Table.Schema)
+				require.Equal(t, decodedRow.Table.Table, event.Table.Table)
 
-			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
-			for _, column := range decodedRow.Columns {
-				decodedColumns[column.Name] = column
-			}
-			for _, col := range insertEvent.Columns {
-				decoded, ok := decodedColumns[col.Name]
-				require.True(t, ok)
-				require.Equal(t, col.Type, decoded.Type)
-				require.Equal(t, col.Charset, decoded.Charset)
-				require.Equal(t, col.Collation, decoded.Collation)
-				require.EqualValues(t, col.Value, decoded.Value)
+				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+				for _, column := range decodedRow.Columns {
+					decodedColumns[column.Name] = column
+				}
+				for _, col := range event.Columns {
+					decoded, ok := decodedColumns[col.Name]
+					require.True(t, ok)
+					require.Equal(t, col.Type, decoded.Type)
+					require.Equal(t, col.Charset, decoded.Charset)
+					require.Equal(t, col.Collation, decoded.Collation)
+					require.EqualValues(t, col.Value, decoded.Value)
+				}
+
+				decodedPreviousColumns := make(map[string]*model.Column, len(decodedRow.PreColumns))
+				for _, column := range decodedRow.PreColumns {
+					decodedPreviousColumns[column.Name] = column
+				}
+				for _, col := range event.PreColumns {
+					decoded, ok := decodedPreviousColumns[col.Name]
+					require.True(t, ok)
+					require.Equal(t, col.Type, decoded.Type)
+					require.Equal(t, col.Charset, decoded.Charset)
+					require.Equal(t, col.Collation, decoded.Collation)
+					require.EqualValues(t, col.Value, decoded.Value)
+				}
 			}
 		}
 	}

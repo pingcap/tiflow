@@ -492,9 +492,6 @@ func newResolvedMessage(ts uint64) *message {
 }
 
 func newBootstrapMessage(event *model.DDLEvent) (*message, error) {
-	if event.TableInfo == nil || event.TableInfo.TableInfo == nil {
-		return nil, nil
-	}
 	schema, err := newTableSchema(event.TableInfo)
 	if err != nil {
 		return nil, err

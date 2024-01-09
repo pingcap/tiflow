@@ -99,21 +99,9 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	}
 
 	m := new(message)
-	switch d.config.EncodingFormat {
-	case common.EncodingFormatJSON:
-		if err := d.marshaller.Unmarshal(d.value, m); err != nil {
-			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-	case common.EncodingFormatAvro:
-		var native map[string]interface{}
-		err := d.marshaller.Unmarshal(d.value, &native)
-		if err != nil {
-			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-		m, err = newMessageFromAvroNative(native)
-		if err != nil {
-			return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
+	err := d.marshaller.Unmarshal(d.value, m)
+	if err != nil {
+		return model.MessageTypeUnknown, false, cerror.WrapError(cerror.ErrDecodeFailed, err)
 	}
 	d.msg = m
 	d.value = nil
@@ -193,21 +181,9 @@ func (d *decoder) assembleClaimCheckRowChangedEvent(claimCheckLocation string) (
 	}
 
 	m := new(message)
-	switch d.config.EncodingFormat {
-	case common.EncodingFormatJSON:
-		if err = d.marshaller.Unmarshal(value, m); err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-	case common.EncodingFormatAvro:
-		var native map[string]interface{}
-		err = d.marshaller.Unmarshal(value, &native)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
-		m, err = newMessageFromAvroNative(native)
-		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrDecodeFailed, err)
-		}
+	err = d.marshaller.Unmarshal(value, m)
+	if err != nil {
+		return nil, err
 	}
 	d.msg = m
 	return d.NextRowChangedEvent()

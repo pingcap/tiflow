@@ -87,9 +87,6 @@ func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 	} else {
 		msg, err = newDDLMessage(event)
 	}
-	if msg == nil {
-		return nil, nil
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -192,10 +189,9 @@ func (m *avroMarshaller) Unmarshal(data []byte, v any) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	switch value := native.(type) {
-	case map[string]interface{}:
-		*v.(*map[string]interface{}) = value
-	default:
+	err = newMessageFromAvroNative(native, v.(*message))
+	if err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }
