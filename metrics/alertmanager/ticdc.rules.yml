@@ -123,7 +123,7 @@ groups:
       summary:  ticdc puller entry sorter merge latency is too high
 
   - alert: tikv_cdc_min_resolved_ts_no_change_for_1m
-    expr: changes(tikv_cdc_min_resolved_ts[1m]) < 1 and ON (instance) tikv_cdc_region_resolve_status{status="resolved"} > 0
+    expr: changes(tikv_cdc_min_resolved_ts[1m]) < 1 and ON (instance) tikv_cdc_region_resolve_status{status="resolved"} > 0 and ON (instance) tikv_cdc_captured_region_total > 0
     for: 1m
     labels:
       env: ENV_LABELS_ENV
