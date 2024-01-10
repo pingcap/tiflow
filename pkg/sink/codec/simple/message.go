@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -94,11 +95,18 @@ func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
 		Charset:   col.GetCharset(),
 		Collate:   col.GetCollate(),
 		Length:    col.GetFlen(),
-		Decimal:   col.GetDecimal(),
 		Elements:  col.GetElems(),
 		Unsigned:  mysql.HasUnsignedFlag(col.GetFlag()),
 		Zerofill:  mysql.HasZerofillFlag(col.GetFlag()),
 	}
+
+	switch col.GetType() {
+	// Float and Double decimal is always -1, do not encode it into the schema.
+	case mysql.TypeFloat, mysql.TypeDouble:
+	default:
+		tp.Decimal = col.GetDecimal()
+	}
+
 	defaultValue := entry.GetColumnDefaultValue(col)
 	if defaultValue != nil && col.GetType() == mysql.TypeBit {
 		var err error
@@ -615,24 +623,34 @@ func encodeValue4Avro(
 		return nil, "null", nil
 	}
 
+	switch ft.GetType() {
+	case mysql.TypeEnum:
+		v, ok := value.(uint64)
+		if !ok {
+			return nil, "", cerror.ErrEncodeFailed.
+				GenWithStack("unexpected type for the enum value: %+v, tp: %+v", value, reflect.TypeOf(value))
+		}
+
+		enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
+		if err != nil {
+			return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+		value = enumVar.Name
+	case mysql.TypeSet:
+		v, ok := value.(uint64)
+		if !ok {
+			return nil, "", cerror.ErrEncodeFailed.
+				GenWithStack("unexpected type for the set value: %+v, tp: %+v", value, reflect.TypeOf(value))
+		}
+		setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
+		if err != nil {
+			return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
+		}
+		value = setValue.Name
+	}
+
 	switch v := value.(type) {
 	case uint64:
-		switch ft.GetType() {
-		case mysql.TypeEnum:
-			enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
-			if err != nil {
-				return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-			}
-			return enumVar.Name, "string", nil
-		case mysql.TypeSet:
-			setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
-			if err != nil {
-				return nil, "", cerror.WrapError(cerror.ErrEncodeFailed, err)
-			}
-			return setValue.Name, "string", nil
-		default:
-
-		}
 		if v > math.MaxInt64 {
 			return strconv.FormatUint(v, 10), "string", nil
 		}

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
@@ -580,6 +581,11 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 			obtainedDefaultValues := make(map[string]interface{}, len(obtainedDDL.TableInfo.Columns))
 			for _, col := range obtainedDDL.TableInfo.Columns {
 				obtainedDefaultValues[col.Name.O] = entry.GetColumnDefaultValue(col)
+				switch col.GetType() {
+				case mysql.TypeFloat, mysql.TypeDouble:
+					require.Equal(t, 0, col.GetDecimal())
+				default:
+				}
 			}
 			for _, col := range ddlEvent.TableInfo.Columns {
 				expected := entry.GetColumnDefaultValue(col)
