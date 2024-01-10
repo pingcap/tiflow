@@ -549,8 +549,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		}
 	}
 
-	schemaName := tableInfo.TableName.Schema
-	tableName := tableInfo.TableName.Table
 	var intRowID int64
 	if row.RecordID.IsInt() {
 		intRowID = row.RecordID.IntValue()
@@ -571,23 +569,16 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 	}
 
 	return &model.RowChangedEvent{
-		StartTs:  row.StartTs,
-		CommitTs: row.CRTs,
-		RowID:    intRowID,
-		Table: &model.TableName{
-			Schema:      schemaName,
-			Table:       tableName,
-			TableID:     row.PhysicalTableID,
-			IsPartition: tableInfo.GetPartitionInfo() != nil,
-		},
-		ColInfos:   extendColumnInfos,
-		TableInfo:  tableInfo,
-		Columns:    cols,
-		PreColumns: preCols,
+		StartTs:         row.StartTs,
+		CommitTs:        row.CRTs,
+		RowID:           intRowID,
+		TableInfo:       tableInfo,
+		Columns:         cols,
+		PreColumns:      preCols,
+		PhysicalTableID: row.PhysicalTableID,
 
 		Checksum: checksum,
 
-		IndexColumns:        tableInfo.IndexColumnsOffset,
 		ApproximateDataSize: dataSize,
 	}, rawRow, nil
 }

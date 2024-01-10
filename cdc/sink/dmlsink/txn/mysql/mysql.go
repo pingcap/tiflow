@@ -314,7 +314,12 @@ func convert2RowChanges(
 	switch changeType {
 	case sqlmodel.RowChangeInsert:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&model.TableName{
+				Schema:      *row.TableInfo.GetSchemaName(),
+				Table:       *row.TableInfo.GetTableName(),
+				TableID:     row.PhysicalTableID,
+				IsPartition: row.TableInfo.IsPartitionTable(),
+			},
 			nil,
 			nil,
 			postValues,
@@ -322,7 +327,12 @@ func convert2RowChanges(
 			nil, nil)
 	case sqlmodel.RowChangeUpdate:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&model.TableName{
+				Schema:      *row.TableInfo.GetSchemaName(),
+				Table:       *row.TableInfo.GetTableName(),
+				TableID:     row.PhysicalTableID,
+				IsPartition: row.TableInfo.IsPartitionTable(),
+			},
 			nil,
 			preValues,
 			postValues,
@@ -330,7 +340,12 @@ func convert2RowChanges(
 			nil, nil)
 	case sqlmodel.RowChangeDelete:
 		res = sqlmodel.NewRowChange(
-			row.Table,
+			&model.TableName{
+				Schema:      *row.TableInfo.GetSchemaName(),
+				Table:       *row.TableInfo.GetTableName(),
+				TableID:     row.PhysicalTableID,
+				IsPartition: row.TableInfo.IsPartitionTable(),
+			},
 			nil,
 			preValues,
 			nil,
@@ -586,7 +601,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			}
 		}
 
-		quoteTable := firstRow.Table.QuoteString()
+		// FIXME: check
+		quoteTable := firstRow.TableInfo.TableName.QuoteString()
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}

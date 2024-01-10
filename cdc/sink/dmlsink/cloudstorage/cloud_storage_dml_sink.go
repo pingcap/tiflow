@@ -248,8 +248,13 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 		}
 
 		tbl := cloudstorage.VersionedTableName{
-			TableNameWithPhysicTableID: *txn.Event.Table,
-			TableInfoVersion:           txn.Event.TableInfoVersion,
+			TableNameWithPhysicTableID: model.TableName{
+				Schema:      txn.Event.GetSchemaName(),
+				Table:       txn.Event.GetTableName(),
+				TableID:     txn.Event.GetPhysicalTableID(),
+				IsPartition: txn.Event.TableInfo.IsPartitionTable(),
+			},
+			TableInfoVersion: txn.Event.TableInfoVersion,
 		}
 		seq := atomic.AddUint64(&s.lastSeqNum, 1)
 

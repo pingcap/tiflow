@@ -460,16 +460,16 @@ func (b *RowChangedEventBuffer) Encode() []byte {
 // AppendRowChangedEvent append a new event to buffer
 func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent, onlyHandleKeyColumns bool) (rows, size int) {
 	var partition int64 = -1
-	if ev.Table.IsPartition {
-		partition = ev.Table.TableID
+	if ev.TableInfo.IsPartitionTable() {
+		partition = ev.PhysicalTableID
 	}
 
 	var schema, table *string
-	if len(ev.Table.Schema) > 0 {
-		schema = &ev.Table.Schema
+	if len(*ev.TableInfo.GetSchemaName()) > 0 {
+		schema = ev.TableInfo.GetSchemaName()
 	}
-	if len(ev.Table.Table) > 0 {
-		table = &ev.Table.Table
+	if len(*ev.TableInfo.GetTableName()) > 0 {
+		table = ev.TableInfo.GetTableName()
 	}
 
 	b.estimatedSize += b.headers.appendHeader(

@@ -28,7 +28,11 @@ var (
 	// CodecRowCases defines test cases for RowChangedEvent.
 	CodecRowCases = [][]*model.RowChangedEvent{{{
 		CommitTs: 424316552636792833,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
+		},
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -51,7 +55,11 @@ var (
 		},
 	}}, {{
 		CommitTs: 424316553934667777,
-		Table:    &model.TableName{Schema: "a", Table: "c"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
+		},
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -74,7 +82,11 @@ var (
 		},
 	}, {
 		CommitTs: 424316554327097345,
-		Table:    &model.TableName{Schema: "a", Table: "d"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
+		},
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -97,7 +109,11 @@ var (
 		},
 	}, {
 		CommitTs: 424316554746789889,
-		Table:    &model.TableName{Schema: "a", Table: "e"},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
+		},
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -120,7 +136,11 @@ var (
 		},
 	}, {
 		CommitTs: 424316555073945601,
-		Table:    &model.TableName{Schema: "a", Table: "f", TableID: 6, IsPartition: true},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a", Table: "b",
+			},
+		},
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},

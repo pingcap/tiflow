@@ -205,7 +205,7 @@ func (f *sqlEventFilter) shouldSkipDML(event *model.RowChangedEvent) (bool, erro
 		log.Warn("unknown row changed event type")
 		return false, nil
 	}
-	rules := f.getRules(event.Table.Schema, event.Table.Table)
+	rules := f.getRules(*event.TableInfo.GetSchemaName(), *event.TableInfo.GetTableName())
 	for _, rule := range rules {
 		action, err := rule.bf.Filter(binlogFilterSchemaPlaceholder, binlogFilterTablePlaceholder, et, dmlQuery)
 		if err != nil {

@@ -538,8 +538,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
 				// snapshot field is a string of true,last,false,incremental
 				jWriter.WriteStringField("snapshot", "false")
-				jWriter.WriteStringField("db", e.Table.Schema)
-				jWriter.WriteStringField("table", e.Table.Table)
+				jWriter.WriteStringField("db", *e.TableInfo.GetSchemaName())
+				jWriter.WriteStringField("table", *e.TableInfo.GetTableName())
 				jWriter.WriteInt64Field("server_id", 0)
 				jWriter.WriteNullField("gtid")
 				jWriter.WriteStringField("file", "")

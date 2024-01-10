@@ -315,6 +315,22 @@ func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
 	return colID
 }
 
+func (ti *TableInfo) GetSchemaName() *string {
+	return &ti.TableName.Schema
+}
+
+func (ti *TableInfo) GetTableName() *string {
+	return &ti.TableName.Table
+}
+
+func (ti *TableInfo) GetSchemaAndTableString() string {
+	return fmt.Sprintf("%s.%s", *ti.GetSchemaName(), *ti.GetTableName())
+}
+
+func (ti *TableInfo) IsPartitionTable() bool {
+	return ti.GetPartitionInfo() != nil
+}
+
 func (ti *TableInfo) String() string {
 	return fmt.Sprintf("TableInfo, ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t", ti.ID, ti.TableName, len(ti.Columns), len(ti.Indices), ti.PKIsHandle)
 }

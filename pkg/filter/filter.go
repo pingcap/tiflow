@@ -132,7 +132,7 @@ func (f *filter) ShouldIgnoreDMLEvent(
 		return true, nil
 	}
 
-	if f.ShouldIgnoreTable(dml.Table.Schema, dml.Table.Table) {
+	if f.ShouldIgnoreTable(*dml.TableInfo.GetSchemaName(), *dml.TableInfo.GetTableName()) {
 		return true, nil
 	}
 

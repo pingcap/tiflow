@@ -157,10 +157,10 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = msg.getCommitTs()
-	result.Table = &model.TableName{
-		Schema: *msg.getSchema(),
-		Table:  *msg.getTable(),
-	}
+	// result.Table = &model.TableName{
+	// 	Schema: *msg.getSchema(),
+	// 	Table:  *msg.getTable(),
+	// }
 
 	mysqlType := msg.getMySQLType()
 	var err error

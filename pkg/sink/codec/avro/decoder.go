@@ -229,9 +229,9 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 	}
 
 	// "namespace.schema"
-	namespace := schema["namespace"].(string)
-	schemaName := strings.Split(namespace, ".")[1]
-	tableName := schema["name"].(string)
+	// namespace := schema["namespace"].(string)
+	// schemaName := strings.Split(namespace, ".")[1]
+	// tableName := schema["name"].(string)
 
 	var commitTs int64
 	if !isDelete {
@@ -244,10 +244,10 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 
 	event := new(model.RowChangedEvent)
 	event.CommitTs = uint64(commitTs)
-	event.Table = &model.TableName{
-		Schema: schemaName,
-		Table:  tableName,
-	}
+	// event.Table = &model.TableName{
+	// 	Schema: schemaName,
+	// 	Table:  tableName,
+	// }
 
 	if isDelete {
 		event.PreColumns = columns

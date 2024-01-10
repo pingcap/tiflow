@@ -45,20 +45,20 @@ func (m *maxwellMessage) encode() ([]byte, error) {
 
 func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*internal.MessageKey, *maxwellMessage) {
 	var partition *int64
-	if e.Table.IsPartition {
-		partition = &e.Table.TableID
+	if e.TableInfo.IsPartitionTable() {
+		partition = &e.PhysicalTableID
 	}
 	key := &internal.MessageKey{
 		Ts:        e.CommitTs,
-		Schema:    e.Table.Schema,
-		Table:     e.Table.Table,
+		Schema:    *e.TableInfo.GetSchemaName(),
+		Table:     *e.TableInfo.GetTableName(),
 		Partition: partition,
 		Type:      model.MessageTypeRow,
 	}
 	value := &maxwellMessage{
 		Ts:       0,
-		Database: e.Table.Schema,
-		Table:    e.Table.Table,
+		Database: *e.TableInfo.GetSchemaName(),
+		Table:    *e.TableInfo.GetTableName(),
 		Data:     make(map[string]interface{}),
 		Old:      make(map[string]interface{}),
 	}

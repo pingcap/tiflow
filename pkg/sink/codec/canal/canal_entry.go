@@ -190,7 +190,7 @@ func (b *canalEntryBuilder) buildRowData(e *model.RowChangedEvent, onlyHandleKey
 // fromRowEvent builds canal entry from cdc RowChangedEvent
 func (b *canalEntryBuilder) fromRowEvent(e *model.RowChangedEvent, onlyHandleKeyColumns bool) (*canal.Entry, error) {
 	eventType := convertRowEventType(e)
-	header := b.buildHeader(e.CommitTs, e.Table.Schema, e.Table.Table, eventType, 1)
+	header := b.buildHeader(e.CommitTs, *e.TableInfo.GetSchemaName(), *e.TableInfo.GetTableName(), eventType, 1)
 	isDdl := isCanalDDL(eventType) // false
 	rowData, err := b.buildRowData(e, onlyHandleKeyColumns)
 	if err != nil {

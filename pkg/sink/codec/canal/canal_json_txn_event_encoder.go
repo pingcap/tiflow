@@ -60,7 +60,7 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 			log.Warn("Single message is too large for canal-json",
 				zap.Int("maxMessageBytes", j.config.MaxMessageBytes),
 				zap.Int("length", length),
-				zap.Any("table", row.Table))
+				zap.Any("table", row.TableInfo.TableName))
 			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 		}
 		j.valueBuf.Write(value)
@@ -69,8 +69,8 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 	}
 	j.callback = callback
 	j.txnCommitTs = txn.CommitTs
-	j.txnSchema = &txn.Table.Schema
-	j.txnTable = &txn.Table.Table
+	j.txnSchema = txn.TableInfo.GetSchemaName()
+	j.txnTable = txn.TableInfo.GetTableName()
 	return nil
 }
 

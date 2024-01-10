@@ -254,8 +254,8 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 	ctx context.Context, handleKeyOnlyEvent *model.RowChangedEvent,
 ) (*model.RowChangedEvent, error) {
 	var (
-		schema   = handleKeyOnlyEvent.Table.Schema
-		table    = handleKeyOnlyEvent.Table.Table
+		schema   = *handleKeyOnlyEvent.TableInfo.GetSchemaName()
+		table    = *handleKeyOnlyEvent.TableInfo.GetTableName()
 		commitTs = handleKeyOnlyEvent.CommitTs
 	)
 
