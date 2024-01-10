@@ -35,12 +35,12 @@ func TestInsert(t *testing.T) {
 	require.Equal(t, target, heap.GetMinKey())
 }
 
-func TestUpdateTs(t *testing.T) {
+func TestRandomUpdateTs(t *testing.T) {
 	t.Parallel()
 	seed := time.Now().Unix()
 	rand.Seed(seed)
 	var heap fibonacciHeap
-	nodes := make([]*fibonacciHeapNode, 2000)
+	nodes := make([]*fibonacciHeapNode, 20000)
 	expectedMin := uint64(math.MaxUint64)
 	for i := range nodes {
 		key := 10000 + uint64(rand.Intn(len(nodes)/2))
@@ -51,15 +51,25 @@ func TestUpdateTs(t *testing.T) {
 	}
 
 	var key uint64
-	for i := range nodes {
+	lastOp := "Init"
+	for i := 0; i < 100000; i++ {
 		min := heap.GetMinKey()
-		require.Equal(t, expectedMin, min, "seed:%d", seed)
+		require.Equal(t, expectedMin, min,
+			"seed:%d, lastOperation: %s, expected: %d, actual: %d",
+			seed, lastOp, expectedMin, min)
+		idx := rand.Intn(len(nodes))
+		delta := rand.Uint64() % 10000
 		if rand.Intn(2) == 0 {
-			key = nodes[i].key + uint64(10000)
-			heap.UpdateKey(nodes[i], key)
+			key = nodes[idx].key + delta
+			heap.UpdateKey(nodes[idx], key)
+			lastOp = "Increase"
 		} else {
-			key = nodes[i].key - uint64(10000)
-			heap.UpdateKey(nodes[i], key)
+			if delta > nodes[idx].key {
+				delta = nodes[idx].key
+			}
+			key = nodes[idx].key - delta
+			heap.UpdateKey(nodes[idx], key)
+			lastOp = "Decrease"
 		}
 		if expectedMin > key {
 			expectedMin = key
@@ -72,10 +82,12 @@ func TestRemoveNode(t *testing.T) {
 	seed := time.Now().Unix()
 	rand.Seed(seed)
 	var heap fibonacciHeap
-	nodes := make([]*fibonacciHeapNode, 2000)
+	nodes := make([]*fibonacciHeapNode, 200000)
+	nodesMap := make(map[*fibonacciHeapNode]struct{})
 	expectedMin := uint64(math.MaxUint64)
 	for i := range nodes {
 		nodes[i] = heap.Insert(10000 + uint64(rand.Intn(len(nodes)/2)))
+		nodesMap[nodes[i]] = struct{}{}
 		if nodes[i].key < expectedMin {
 			expectedMin = nodes[i].key
 		}
@@ -86,10 +98,7 @@ func TestRemoveNode(t *testing.T) {
 		min := heap.GetMinKey()
 		if preKey == expectedMin {
 			expectedMin = uint64(math.MaxUint64)
-			for _, n := range nodes {
-				if isRemoved(n) {
-					continue
-				}
+			for n := range nodesMap {
 				if expectedMin > n.key {
 					expectedMin = n.key
 				}
@@ -98,6 +107,7 @@ func TestRemoveNode(t *testing.T) {
 		require.Equal(t, expectedMin, min, "seed:%d", seed)
 		preKey = nodes[i].key
 		heap.Remove(nodes[i])
+		delete(nodesMap, nodes[i])
 	}
 	for _, n := range nodes {
 		if !isRemoved(n) {

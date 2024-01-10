@@ -156,3 +156,42 @@ func TestSeek(t *testing.T) {
 	require.Equal(t, "[b5] [e5] [f5] [g5] [h5] ", list.String())
 	checkList(t, list)
 }
+
+func TestListPanic(t *testing.T) {
+	t.Parallel()
+	list := newSpanList()
+	insertIntoList(list, []byte("c"), []byte("d"), []byte("a"), []byte("b"))
+
+	// test ascending iteration
+	cnt := 0
+	list.Entries(func(n *skipListNode) bool {
+		if bytes.Compare(n.Key(), []byte("c")) >= 0 {
+			return false
+		}
+		cnt++
+		return true
+	})
+	require.Equal(t, 2, cnt)
+
+	require.PanicsWithValue(t, "the Remove function can only remove node right next to the seek result.",
+		func() {
+			list.Remove(nil, &skipListNode{})
+		},
+	)
+	seekRes := list.Seek([]byte("b"), make(seekResult, maxHeight))
+	require.PanicsWithValue(t, "the Remove function can only remove node right next to the seek result.",
+		func() {
+			list.Remove(seekRes, nil)
+		},
+	)
+	require.PanicsWithValue(t, "the InsertNextToNode function can only append node to the seek result.",
+		func() {
+			list.InsertNextToNode(seekRes, nil, nil, 0)
+		},
+	)
+	require.PanicsWithValue(t, "the InsertNextToNode function can only append node to the seek result.",
+		func() {
+			list.InsertNextToNode(seekRes, []byte{'f'}, nil, 0)
+		},
+	)
+}

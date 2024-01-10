@@ -51,6 +51,10 @@ func (h *fibonacciHeap) Insert(key uint64) *fibonacciHeapNode {
 }
 
 // Remove removes a node from the heap
+//
+// There are two steps to remove a node from the heap:
+// 1. Add the node's children to the root list.
+// 2. Remove the node from the heap.
 func (h *fibonacciHeap) Remove(x *fibonacciHeapNode) {
 	if x == h.min {
 		h.dirty = true
@@ -161,28 +165,29 @@ const consolidateTableSize = 47
 
 func (h *fibonacciHeap) consolidate() {
 	var table [consolidateTableSize]*fibonacciHeapNode
-	x := h.root
+	nextNode := h.root
 	maxOrder := 0
 	h.min = h.root
 
 	for {
-		y := x
-		x = x.right
-		z := table[y.rank]
-		for z != nil {
-			table[y.rank] = nil
-			if y.key > z.key {
-				y, z = z, y
+		currentNode := nextNode
+		nextNode = nextNode.right
+
+		x := table[currentNode.rank]
+		for x != nil {
+			table[currentNode.rank] = nil
+			if currentNode.key > x.key {
+				currentNode, x = x, currentNode
 			}
-			h.addChildren(y, z)
-			z = table[y.rank]
+			h.addChildren(currentNode, x)
+			x = table[currentNode.rank]
 		}
-		table[y.rank] = y
-		if y.rank > maxOrder {
-			maxOrder = y.rank
+		table[currentNode.rank] = currentNode
+		if currentNode.rank > maxOrder {
+			maxOrder = currentNode.rank
 		}
 
-		if x == h.root {
+		if nextNode == h.root {
 			break
 		}
 	}
