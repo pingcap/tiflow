@@ -149,8 +149,8 @@ func NewMonotonicClock(pClock pclock.Clock) Clock {
 	}
 }
 
-func (m *monotonicClock) CurrentTime() time.Time {
-	return m.clock.Now()
+func (c *monotonicClock) CurrentTime() time.Time {
+	return c.clock.Now()
 }
 
 func (c *monotonicClock) Run(ctx context.Context) {
