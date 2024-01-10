@@ -152,7 +152,7 @@ func (m *avroMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
 
 // MarshalDDLEvent implement the marshaller interface
 func (m *avroMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) {
-	var msg interface{}
+	var msg map[string]interface{}
 	if event.IsBootstrap {
 		msg = newBootstrapMessageMap(event.TableInfo)
 	} else {

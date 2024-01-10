@@ -41,11 +41,18 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 			"charset":   col.GetCharset(),
 			"collate":   col.GetCollate(),
 			"length":    col.GetFlen(),
-			"decimal":   col.GetDecimal(),
 			"elements":  col.GetElems(),
 			"unsigned":  mysql.HasUnsignedFlag(col.GetFlag()),
 			"zerofill":  mysql.HasZerofillFlag(col.GetFlag()),
 		}
+
+		switch col.GetType() {
+		// Float and Double decimal is always -1, do not encode it into the schema.
+		case mysql.TypeFloat, mysql.TypeDouble:
+		default:
+			mysqlType["decimal"] = col.GetDecimal()
+		}
+
 		column := map[string]interface{}{
 			"name":     col.Name.O,
 			"dataType": mysqlType,
@@ -137,7 +144,7 @@ func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 	}
 }
 
-func newDDLMessageMap(ddl *model.DDLEvent) interface{} {
+func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 	result := map[string]interface{}{
 		"version":  defaultVersion,
 		"type":     string(DDLType),
