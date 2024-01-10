@@ -79,6 +79,8 @@ func TestTableDispatcher(t *testing.T) {
 	}
 	p := NewTableDispatcher()
 	for _, tc := range testCases {
-		require.Equal(t, tc.expectPartition, p.DispatchRowChangedEvent(tc.row, 16))
+		index, _, err := p.DispatchRowChangedEvent(tc.row, 16)
+		require.NoError(t, err)
+		require.Equal(t, tc.expectPartition, index)
 	}
 }

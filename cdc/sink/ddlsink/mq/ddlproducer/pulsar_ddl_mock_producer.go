@@ -17,11 +17,9 @@ import (
 	"context"
 
 	"github.com/apache/pulsar-client-go/pulsar"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
-	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
 )
 
 // Assert DDLEventSink implementation
@@ -36,9 +34,6 @@ type PulsarMockProducers struct {
 func (p *PulsarMockProducers) SyncBroadcastMessage(ctx context.Context, topic string,
 	totalPartitionsNum int32, message *common.Message,
 ) error {
-	// call SyncSendMessage
-
-	log.Info("pulsarProducers SyncBroadcastMessage in")
 	return p.SyncSendMessage(ctx, topic, totalPartitionsNum, message)
 }
 
@@ -60,7 +55,7 @@ func (p *PulsarMockProducers) SyncSendMessage(ctx context.Context, topic string,
 func NewMockPulsarProducer(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
-	pConfig *pulsarConfig.Config,
+	pConfig *config.PulsarConfig,
 	client pulsar.Client,
 ) (*PulsarMockProducers, error) {
 	return &PulsarMockProducers{
@@ -72,7 +67,7 @@ func NewMockPulsarProducer(
 func NewMockPulsarProducerDDL(
 	ctx context.Context,
 	changefeedID model.ChangeFeedID,
-	pConfig *pulsarConfig.Config,
+	pConfig *config.PulsarConfig,
 	client pulsar.Client,
 	sinkConfig *config.SinkConfig,
 ) (DDLProducer, error) {

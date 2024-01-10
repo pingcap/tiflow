@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/planner/core"
+	"github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -318,13 +318,11 @@ func TestShouldSkipDMLBasic(t *testing.T) {
 		},
 	}
 
-	sessCtx := utils.NewSessionCtx(map[string]string{
-		"time_zone": "System",
-	})
+	sessCtx := utils.ZeroSessionCtx
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg)
+		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
@@ -436,12 +434,12 @@ func TestShouldSkipDMLError(t *testing.T) {
 	}
 
 	sessCtx := utils.NewSessionCtx(map[string]string{
-		"time_zone": "System",
+		"time_zone": "UTC",
 	})
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg)
+		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			rowDatums, err := utils.AdjustBinaryProtocolForDatum(sessCtx, c.row, tableInfo.Columns)
@@ -629,12 +627,12 @@ func TestShouldSkipDMLTableUpdated(t *testing.T) {
 	}
 
 	sessCtx := utils.NewSessionCtx(map[string]string{
-		"time_zone": "System",
+		"time_zone": "UTC",
 	})
 
 	for _, tc := range testCases {
 		tableInfo := helper.execDDL(tc.ddl)
-		f, err := newExprFilter("", tc.cfg)
+		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
 		require.Nil(t, err)
 		for _, c := range tc.cases {
 			if c.updateDDl != "" {
@@ -754,7 +752,7 @@ func TestVerify(t *testing.T) {
 			ti := helper.execDDL(ddl)
 			tableInfos = append(tableInfos, ti)
 		}
-		f, err := newExprFilter("", tc.cfg)
+		f, err := newExprFilter("", tc.cfg, config.GetDefaultReplicaConfig().SQLMode)
 		require.Nil(t, err)
 		err = f.verify(tableInfos)
 		require.True(t, errors.ErrorEqual(tc.err, err), "case: %+v", tc, err)

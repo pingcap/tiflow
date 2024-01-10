@@ -15,7 +15,9 @@ package v2
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -23,16 +25,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/retry"
-	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
+	pd "github.com/tikv/pd/client"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
@@ -44,6 +48,8 @@ const (
 	apiOpVarChangefeedID = "changefeed_id"
 	// apiOpVarNamespace is the key of changefeed namespace in HTTP API
 	apiOpVarNamespace = "namespace"
+	// timeout for pd client
+	timeout = 30 * time.Second
 )
 
 // createChangefeed handles create changefeed request,
@@ -135,12 +141,6 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		CAPath:        cfg.CAPath,
 		CertAllowedCN: cfg.CertAllowedCN,
 	}
-	infoStr, err := info.Marshal()
-	if err != nil {
-		needRemoveGCSafePoint = true
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
 
 	// cannot create changefeed if there are running lightning/restore tasks
 	tlsCfg, err := credential.ToTLSConfig()
@@ -164,10 +164,9 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
+	err = ctrl.CreateChangefeed(ctx,
 		upstreamInfo,
-		info,
-		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID})
+		info)
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(err)
@@ -176,7 +175,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 
 	log.Info("Create changefeed successfully!",
 		zap.String("id", info.ID),
-		zap.String("changefeed", infoStr))
+		zap.String("changefeed", info.String()))
 	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
 		nil, true))
@@ -345,9 +344,20 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	uri, err := url.Parse(cfg.SinkURI)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	scheme := uri.Scheme
+	topic := strings.TrimFunc(uri.Path, func(r rune) bool {
+		return r == '/'
+	})
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
+	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
+
 	ineligibleTables, eligibleTables, err := h.helpers.
-		getVerfiedTables(replicaCfg, kvStore, cfg.StartTs)
+		getVerifiedTables(replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -399,6 +409,12 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 
+	owner, err := h.capture.GetOwner()
+	if err != nil {
+		_ = c.Error(errors.Trace(err))
+		return
+	}
+
 	oldCfInfo, err := h.capture.StatusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
@@ -424,7 +440,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 
 	oldCfInfo.Namespace = changefeedID.Namespace
 	oldCfInfo.ID = changefeedID.ID
-	OldUpInfo, err := h.capture.GetEtcdClient().GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
+	OldUpInfo, err := h.capture.GetUpstreamInfo(ctx, oldCfInfo.UpstreamID,
 		oldCfInfo.Namespace)
 	if err != nil {
 		_ = c.Error(err)
@@ -446,26 +462,31 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", oldCfInfo.String()),
 		zap.Any("upstreamInfo", OldUpInfo))
 
-	var pdAddrs []string
-	var credentials *security.Credential
-	if OldUpInfo != nil {
-		pdAddrs = strings.Split(OldUpInfo.PDEndpoints, ",")
-		credentials = &security.Credential{
-			CAPath:        OldUpInfo.CAPath,
-			CertPath:      OldUpInfo.CertPath,
-			KeyPath:       OldUpInfo.KeyPath,
-			CertAllowedCN: OldUpInfo.CertAllowedCN,
-		}
-	}
-	if len(updateCfConfig.PDAddrs) != 0 {
-		pdAddrs = updateCfConfig.PDAddrs
-		credentials = updateCfConfig.PDConfig.toCredential()
+	upManager, err := h.capture.GetUpstreamManager()
+	if err != nil {
+		_ = c.Error(err)
+		return
 	}
 
-	storage, err := h.helpers.createTiStore(pdAddrs, credentials)
-	if err != nil {
-		_ = c.Error(errors.Trace(err))
+	var storage tidbkv.Storage
+	// if PDAddrs is not empty, use it to create a new kvstore
+	// Note: upManager is nil in some unit test cases
+	if len(updateCfConfig.PDAddrs) != 0 || upManager == nil {
+		pdAddrs := updateCfConfig.PDAddrs
+		credentials := updateCfConfig.PDConfig.toCredential()
+		storage, err = h.helpers.createTiStore(pdAddrs, credentials)
+		if err != nil {
+			_ = c.Error(errors.Trace(err))
+		}
+	} else { // get the upstream of the changefeed to get the kvstore
+		up, ok := upManager.Get(oldCfInfo.UpstreamID)
+		if !ok {
+			_ = c.Error(errors.New(fmt.Sprintf("upstream %d not found", oldCfInfo.UpstreamID)))
+			return
+		}
+		storage = up.KVStorage
 	}
+
 	newCfInfo, newUpInfo, err := h.helpers.verifyUpdateChangefeedConfig(ctx,
 		updateCfConfig, oldCfInfo, OldUpInfo, storage, cfStatus.CheckpointTs)
 	if err != nil {
@@ -477,7 +498,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.String("changefeedInfo", newCfInfo.String()),
 		zap.Any("upstreamInfo", newUpInfo))
 
-	err = h.capture.GetEtcdClient().
+	err = owner.
 		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
@@ -719,24 +740,26 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		return
 	}
 
+	var pdClient pd.Client
+	// if PDAddrs is empty, use the default pdClient
 	if len(cfg.PDAddrs) == 0 {
 		up, err := getCaptureDefaultUpstream(h.capture)
 		if err != nil {
 			_ = c.Error(err)
 			return
 		}
-		cfg.PDConfig = getUpstreamPDConfig(up)
+		pdClient = up.PDClient
+	} else {
+		credential := cfg.PDConfig.toCredential()
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		pdClient, err = h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+		if err != nil {
+			_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+			return
+		}
+		defer pdClient.Close()
 	}
-	credential := cfg.PDConfig.toCredential()
-
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
-	if err != nil {
-		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
-		return
-	}
-	defer pdClient.Close()
 
 	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,
@@ -871,6 +894,142 @@ func (h *OpenAPIV2) status(c *gin.Context) {
 		ResolvedTs:   status.ResolvedTs,
 		LastError:    lastError,
 		LastWarning:  lastWarning,
+	})
+}
+
+// synced get the synced status of a changefeed
+// @Summary Get synced status
+// @Description get the synced status of a changefeed
+// @Tags changefeed,v2
+// @Accept json
+// @Produce json
+// @Param changefeed_id  path  string  true  "changefeed_id"
+// @Param namespace query string false "default"
+// @Success 200 {object} SyncedStatus
+// @Failure 500,400 {object} model.HTTPError
+// @Router /api/v2/changefeeds/{changefeed_id}/synced [get]
+func (h *OpenAPIV2) synced(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	namespace := getNamespaceValueWithDefault(c)
+	changefeedID := model.ChangeFeedID{Namespace: namespace, ID: c.Param(apiOpVarChangefeedID)}
+	if err := model.ValidateChangefeedID(changefeedID.ID); err != nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed_id: %s",
+			changefeedID.ID))
+		return
+	}
+
+	status, err := h.capture.StatusProvider().GetChangeFeedSyncedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
+	log.Info("Get changefeed synced status:", zap.Any("status", status), zap.Any("changefeedID", changefeedID))
+
+	cfg := &ChangefeedConfig{ReplicaConfig: GetDefaultReplicaConfig()}
+	if (status.SyncedCheckInterval != 0) && (status.CheckpointInterval != 0) {
+		cfg.ReplicaConfig.SyncedStatus.CheckpointInterval = status.CheckpointInterval
+		cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval = status.SyncedCheckInterval
+	}
+
+	// try to get pd client to get pd time, and determine synced status based on the pd time
+	if len(cfg.PDAddrs) == 0 {
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		cfg.PDConfig = getUpstreamPDConfig(up)
+	}
+	credential := cfg.PDConfig.toCredential()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	pdClient, err := h.helpers.getPDClient(timeoutCtx, cfg.PDAddrs, credential)
+	if err != nil {
+		// case 1. we can't get pd client, pd may be unavailable.
+		//         if pullerResolvedTs - checkpointTs > checkpointInterval, data is not synced
+		//         otherwise, if pd is unavailable, we decide data whether is synced based on
+		//         the time difference between current time and lastSyncedTs.
+		var message string
+		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) >
+			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
+			message = fmt.Sprintf("%s. Besides the data is not finish syncing", err.Error())
+		} else {
+			message = fmt.Sprintf("%s. You should check the pd status first. If pd status is normal, means we don't finish sync data. "+
+				"If pd is offline, please check whether we satisfy the condition that "+
+				"the time difference from lastSyncedTs to the current time from the time zone of pd is greater than %v secs. "+
+				"If it's satisfied, means the data syncing is totally finished", err, cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval)
+		}
+		c.JSON(http.StatusOK, SyncedStatus{
+			Synced:           false,
+			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+			NowTs:            model.JSONTime(time.Unix(0, 0)),
+			Info:             message,
+		})
+		return
+	}
+	defer pdClient.Close()
+	// get time from pd
+	physicalNow, _, _ := pdClient.GetTS(ctx)
+
+	// We can normally get pd time. Thus we determine synced status based on physicalNow, lastSyncedTs, checkpointTs and pullerResolvedTs
+	if (physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000) &&
+		(physicalNow-oracle.ExtractPhysical(status.CheckpointTs) < cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000) {
+		// case 2: If physcialNow - lastSyncedTs > SyncedCheckInterval && physcialNow - CheckpointTs < CheckpointInterval
+		//         --> reach strict synced status
+		c.JSON(http.StatusOK, SyncedStatus{
+			Synced:           true,
+			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
+			Info:             "Data syncing is finished",
+		})
+		return
+	}
+
+	if physicalNow-oracle.ExtractPhysical(status.LastSyncedTs) > cfg.ReplicaConfig.SyncedStatus.SyncedCheckInterval*1000 {
+		// case 3: If physcialNow - lastSyncedTs > SyncedCheckInterval && physcialNow - CheckpointTs > CheckpointInterval
+		//         we should consider the situation that pd or tikv region is not healthy to block the advancing resolveTs.
+		//         if pullerResolvedTs - checkpointTs > CheckpointInterval-->  data is not synced
+		//         otherwise, if pd & tikv is healthy --> data is not synced
+		//                    if not healthy --> data is synced
+		var message string
+		if (oracle.ExtractPhysical(status.PullerResolvedTs) - oracle.ExtractPhysical(status.CheckpointTs)) <
+			cfg.ReplicaConfig.SyncedStatus.CheckpointInterval*1000 {
+			message = fmt.Sprintf("Please check whether PD is online and TiKV Regions are all available. " +
+				"If PD is offline or some TiKV regions are not available, it means that the data syncing process is complete. " +
+				"To check whether TiKV regions are all available, you can view " +
+				"'TiKV-Details' > 'Resolved-Ts' > 'Max Leader Resolved TS gap' on Grafana. " +
+				"If the gap is large, such as a few minutes, it means that some regions in TiKV are unavailable. " +
+				"Otherwise, if the gap is small and PD is online, it means the data syncing is incomplete, so please wait")
+		} else {
+			message = "The data syncing is not finished, please wait"
+		}
+		c.JSON(http.StatusOK, SyncedStatus{
+			Synced:           false,
+			SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+			PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+			LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+			NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
+			Info:             message,
+		})
+		return
+	}
+
+	// case	4: If physcialNow - lastSyncedTs < SyncedCheckInterval --> data is not synced
+	c.JSON(http.StatusOK, SyncedStatus{
+		Synced:           false,
+		SinkCheckpointTs: model.JSONTime(oracle.GetTimeFromTS(status.CheckpointTs)),
+		PullerResolvedTs: model.JSONTime(oracle.GetTimeFromTS(status.PullerResolvedTs)),
+		LastSyncedTs:     model.JSONTime(oracle.GetTimeFromTS(status.LastSyncedTs)),
+		NowTs:            model.JSONTime(time.Unix(physicalNow/1e3, 0)),
+		Info:             "The data syncing is not finished, please wait",
 	})
 }
 

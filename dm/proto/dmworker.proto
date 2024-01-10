@@ -28,6 +28,8 @@ service Worker {
     rpc GetValidatorError(GetValidationErrorRequest) returns(GetValidationErrorResponse) {}
 
     rpc OperateValidatorError(OperateValidationErrorRequest) returns(OperateValidationErrorResponse) {}
+
+    rpc UpdateValidator(UpdateValidationWorkerRequest) returns(CommonWorkerResponse) {}
 }
 
 enum TaskOp {
@@ -435,6 +437,8 @@ message ValidationStatus {
     string processedRowsStatus = 8;
     string pendingRowsStatus = 9;
     string errorRowsStatus = 10;
+    string cutoverBinlogPos = 11;
+    string cutoverBinlogGtid = 12;
 }
 
 message ValidationTableStatus {
@@ -499,4 +503,11 @@ enum ValidationErrOp {
   IgnoreErrOp = 1;
   ResolveErrOp = 2;
   ClearErrOp = 3;
+}
+
+
+message UpdateValidationWorkerRequest {
+    string taskName = 1;
+    string binlogPos = 2; // binlog-pos (that's (file:pos) format)
+    string binlogGTID = 3;
 }

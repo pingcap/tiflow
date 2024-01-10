@@ -23,16 +23,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util/codec"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -132,12 +129,10 @@ func newMockDDLJobPuller(
 		helper = entry.NewSchemaTestHelper(t)
 		kvStorage := helper.Storage()
 		ts := helper.GetCurrentMeta().StartTS
-		meta, err := kv.GetSnapshotMeta(kvStorage, ts)
-		require.Nil(t, err)
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
-			meta,
+			kvStorage,
 			ts,
 			false,
 			model.DefaultChangeFeedID("test"),
@@ -610,13 +605,7 @@ func TestDDLPuller(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config,
-		up, startTs,
-		ctx.ChangefeedVars().ID,
-		schemaStorage,
-		f)
-	require.Nil(t, err)
+	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
 	var wg sync.WaitGroup
@@ -740,16 +729,7 @@ func TestResolvedTsStuck(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config,
-		up, startTs,
-		ctx.ChangefeedVars().ID,
-		schemaStorage,
-		f)
-	require.Nil(t, err)
-
-	mockClock := clock.NewMock()
-	p.(*ddlPullerImpl).clock = mockClock
+	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 	var wg sync.WaitGroup
@@ -773,18 +753,6 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(t, p, 30)
 	require.Equal(t, 0, logs.Len())
-
-	mockClock.Add(2 * ddlPullerStuckWarnDuration)
-	for i := 0; i < 20; i++ {
-		mockClock.Add(time.Second)
-		if logs.Len() > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-		if i == 19 {
-			t.Fatal("warning log not printed")
-		}
-	}
 
 	mockPuller.appendResolvedTs(40)
 	waitResolvedTsGrowing(t, p, 40)

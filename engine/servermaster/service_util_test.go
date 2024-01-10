@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	electionMock "github.com/pingcap/tiflow/engine/pkg/election/mock"
+	electionMock "github.com/pingcap/tiflow/pkg/election/mock"
 	"github.com/stretchr/testify/require"
 )
 

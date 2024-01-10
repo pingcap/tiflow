@@ -18,12 +18,12 @@ import (
 	"sync"
 
 	"github.com/apache/pulsar-client-go/pulsar"
-	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
+	"github.com/pingcap/tiflow/pkg/config"
 )
 
 // PulsarTopicManager is a manager for pulsar topics.
 type PulsarTopicManager func(
-	cfg *pulsarConfig.Config,
+	cfg *config.PulsarConfig,
 	client pulsar.Client,
 ) (TopicManager, error)
 
@@ -31,12 +31,12 @@ type PulsarTopicManager func(
 type pulsarTopicManager struct {
 	client     pulsar.Client
 	partitions sync.Map // key : topic, value : partition-name
-	cfg        *pulsarConfig.Config
+	cfg        *config.PulsarConfig
 }
 
 // NewPulsarTopicManager creates a new topic manager.
 func NewPulsarTopicManager(
-	cfg *pulsarConfig.Config,
+	cfg *config.PulsarConfig,
 	client pulsar.Client,
 ) (TopicManager, error) {
 	mgr := &pulsarTopicManager{
@@ -48,11 +48,11 @@ func NewPulsarTopicManager(
 	return mgr, nil
 }
 
-// GetPartitionNum spend more time,but no use.
-// Neither synchronous nor asynchronous sending of pulsar will use PartitionNum
-// but this method is used in mq_ddl_sink.go, so an empty implementation is required
+// GetPartitionNum  always return 1 because we pass a message key to pulsar producer,
+// and pulsar producer will hash the key to a partition.
+// This method is only used to meet the requirement of mq sink's interface.
 func (m *pulsarTopicManager) GetPartitionNum(ctx context.Context, topic string) (int32, error) {
-	return 0, nil
+	return 1, nil
 }
 
 // CreateTopicAndWaitUntilVisible no need to create first

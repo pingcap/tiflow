@@ -18,7 +18,7 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -33,8 +33,9 @@ type Wrapper interface {
 	Start(
 		ctx context.Context,
 		up *upstream.Upstream,
-		eventSortEngine engine.SortEngine,
+		eventSortEngine sorter.SortEngine,
 		errChan chan<- error,
+		enableTableMonitor bool,
 	)
 	GetStats() puller.Stats
 	Close()
@@ -77,8 +78,9 @@ func NewPullerWrapper(
 func (n *WrapperImpl) Start(
 	ctx context.Context,
 	up *upstream.Upstream,
-	eventSortEngine engine.SortEngine,
+	eventSortEngine sorter.SortEngine,
 	errChan chan<- error,
+	enableTableMonitor bool,
 ) {
 	ctx, n.cancel = context.WithCancel(ctx)
 	errorHandler := func(err error) {
@@ -103,11 +105,12 @@ func (n *WrapperImpl) Start(
 		up.PDClock,
 		n.startTs,
 		[]tablepb.Span{n.span},
-		config.GetGlobalServerConfig().KVClient,
+		config.GetGlobalServerConfig(),
 		n.changefeed,
 		n.span.TableID,
 		n.tableName,
 		n.bdrMode,
+		enableTableMonitor,
 	)
 
 	// Use errgroup to ensure all sub goroutines can exit without calling Close.

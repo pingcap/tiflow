@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/pingcap/errors"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -74,7 +74,6 @@ type DDLJobEntry struct {
 	Job    *timodel.Job
 	OpType OpType
 	CRTs   uint64
-	Err    error
 }
 
 // TaskPosition records the process information of a capture

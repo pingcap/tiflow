@@ -227,6 +227,30 @@ func TestSubstituteTopicExpression(t *testing.T) {
 	}
 }
 
+func TestSchemaOptional(t *testing.T) {
+	expression := "prefix_{table}"
+	topicExpr := Expression(expression)
+	err := topicExpr.Validate()
+	require.NoError(t, err)
+
+	schemaName := "test"
+	tableName := "table1"
+	topicName := topicExpr.Substitute(schemaName, tableName)
+	require.Equal(t, topicName, "prefix_table1")
+}
+
+func TestTableOptional(t *testing.T) {
+	expression := "prefix_{schema}"
+	topicExpr := Expression(expression)
+	err := topicExpr.Validate()
+	require.NoError(t, err)
+
+	schemaName := "test"
+	tableName := "abc"
+	topicName := topicExpr.Substitute(schemaName, tableName)
+	require.Equal(t, topicName, "prefix_test")
+}
+
 // cmd: go test -run='^$' -bench '^(BenchmarkSubstitute)$' github.com/pingcap/tiflow/cdc/sink/dispatcher/topic
 // goos: linux
 // goarch: amd64

@@ -24,15 +24,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var (
-	defaultEncodingWorkerNum      = 16
-	defaultEncodingInputChanSize  = 128
-	defaultEncodingOutputChanSize = 2048
-	// Maximum allocated memory is flushWorkerNum*maxLogSize, which is
-	// `8*64MB = 512MB` by default.
-	defaultFlushWorkerNum = 8
-)
-
 var _ writer.RedoLogWriter = (*memoryLogWriter)(nil)
 
 type memoryLogWriter struct {
@@ -52,13 +43,14 @@ func NewLogWriter(
 		return nil, errors.WrapError(errors.ErrRedoConfigInvalid,
 			errors.New("invalid LogWriterConfig"))
 	}
+
 	// "nfs" and "local" scheme are converted to "file" scheme
 	if !cfg.UseExternalStorage {
-		redo.FixLocalScheme(&cfg.URI)
+		redo.FixLocalScheme(cfg.URI)
 		cfg.UseExternalStorage = redo.IsExternalStorage(cfg.URI.Scheme)
 	}
 
-	extStorage, err := redo.InitExternalStorage(ctx, cfg.URI)
+	extStorage, err := redo.InitExternalStorage(ctx, *cfg.URI)
 	if err != nil {
 		return nil, err
 	}
@@ -66,16 +58,16 @@ func NewLogWriter(
 	eg, ctx := errgroup.WithContext(ctx)
 	lwCtx, lwCancel := context.WithCancel(ctx)
 	lw := &memoryLogWriter{
-		cfg:    cfg,
-		eg:     eg,
-		cancel: lwCancel,
+		cfg:           cfg,
+		encodeWorkers: newEncodingWorkerGroup(cfg),
+		fileWorkers:   newFileWorkerGroup(cfg, cfg.FlushWorkerNum, extStorage, opts...),
+		eg:            eg,
+		cancel:        lwCancel,
 	}
 
-	lw.encodeWorkers = newEncodingWorkerGroup(defaultEncodingWorkerNum)
 	eg.Go(func() error {
 		return lw.encodeWorkers.Run(lwCtx)
 	})
-	lw.fileWorkers = newFileWorkerGroup(cfg, defaultFlushWorkerNum, extStorage, opts...)
 	eg.Go(func() error {
 		return lw.fileWorkers.Run(lwCtx, lw.encodeWorkers.outputCh)
 	})
@@ -87,6 +79,8 @@ func (l *memoryLogWriter) WriteEvents(ctx context.Context, events ...writer.Redo
 	for _, event := range events {
 		if event == nil {
 			log.Warn("writing nil event to redo log, ignore this",
+				zap.String("namespace", l.cfg.ChangeFeedID.Namespace),
+				zap.String("changefeed", l.cfg.ChangeFeedID.ID),
 				zap.String("capture", l.cfg.CaptureID))
 			continue
 		}

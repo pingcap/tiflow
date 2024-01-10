@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"go.uber.org/zap"
@@ -41,11 +41,44 @@ func (e *txnEvent) OnConflictResolved() {
 	e.conflictResolved = time.Now()
 }
 
-// ConflictKeys implements causality.txnEvent interface.
-func (e *txnEvent) ConflictKeys(numSlots uint64) []uint64 {
-	keys := genTxnKeys(e.TxnCallbackableEvent.Event)
-	sort.Slice(keys, func(i, j int) bool { return keys[i]%numSlots < keys[j]%numSlots })
-	return keys
+// GenSortedDedupKeysHash implements causality.txnEvent interface.
+func (e *txnEvent) GenSortedDedupKeysHash(numSlots uint64) []uint64 {
+	hashes := genTxnKeys(e.TxnCallbackableEvent.Event)
+
+	// Sort and dedup hashes.
+	// Sort hashes by `hash % numSlots` to avoid deadlock, and then dedup
+	// hashes, so the same txn will not check confict with the same hash twice to
+	// prevent potential cyclic self dependency in the causality dependency
+	// graph.
+	return sortAndDedupHashes(hashes, numSlots)
+}
+
+func sortAndDedupHashes(hashes []uint64, numSlots uint64) []uint64 {
+	if len(hashes) == 0 {
+		return nil
+	}
+
+	// Sort hashes by `hash % numSlots` to avoid deadlock.
+	sort.Slice(hashes, func(i, j int) bool { return hashes[i]%numSlots < hashes[j]%numSlots })
+
+	// Dedup hashes
+	last := hashes[0]
+	j := 1
+	for i, hash := range hashes {
+		if i == 0 {
+			// skip first one, start checking duplication from 2nd one
+			continue
+		}
+		if hash == last {
+			continue
+		}
+		last = hash
+		hashes[j] = hash
+		j++
+	}
+	hashes = hashes[:j]
+
+	return hashes
 }
 
 // genTxnKeys returns hash keys for `txn`.

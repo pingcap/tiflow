@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,20 +25,20 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	ticonfig "github.com/pingcap/tidb/config"
-	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/executor"
-	tidbkv "github.com/pingcap/tidb/kv"
-	"github.com/pingcap/tidb/meta/autoid"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/session"
-	"github.com/pingcap/tidb/store/mockstore"
-	"github.com/pingcap/tidb/testkit"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/mock"
+	ticonfig "github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/executor"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/autoid"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/session"
+	"github.com/pingcap/tidb/pkg/store/mockstore"
+	"github.com/pingcap/tidb/pkg/testkit"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -1014,7 +1014,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	for _, tc := range testCases {
 		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
-		val = GetDDLDefaultDefinition(&tc.ColInfo)
+		val = GetColumnDefaultValue(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
 	}
 }
@@ -1038,7 +1038,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := NewSchemaStorage(helper.Storage(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 	require.NotNil(t, schemaStorage)
@@ -1173,7 +1173,7 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	msg := avroEncoder.Build()
 	require.Len(t, msg, 1)
 
-	schemaM, err := avro.NewAvroSchemaManager(
+	schemaM, err := avro.NewConfluentSchemaManager(
 		ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
@@ -1210,7 +1210,7 @@ func TestDecodeRowEnableChecksum(t *testing.T) {
 	require.NoError(t, err)
 
 	changefeed := model.DefaultChangeFeedID("changefeed-test-decode-row")
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := NewSchemaStorage(helper.Storage(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 	require.NotNil(t, schemaStorage)
@@ -1339,7 +1339,7 @@ func TestDecodeRow(t *testing.T) {
 	filter, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := NewSchemaStorage(helper.Storage(),
 		ver.Ver, false, changefeed, util.RoleTester, filter)
 	require.NoError(t, err)
 
@@ -1420,7 +1420,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 
-	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+	schemaStorage, err := NewSchemaStorage(helper.Storage(),
 		ver.Ver, false, cfID, util.RoleTester, f)
 	require.Nil(t, err)
 	// apply ddl to schemaStorage
@@ -1601,9 +1601,41 @@ func TestBuildTableInfo(t *testing.T) {
 				"  PRIMARY KEY (`a`(0)) /*T![clustered_index] CLUSTERED */\n" +
 				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
 		},
+		{ // This case is to check the primary key is correctly identified by BuildTiDBTableInfo
+			"CREATE TABLE your_table (" +
+				" id INT NOT NULL," +
+				" name VARCHAR(50) NOT NULL," +
+				" email VARCHAR(100) NOT NULL," +
+				" age INT NOT NULL ," +
+				" address VARCHAR(200) NOT NULL," +
+				" PRIMARY KEY (id, name)," +
+				" UNIQUE INDEX idx_unique_1 (id, email, age)," +
+				" UNIQUE INDEX idx_unique_2 (name, email, address)" +
+				" );",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `id` int(0) NOT NULL,\n" +
+				"  `name` varchar(0) NOT NULL,\n" +
+				"  `email` varchar(0) NOT NULL,\n" +
+				"  `age` int(0) NOT NULL,\n" +
+				"  `address` varchar(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`id`(0),`name`(0)) /*T![clustered_index] CLUSTERED */,\n" +
+				"  UNIQUE KEY `idx_1` (`id`(0),`email`(0),`age`(0)),\n" +
+				"  UNIQUE KEY `idx_2` (`name`(0),`email`(0),`address`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `BuildTiDBTableInfo` (\n" +
+				"  `id` int(0) NOT NULL,\n" +
+				"  `name` varchar(0) NOT NULL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  PRIMARY KEY (`id`(0),`name`(0)) /*T![clustered_index] CLUSTERED */,\n" +
+				"  UNIQUE KEY `idx_1` (`id`(0),`omitted`(0),`omitted`(0)),\n" +
+				"  UNIQUE KEY `idx_2` (`name`(0),`omitted`(0),`omitted`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
 	}
 	p := parser.New()
-	for _, c := range cases {
+	for i, c := range cases {
 		stmt, err := p.ParseOneStmt(c.origin, "", "")
 		require.NoError(t, err)
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
@@ -1615,7 +1647,18 @@ func TestBuildTableInfo(t *testing.T) {
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)
 		require.NotNil(t, handle.UniqueNotNullIdx)
 		require.Equal(t, c.recovered, showCreateTable(t, recoveredTI))
-
+		// make sure BuildTiDBTableInfo indentify the correct primary key
+		if i == 5 {
+			inexes := recoveredTI.Indices
+			primaryCount := 0
+			for i := range inexes {
+				if inexes[i].Primary {
+					primaryCount++
+				}
+			}
+			require.Equal(t, 1, primaryCount)
+			require.Equal(t, 2, len(handle.UniqueNotNullIdx.Columns))
+		}
 		// mimic the columns are set to nil when old value feature is disabled
 		for i := range cols {
 			if !cols[i].Flag.IsHandleKey() {

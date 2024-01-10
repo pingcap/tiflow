@@ -45,9 +45,9 @@ const (
 	// DefaultChangefeedMemoryQuota is the default memory quota for each changefeed.
 	DefaultChangefeedMemoryQuota = 1024 * 1024 * 1024 // 1GB.
 
-	// DefaultMaxMemoryPercentage is the default max memory percentage
-	// cdc server use 70% of total memory limit as soft limit by default.
-	DefaultMaxMemoryPercentage = 70
+	// DisableMemoryLimit is the default max memory percentage for TiCDC server.
+	// 0 means no memory limit.
+	DisableMemoryLimit = 0
 )
 
 var (
@@ -65,9 +65,6 @@ var (
 func init() {
 	StoreGlobalServerConfig(GetDefaultServerConfig())
 }
-
-// SecurityConfig represents security config for server
-type SecurityConfig = security.Credential
 
 // LogFileConfig represents log file config for server
 type LogFileConfig struct {
@@ -106,15 +103,15 @@ var defaultServerConfig = &ServerConfig{
 	OwnerFlushInterval:     TomlDuration(50 * time.Millisecond),
 	ProcessorFlushInterval: TomlDuration(50 * time.Millisecond),
 	Sorter: &SorterConfig{
-		SortDir:             DefaultSortDir,
-		CacheSizeInMB:       128, // By default use 128M memory as sorter cache.
-		MaxMemoryPercentage: 10,  // Deprecated.
+		SortDir:       DefaultSortDir,
+		CacheSizeInMB: 128, // By default, use 128M memory as sorter cache.
 	},
-	Security: &SecurityConfig{},
+	Security: &security.Credential{},
 	KVClient: &KVClientConfig{
-		EnableMultiplexing:   false,
+		EnableMultiplexing:   true,
 		WorkerConcurrent:     8,
 		GrpcStreamConcurrent: 1,
+		FrontierConcurrent:   8,
 		WorkerPoolSize:       0, // 0 will use NumCPU() * 2
 		RegionScanLimit:      40,
 		// The default TiKV region election timeout is [10s, 20s],
@@ -126,24 +123,25 @@ var defaultServerConfig = &ServerConfig{
 			Count: 8,
 			// Following configs are optimized for write/read throughput.
 			// Users should not change them.
-			Concurrency:                 128,
-			MaxOpenFiles:                10000,
-			BlockSize:                   65536,
-			WriterBufferSize:            8388608,
-			Compression:                 "snappy",
-			WriteL0PauseTrigger:         math.MaxInt32,
-			CompactionL0Trigger:         160,
-			CompactionDeletionThreshold: 10485760,
-			CompactionPeriod:            1800,
-			IteratorMaxAliveDuration:    10000,
-			IteratorSlowReadDuration:    256,
+			MaxOpenFiles:        10000,
+			BlockSize:           65536,
+			WriterBufferSize:    8388608,
+			Compression:         "snappy",
+			WriteL0PauseTrigger: math.MaxInt32,
+			CompactionL0Trigger: 160,
 		},
 		Messages: defaultMessageConfig.Clone(),
 
-		Scheduler: NewDefaultSchedulerConfig(),
+		Scheduler:              NewDefaultSchedulerConfig(),
+		EnableKVConnectBackOff: false,
+		CDCV2:                  &CDCV2{Enable: false},
+		Puller: &PullerConfig{
+			EnableResolvedTsStuckDetection: false,
+			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
+		},
 	},
-	ClusterID:           "default",
-	MaxMemoryPercentage: DefaultMaxMemoryPercentage,
+	ClusterID:              "default",
+	GcTunerMemoryThreshold: DisableMemoryLimit,
 }
 
 // ServerConfig represents a config for server
@@ -165,15 +163,16 @@ type ServerConfig struct {
 	OwnerFlushInterval     TomlDuration `toml:"owner-flush-interval" json:"owner-flush-interval"`
 	ProcessorFlushInterval TomlDuration `toml:"processor-flush-interval" json:"processor-flush-interval"`
 
-	Sorter   *SorterConfig   `toml:"sorter" json:"sorter"`
-	Security *SecurityConfig `toml:"security" json:"security"`
-	// DEPRECATED: after using pull based sink, this config is useless.
-	// Because we do not control the memory usage by table anymore.
+	Sorter   *SorterConfig        `toml:"sorter" json:"sorter"`
+	Security *security.Credential `toml:"security" json:"security"`
+	// Deprecated: we don't use this field anymore.
 	PerTableMemoryQuota uint64          `toml:"per-table-memory-quota" json:"per-table-memory-quota"`
 	KVClient            *KVClientConfig `toml:"kv-client" json:"kv-client"`
 	Debug               *DebugConfig    `toml:"debug" json:"debug"`
 	ClusterID           string          `toml:"cluster-id" json:"cluster-id"`
-	MaxMemoryPercentage int             `toml:"max-memory-percentage" json:"max-memory-percentage"`
+	// Deprecated: we don't use this field anymore.
+	MaxMemoryPercentage    int    `toml:"max-memory-percentage" json:"max-memory-percentage"`
+	GcTunerMemoryThreshold uint64 `toml:"gc-tuner-memory-threshold" json:"gc-tuner-memory-threshold"`
 }
 
 // Marshal returns the json marshal format of a ServerConfig
@@ -284,11 +283,6 @@ func (c *ServerConfig) ValidateAndAdjust() error {
 	if err = c.Debug.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
 	}
-	if c.MaxMemoryPercentage >= 100 {
-		log.Warn("server max-memory-percentage must be less than 100, set to default value")
-		c.MaxMemoryPercentage = DefaultMaxMemoryPercentage
-	}
-
 	return nil
 }
 

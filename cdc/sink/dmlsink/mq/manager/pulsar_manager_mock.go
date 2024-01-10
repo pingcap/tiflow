@@ -16,7 +16,7 @@ package manager
 import (
 	"context"
 	"github.com/apache/pulsar-client-go/pulsar"
-	pulsarConfig "github.com/pingcap/tiflow/pkg/sink/pulsar"
+	"github.com/pingcap/tiflow/pkg/config"
 )
 
 // pulsarTopicManager is a manager for pulsar topics.
@@ -26,7 +26,7 @@ type pulsarTopicManagerMock struct {
 
 // NewMockPulsarTopicManager creates a new topic manager.
 func NewMockPulsarTopicManager(
-	cfg *pulsarConfig.Config,
+	cfg *config.PulsarConfig,
 	client pulsar.Client,
 ) (TopicManager, error) {
 	mgr := &pulsarTopicManagerMock{}

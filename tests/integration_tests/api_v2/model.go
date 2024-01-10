@@ -165,7 +165,6 @@ func (d *JSONDuration) UnmarshalJSON(b []byte) error {
 type ReplicaConfig struct {
 	MemoryQuota           uint64 `json:"memory_quota"`
 	CaseSensitive         bool   `json:"case_sensitive"`
-	EnableOldValue        bool   `json:"enable_old_value"`
 	ForceReplicate        bool   `json:"force_replicate"`
 	IgnoreIneligibleTable bool   `json:"ignore_ineligible_table"`
 	CheckGCSafePoint      bool   `json:"check_gc_safe_point"`
@@ -234,16 +233,20 @@ type Table struct {
 // SinkConfig represents sink config for a changefeed
 // This is a duplicate of config.SinkConfig
 type SinkConfig struct {
-	Protocol                 string            `json:"protocol,omitempty"`
-	SchemaRegistry           string            `json:"schema_registry,omitempty"`
-	CSVConfig                *CSVConfig        `json:"csv,omitempty"`
-	DispatchRules            []*DispatchRule   `json:"dispatchers,omitempty"`
-	ColumnSelectors          []*ColumnSelector `json:"column_selectors,omitempty"`
-	TxnAtomicity             string            `json:"transaction_atomicity"`
-	EncoderConcurrency       *int              `json:"encoder_concurrency,omitempty"`
-	Terminator               string            `json:"terminator"`
-	DateSeparator            string            `json:"date_separator,omitempty"`
-	EnablePartitionSeparator *bool             `json:"enable_partition_separator,omitempty"`
+	Protocol                   string            `json:"protocol,omitempty"`
+	SchemaRegistry             string            `json:"schema_registry,omitempty"`
+	CSVConfig                  *CSVConfig        `json:"csv,omitempty"`
+	DispatchRules              []*DispatchRule   `json:"dispatchers,omitempty"`
+	ColumnSelectors            []*ColumnSelector `json:"column_selectors,omitempty"`
+	TxnAtomicity               string            `json:"transaction_atomicity"`
+	EncoderConcurrency         *int              `json:"encoder_concurrency,omitempty"`
+	Terminator                 string            `json:"terminator"`
+	DateSeparator              string            `json:"date_separator,omitempty"`
+	EnablePartitionSeparator   *bool             `json:"enable_partition_separator,omitempty"`
+	ContentCompatible          *bool             `json:"content_compatible"`
+	SendBootstrapIntervalInSec *int64            `json:"send_bootstrap_interval_in_sec,omitempty"`
+	SendBootstrapInMsgCount    *int32            `json:"send_bootstrap_in_msg_count,omitempty"`
+	DebeziumDisableSchema      *bool             `json:"debezium_disable_schema,omitempty"`
 }
 
 // CSVConfig denotes the csv config
@@ -273,11 +276,14 @@ type ColumnSelector struct {
 // ConsistentConfig represents replication consistency config for a changefeed
 // This is a duplicate of config.ConsistentConfig
 type ConsistentConfig struct {
-	Level             string `json:"level"`
-	MaxLogSize        int64  `json:"max_log_size"`
-	FlushIntervalInMs int64  `json:"flush_interval"`
-	Storage           string `json:"storage"`
-	UseFileBackend    bool   `json:"use_file_backend"`
+	Level                 string `json:"level"`
+	MaxLogSize            int64  `json:"max_log_size"`
+	FlushIntervalInMs     int64  `json:"flush_interval"`
+	MetaFlushIntervalInMs int64  `json:"meta_flush_interval"`
+	EncoderWorkerNum      int    `json:"encoding_worker_num"`
+	FlushWorkerNum        int    `json:"flush_worker_num"`
+	Storage               string `json:"storage"`
+	UseFileBackend        bool   `json:"use_file_backend"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.

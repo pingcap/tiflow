@@ -14,7 +14,7 @@ your contribution accepted.
 
 Developing TiDB-CDC requires:
 
-* [Go 1.20+](https://go.dev/doc/code)
+* [Go 1.21+](https://go.dev/doc/code)
 * An internet connection to download the dependencies
 
 Simply run `make` to build the program.

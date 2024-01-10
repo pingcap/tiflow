@@ -18,7 +18,6 @@ import (
 	"math"
 	"net/url"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -240,9 +239,9 @@ func (info *ChangeFeedInfo) String() (str string) {
 		return
 	}
 
-	clone.SinkURI, err = util.MaskSinkURI(clone.SinkURI)
-	if err != nil {
-		log.Error("failed to marshal changefeed info", zap.Error(err))
+	clone.SinkURI = util.MaskSensitiveDataInURI(clone.SinkURI)
+	if clone.Config != nil {
+		clone.Config.MaskSensitiveData()
 	}
 
 	str, err = clone.Marshal()
@@ -332,7 +331,15 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.Integrity == nil {
 		info.Config.Integrity = defaultConfig.Integrity
 	}
-
+	if info.Config.ChangefeedErrorStuckDuration == nil {
+		info.Config.ChangefeedErrorStuckDuration = defaultConfig.ChangefeedErrorStuckDuration
+	}
+	if info.Config.SQLMode == "" {
+		info.Config.SQLMode = defaultConfig.SQLMode
+	}
+	if info.Config.SyncedStatus == nil {
+		info.Config.SyncedStatus = defaultConfig.SyncedStatus
+	}
 	info.RmUnusedFields()
 }
 
@@ -347,6 +354,10 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 			zap.Error(err),
 			zap.Any("sinkUri", info.SinkURI),
 		)
+		return
+	}
+	// blackhole is for testing purpose, no need to remove fields
+	if sink.IsBlackHoleScheme(uri.Scheme) {
 		return
 	}
 	if !sink.IsMQScheme(uri.Scheme) {
@@ -373,12 +384,16 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 }
 
 func (info *ChangeFeedInfo) rmMQOnlyFields() {
+	log.Info("since the downstream is not a MQ, remove MQ only fields",
+		zap.String("namespace", info.Namespace),
+		zap.String("changefeed", info.ID))
 	info.Config.Sink.DispatchRules = nil
 	info.Config.Sink.SchemaRegistry = nil
 	info.Config.Sink.EncoderConcurrency = nil
 	info.Config.Sink.EnableKafkaSinkV2 = nil
 	info.Config.Sink.OnlyOutputUpdatedColumns = nil
 	info.Config.Sink.DeleteOnlyOutputHandleKeyColumns = nil
+	info.Config.Sink.ContentCompatible = nil
 	info.Config.Sink.KafkaConfig = nil
 }
 
@@ -427,18 +442,16 @@ func (info *ChangeFeedInfo) FixIncompatible() {
 		log.Info("Fix incompatible memory quota completed", zap.String("changefeed", info.String()))
 	}
 
+	if info.Config.ChangefeedErrorStuckDuration == nil {
+		log.Info("Start fixing incompatible error stuck duration", zap.String("changefeed", info.String()))
+		info.Config.ChangefeedErrorStuckDuration = config.GetDefaultReplicaConfig().ChangefeedErrorStuckDuration
+		log.Info("Fix incompatible error stuck duration completed", zap.String("changefeed", info.String()))
+	}
+
 	log.Info("Start fixing incompatible scheduler", zap.String("changefeed", info.String()))
 	inheritV66 := creatorVersionGate.ChangefeedInheritSchedulerConfigFromV66()
 	info.fixScheduler(inheritV66)
 	log.Info("Fix incompatible scheduler completed", zap.String("changefeed", info.String()))
-
-	if creatorVersionGate.ChangefeedAdjustEnableOldValueByProtocol() {
-		log.Info("Start fixing incompatible enable old value", zap.String("changefeed", info.String()),
-			zap.Bool("enableOldValue", info.Config.EnableOldValue))
-		info.fixEnableOldValue()
-		log.Info("Fix incompatible enable old value completed", zap.String("changefeed", info.String()),
-			zap.Bool("enableOldValue", info.Config.EnableOldValue))
-	}
 }
 
 // fixState attempts to fix state loss from upgrading the old owner to the new owner.
@@ -509,18 +522,6 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 	}
 }
 
-func (info *ChangeFeedInfo) fixEnableOldValue() {
-	uri, err := url.Parse(info.SinkURI)
-	if err != nil {
-		// this is impossible to happen, since the changefeed registered successfully.
-		log.Warn("parse sink URI failed", zap.Error(err))
-		return
-	}
-	scheme := strings.ToLower(uri.Scheme)
-	protocol := uri.Query().Get(config.ProtocolKey)
-	info.Config.AdjustEnableOldValue(scheme, protocol)
-}
-
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
@@ -561,34 +562,16 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 }
 
 func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProtocol string, newQuery url.Values) {
-	oldRawQuery := uri.RawQuery
 	newRawQuery := newQuery.Encode()
+	maskedURI, _ := util.MaskSinkURI(uri.String())
 	log.Info("handle incompatible protocol from sink URI",
-		zap.String("oldUriQuery", oldRawQuery),
-		zap.String("fixedUriQuery", newQuery.Encode()))
+		zap.String("oldURI", maskedURI),
+		zap.String("newProtocol", newProtocol))
 
 	uri.RawQuery = newRawQuery
 	fixedSinkURI := uri.String()
 	info.SinkURI = fixedSinkURI
 	info.Config.Sink.Protocol = util.AddressOf(newProtocol)
-}
-
-// DownstreamType returns the type of the downstream.
-func (info *ChangeFeedInfo) DownstreamType() (DownstreamType, error) {
-	uri, err := url.Parse(info.SinkURI)
-	if err != nil {
-		return Unknown, errors.Trace(err)
-	}
-	if sink.IsMySQLCompatibleScheme(uri.Scheme) {
-		return DB, nil
-	}
-	if sink.IsMQScheme(uri.Scheme) {
-		return MQ, nil
-	}
-	if sink.IsStorageScheme(uri.Scheme) {
-		return Storage, nil
-	}
-	return Unknown, nil
 }
 
 func (info *ChangeFeedInfo) fixMemoryQuota() {
@@ -599,35 +582,17 @@ func (info *ChangeFeedInfo) fixScheduler(inheritV66 bool) {
 	info.Config.FixScheduler(inheritV66)
 }
 
-// DownstreamType is the type of downstream.
-type DownstreamType int
-
-const (
-	// DB is the type of Database.
-	DB DownstreamType = iota
-	// MQ is the type of MQ or Cloud Storage.
-	MQ
-	// Storage is the type of Cloud Storage.
-	Storage
-	// Unknown is the type of Unknown.
-	Unknown
-)
-
-// String implements fmt.Stringer interface.
-func (t DownstreamType) String() string {
-	switch t {
-	case DB:
-		return "DB"
-	case MQ:
-		return "MQ"
-	case Storage:
-		return "Storage"
-	}
-	return "Unknown"
-}
-
 // ChangeFeedStatusForAPI uses to transfer the status of changefeed for API.
 type ChangeFeedStatusForAPI struct {
 	ResolvedTs   uint64 `json:"resolved-ts"`
 	CheckpointTs uint64 `json:"checkpoint-ts"`
+}
+
+// ChangeFeedSyncedStatusForAPI uses to transfer the synced status of changefeed for API.
+type ChangeFeedSyncedStatusForAPI struct {
+	CheckpointTs        uint64 `json:"checkpoint-ts"`
+	LastSyncedTs        uint64 `json:"last-sync-time"`
+	PullerResolvedTs    uint64 `json:"puller-resolved-ts"`
+	SyncedCheckInterval int64  `json:"synced-check-interval"`
+	CheckpointInterval  int64  `json:"checkpoint-interval"`
 }

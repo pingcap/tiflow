@@ -162,7 +162,7 @@ func newBatchEncoder(config *common.Config) codec.RowEventEncoder {
 	encoder := &BatchEncoder{
 		messages:     &canal.Messages{},
 		callbackBuf:  make([]func(), 0),
-		entryBuilder: newCanalEntryBuilder(),
+		entryBuilder: newCanalEntryBuilder(config),
 
 		config: config,
 	}
@@ -179,6 +179,9 @@ type batchEncoderBuilder struct {
 func (b *batchEncoderBuilder) Build() codec.RowEventEncoder {
 	return newBatchEncoder(b.config)
 }
+
+// CleanMetrics is a no-op for canalBatchEncoder.
+func (b *batchEncoderBuilder) CleanMetrics() {}
 
 // NewBatchEncoderBuilder creates a canal batchEncoderBuilder.
 func NewBatchEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {

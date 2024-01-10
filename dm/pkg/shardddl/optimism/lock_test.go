@@ -20,11 +20,11 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/mock"
-	"github.com/pingcap/tidb/util/schemacmp"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/util/mock"
+	"github.com/pingcap/tidb/pkg/util/schemacmp"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
@@ -2734,6 +2734,11 @@ func (t *testLock) TestTrySyncForOneDDL(c *C) {
 	c.Assert(conflictStage, Equals, ConflictNone)
 
 	// check alter table add column
+	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t0, t1)
+	c.Assert(schemaChanged, IsTrue)
+	c.Assert(conflictStage, Equals, ConflictNone)
+
+	// check create partition, no changed since https://github.com/pingcap/tidb-tools/blob/d671b0840063bc2532941f02e02e12627402844c/pkg/schemacmp/table.go#L251
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t0, t1)
 	c.Assert(schemaChanged, IsTrue)
 	c.Assert(conflictStage, Equals, ConflictNone)

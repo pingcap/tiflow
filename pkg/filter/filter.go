@@ -14,8 +14,8 @@
 package filter
 
 import (
-	timodel "github.com/pingcap/tidb/parser/model"
-	tfilter "github.com/pingcap/tidb/util/table-filter"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 )
@@ -57,6 +57,8 @@ var allowDDLList = []timodel.ActionType{
 	timodel.ActionReorganizePartition,
 	timodel.ActionAlterTTLInfo,
 	timodel.ActionAlterTTLRemove,
+	timodel.ActionAlterTablePartitioning,
+	timodel.ActionRemovePartitioning,
 }
 
 // Filter are safe for concurrent use.
@@ -100,11 +102,11 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 		f = tfilter.CaseInsensitive(f)
 	}
 
-	dmlExprFilter, err := newExprFilter(tz, cfg.Filter)
+	dmlExprFilter, err := newExprFilter(tz, cfg.Filter, cfg.SQLMode)
 	if err != nil {
 		return nil, err
 	}
-	sqlEventFilter, err := newSQLEventFilter(cfg.Filter)
+	sqlEventFilter, err := newSQLEventFilter(cfg.Filter, cfg.SQLMode)
 	if err != nil {
 		return nil, err
 	}
@@ -158,13 +160,12 @@ func (f *filter) ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, sc
 		return
 	}
 
-	switch ddlType {
-	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
-		timodel.ActionModifySchemaCharsetAndCollate:
+	if IsSchemaDDL(ddlType) {
 		discard = !f.tableFilter.MatchSchema(schema)
-	default:
+	} else {
 		discard = f.ShouldIgnoreTable(schema, table)
 	}
+
 	if discard {
 		return
 	}
@@ -206,4 +207,15 @@ func isAllowedDDL(actionType timodel.ActionType) bool {
 		}
 	}
 	return false
+}
+
+// IsSchemaDDL returns true if the action type is a schema DDL.
+func IsSchemaDDL(actionType timodel.ActionType) bool {
+	switch actionType {
+	case timodel.ActionCreateSchema, timodel.ActionDropSchema,
+		timodel.ActionModifySchemaCharsetAndCollate:
+		return true
+	default:
+		return false
+	}
 }

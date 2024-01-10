@@ -89,6 +89,15 @@ func TestValidateTxnAtomicity(t *testing.T) {
 				"&protocol=open-protocol",
 			expectedErr: "invalid level atomicity is not supported by kafka scheme",
 		},
+		{
+			sinkURI: "pulsar://127.0.0.1:6550?transaction-atomicity=invalid" +
+				"&protocol=open-protocol",
+			expectedErr: "invalid level atomicity is not supported by pulsar scheme",
+		},
+		{
+			sinkURI:        "pulsar://127.0.0.1:6550/test?protocol=canal-json",
+			shouldSplitTxn: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -129,6 +138,20 @@ func TestValidateProtocol(t *testing.T) {
 			},
 			sinkURI: "kafka://127.0.0.1:9092",
 			result:  "default",
+		},
+		{
+			sinkConfig: &SinkConfig{
+				Protocol: util.AddressOf("default"),
+			},
+			sinkURI: "pulsar://127.0.0.1:6650",
+			result:  "default",
+		},
+		{
+			sinkConfig: &SinkConfig{
+				Protocol: util.AddressOf("canal-json"),
+			},
+			sinkURI: "pulsar://127.0.0.1:6650/test?protocol=canal-json",
+			result:  "canal-json",
 		},
 	}
 	for _, c := range testCases {
@@ -311,6 +334,24 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 			wantErr: "",
 		},
 		{
+			name: "valid delimiter with 2 characters",
+			config: &CSVConfig{
+				Quote:                "\"",
+				Delimiter:            "FE",
+				BinaryEncodingMethod: BinaryEncodingHex,
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid delimiter with 3 characters",
+			config: &CSVConfig{
+				Quote:                "\"",
+				Delimiter:            "|@|",
+				BinaryEncodingMethod: BinaryEncodingHex,
+			},
+			wantErr: "",
+		},
+		{
 			name: "delimiter is empty",
 			config: &CSVConfig{
 				Quote:     "'",
@@ -327,12 +368,29 @@ func TestValidateAndAdjustCSVConfig(t *testing.T) {
 			wantErr: "csv config delimiter contains line break characters",
 		},
 		{
+			name: "delimiter contains more than three characters",
+			config: &CSVConfig{
+				Quote:     "'",
+				Delimiter: "FEFA",
+			},
+			wantErr: "csv config delimiter contains more than three characters, note that escape " +
+				"sequences can only be used in double quotes in toml configuration items.",
+		},
+		{
 			name: "delimiter and quote are same",
 			config: &CSVConfig{
 				Quote:     "'",
 				Delimiter: "'",
 			},
-			wantErr: "csv config quote and delimiter cannot be the same",
+			wantErr: "csv config quote and delimiter has common characters which is not allowed",
+		},
+		{
+			name: "delimiter and quote contain common characters",
+			config: &CSVConfig{
+				Quote:     "E",
+				Delimiter: "FE",
+			},
+			wantErr: "csv config quote and delimiter has common characters which is not allowed",
 		},
 		{
 			name: "invalid binary encoding method",

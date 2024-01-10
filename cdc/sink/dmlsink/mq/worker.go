@@ -28,30 +28,23 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	// flushBatchSize is the batch size of the flush worker.
-	flushBatchSize = 2048
-	// flushInterval is the interval of the flush worker.
-	// We should not set it too big, otherwise it will cause we wait too long to send the message.
-	flushInterval = 15 * time.Millisecond
+	// batchSize is the maximum size of the number of messages in a batch.
+	batchSize = 2048
+	// batchInterval is the interval of the worker to collect a batch of messages.
+	// It shouldn't be too large, otherwise it will lead to a high latency.
+	batchInterval = 15 * time.Millisecond
 )
-
-// TopicPartitionKey contains the topic and partition key of the message.
-type TopicPartitionKey struct {
-	Topic     string
-	Partition int32
-}
 
 // mqEvent is the event of the mq worker.
 // It carries the topic and partition information of the message.
 type mqEvent struct {
-	key      TopicPartitionKey
+	key      model.TopicPartitionKey
 	rowEvent *dmlsink.RowChangeCallbackableEvent
 }
 
@@ -64,11 +57,8 @@ type worker struct {
 	// msgChan caches the messages to be sent.
 	// It is an unbounded channel.
 	msgChan *chann.DrainableChann[mqEvent]
-	// ticker used to force flush the messages when the interval is reached.
+	// ticker used to force flush the batched messages when the interval is reached.
 	ticker *time.Ticker
-
-	// claimCheckEncoder is used to encode message which has claim-check location, send to kafka.
-	claimCheckEncoder codec.ClaimCheckLocationEncoder
 
 	encoderGroup codec.EncoderGroup
 
@@ -83,8 +73,6 @@ type worker struct {
 	metricMQWorkerBatchDuration prometheus.Observer
 	// statistics is used to record DML metrics.
 	statistics *metrics.Statistics
-
-	claimCheck *claimcheck.ClaimCheck
 }
 
 // newWorker creates a new flush worker.
@@ -93,19 +81,15 @@ func newWorker(
 	protocol config.Protocol,
 	producer dmlproducer.DMLProducer,
 	encoderGroup codec.EncoderGroup,
-	claimCheck *claimcheck.ClaimCheck,
-	claimCheckEncoder codec.ClaimCheckLocationEncoder,
 	statistics *metrics.Statistics,
 ) *worker {
 	w := &worker{
 		changeFeedID:                      id,
 		protocol:                          protocol,
 		msgChan:                           chann.NewAutoDrainChann[mqEvent](),
-		ticker:                            time.NewTicker(flushInterval),
+		ticker:                            time.NewTicker(batchInterval),
 		encoderGroup:                      encoderGroup,
 		producer:                          producer,
-		claimCheck:                        claimCheck,
-		claimCheckEncoder:                 claimCheckEncoder,
 		metricMQWorkerSendMessageDuration: mq.WorkerSendMessageDuration.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchSize:           mq.WorkerBatchSize.WithLabelValues(id.Namespace, id.ID),
 		metricMQWorkerBatchDuration:       mq.WorkerBatchDuration.WithLabelValues(id.Namespace, id.ID),
@@ -169,7 +153,10 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 					zap.Any("event", event))
 				continue
 			}
-			if err := w.encoderGroup.AddEvents(ctx, event.key.Topic, event.key.Partition, event.rowEvent); err != nil {
+			if err := w.encoderGroup.AddEvents(
+				ctx,
+				event.key,
+				event.rowEvent); err != nil {
 				return errors.Trace(err)
 			}
 		}
@@ -183,98 +170,103 @@ func (w *worker) batchEncodeRun(ctx context.Context) (retErr error) {
 		zap.String("changefeed", w.changeFeedID.ID),
 		zap.String("protocol", w.protocol.String()),
 	)
-	// Fixed size of the batch.
-	eventsBuf := make([]mqEvent, flushBatchSize)
+
+	msgsBuf := make([]mqEvent, batchSize)
 	for {
 		start := time.Now()
-		endIndex, err := w.batch(ctx, eventsBuf, flushInterval)
+		msgCount, err := w.batch(ctx, msgsBuf, batchInterval)
 		if err != nil {
 			return errors.Trace(err)
 		}
-		if endIndex == 0 {
+		if msgCount == 0 {
 			continue
 		}
 
-		w.metricMQWorkerBatchSize.Observe(float64(endIndex))
+		w.metricMQWorkerBatchSize.Observe(float64(msgCount))
 		w.metricMQWorkerBatchDuration.Observe(time.Since(start).Seconds())
-		msgs := eventsBuf[:endIndex]
-		partitionedRows := w.group(msgs)
-		for key, events := range partitionedRows {
-			if err := w.encoderGroup.AddEvents(ctx, key.Topic, key.Partition, events...); err != nil {
+
+		msgs := msgsBuf[:msgCount]
+		// Group messages by its TopicPartitionKey before adding them to the encoder group.
+		groupedMsgs := w.group(msgs)
+		for key, msg := range groupedMsgs {
+			if err := w.encoderGroup.AddEvents(ctx, key, msg...); err != nil {
 				return errors.Trace(err)
 			}
 		}
 	}
 }
 
-// batch collects a batch of messages to be sent to the DML producer.
+// batch collects a batch of messages from w.msgChan into buffer.
+// It returns the number of messages collected.
+// Note: It will block until at least one message is received.
 func (w *worker) batch(
-	ctx context.Context, events []mqEvent, flushInterval time.Duration,
+	ctx context.Context, buffer []mqEvent, flushInterval time.Duration,
 ) (int, error) {
-	index := 0
-	max := len(events)
+	msgCount := 0
+	maxBatchSize := len(buffer)
 	// We need to receive at least one message or be interrupted,
 	// otherwise it will lead to idling.
 	select {
 	case <-ctx.Done():
-		return index, ctx.Err()
+		return msgCount, ctx.Err()
 	case msg, ok := <-w.msgChan.Out():
 		if !ok {
 			log.Warn("MQ sink flush worker channel closed")
-			return index, nil
+			return msgCount, nil
 		}
 		if msg.rowEvent != nil {
 			w.statistics.ObserveRows(msg.rowEvent.Event)
-			events[index] = msg
-			index++
+			buffer[msgCount] = msg
+			msgCount++
 		}
 	}
 
-	// Start a new tick to flush the batch.
+	// Reset the ticker to start a new batching.
+	// We need to stop batching when the interval is reached.
 	w.ticker.Reset(flushInterval)
 	for {
 		select {
 		case <-ctx.Done():
-			return index, ctx.Err()
+			return msgCount, ctx.Err()
 		case msg, ok := <-w.msgChan.Out():
 			if !ok {
 				log.Warn("MQ sink flush worker channel closed")
-				return index, nil
+				return msgCount, nil
 			}
 
 			if msg.rowEvent != nil {
 				w.statistics.ObserveRows(msg.rowEvent.Event)
-				events[index] = msg
-				index++
+				buffer[msgCount] = msg
+				msgCount++
 			}
 
-			if index >= max {
-				return index, nil
+			if msgCount >= maxBatchSize {
+				return msgCount, nil
 			}
 		case <-w.ticker.C:
-			return index, nil
+			return msgCount, nil
 		}
 	}
 }
 
-// group is responsible for grouping messages by the partition.
+// group groups messages by its key.
 func (w *worker) group(
-	events []mqEvent,
-) map[TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent {
-	partitionedRows := make(map[TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent)
-	for _, event := range events {
+	msgs []mqEvent,
+) map[model.TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent {
+	groupedMsgs := make(map[model.TopicPartitionKey][]*dmlsink.RowChangeCallbackableEvent)
+	for _, msg := range msgs {
 		// Skip this event when the table is stopping.
-		if event.rowEvent.GetTableSinkState() != state.TableSinkSinking {
-			event.rowEvent.Callback()
-			log.Debug("Skip event of stopped table", zap.Any("event", event.rowEvent))
+		if msg.rowEvent.GetTableSinkState() != state.TableSinkSinking {
+			msg.rowEvent.Callback()
+			log.Debug("Skip event of stopped table", zap.Any("event", msg.rowEvent))
 			continue
 		}
-		if _, ok := partitionedRows[event.key]; !ok {
-			partitionedRows[event.key] = make([]*dmlsink.RowChangeCallbackableEvent, 0)
+		if _, ok := groupedMsgs[msg.key]; !ok {
+			groupedMsgs[msg.key] = make([]*dmlsink.RowChangeCallbackableEvent, 0)
 		}
-		partitionedRows[event.key] = append(partitionedRows[event.key], event.rowEvent)
+		groupedMsgs[msg.key] = append(groupedMsgs[msg.key], msg.rowEvent)
 	}
-	return partitionedRows
+	return groupedMsgs
 }
 
 func (w *worker) sendMessages(ctx context.Context) error {
@@ -288,16 +280,16 @@ func (w *worker) sendMessages(ctx context.Context) error {
 	}()
 
 	var err error
-	inputCh := w.encoderGroup.Output()
+	outCh := w.encoderGroup.Output()
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
 		case <-ticker.C:
-			metric.Set(float64(len(inputCh)))
-		case future, ok := <-inputCh:
+			metric.Set(float64(len(outCh)))
+		case future, ok := <-outCh:
 			if !ok {
-				log.Warn("MQ sink encode output channel closed",
+				log.Warn("MQ sink encoder's output channel closed",
 					zap.String("namespace", w.changeFeedID.Namespace),
 					zap.String("changefeed", w.changeFeedID.ID))
 				return nil
@@ -306,30 +298,17 @@ func (w *worker) sendMessages(ctx context.Context) error {
 				return errors.Trace(err)
 			}
 			for _, message := range future.Messages {
-				if message.ClaimCheckFileName != "" {
-					// send the message to the external storage.
-					if err = w.claimCheck.WriteMessage(ctx, message); err != nil {
-						log.Error("send message to the external claim check storage failed",
-							zap.String("namespace", w.changeFeedID.Namespace),
-							zap.String("changefeed", w.changeFeedID.ID),
-							zap.String("filename", message.ClaimCheckFileName),
-							zap.Error(err))
-						return errors.Trace(err)
-					}
-					// create the location message which contain the external storage location of the message.
-					locationMessage, err := w.claimCheckEncoder.NewClaimCheckLocationMessage(message)
-					if err != nil {
-						return errors.Trace(err)
-					}
-					message = locationMessage
-				}
-				// normal message, just send it to the kafka.
 				start := time.Now()
-				if err = w.statistics.RecordBatchExecution(func() (int, error) {
-					if err := w.producer.AsyncSendMessage(ctx, future.Topic, future.Partition, message); err != nil {
-						return 0, err
+				if err = w.statistics.RecordBatchExecution(func() (int, int64, error) {
+					message.SetPartitionKey(future.Key.PartitionKey)
+					if err := w.producer.AsyncSendMessage(
+						ctx,
+						future.Key.Topic,
+						future.Key.Partition,
+						message); err != nil {
+						return 0, 0, err
 					}
-					return message.GetRowsCount(), nil
+					return message.GetRowsCount(), int64(message.Length()), nil
 				}); err != nil {
 					return err
 				}
@@ -342,10 +321,6 @@ func (w *worker) sendMessages(ctx context.Context) error {
 func (w *worker) close() {
 	w.msgChan.CloseAndDrain()
 	w.producer.Close()
-	if w.claimCheck != nil {
-		w.claimCheck.Close()
-	}
-
 	mq.WorkerSendMessageDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchSize.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)
 	mq.WorkerBatchDuration.DeleteLabelValues(w.changeFeedID.Namespace, w.changeFeedID.ID)

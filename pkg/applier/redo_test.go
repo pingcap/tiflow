@@ -22,7 +22,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	"github.com/phayes/freeport"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/reader"
 	mysqlDDL "github.com/pingcap/tiflow/cdc/sink/ddlsink/mysql"
@@ -233,6 +233,14 @@ func getMockDB(t *testing.T) *sql.DB {
 
 	// Before we write data to downstream, we need to check whether the downstream is TiDB.
 	// So we mock a select tidb_version() query.
+	mock.ExpectQuery("select tidb_version()").WillReturnError(&mysql.MySQLError{
+		Number:  1305,
+		Message: "FUNCTION test.tidb_version does not exist",
+	})
+	mock.ExpectQuery("select tidb_version()").WillReturnError(&mysql.MySQLError{
+		Number:  1305,
+		Message: "FUNCTION test.tidb_version does not exist",
+	})
 	mock.ExpectQuery("select tidb_version()").WillReturnError(&mysql.MySQLError{
 		Number:  1305,
 		Message: "FUNCTION test.tidb_version does not exist",

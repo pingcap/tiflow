@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -61,7 +62,7 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 		LogType:            redo.RedoDDLLogFileType,
 		CaptureID:          "test-capture",
 		ChangeFeedID:       model.DefaultChangeFeedID("test-changefeed"),
-		URI:                *uri,
+		URI:                uri,
 		UseExternalStorage: true,
 		MaxLogSizeInBytes:  10 * redo.Megabyte,
 	}
@@ -92,7 +93,7 @@ func testWriteEvents(t *testing.T, events []writer.RedoEvent) {
 		err = lw.WriteEvents(ctx, events...)
 		return err != nil
 	}, 2*time.Second, 10*time.Millisecond)
-	require.ErrorContains(t, err, "redo log writer stopped")
+	require.ErrorIs(t, err, cerror.ErrRedoWriterStopped)
 	err = lw.FlushLog(ctx)
-	require.ErrorContains(t, err, "redo log writer stopped")
+	require.ErrorIs(t, err, cerror.ErrRedoWriterStopped)
 }

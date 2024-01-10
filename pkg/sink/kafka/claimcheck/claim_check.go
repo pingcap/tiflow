@@ -14,19 +14,15 @@
 package claimcheck
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/klauspost/compress/snappy"
-	"github.com/pierrec/lz4"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -34,11 +30,14 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultTimeout = 5 * time.Minute
+)
+
 // ClaimCheck manage send message to the claim-check external storage.
 type ClaimCheck struct {
 	storage storage.ExternalStorage
 
-	compression  string
 	changefeedID model.ChangeFeedID
 
 	// metricSendMessageDuration tracks the time duration
@@ -48,55 +47,51 @@ type ClaimCheck struct {
 }
 
 // New return a new ClaimCheck.
-func New(ctx context.Context, config *config.LargeMessageHandleConfig, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
-	externalStorage, err := util.GetExternalStorageFromURI(ctx, config.ClaimCheckStorageURI)
+func New(ctx context.Context, storageURI string, changefeedID model.ChangeFeedID) (*ClaimCheck, error) {
+	log.Info("claim check enabled, start create the external storage",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)))
+
+	start := time.Now()
+	externalStorage, err := util.GetExternalStorageWithTimeout(ctx, storageURI, defaultTimeout)
 	if err != nil {
+		log.Error("create external storage failed",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
 		return nil, errors.Trace(err)
 	}
 
-	log.Info("claim-check enabled",
+	log.Info("claim-check create the external storage success",
 		zap.String("namespace", changefeedID.Namespace),
 		zap.String("changefeed", changefeedID.ID),
-		zap.String("storageURI", config.ClaimCheckStorageURI),
-		zap.String("compression", config.ClaimCheckCompression))
+		zap.String("storageURI", util.MaskSensitiveDataInURI(storageURI)),
+		zap.Duration("duration", time.Since(start)))
 
 	return &ClaimCheck{
 		changefeedID:              changefeedID,
 		storage:                   externalStorage,
-		compression:               config.ClaimCheckCompression,
 		metricSendMessageDuration: claimCheckSendMessageDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricSendMessageCount:    claimCheckSendMessageCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 	}, nil
 }
 
 // WriteMessage write message to the claim check external storage.
-func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) error {
+func (c *ClaimCheck) WriteMessage(ctx context.Context, key, value []byte, fileName string) error {
 	m := common.ClaimCheckMessage{
-		Key:   message.Key,
-		Value: message.Value,
+		Key:   key,
+		Value: value,
 	}
 	data, err := json.Marshal(m)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	switch c.compression {
-	case config.CompressionSnappy:
-		data = snappy.Encode(nil, data)
-	case config.CompressionLZ4:
-		var buf bytes.Buffer
-		writer := lz4.NewWriter(&buf)
-		if _, err := writer.Write(data); err != nil {
-			return errors.Trace(err)
-		}
-		if err := writer.Close(); err != nil {
-			log.Warn("claim-check: close lz4 writer failed", zap.Error(err))
-		}
-		data = buf.Bytes()
-	default:
-	}
 
 	start := time.Now()
-	err = c.storage.WriteFile(ctx, message.ClaimCheckFileName, data)
+	err = c.storage.WriteFile(ctx, fileName, data)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -105,8 +100,13 @@ func (c *ClaimCheck) WriteMessage(ctx context.Context, message *common.Message) 
 	return nil
 }
 
-// Close the claim check by clean up the metrics.
-func (c *ClaimCheck) Close() {
+// FileNameWithPrefix returns the file name with prefix, the full path.
+func (c *ClaimCheck) FileNameWithPrefix(fileName string) string {
+	return strings.TrimSuffix(c.storage.URI(), "/") + "/" + fileName
+}
+
+// CleanMetrics the claim check by clean up the metrics.
+func (c *ClaimCheck) CleanMetrics() {
 	claimCheckSendMessageDuration.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
 	claimCheckSendMessageCount.DeleteLabelValues(c.changefeedID.Namespace, c.changefeedID.ID)
 }
@@ -117,9 +117,4 @@ func (c *ClaimCheck) Close() {
 // ref https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
 func NewFileName() string {
 	return uuid.NewString() + ".json"
-}
-
-// FileNameWithPrefix returns the file name with prefix, the full path.
-func FileNameWithPrefix(prefix, fileName string) string {
-	return filepath.Join(prefix, fileName)
 }

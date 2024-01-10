@@ -21,10 +21,6 @@ type DBConfig struct {
 	//
 	// The default value is 8.
 	Count int `toml:"count" json:"count"`
-	// Concurrency is the maximum write and read concurrency.
-	//
-	// The default value is 256.
-	Concurrency int `toml:"concurrency" json:"concurrency"`
 	// MaxOpenFiles is the maximum number of open FD by db sorter.
 	//
 	// The default value is 10000.
@@ -53,28 +49,6 @@ type DBConfig struct {
 	//
 	// The default value is 160.
 	CompactionL0Trigger int `toml:"compaction-l0-trigger" json:"compaction-l0-trigger"`
-	// CompactionDeletionThreshold defines the threshold of the number of deletion that
-	// trigger compaction.
-	//
-	// The default value is 10 * 1024 * 1024, 10485760.
-	// Assume every key-value is about 1KB, 10485760 is about deleting 10GB data.
-	CompactionDeletionThreshold int `toml:"compaction-deletion-threshold" json:"compaction-deletion-threshold"`
-	// CompactionDeletionThreshold defines the threshold of the number of deletion that
-	// trigger compaction.
-	//
-	// The default value is 30 minutes, 1800.
-	CompactionPeriod int `toml:"compaction-period" json:"compaction-period"`
-
-	// IteratorMaxAliveDuration the maximum iterator alive duration in ms.
-	//
-	// The default value is 10000, 10s
-	IteratorMaxAliveDuration int `toml:"iterator-max-alive-duration" json:"iterator-max-alive-duration"`
-
-	// IteratorSlowReadDuration is the iterator slow read threshold.
-	// A reading that exceeds the duration triggers a db compaction.
-	//
-	// The default value is 256, 256ms.
-	IteratorSlowReadDuration int `toml:"iterator-slow-read-duration" json:"iterator-slow-read-duration"`
 }
 
 // ValidateAndAdjust validates and adjusts the db configuration

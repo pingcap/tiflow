@@ -30,11 +30,11 @@ import (
 	"github.com/pingcap/tidb/br/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/br/pkg/lightning/precheck"
 	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/loader"
@@ -50,6 +50,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
+	pd "github.com/tikv/pd/client"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -449,7 +450,20 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		targetInfoGetter, err := importer.NewTargetInfoGetterImpl(lCfg, targetDB)
+
+		pdClient, err := pd.NewClientWithContext(
+			ctx, []string{lCfg.TiDB.PdAddr}, pd.SecurityOption{
+				CAPath:       lCfg.Security.CAPath,
+				CertPath:     lCfg.Security.CertPath,
+				KeyPath:      lCfg.Security.KeyPath,
+				SSLCABytes:   lCfg.Security.CABytes,
+				SSLCertBytes: lCfg.Security.CertBytes,
+				SSLKEYBytes:  lCfg.Security.KeyBytes,
+			})
+		if err != nil {
+			return err
+		}
+		targetInfoGetter, err := importer.NewTargetInfoGetterImpl(lCfg, targetDB, pdClient)
 		if err != nil {
 			return err
 		}
@@ -476,6 +490,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			dbMetas,
 			newLightningPrecheckAdaptor(targetInfoGetter, info),
 			cpdb,
+			pdClient,
 		)
 
 		if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok {

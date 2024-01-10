@@ -22,6 +22,8 @@ type KVClientConfig struct {
 	WorkerConcurrent uint `toml:"worker-concurrent" json:"worker-concurrent"`
 	// how many grpc streams will be established to every TiKV node
 	GrpcStreamConcurrent uint `toml:"grpc-stream-concurrent" json:"grpc-stream-concurrent"`
+	// how many goroutines to maintain frontiers.
+	FrontierConcurrent uint `toml:"frontier-concurrent" json:"frontier-concurrent"`
 	// background workerpool size, the workrpool is shared by all goroutines in cdc server
 	WorkerPoolSize int `toml:"worker-pool-size" json:"worker-pool-size"`
 	// region incremental scan limit for one table in a single store

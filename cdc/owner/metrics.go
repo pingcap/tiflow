@@ -113,13 +113,6 @@ var (
 			Help:      "Bucketed histogram of owner close changefeed reactor time (s).",
 			Buckets:   prometheus.ExponentialBuckets(0.01 /* 10 ms */, 2, 18),
 		})
-	changefeedIgnoredDDLEventCounter = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "ticdc",
-			Subsystem: "owner",
-			Name:      "ignored_ddl_event_count",
-			Help:      "The total count of ddl events that are ignored in changefeed.",
-		}, []string{"namespace", "changefeed"})
 )
 
 const (
@@ -149,7 +142,6 @@ func InitMetrics(registry *prometheus.Registry) {
 	registry.MustRegister(changefeedStatusGauge)
 	registry.MustRegister(changefeedTickDuration)
 	registry.MustRegister(changefeedCloseDuration)
-	registry.MustRegister(changefeedIgnoredDDLEventCounter)
 }
 
 // lagBucket returns the lag buckets for prometheus metric
@@ -159,6 +151,6 @@ func InitMetrics(registry *prometheus.Registry) {
 func lagBucket() []float64 {
 	buckets := prometheus.LinearBuckets(0.5, 0.5, 20)
 	buckets = append(buckets, prometheus.LinearBuckets(11, 1, 10)...)
-	buckets = append(buckets, prometheus.ExponentialBuckets(40, 2, 10)...)
+	buckets = append(buckets, prometheus.ExponentialBuckets(21, 2, 10)...)
 	return buckets
 }

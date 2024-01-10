@@ -133,19 +133,17 @@ func (o *createChangefeedOptions) addFlags(cmd *cobra.Command) {
 }
 
 // complete adapts from the command line args to the data and client required.
-func (o *createChangefeedOptions) complete(f factory.Factory, cmd *cobra.Command) error {
+func (o *createChangefeedOptions) complete(f factory.Factory) error {
 	client, err := f.APIV2Client()
 	if err != nil {
 		return err
 	}
 	o.apiClient = client
-	return o.completeReplicaCfg(cmd)
+	return o.completeReplicaCfg()
 }
 
 // completeCfg complete the replica config from file and cmd flags.
-func (o *createChangefeedOptions) completeReplicaCfg(
-	cmd *cobra.Command,
-) error {
+func (o *createChangefeedOptions) completeReplicaCfg() error {
 	cfg := config.GetDefaultReplicaConfig()
 	if len(o.commonChangefeedOptions.configFile) > 0 {
 		if err := o.commonChangefeedOptions.strictDecodeConfig("TiCDC changefeed", cfg); err != nil {
@@ -161,17 +159,6 @@ func (o *createChangefeedOptions) completeReplicaCfg(
 	err = cfg.ValidateAndAdjust(uri)
 	if err != nil {
 		return err
-	}
-
-	for _, rules := range cfg.Sink.DispatchRules {
-		switch strings.ToLower(rules.PartitionRule) {
-		case "rowid", "index-value":
-			if cfg.EnableOldValue {
-				cmd.Printf("[WARN] This index-value distribution mode "+
-					"does not guarantee row-level orderliness when "+
-					"switching on the old value, so please use caution! dispatch-rules: %#v", rules)
-			}
-		}
 	}
 
 	if o.commonChangefeedOptions.schemaRegistry != "" {
@@ -291,6 +278,7 @@ func (o *createChangefeedOptions) run(ctx context.Context, cmd *cobra.Command) e
 		},
 		ReplicaConfig: createChangefeedCfg.ReplicaConfig,
 		StartTs:       createChangefeedCfg.StartTs,
+		SinkURI:       createChangefeedCfg.SinkURI,
 	}
 
 	tables, err := o.apiClient.Changefeeds().VerifyTable(ctx, verifyTableConfig)
@@ -368,7 +356,7 @@ func newCmdCreateChangefeed(f factory.Factory) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			ctx := cmdcontext.GetDefaultContext()
 
-			util.CheckErr(o.complete(f, cmd))
+			util.CheckErr(o.complete(f))
 			util.CheckErr(o.validate(cmd))
 			util.CheckErr(o.run(ctx, cmd))
 		},

@@ -21,7 +21,7 @@
   "homepage": "https://github.com/pingcap/tiflow/docs/",
   "devDependencies": {
     "husky": "^5.0.9",
-    "prettier": "^2.2.1"
+    "prettier": "2.8.8"
   },
   "husky": {
     "hooks": {

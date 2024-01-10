@@ -292,6 +292,11 @@ function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 	check_rpc_alive $cur/../bin/check_master_online_http 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 	check_rpc_alive $cur/../bin/check_master_http_apis 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 
+	# https://github.com/pingcap/dm/issues/1458
+	# check the log is not repeatedly printed
+	check_log_not_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate"
+	check_log_not_contains $WORK_DIR/master1/log/dm-master.log "client certificate authentication failed"
+
 	echo "use common name not in 'cert-allowed-cn' should not request success"
 	check_rpc_alive $cur/../bin/check_master_online_http 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/other.pem" "$cur/conf/other.key" && exit 1 || true
 
@@ -306,10 +311,6 @@ function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
-	# https://github.com/pingcap/dm/issues/1458
-	# check the log is not repeatedly printed
-	check_log_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate" 1
 
 	echo "============================== test_master_ha_when_enable_tidb_and_only_ca_source_tls success =================================="
 }

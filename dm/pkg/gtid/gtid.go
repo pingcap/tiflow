@@ -17,9 +17,18 @@ import (
 	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
+
+var (
+	emptyMySQLGTIDSet, _   = mysql.ParseMysqlGTIDSet("")
+	emptyMariaDBGTIDSet, _ = mysql.ParseMariadbGTIDSet("")
+)
+
+// CheckGTIDSetEmpty is used to check whether a GTID set is zero.
+func CheckGTIDSetEmpty(gSet mysql.GTIDSet) bool {
+	return gSet == nil || gSet.Equal(emptyMySQLGTIDSet) || gSet.Equal(emptyMariaDBGTIDSet)
+}
 
 // ParserGTID parses GTID from string. If the flavor is not specified, it will
 // try mysql GTID first and then MariaDB GTID.
@@ -30,7 +39,8 @@ func ParserGTID(flavor, gtidStr string) (mysql.GTIDSet, error) {
 	)
 
 	if len(flavor) == 0 && len(gtidStr) == 0 {
-		return nil, errors.Errorf("empty flavor with empty gtid is invalid")
+		// regard as mysql, mariadb always enabled gtid
+		return mysql.ParseGTIDSet(mysql.MySQLFlavor, "")
 	}
 
 	fla := flavor
@@ -42,7 +52,11 @@ func ParserGTID(flavor, gtidStr string) (mysql.GTIDSet, error) {
 			gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
 		}
 	case mysql.MariaDBFlavor:
-		gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
+		if IsZeroMariaDBGTIDSet(gtidStr) {
+			gtid, err = mysql.ParseGTIDSet(fla, "")
+		} else {
+			gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
+		}
 	case "":
 		fla = mysql.MySQLFlavor
 		gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
@@ -74,9 +88,6 @@ func MustZeroGTIDSet(flavor string) mysql.GTIDSet {
 // IsZeroMySQLGTIDSet is used to meet this usage: when user wants to start binlog
 // replication from scratch, a "uuid:0" (MySQL flavor) or "0-0-0" (mariaDB) GTID
 // set must be written, in order to distinguish that user forgets to write it.
-//
-// For above two flavor, only "uuid:0" is illegal, so we use IsZeroMySQLGTIDSet
-// to handle it.
 func IsZeroMySQLGTIDSet(gStr string) bool {
 	sp := strings.Split(gStr, ",")
 	if len(sp) != 1 {
@@ -88,5 +99,25 @@ func IsZeroMySQLGTIDSet(gStr string) bool {
 		return false
 	}
 	interval := strings.TrimSpace(sep[1])
+	return interval == "0"
+}
+
+// IsZeroMariaDBGTIDSet is used to meet this usage: when user wants to start binlog
+// replication from scratch, a "uuid:0" (MySQL flavor) or "0-0-0" (mariaDB) GTID
+// set must be written, in order to distinguish that user forgets to write it.
+//
+// For MariaDB, the GTID set like "0-0-0" will confuse IsZeroGTIDSet function,
+// so we also need to check the interval part.
+func IsZeroMariaDBGTIDSet(gStr string) bool {
+	sp := strings.Split(gStr, ",")
+	if len(sp) != 1 {
+		return false
+	}
+
+	sep := strings.Split(sp[0], "-")
+	if len(sep) != 3 {
+		return false
+	}
+	interval := strings.TrimSpace(sep[2])
 	return interval == "0"
 }

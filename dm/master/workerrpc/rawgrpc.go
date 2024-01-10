@@ -124,6 +124,8 @@ func callRPC(ctx context.Context, client pb.WorkerClient, req *Request) (*Respon
 		resp.GetValidationError, err = client.GetValidatorError(ctx, req.GetValidationError)
 	case CmdOperateValidationError:
 		resp.OperateValidationError, err = client.OperateValidatorError(ctx, req.OperateValidationError)
+	case CmdUpdateValidation:
+		resp.UpdateValidation, err = client.UpdateValidator(ctx, req.UpdateValidation)
 	default:
 		return nil, terror.ErrMasterGRPCInvalidReqType.Generate(req.Type)
 	}

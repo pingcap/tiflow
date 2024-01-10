@@ -21,11 +21,11 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/schemacmp"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/schemacmp"
 	"github.com/pingcap/tiflow/dm/master/metrics"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
@@ -848,7 +848,7 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 
 	// Normal DDL
 	if tableErr == nil {
-		log.L().Debug("receive a normal DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+		log.L().Info("receive a normal DDL", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 		oldJoined, oldErr := l.joinNormalTables()
 
 		l.tables[source][schema][table] = postTable
@@ -883,7 +883,8 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 			// oldJoined != newJoined
 			// postTable == oldJoined (CREATE TABLE)
 			// prevTable < postTable
-			return (joinedErr != nil || joinedCmp != 0) || (err2 == nil && cmp == 0) || tableCmp < 0, ConflictNone
+			// prevTable == postTable(Partition/Sequence)
+			return (joinedErr != nil || joinedCmp != 0) || (err2 == nil && cmp == 0) || tableCmp <= 0, ConflictNone
 		}
 	}
 
@@ -920,7 +921,7 @@ func (l *Lock) trySyncForOneDDL(source, schema, table string, prevTable, postTab
 
 		return true, ConflictNone
 	}
-	log.L().Debug("conflict hasn't been resolved", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
+	log.L().Info("conflict hasn't been resolved", zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("prevTable", prevTable), zap.Stringer("postTable", postTable))
 	return false, ConflictSkipWaitRedirect
 }
 

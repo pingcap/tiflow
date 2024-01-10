@@ -44,8 +44,21 @@ const (
 	FlushWarnDuration = time.Second * 20
 	// DefaultFlushIntervalInMs is the default flush interval for redo log.
 	DefaultFlushIntervalInMs = 2000
+	// DefaultMetaFlushIntervalInMs is the default flush interval for redo meta.
+	DefaultMetaFlushIntervalInMs = 200
 	// MinFlushIntervalInMs is the minimum flush interval for redo log.
 	MinFlushIntervalInMs = 50
+
+	// DefaultEncodingWorkerNum is the default number of encoding workers.
+	DefaultEncodingWorkerNum = 16
+	// DefaultEncodingInputChanSize is the default size of input channel for encoding worker.
+	DefaultEncodingInputChanSize = 128
+	// DefaultEncodingOutputChanSize is the default size of output channel for encoding worker.
+	DefaultEncodingOutputChanSize = 2048
+	// DefaultFlushWorkerNum is the default number of flush workers.
+	// Maximum allocated memory is flushWorkerNum*maxLogSize, which is
+	// `8*64MB = 512MB` by default.
+	DefaultFlushWorkerNum = 8
 
 	// DefaultFileMode is the default mode when operation files
 	DefaultFileMode = 0o644
@@ -172,7 +185,7 @@ func FixLocalScheme(uri *url.URL) {
 
 // IsBlackholeStorage returns whether a blackhole storage is used.
 func IsBlackholeStorage(scheme string) bool {
-	return ConsistentStorage(scheme) == consistentStorageBlackhole
+	return strings.HasPrefix(scheme, string(consistentStorageBlackhole))
 }
 
 // InitExternalStorage init an external storage.
@@ -220,6 +233,18 @@ func ValidateStorage(uri *url.URL) error {
 		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
 			fmt.Sprintf("can't make dir for new redo log: %+v", uri)))
 	}
+
+	file := filepath.Join(uri.Path, "file.test")
+	if err := os.WriteFile(file, []byte(""), DefaultFileMode); err != nil {
+		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
+			fmt.Sprintf("can't write file for new redo log: %+v", uri)))
+	}
+
+	if _, err := os.ReadFile(file); err != nil {
+		return errors.WrapError(errors.ErrStorageInitialize, errors.Annotate(err,
+			fmt.Sprintf("can't read file for new redo log: %+v", uri)))
+	}
+	_ = os.Remove(file)
 	return nil
 }
 

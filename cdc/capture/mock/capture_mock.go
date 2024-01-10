@@ -125,6 +125,21 @@ func (mr *MockCaptureMockRecorder) GetOwner() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwner", reflect.TypeOf((*MockCapture)(nil).GetOwner))
 }
 
+// GetUpstreamInfo mocks base method.
+func (m *MockCapture) GetUpstreamInfo(arg0 context.Context, arg1 model.UpstreamID, arg2 string) (*model.UpstreamInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUpstreamInfo", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*model.UpstreamInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUpstreamInfo indicates an expected call of GetUpstreamInfo.
+func (mr *MockCaptureMockRecorder) GetUpstreamInfo(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpstreamInfo", reflect.TypeOf((*MockCapture)(nil).GetUpstreamInfo), arg0, arg1, arg2)
+}
+
 // GetUpstreamManager mocks base method.
 func (m *MockCapture) GetUpstreamManager() (*upstream.Manager, error) {
 	m.ctrl.T.Helper()

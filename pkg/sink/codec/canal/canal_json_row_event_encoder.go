@@ -26,11 +26,13 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/pingcap/tiflow/pkg/sink/kafka/claimcheck"
 	"go.uber.org/zap"
 )
 
-func fillColumns(columns []*model.Column,
+func fillColumns(
+	columns []*model.Column,
 	onlyOutputUpdatedColumn bool,
 	onlyHandleKeyColumn bool,
 	newColumnMap map[string]*model.Column,
@@ -58,12 +60,7 @@ func fillColumns(columns []*model.Column,
 			} else {
 				out.RawByte(',')
 			}
-			mysqlType := getMySQLType(col)
-			javaType, err := getJavaSQLType(col, mysqlType)
-			if err != nil {
-				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
-			}
-			value, err := builder.formatValue(col.Value, javaType)
+			value, err := builder.formatValue(col.Value, col.Flag.IsBinary())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 			}
@@ -96,7 +93,6 @@ func newJSONMessageForDML(
 	}
 
 	mysqlTypeMap := make(map[string]string, len(e.Columns))
-
 	out := &jwriter.Writer{}
 	out.RawByte('{')
 	{
@@ -164,7 +160,7 @@ func newJSONMessageForDML(
 		const prefix string = ",\"sqlType\":"
 		out.RawString(prefix)
 		emptyColumn := true
-		for _, col := range columns {
+		for idx, col := range columns {
 			if col != nil {
 				if onlyHandleKey && !col.Flag.IsHandleKey() {
 					continue
@@ -175,15 +171,19 @@ func newJSONMessageForDML(
 				} else {
 					out.RawByte(',')
 				}
-				mysqlType := getMySQLType(col)
-				javaType, err := getJavaSQLType(col, mysqlType)
+				javaType, err := getJavaSQLType(col.Value, col.Type, col.Flag)
 				if err != nil {
 					return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 				}
 				out.String(col.Name)
 				out.RawByte(':')
 				out.Int32(int32(javaType))
-				mysqlTypeMap[col.Name] = mysqlType
+				columnInfo, ok := e.TableInfo.GetColumnInfo(e.ColInfos[idx].ID)
+				if !ok {
+					return nil, cerror.ErrCanalEncodeFailed.GenWithStack(
+						"cannot found the column info by the column ID: %d", e.ColInfos[idx].ID)
+				}
+				mysqlTypeMap[col.Name] = utils.GetMySQLType(columnInfo, config.ContentCompatible)
 			}
 		}
 		if emptyColumn {
@@ -217,13 +217,17 @@ func newJSONMessageForDML(
 	if e.IsDelete() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.PreColumns, false, onlyHandleKey, nil, out, builder); err != nil {
+		if err := fillColumns(
+			e.PreColumns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
 			return nil, err
 		}
 	} else if e.IsInsert() {
 		out.RawString(",\"old\":null")
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder); err != nil {
+		if err := fillColumns(
+			e.Columns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
 			return nil, err
 		}
 	} else if e.IsUpdate() {
@@ -235,11 +239,15 @@ func newJSONMessageForDML(
 			}
 		}
 		out.RawString(",\"old\":")
-		if err := fillColumns(e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder); err != nil {
+		if err := fillColumns(
+			e.PreColumns, config.OnlyOutputUpdatedColumns, onlyHandleKey, newColsMap, out, builder,
+		); err != nil {
 			return nil, err
 		}
 		out.RawString(",\"data\":")
-		if err := fillColumns(e.Columns, false, onlyHandleKey, nil, out, builder); err != nil {
+		if err := fillColumns(
+			e.Columns, false, onlyHandleKey, nil, out, builder,
+		); err != nil {
 			return nil, err
 		}
 	} else {
@@ -293,18 +301,21 @@ type JSONRowEventEncoder struct {
 	builder  *canalEntryBuilder
 	messages []*common.Message
 
+	claimCheck *claimcheck.ClaimCheck
+
 	config *common.Config
 }
 
 // newJSONRowEventEncoder creates a new JSONRowEventEncoder
-func newJSONRowEventEncoder(config *common.Config) codec.RowEventEncoder {
-	encoder := &JSONRowEventEncoder{
-		builder:  newCanalEntryBuilder(),
-		messages: make([]*common.Message, 0, 1),
-
-		config: config,
+func newJSONRowEventEncoder(
+	config *common.Config, claimCheck *claimcheck.ClaimCheck,
+) codec.RowEventEncoder {
+	return &JSONRowEventEncoder{
+		builder:    newCanalEntryBuilder(config),
+		messages:   make([]*common.Message, 0, 1),
+		config:     config,
+		claimCheck: claimCheck,
 	}
-	return encoder
 }
 
 func (c *JSONRowEventEncoder) newJSONMessageForDDL(e *model.DDLEvent) canalJSONMessageInterface {
@@ -355,12 +366,20 @@ func (c *JSONRowEventEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message,
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
+
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return common.NewResolvedMsg(config.ProtocolCanalJSON, nil, value, ts), nil
 }
 
 // AppendRowChangedEvent implements the interface EventJSONBatchEncoder
 func (c *JSONRowEventEncoder) AppendRowChangedEvent(
-	_ context.Context,
+	ctx context.Context,
 	_ string,
 	e *model.RowChangedEvent,
 	callback func(),
@@ -370,6 +389,12 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		return errors.Trace(err)
 	}
 
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	m := &common.Message{
 		Key:      nil,
 		Value:    value,
@@ -398,6 +423,13 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 			if err != nil {
 				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
 			}
+			value, err = common.Compress(
+				c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+			)
+			if err != nil {
+				return errors.Trace(err)
+			}
+
 			m.Value = value
 			length := m.Length()
 			if length > c.config.MaxMessageBytes {
@@ -416,8 +448,15 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		}
 
 		if c.config.LargeMessageHandle.EnableClaimCheck() {
-			m.Event = e
-			m.ClaimCheckFileName = claimcheck.NewFileName()
+			claimCheckFileName := claimcheck.NewFileName()
+			if err := c.claimCheck.WriteMessage(ctx, m.Key, m.Value, claimCheckFileName); err != nil {
+				return errors.Trace(err)
+			}
+
+			m, err = c.newClaimCheckLocationMessage(e, callback, claimCheckFileName)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 	}
 
@@ -425,16 +464,24 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 	return nil
 }
 
-// NewClaimCheckLocationMessage implements the ClaimCheckLocationEncoder interface
-func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Message) (*common.Message, error) {
-	claimCheckLocation := claimcheck.FileNameWithPrefix(c.config.LargeMessageHandle.ClaimCheckStorageURI, origin.ClaimCheckFileName)
-	value, err := newJSONMessageForDML(c.builder, origin.Event, c.config, true, claimCheckLocation)
+func (c *JSONRowEventEncoder) newClaimCheckLocationMessage(
+	event *model.RowChangedEvent, callback func(), fileName string,
+) (*common.Message, error) {
+	claimCheckLocation := c.claimCheck.FileNameWithPrefix(fileName)
+	value, err := newJSONMessageForDML(c.builder, event, c.config, true, claimCheckLocation)
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
 
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	result := common.NewMsg(config.ProtocolCanalJSON, nil, value, 0, model.MessageTypeRow, nil, nil)
-	result.Callback = origin.Callback
+	result.Callback = callback
 	result.IncRowsCount()
 
 	length := result.Length()
@@ -442,7 +489,7 @@ func (c *JSONRowEventEncoder) NewClaimCheckLocationMessage(origin *common.Messag
 		log.Warn("Single message is too large for canal-json, when create the claim check location message",
 			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
 			zap.Int("length", length),
-			zap.Any("table", origin.Event.Table))
+			zap.Any("table", event.Table))
 		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(length)
 	}
 	return result, nil
@@ -466,21 +513,42 @@ func (c *JSONRowEventEncoder) EncodeDDLEvent(e *model.DDLEvent) (*common.Message
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrCanalEncodeFailed, err)
 	}
+	value, err = common.Compress(
+		c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
+	)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	return common.NewDDLMsg(config.ProtocolCanalJSON, nil, value, e), nil
 }
 
 type jsonRowEventEncoderBuilder struct {
 	config *common.Config
+
+	claimCheck *claimcheck.ClaimCheck
 }
 
 // NewJSONRowEventEncoderBuilder creates a canal-json batchEncoderBuilder.
-func NewJSONRowEventEncoderBuilder(config *common.Config) codec.RowEventEncoderBuilder {
-	return &jsonRowEventEncoderBuilder{config: config}
+func NewJSONRowEventEncoderBuilder(ctx context.Context, config *common.Config) (codec.RowEventEncoderBuilder, error) {
+	var (
+		claimCheck *claimcheck.ClaimCheck
+		err        error
+	)
+	if config.LargeMessageHandle.EnableClaimCheck() {
+		claimCheck, err = claimcheck.New(ctx, config.LargeMessageHandle.ClaimCheckStorageURI, config.ChangefeedID)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+	return &jsonRowEventEncoderBuilder{
+		config:     config,
+		claimCheck: claimCheck,
+	}, nil
 }
 
 // Build a `jsonRowEventEncoderBuilder`
 func (b *jsonRowEventEncoderBuilder) Build() codec.RowEventEncoder {
-	return newJSONRowEventEncoder(b.config)
+	return newJSONRowEventEncoder(b.config, b.claimCheck)
 }
 
 func shouldIgnoreColumn(col *model.Column,
@@ -498,4 +566,10 @@ func shouldIgnoreColumn(col *model.Column,
 		}
 	}
 	return false
+}
+
+func (b *jsonRowEventEncoderBuilder) CleanMetrics() {
+	if b.claimCheck != nil {
+		b.claimCheck.CleanMetrics()
+	}
 }

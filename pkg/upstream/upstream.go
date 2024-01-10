@@ -24,11 +24,11 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	tidbkv "github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/kv"
-	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/pdutil"
+	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/version"
 	tikvconfig "github.com/tikv/client-go/v2/config"
@@ -59,7 +59,7 @@ const (
 type Upstream struct {
 	ID             uint64
 	PdEndpoints    []string
-	SecurityConfig *config.SecurityConfig
+	SecurityConfig *security.Credential
 
 	PDClient    pd.Client
 	KVStorage   tidbkv.Storage
@@ -82,7 +82,7 @@ type Upstream struct {
 }
 
 func newUpstream(pdEndpoints []string,
-	securityConfig *config.SecurityConfig,
+	securityConfig *security.Credential,
 ) *Upstream {
 	return &Upstream{
 		PdEndpoints: pdEndpoints, status: uninit,
@@ -104,7 +104,7 @@ func NewUpstream4Test(pdClient pd.Client) *Upstream {
 		status:         normal,
 		wg:             new(sync.WaitGroup),
 		clock:          clock.New(),
-		SecurityConfig: &config.SecurityConfig{},
+		SecurityConfig: &security.Credential{},
 		cancel:         func() {},
 	}
 
@@ -122,28 +122,30 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 	}
 	// init the tikv client tls global config
 	initGlobalConfig(up.SecurityConfig)
-
-	up.PDClient, err = pd.NewClientWithContext(
-		ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
-		// the default `timeout` is 3s, maybe too small if the pd is busy,
-		// set to 10s to avoid frequent timeout.
-		pd.WithCustomTimeoutOption(10*time.Second),
-		pd.WithGRPCDialOptions(
-			grpcTLSOption,
-			grpc.WithBlock(),
-			grpc.WithConnectParams(grpc.ConnectParams{
-				Backoff: backoff.Config{
-					BaseDelay:  time.Second,
-					Multiplier: 1.1,
-					Jitter:     0.1,
-					MaxDelay:   3 * time.Second,
-				},
-				MinConnectTimeout: 3 * time.Second,
-			}),
-		))
-	if err != nil {
-		up.err.Store(err)
-		return errors.Trace(err)
+	// default upstream always use the pdClient pass from cdc server
+	if !up.isDefaultUpstream {
+		up.PDClient, err = pd.NewClientWithContext(
+			ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
+			// the default `timeout` is 3s, maybe too small if the pd is busy,
+			// set to 10s to avoid frequent timeout.
+			pd.WithCustomTimeoutOption(10*time.Second),
+			pd.WithGRPCDialOptions(
+				grpcTLSOption,
+				grpc.WithBlock(),
+				grpc.WithConnectParams(grpc.ConnectParams{
+					Backoff: backoff.Config{
+						BaseDelay:  time.Second,
+						Multiplier: 1.1,
+						Jitter:     0.1,
+						MaxDelay:   3 * time.Second,
+					},
+					MinConnectTimeout: 3 * time.Second,
+				}),
+			))
+		if err != nil {
+			up.err.Store(err)
+			return errors.Trace(err)
+		}
 	}
 	clusterID := up.PDClient.GetClusterID(ctx)
 	if up.ID != 0 && up.ID != clusterID {
@@ -218,7 +220,7 @@ func initUpstream(ctx context.Context, up *Upstream, gcServiceID string) error {
 // initGlobalConfig initializes the global config for tikv client tls.
 // region cache health check will use the global config.
 // TODO: remove this function after tikv client tls is refactored.
-func initGlobalConfig(secCfg *config.SecurityConfig) {
+func initGlobalConfig(secCfg *security.Credential) {
 	if secCfg.CAPath != "" || secCfg.CertPath != "" || secCfg.KeyPath != "" {
 		conf := tikvconfig.GetGlobalConfig()
 		conf.Security.ClusterSSLCA = secCfg.CAPath
@@ -240,7 +242,9 @@ func (up *Upstream) Close() {
 	}
 	atomic.StoreInt32(&up.status, closing)
 
-	if up.PDClient != nil {
+	// should never close default upstream's pdClient here
+	// because it's shared by the cdc server
+	if up.PDClient != nil && !up.isDefaultUpstream {
 		up.PDClient.Close()
 	}
 

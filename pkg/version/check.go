@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/util/engine"
+	"github.com/pingcap/tidb/pkg/util/engine"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/retry"
@@ -67,6 +67,7 @@ func SanitizeVersion(v string) string {
 		return v
 	}
 	v = versionHash.ReplaceAllLiteralString(v, "")
+	v = strings.TrimSuffix(v, "-fips")
 	v = strings.TrimSuffix(v, "-dirty")
 	return strings.TrimPrefix(v, "v")
 }
@@ -239,8 +240,8 @@ type TiCDCClusterVersion struct {
 	*semver.Version
 }
 
-// ShouldEnableOldValueByDefault returns whether old value should be enabled by default
-func (v *TiCDCClusterVersion) ShouldEnableOldValueByDefault() bool {
+// LessThan500RC returns true if th cluster version is less than 5.0.0-rc
+func (v *TiCDCClusterVersion) LessThan500RC() bool {
 	// we assume the unknown version to be the latest version
 	return v.Version == nil || !v.LessThan(*semver.New("5.0.0-rc"))
 }

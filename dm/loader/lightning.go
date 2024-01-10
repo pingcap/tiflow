@@ -30,8 +30,8 @@ import (
 	lcfg "github.com/pingcap/tidb/br/pkg/lightning/config"
 	"github.com/pingcap/tidb/br/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/pingcap/tidb/parser/mysql"
-	tidbpromutil "github.com/pingcap/tidb/util/promutil"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	tidbpromutil "github.com/pingcap/tidb/pkg/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -364,8 +364,11 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
 		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	}
-	cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
-	cfg.TikvImporter.IncrementalImport = true
+	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
+		cfg.TikvImporter.IncrementalImport = true
+	} else {
+		cfg.TikvImporter.OnDuplicate = string(subtaskCfg.OnDuplicateLogical)
+	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
 		cfg.TikvImporter.DuplicateResolution = lcfg.DupeResAlgRemove

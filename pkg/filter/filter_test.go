@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -318,5 +318,23 @@ func TestIsAllowedDDL(t *testing.T) {
 	testCases = append(testCases, testCase{timodel.ActionDropSequence, false})
 	for _, tc := range testCases {
 		require.Equal(t, tc.allowed, isAllowedDDL(tc.ActionType), "%#v", tc)
+	}
+}
+
+func TestIsSchemaDDL(t *testing.T) {
+	cases := []struct {
+		actionType timodel.ActionType
+		isSchema   bool
+	}{
+		{timodel.ActionCreateSchema, true},
+		{timodel.ActionDropSchema, true},
+		{timodel.ActionModifySchemaCharsetAndCollate, true},
+		{timodel.ActionCreateTable, false},
+		{timodel.ActionDropTable, false},
+		{timodel.ActionTruncateTable, false},
+		{timodel.ActionAddColumn, false},
+	}
+	for _, tc := range cases {
+		require.Equal(t, tc.isSchema, IsSchemaDDL(tc.actionType), "%#v", tc)
 	}
 }

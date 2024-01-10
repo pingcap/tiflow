@@ -1,4 +1,5 @@
 [sink]
 dispatchers = [
+    { matcher = ['workload.*'], topic = "workload"},
     { matcher = ['test.*'], topic = "{schema}_{table}" },
 ]

@@ -33,7 +33,6 @@ type redoWorker struct {
 	memQuota       *memquota.MemQuota
 	redoDMLManager redo.DMLManager
 	eventCache     *redoEventCache
-	enableOldValue bool
 }
 
 func newRedoWorker(
@@ -42,7 +41,6 @@ func newRedoWorker(
 	quota *memquota.MemQuota,
 	redoDMLMgr redo.DMLManager,
 	eventCache *redoEventCache,
-	enableOldValue bool,
 ) *redoWorker {
 	return &redoWorker{
 		changefeedID:   changefeedID,
@@ -50,7 +48,6 @@ func newRedoWorker(
 		memQuota:       quota,
 		redoDMLManager: redoDMLMgr,
 		eventCache:     eventCache,
-		enableOldValue: enableOldValue,
 	}
 }
 
@@ -68,21 +65,22 @@ func (w *redoWorker) handleTasks(ctx context.Context, taskChan <-chan *redoTask)
 }
 
 func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr error) {
+	advancer := newRedoLogAdvancer(task, w.memQuota, requestMemSize, w.redoDMLManager)
+	// The task is finished and some required memory isn't used.
+	defer advancer.cleanup()
+
 	lowerBound, upperBound := validateAndAdjustBound(
 		w.changefeedID,
 		&task.span,
 		task.lowerBound,
 		task.getUpperBound(task.tableSink.getReceivedSorterResolvedTs()),
 	)
+	advancer.lastPos = lowerBound.Prev()
 
 	var cache *eventAppender
 	if w.eventCache != nil {
 		cache = w.eventCache.maybeCreateAppender(task.span, lowerBound)
 	}
-
-	advancer := newRedoLogAdvancer(task, w.memQuota, requestMemSize, w.redoDMLManager)
-	// The task is finished and some required memory isn't used.
-	defer advancer.cleanup()
 
 	iter := w.sourceManager.FetchByTable(task.span, lowerBound, upperBound, w.memQuota)
 	allEventCount := 0
@@ -127,11 +125,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 				cache.pushBatch(nil, 0, upperBound)
 			}
 
-			return advancer.finish(
-				ctx,
-				cachedSize,
-				upperBound,
-			)
+			return advancer.finish(ctx, cachedSize, upperBound)
 		}
 
 		allEventCount += 1
@@ -148,10 +142,7 @@ func (w *redoWorker) handleTask(ctx context.Context, task *redoTask) (finalErr e
 		if e.Row != nil {
 			// For all events, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.replicateTs
-			x, size, err = convertRowChangedEvents(w.changefeedID, task.span, w.enableOldValue, e)
-			if err != nil {
-				return errors.Trace(err)
-			}
+			x, size = handleRowChangedEvents(w.changefeedID, task.span, e)
 			advancer.appendEvents(x, size)
 		}
 

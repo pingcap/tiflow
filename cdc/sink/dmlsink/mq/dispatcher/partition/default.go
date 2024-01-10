@@ -19,28 +19,18 @@ import (
 
 // DefaultDispatcher is the default partition dispatcher.
 type DefaultDispatcher struct {
-	tbd            *TableDispatcher
-	ivd            *IndexValueDispatcher
-	enableOldValue bool
+	tbd *TableDispatcher
 }
 
 // NewDefaultDispatcher creates a DefaultDispatcher.
-func NewDefaultDispatcher(enableOldValue bool) *DefaultDispatcher {
+func NewDefaultDispatcher() *DefaultDispatcher {
 	return &DefaultDispatcher{
-		tbd:            NewTableDispatcher(),
-		ivd:            NewIndexValueDispatcher(),
-		enableOldValue: enableOldValue,
+		tbd: NewTableDispatcher(),
 	}
 }
 
 // DispatchRowChangedEvent returns the target partition to which
 // a row changed event should be dispatched.
-func (d *DefaultDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) int32 {
-	if d.enableOldValue {
-		return d.tbd.DispatchRowChangedEvent(row, partitionNum)
-	}
-	if len(row.IndexColumns) != 1 {
-		return d.tbd.DispatchRowChangedEvent(row, partitionNum)
-	}
-	return d.ivd.DispatchRowChangedEvent(row, partitionNum)
+func (d *DefaultDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, partitionNum int32) (int32, string, error) {
+	return d.tbd.DispatchRowChangedEvent(row, partitionNum)
 }

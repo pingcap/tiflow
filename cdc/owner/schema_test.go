@@ -20,13 +20,14 @@ import (
 	"sort"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -40,8 +41,8 @@ func TestAllPhysicalTables(t *testing.T) {
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	tableIDs, err := schema.AllPhysicalTables(context.Background(), ver.Ver)
 	require.Nil(t, err)
@@ -98,8 +99,8 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	tableInfos, err := schema.AllTables(context.Background(), ver.Ver)
 	require.Nil(t, err)
@@ -111,11 +112,11 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
 	tableName := tableInfos[0].TableName
-	require.Equal(t, tableName, model.TableName{
+	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 88,
-	})
+		TableID: 104,
+	}, tableName)
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
 	require.Nil(t, schema.HandleDDLJob(job))
@@ -123,11 +124,11 @@ func TestAllTables(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, tableInfos, 1)
 	tableName = tableInfos[0].TableName
-	require.Equal(t, tableName, model.TableName{
+	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 88,
-	})
+		TableID: 104,
+	}, tableName)
 }
 
 func TestIsIneligibleTableID(t *testing.T) {
@@ -137,8 +138,8 @@ func TestIsIneligibleTableID(t *testing.T) {
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	// add normal table
 	job := helper.DDL2Job("create table test.t1(id int primary key)")
@@ -149,8 +150,31 @@ func TestIsIneligibleTableID(t *testing.T) {
 	tableIDT2 := job.BinlogInfo.TableInfo.ID
 
 	require.Nil(t, schema.HandleDDLJob(job))
-	require.False(t, schema.IsIneligibleTableID(tableIDT1))
-	require.True(t, schema.IsIneligibleTableID(tableIDT2))
+	ctx := context.Background()
+	ignore, err := schema.IsIneligibleTable(ctx, tableIDT1, job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.False(t, ignore)
+
+	ignore, err = schema.IsIneligibleTable(ctx, tableIDT2, job.BinlogInfo.FinishedTS)
+	require.Nil(t, err)
+	require.True(t, ignore)
+
+	// test we get the right snapshot to check ineligible table
+	job = helper.DDL2Job("create table test.t3(id int)")
+	tableIDT3 := job.BinlogInfo.TableInfo.ID
+	snapshotTsWithoutPK := job.BinlogInfo.FinishedTS
+	require.Nil(t, schema.HandleDDLJob(job))
+	job = helper.DDL2Job("alter table test.t3 add primary key(id)")
+	snapshotTsWithPK := job.BinlogInfo.FinishedTS
+	require.Nil(t, schema.HandleDDLJob(job))
+	// tableIDT3 is ineligible at snapshotTsWithoutPK
+	ignore, err = schema.IsIneligibleTable(ctx, tableIDT3, snapshotTsWithoutPK)
+	require.Nil(t, err)
+	require.True(t, ignore)
+	// tableIDT3 is eligible at snapshotTsWithPK
+	ignore, err = schema.IsIneligibleTable(ctx, tableIDT3, snapshotTsWithPK)
+	require.Nil(t, err)
+	require.False(t, ignore)
 }
 
 func compareEvents(t *testing.T, e1, e2 *model.DDLEvent) {
@@ -172,8 +196,8 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	// add normal table
 	ctx := context.Background()
@@ -248,8 +272,8 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	ctx := context.Background()
 	job := helper.DDL2Job("create database test1")
@@ -376,8 +400,8 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	// add test.t1
 	ctx := context.Background()
@@ -479,8 +503,8 @@ func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	require.Nil(t, err)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		config.GetDefaultReplicaConfig(), dummyChangeFeedID, f)
+	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	ctx := context.Background()
 	// add test.tb1
@@ -603,8 +627,8 @@ func TestBuildIgnoredDDLJob(t *testing.T) {
 	cfg.Filter.Rules = []string{"test.tb1", "test.tb2"}
 	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(helper.Storage(), ver.Ver,
-		cfg, dummyChangeFeedID, f)
+	schema, err := entry.NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
 	require.Nil(t, err)
 	ctx := context.Background()
 	// test case 1: Will not filter out create test.tb1 ddl.
