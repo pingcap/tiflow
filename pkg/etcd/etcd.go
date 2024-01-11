@@ -14,14 +14,20 @@
 package etcd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/pd/pkg/tempurl"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -86,6 +92,80 @@ type CDCEtcdClient struct {
 	Client *Client
 }
 
+<<<<<<< HEAD
+=======
+// OwnerCaptureInfoClient is the sub interface of CDCEtcdClient that used for get owner capture information
+type OwnerCaptureInfoClient interface {
+	GetOwnerID(context.Context) (model.CaptureID, error)
+
+	GetOwnerRevision(context.Context, model.CaptureID) (int64, error)
+
+	GetCaptures(context.Context) (int64, []*model.CaptureInfo, error)
+}
+
+// CDCEtcdClient extracts CDCEtcdClients's method used for apiv2.
+type CDCEtcdClient interface {
+	OwnerCaptureInfoClient
+
+	GetClusterID() string
+
+	GetEtcdClient() *Client
+
+	GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error)
+
+	GetChangeFeedInfo(ctx context.Context,
+		id model.ChangeFeedID,
+	) (*model.ChangeFeedInfo, error)
+
+	GetAllChangeFeedInfo(ctx context.Context) (
+		map[model.ChangeFeedID]*model.ChangeFeedInfo, error,
+	)
+
+	GetChangeFeedStatus(ctx context.Context,
+		id model.ChangeFeedID,
+	) (*model.ChangeFeedStatus, int64, error)
+
+	GetUpstreamInfo(ctx context.Context,
+		upstreamID model.UpstreamID,
+		namespace string,
+	) (*model.UpstreamInfo, error)
+
+	GetGCServiceID() string
+
+	GetEnsureGCServiceID(tag string) string
+
+	SaveChangeFeedInfo(ctx context.Context,
+		info *model.ChangeFeedInfo,
+		changeFeedID model.ChangeFeedID,
+	) error
+
+	CreateChangefeedInfo(context.Context,
+		*model.UpstreamInfo,
+		*model.ChangeFeedInfo,
+	) error
+
+	UpdateChangefeedAndUpstream(ctx context.Context,
+		upstreamInfo *model.UpstreamInfo,
+		changeFeedInfo *model.ChangeFeedInfo,
+	) error
+
+	PutCaptureInfo(context.Context, *model.CaptureInfo, clientv3.LeaseID) error
+
+	DeleteCaptureInfo(context.Context, model.CaptureID) error
+
+	CheckMultipleCDCClusterExist(ctx context.Context) error
+}
+
+// CDCEtcdClientImpl is a wrap of etcd client
+type CDCEtcdClientImpl struct {
+	Client        *Client
+	ClusterID     string
+	etcdClusterID uint64
+}
+
+var _ CDCEtcdClient = (*CDCEtcdClientImpl)(nil)
+
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 // NewCDCEtcdClient returns a new CDCEtcdClient
 func NewCDCEtcdClient(ctx context.Context, cli *clientv3.Client) CDCEtcdClient {
 	metrics := map[string]prometheus.Counter{
@@ -105,20 +185,60 @@ func (c CDCEtcdClient) Close() error {
 }
 
 // ClearAllCDCInfo delete all keys created by CDC
+<<<<<<< HEAD
 func (c CDCEtcdClient) ClearAllCDCInfo(ctx context.Context) error {
 	_, err := c.Client.Delete(ctx, EtcdKeyBase, clientv3.WithPrefix())
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+=======
+func (c *CDCEtcdClientImpl) ClearAllCDCInfo(ctx context.Context) error {
+	_, err := c.Client.Delete(ctx, BaseKey(c.ClusterID), clientv3.WithPrefix())
+	return errors.WrapError(errors.ErrPDEtcdAPIError, err)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 }
 
 // GetAllCDCInfo get all keys created by CDC
 func (c CDCEtcdClient) GetAllCDCInfo(ctx context.Context) ([]*mvccpb.KeyValue, error) {
 	resp, err := c.Client.Get(ctx, EtcdKeyBase, clientv3.WithPrefix())
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return nil, errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	return resp.Kvs, nil
 }
 
+<<<<<<< HEAD
+=======
+// CheckMultipleCDCClusterExist checks if other cdc clusters exists,
+// and returns an error is so, and user should use --server instead
+func (c *CDCEtcdClientImpl) CheckMultipleCDCClusterExist(ctx context.Context) error {
+	resp, err := c.Client.Get(ctx, BaseKey(""),
+		clientv3.WithPrefix(),
+		clientv3.WithKeysOnly())
+	if err != nil {
+		return errors.WrapError(errors.ErrPDEtcdAPIError, err)
+	}
+	for _, kv := range resp.Kvs {
+		key := string(kv.Key)
+		if strings.HasPrefix(key, BaseKey(DefaultCDCClusterID)) ||
+			strings.HasPrefix(key, migrateBackupPrefix) {
+			continue
+		}
+		// skip the reserved cluster id
+		isReserved := false
+		for _, reserved := range config.ReservedClusterIDs {
+			if strings.HasPrefix(key, BaseKey(reserved)) {
+				isReserved = true
+				break
+			}
+		}
+		if isReserved {
+			continue
+		}
+		return errors.ErrMultipleCDCClustersExist.GenWithStackByArgs()
+	}
+	return nil
+}
+
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 // GetChangeFeeds returns kv revision and a map mapping from changefeedID to changefeed detail mvccpb.KeyValue
 func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (
 	int64,
@@ -128,7 +248,7 @@ func (c CDCEtcdClient) GetChangeFeeds(ctx context.Context) (
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
-		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return 0, nil, errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	revision := resp.Header.Revision
 	details := make(map[model.ChangeFeedID]*mvccpb.KeyValue, resp.Count)
@@ -169,10 +289,10 @@ func (c CDCEtcdClient) GetChangeFeedInfo(ctx context.Context,
 	key := GetEtcdKeyChangeFeedInfo(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return nil, errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
-		return nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(key)
+		return nil, errors.ErrChangeFeedNotExists.GenWithStackByArgs(key)
 	}
 	detail := &model.ChangeFeedInfo{}
 	err = detail.Unmarshal(resp.Kvs[0].Value)
@@ -185,7 +305,7 @@ func (c CDCEtcdClient) DeleteChangeFeedInfo(ctx context.Context,
 ) error {
 	key := GetEtcdKeyChangeFeedInfo(id)
 	_, err := c.Client.Delete(ctx, key)
-	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	return errors.WrapError(errors.ErrPDEtcdAPIError, err)
 }
 
 // GetAllChangeFeedStatus queries all changefeed job status
@@ -220,10 +340,10 @@ func (c CDCEtcdClient) GetChangeFeedStatus(ctx context.Context,
 	key := GetEtcdKeyJob(id)
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return nil, 0, errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	if resp.Count == 0 {
-		return nil, 0, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(key)
+		return nil, 0, errors.ErrChangeFeedNotExists.GenWithStackByArgs(key)
 	}
 	info := &model.ChangeFeedStatus{}
 	err = info.Unmarshal(resp.Kvs[0].Value)
@@ -236,7 +356,7 @@ func (c CDCEtcdClient) GetCaptures(ctx context.Context) (int64, []*model.Capture
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
-		return 0, nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return 0, nil, errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	revision := resp.Header.Revision
 	infos := make([]*model.CaptureInfo, 0, resp.Count)
@@ -258,11 +378,11 @@ func (c CDCEtcdClient) GetCaptureInfo(ctx context.Context, id string) (info *mod
 
 	resp, err := c.Client.Get(ctx, key)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return nil, errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 
 	if len(resp.Kvs) == 0 {
-		return nil, cerror.ErrCaptureNotExist.GenWithStackByArgs(key)
+		return nil, errors.ErrCaptureNotExist.GenWithStackByArgs(key)
 	}
 
 	info = new(model.CaptureInfo)
@@ -280,7 +400,7 @@ func (c CDCEtcdClient) GetCaptureLeases(ctx context.Context) (map[string]int64, 
 
 	resp, err := c.Client.Get(ctx, key, clientv3.WithPrefix())
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return nil, errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	leases := make(map[string]int64, resp.Count)
 	for _, kv := range resp.Kvs {
@@ -303,12 +423,13 @@ func (c CDCEtcdClient) RevokeAllLeases(ctx context.Context, leases map[string]in
 			// it means the etcd lease is already expired or revoked
 			continue
 		}
-		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	return nil
 }
 
 // CreateChangefeedInfo creates a change feed info into etcd and fails if it is already exists.
+<<<<<<< HEAD
 func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 	info *model.ChangeFeedInfo,
 	changeFeedID model.ChangeFeedID,
@@ -316,10 +437,73 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 	infoKey := GetEtcdKeyChangeFeedInfo(changeFeedID)
 	jobKey := GetEtcdKeyJob(changeFeedID)
 	value, err := info.Marshal()
+=======
+func (c *CDCEtcdClientImpl) CreateChangefeedInfo(
+	ctx context.Context, upstreamInfo *model.UpstreamInfo, info *model.ChangeFeedInfo,
+) error {
+	return c.saveChangefeedAndUpstreamInfo(ctx, "Create", upstreamInfo, info)
+}
+
+// UpdateChangefeedAndUpstream updates the changefeed's info and its upstream info into etcd
+func (c *CDCEtcdClientImpl) UpdateChangefeedAndUpstream(
+	ctx context.Context, upstreamInfo *model.UpstreamInfo, changeFeedInfo *model.ChangeFeedInfo,
+) error {
+	return c.saveChangefeedAndUpstreamInfo(ctx, "Update", upstreamInfo, changeFeedInfo)
+}
+
+// saveChangefeedAndUpstreamInfo stores changefeed info and its upstream info into etcd
+func (c *CDCEtcdClientImpl) saveChangefeedAndUpstreamInfo(
+	ctx context.Context, operation string,
+	upstreamInfo *model.UpstreamInfo, info *model.ChangeFeedInfo,
+) error {
+	cmps := []clientv3.Cmp{}
+	opsThen := []clientv3.Op{}
+
+	if upstreamInfo != nil {
+		if info.UpstreamID != upstreamInfo.ID {
+			return errors.ErrUpstreamMissMatch.GenWithStackByArgs(info.UpstreamID, upstreamInfo.ID)
+		}
+		upstreamInfoKey := CDCKey{
+			Tp:         CDCKeyTypeUpStream,
+			ClusterID:  c.ClusterID,
+			UpstreamID: upstreamInfo.ID,
+			Namespace:  info.Namespace,
+		}
+		upstreamEtcdKeyStr := upstreamInfoKey.String()
+		upstreamResp, err := c.Client.Get(ctx, upstreamEtcdKeyStr)
+		if err != nil {
+			return errors.WrapError(errors.ErrPDEtcdAPIError, err)
+		}
+		upstreamData, err := upstreamInfo.Marshal()
+		if err != nil {
+			return errors.WrapError(errors.ErrPDEtcdAPIError, err)
+		}
+
+		if len(upstreamResp.Kvs) == 0 {
+			cmps = append(cmps, clientv3.Compare(clientv3.ModRevision(upstreamEtcdKeyStr), "=", 0))
+			opsThen = append(opsThen, clientv3.OpPut(upstreamEtcdKeyStr, string(upstreamData)))
+		} else {
+			cmps = append(cmps,
+				clientv3.Compare(clientv3.ModRevision(upstreamEtcdKeyStr), "=", upstreamResp.Kvs[0].ModRevision))
+			if !bytes.Equal(upstreamResp.Kvs[0].Value, upstreamData) {
+				opsThen = append(opsThen, clientv3.OpPut(upstreamEtcdKeyStr, string(upstreamData)))
+			}
+		}
+	}
+
+	changeFeedID := model.ChangeFeedID{
+		Namespace: info.Namespace,
+		ID:        info.ID,
+	}
+	infoKey := GetEtcdKeyChangeFeedInfo(c.ClusterID, changeFeedID)
+	jobKey := GetEtcdKeyJob(c.ClusterID, changeFeedID)
+	infoData, err := info.Marshal()
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 	if err != nil {
 		return errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	cmps := []clientv3.Cmp{
 		clientv3.Compare(clientv3.ModRevision(infoKey), "=", 0),
 		clientv3.Compare(clientv3.ModRevision(jobKey), "=", 0),
@@ -327,15 +511,47 @@ func (c CDCEtcdClient) CreateChangefeedInfo(ctx context.Context,
 	opsThen := []clientv3.Op{
 		clientv3.OpPut(infoKey, value),
 	}
+=======
+	var infoModRevsion, jobModRevision int64
+	if operation == "Update" {
+		infoResp, err := c.Client.Get(ctx, infoKey)
+		if err != nil {
+			return errors.WrapError(errors.ErrPDEtcdAPIError, err)
+		}
+		if len(infoResp.Kvs) == 0 {
+			return errors.ErrChangeFeedNotExists.GenWithStackByArgs(infoKey)
+		}
+		infoModRevsion = infoResp.Kvs[0].ModRevision
+
+		jobResp, err := c.Client.Get(ctx, jobKey)
+		if err != nil {
+			return errors.WrapError(errors.ErrPDEtcdAPIError, err)
+		}
+		if len(jobResp.Kvs) == 0 {
+			// Note that status may not exist, so we don't check it here.
+			log.Debug("job status not exists", zap.Stringer("changefeed", changeFeedID))
+		} else {
+			jobModRevision = jobResp.Kvs[0].ModRevision
+		}
+	}
+
+	cmps = append(cmps,
+		clientv3.Compare(clientv3.ModRevision(infoKey), "=", infoModRevsion),
+		clientv3.Compare(clientv3.ModRevision(jobKey), "=", jobModRevision),
+	)
+	opsThen = append(opsThen, clientv3.OpPut(infoKey, infoData))
+
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 	resp, err := c.Client.Txn(ctx, cmps, opsThen, TxnEmptyOpsElse)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	if !resp.Succeeded {
-		log.Warn("changefeed already exists, ignore create changefeed",
+		log.Warn(fmt.Sprintf("unexpected etcd transaction failure, operation: %s", operation),
 			zap.String("namespace", changeFeedID.Namespace),
 			zap.String("changefeed", changeFeedID.ID))
-		return cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(changeFeedID)
+		errMsg := fmt.Sprintf("%s changefeed %s", operation, changeFeedID)
+		return errors.ErrMetaOpFailed.GenWithStackByArgs(errMsg)
 	}
 	return errors.Trace(err)
 }
@@ -352,7 +568,7 @@ func (c CDCEtcdClient) SaveChangeFeedInfo(ctx context.Context,
 		return errors.Trace(err)
 	}
 	_, err = c.Client.Put(ctx, key, value)
-	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	return errors.WrapError(errors.ErrPDEtcdAPIError, err)
 }
 
 // GetProcessors queries all processors of the cdc cluster,
@@ -499,7 +715,7 @@ func (c CDCEtcdClient) PutCaptureInfo(ctx context.Context, info *model.CaptureIn
 
 	key := GetEtcdKeyCaptureInfo(info.ID)
 	_, err = c.Client.Put(ctx, key, string(data), clientv3.WithLease(leaseID))
-	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	return errors.WrapError(errors.ErrPDEtcdAPIError, err)
 }
 
 // DeleteCaptureInfo delete capture info from etcd.
@@ -507,7 +723,7 @@ func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, captureID string) 
 	key := GetEtcdKeyCaptureInfo(captureID)
 	_, err := c.Client.Delete(ctx, key)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 
 	// we need to clean all task position related to this capture when the capture is offline
@@ -520,14 +736,14 @@ func (c CDCEtcdClient) DeleteCaptureInfo(ctx context.Context, captureID string) 
 			zap.String("captureID", captureID),
 			zap.String("key", key), zap.Error(err))
 	}
-	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+	return errors.WrapError(errors.ErrPDEtcdAPIError, err)
 }
 
 // GetOwnerID returns the owner id by querying etcd
 func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, error) {
 	resp, err := c.Client.Get(ctx, key, clientv3.WithFirstCreate()...)
 	if err != nil {
-		return "", cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return "", errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	if len(resp.Kvs) == 0 {
 		return "", concurrency.ErrElectionNoLeader
@@ -539,18 +755,60 @@ func (c CDCEtcdClient) GetOwnerID(ctx context.Context, key string) (string, erro
 func (c CDCEtcdClient) GetOwnerRevision(ctx context.Context, captureID string) (rev int64, err error) {
 	resp, err := c.Client.Get(ctx, CaptureOwnerKey, clientv3.WithFirstCreate()...)
 	if err != nil {
-		return 0, cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
+		return 0, errors.WrapError(errors.ErrPDEtcdAPIError, err)
 	}
 	if len(resp.Kvs) == 0 {
-		return 0, cerror.ErrOwnerNotFound.GenWithStackByArgs()
+		return 0, errors.ErrOwnerNotFound.GenWithStackByArgs()
 	}
 	// Checks that the given capture is indeed the owner.
 	if string(resp.Kvs[0].Value) != captureID {
-		return 0, cerror.ErrNotOwner.GenWithStackByArgs()
+		return 0, errors.ErrNotOwner.GenWithStackByArgs()
 	}
 	return resp.Kvs[0].ModRevision, nil
 }
 
+<<<<<<< HEAD
+=======
+// GetGCServiceID returns the cdc gc service ID
+func (c *CDCEtcdClientImpl) GetGCServiceID() string {
+	return fmt.Sprintf("ticdc-%s-%d", c.ClusterID, c.etcdClusterID)
+}
+
+// GetEnsureGCServiceID return the prefix for the gc service id when changefeed is creating
+func (c *CDCEtcdClientImpl) GetEnsureGCServiceID(tag string) string {
+	return c.GetGCServiceID() + tag
+}
+
+// GetUpstreamInfo get a upstreamInfo from etcd server
+func (c *CDCEtcdClientImpl) GetUpstreamInfo(ctx context.Context,
+	upstreamID model.UpstreamID,
+	namespace string,
+) (*model.UpstreamInfo, error) {
+	Key := CDCKey{
+		Tp:         CDCKeyTypeUpStream,
+		ClusterID:  c.ClusterID,
+		UpstreamID: upstreamID,
+		Namespace:  namespace,
+	}
+	KeyStr := Key.String()
+	resp, err := c.Client.Get(ctx, KeyStr)
+	if err != nil {
+		return nil, errors.WrapError(errors.ErrPDEtcdAPIError, err)
+	}
+	if resp.Count == 0 {
+		return nil, errors.ErrUpstreamNotFound.GenWithStackByArgs(KeyStr)
+	}
+	info := &model.UpstreamInfo{}
+	err = info.Unmarshal(resp.Kvs[0].Value)
+	return info, errors.Trace(err)
+}
+
+// GcServiceIDForTest returns the gc service ID for tests
+func GcServiceIDForTest() string {
+	return fmt.Sprintf("ticdc-%s-%d", "default", 0)
+}
+
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 // getFreeListenURLs get free ports and localhost as url.
 func getFreeListenURLs(n int) (urls []*url.URL, retErr error) {
 	for i := 0; i < n; i++ {
@@ -600,7 +858,7 @@ func SetupEmbedEtcd(dir string) (clientURL *url.URL, e *embed.Etcd, err error) {
 func extractKeySuffix(key string) (string, error) {
 	subs := strings.Split(key, "/")
 	if len(subs) < 2 {
-		return "", cerror.ErrInvalidEtcdKey.GenWithStackByArgs(key)
+		return "", errors.ErrInvalidEtcdKey.GenWithStackByArgs(key)
 	}
 	return subs[len(subs)-1], nil
 }

@@ -1017,4 +1017,52 @@ var (
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
+<<<<<<< HEAD:pkg/errors/errors.go
+=======
+
+	ErrHandleDDLFailed = errors.Normalize(
+		"handle ddl failed, query: %s, startTs: %d. "+
+			"If you want to skip this DDL and continue with replication, "+
+			"you can manually execute this DDL downstream. Afterwards, "+
+			"add `ignore-txn-start-ts=[%d]` to the changefeed in the filter configuration.",
+		errors.RFCCodeText("CDC:ErrHandleDDLFailed"),
+	)
+
+	ErrInvalidGlueSchemaRegistryConfig = errors.Normalize(
+		"invalid glue schema registry config, %s",
+		errors.RFCCodeText("CDC:ErrInvalidGlueSchemaRegistryConfig"),
+	)
+
+	// cdc v2
+	// TODO(CharlesCheung): refactor this errors
+	ErrElectorNotLeader = errors.Normalize(
+		"%s is not leader",
+		errors.RFCCodeText("CDC:ErrNotLeader"),
+	)
+	ErrNotController = errors.Normalize(
+		"not controller",
+		errors.RFCCodeText("CDC:ErrNotController"),
+	)
+	ErrMetaRowsAffectedNotMatch = errors.Normalize(
+		"rows affected by the operation %s is unexpected: expected %d, got %d",
+		errors.RFCCodeText("CDC:ErrMetaOpIgnored"),
+	)
+	ErrMetaOpFailed = errors.Normalize(
+		"unexpected meta operation failure: %s",
+		errors.RFCCodeText("DFLOW:ErrMetaOpFailed"),
+	)
+	ErrMetaInvalidState = errors.Normalize(
+		"meta state is invalid: %s",
+		errors.RFCCodeText("DFLOW:ErrMetaInvalidState"),
+	)
+	ErrInconsistentMetaCache = errors.Normalize(
+		"meta cache is inconsistent: %s",
+		errors.RFCCodeText("DFLOW:ErrInconsistentMetaCache"),
+	)
+
+	ErrUnexpected = errors.Normalize(
+		"cdc met unexpected error: %s",
+		errors.RFCCodeText("CDC:ErrUnexpected"),
+	)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422)):pkg/errors/cdc_errors.go
 )

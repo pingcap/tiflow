@@ -99,6 +99,15 @@ type Owner interface {
 	Query(query *Query, done chan<- error)
 	ValidateChangefeed(info *model.ChangefeedConfig) error
 	AsyncStop()
+<<<<<<< HEAD
+=======
+	UpdateChangefeedAndUpstream(ctx context.Context,
+		upstreamInfo *model.UpstreamInfo,
+		changeFeedInfo *model.ChangeFeedInfo,
+	) error
+	UpdateChangefeed(ctx context.Context,
+		changeFeedInfo *model.ChangeFeedInfo) error
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 }
 
 type ownerImpl struct {
@@ -348,6 +357,25 @@ func (o *ownerImpl) AsyncStop() {
 	o.cleanStaleMetrics()
 }
 
+<<<<<<< HEAD
+=======
+func (o *ownerImpl) UpdateChangefeedAndUpstream(ctx context.Context,
+	upstreamInfo *model.UpstreamInfo,
+	changeFeedInfo *model.ChangeFeedInfo,
+) error {
+	return o.etcdClient.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo)
+}
+
+func (o *ownerImpl) UpdateChangefeed(ctx context.Context,
+	changeFeedInfo *model.ChangeFeedInfo,
+) error {
+	return o.etcdClient.SaveChangeFeedInfo(ctx, changeFeedInfo, model.ChangeFeedID{
+		Namespace: changeFeedInfo.Namespace,
+		ID:        changeFeedInfo.ID,
+	})
+}
+
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 func (o *ownerImpl) cleanUpChangefeed(state *orchestrator.ChangefeedReactorState) {
 	state.PatchInfo(func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 		return nil, info != nil, nil

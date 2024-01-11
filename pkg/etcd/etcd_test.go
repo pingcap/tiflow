@@ -95,10 +95,19 @@ logEtcdError:
 }
 
 func TestEmbedEtcd(t *testing.T) {
+<<<<<<< HEAD
 	s := &etcdTester{}
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
 	curl := s.clientURL.String()
+=======
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+	curl := s.ClientURL.String()
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{curl},
 		DialTimeout: 3 * time.Second,
@@ -119,9 +128,17 @@ func TestEmbedEtcd(t *testing.T) {
 }
 
 func TestGetChangeFeeds(t *testing.T) {
+<<<<<<< HEAD
 	s := &etcdTester{}
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
+=======
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 	testCases := []struct {
 		ids     []string
 		details []string
@@ -160,9 +177,17 @@ func TestGetChangeFeeds(t *testing.T) {
 }
 
 func TestOpChangeFeedDetail(t *testing.T) {
+<<<<<<< HEAD
 	s := &etcdTester{}
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
+=======
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
 		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
@@ -186,9 +211,17 @@ func TestOpChangeFeedDetail(t *testing.T) {
 }
 
 func TestGetAllChangeFeedInfo(t *testing.T) {
+<<<<<<< HEAD
 	s := &etcdTester{}
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
+=======
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 	ctx := context.Background()
 	infos := []struct {
 		id   string
@@ -227,6 +260,7 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func putChangeFeedStatus(
 	ctx context.Context,
 	c CDCEtcdClient,
@@ -241,6 +275,14 @@ func putChangeFeedStatus(
 	_, err = c.Client.Put(ctx, key, value)
 	return cerror.WrapError(cerror.ErrPDEtcdAPIError, err)
 }
+=======
+func TestCheckMultipleCDCClusterExist(t *testing.T) {
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 
 func TestGetAllChangeFeedStatus(t *testing.T) {
 	s := &etcdTester{}
@@ -267,18 +309,30 @@ func TestGetAllChangeFeedStatus(t *testing.T) {
 }
 
 func TestCreateChangefeed(t *testing.T) {
+<<<<<<< HEAD
 	s := &etcdTester{}
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
+=======
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
-		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
+		UpstreamID: 1,
+		Namespace:  "test",
+		ID:         "create-changefeed",
+		SinkURI:    "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
 	err := s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
 	require.NoError(t, err)
 
+<<<<<<< HEAD
 	err = s.client.CreateChangefeedInfo(ctx, detail, model.DefaultChangeFeedID("test-id"))
 	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
 }
@@ -287,6 +341,58 @@ func TestGetAllCaptureLeases(t *testing.T) {
 	s := &etcdTester{}
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
+=======
+	err = s.client.CreateChangefeedInfo(ctx,
+		upstreamInfo, detail)
+	require.True(t, cerror.ErrMetaOpFailed.Equal(err))
+	require.Equal(t, "[DFLOW:ErrMetaOpFailed]unexpected meta operation failure: Create changefeed test/create-changefeed", err.Error())
+}
+
+func TestUpdateChangefeedAndUpstream(t *testing.T) {
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+
+	ctx := context.Background()
+	upstreamInfo := &model.UpstreamInfo{
+		ID:          1,
+		PDEndpoints: "http://127.0.0.1:2385",
+	}
+	changeFeedID := model.DefaultChangeFeedID("test-update-cf-and-up")
+	changeFeedInfo := &model.ChangeFeedInfo{
+		UpstreamID: upstreamInfo.ID,
+		ID:         changeFeedID.ID,
+		Namespace:  changeFeedID.Namespace,
+		SinkURI:    "blackhole://",
+	}
+
+	err := s.client.SaveChangeFeedInfo(ctx, changeFeedInfo, changeFeedID)
+	require.NoError(t, err)
+
+	err = s.client.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo)
+	require.NoError(t, err)
+
+	var upstreamResult *model.UpstreamInfo
+	var changefeedResult *model.ChangeFeedInfo
+
+	upstreamResult, err = s.client.GetUpstreamInfo(ctx, 1, changeFeedID.Namespace)
+	require.NoError(t, err)
+	require.Equal(t, upstreamInfo.PDEndpoints, upstreamResult.PDEndpoints)
+
+	changefeedResult, err = s.client.GetChangeFeedInfo(ctx, changeFeedID)
+	require.NoError(t, err)
+	require.Equal(t, changeFeedInfo.SinkURI, changefeedResult.SinkURI)
+}
+
+func TestGetAllCaptureLeases(t *testing.T) {
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -339,9 +445,17 @@ const (
 )
 
 func TestGetOwnerRevision(t *testing.T) {
+<<<<<<< HEAD
 	s := &etcdTester{}
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
+=======
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -430,10 +544,28 @@ func TestExtractKeySuffix(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestDeleteCaptureInfo(t *testing.T) {
 	s := &etcdTester{}
 	s.setUpTest(t)
 	defer s.tearDownTest(t)
+=======
+func TestMigrateBackupKey(t *testing.T) {
+	t.Parallel()
+
+	key := MigrateBackupKey(1, "/tidb/cdc/capture/abcd")
+	require.Equal(t, "/tidb/cdc/__backup__/1/tidb/cdc/capture/abcd", key)
+	key = MigrateBackupKey(1, "abcdc")
+	require.Equal(t, "/tidb/cdc/__backup__/1/abcdc", key)
+}
+
+func TestDeleteCaptureInfo(t *testing.T) {
+	t.Parallel()
+
+	s := &Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

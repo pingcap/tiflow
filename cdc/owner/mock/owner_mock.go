@@ -124,7 +124,25 @@ func (m *MockOwner) ValidateChangefeed(info *model.ChangefeedConfig) error {
 // ValidateChangefeed indicates an expected call of ValidateChangefeed.
 func (mr *MockOwnerMockRecorder) ValidateChangefeed(info interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
+<<<<<<< HEAD
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateChangefeed", reflect.TypeOf((*MockOwner)(nil).ValidateChangefeed), info)
+=======
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChangefeed", reflect.TypeOf((*MockOwner)(nil).UpdateChangefeed), ctx, changeFeedInfo)
+}
+
+// UpdateChangefeedAndUpstream mocks base method.
+func (m *MockOwner) UpdateChangefeedAndUpstream(ctx context.Context, upstreamInfo *model.UpstreamInfo, changeFeedInfo *model.ChangeFeedInfo) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateChangefeedAndUpstream", ctx, upstreamInfo, changeFeedInfo)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateChangefeedAndUpstream indicates an expected call of UpdateChangefeedAndUpstream.
+func (mr *MockOwnerMockRecorder) UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChangefeedAndUpstream", reflect.TypeOf((*MockOwner)(nil).UpdateChangefeedAndUpstream), ctx, upstreamInfo, changeFeedInfo)
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 }
 
 // WriteDebugInfo mocks base method.

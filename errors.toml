@@ -1136,6 +1136,359 @@ error = '''
 failed to create external storage
 '''
 
+<<<<<<< HEAD
+=======
+["DFLOW:ErrFilterNoResult"]
+error = '''
+filter % returns no result
+'''
+
+["DFLOW:ErrHeartbeat"]
+error = '''
+heartbeat error type: %s
+'''
+
+["DFLOW:ErrIllegalResourcePath"]
+error = '''
+resource path is illegal: %s
+'''
+
+["DFLOW:ErrIncompatibleSchedulerRequest"]
+error = '''
+incompatible scheduler request: %s
+'''
+
+["DFLOW:ErrInconsistentMetaCache"]
+error = '''
+meta cache is inconsistent: %s
+'''
+
+["DFLOW:ErrInvalidArgument"]
+error = '''
+invalid argument: %s
+'''
+
+["DFLOW:ErrInvalidCliParameter"]
+error = '''
+invalid cli parameters
+'''
+
+["DFLOW:ErrInvalidMasterMessage"]
+error = '''
+invalid master message: %s
+'''
+
+["DFLOW:ErrInvalidResourceHandle"]
+error = '''
+using an invalid resource handle
+'''
+
+["DFLOW:ErrJobAlreadyCanceled"]
+error = '''
+job %s is already canceled
+'''
+
+["DFLOW:ErrJobAlreadyExists"]
+error = '''
+job %s already exists
+'''
+
+["DFLOW:ErrJobManagerGetJobDetailFail"]
+error = '''
+failed to get job detail from job master
+'''
+
+["DFLOW:ErrJobNotFound"]
+error = '''
+job %s is not found
+'''
+
+["DFLOW:ErrJobNotRunning"]
+error = '''
+job %s is not running
+'''
+
+["DFLOW:ErrJobNotTerminated"]
+error = '''
+job %s is not terminated
+'''
+
+["DFLOW:ErrLocalFileDirNotWritable"]
+error = '''
+local resource directory not writable
+'''
+
+["DFLOW:ErrMasterClosed"]
+error = '''
+master has been closed explicitly: master ID %s
+'''
+
+["DFLOW:ErrMasterConcurrencyExceeded"]
+error = '''
+master has reached concurrency quota
+'''
+
+["DFLOW:ErrMasterConfigUnknownItem"]
+error = '''
+master config contains unknown configuration options: %s
+'''
+
+["DFLOW:ErrMasterCreateWorkerBackoff"]
+error = '''
+create worker is being backoff, retry later
+'''
+
+["DFLOW:ErrMasterCreateWorkerTerminate"]
+error = '''
+create worker is terminated, won't backoff any more
+'''
+
+["DFLOW:ErrMasterDecodeConfigFile"]
+error = '''
+decode config file failed
+'''
+
+["DFLOW:ErrMasterEtcdEpochFail"]
+error = '''
+server master generate epoch fail
+'''
+
+["DFLOW:ErrMasterInterfaceNotFound"]
+error = '''
+basemaster interface not found
+'''
+
+["DFLOW:ErrMasterInvalidMeta"]
+error = '''
+invalid master meta data: %s
+'''
+
+["DFLOW:ErrMasterNoLeader"]
+error = '''
+master has no leader
+'''
+
+["DFLOW:ErrMasterNotFound"]
+error = '''
+master is not found: master ID %s
+'''
+
+["DFLOW:ErrMasterNotReady"]
+error = '''
+master is not ready
+'''
+
+["DFLOW:ErrMasterTooManyPendingEvents"]
+error = '''
+master has too many pending events
+'''
+
+["DFLOW:ErrMetaClientTypeNotSupport"]
+error = '''
+meta client type not support:%s
+'''
+
+["DFLOW:ErrMetaCommittedTxn"]
+error = '''
+meta already committed txn
+'''
+
+["DFLOW:ErrMetaEmptyKey"]
+error = '''
+meta empty key
+'''
+
+["DFLOW:ErrMetaEntryNotFound"]
+error = '''
+meta entry not found
+'''
+
+["DFLOW:ErrMetaInvalidState"]
+error = '''
+meta state is invalid: %s
+'''
+
+["DFLOW:ErrMetaNestedTxn"]
+error = '''
+meta unsupported nested txn
+'''
+
+["DFLOW:ErrMetaNewClientFail"]
+error = '''
+create meta client fail
+'''
+
+["DFLOW:ErrMetaOpFail"]
+error = '''
+meta operation fail
+'''
+
+["DFLOW:ErrMetaOpFailed"]
+error = '''
+unexpected meta operation failure: %s
+'''
+
+["DFLOW:ErrMetaOptionConflict"]
+error = '''
+WithRange/WithPrefix/WithFromKey, more than one option are used
+'''
+
+["DFLOW:ErrMetaOptionInvalid"]
+error = '''
+meta option invalid
+'''
+
+["DFLOW:ErrMetaParamsInvalid"]
+error = '''
+meta params invalid:%s
+'''
+
+["DFLOW:ErrMetaStoreIDDuplicate"]
+error = '''
+metastore id duplicated
+'''
+
+["DFLOW:ErrMetaStoreNotExists"]
+error = '''
+metastore %s does not exist
+'''
+
+["DFLOW:ErrNoQualifiedExecutor"]
+error = '''
+no executor is available for scheduling
+'''
+
+["DFLOW:ErrReadLocalFileDirectoryFailed"]
+error = '''
+reading local file resource directory failed
+'''
+
+["DFLOW:ErrRemovingLocalResource"]
+error = '''
+removing a local resource file directory has failed
+'''
+
+["DFLOW:ErrResourceAlreadyExists"]
+error = '''
+resource %s already exists
+'''
+
+["DFLOW:ErrResourceConflict"]
+error = '''
+resource % on executor %s conflicts with resource %s on executor %s
+'''
+
+["DFLOW:ErrResourceDoesNotExist"]
+error = '''
+resource does not exists: %s
+'''
+
+["DFLOW:ErrResourceFilesNotFound"]
+error = '''
+resource files not found
+'''
+
+["DFLOW:ErrResourceMetastoreError"]
+error = '''
+resource metastore error
+'''
+
+["DFLOW:ErrRuntimeClosed"]
+error = '''
+runtime has been closed
+'''
+
+["DFLOW:ErrRuntimeDuplicateTaskID %s"]
+error = '''
+trying to add a task with the same ID as an existing one
+'''
+
+["DFLOW:ErrRuntimeIncomingQueueFull"]
+error = '''
+runtime has too many pending CreateWorker requests
+'''
+
+["DFLOW:ErrRuntimeIsClosed"]
+error = '''
+runtime has been closed
+'''
+
+["DFLOW:ErrSelectorUnsatisfied"]
+error = '''
+selector %v is not satisfied
+'''
+
+["DFLOW:ErrSendingMessageToTombstone"]
+error = '''
+trying to send message to a tombstone worker handle: %s
+'''
+
+["DFLOW:ErrTombstoneExecutor"]
+error = '''
+tombstone executor: %s
+'''
+
+["DFLOW:ErrTooManyStatusUpdates"]
+error = '''
+there are too many pending worker status updates: %d
+'''
+
+["DFLOW:ErrUnknown"]
+error = '''
+unknown error
+'''
+
+["DFLOW:ErrUnknownExecutor"]
+error = '''
+unknown executor: %s
+'''
+
+["DFLOW:ErrWorkerCancel"]
+error = '''
+worker is canceled
+'''
+
+["DFLOW:ErrWorkerFailed"]
+error = '''
+worker is failed permanently
+'''
+
+["DFLOW:ErrWorkerFinish"]
+error = '''
+worker finished and exited
+'''
+
+["DFLOW:ErrWorkerHalfExit"]
+error = '''
+the worker is in half-exited state
+'''
+
+["DFLOW:ErrWorkerNotFound"]
+error = '''
+worker is not found: worker ID %s
+'''
+
+["DFLOW:ErrWorkerOffline"]
+error = '''
+worker is offline: workerID: %s, error message: %s
+'''
+
+["DFLOW:ErrWorkerSuicide"]
+error = '''
+worker has committed suicide due to master(%s) having timed out
+'''
+
+["DFLOW:ErrWorkerTypeNotFound"]
+error = '''
+worker type is not found: type %d
+'''
+
+["DFLOW:ErrWorkerUpdateStatusTryAgain"]
+error = '''
+worker should try again in updating the status
+'''
+
+>>>>>>> c5d5eff1f2 (api(ticdc): only update upstreamInfo that has changed (#10422))
 ["ErrConflictingFileLocks"]
 error = '''
 file lock conflict: %s
