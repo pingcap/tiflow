@@ -131,13 +131,7 @@ func (h *fibonacciHeap) decreaseKey(x *fibonacciHeapNode, key uint64) {
 	x.key = key
 	parent := x.parent
 	if parent != nil && parent.key > x.key {
-		h.removeChildren(parent, x)
-		h.addToRoot(x)
-		if parent.marked {
-			h.cascadingCut(parent)
-		} else {
-			parent.marked = true
-		}
+		h.cascadingCut(x)
 	}
 	if x.parent == nil && h.min.key > key {
 		h.min = x
