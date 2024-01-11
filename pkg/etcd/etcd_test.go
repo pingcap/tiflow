@@ -37,6 +37,8 @@ func (c Captures) Less(i, j int) bool { return c[i].ID < c[j].ID }
 func (c Captures) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 
 func TestEmbedEtcd(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -61,6 +63,8 @@ func TestEmbedEtcd(t *testing.T) {
 }
 
 func TestGetChangeFeeds(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -103,6 +107,8 @@ func TestGetChangeFeeds(t *testing.T) {
 }
 
 func TestOpChangeFeedDetail(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -129,6 +135,8 @@ func TestOpChangeFeedDetail(t *testing.T) {
 }
 
 func TestGetAllChangeFeedInfo(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -171,6 +179,8 @@ func TestGetAllChangeFeedInfo(t *testing.T) {
 }
 
 func TestCheckMultipleCDCClusterExist(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -203,26 +213,34 @@ func TestCheckMultipleCDCClusterExist(t *testing.T) {
 }
 
 func TestCreateChangefeed(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
 
 	ctx := context.Background()
 	detail := &model.ChangeFeedInfo{
-		SinkURI: "root@tcp(127.0.0.1:3306)/mysql",
+		UpstreamID: 1,
+		Namespace:  "test",
+		ID:         "create-changefeed",
+		SinkURI:    "root@tcp(127.0.0.1:3306)/mysql",
 	}
 
 	upstreamInfo := &model.UpstreamInfo{ID: 1}
 	err := s.client.CreateChangefeedInfo(ctx,
-		upstreamInfo, detail, model.DefaultChangeFeedID("test-id"))
+		upstreamInfo, detail)
 	require.NoError(t, err)
 
 	err = s.client.CreateChangefeedInfo(ctx,
-		upstreamInfo, detail, model.DefaultChangeFeedID("test-id"))
-	require.True(t, cerror.ErrChangeFeedAlreadyExists.Equal(err))
+		upstreamInfo, detail)
+	require.True(t, cerror.ErrMetaOpFailed.Equal(err))
+	require.Equal(t, "[DFLOW:ErrMetaOpFailed]unexpected meta operation failure: Create changefeed test/create-changefeed", err.Error())
 }
 
 func TestUpdateChangefeedAndUpstream(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -234,12 +252,16 @@ func TestUpdateChangefeedAndUpstream(t *testing.T) {
 	}
 	changeFeedID := model.DefaultChangeFeedID("test-update-cf-and-up")
 	changeFeedInfo := &model.ChangeFeedInfo{
-		ID:        changeFeedID.ID,
-		Namespace: changeFeedID.Namespace,
-		SinkURI:   "blackhole://",
+		UpstreamID: upstreamInfo.ID,
+		ID:         changeFeedID.ID,
+		Namespace:  changeFeedID.Namespace,
+		SinkURI:    "blackhole://",
 	}
 
-	err := s.client.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo, changeFeedID)
+	err := s.client.SaveChangeFeedInfo(ctx, changeFeedInfo, changeFeedID)
+	require.NoError(t, err)
+
+	err = s.client.UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo)
 	require.NoError(t, err)
 
 	var upstreamResult *model.UpstreamInfo
@@ -255,6 +277,8 @@ func TestUpdateChangefeedAndUpstream(t *testing.T) {
 }
 
 func TestGetAllCaptureLeases(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -310,6 +334,8 @@ const (
 )
 
 func TestGetOwnerRevision(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -403,6 +429,8 @@ func TestExtractKeySuffix(t *testing.T) {
 }
 
 func TestMigrateBackupKey(t *testing.T) {
+	t.Parallel()
+
 	key := MigrateBackupKey(1, "/tidb/cdc/capture/abcd")
 	require.Equal(t, "/tidb/cdc/__backup__/1/tidb/cdc/capture/abcd", key)
 	key = MigrateBackupKey(1, "abcdc")
@@ -410,6 +438,8 @@ func TestMigrateBackupKey(t *testing.T) {
 }
 
 func TestDeleteCaptureInfo(t *testing.T) {
+	t.Parallel()
+
 	s := &Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)

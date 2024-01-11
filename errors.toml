@@ -1586,6 +1586,14 @@ error = '''
 meta operation fail
 '''
 
+<<<<<<< HEAD
+=======
+["DFLOW:ErrMetaOpFailed"]
+error = '''
+unexpected meta operation failure: %s
+'''
+
+>>>>>>> c5d5eff1f (api(ticdc): only update upstreamInfo that has changed (#10422))
 ["DFLOW:ErrMetaOptionConflict"]
 error = '''
 WithRange/WithPrefix/WithFromKey, more than one option are used
