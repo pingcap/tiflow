@@ -28,8 +28,10 @@
       },
       {
         "name": "elements",
-        "type": "array",
-        "items": "string"
+        "type": {
+            "type": "array",
+            "items": "string"
+        }
       },
       {
         "name": "unsigned",
@@ -62,7 +64,6 @@
       {
         "name": "default",
         "type": ["null", "string"]
-
       }
     ]
   },
@@ -170,8 +171,7 @@
       },
       {
         "name": "type",
-        "type": "fixed",
-        "size": 9
+        "type": "string"
       },
       {
         "name": "commitTs",
@@ -195,8 +195,7 @@
       },
       {
         "name": "type",
-        "type": "fixed",
-        "size": 9
+        "type": "string"
       },
       {
         "name": "buildTs",
@@ -220,8 +219,7 @@
       },
       {
         "name": "type",
-        "type": "fixed",
-        "size": 3
+        "type": "string"
       },
       {
         "name": "sql",
