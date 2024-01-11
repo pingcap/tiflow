@@ -54,7 +54,7 @@ func TestRandomUpdateTs(t *testing.T) {
 
 	var key uint64
 	lastOp := "Init"
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 1000000; i++ {
 		min := heap.GetMinKey()
 		require.Equal(t, expectedMin, min,
 			"seed:%d, lastOperation: %s, expected: %d, actual: %d",
