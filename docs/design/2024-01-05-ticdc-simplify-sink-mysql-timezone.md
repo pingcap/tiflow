@@ -1,7 +1,7 @@
 # Simplify Sink to MySQL Timezone Handling
 
 - Author(s): [zhangjinpeng1987](https://github.com/zhangjinpeng1987)
-- Tracking Issue(s): 
+- Tracking Issue(s):
 
 ## Goals
 
@@ -32,20 +32,21 @@ else if sink-uri.timezone == "" (case 2):
     // default value is `SYSTEM`. We require users set same timezone for ticdc servers and downstream
     // MySQL servers to make sure timezone awared column type like `timestamp` is
     // replicated correctly. **If the user dont recognize this case, there is a risk that
-    // the replicated `timestamp` value is incorrect, at the same time set timezone for   
-    // machine might affect other application in the same machine**. 
+    // the replicated `timestamp` value is incorrect, at the same time set timezone for
+    // machine might affect other application in the same machine**.
 
     sink.timezone = downstream-MySQL.time_zone
 
 else if sink-uri.time_zone is nil (case 3):
     // In this case, sink will use cdc server configured timezone. If the downstream MySQL
-    // has not installed related timezone, users should follow 
+    // has not installed related timezone, users should follow
     // https://dev.mysql.com/doc/refman/8.0/en/mysql-tzinfo-to-sql.html to install them.
 
     sink.timezone = cdc-server.timezone
 ```
 
 From above description we can tell some potential problems with existing timezone handling in CDC:
+
 - Case 2 has a correctness risk for `TIMESTAMP` column types when the users don't set downstram MySQL as the same timezone with CDC server. But in the case of cross region replication, databases and machines in different regions may have different default timezone setting.
 - Users should carefully treat timezone setting for cdc servers, sink-uri and downstream MySQL/TiDB, this is a maintenance burden for users.
 
@@ -71,10 +72,10 @@ From above description we can tell some potential problems with existing timezon
 
 Currently, there is just one timezone sensitive column type `TIMESTAMP`, both TiDB and MySQL will convert it as UTC values and then store them, and convert back from UTC to the current time zone for retrieval. For other time column types like `DATE` and `DATETIME`, both MySQL and TiDB treat them as other types like int, they are not timezone sensitive types, application layer should handle them correctly.
 
-*MySQL converts TIMESTAMP values from the current time zone to UTC for storage, and back from UTC to the current time zone for retrieval. (This does not occur for other types such as DATETIME.) By default, the current time zone for each connection is the server's time. The time zone can be set on a per-connection basis. As long as the time zone setting remains constant, you get back the same value you store. If you store a TIMESTAMP value, and then change the time zone and retrieve the value, the retrieved value is different from the value you stored. This occurs because the same time zone was not used for conversion in both directions. The current time zone is available as the value of the time_zone system variable.*
+_MySQL converts TIMESTAMP values from the current time zone to UTC for storage, and back from UTC to the current time zone for retrieval. (This does not occur for other types such as DATETIME.) By default, the current time zone for each connection is the server's time. The time zone can be set on a per-connection basis. As long as the time zone setting remains constant, you get back the same value you store. If you store a TIMESTAMP value, and then change the time zone and retrieve the value, the retrieved value is different from the value you stored. This occurs because the same time zone was not used for conversion in both directions. The current time zone is available as the value of the time_zone system variable._
 
 ### MySQL binlog cross region replication case
 
-According to https://dev.mysql.com/doc/refman/8.0/en/replication-features-timezone.html, when using MySQL binlog to replicate  data across regions, MySQL suggests users explicitly set related time_zone for both source and replica. The reason is because when the binlog format is `statement` and some time zone sensitive functions like `NOW()` and `FROM_UNIXTIME()` may result in inconsistent value. But TiCDC is more like a row format binlog, it receiving row level changes from TiKV and decode them and repilcate downstream, and CDC has no such issue.
+According to https://dev.mysql.com/doc/refman/8.0/en/replication-features-timezone.html, when using MySQL binlog to replicate data across regions, MySQL suggests users explicitly set related time_zone for both source and replica. The reason is because when the binlog format is `statement` and some time zone sensitive functions like `NOW()` and `FROM_UNIXTIME()` may result in inconsistent value. But TiCDC is more like a row format binlog, it receiving row level changes from TiKV and decode them and repilcate downstream, and CDC has no such issue.
 
 [NEED TO VERIFY] For row format binlog, `TIMESTAMP` column UTC values are recored and replicated, and the downstream MySQL decode it and write it with the same timezone to make sure it is correct (same as our proposal way above).
