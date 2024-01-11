@@ -42,11 +42,13 @@ func TestRandomUpdateTs(t *testing.T) {
 	var heap fibonacciHeap
 	nodes := make([]*fibonacciHeapNode, 20000)
 	expectedMin := uint64(math.MaxUint64)
+	expectedMinNode := &fibonacciHeapNode{}
 	for i := range nodes {
 		key := 10000 + uint64(rand.Intn(len(nodes)/2))
 		nodes[i] = heap.Insert(key)
 		if expectedMin > key {
 			expectedMin = key
+			expectedMinNode = nodes[i]
 		}
 	}
 
@@ -57,22 +59,35 @@ func TestRandomUpdateTs(t *testing.T) {
 		require.Equal(t, expectedMin, min,
 			"seed:%d, lastOperation: %s, expected: %d, actual: %d",
 			seed, lastOp, expectedMin, min)
+
+		// update the key of a random node
 		idx := rand.Intn(len(nodes))
 		delta := rand.Uint64() % 10000
 		if rand.Intn(2) == 0 {
+			lastOp = "Increase"
 			key = nodes[idx].key + delta
 			heap.UpdateKey(nodes[idx], key)
-			lastOp = "Increase"
+
+			if nodes[idx] == expectedMinNode {
+				expectedMin = key
+				for _, n := range nodes {
+					if expectedMin > n.key {
+						expectedMin = n.key
+						expectedMinNode = n
+					}
+				}
+			}
 		} else {
+			lastOp = "Decrease"
 			if delta > nodes[idx].key {
 				delta = nodes[idx].key
 			}
 			key = nodes[idx].key - delta
 			heap.UpdateKey(nodes[idx], key)
-			lastOp = "Decrease"
-		}
-		if expectedMin > key {
-			expectedMin = key
+			if expectedMin > key {
+				expectedMin = key
+				expectedMinNode = nodes[idx]
+			}
 		}
 	}
 }
