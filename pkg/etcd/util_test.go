@@ -22,6 +22,8 @@ import (
 )
 
 func TestGetRevisionFromWatchOpts(t *testing.T) {
+	t.Parallel()
+
 	for i := 0; i < 100; i++ {
 		rev := rand.Int63n(math.MaxInt64)
 		opt := clientv3.WithRev(rev)

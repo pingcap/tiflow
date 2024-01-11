@@ -474,7 +474,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
 		Times(1)
 	mockOwner.EXPECT().
-		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrEtcdAPIError).Times(1)
 
 	w = httptest.NewRecorder()
@@ -494,7 +494,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Times(1)
 	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	mockOwner.EXPECT().
-		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 
 	w = httptest.NewRecorder()
@@ -511,7 +511,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Times(1)
 	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	mockOwner.EXPECT().
-		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 
 	w = httptest.NewRecorder()
