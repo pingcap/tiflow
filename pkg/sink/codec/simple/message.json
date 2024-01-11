@@ -29,8 +29,8 @@
       {
         "name": "elements",
         "type": {
-            "type": "array",
-            "items": "string"
+          "type": "array",
+          "items": "string"
         }
       },
       {
@@ -64,6 +64,7 @@
       {
         "name": "default",
         "type": ["null", "string"]
+
       }
     ]
   },
@@ -265,12 +266,15 @@
       },
       {
         "name": "type",
-        "type": "enum",
-        "symbols": [
-          "INSERT",
-          "UPDATE",
-          "DELETE"
-        ]
+        "type": {
+          "type": "enum",
+          "name": "DMLType",
+          "symbols": [
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ]
+        }
       },
       {
         "name": "commitTs",
