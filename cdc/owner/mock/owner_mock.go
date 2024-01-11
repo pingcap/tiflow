@@ -123,7 +123,25 @@ func (m *MockOwner) Tick(ctx context.Context, state orchestrator.ReactorState) (
 // Tick indicates an expected call of Tick.
 func (mr *MockOwnerMockRecorder) Tick(ctx, state interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
+<<<<<<< HEAD
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tick", reflect.TypeOf((*MockOwner)(nil).Tick), ctx, state)
+=======
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChangefeed", reflect.TypeOf((*MockOwner)(nil).UpdateChangefeed), ctx, changeFeedInfo)
+}
+
+// UpdateChangefeedAndUpstream mocks base method.
+func (m *MockOwner) UpdateChangefeedAndUpstream(ctx context.Context, upstreamInfo *model.UpstreamInfo, changeFeedInfo *model.ChangeFeedInfo) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateChangefeedAndUpstream", ctx, upstreamInfo, changeFeedInfo)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateChangefeedAndUpstream indicates an expected call of UpdateChangefeedAndUpstream.
+func (mr *MockOwnerMockRecorder) UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChangefeedAndUpstream", reflect.TypeOf((*MockOwner)(nil).UpdateChangefeedAndUpstream), ctx, upstreamInfo, changeFeedInfo)
+>>>>>>> c5d5eff1f (api(ticdc): only update upstreamInfo that has changed (#10422))
 }
 
 // WriteDebugInfo mocks base method.

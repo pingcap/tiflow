@@ -958,7 +958,7 @@ var (
 		errors.RFCCodeText("CDC:ErrMetaOpIgnored"),
 	)
 	ErrMetaOpFailed = errors.Normalize(
-		"meta operation %s is failed",
+		"unexpected meta operation failure: %s",
 		errors.RFCCodeText("DFLOW:ErrMetaOpFailed"),
 	)
 	ErrMetaInvalidState = errors.Normalize(
