@@ -277,9 +277,9 @@ func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string) error {
 
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
-	Row        *RowChangedEvent `msg:"row"`
-	Columns    []RedoColumn     `msg:"columns"`
-	PreColumns []RedoColumn     `msg:"pre-columns"`
+	Row        *RowChangedEventInRedoLog `msg:"row"`
+	Columns    []RedoColumn              `msg:"columns"`
+	PreColumns []RedoColumn              `msg:"pre-columns"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent
@@ -291,8 +291,21 @@ type RedoDDLEvent struct {
 
 // ToRedoLog converts row changed event to redo log
 func (r *RowChangedEvent) ToRedoLog() *RedoLog {
+	rowInRedoLog := &RowChangedEventInRedoLog{
+		StartTs:  r.StartTs,
+		CommitTs: r.CommitTs,
+		Table: &TableName{
+			Schema:      *r.TableInfo.GetSchemaName(),
+			Table:       *r.TableInfo.GetTableName(),
+			TableID:     r.PhysicalTableID,
+			IsPartition: r.TableInfo.IsPartitionTable(),
+		},
+		Columns:      ColumnDatas2Columns(r.Columns, r.TableInfo),
+		PreColumns:   ColumnDatas2Columns(r.PreColumns, r.TableInfo),
+		IndexColumns: r.TableInfo.IndexColumnsOffset,
+	}
 	return &RedoLog{
-		RedoRow: RedoRowChangedEvent{Row: r},
+		RedoRow: RedoRowChangedEvent{Row: rowInRedoLog},
 		Type:    RedoLogTypeRow,
 	}
 }
@@ -343,6 +356,20 @@ type RowChangedEvent struct {
 	SplitTxn bool `json:"-" msg:"-"`
 	// ReplicatingTs is ts when a table starts replicating events to downstream.
 	ReplicatingTs Ts `json:"-" msg:"-"`
+}
+
+// RowChangedEventInRedoLog is used to store RowChangedEvent in redo log v2 format
+type RowChangedEventInRedoLog struct {
+	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
+	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
+
+	// Table contains the table name and table ID.
+	// NOTICE: We store the physical table ID here, not the logical table ID.
+	Table *TableName `json:"table" msg:"table"`
+
+	Columns      []*Column `json:"columns" msg:"columns"`
+	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
+	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 }
 
 // txnRows represents a set of events that belong to the same transaction.

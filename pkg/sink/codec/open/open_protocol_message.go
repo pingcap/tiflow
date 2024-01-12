@@ -144,15 +144,17 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
-	// e.Table = &model.TableName{
-	// 	Schema: key.Schema,
-	// 	Table:  key.Table,
-	// }
+	e.TableInfo = &model.TableInfo{
+		TableName: model.TableName{
+			Schema: key.Schema,
+			Table:  key.Table,
+		},
+	}
 	// TODO: we lost the tableID from kafka message
-	// if key.Partition != nil {
-	// 	e.Table.TableID = *key.Partition
-	// 	e.Table.IsPartition = true
-	// }
+	if key.Partition != nil {
+		e.PhysicalTableID = *key.Partition
+		e.TableInfo.TableName.IsPartition = true
+	}
 
 	if len(value.Delete) != 0 {
 		e.PreColumns = codecColumns2RowChangeColumns(value.Delete)

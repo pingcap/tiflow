@@ -87,7 +87,7 @@ type LogReaderConfig struct {
 type LogReader struct {
 	cfg   *LogReaderConfig
 	meta  *common.LogMeta
-	rowCh chan *model.RowChangedEvent
+	rowCh chan *model.RowChangedEventInRedoLog
 	ddlCh chan *model.DDLEvent
 }
 
@@ -106,7 +106,7 @@ func newLogReader(ctx context.Context, cfg *LogReaderConfig) (*LogReader, error)
 
 	logReader := &LogReader{
 		cfg:   cfg,
-		rowCh: make(chan *model.RowChangedEvent, defaultReaderChanSize),
+		rowCh: make(chan *model.RowChangedEventInRedoLog, defaultReaderChanSize),
 		ddlCh: make(chan *model.DDLEvent, defaultReaderChanSize),
 	}
 	// remove logs in local dir first, if have logs left belongs to previous changefeed with the same name may have error when apply logs
@@ -243,7 +243,16 @@ func (l *LogReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, er
 	select {
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
-	case row := <-l.rowCh:
+	case rowInRedoLog := <-l.rowCh:
+		tableInfo := model.BuildTableInfo(rowInRedoLog.Table.Schema, rowInRedoLog.Table.Table, rowInRedoLog.Columns, rowInRedoLog.IndexColumns)
+		row := &model.RowChangedEvent{
+			StartTs:         rowInRedoLog.StartTs,
+			CommitTs:        rowInRedoLog.CommitTs,
+			PhysicalTableID: rowInRedoLog.Table.TableID,
+			TableInfo:       tableInfo,
+			Columns:         model.Columns2ColumnDatas(rowInRedoLog.Columns, tableInfo),
+			PreColumns:      model.Columns2ColumnDatas(rowInRedoLog.PreColumns, tableInfo),
+		}
 		return row, nil
 	}
 }
