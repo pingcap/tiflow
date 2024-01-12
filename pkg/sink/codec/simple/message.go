@@ -62,8 +62,6 @@ const (
 
 // columnSchema is the schema of the column.
 type columnSchema struct {
-	// ID is used to sort all column schema, should not be exposed to the outside.
-	ID       int64       `json:"-"`
 	Name     string      `json:"name"`
 	DataType dataType    `json:"dataType"`
 	Nullable bool        `json:"nullable"`
@@ -116,7 +114,6 @@ func newColumnSchema(col *timodel.ColumnInfo) (*columnSchema, error) {
 		}
 	}
 	return &columnSchema{
-		ID:       col.ID,
 		Name:     col.Name.O,
 		DataType: tp,
 		Nullable: !mysql.HasNotNullFlag(col.GetFlag()),
