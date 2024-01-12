@@ -40,7 +40,6 @@ func TestNewTableSchema(t *testing.T) {
 		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
-				ID:   1,
 				Name: "id",
 				DataType: dataType{
 					MySQLType: "int",
@@ -51,7 +50,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: false,
 			},
 			{
-				ID:   2,
 				Name: "name",
 				DataType: dataType{
 					MySQLType: "varchar",
@@ -62,7 +60,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: false,
 			},
 			{
-				ID:   3,
 				Name: "age",
 				DataType: dataType{
 					MySQLType: "int",
@@ -73,7 +70,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   4,
 				Name: "email",
 				DataType: dataType{
 					MySQLType: "varchar",
@@ -129,7 +125,6 @@ func TestNewTableSchema(t *testing.T) {
 		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
-				ID:   1,
 				Name: "id",
 				DataType: dataType{
 					MySQLType: "int",
@@ -140,7 +135,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: false,
 			},
 			{
-				ID:   2,
 				Name: "name",
 				DataType: dataType{
 					MySQLType: "varchar",
@@ -151,7 +145,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: false,
 			},
 			{
-				ID:   3,
 				Name: "age",
 				DataType: dataType{
 					MySQLType: "int",
@@ -162,7 +155,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   4,
 				Name: "email",
 				DataType: dataType{
 					MySQLType: "varchar",
@@ -248,7 +240,6 @@ func TestNewTableSchema(t *testing.T) {
 		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
-				ID:   1,
 				Name: "t",
 				DataType: dataType{
 					MySQLType: "tinyint",
@@ -259,7 +250,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: false,
 			},
 			{
-				ID:   2,
 				Name: "tu1",
 				DataType: dataType{
 					MySQLType: "tinyint",
@@ -271,7 +261,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   3,
 				Name: "s",
 				DataType: dataType{
 					MySQLType: "smallint",
@@ -282,7 +271,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   4,
 				Name: "su1",
 				DataType: dataType{
 					MySQLType: "smallint",
@@ -294,7 +282,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   5,
 				Name: "m",
 				DataType: dataType{
 					MySQLType: "mediumint",
@@ -305,7 +292,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   6,
 				Name: "mu1",
 				DataType: dataType{
 					MySQLType: "mediumint",
@@ -317,7 +303,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   7,
 				Name: "i",
 				DataType: dataType{
 					MySQLType: "int",
@@ -329,7 +314,6 @@ func TestNewTableSchema(t *testing.T) {
 				Default:  "100",
 			},
 			{
-				ID:   8,
 				Name: "iu1",
 				DataType: dataType{
 					MySQLType: "int",
@@ -341,7 +325,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   9,
 				Name: "bi",
 				DataType: dataType{
 					MySQLType: "bigint",
@@ -352,7 +335,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   10,
 				Name: "biu1",
 				DataType: dataType{
 					MySQLType: "bigint",
@@ -364,7 +346,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   11,
 				Name: "floatT",
 				DataType: dataType{
 					MySQLType: "float",
@@ -375,7 +356,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   12,
 				Name: "doubleT",
 				DataType: dataType{
 					MySQLType: "double",
@@ -386,7 +366,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   13,
 				Name: "decimalT",
 				DataType: dataType{
 					MySQLType: "decimal",
@@ -397,7 +376,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   14,
 				Name: "floatTu",
 				DataType: dataType{
 					MySQLType: "float",
@@ -409,7 +387,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   15,
 				Name: "doubleTu",
 				DataType: dataType{
 					MySQLType: "double",
@@ -421,7 +398,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   16,
 				Name: "decimalTu",
 				DataType: dataType{
 					MySQLType: "decimal",
@@ -433,7 +409,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   17,
 				Name: "varcharT",
 				DataType: dataType{
 					MySQLType: "varchar",
@@ -444,7 +419,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   18,
 				Name: "charT",
 				DataType: dataType{
 					MySQLType: "char",
@@ -455,7 +429,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   19,
 				Name: "binaryT",
 				DataType: dataType{
 					MySQLType: "binary",
@@ -466,7 +439,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   20,
 				Name: "varbinaryT",
 				DataType: dataType{
 					MySQLType: "varbinary",
@@ -477,7 +449,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   21,
 				Name: "tinytextT",
 				DataType: dataType{
 					MySQLType: "tinytext",
@@ -488,7 +459,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   22,
 				Name: "textT",
 				DataType: dataType{
 					MySQLType: "text",
@@ -499,7 +469,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   23,
 				Name: "mediumtextT",
 				DataType: dataType{
 					MySQLType: "mediumtext",
@@ -510,7 +479,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   24,
 				Name: "longtextT",
 				DataType: dataType{
 					MySQLType: "longtext",
@@ -521,7 +489,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   25,
 				Name: "tinyblobT",
 				DataType: dataType{
 					MySQLType: "tinyblob",
@@ -532,7 +499,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   26,
 				Name: "blobT",
 				DataType: dataType{
 					MySQLType: "blob",
@@ -543,7 +509,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   27,
 				Name: "mediumblobT",
 				DataType: dataType{
 					MySQLType: "mediumblob",
@@ -554,7 +519,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   28,
 				Name: "longblobT",
 				DataType: dataType{
 					MySQLType: "longblob",
@@ -565,7 +529,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   29,
 				Name: "dateT",
 				DataType: dataType{
 					MySQLType: "date",
@@ -576,7 +539,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   30,
 				Name: "datetimeT",
 				DataType: dataType{
 					MySQLType: "datetime",
@@ -587,7 +549,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   31,
 				Name: "timestampT",
 				DataType: dataType{
 					MySQLType: "timestamp",
@@ -598,7 +559,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   32,
 				Name: "timeT",
 				DataType: dataType{
 					MySQLType: "time",
@@ -609,7 +569,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   33,
 				Name: "yearT",
 				DataType: dataType{
 					MySQLType: "year",
@@ -622,7 +581,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   34,
 				Name: "enumT",
 				DataType: dataType{
 					MySQLType: "enum",
@@ -635,7 +593,6 @@ func TestNewTableSchema(t *testing.T) {
 				Default:  "b",
 			},
 			{
-				ID:   35,
 				Name: "setT",
 				DataType: dataType{
 					MySQLType: "set",
@@ -647,7 +604,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   36,
 				Name: "bitT",
 				DataType: dataType{
 					MySQLType: "bit",
@@ -659,7 +615,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   37,
 				Name: "jsonT",
 				DataType: dataType{
 					MySQLType: "json",
@@ -670,7 +625,6 @@ func TestNewTableSchema(t *testing.T) {
 				Nullable: true,
 			},
 			{
-				ID:   38,
 				Name: "tgen",
 				DataType: dataType{
 					MySQLType: "tinyint",

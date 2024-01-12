@@ -28,8 +28,10 @@
       },
       {
         "name": "elements",
-        "type": "array",
-        "items": "string"
+        "type": {
+          "type": "array",
+          "items": "string"
+        }
       },
       {
         "name": "unsigned",
@@ -170,8 +172,7 @@
       },
       {
         "name": "type",
-        "type": "fixed",
-        "size": 9
+        "type": "string"
       },
       {
         "name": "commitTs",
@@ -195,8 +196,7 @@
       },
       {
         "name": "type",
-        "type": "fixed",
-        "size": 9
+        "type": "string"
       },
       {
         "name": "buildTs",
@@ -220,8 +220,7 @@
       },
       {
         "name": "type",
-        "type": "fixed",
-        "size": 3
+        "type": "string"
       },
       {
         "name": "sql",
@@ -267,12 +266,15 @@
       },
       {
         "name": "type",
-        "type": "enum",
-        "symbols": [
-          "INSERT",
-          "UPDATE",
-          "DELETE"
-        ]
+        "type": {
+          "type": "enum",
+          "name": "DMLType",
+          "symbols": [
+            "INSERT",
+            "UPDATE",
+            "DELETE"
+          ]
+        }
       },
       {
         "name": "commitTs",
