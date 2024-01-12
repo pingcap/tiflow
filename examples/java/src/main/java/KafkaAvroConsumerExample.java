@@ -18,7 +18,6 @@ import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.io.DatumReader;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.DecoderFactory;
-import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -28,9 +27,9 @@ import org.apache.avro.generic.GenericRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Properties;
 
@@ -48,15 +47,17 @@ public class KafkaAvroConsumerExample {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "ticdc-kafka-consumer-example");
 
 
-        KafkaConsumer<String, GenericRecord> consumer = new KafkaConsumer<>(props);
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
         consumer.subscribe(Arrays.asList(topic));
 
         try {
             while (true) {
-                ConsumerRecords<String, GenericRecord> records = consumer.poll(100);
-                for (ConsumerRecord<String, GenericRecord> record : records) {
+                ConsumerRecords<String, String> records = consumer.poll(100);
+                for (ConsumerRecord<String, String> record : records) {
+                    ByteArrayInputStream inputStream = new ByteArrayInputStream(record.value().getBytes());
+                    Decoder decoder = DecoderFactory.get().binaryDecoder(inputStream, null);
+
                     DatumReader<GenericRecord> reader = new GenericDatumReader<>(schema);
-                    Decoder decoder = DecoderFactory.get().binaryDecoder((InputStream) record.value(), null);
                     GenericRecord result = reader.read(null, decoder);
 
                     System.out.println(result);
