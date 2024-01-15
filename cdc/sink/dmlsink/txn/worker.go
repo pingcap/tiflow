@@ -130,6 +130,7 @@ func (w *worker) runLoop() error {
 						case txn := <-w.txnCh.Out():
 							needFlush = w.onEvent(txn)
 						case <-delay:
+							needFlush = true
 							break loop
 						}
 					}
