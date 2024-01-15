@@ -614,6 +614,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 				require.Equal(t, decodedRow.Table.Schema, event.Table.Schema)
 				require.Equal(t, decodedRow.Table.Table, event.Table.Table)
+				require.Equal(t, decodedRow.Table.TableID, event.Table.TableID)
 
 				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 				for _, column := range decodedRow.Columns {

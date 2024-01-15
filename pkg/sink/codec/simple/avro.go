@@ -185,6 +185,7 @@ func newDMLMessageMap(
 		"version":            defaultVersion,
 		"schema":             event.Table.Schema,
 		"table":              event.Table.Table,
+		"tableID":            event.Table.TableID,
 		"commitTs":           int64(event.CommitTs),
 		"buildTs":            time.Now().UnixMilli(),
 		"schemaVersion":      int64(event.TableInfo.UpdateTS),
@@ -427,6 +428,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	m.BuildTs = rawValues["buildTs"].(int64)
 	m.Schema = rawValues["schema"].(string)
 	m.Table = rawValues["table"].(string)
+	m.TableID = rawValues["tableID"].(int64)
 	m.SchemaVersion = uint64(rawValues["schemaVersion"].(int64))
 	m.HandleKeyOnly = rawValues["handleKeyOnly"].(bool)
 	m.ClaimCheckLocation = rawValues["claimCheckLocation"].(string)

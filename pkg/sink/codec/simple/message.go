@@ -358,8 +358,9 @@ func buildRowChangedEvent(
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
-			Schema: msg.Schema,
-			Table:  msg.Table,
+			Schema:  msg.Schema,
+			Table:   msg.Table,
+			TableID: msg.TableID,
 		},
 		TableInfo: tableInfo,
 	}
@@ -459,9 +460,10 @@ type checksum struct {
 type message struct {
 	Version int `json:"version"`
 	// Schema and Table is empty for the resolved ts event.
-	Schema string    `json:"schema,omitempty"`
-	Table  string    `json:"table,omitempty"`
-	Type   EventType `json:"type"`
+	Schema  string    `json:"schema,omitempty"`
+	Table   string    `json:"table,omitempty"`
+	TableID int64     `json:"tableID,omitempty"`
+	Type    EventType `json:"type"`
 	// SQL is only for the DDL event.
 	SQL      string `json:"sql,omitempty"`
 	CommitTs uint64 `json:"commitTs"`
@@ -543,16 +545,19 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 }
 
 func newDMLMessage(
-	event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool,
+	event *model.RowChangedEvent, config *common.Config,
+	onlyHandleKey bool, claimCheckFileName string,
 ) (*message, error) {
 	m := &message{
-		Version:       defaultVersion,
-		Schema:        event.Table.Schema,
-		Table:         event.Table.Table,
-		CommitTs:      event.CommitTs,
-		BuildTs:       time.Now().UnixMilli(),
-		SchemaVersion: event.TableInfo.UpdateTS,
-		HandleKeyOnly: onlyHandleKey,
+		Version:            defaultVersion,
+		Schema:             event.Table.Schema,
+		Table:              event.Table.Table,
+		TableID:            event.Table.TableID,
+		CommitTs:           event.CommitTs,
+		BuildTs:            time.Now().UnixMilli(),
+		SchemaVersion:      event.TableInfo.UpdateTS,
+		HandleKeyOnly:      onlyHandleKey,
+		ClaimCheckLocation: claimCheckFileName,
 	}
 	var err error
 	if event.IsInsert() {
