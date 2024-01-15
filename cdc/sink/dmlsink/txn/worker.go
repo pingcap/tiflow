@@ -107,7 +107,7 @@ func (w *worker) runLoop() error {
 		zap.Int("workerID", w.ID))
 
 	needFlush := false
-	startToWork := time.Now()
+	startToBatching := time.Now()
 
 	for {
 		select {
@@ -147,8 +147,8 @@ func (w *worker) runLoop() error {
 			// we record total time to calcuate the worker busy ratio.
 			// so we record the total time after flushing, to unified statistics on
 			// flush time and total time
-			w.metricTxnWorkerTotalDuration.Observe(time.Since(startToWork).Seconds())
-			startToWork = time.Now()
+			w.metricTxnWorkerTotalDuration.Observe(time.Since(startToBatching).Seconds())
+			startToBatching = time.Now()
 		}
 	}
 }
@@ -179,8 +179,7 @@ func (w *worker) doFlush() error {
 	if w.hasPending {
 		start := time.Now()
 		defer func() {
-			elapsed := time.Since(start)
-			w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
+			w.metricTxnWorkerFlushDuration.Observe(time.Since(start).Seconds())
 		}()
 		if err := w.backend.Flush(w.ctx); err != nil {
 			log.Warn("Transaction dmlSink backend flush fail",
