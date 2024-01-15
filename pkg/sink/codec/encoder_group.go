@@ -85,6 +85,7 @@ func NewEncoderGroup(
 			builder.Build(),
 			*cfg.SendBootstrapIntervalInSec,
 			*cfg.SendBootstrapInMsgCount,
+			*cfg.SendBootstrapToAllPartition,
 			defaultMaxInactiveDuration,
 		)
 	}

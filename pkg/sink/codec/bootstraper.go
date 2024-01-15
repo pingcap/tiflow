@@ -36,12 +36,15 @@ const (
 	defaultBootstrapPartitionIndex = 0
 )
 
+// bootstrapWorker is used to send bootstrap message to the MQ sink worker.
+// It will be only used in simple protocol.
 type bootstrapWorker struct {
-	changefeedID            model.ChangeFeedID
-	activeTables            sync.Map
-	encoder                 RowEventEncoder
-	sendBootstrapInterval   time.Duration
-	sendBootstrapInMsgCount int32
+	changefeedID                model.ChangeFeedID
+	activeTables                sync.Map
+	encoder                     RowEventEncoder
+	sendBootstrapInterval       time.Duration
+	sendBootstrapInMsgCount     int32
+	sendBootstrapToAllPartition bool
 	// maxInactiveDuration is the max duration that a table can be inactive
 	maxInactiveDuration time.Duration
 	outCh               chan<- *future
@@ -54,22 +57,23 @@ func newBootstrapWorker(
 	encoder RowEventEncoder,
 	sendBootstrapInterval int64,
 	sendBootstrapInMsgCount int32,
+	sendBootstrapToAllPartition bool,
 	maxInactiveDuration time.Duration,
 ) *bootstrapWorker {
-	log.Info("Sending bootstrap event is enabled for simple protocol,"+
-		"and both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0"+
-		"enable bootstrap sending function",
+	log.Info("Sending bootstrap event is enabled for simple protocol. "+
+		"Both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0.",
 		zap.Stringer("changefeed", changefeedID),
 		zap.Int64("sendBootstrapIntervalInSec", sendBootstrapInterval),
 		zap.Int32("sendBootstrapInMsgCount", sendBootstrapInMsgCount))
 	return &bootstrapWorker{
-		changefeedID:            changefeedID,
-		outCh:                   outCh,
-		encoder:                 encoder,
-		activeTables:            sync.Map{},
-		sendBootstrapInterval:   time.Duration(sendBootstrapInterval) * time.Second,
-		sendBootstrapInMsgCount: sendBootstrapInMsgCount,
-		maxInactiveDuration:     maxInactiveDuration,
+		changefeedID:                changefeedID,
+		outCh:                       outCh,
+		encoder:                     encoder,
+		activeTables:                sync.Map{},
+		sendBootstrapInterval:       time.Duration(sendBootstrapInterval) * time.Second,
+		sendBootstrapInMsgCount:     sendBootstrapInMsgCount,
+		sendBootstrapToAllPartition: sendBootstrapToAllPartition,
+		maxInactiveDuration:         maxInactiveDuration,
 	}
 }
 
@@ -134,40 +138,65 @@ func (b *bootstrapWorker) sendBootstrapMsg(ctx context.Context, table *tableStat
 	}
 	table.reset()
 	tableInfo := table.tableInfo.Load().(*model.TableInfo)
-	event, err := b.generateEvents(table.topic, tableInfo)
+	events, err := b.generateEvents(table.topic, table.totalPartition.Load(), tableInfo)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case b.outCh <- event:
+	for _, e := range events {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case b.outCh <- e:
+		}
 	}
 	return nil
 }
 
 func (b *bootstrapWorker) generateEvents(
 	topic string,
+	totalPartition int32,
 	tableInfo *model.TableInfo,
-) (*future, error) {
+) ([]*future, error) {
+	res := make([]*future, 0, totalPartition)
+	if !b.sendBootstrapToAllPartition {
+		msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		key := model.TopicPartitionKey{
+			Topic:     topic,
+			Partition: defaultBootstrapPartitionIndex,
+		}
+		f := &future{
+			Key:  key,
+			done: make(chan struct{}),
+		}
+		f.Messages = append(f.Messages, msg)
+		close(f.done)
+		res = append(res, f)
+		return res, nil
+	}
 	// Bootstrap messages of a table should be sent to all partitions.
-	msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
-	if err != nil {
-		return nil, errors.Trace(err)
+	for partitionIdx := int32(0); partitionIdx < totalPartition; partitionIdx++ {
+		// Bootstrap messages of a table should be sent to all partitions.
+		msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		key := model.TopicPartitionKey{
+			Topic:     topic,
+			Partition: partitionIdx,
+		}
+		f := &future{
+			Key:  key,
+			done: make(chan struct{}),
+		}
+		f.Messages = append(f.Messages, msg)
+		close(f.done)
+		res = append(res, f)
 	}
 
-	key := model.TopicPartitionKey{
-		Topic:     topic,
-		Partition: defaultBootstrapPartitionIndex,
-	}
-
-	f := &future{
-		Key:  key,
-		done: make(chan struct{}),
-	}
-	f.Messages = append(f.Messages, msg)
-	close(f.done)
-	return f, nil
+	return res, nil
 }
 
 func (b *bootstrapWorker) gcInactiveTables() {
@@ -190,6 +219,8 @@ type tableStatistic struct {
 	id int64
 	// topic is the table's topic, it will not change
 	topic string
+	// totalPartition is the partition number of the corresponding topic
+	totalPartition atomic.Int32
 	// counter is the number of row event sent since last bootstrap message sent
 	// It is used to check if the bootstrap message should be sent
 	counter atomic.Int32
@@ -212,6 +243,7 @@ func newTableStatus(key model.TopicPartitionKey, row *model.RowChangedEvent) *ta
 		id:    row.Table.TableID,
 		topic: key.Topic,
 	}
+	res.totalPartition.Store(key.TotalPartition)
 	res.counter.Add(1)
 	res.lastMsgReceivedTime.Store(time.Now())
 	res.lastSendTime.Store(time.Unix(0, 0))
