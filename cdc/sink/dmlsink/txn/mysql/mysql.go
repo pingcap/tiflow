@@ -207,7 +207,7 @@ func NewMySQLBackends(
 func (s *mysqlBackend) OnTxnEvent(event *dmlsink.TxnCallbackableEvent) (needFlush bool) {
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
-	return event.Event.ToWaitFlush() || s.rows >= s.cfg.MaxTxnRow
+	return s.rows >= s.cfg.MaxTxnRow
 }
 
 // Flush implements interface backend.
