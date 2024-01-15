@@ -124,13 +124,12 @@ func (w *worker) runLoop() error {
 				needFlush = w.onEvent(txn)
 				if !needFlush {
 					delay := time.After(w.flushInterval)
-				loop:
 					for !needFlush {
 						select {
 						case txn := <-w.txnCh.Out():
 							needFlush = w.onEvent(txn)
 						case <-delay:
-							break loop
+							needFlush = true
 						}
 					}
 				}
