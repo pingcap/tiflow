@@ -293,7 +293,7 @@ func (suite *redoLogAdvancerSuite) TestAdvance() {
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	require.Equal(suite.T(), uint64(768), memoryQuota.GetUsedBytes())
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+	require.Equal(suite.T(), uint64(0), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
 }
 
@@ -341,7 +341,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	require.Equal(suite.T(), uint64(3), manager.GetResolvedTs(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+	require.Equal(suite.T(), uint64(0), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
 }
 
@@ -383,7 +383,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeAnd
 	require.Equal(suite.T(), uint64(2), manager.GetResolvedTs(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(512), memoryQuota.GetUsedBytes(),
+	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
 }
 
@@ -432,7 +432,7 @@ func (suite *redoLogAdvancerSuite) TestFinish() {
 	require.Equal(suite.T(), uint64(3), manager.GetResolvedTs(suite.testSpan))
 	require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
 	manager.releaseRowsMemory(suite.testSpan)
-	require.Equal(suite.T(), uint64(256), memoryQuota.GetUsedBytes(),
+	require.Equal(suite.T(), uint64(0), memoryQuota.GetUsedBytes(),
 		"memory quota should be released after releaseRowsMemory is called")
 }
 
