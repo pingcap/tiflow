@@ -106,9 +106,6 @@ func (w *worker) runLoop() error {
 		zap.String("changefeedID", w.changefeed),
 		zap.Int("workerID", w.ID))
 
-	ticker := time.NewTicker(w.flushInterval)
-	defer ticker.Stop()
-
 	needFlush := false
 	startToWork := time.Now()
 
@@ -121,19 +118,23 @@ func (w *worker) runLoop() error {
 			return nil
 		case txn := <-w.txnCh.Out():
 			// we get the data from txnCh.out until no more data here or reached the state that can be flushed.
+			// If no more daa in txnCh.out, and also not reached the state that can be flushed,
+			// we will wait for 10ms and then do flush to avoid too much flush wish small amount of txns.
 			if txn.txnEvent != nil {
 				needFlush = w.onEvent(txn)
-				for !needFlush {
-					select {
-					case txn := <-w.txnCh.Out():
-						needFlush = w.onEvent(txn)
-					default:
-						break
+				if !needFlush {
+					delay := time.After(w.flushInterval)
+				loop:
+					for !needFlush {
+						select {
+						case txn := <-w.txnCh.Out():
+							needFlush = w.onEvent(txn)
+						case <-delay:
+							break loop
+						}
 					}
 				}
 			}
-		case <-ticker.C:
-			needFlush = true
 		}
 		if needFlush {
 			if err := w.doFlush(); err != nil {
@@ -147,7 +148,7 @@ func (w *worker) runLoop() error {
 			// we record total time to calcuate the worker busy ratio.
 			// so we record the total time after flushing, to unified statistics on
 			// flush time and total time
-			w.metricTxnWorkerTotalDuration.Observe(time.Now().Sub(startToWork).Seconds())
+			w.metricTxnWorkerTotalDuration.Observe(time.Since(startToWork).Seconds())
 			startToWork = time.Now()
 		}
 	}
