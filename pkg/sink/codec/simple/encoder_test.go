@@ -333,6 +333,7 @@ func TestEncodeIntegerTypes(t *testing.T) {
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
+	codecConfig.EnableRowChecksum = true
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
 		common.EncodingFormatJSON,
