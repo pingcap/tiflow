@@ -92,7 +92,7 @@ func (w *worker) close() {
 	w.txnCh.CloseAndDrain()
 }
 
-// Run a loop.
+// Continuously get events from txnCh and call backend flush based on conditions.
 func (w *worker) runLoop() error {
 	defer func() {
 		if err := w.backend.Close(); err != nil {
@@ -157,7 +157,7 @@ func (w *worker) runLoop() error {
 }
 
 // onEvent is called when a new event is received.
-// It returns true if the event is sent to backend.
+// It returns true if it needs flush immediately.
 func (w *worker) onEvent(txn txnWithNotifier) bool {
 	w.hasPending = true
 
@@ -178,7 +178,6 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 }
 
 // doFlush flushes the backend.
-// It returns true only if it can no longer be flushed.
 func (w *worker) doFlush() error {
 	if w.hasPending {
 		start := time.Now()
