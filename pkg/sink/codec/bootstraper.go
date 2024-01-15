@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
 )
 
@@ -30,10 +31,6 @@ const (
 	bootstrapWorkerGCInterval     = 30 * time.Second
 
 	defaultMaxInactiveDuration = 30 * time.Minute
-
-	// In the current implementation, the bootstrapWorker only sends bootstrap message
-	// to the first partition of the corresponding topic of the table.
-	defaultBootstrapPartitionIndex = 0
 )
 
 // bootstrapWorker is used to send bootstrap message to the MQ sink worker.
@@ -158,44 +155,27 @@ func (b *bootstrapWorker) generateEvents(
 	tableInfo *model.TableInfo,
 ) ([]*future, error) {
 	res := make([]*future, 0, totalPartition)
+	msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	// If sendBootstrapToAllPartition is true, send bootstrap message to all partition
+	// Otherwise, send bootstrap message to partition 0.
 	if !b.sendBootstrapToAllPartition {
-		msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		key := model.TopicPartitionKey{
-			Topic:     topic,
-			Partition: defaultBootstrapPartitionIndex,
-		}
-		f := &future{
-			Key:  key,
-			done: make(chan struct{}),
-		}
-		f.Messages = append(f.Messages, msg)
-		close(f.done)
-		res = append(res, f)
-		return res, nil
+		totalPartition = 1
 	}
-	// Bootstrap messages of a table should be sent to all partitions.
-	for partitionIdx := int32(0); partitionIdx < totalPartition; partitionIdx++ {
-		// Bootstrap messages of a table should be sent to all partitions.
-		msg, err := b.encoder.EncodeDDLEvent(model.NewBootstrapDDLEvent(tableInfo))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		key := model.TopicPartitionKey{
-			Topic:     topic,
-			Partition: partitionIdx,
-		}
+	for i := int32(0); i < totalPartition; i++ {
 		f := &future{
-			Key:  key,
-			done: make(chan struct{}),
+			Key: model.TopicPartitionKey{
+				Topic:     topic,
+				Partition: i,
+			},
+			done:     make(chan struct{}),
+			Messages: []*common.Message{msg},
 		}
-		f.Messages = append(f.Messages, msg)
 		close(f.done)
 		res = append(res, f)
 	}
-
 	return res, nil
 }
 
