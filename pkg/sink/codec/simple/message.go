@@ -276,7 +276,7 @@ func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 	return &TableSchema{
 		Schema:  tableInfo.TableName.Schema,
 		Table:   tableInfo.TableName.Table,
-		TableID: tableInfo.TableName.TableID,
+		TableID: tableInfo.ID,
 		Version: tableInfo.UpdateTS,
 		Columns: columns,
 		Indexes: indexes,
@@ -557,7 +557,7 @@ func newDMLMessage(
 		Version:            defaultVersion,
 		Schema:             event.Table.Schema,
 		Table:              event.Table.Table,
-		TableID:            event.Table.TableID,
+		TableID:            event.TableInfo.ID,
 		CommitTs:           event.CommitTs,
 		BuildTs:            time.Now().UnixMilli(),
 		SchemaVersion:      event.TableInfo.UpdateTS,

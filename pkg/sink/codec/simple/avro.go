@@ -113,7 +113,7 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 	result := map[string]interface{}{
 		"schema":  tableInfo.TableName.Schema,
 		"table":   tableInfo.TableName.Table,
-		"tableID": tableInfo.TableName.TableID,
+		"tableID": tableInfo.ID,
 		"version": int64(tableInfo.UpdateTS),
 		"columns": columnsSchema,
 		"indexes": indexesSchema,
@@ -186,7 +186,7 @@ func newDMLMessageMap(
 		"version":            defaultVersion,
 		"schema":             event.Table.Schema,
 		"table":              event.Table.Table,
-		"tableID":            event.Table.TableID,
+		"tableID":            event.TableInfo.ID,
 		"commitTs":           int64(event.CommitTs),
 		"buildTs":            time.Now().UnixMilli(),
 		"schemaVersion":      int64(event.TableInfo.UpdateTS),
