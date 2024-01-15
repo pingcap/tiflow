@@ -79,8 +79,6 @@ type SinkManager struct {
 	// redoProgressHeap is the heap of the table progress for redo.
 	redoProgressHeap *tableProgresses
 
-	// eventCache caches events fetched from sort engine.
-	eventCache *redoEventCache
 	// redoDMLMgr is used to report the resolved ts of the table if redo log is enabled.
 	redoDMLMgr redo.DMLManager
 	// sourceManager is used by the sink manager to fetch data.
@@ -175,11 +173,6 @@ func New(
 		sinkQuota := totalQuota - redoQuota
 		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, sinkQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, redoQuota, "redo")
-
-		eventCache := redoQuota * consistentMemoryUsage.EventCachePercentage / 100
-		if eventCache > 0 {
-			m.eventCache = newRedoEventCache(changefeedID, eventCache)
-		}
 	} else {
 		m.sinkMemQuota = memquota.NewMemQuota(changefeedID, totalQuota, "sink")
 		m.redoMemQuota = memquota.NewMemQuota(changefeedID, 0, "redo")
@@ -404,8 +397,7 @@ func (m *SinkManager) putSinkFactoryError(err error, version uint64) (success bo
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
-			m.sinkMemQuota, m.redoMemQuota,
-			m.eventCache, splitTxn)
+			m.sinkMemQuota, m.redoMemQuota, splitTxn)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.sinkTaskChan) })
 	}
@@ -414,7 +406,7 @@ func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, 
 func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group) {
 	for i := 0; i < redoWorkerNum; i++ {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
-			m.redoDMLMgr, m.eventCache)
+			m.redoDMLMgr)
 		m.redoWorkers = append(m.redoWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.redoTaskChan) })
 	}
@@ -944,9 +936,6 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Stringer("span", &span),
 		zap.Uint64("checkpointTs", checkpointTs.Ts))
-	if m.eventCache != nil {
-		m.eventCache.removeTable(span)
-	}
 }
 
 // GetAllCurrentTableSpans returns all spans in the sinkManager.
@@ -1085,9 +1074,6 @@ func (m *SinkManager) Close() {
 	m.waitSubroutines()
 	// NOTE: It's unnecceary to close table sinks before clear sink factory.
 	m.clearSinkFactory()
-	if m.eventCache != nil {
-		m.eventCache.clear()
-	}
 
 	log.Info("Closed sink manager",
 		zap.String("namespace", m.changefeedID.Namespace),
