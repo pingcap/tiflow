@@ -228,6 +228,7 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 type TableSchema struct {
 	Schema  string          `json:"schema"`
 	Table   string          `json:"table"`
+	TableID int64           `json:"tableID"`
 	Version uint64          `json:"version"`
 	Columns []*columnSchema `json:"columns"`
 	Indexes []*IndexSchema  `json:"indexes"`
@@ -275,6 +276,7 @@ func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 	return &TableSchema{
 		Schema:  tableInfo.TableName.Schema,
 		Table:   tableInfo.TableName.Table,
+		TableID: tableInfo.TableName.TableID,
 		Version: tableInfo.UpdateTS,
 		Columns: columns,
 		Indexes: indexes,
@@ -286,17 +288,20 @@ func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
 	var (
 		database      string
 		table         string
+		tableID       int64
 		schemaVersion uint64
 	)
 	if m != nil {
 		database = m.Schema
 		table = m.Table
+		tableID = m.TableID
 		schemaVersion = m.Version
 	}
 	info := &model.TableInfo{
 		TableName: model.TableName{
-			Schema: database,
-			Table:  table,
+			Schema:  database,
+			Table:   table,
+			TableID: tableID,
 		},
 		TableInfo: &timodel.TableInfo{
 			Name:     timodel.NewCIStr(table),

@@ -113,6 +113,7 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 	result := map[string]interface{}{
 		"schema":  tableInfo.TableName.Schema,
 		"table":   tableInfo.TableName.Table,
+		"tableID": tableInfo.TableName.TableID,
 		"version": int64(tableInfo.UpdateTS),
 		"columns": columnsSchema,
 		"indexes": indexesSchema,
@@ -364,6 +365,7 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 	return &TableSchema{
 		Schema:  native["schema"].(string),
 		Table:   native["table"].(string),
+		TableID: native["tableID"].(int64),
 		Version: uint64(native["version"].(int64)),
 		Columns: columns,
 		Indexes: indexes,

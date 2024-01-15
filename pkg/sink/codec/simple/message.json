@@ -116,6 +116,10 @@
         "type": "string"
       },
       {
+        "name": "tableID",
+        "type": "long"
+      },
+      {
         "name": "version",
         "type": "long"
       },
