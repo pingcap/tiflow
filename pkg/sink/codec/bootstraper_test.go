@@ -93,7 +93,7 @@ func TestIsActive(t *testing.T) {
 	// case 3: A table which receive message recently should be active
 	// Note: A table's update method will be call any time it receive message
 	// So use update method to simulate the table receive message
-	tb1.update(row)
+	tb1.update(row, 1)
 	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
 }
 

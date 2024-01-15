@@ -118,7 +118,7 @@ func (b *bootstrapWorker) addEvent(
 		}
 	} else {
 		// If the table is already in the activeTables, update its status.
-		table.(*tableStatistic).update(row)
+		table.(*tableStatistic).update(row, key.TotalPartition)
 	}
 	return nil
 }
@@ -241,13 +241,17 @@ func (t *tableStatistic) shouldSendBootstrapMsg(
 		t.counter.Load() >= sendBootstrapMsgCountInterval
 }
 
-func (t *tableStatistic) update(row *model.RowChangedEvent) {
+func (t *tableStatistic) update(row *model.RowChangedEvent, totalPartition int32) {
 	t.counter.Add(1)
 	t.lastMsgReceivedTime.Store(time.Now())
 
 	if t.version.Load() != row.TableInfo.UpdateTS {
 		t.version.Store(row.TableInfo.UpdateTS)
 		t.tableInfo.Store(row.TableInfo)
+	}
+
+	if t.totalPartition.Load() != totalPartition {
+		t.totalPartition.Store(totalPartition)
 	}
 }
 
