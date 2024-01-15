@@ -117,9 +117,9 @@ func (w *worker) runLoop() error {
 				zap.Int("workerID", w.ID))
 			return nil
 		case txn := <-w.txnCh.Out():
-			// we get the data from txnCh.out until no more data here or reached the state that can be flushed.
-			// If no more daa in txnCh.out, and also not reached the state that can be flushed,
-			// we will wait for 10ms and then do flush to avoid too much flush wish small amount of txns.
+			// we get the data from txnCh.out until no more data here or reach the state that can be flushed.
+			// If no more data in txnCh.out, and also not reach the state that can be flushed,
+			// we will wait for 10ms and then do flush to avoid too much flush with small amount of txns.
 			if txn.txnEvent != nil {
 				needFlush = w.onEvent(txn)
 				if !needFlush {
