@@ -123,15 +123,12 @@ func (w *worker) runLoop() error {
 			// we get the data from txnCh.out until no more data here or reached the state that can be flushed.
 			if txn.txnEvent != nil {
 				needFlush = w.onEvent(txn)
-				if !needFlush {
-					for txn = range w.txnCh.Out() {
-						if txn.txnEvent == nil {
-							break
-						}
+				for !needFlush {
+					select {
+					case txn := <-w.txnCh.Out():
 						needFlush = w.onEvent(txn)
-						if needFlush {
-							break
-						}
+					default:
+						break
 					}
 				}
 			}
