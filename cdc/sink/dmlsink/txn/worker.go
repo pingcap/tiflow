@@ -93,7 +93,7 @@ func (w *worker) close() {
 }
 
 // Continuously get events from txnCh and call backend flush based on conditions.
-func (w *worker) runLoop() error {
+func (w *worker) run() error {
 	defer func() {
 		if err := w.backend.Close(); err != nil {
 			log.Info("Transaction dmlSink backend close fail",
