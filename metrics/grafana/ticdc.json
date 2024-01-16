@@ -7481,9 +7481,15 @@
           "targets": [
             {
               "exemplar": true,
+<<<<<<< HEAD
               "expr": "sum(rate(ticdc_sinkv2_txn_worker_busy_ratio{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])/10) by (changefeed,instance)",
               "interval": "",
               "legendFormat": "{{changefeed}}-{{instance}}",
+=======
+              "expr": "sum(rate(ticdc_sink_txn_worker_flush_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed,instance,id) /sum(rate(ticdc_sink_txn_worker_total_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed,instance,id) *100",
+              "interval": "",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-worker-{{id}}",
+>>>>>>> 50d96a6508 (mysql (ticdc): Improve the performance of the mysql sink by refining the transaction event batching logic (#10466))
               "queryType": "randomWalk",
               "refId": "A"
             }

@@ -111,9 +111,14 @@ func newSink(ctx context.Context, backends []backend,
 
 	g, ctx1 := errgroup.WithContext(ctx)
 	for i, backend := range backends {
+<<<<<<< HEAD:cdc/sinkv2/eventsink/txn/txn_sink.go
 		w := newWorker(ctx1, i, backend, len(backends))
 		txnCh := sink.alive.conflictDetector.GetOutChByCacheID(int64(i))
 		g.Go(func() error { return w.runLoop(txnCh) })
+=======
+		w := newWorker(ctx1, changefeedID, i, backend, len(backends))
+		g.Go(func() error { return w.run() })
+>>>>>>> 50d96a6508 (mysql (ticdc): Improve the performance of the mysql sink by refining the transaction event batching logic (#10466)):cdc/sink/dmlsink/txn/txn_dml_sink.go
 		sink.workers = append(sink.workers, w)
 	}
 
