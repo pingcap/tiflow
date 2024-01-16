@@ -397,7 +397,7 @@ func (m *SinkManager) putSinkFactoryError(err error, version uint64) (success bo
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
-			m.sinkMemQuota, m.redoMemQuota, splitTxn)
+			m.sinkMemQuota, splitTxn)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.sinkTaskChan) })
 	}

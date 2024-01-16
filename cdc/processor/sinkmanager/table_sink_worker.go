@@ -61,7 +61,6 @@ type sinkWorker struct {
 	changefeedID  model.ChangeFeedID
 	sourceManager *sourcemanager.SourceManager
 	sinkMemQuota  *memquota.MemQuota
-	redoMemQuota  *memquota.MemQuota
 	// splitTxn indicates whether to split the transaction into multiple batches.
 	splitTxn bool
 
@@ -74,14 +73,12 @@ func newSinkWorker(
 	changefeedID model.ChangeFeedID,
 	sourceManager *sourcemanager.SourceManager,
 	sinkQuota *memquota.MemQuota,
-	redoQuota *memquota.MemQuota,
 	splitTxn bool,
 ) *sinkWorker {
 	return &sinkWorker{
 		changefeedID:  changefeedID,
 		sourceManager: sourceManager,
 		sinkMemQuota:  sinkQuota,
-		redoMemQuota:  redoQuota,
 		splitTxn:      splitTxn,
 
 		metricOutputEventCountKV: outputEventCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv"),
