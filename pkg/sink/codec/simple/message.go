@@ -459,7 +459,7 @@ type checksum struct {
 type message struct {
 	Version int `json:"version"`
 	// Schema and Table is empty for the resolved ts event.
-	Schema string    `json:"schema,omitempty"`
+	Schema string    `json:"database,omitempty"`
 	Table  string    `json:"table,omitempty"`
 	Type   EventType `json:"type"`
 	// SQL is only for the DDL event.
