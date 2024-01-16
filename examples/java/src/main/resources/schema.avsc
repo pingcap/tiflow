@@ -108,7 +108,7 @@
     "docs": "table schema information",
     "fields": [
       {
-        "name": "schema",
+        "name": "database",
         "type": "string"
       },
       {
@@ -261,7 +261,7 @@
         "type": "int"
       },
       {
-        "name": "schema",
+        "name": "database",
         "type": "string"
       },
       {
