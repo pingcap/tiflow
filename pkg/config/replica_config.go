@@ -95,7 +95,6 @@ var defaultReplicaConfig = &ReplicaConfig{
 		Compression:           "",
 		MemoryUsage: &ConsistentMemoryUsage{
 			MemoryQuotaPercentage: 50,
-			EventCachePercentage:  0,
 		},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{

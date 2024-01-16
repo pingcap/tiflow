@@ -288,7 +288,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		if c.Consistent.MemoryUsage != nil {
 			res.Consistent.MemoryUsage = &config.ConsistentMemoryUsage{
 				MemoryQuotaPercentage: c.Consistent.MemoryUsage.MemoryQuotaPercentage,
-				EventCachePercentage:  c.Consistent.MemoryUsage.EventCachePercentage,
 			}
 		}
 	}
@@ -820,7 +819,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Consistent.MemoryUsage != nil {
 			res.Consistent.MemoryUsage = &ConsistentMemoryUsage{
 				MemoryQuotaPercentage: cloned.Consistent.MemoryUsage.MemoryQuotaPercentage,
-				EventCachePercentage:  cloned.Consistent.MemoryUsage.EventCachePercentage,
 			}
 		}
 	}
@@ -1038,7 +1036,6 @@ type ConsistentConfig struct {
 // ConsistentMemoryUsage represents memory usage of Consistent module.
 type ConsistentMemoryUsage struct {
 	MemoryQuotaPercentage uint64 `json:"memory_quota_percentage"`
-	EventCachePercentage  uint64 `json:"event_cache_percentage"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
