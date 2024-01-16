@@ -123,16 +123,18 @@ func (w *worker) run() error {
 			if txn.txnEvent != nil {
 				needFlush = w.onEvent(txn)
 				if !needFlush {
-					delayTicker := time.NewTicker(w.flushInterval)
+					delay := time.NewTimer(w.flushInterval)
 					for !needFlush {
 						select {
 						case txn := <-w.txnCh.Out():
 							needFlush = w.onEvent(txn)
-						case <-delayTicker.C:
+						case <-delay.C:
 							needFlush = true
 						}
 					}
-					delayTicker.Stop()
+					if !delay.Stop() {
+						<-delay.C
+					}
 				}
 				// needFlush must be true here, so we can do flush.
 				if err := w.doFlush(); err != nil {
