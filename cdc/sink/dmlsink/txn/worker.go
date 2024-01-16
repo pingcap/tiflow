@@ -132,8 +132,12 @@ func (w *worker) run() error {
 							needFlush = true
 						}
 					}
+					//Release resources promptly
 					if !delay.Stop() {
-						<-delay.C
+						select {
+						case <-delay.C:
+						default:
+						}
 					}
 				}
 				// needFlush must be true here, so we can do flush.
