@@ -22,8 +22,8 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timeta "github.com/pingcap/tidb/meta"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timeta "github.com/pingcap/tidb/pkg/meta"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -45,7 +45,7 @@ func (s *Snapshot) PreTableInfo(job *timodel.Job) (*model.TableInfo, error) {
 	case timodel.ActionCreateTable, timodel.ActionCreateView, timodel.ActionRecoverTable:
 		// no pre table info
 		return nil, nil
-	case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView, timodel.ActionTruncateTable:
+	case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView, timodel.ActionTruncateTable, timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
 		// get the table will be dropped
 		table, ok := s.PhysicalTableByID(job.TableID)
 		if !ok {
@@ -85,6 +85,11 @@ func (s *Snapshot) FillSchemaName(job *timodel.Job) error {
 		// DDLs on multiple schema or tables, ignore them.
 		return nil
 	}
+	if job.Type == timodel.ActionRenameTable && job.SchemaName != "" {
+		// DDL on single table with schema name, ignore it.
+		return nil
+	}
+
 	if job.Type == timodel.ActionCreateSchema ||
 		job.Type == timodel.ActionDropSchema {
 		job.SchemaName = job.BinlogInfo.DBInfo.Name.O
@@ -395,17 +400,18 @@ func (s *Snapshot) Drop() {
 	s.inner.drop()
 }
 
+func getWrapTableInfo(job *timodel.Job) *model.TableInfo {
+	return model.WrapTableInfo(job.SchemaID, job.SchemaName,
+		job.BinlogInfo.FinishedTS,
+		job.BinlogInfo.TableInfo)
+}
+
 // DoHandleDDL is like HandleDDL but doesn't fill schema name into job.
 // NOTE: it's public because some tests in the upper package need this.
 func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 	s.rwlock.Lock()
 	defer s.rwlock.Unlock()
 
-	getWrapTableInfo := func(job *timodel.Job) *model.TableInfo {
-		return model.WrapTableInfo(job.SchemaID, job.SchemaName,
-			job.BinlogInfo.FinishedTS,
-			job.BinlogInfo.TableInfo)
-	}
 	switch job.Type {
 	case timodel.ActionCreateSchema:
 		// get the DBInfo from job rawArgs
@@ -428,6 +434,12 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		err := s.inner.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
+		}
+		// If it a rename table job and the schema does not exist,
+		// there is no need to create the table, since this table
+		// will not be replicated in the future.
+		if _, ok := s.inner.schemaByID(job.SchemaID); !ok {
+			return nil
 		}
 		// create table
 		err = s.inner.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
@@ -466,6 +478,11 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		}
 	case timodel.ActionExchangeTablePartition:
 		err := s.inner.exchangePartition(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
+		if err != nil {
+			return errors.Trace(err)
+		}
+	case timodel.ActionRemovePartitioning, timodel.ActionAlterTablePartitioning:
+		err := s.inner.alterPartitioning(job)
 		if err != nil {
 			return errors.Trace(err)
 		}
@@ -990,6 +1007,27 @@ func (s *snapshot) exchangePartition(targetTable *model.TableInfo, currentTS uin
 		zap.Int64("exchangedPartition", exchangedPartitionID),
 		zap.String("targetTable", targetTable.TableName.String()),
 		zap.Any("partition", targetTable.GetPartitionInfo().Definitions))
+	return nil
+}
+
+// alterPartitioning changes the table id and updates the TableInfo (including the partitioning info)
+func (s *snapshot) alterPartitioning(job *timodel.Job) error {
+	// first drop the table (will work with both partitioned and non-partitioned tables
+	err := s.dropTable(job.TableID, job.BinlogInfo.FinishedTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	// (re)create table, again will work with both partitioned and non-paritioned tables
+	// it uses the model.TableInfo written to the job.BinlogInfo, which is the final one
+	err = s.createTable(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	log.Info("handle alter partitioning success",
+		zap.Int64("OldID", job.TableID),
+		zap.Int64("NewID", job.BinlogInfo.TableInfo.ID),
+		zap.String("Name", job.TableName))
 	return nil
 }
 

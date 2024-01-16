@@ -23,16 +23,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
-	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx/variable"
-	"github.com/pingcap/tidb/util/codec"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
@@ -132,12 +129,10 @@ func newMockDDLJobPuller(
 		helper = entry.NewSchemaTestHelper(t)
 		kvStorage := helper.Storage()
 		ts := helper.GetCurrentMeta().StartTS
-		meta, err := kv.GetSnapshotMeta(kvStorage, ts)
-		require.Nil(t, err)
 		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
-			meta,
+			kvStorage,
 			ts,
 			false,
 			model.DefaultChangeFeedID("test"),
@@ -165,6 +160,9 @@ func TestHandleRenameTable(t *testing.T) {
 		"test1.t66",
 		"test1.t99",
 		"test1.t100",
+		"test1.t20230808",
+		"test1.t202308081",
+		"test1.t202308082",
 
 		"test2.t4",
 
@@ -216,7 +214,17 @@ func TestHandleRenameTable(t *testing.T) {
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
-		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55")
+		job = helper.DDL2Job("create database ignore1")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("create table ignore1.a(id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("rename table test1.t1 to test1.t11, test1.t3 to test1.t33, test1.t5 to test1.t55, ignore1.a to ignore1.b")
 
 		skip, err := ddlJobPullerImpl.handleRenameTables(job)
 		require.NoError(t, err)
@@ -310,6 +318,20 @@ func TestHandleRenameTable(t *testing.T) {
 		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
 		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 
+		job = helper.DDL2Job("create table test1.t20230808 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("create table test1.t202308081 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+		job = helper.DDL2Job("create table test1.t202308082 (id int)")
+		mockPuller.appendDDL(job)
+		mockPuller.appendResolvedTs(job.BinlogInfo.FinishedTS + 1)
+		waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
 		// since test1.99 in filter rule, we replicate it
 		job = helper.DDL2Job("rename table test1.t99 to test1.t999")
 		skip, err := ddlJobPullerImpl.handleJob(job)
@@ -330,6 +352,22 @@ func TestHandleRenameTable(t *testing.T) {
 		skip, err = ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.True(t, skip)
+
+		// since test1.t20230808 is  in filter rule, replicate it
+		// ref: https://github.com/pingcap/tiflow/issues/9488
+		job = helper.DDL2Job("rename table test1.t20230808 to ignore1.ignore")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		// FIXME(dongmen): since test1.t202308081 and test1.t202308082 are in filter rule, it should be replicated
+		// but now it will throw an error since schema ignore1 are not in schemaStorage
+		// ref: https://github.com/pingcap/tiflow/issues/9488
+		job = helper.DDL2Job("rename table test1.t202308081 to ignore1.ignore1, test1.t202308082 to ignore1.dongmen")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NotNil(t, err)
+		require.True(t, skip)
+		require.Contains(t, err.Error(), "ErrSnapshotSchemaNotFound")
 	}
 }
 
@@ -344,7 +382,18 @@ func TestHandleJob(t *testing.T) {
 	cfg.Filter.Rules = []string{
 		"test1.t1",
 		"test1.t2",
+		"test1.testStartTs",
 	}
+	// test start ts filter
+	cfg.Filter.IgnoreTxnStartTs = []uint64{1}
+	// test event filter
+	cfg.Filter.EventFilters = []*config.EventFilterRule{
+		{
+			Matcher:   []string{"test1.*"},
+			IgnoreSQL: []string{"alter table test1.t1 add column c1 int"},
+		},
+	}
+
 	f, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
@@ -381,6 +430,22 @@ func TestHandleJob(t *testing.T) {
 		skip, err := ddlJobPullerImpl.handleJob(job)
 		require.NoError(t, err)
 		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.t1 add column c1 int")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
+
+		job = helper.DDL2Job("create table test1.testStartTs(id int)")
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.False(t, skip)
+
+		job = helper.DDL2Job("alter table test1.testStartTs add column c1 int")
+		job.StartTS = 1
+		skip, err = ddlJobPullerImpl.handleJob(job)
+		require.NoError(t, err)
+		require.True(t, skip)
 
 		job = helper.DDL2Job("create table test1.t2(id int)")
 		skip, err = ddlJobPullerImpl.handleJob(job)
@@ -540,13 +605,7 @@ func TestDDLPuller(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config,
-		up, startTs,
-		ctx.ChangefeedVars().ID,
-		schemaStorage,
-		f)
-	require.Nil(t, err)
+	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 
 	var wg sync.WaitGroup
@@ -670,16 +729,7 @@ func TestResolvedTsStuck(t *testing.T) {
 		f,
 	)
 	require.Nil(t, err)
-	p, err := NewDDLPuller(
-		ctx, ctx.ChangefeedVars().Info.Config,
-		up, startTs,
-		ctx.ChangefeedVars().ID,
-		schemaStorage,
-		f)
-	require.Nil(t, err)
-
-	mockClock := clock.NewMock()
-	p.(*ddlPullerImpl).clock = mockClock
+	p := NewDDLPuller(ctx, up, startTs, ctx.ChangefeedVars().ID, schemaStorage, f)
 
 	p.(*ddlPullerImpl).ddlJobPuller, _ = newMockDDLJobPuller(t, mockPuller, false)
 	var wg sync.WaitGroup
@@ -703,18 +753,6 @@ func TestResolvedTsStuck(t *testing.T) {
 	mockPuller.appendResolvedTs(30)
 	waitResolvedTsGrowing(t, p, 30)
 	require.Equal(t, 0, logs.Len())
-
-	mockClock.Add(2 * ddlPullerStuckWarnDuration)
-	for i := 0; i < 20; i++ {
-		mockClock.Add(time.Second)
-		if logs.Len() > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-		if i == 19 {
-			t.Fatal("warning log not printed")
-		}
-	}
 
 	mockPuller.appendResolvedTs(40)
 	waitResolvedTsGrowing(t, p, 40)

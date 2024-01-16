@@ -575,7 +575,7 @@ func (st *SubTask) Kill() {
 	st.validator = nil
 }
 
-// Pause pauses a running sub task or a sub task paused by error.
+// Pause pauses a running subtask or a subtask paused by error.
 func (st *SubTask) Pause() error {
 	if st.markResultCanceled() {
 		return nil
@@ -872,6 +872,14 @@ func (st *SubTask) GetValidatorError(errState pb.ValidateErrorState) ([]*pb.Vali
 func (st *SubTask) OperateValidatorError(op pb.ValidationErrOp, errID uint64, isAll bool) error {
 	if validator := st.getValidator(); validator != nil {
 		return validator.OperateValidatorError(op, errID, isAll)
+	}
+	cfg := st.getCfg()
+	return terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)
+}
+
+func (st *SubTask) UpdateValidator(req *pb.UpdateValidationWorkerRequest) error {
+	if validator := st.getValidator(); validator != nil {
+		return validator.UpdateValidator(req)
 	}
 	cfg := st.getCfg()
 	return terror.ErrValidatorNotFound.Generate(cfg.Name, cfg.SourceID)

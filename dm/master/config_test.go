@@ -131,10 +131,10 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(etcdCfg.Name, check.Equals, fmt.Sprintf("dm-master-%s", hostname))
 	c.Assert(etcdCfg.Dir, check.Equals, fmt.Sprintf("default.%s", etcdCfg.Name))
-	c.Assert(etcdCfg.LCUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "0.0.0.0:8261"}})
-	c.Assert(etcdCfg.ACUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8261"}})
-	c.Assert(etcdCfg.LPUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
-	c.Assert(etcdCfg.APUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
+	c.Assert(etcdCfg.ListenClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "0.0.0.0:8261"}})
+	c.Assert(etcdCfg.AdvertiseClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8261"}})
+	c.Assert(etcdCfg.ListenPeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
+	c.Assert(etcdCfg.AdvertisePeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
 	c.Assert(etcdCfg.InitialCluster, check.DeepEquals, fmt.Sprintf("dm-master-%s=http://127.0.0.1:8291", hostname))
 	c.Assert(etcdCfg.ClusterState, check.Equals, embed.ClusterStateFlagExisting)
 	c.Assert(etcdCfg.AutoCompactionMode, check.Equals, "periodic")
@@ -151,8 +151,8 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 	cfg2.AdvertiseAddr = "172.100.8.8:8261"
 	etcdCfg, err = cfg2.genEmbedEtcdConfig(embed.NewConfig())
 	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.LCUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
-	c.Assert(etcdCfg.ACUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
+	c.Assert(etcdCfg.ListenClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
+	c.Assert(etcdCfg.AdvertiseClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
 
 	cfg3 := *cfg1
 	cfg3.PeerUrls = "127.0.0.1:\n8291"
@@ -162,7 +162,7 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 	cfg3.PeerUrls = "http://172.100.8.8:8291"
 	etcdCfg, err = cfg3.genEmbedEtcdConfig(embed.NewConfig())
 	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.LPUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
+	c.Assert(etcdCfg.ListenPeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
 
 	cfg4 := *cfg1
 	cfg4.AdvertisePeerUrls = "127.0.0.1:\n8291"
@@ -172,7 +172,7 @@ func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
 	cfg4.AdvertisePeerUrls = "http://172.100.8.8:8291"
 	etcdCfg, err = cfg4.genEmbedEtcdConfig(embed.NewConfig())
 	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.APUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
+	c.Assert(etcdCfg.AdvertisePeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
 }
 
 func (t *testConfigSuite) TestParseURLs(c *check.C) {

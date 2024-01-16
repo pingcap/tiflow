@@ -21,7 +21,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
@@ -87,12 +86,16 @@ func NewManager4Test(pdClient pd.Client) *Manager {
 // AddDefaultUpstream add the default upstream
 func (m *Manager) AddDefaultUpstream(pdEndpoints []string,
 	conf *security.Credential,
+	pdClient pd.Client,
 ) (*Upstream, error) {
 	up := newUpstream(pdEndpoints, conf)
+	// use the pdClient pass from cdc server as the default upstream
+	// to reduce the creation times of pdClient to make cdc server more stable
+	up.isDefaultUpstream = true
+	up.PDClient = pdClient
 	if err := m.initUpstreamFunc(m.ctx, up, m.gcServiceID); err != nil {
 		return nil, err
 	}
-	up.isDefaultUpstream = true
 	m.defaultUpstream = up
 	m.ups.Store(up.ID, up)
 	log.Info("default upstream is added", zap.Uint64("id", up.ID))
@@ -108,7 +111,7 @@ func (m *Manager) GetDefaultUpstream() (*Upstream, error) {
 }
 
 func (m *Manager) add(upstreamID uint64,
-	pdEndpoints []string, conf *config.SecurityConfig,
+	pdEndpoints []string, conf *security.Credential,
 ) *Upstream {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -193,7 +196,9 @@ func (m *Manager) Tick(ctx context.Context,
 
 	activeUpstreams := make(map[uint64]struct{})
 	for _, cf := range globalState.Changefeeds {
-		activeUpstreams[cf.Info.UpstreamID] = struct{}{}
+		if cf != nil && cf.Info != nil {
+			activeUpstreams[cf.Info.UpstreamID] = struct{}{}
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

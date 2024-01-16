@@ -191,7 +191,7 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 	err = cfg.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
-		EncoderConcurrency: util.AddressOf(16),
+		EncoderConcurrency: util.AddressOf(config.DefaultEncoderGroupConcurrency),
 		DispatchRules: []*config.DispatchRule{
 			{PartitionRule: "ts", TopicRule: "hello_{schema}", Matcher: []string{"test1.*", "test2.*"}},
 			{PartitionRule: "rowid", TopicRule: "{schema}_world", Matcher: []string{"test3.*", "test4.*"}},
@@ -212,7 +212,12 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
 		Protocol:                         util.AddressOf("open-protocol"),
+		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	}, cfg.Sink)
 }
 
@@ -229,7 +234,7 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, &config.SinkConfig{
 		Protocol:                 util.AddressOf(config.ProtocolCanalJSON.String()),
-		EncoderConcurrency:       util.AddressOf(16),
+		EncoderConcurrency:       util.AddressOf(config.DefaultEncoderGroupConcurrency),
 		Terminator:               util.AddressOf(config.CRLF),
 		TxnAtomicity:             util.AddressOf(config.AtomicityLevel("")),
 		DateSeparator:            util.AddressOf("day"),
@@ -245,6 +250,11 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		},
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
+		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		DebeziumDisableSchema:            util.AddressOf(false),
 	}, cfg.Sink)
 }
 

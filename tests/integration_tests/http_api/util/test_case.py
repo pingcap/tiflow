@@ -1,6 +1,7 @@
 import sys
 import os
 import requests as rq
+from requests.exceptions import RequestException
 import time
 import json
 
@@ -24,6 +25,26 @@ ENPASSWORD="MTIzNDU2"
 SINK_URI="mysql://normal:%s@127.0.0.1:3306/" % ENPASSWORD
 
 physicalShiftBits = 18
+
+def requests_get_with_retry(url, max_retries=RETRY_TIME, delay_seconds=1):
+    """
+    requests get with retry
+
+    :param url: request url
+    :param max_retries: max retry times
+    :param delay_seconds: retry delay seconds
+    :return: when success, return response, else return None
+    """
+    for retry in range(max_retries):
+        try:
+            response = rq.get(url)
+            if response.status_code == 200 or response.status_code == 202:
+                return response
+        except RequestException as e:
+            print(f"request fails {retry + 1}/{max_retries} time retry...")
+            time.sleep(delay_seconds)
+    return None
+
 # we should write some SQLs in the run.sh after call create_changefeed
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
@@ -245,7 +266,7 @@ def resign_owner():
 
 def list_capture():
     url = BASE_URL0 + "/captures"
-    resp = rq.get(url)
+    resp = requests_get_with_retry(url)
     assert resp.status_code == rq.codes.ok
 
     print("pass test: list captures")
@@ -253,7 +274,7 @@ def list_capture():
 
 def list_processor():
     url = BASE_URL0 + "/processors"
-    resp = rq.get(url)
+    resp = requests_get_with_retry(url)
     assert resp.status_code == rq.codes.ok
 
     print("pass test: list processors")
@@ -262,16 +283,16 @@ def list_processor():
 def get_processor():
     # list processor to get changefeed_id and capture_id 
     base_url = BASE_URL0 + "/processors"
-    resp = rq.get(base_url)
+    resp = requests_get_with_retry(base_url)
     assert resp.status_code == rq.codes.ok
     data = resp.json()[0]
-    url = base_url + "/" + data["changefeed_id"] + "/" + data["capture_id"]
-    resp = rq.get(url)
+    time.sleep(2)
+    url = base_url + "/changefeed-test1/" + data["capture_id"]
+    resp = requests_get_with_retry(url)
     # print error message for debug 
     if (resp.status_code != rq.codes.ok):
         print("request url", url)
         print("response status code:", resp.status_code)
-        print("response body:", resp.text())
     assert resp.status_code == rq.codes.ok
 
     # test capture_id error and cdc server no panic
@@ -296,7 +317,7 @@ def check_health():
 
 def get_status():
     url = BASE_URL0 + "/status"
-    resp = rq.get(url)
+    resp = requests_get_with_retry(url)
     assert resp.status_code == rq.codes.ok
     assert resp.json()["is_owner"]
 

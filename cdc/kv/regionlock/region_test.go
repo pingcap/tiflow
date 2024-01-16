@@ -63,3 +63,85 @@ func TestCheckRegionsLeftCover(t *testing.T) {
 		require.Equal(t, tc.cover, CheckRegionsLeftCover(tc.regions, tc.span))
 	}
 }
+
+func TestCutRegionsLeftCoverSpan(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		regions []*metapb.Region
+		span    tablepb.Span
+		covered []*metapb.Region
+	}{
+		{
+			regions: []*metapb.Region{},
+			span:    tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			covered: nil,
+		},
+		{
+			regions: []*metapb.Region{{StartKey: nil, EndKey: nil}},
+			span:    tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			covered: []*metapb.Region{{StartKey: nil, EndKey: nil}},
+		},
+		{
+			regions: []*metapb.Region{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+			},
+			span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			covered: []*metapb.Region{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+			},
+		},
+		{
+			regions: []*metapb.Region{
+				{StartKey: []byte{0}, EndKey: []byte{4}},
+			},
+			span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{2}},
+			covered: []*metapb.Region{
+				{StartKey: []byte{0}, EndKey: []byte{4}},
+			},
+		},
+		{
+			regions: []*metapb.Region{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+				{StartKey: []byte{2}, EndKey: []byte{3}},
+			},
+			span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{3}},
+			covered: []*metapb.Region{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+				{StartKey: []byte{2}, EndKey: []byte{3}},
+			},
+		},
+		{
+			regions: []*metapb.Region{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+				{StartKey: []byte{3}, EndKey: []byte{4}},
+			},
+			span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{4}},
+			covered: []*metapb.Region{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+			},
+		},
+		{
+			regions: []*metapb.Region{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+				{StartKey: []byte{2}, EndKey: []byte{3}},
+			},
+			span: tablepb.Span{StartKey: []byte{1}, EndKey: []byte{4}},
+			covered: []*metapb.Region{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+				{StartKey: []byte{2}, EndKey: []byte{3}},
+			},
+		},
+		{
+			regions: []*metapb.Region{
+				{StartKey: []byte{2}, EndKey: []byte{3}},
+			},
+			span:    tablepb.Span{StartKey: []byte{1}, EndKey: []byte{3}},
+			covered: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		require.Equal(t, tc.covered, CutRegionsLeftCoverSpan(tc.regions, tc.span))
+	}
+}

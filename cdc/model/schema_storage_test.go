@@ -16,9 +16,9 @@ package model
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	parser_types "github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	parser_types "github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -190,7 +190,7 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 	require.Equal(t, 3, len(fts))
 	require.Equal(t, 3, len(colInfos))
 
-	require.True(t, info.ExistTableUniqueColumn())
+	require.True(t, info.HasUniqueColumn())
 
 	// check IsEligible
 	require.True(t, info.IsEligible(false))
@@ -269,4 +269,87 @@ func TestTableInfoClone(t *testing.T) {
 	require.Equal(t, cloned.SchemaID, info.SchemaID)
 	cloned.SchemaID = 100
 	require.Equal(t, int64(10), info.SchemaID)
+}
+
+func TestIndexByName(t *testing.T) {
+	tableInfo := &TableInfo{
+		TableInfo: &timodel.TableInfo{
+			Indices: nil,
+		},
+	}
+	names, offsets, ok := tableInfo.IndexByName("idx1")
+	require.False(t, ok)
+	require.Nil(t, names)
+	require.Nil(t, offsets)
+
+	tableInfo = &TableInfo{
+		TableInfo: &timodel.TableInfo{
+			Indices: []*timodel.IndexInfo{
+				{
+					Name: timodel.CIStr{
+						O: "idx1",
+					},
+					Columns: []*timodel.IndexColumn{
+						{
+							Name: timodel.CIStr{
+								O: "col1",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	names, offsets, ok = tableInfo.IndexByName("idx2")
+	require.False(t, ok)
+	require.Nil(t, names)
+	require.Nil(t, offsets)
+
+	names, offsets, ok = tableInfo.IndexByName("idx1")
+	require.True(t, ok)
+	require.Equal(t, []string{"col1"}, names)
+	require.Equal(t, []int{0}, offsets)
+}
+
+func TestColumnsByNames(t *testing.T) {
+	tableInfo := &TableInfo{
+		TableInfo: &timodel.TableInfo{
+			Columns: []*timodel.ColumnInfo{
+				{
+					Name: timodel.CIStr{
+						O: "col2",
+					},
+					Offset: 1,
+				},
+				{
+					Name: timodel.CIStr{
+						O: "col1",
+					},
+					Offset: 0,
+				},
+				{
+					Name: timodel.CIStr{
+						O: "col3",
+					},
+					Offset: 2,
+				},
+			},
+		},
+	}
+
+	names := []string{"col1", "col2", "col3"}
+	offsets, ok := tableInfo.OffsetsByNames(names)
+	require.True(t, ok)
+	require.Equal(t, []int{0, 1, 2}, offsets)
+
+	names = []string{"col2"}
+	offsets, ok = tableInfo.OffsetsByNames(names)
+	require.True(t, ok)
+	require.Equal(t, []int{1}, offsets)
+
+	names = []string{"col1", "col-not-found"}
+	offsets, ok = tableInfo.OffsetsByNames(names)
+	require.False(t, ok)
+	require.Nil(t, offsets)
 }

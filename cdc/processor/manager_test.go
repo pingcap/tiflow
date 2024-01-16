@@ -47,15 +47,17 @@ func NewManager4Test(
 	cfg := config.NewDefaultSchedulerConfig()
 	m := NewManager(captureInfo, upstream.NewManager4Test(nil), liveness, cfg).(*managerImpl)
 	m.newProcessor = func(
-		state *orchestrator.ChangefeedReactorState,
+		info *model.ChangeFeedInfo,
+		status *model.ChangeFeedStatus,
 		captureInfo *model.CaptureInfo,
 		changefeedID model.ChangeFeedID,
 		up *upstream.Upstream,
 		liveness *model.Liveness,
 		changefeedEpoch uint64,
 		cfg *config.SchedulerConfig,
+		client etcd.OwnerCaptureInfoClient,
 	) *processor {
-		return newProcessor4Test(t, state, captureInfo, m.liveness, cfg, false)
+		return newProcessor4Test(t, info, status, captureInfo, m.liveness, cfg, false, client)
 	}
 	return m
 }
@@ -63,7 +65,7 @@ func NewManager4Test(
 //nolint:unused
 func (s *managerTester) resetSuit(ctx cdcContext.Context, t *testing.T) {
 	s.manager = NewManager4Test(t, &s.liveness)
-	s.state = orchestrator.NewGlobalState(etcd.DefaultCDCClusterID)
+	s.state = orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	captureInfoBytes, err := ctx.GlobalVars().CaptureInfo.Marshal()
 	require.Nil(t, err)
 	s.tester = orchestrator.NewReactorStateTester(t, s.state, map[string]string{

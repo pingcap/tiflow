@@ -16,13 +16,14 @@ package util
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	gcsStorage "cloud.google.com/go/storage"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -175,11 +176,11 @@ func (s *extStorageWithTimeout) DeleteFile(ctx context.Context, name string) err
 
 // Open a Reader by file path. path is relative path to storage base path
 func (s *extStorageWithTimeout) Open(
-	ctx context.Context, path string,
+	ctx context.Context, path string, _ *storage.ReaderOption,
 ) (storage.ExternalFileReader, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.Open(ctx, path)
+	return s.ExternalStorage.Open(ctx, path, nil)
 }
 
 // WalkDir traverse all the files in a dir.
@@ -193,11 +194,15 @@ func (s *extStorageWithTimeout) WalkDir(
 
 // Create opens a file writer by path. path is relative path to storage base path
 func (s *extStorageWithTimeout) Create(
-	ctx context.Context, path string,
+	ctx context.Context, path string, option *storage.WriterOption,
 ) (storage.ExternalFileWriter, error) {
-	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-	return s.ExternalStorage.Create(ctx, path)
+	if option.Concurrency <= 1 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.timeout)
+		defer cancel()
+	}
+	// multipart uploading spawns a background goroutine, can't set timeout
+	return s.ExternalStorage.Create(ctx, path, option)
 }
 
 // Rename file name from oldFileName to newFileName
@@ -230,9 +235,9 @@ func IsNotExistInExtStorage(err error) bool {
 		return true
 	}
 
-	var errResp *azblob.StorageError
-	if internalErr, ok := err.(*azblob.InternalError); ok && internalErr.As(&errResp) {
-		if errResp.ErrorCode == azblob.StorageErrorCodeBlobNotFound {
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		if respErr.StatusCode == http.StatusNotFound {
 			return true
 		}
 	}
@@ -259,38 +264,38 @@ func RemoveFilesIf(
 	}
 
 	log.Debug("Removing files", zap.Any("toRemoveFiles", toRemoveFiles))
-
-	for _, path := range toRemoveFiles {
-		if err := extStorage.DeleteFile(ctx, path); err != nil {
-			return errors.ErrExternalStorageAPI.Wrap(err)
-		}
-	}
 	return DeleteFilesInExtStorage(ctx, extStorage, toRemoveFiles)
 }
 
 // DeleteFilesInExtStorage deletes files in external storage concurrently.
+// TODO: Add a test for this function to cover batch delete.
 func DeleteFilesInExtStorage(
 	ctx context.Context, extStorage storage.ExternalStorage, toRemoveFiles []string,
 ) error {
 	limit := make(chan struct{}, 32)
+	batch := 3000
 	eg, egCtx := errgroup.WithContext(ctx)
-	for _, file := range toRemoveFiles {
+	for len(toRemoveFiles) > 0 {
 		select {
 		case <-egCtx.Done():
 			return egCtx.Err()
 		case limit <- struct{}{}:
 		}
 
-		name := file
+		if len(toRemoveFiles) < batch {
+			batch = len(toRemoveFiles)
+		}
+		files := toRemoveFiles[:batch]
 		eg.Go(func() error {
 			defer func() { <-limit }()
-			err := extStorage.DeleteFile(egCtx, name)
+			err := extStorage.DeleteFiles(egCtx, files)
 			if err != nil && !IsNotExistInExtStorage(err) {
 				// if fail then retry, may end up with notExit err, ignore the error
 				return errors.ErrExternalStorageAPI.Wrap(err)
 			}
 			return nil
 		})
+		toRemoveFiles = toRemoveFiles[batch:]
 	}
 	return eg.Wait()
 }

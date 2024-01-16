@@ -73,7 +73,7 @@ func TestFileManagerBasics(t *testing.T) {
 
 	storage, err := newBrStorageForLocalFile(res1.AbsolutePath())
 	require.NoError(t, err)
-	fwriter, err := storage.Create(context.Background(), "1.txt")
+	fwriter, err := storage.Create(context.Background(), "1.txt", nil)
 	require.NoError(t, err)
 	err = fwriter.Close(context.Background())
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestFileManagerBasics(t *testing.T) {
 
 	storage, err = newBrStorageForLocalFile(res2.AbsolutePath())
 	require.NoError(t, err)
-	fwriter, err = storage.Create(context.Background(), "1.txt")
+	fwriter, err = storage.Create(context.Background(), "1.txt", nil)
 	require.NoError(t, err)
 	err = fwriter.Close(context.Background())
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestFileManagerManyWorkers(t *testing.T) {
 
 		storage, err := newBrStorageForLocalFile(res1.AbsolutePath())
 		require.NoError(t, err)
-		fwriter, err := storage.Create(context.Background(), "1.txt")
+		fwriter, err := storage.Create(context.Background(), "1.txt", nil)
 		require.NoError(t, err)
 		err = fwriter.Close(context.Background())
 		require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestFileManagerManyWorkers(t *testing.T) {
 
 		storage, err = newBrStorageForLocalFile(res2.AbsolutePath())
 		require.NoError(t, err)
-		fwriter, err = storage.Create(context.Background(), "1.txt")
+		fwriter, err = storage.Create(context.Background(), "1.txt", nil)
 		require.NoError(t, err)
 		err = fwriter.Close(context.Background())
 		require.NoError(t, err)

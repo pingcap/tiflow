@@ -40,6 +40,8 @@ const (
 type kafkaTopicManager struct {
 	changefeedID model.ChangeFeedID
 
+	defaultTopic string
+
 	admin kafka.ClusterAdminClient
 
 	cfg *kafka.AutoCreateTopicConfig
@@ -55,11 +57,13 @@ type kafkaTopicManager struct {
 // NewKafkaTopicManager creates a new topic manager.
 func NewKafkaTopicManager(
 	ctx context.Context,
+	defaultTopic string,
 	changefeedID model.ChangeFeedID,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
-) (*kafkaTopicManager, error) {
+) *kafkaTopicManager {
 	mgr := &kafkaTopicManager{
+		defaultTopic:      defaultTopic,
 		changefeedID:      changefeedID,
 		admin:             admin,
 		cfg:               cfg,
@@ -70,7 +74,7 @@ func NewKafkaTopicManager(
 	// Background refresh metadata.
 	go mgr.backgroundRefreshMeta(ctx)
 
-	return mgr, nil
+	return mgr
 }
 
 // GetPartitionNum returns the number of partitions of the topic.
@@ -102,20 +106,12 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 			)
 			return
 		case <-m.metaRefreshTicker.C:
-			topicMetaList, err := m.getMetadataOfTopics(ctx)
 			// We ignore the error here, because the error may be caused by the
 			// network problem, and we can try to get the metadata next time.
-			if err != nil {
-				log.Warn("Get metadata of topics failed",
-					zap.String("namespace", m.changefeedID.Namespace),
-					zap.String("changefeed", m.changefeedID.ID),
-					zap.Error(err))
+			topicPartitionNums, _ := m.fetchAllTopicsPartitionsNum(ctx)
+			for topic, partitionNum := range topicPartitionNums {
+				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
 			}
-
-			for topic, detail := range topicMetaList {
-				m.tryUpdatePartitionsAndLogging(topic, detail.NumPartitions)
-			}
-
 		}
 	}
 }
@@ -147,21 +143,21 @@ func (m *kafkaTopicManager) tryUpdatePartitionsAndLogging(topic string, partitio
 	}
 }
 
-func (m *kafkaTopicManager) getMetadataOfTopics(
+// fetchAllTopicsPartitionsNum fetches all topics' partitions number.
+// The error returned by this method could be a transient error that is fixable by the underlying logic.
+// When handling this error, please be cautious.
+// If you simply throw the error to the caller, it may impact the robustness of your program.
+func (m *kafkaTopicManager) fetchAllTopicsPartitionsNum(
 	ctx context.Context,
-) (map[string]kafka.TopicDetail, error) {
-	var topicList []string
-
+) (map[string]int32, error) {
+	var topics []string
 	m.topics.Range(func(key, value any) bool {
-		topic := key.(string)
-		topicList = append(topicList, topic)
-
+		topics = append(topics, key.(string))
 		return true
 	})
 
 	start := time.Now()
-	// ignore the topic with error, return a subset of all topics.
-	topicMetaList, err := m.admin.GetTopicsMeta(ctx, topicList, true)
+	numPartitions, err := m.admin.GetTopicsPartitionsNum(ctx, topics)
 	if err != nil {
 		log.Warn(
 			"Kafka admin client describe topics failed",
@@ -173,13 +169,22 @@ func (m *kafkaTopicManager) getMetadataOfTopics(
 		return nil, err
 	}
 
+	// it may happen the following case:
+	// 1. user create the default topic with partition number set as 3 manually
+	// 2. set the partition-number as 2 in the sink-uri.
+	// in the such case, we should use 2 instead of 3 as the partition number.
+	_, ok := numPartitions[m.defaultTopic]
+	if ok {
+		numPartitions[m.defaultTopic] = m.cfg.PartitionNum
+	}
+
 	log.Info(
 		"Kafka admin client describe topics success",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("duration", time.Since(start)))
 
-	return topicMetaList, nil
+	return numPartitions, nil
 }
 
 // waitUntilTopicVisible is called after CreateTopic to make sure the topic
@@ -194,6 +199,8 @@ func (m *kafkaTopicManager) waitUntilTopicVisible(
 	topics := []string{topicName}
 	err := retry.Do(ctx, func() error {
 		start := time.Now()
+		// ignoreTopicError is set to false since we just create the topic,
+		// make sure the topic is visible.
 		meta, err := m.admin.GetTopicsMeta(ctx, topics, false)
 		if err != nil {
 			log.Warn(" topic not found, retry it",
@@ -267,17 +274,22 @@ func (m *kafkaTopicManager) createTopic(
 
 // CreateTopicAndWaitUntilVisible wraps createTopic and waitUntilTopicVisible together.
 func (m *kafkaTopicManager) CreateTopicAndWaitUntilVisible(
-	ctx context.Context,
-	topicName string,
+	ctx context.Context, topicName string,
 ) (int32, error) {
 	// If the topic is not in the cache, we try to get the metadata of the topic.
+	// ignoreTopicErr is set to true to ignore the error if the topic is not found,
+	// which means we should create the topic later.
 	topicDetails, err := m.admin.GetTopicsMeta(ctx, []string{topicName}, true)
 	if err != nil {
 		return 0, errors.Trace(err)
 	}
 	if detail, ok := topicDetails[topicName]; ok {
-		m.tryUpdatePartitionsAndLogging(topicName, detail.NumPartitions)
-		return detail.NumPartitions, nil
+		numPartition := detail.NumPartitions
+		if topicName == m.defaultTopic {
+			numPartition = m.cfg.PartitionNum
+		}
+		m.tryUpdatePartitionsAndLogging(topicName, numPartition)
+		return numPartition, nil
 	}
 
 	partitionNum, err := m.createTopic(ctx, topicName)

@@ -23,6 +23,7 @@ func NewValidationCmd() *cobra.Command {
 	cmd.AddCommand(
 		NewStartValidationCmd(),
 		NewStopValidationCmd(),
+		NewUpdateValidationCmd(),
 		NewQueryValidationErrorCmd(),
 		NewQueryValidationStatusCmd(),
 		NewIgnoreValidationErrorCmd(),

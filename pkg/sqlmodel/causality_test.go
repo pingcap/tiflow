@@ -156,6 +156,18 @@ func TestGetCausalityString(t *testing.T) {
 			keys:   []string{"16.a.db.tbl", "xyz.b.db.tbl"},
 		},
 		{
+			// case insensitive
+			schema: `create table t_ci(a int unique, b varchar(16) primary key)default charset=utf8 collate=utf8_unicode_ci`,
+			values: []interface{}{16, "XyZ"},
+			keys:   []string{"16.a.db.tbl", "xyz.b.db.tbl"},
+		},
+		{
+			// case sensitive
+			schema: `create table t_bin(a int unique, b varchar(16) primary key)default charset=utf8 collate=utf8_bin`,
+			values: []interface{}{16, "XyZ"},
+			keys:   []string{"16.a.db.tbl", "XyZ.b.db.tbl"},
+		},
+		{
 			// primary key of multiple columns
 			schema: `create table t7(a int, b int, primary key(a, b))`,
 			values: []interface{}{59, 69},

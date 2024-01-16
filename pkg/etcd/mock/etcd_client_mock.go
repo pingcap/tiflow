@@ -15,6 +15,75 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// MockOwnerCaptureInfoClient is a mock of OwnerCaptureInfoClient interface.
+type MockOwnerCaptureInfoClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockOwnerCaptureInfoClientMockRecorder
+}
+
+// MockOwnerCaptureInfoClientMockRecorder is the mock recorder for MockOwnerCaptureInfoClient.
+type MockOwnerCaptureInfoClientMockRecorder struct {
+	mock *MockOwnerCaptureInfoClient
+}
+
+// NewMockOwnerCaptureInfoClient creates a new mock instance.
+func NewMockOwnerCaptureInfoClient(ctrl *gomock.Controller) *MockOwnerCaptureInfoClient {
+	mock := &MockOwnerCaptureInfoClient{ctrl: ctrl}
+	mock.recorder = &MockOwnerCaptureInfoClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockOwnerCaptureInfoClient) EXPECT() *MockOwnerCaptureInfoClientMockRecorder {
+	return m.recorder
+}
+
+// GetCaptures mocks base method.
+func (m *MockOwnerCaptureInfoClient) GetCaptures(arg0 context.Context) (int64, []*model.CaptureInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCaptures", arg0)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].([]*model.CaptureInfo)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetCaptures indicates an expected call of GetCaptures.
+func (mr *MockOwnerCaptureInfoClientMockRecorder) GetCaptures(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCaptures", reflect.TypeOf((*MockOwnerCaptureInfoClient)(nil).GetCaptures), arg0)
+}
+
+// GetOwnerID mocks base method.
+func (m *MockOwnerCaptureInfoClient) GetOwnerID(arg0 context.Context) (model.CaptureID, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOwnerID", arg0)
+	ret0, _ := ret[0].(model.CaptureID)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOwnerID indicates an expected call of GetOwnerID.
+func (mr *MockOwnerCaptureInfoClientMockRecorder) GetOwnerID(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwnerID", reflect.TypeOf((*MockOwnerCaptureInfoClient)(nil).GetOwnerID), arg0)
+}
+
+// GetOwnerRevision mocks base method.
+func (m *MockOwnerCaptureInfoClient) GetOwnerRevision(arg0 context.Context, arg1 model.CaptureID) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOwnerRevision", arg0, arg1)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOwnerRevision indicates an expected call of GetOwnerRevision.
+func (mr *MockOwnerCaptureInfoClientMockRecorder) GetOwnerRevision(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOwnerRevision", reflect.TypeOf((*MockOwnerCaptureInfoClient)(nil).GetOwnerRevision), arg0, arg1)
+}
+
 // MockCDCEtcdClient is a mock of CDCEtcdClient interface.
 type MockCDCEtcdClient struct {
 	ctrl     *gomock.Controller
@@ -53,17 +122,17 @@ func (mr *MockCDCEtcdClientMockRecorder) CheckMultipleCDCClusterExist(ctx interf
 }
 
 // CreateChangefeedInfo mocks base method.
-func (m *MockCDCEtcdClient) CreateChangefeedInfo(arg0 context.Context, arg1 *model.UpstreamInfo, arg2 *model.ChangeFeedInfo, arg3 model.ChangeFeedID) error {
+func (m *MockCDCEtcdClient) CreateChangefeedInfo(arg0 context.Context, arg1 *model.UpstreamInfo, arg2 *model.ChangeFeedInfo) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateChangefeedInfo", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "CreateChangefeedInfo", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateChangefeedInfo indicates an expected call of CreateChangefeedInfo.
-func (mr *MockCDCEtcdClientMockRecorder) CreateChangefeedInfo(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+func (mr *MockCDCEtcdClientMockRecorder) CreateChangefeedInfo(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChangefeedInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).CreateChangefeedInfo), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChangefeedInfo", reflect.TypeOf((*MockCDCEtcdClient)(nil).CreateChangefeedInfo), arg0, arg1, arg2)
 }
 
 // DeleteCaptureInfo mocks base method.
@@ -287,15 +356,15 @@ func (mr *MockCDCEtcdClientMockRecorder) SaveChangeFeedInfo(ctx, info, changeFee
 }
 
 // UpdateChangefeedAndUpstream mocks base method.
-func (m *MockCDCEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context, upstreamInfo *model.UpstreamInfo, changeFeedInfo *model.ChangeFeedInfo, changeFeedID model.ChangeFeedID) error {
+func (m *MockCDCEtcdClient) UpdateChangefeedAndUpstream(ctx context.Context, upstreamInfo *model.UpstreamInfo, changeFeedInfo *model.ChangeFeedInfo) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateChangefeedAndUpstream", ctx, upstreamInfo, changeFeedInfo, changeFeedID)
+	ret := m.ctrl.Call(m, "UpdateChangefeedAndUpstream", ctx, upstreamInfo, changeFeedInfo)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateChangefeedAndUpstream indicates an expected call of UpdateChangefeedAndUpstream.
-func (mr *MockCDCEtcdClientMockRecorder) UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo, changeFeedID interface{}) *gomock.Call {
+func (mr *MockCDCEtcdClientMockRecorder) UpdateChangefeedAndUpstream(ctx, upstreamInfo, changeFeedInfo interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChangefeedAndUpstream", reflect.TypeOf((*MockCDCEtcdClient)(nil).UpdateChangefeedAndUpstream), ctx, upstreamInfo, changeFeedInfo, changeFeedID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateChangefeedAndUpstream", reflect.TypeOf((*MockCDCEtcdClient)(nil).UpdateChangefeedAndUpstream), ctx, upstreamInfo, changeFeedInfo)
 }

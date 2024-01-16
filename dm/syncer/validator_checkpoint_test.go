@@ -24,9 +24,9 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util/filter"
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
+	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -138,10 +138,10 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	dbMock.ExpectExec("INSERT INTO .*_validator_pending_change.*VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
 		WillReturnResult(driver.ResultNoRows)
 	dbMock.ExpectExec("INSERT INTO .*_validator_checkpoint.*ON DUPLICATE.*").
-		WillReturnError(errors.New("failed on persist checkpoint"))
+		WillReturnError(errors.New("Error 1406 failed on persist checkpoint"))
 	require.Nil(t, validator.flushedLoc)
 	err2 := validator.persistCheckpointAndData(*validator.location)
-	require.EqualError(t, err2, "failed on persist checkpoint")
+	require.EqualError(t, err2, "Error 1406 failed on persist checkpoint")
 	require.Equal(t, int64(100), validator.persistHelper.revision)
 	require.Len(t, validator.workers[0].errorRows, 1)
 	require.Nil(t, validator.flushedLoc)
@@ -157,7 +157,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	dbMock.ExpectExec("INSERT INTO .*_validator_checkpoint.*ON DUPLICATE.*").
 		WillReturnResult(driver.ResultNoRows)
 	dbMock.ExpectExec("DELETE FROM .*_validator_pending_change.*WHERE source = \\? and revision != \\?").
-		WillReturnError(errors.New("failed on delete pending change"))
+		WillReturnError(errors.New("Error 1406 failed on delete pending change"))
 	err2 = validator.persistCheckpointAndData(*validator.location)
 	require.NoError(t, err2)
 	require.Equal(t, int64(101), validator.persistHelper.revision)

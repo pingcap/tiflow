@@ -23,17 +23,8 @@ function prepare() {
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --config $CUR/conf/server.toml
 
-	TOPIC_NAME="ticdc-simple-test-$RANDOM"
-	case $SINK_TYPE in
-	kafka) SINK_URI="kafka+ssl://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-client-id=cdc_test_simple&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-	storage) SINK_URI="file://$WORK_DIR/storage_test/$TOPIC_NAME?protocol=canal-json&enable-tidb-extension=true" ;;
-	*) SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/" ;;
-	esac
+	SINK_URI="mysql+ssl://normal:123456@127.0.0.1:3306/"
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI"
-	case $SINK_TYPE in
-	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
-	storage) run_storage_consumer $WORK_DIR $SINK_URI "" "" ;;
-	esac
 }
 
 function sql_check() {
@@ -100,7 +91,11 @@ function sql_test() {
 }
 
 trap stop_tidb_cluster EXIT
-prepare $*
-sql_test $*
-check_logs $WORK_DIR
+# No need to test different sink type.
+# Because we only test the compatibility of the server config file.
+if [ "$SINK_TYPE" == "mysql" ]; then
+	prepare $*
+	sql_test $*
+	check_logs $WORK_DIR
+fi
 echo "[$(date)] <<<<<< run test case $TEST_NAME success! >>>>>>"

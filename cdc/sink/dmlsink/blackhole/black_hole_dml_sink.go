@@ -14,9 +14,12 @@
 package blackhole
 
 import (
+	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"go.uber.org/zap"
 )
 
@@ -32,14 +35,21 @@ func NewDMLSink() *DMLSink {
 }
 
 // WriteEvents log the events.
-func (s *DMLSink) WriteEvents(rows ...*dmlsink.CallbackableEvent[*model.RowChangedEvent]) error {
-	for _, row := range rows {
-		// NOTE: don't change the log, some tests depend on it.
-		log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row.Event))
-		row.Callback()
+func (s *DMLSink) WriteEvents(rows ...*dmlsink.CallbackableEvent[*model.RowChangedEvent]) (err error) {
+	failpoint.Inject("WriteEventsFail", func() { err = errors.New("InjectedErrorForWriteEventsFail") })
+	if err == nil {
+		for _, row := range rows {
+			// NOTE: don't change the log, some tests depend on it.
+			log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row.Event))
+			row.Callback()
+		}
 	}
+	return
+}
 
-	return nil
+// Scheme return the scheme of the sink.
+func (s *DMLSink) Scheme() string {
+	return sink.BlackHoleScheme
 }
 
 // Close do nothing.

@@ -14,11 +14,14 @@
 package model
 
 import (
+	"sort"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -395,4 +398,214 @@ func TestExchangeTablePartition(t *testing.T) {
 	require.Len(t, event.TableInfo.TableInfo.Columns, 1)
 	require.Equal(t, "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2`", event.Query)
 	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
+}
+
+func TestSortRowChangedEvent(t *testing.T) {
+	events := []*RowChangedEvent{
+		{
+			PreColumns: []*Column{{}},
+			Columns:    []*Column{{}},
+		},
+		{
+			Columns: []*Column{{}},
+		},
+		{
+			PreColumns: []*Column{{}},
+		},
+	}
+	assert.True(t, events[0].IsUpdate())
+	assert.True(t, events[1].IsInsert())
+	assert.True(t, events[2].IsDelete())
+	sort.Sort(txnRows(events))
+	assert.True(t, events[0].IsDelete())
+	assert.True(t, events[1].IsUpdate())
+	assert.True(t, events[2].IsInsert())
+}
+
+func TestTrySplitAndSortUpdateEventNil(t *testing.T) {
+	t.Parallel()
+
+	events := []*RowChangedEvent{nil}
+	result, err := trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(result))
+}
+
+func TestTrySplitAndSortUpdateEventEmpty(t *testing.T) {
+	t.Parallel()
+
+	events := []*RowChangedEvent{
+		{
+			StartTs:  1,
+			CommitTs: 2,
+		},
+	}
+	result, err := trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(result))
+}
+
+func TestTrySplitAndSortUpdateEvent(t *testing.T) {
+	t.Parallel()
+
+	// Update handle key.
+	columns := []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag,
+			Value: "col2-value-updated",
+		},
+	}
+	preColumns := []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag,
+			Value: "col2-value",
+		},
+	}
+
+	events := []*RowChangedEvent{
+		{
+			CommitTs:   1,
+			Columns:    columns,
+			PreColumns: preColumns,
+		},
+	}
+	result, err := trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result))
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
+
+	// Update unique key.
+	columns = []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
+			Name:  "col2",
+			Flag:  UniqueKeyFlag,
+			Value: "col2-value-updated",
+		},
+	}
+	preColumns = []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  UniqueKeyFlag,
+			Value: "col2-value",
+		},
+	}
+
+	events = []*RowChangedEvent{
+		{
+			CommitTs:   1,
+			Columns:    columns,
+			PreColumns: preColumns,
+		},
+	}
+	result, err = trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(result))
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[0].IsDelete())
+	require.True(t, result[1].IsInsert())
+
+	// Update non-handle key.
+	columns = []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value-updated",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag,
+			Value: "col2-value",
+		},
+	}
+	preColumns = []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag,
+			Value: "col2-value",
+		},
+	}
+
+	events = []*RowChangedEvent{
+		{
+			CommitTs:   1,
+			Columns:    columns,
+			PreColumns: preColumns,
+		},
+	}
+	result, err = trySplitAndSortUpdateEvent(events)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(result))
+}
+
+var ukUpdatedEvent = &RowChangedEvent{
+	PreColumns: []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag | UniqueKeyFlag,
+			Value: "col2-value",
+		},
+	},
+
+	Columns: []*Column{
+		{
+			Name:  "col1",
+			Flag:  BinaryFlag,
+			Value: "col1-value",
+		},
+		{
+			Name:  "col2",
+			Flag:  HandleKeyFlag | UniqueKeyFlag,
+			Value: "col2-value-updated",
+		},
+	},
+}
+
+func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
+	txn := &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent},
+	}
+
+	err := txn.TrySplitAndSortUpdateEvent(sink.KafkaScheme)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 2)
+
+	txn = &SingleTableTxn{
+		Rows: []*RowChangedEvent{ukUpdatedEvent},
+	}
+	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme)
+	require.NoError(t, err)
+	require.Len(t, txn.Rows, 1)
 }

@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	gstorage "cloud.google.com/go/storage"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/errors"
@@ -140,10 +141,19 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 	}
 
 	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
-		return storage.DeleteFile(ctx, filePath)
+		err2 := storage.DeleteFile(ctx, filePath)
+		if errors.Cause(err2) == gstorage.ErrObjectNotExist {
+			// ignore not exist error when we delete files
+			return nil
+		}
+		return err2
 	})
 	if err == nil {
-		return storage.DeleteFile(ctx, "")
+		err = storage.DeleteFile(ctx, "")
+		if errors.Cause(err) == gstorage.ErrObjectNotExist {
+			// ignore not exist error when we delete files
+			return nil
+		}
 	}
 	return err
 }
@@ -167,17 +177,18 @@ func OpenFile(ctx context.Context, dir, fileName string, storage bstorage.Extern
 			return nil, err
 		}
 	}
-	return storage.Open(ctx, fileName)
+	return storage.Open(ctx, fileName, nil)
 }
 
 func IsNotExistError(err error) bool {
 	if err == nil {
 		return false
 	}
+	err = errors.Cause(err)
 	if os.IsNotExist(err) {
 		return true
 	}
-	if aerr, ok := errors.Cause(err).(awserr.Error); ok {
+	if aerr, ok := err.(awserr.Error); ok {
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
 			return true

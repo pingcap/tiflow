@@ -16,7 +16,6 @@ package syncer
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"fmt"
 	"math"
 	"strconv"
@@ -25,13 +24,12 @@ import (
 	"time"
 
 	"github.com/docker/go-units"
-	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser/model"
-	tidbmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	tidbmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -39,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -519,15 +518,7 @@ func isRetryableValidateError(err error) bool {
 }
 
 func isRetryableDBError(err error) bool {
-	err = errors.Cause(err)
-	if dbutil.IsRetryableError(err) {
-		return true
-	}
-	switch err {
-	case driver.ErrBadConn, mysql.ErrInvalidConn:
-		return true
-	}
-	return false
+	return unit.IsResumableDBError(err)
 }
 
 func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {

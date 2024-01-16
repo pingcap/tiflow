@@ -29,13 +29,6 @@ function run() {
 	# up
 	SINK_URI_2="mysql://root@127.0.0.1:4000"
 
-	run_sql_file $CUR/data/start.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql_file $CUR/data/start.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	# the table must be created before starting the BDRmode changefeed
-	# since the BDRmode changefeed will ignore DDL
-	check_table_exists "bdr_mode.t1" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	check_table_exists "bdr_mode.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-
 	# up -> down
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI_1" -c "test-1" --config="$CUR/conf/cf.toml"
 	# down -> up
@@ -45,10 +38,8 @@ function run() {
 	run_sql_file $CUR/data/down.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	run_sql_file $CUR/data/finished.sql ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql_file $CUR/data/finished.sql ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
 	check_table_exists "bdr_mode.finish_mark" ${UP_TIDB_HOST} ${UP_TIDB_PORT} 60
-	check_table_exists "bdr_mode.finish_mark" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 

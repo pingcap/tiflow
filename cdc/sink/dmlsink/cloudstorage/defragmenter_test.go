@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/types"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/util"
@@ -51,7 +51,9 @@ func TestDeframenter(t *testing.T) {
 	txnCnt := 50
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	encoderConfig, err := util.GetEncoderConfig(sinkURI, config.ProtocolCsv,
+
+	changefeedID := model.DefaultChangeFeedID("changefeed-test")
+	encoderConfig, err := util.GetEncoderConfig(changefeedID, sinkURI, config.ProtocolCsv,
 		config.GetDefaultReplicaConfig(), config.DefaultMaxMessageBytes)
 	require.Nil(t, err)
 	encoderBuilder, err := builder.NewTxnEventEncoderBuilder(encoderConfig)

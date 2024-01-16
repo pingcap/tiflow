@@ -22,11 +22,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -34,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -156,7 +158,7 @@ func (vs *tableValidateStatus) stopped(msg string) {
 	vs.message = msg
 }
 
-// DataValidator
+// DataValidator is used to continuously validate incremental data migrated to downstream by dm.
 // validator can be start when there's syncer unit in the subtask and validation mode is not none,
 // it's terminated when the subtask is terminated.
 // stage of validator is independent of subtask, pause/resume subtask doesn't affect the stage of validator.
@@ -164,8 +166,13 @@ func (vs *tableValidateStatus) stopped(msg string) {
 // validator can be in running or stopped stage
 // - in running when it's started with subtask or started later on the fly.
 // - in stopped when validation stop is executed.
+//
+// for each subtask, before it's closed/killed, only one DataValidator object is created,
+// on "dmctl validation stop/start", will call Stop and Start on the same object.
 type DataValidator struct {
+	// used to sync Stop and Start operations.
 	sync.RWMutex
+
 	cfg    *config.SubTaskConfig
 	syncer *Syncer
 	// whether validator starts together with subtask
@@ -189,8 +196,10 @@ type DataValidator struct {
 
 	validateInterval time.Duration
 	checkInterval    time.Duration
-	workers          []*validateWorker
-	workerCnt        int
+	cutOverLocation  atomic.Pointer[binlog.Location]
+
+	workers   []*validateWorker
+	workerCnt int
 
 	// whether we start to mark failed rows as error rows
 	// if it's false, we don't mark failed row change as error to reduce false-positive
@@ -199,7 +208,7 @@ type DataValidator struct {
 
 	// fields in this field block are guarded by stateMutex
 	stateMutex  sync.RWMutex
-	stage       pb.Stage
+	stage       pb.Stage // only Running or Stopped is allowed for validator
 	flushedLoc  *binlog.Location
 	result      pb.ProcessResult
 	tableStatus map[string]*tableValidateStatus
@@ -352,7 +361,7 @@ func (v *DataValidator) Start(expect pb.Stage) {
 	}
 
 	if err := v.initialize(); err != nil {
-		v.fillResult(err, false)
+		v.fillResult(err)
 		return
 	}
 
@@ -426,16 +435,11 @@ func (v *DataValidator) printStatusRoutine() {
 	}
 }
 
-func (v *DataValidator) fillResult(err error, needLock bool) {
-	if needLock {
-		v.Lock()
-		defer v.Unlock()
-	}
-
+func (v *DataValidator) fillResult(err error) {
 	// when met a non-retryable error, we'll call stopInner, then v.ctx is cancelled,
 	// don't set IsCanceled in this case
 	isCanceled := false
-	if len(v.result.Errors) == 0 {
+	if v.getResultErrCnt() == 0 {
 		select {
 		case <-v.ctx.Done():
 			isCanceled = true
@@ -455,13 +459,25 @@ func (v *DataValidator) fillResult(err error, needLock bool) {
 
 func (v *DataValidator) errorProcessRoutine() {
 	defer v.errProcessWg.Done()
-	for err := range v.errChan {
-		v.fillResult(err, true)
 
-		if errors.Cause(err) != context.Canceled {
-			v.stopInner()
+	var (
+		stopped bool
+		wg      sync.WaitGroup
+	)
+
+	for err := range v.errChan {
+		v.fillResult(err)
+
+		if errors.Cause(err) != context.Canceled && !stopped {
+			stopped = true
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				v.stopInner()
+			}()
 		}
 	}
+	wg.Wait()
 }
 
 func (v *DataValidator) waitSyncerSynced(currLoc binlog.Location) error {
@@ -725,10 +741,10 @@ func (v *DataValidator) Stop() {
 
 func (v *DataValidator) stopInner() {
 	v.Lock()
+	defer v.Unlock()
 	v.L.Info("stopping")
 	if v.Stage() != pb.Stage_Running {
 		v.L.Warn("not started")
-		v.Unlock()
 		return
 	}
 
@@ -737,13 +753,10 @@ func (v *DataValidator) stopInner() {
 	v.fromDB.Close()
 	v.toDB.Close()
 
-	// release the lock so that the error routine can process errors
-	// wait until all errors are recorded
-	v.Unlock()
 	v.wg.Wait()
-	close(v.errChan) // close error chan after all possible sender goroutines stopped
-	v.Lock()         // lock and modify the stage
-	defer v.Unlock()
+	// we want to record all errors, so we need to wait all error sender goroutines to stop
+	// before closing this error chan.
+	close(v.errChan)
 
 	v.setStage(pb.Stage_Stopped)
 	v.L.Info("stopped")
@@ -945,7 +958,12 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 
 func (v *DataValidator) checkAndPersistCheckpointAndData(loc binlog.Location) error {
 	metaFlushInterval := v.cfg.ValidatorCfg.MetaFlushInterval.Duration
-	if time.Since(v.lastFlushTime) > metaFlushInterval {
+	cutOverLocation := v.cutOverLocation.Load()
+	needCutOver := cutOverLocation != nil && binlog.CompareLocation(*cutOverLocation, loc, v.cfg.EnableGTID) <= 0
+	if time.Since(v.lastFlushTime) > metaFlushInterval || needCutOver {
+		if needCutOver {
+			v.cutOverLocation.Store(nil)
+		}
 		v.lastFlushTime = time.Now()
 		if err := v.persistCheckpointAndData(loc); err != nil {
 			v.L.Warn("failed to flush checkpoint: ", zap.Error(err))
@@ -1104,6 +1122,12 @@ func (v *DataValidator) addResultError(err *pb.ProcessError, cancelled bool) {
 		v.result.Errors = append(v.result.Errors, err)
 	}
 	v.result.IsCanceled = cancelled
+}
+
+func (v *DataValidator) getResultErrCnt() int {
+	v.stateMutex.Lock()
+	defer v.stateMutex.Unlock()
+	return len(v.result.Errors)
 }
 
 func (v *DataValidator) resetResult() {
@@ -1294,6 +1318,30 @@ func (v *DataValidator) OperateValidatorError(validateOp pb.ValidationErrOp, err
 	return v.persistHelper.operateError(tctx, toDB, validateOp, errID, isAll)
 }
 
+func (v *DataValidator) UpdateValidator(req *pb.UpdateValidationWorkerRequest) error {
+	var (
+		pos = mysql.Position{}
+		gs  mysql.GTIDSet
+		err error
+	)
+	if len(req.BinlogPos) > 0 {
+		pos, err = binlog.PositionFromPosStr(req.BinlogPos)
+		if err != nil {
+			return err
+		}
+	}
+	if len(req.BinlogGTID) > 0 {
+		gs, err = gtid.ParserGTID(v.cfg.Flavor, req.BinlogGTID)
+		if err != nil {
+			return err
+		}
+	}
+	cutOverLocation := binlog.NewLocation(pos, gs)
+	v.cutOverLocation.Store(&cutOverLocation)
+	v.syncer.cutOverLocation.Store(&cutOverLocation)
+	return nil
+}
+
 func (v *DataValidator) getErrorRowCount(timeout time.Duration) ([errorStateTypeCount]int64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -1357,6 +1405,14 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 			validatorBinlogGtid = flushedLoc.GetGTID().String()
 		}
 	}
+	var cutoverBinlogPos, cutoverBinlogGTID string
+	if cutOverLoc := v.cutOverLocation.Load(); cutOverLoc != nil {
+		cutoverBinlogPos = cutOverLoc.Position.String()
+		if cutOverLoc.GetGTID() != nil {
+			cutoverBinlogGTID = cutOverLoc.GetGTID().String()
+		}
+	}
+
 	return &pb.ValidationStatus{
 		Task:                v.cfg.Name,
 		Source:              v.cfg.SourceID,
@@ -1368,5 +1424,7 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 		ProcessedRowsStatus: processedRows,
 		PendingRowsStatus:   pendingRows,
 		ErrorRowsStatus:     errorRows,
+		CutoverBinlogPos:    cutoverBinlogPos,
+		CutoverBinlogGtid:   cutoverBinlogGTID,
 	}
 }

@@ -18,16 +18,14 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"hash/crc32"
-	"math"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/sessionctx/stmtctx"
-	"github.com/pingcap/tidb/types"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx/stmtctx"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -40,7 +38,7 @@ type decoder struct {
 	topic  string
 	sc     *stmtctx.StatementContext
 
-	schemaM *SchemaManager
+	schemaM SchemaManager
 
 	key   []byte
 	value []byte
@@ -49,7 +47,7 @@ type decoder struct {
 // NewDecoder return an avro decoder
 func NewDecoder(
 	config *common.Config,
-	schemaM *SchemaManager,
+	schemaM SchemaManager,
 	topic string,
 	tz *time.Location,
 ) codec.RowEventDecoder {
@@ -57,7 +55,7 @@ func NewDecoder(
 		config:  config,
 		topic:   topic,
 		schemaM: schemaM,
-		sc:      &stmtctx.StatementContext{TimeZone: tz},
+		sc:      stmtctx.NewStmtCtxWithTimeZone(tz),
 	}
 }
 
@@ -80,7 +78,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 		return model.MessageTypeRow, true, nil
 	}
 	if len(d.value) < 1 {
-		return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs(d.value)
 	}
 	switch d.value[0] {
 	case magicByte:
@@ -90,7 +88,7 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	case checkpointByte:
 		return model.MessageTypeResolved, true, nil
 	}
-	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs()
+	return model.MessageTypeUnknown, false, errors.ErrAvroInvalidMessage.FastGenByArgs(d.value)
 }
 
 // NextRowChangedEvent returns the next row changed event if exists
@@ -153,7 +151,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 
 	if found {
-		if err := d.verifyChecksum(event.Columns, expectedChecksum); err != nil {
+		if err := common.VerifyChecksum(event.Columns, uint32(expectedChecksum)); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
@@ -376,22 +374,66 @@ func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
 // return the schema ID and the encoded binary data
 // schemaID can be used to fetch the corresponding schema from schema registry,
 // which should be used to decode the binary data.
-func extractSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
+func extractConfluentSchemaIDAndBinaryData(data []byte) (int, []byte, error) {
 	if len(data) < 5 {
-		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return 0, nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("an avro message using confluent schema registry should have at least 5 bytes")
 	}
 	if data[0] != magicByte {
-		return 0, nil, errors.ErrAvroInvalidMessage.FastGenByArgs()
+		return 0, nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("magic byte is not match, it should be 0")
 	}
-	return int(binary.BigEndian.Uint32(data[1:5])), data[5:], nil
+	id, err := getConfluentSchemaIDFromHeader(data[0:5])
+	if err != nil {
+		return 0, nil, errors.Trace(err)
+	}
+	return int(id), data[5:], nil
+}
+
+func extractGlueSchemaIDAndBinaryData(data []byte) (string, []byte, error) {
+	if len(data) < 18 {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("an avro message using glue schema registry should have at least 18 bytes")
+	}
+	if data[0] != headerVersionByte {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("header version byte is not match, it should be %d", headerVersionByte)
+	}
+	if data[1] != compressionDefaultByte {
+		return "", nil, errors.ErrAvroInvalidMessage.
+			FastGenByArgs("compression byte is not match, it should be %d", compressionDefaultByte)
+	}
+	id, err := getGlueSchemaIDFromHeader(data[0:18])
+	if err != nil {
+		return "", nil, errors.Trace(err)
+	}
+	return id, data[18:], nil
 }
 
 func decodeRawBytes(
-	ctx context.Context, schemaM *SchemaManager, data []byte, topic string,
+	ctx context.Context, schemaM SchemaManager, data []byte, topic string,
 ) (map[string]interface{}, map[string]interface{}, error) {
-	schemaID, binary, err := extractSchemaIDAndBinaryData(data)
-	if err != nil {
-		return nil, nil, err
+	var schemaID schemaID
+	var binary []byte
+	var err error
+	var cid int
+	var gid string
+
+	switch schemaM.RegistryType() {
+	case common.SchemaRegistryTypeConfluent:
+		cid, binary, err = extractConfluentSchemaIDAndBinaryData(data)
+		if err != nil {
+			return nil, nil, err
+		}
+		schemaID.confluentSchemaID = cid
+	case common.SchemaRegistryTypeGlue:
+		gid, binary, err = extractGlueSchemaIDAndBinaryData(data)
+		if err != nil {
+			return nil, nil, err
+		}
+		schemaID.glueSchemaID = gid
+	default:
+		return nil, nil, errors.New("unknown schema registry type")
 	}
 
 	codec, err := schemaM.Lookup(ctx, topic, schemaID)
@@ -427,170 +469,4 @@ func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, map[
 	data := d.value
 	d.value = nil
 	return decodeRawBytes(ctx, d.schemaM, data, d.topic)
-}
-
-// calculate the checksum value, and compare it with the expected one, return error if not identical.
-func (d *decoder) verifyChecksum(columns []*model.Column, expected uint64) error {
-	checksum, err := calculateChecksum(columns)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if checksum != expected {
-		log.Error("checksum mismatch",
-			zap.Uint64("expected", expected),
-			zap.Uint64("actual", checksum))
-		return errors.New("checksum mismatch")
-	}
-
-	return nil
-}
-
-// calculate the checksum, caller should make sure all columns is ordered by the column's id.
-// by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L294
-func calculateChecksum(columns []*model.Column) (uint64, error) {
-	var (
-		checksum uint32
-		err      error
-	)
-	buf := make([]byte, 0)
-	for _, col := range columns {
-		if len(buf) > 0 {
-			buf = buf[:0]
-		}
-		buf, err = buildChecksumBytes(buf, col.Value, col.Type)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-		checksum = crc32.Update(checksum, crc32.IEEETable, buf)
-	}
-	return uint64(checksum), nil
-}
-
-// buildChecksumBytes append value the buf, mysqlType is used to convert value interface to concrete type.
-// by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L308
-func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, error) {
-	if value == nil {
-		return buf, nil
-	}
-
-	switch mysqlType {
-	// TypeTiny, TypeShort, TypeInt32 is encoded as int32
-	// TypeLong is encoded as int32 if signed, else int64.
-	// TypeLongLong is encoded as int64 if signed, else uint64,
-	// if bigintUnsignedHandlingMode set as string, encode as string.
-	case mysql.TypeTiny, mysql.TypeShort, mysql.TypeLong, mysql.TypeLonglong, mysql.TypeInt24, mysql.TypeYear:
-		switch a := value.(type) {
-		case int32:
-			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
-		case uint32:
-			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
-		case int64:
-			buf = binary.LittleEndian.AppendUint64(buf, uint64(a))
-		case uint64:
-			buf = binary.LittleEndian.AppendUint64(buf, a)
-		case string:
-			v, err := strconv.ParseUint(a, 10, 64)
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
-			buf = binary.LittleEndian.AppendUint64(buf, v)
-		default:
-			log.Panic("unknown golang type for the integral value",
-				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
-		}
-	// TypeFloat encoded as float32, TypeDouble encoded as float64
-	case mysql.TypeFloat, mysql.TypeDouble:
-		var v float64
-		switch a := value.(type) {
-		case float32:
-			v = float64(a)
-		case float64:
-			v = a
-		}
-		if math.IsInf(v, 0) || math.IsNaN(v) {
-			v = 0
-		}
-		buf = binary.LittleEndian.AppendUint64(buf, math.Float64bits(v))
-	// TypeEnum, TypeSet encoded as string
-	// but convert to int by the getColumnValue function
-	case mysql.TypeEnum, mysql.TypeSet:
-		buf = binary.LittleEndian.AppendUint64(buf, value.(uint64))
-	// TypeBit encoded as bytes
-	case mysql.TypeBit:
-		// bit is store as bytes, convert to uint64.
-		v, err := binaryLiteralToInt(value.([]byte))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		buf = binary.LittleEndian.AppendUint64(buf, v)
-	// encoded as bytes if binary flag set to true, else string
-	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString, mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-		switch a := value.(type) {
-		case string:
-			buf = appendLengthValue(buf, []byte(a))
-		case []byte:
-			buf = appendLengthValue(buf, a)
-		default:
-			log.Panic("unknown golang type for the string value",
-				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
-		}
-	// all encoded as string
-	case mysql.TypeTimestamp, mysql.TypeDatetime, mysql.TypeDate, mysql.TypeDuration, mysql.TypeNewDate:
-		v := value.(string)
-		buf = appendLengthValue(buf, []byte(v))
-	// encoded as string if decimalHandlingMode set to string, it's required to enable checksum.
-	case mysql.TypeNewDecimal:
-		buf = appendLengthValue(buf, []byte(value.(string)))
-	// encoded as string
-	case mysql.TypeJSON:
-		buf = appendLengthValue(buf, []byte(value.(string)))
-	// this should not happen, does not take into the checksum calculation.
-	case mysql.TypeNull, mysql.TypeGeometry:
-		// do nothing
-	default:
-		return buf, errors.New("invalid type for the checksum calculation")
-	}
-	return buf, nil
-}
-
-func appendLengthValue(buf []byte, val []byte) []byte {
-	buf = binary.LittleEndian.AppendUint32(buf, uint32(len(val)))
-	buf = append(buf, val...)
-	return buf
-}
-
-// convert bytes into uint64,
-// by follow https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/types/binary_literal.go#L105
-func binaryLiteralToInt(bytes []byte) (uint64, error) {
-	bytes = trimLeadingZeroBytes(bytes)
-	length := len(bytes)
-
-	if length > 8 {
-		log.Error("invalid bit value found", zap.ByteString("value", bytes))
-		return math.MaxUint64, errors.New("invalid bit value")
-	}
-
-	if length == 0 {
-		return 0, nil
-	}
-
-	// Note: the byte-order is BigEndian.
-	val := uint64(bytes[0])
-	for i := 1; i < length; i++ {
-		val = (val << 8) | uint64(bytes[i])
-	}
-	return val, nil
-}
-
-func trimLeadingZeroBytes(bytes []byte) []byte {
-	if len(bytes) == 0 {
-		return bytes
-	}
-	pos, posMax := 0, len(bytes)-1
-	for ; pos < posMax; pos++ {
-		if bytes[pos] != 0 {
-			break
-		}
-	}
-	return bytes[pos:]
 }

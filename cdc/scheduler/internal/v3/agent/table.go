@@ -75,7 +75,7 @@ func (t *tableSpan) getTableSpanStatus(collectStat bool) tablepb.TableStatus {
 
 func newAddTableResponseMessage(status tablepb.TableStatus) *schedulepb.Message {
 	if status.Checkpoint.ResolvedTs < status.Checkpoint.CheckpointTs {
-		log.Panic("schedulerv3: resolved ts should not less than checkpoint ts",
+		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
 			zap.Any("tableStatus", status),
 			zap.Any("checkpoint", status.Checkpoint.CheckpointTs),
 			zap.Any("resolved", status.Checkpoint.ResolvedTs))
@@ -100,7 +100,7 @@ func newRemoveTableResponseMessage(status tablepb.TableStatus) *schedulepb.Messa
 			// Advance resolved ts to checkpoint ts if table is removed.
 			status.Checkpoint.ResolvedTs = status.Checkpoint.CheckpointTs
 		} else {
-			log.Panic("schedulerv3: resolved ts should not less than checkpoint ts",
+			log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
 				zap.Any("tableStatus", status),
 				zap.Any("checkpoint", status.Checkpoint.CheckpointTs),
 				zap.Any("resolved", status.Checkpoint.ResolvedTs))
@@ -311,7 +311,7 @@ func newTableSpanManager(
 func (tm *tableSpanManager) poll(ctx context.Context) ([]*schedulepb.Message, error) {
 	result := make([]*schedulepb.Message, 0)
 	var err error
-	toBeDropped := []tablepb.Span{}
+	var toBeDropped []tablepb.Span
 	tm.tables.Ascend(func(span tablepb.Span, table *tableSpan) bool {
 		message, err1 := table.poll(ctx)
 		if err != nil {

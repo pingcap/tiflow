@@ -16,7 +16,7 @@ package kafka
 import (
 	"context"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -47,7 +47,21 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	if err != nil {
 		return nil, err
 	}
-	return newAdminClient(f.option.BrokerEndpoints, config, f.changefeedID)
+
+	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	admin, err := sarama.NewClusterAdminFromClient(client)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return &saramaAdminClient{
+		client:     client,
+		admin:      admin,
+		changefeed: f.changefeedID,
+	}, nil
 }
 
 // SyncProducer returns a Sync Producer,

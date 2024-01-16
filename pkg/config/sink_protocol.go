@@ -38,6 +38,8 @@ const (
 	ProtocolCraft
 	ProtocolOpen
 	ProtocolCsv
+	ProtocolDebezium
+	ProtocolSimple
 )
 
 // IsBatchEncode returns whether the protocol is a batch encoder.
@@ -66,6 +68,10 @@ func ParseSinkProtocolFromString(protocol string) (Protocol, error) {
 		return ProtocolOpen, nil
 	case "csv":
 		return ProtocolCsv, nil
+	case "debezium":
+		return ProtocolDebezium, nil
+	case "simple":
+		return ProtocolSimple, nil
 	default:
 		return ProtocolUnknown, cerror.ErrSinkUnknownProtocol.GenWithStackByArgs(protocol)
 	}
@@ -90,6 +96,10 @@ func (p Protocol) String() string {
 		return "open-protocol"
 	case ProtocolCsv:
 		return "csv"
+	case ProtocolDebezium:
+		return "debezium"
+	case ProtocolSimple:
+		return "simple"
 	default:
 		panic("unreachable")
 	}

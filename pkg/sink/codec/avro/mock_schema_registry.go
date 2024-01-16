@@ -22,7 +22,7 @@ import (
 	"github.com/jarcoal/httpmock"
 )
 
-type mockRegistrySchema struct {
+type mockConfluentRegistrySchema struct {
 	content string
 	version int
 	ID      int
@@ -30,7 +30,7 @@ type mockRegistrySchema struct {
 
 type mockRegistry struct {
 	mu       sync.Mutex
-	subjects map[string]*mockRegistrySchema
+	subjects map[string]*mockConfluentRegistrySchema
 	newID    int
 }
 
@@ -38,7 +38,7 @@ func startHTTPInterceptForTestingRegistry() {
 	httpmock.Activate()
 
 	registry := mockRegistry{
-		subjects: make(map[string]*mockRegistrySchema),
+		subjects: make(map[string]*mockConfluentRegistrySchema),
 		newID:    1,
 	}
 
@@ -68,7 +68,7 @@ func startHTTPInterceptForTestingRegistry() {
 			registry.mu.Lock()
 			item, exists := registry.subjects[subject]
 			if !exists {
-				item = &mockRegistrySchema{
+				item = &mockConfluentRegistrySchema{
 					content: reqData.Schema,
 					version: 1,
 					ID:      registry.newID,

@@ -26,7 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/causality"
 	"github.com/pingcap/tiflow/pkg/config"
-	psink "github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"golang.org/x/sync/errgroup"
 )
@@ -54,6 +54,8 @@ type dmlSink struct {
 	dead chan struct{}
 
 	statistics *metrics.Statistics
+
+	scheme string
 }
 
 // GetDBConnImpl is the implementation of pmysql.Factory.
@@ -72,7 +74,7 @@ func NewMySQLSink(
 	conflictDetectorSlots uint64,
 ) (*dmlSink, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	statistics := metrics.NewStatistics(ctx, changefeedID, psink.TxnSink)
+	statistics := metrics.NewStatistics(ctx, changefeedID, sink.TxnSink)
 
 	backendImpls, err := mysql.NewMySQLBackends(ctx, changefeedID, sinkURI, replicaConfig, GetDBConnImpl, statistics)
 	if err != nil {
@@ -84,11 +86,13 @@ func NewMySQLSink(
 	for _, impl := range backendImpls {
 		backends = append(backends, impl)
 	}
-	sink := newSink(ctx, changefeedID, backends, errCh, conflictDetectorSlots)
-	sink.statistics = statistics
-	sink.cancel = cancel
 
-	return sink, nil
+	s := newSink(ctx, changefeedID, backends, errCh, conflictDetectorSlots)
+	s.statistics = statistics
+	s.cancel = cancel
+	s.scheme = sink.GetScheme(sinkURI)
+
+	return s, nil
 }
 
 func newSink(ctx context.Context,
@@ -172,4 +176,8 @@ func (s *dmlSink) Close() {
 // Dead checks whether it's dead or not.
 func (s *dmlSink) Dead() <-chan struct{} {
 	return s.dead
+}
+
+func (s *dmlSink) Scheme() string {
+	return s.scheme
 }

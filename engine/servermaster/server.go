@@ -36,7 +36,6 @@ import (
 	pkgClient "github.com/pingcap/tiflow/engine/pkg/client"
 	dcontext "github.com/pingcap/tiflow/engine/pkg/context"
 	"github.com/pingcap/tiflow/engine/pkg/deps"
-	"github.com/pingcap/tiflow/engine/pkg/election"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/broker"
 	externRescManager "github.com/pingcap/tiflow/engine/pkg/externalresource/manager"
 	"github.com/pingcap/tiflow/engine/pkg/meta"
@@ -49,6 +48,7 @@ import (
 	"github.com/pingcap/tiflow/engine/servermaster/scheduler"
 	schedModel "github.com/pingcap/tiflow/engine/servermaster/scheduler/model"
 	"github.com/pingcap/tiflow/engine/servermaster/serverutil"
+	"github.com/pingcap/tiflow/pkg/election"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/label"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -377,7 +377,7 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 
 	wg.Go(func() error {
-		return s.elector.Run(ctx)
+		return s.elector.RunElection(ctx)
 	})
 
 	return wg.Wait()

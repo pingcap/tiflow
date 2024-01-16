@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -38,7 +38,7 @@ const (
 	// default to 1048576, identical to kafka broker's `message.max.bytes` and topic's `max.message.bytes`
 	// see: https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes
 	// see: https://kafka.apache.org/documentation/#topicconfigs_max.message.bytes
-	defaultMaxMessageBytes = "1048576"
+	defaultMaxMessageBytes = "1048588"
 
 	// defaultMinInsyncReplicas specifies the default `min.insync.replicas` for broker and topic.
 	defaultMinInsyncReplicas = "1"
@@ -100,11 +100,6 @@ func (c *ClusterAdminClientMockImpl) GetAllBrokers(context.Context) ([]Broker, e
 	return nil, nil
 }
 
-// GetCoordinator implement the ClusterAdminClient interface
-func (c *ClusterAdminClientMockImpl) GetCoordinator(context.Context) (int, error) {
-	return c.controllerID, nil
-}
-
 // GetBrokerConfig implement the ClusterAdminClient interface
 func (c *ClusterAdminClientMockImpl) GetBrokerConfig(
 	_ context.Context,
@@ -162,6 +157,17 @@ func (c *ClusterAdminClientMockImpl) GetTopicsMeta(
 			}
 			result[topic] = details.TopicDetail
 		}
+	}
+	return result, nil
+}
+
+// GetTopicsPartitionsNum implement the ClusterAdminClient interface
+func (c *ClusterAdminClientMockImpl) GetTopicsPartitionsNum(
+	_ context.Context, topics []string,
+) (map[string]int32, error) {
+	result := make(map[string]int32, len(topics))
+	for _, topic := range topics {
+		result[topic] = c.topics[topic].NumPartitions
 	}
 	return result, nil
 }

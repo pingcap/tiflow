@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -41,7 +42,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = util.AddressOf("open-protocol")
+	conf.Sink.Protocol = util.AddressOf("canal-json")
 	conf.Sink.ColumnSelectors = []*ColumnSelector{
 		{
 			Matcher: []string{"1.1"},
@@ -65,7 +66,10 @@ func TestReplicaConfigMarshal(t *testing.T) {
 
 	conf.Sink.OnlyOutputUpdatedColumns = aws.Bool(true)
 	conf.Sink.DeleteOnlyOutputHandleKeyColumns = aws.Bool(true)
+	conf.Sink.ContentCompatible = aws.Bool(true)
 	conf.Sink.SafeMode = aws.Bool(true)
+	conf.Sink.AdvanceTimeoutInSec = util.AddressOf(uint(150))
+	conf.Sink.DebeziumDisableSchema = util.AddressOf(false)
 	conf.Sink.KafkaConfig = &KafkaConfig{
 		PartitionNum:                 aws.Int32(1),
 		ReplicationFactor:            aws.Int16(1),
@@ -99,10 +103,23 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(true),
 			AvroDecimalHandlingMode:        aws.String("string"),
 			AvroBigintUnsignedHandlingMode: aws.String("string"),
+			EncodingFormat:                 aws.String("json"),
 		},
 		LargeMessageHandle: &LargeMessageHandleConfig{
 			LargeMessageHandleOption: LargeMessageHandleOptionHandleKeyOnly,
 		},
+		GlueSchemaRegistryConfig: &GlueSchemaRegistryConfig{
+			Region:       "region",
+			RegistryName: "registry",
+		},
+	}
+	conf.Sink.PulsarConfig = &PulsarConfig{
+		PulsarVersion:           aws.String("v2.10.0"),
+		AuthenticationToken:     aws.String("token"),
+		TLSTrustCertsFilePath:   aws.String("TLSTrustCertsFilePath_path"),
+		ConnectionTimeout:       NewTimeSec(18),
+		OperationTimeout:        NewTimeSec(8),
+		BatchingMaxPublishDelay: NewTimeMill(5000),
 	}
 	conf.Sink.MySQLConfig = &MySQLConfig{
 		WorkerCount:                  aws.Int(8),
@@ -163,7 +180,7 @@ func TestReplicaConfigOutDated(t *testing.T) {
 	conf.ForceReplicate = true
 	conf.Filter.Rules = []string{"1.1"}
 	conf.Mounter.WorkerNum = 3
-	conf.Sink.Protocol = util.AddressOf("open-protocol")
+	conf.Sink.Protocol = util.AddressOf("canal-json")
 	conf.Sink.DispatchRules = []*DispatchRule{
 		{Matcher: []string{"a.b"}, DispatcherRule: "r1"},
 		{Matcher: []string{"a.c"}, DispatcherRule: "r2"},
@@ -180,15 +197,6 @@ func TestReplicaConfigValidate(t *testing.T) {
 	sinkURL, err := url.Parse("blackhole://")
 	require.NoError(t, err)
 	require.NoError(t, conf.ValidateAndAdjust(sinkURL))
-
-	// Incorrect sink configuration.
-	conf = GetDefaultReplicaConfig()
-	conf.Sink.Protocol = util.AddressOf("canal")
-	conf.EnableOldValue = false
-
-	err = conf.ValidateAndAdjust(sinkURL)
-	require.NoError(t, err)
-	require.True(t, conf.EnableOldValue)
 
 	conf = GetDefaultReplicaConfig()
 	conf.Sink.DispatchRules = []*DispatchRule{
@@ -222,6 +230,29 @@ func TestReplicaConfigValidate(t *testing.T) {
 	err = conf.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1024), conf.MemoryQuota)
+
+	conf.Scheduler = &ChangefeedSchedulerConfig{
+		EnableTableAcrossNodes: true,
+		RegionThreshold:        -1,
+	}
+	err = conf.ValidateAndAdjust(sinkURL)
+	require.Error(t, err)
+}
+
+func TestValidateIntegrity(t *testing.T) {
+	sinkURL, err := url.Parse("kafka://topic?protocol=avro")
+	require.NoError(t, err)
+
+	cfg := GetDefaultReplicaConfig()
+	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	cfg.Sink.ColumnSelectors = []*ColumnSelector{
+		{
+			Matcher: []string{"a.b"}, Columns: []string{"c"},
+		},
+	}
+
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.ErrorIs(t, err, cerror.ErrInvalidReplicaConfig)
 }
 
 func TestValidateAndAdjust(t *testing.T) {
@@ -256,6 +287,17 @@ func TestValidateAndAdjust(t *testing.T) {
 	cfg.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
 	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 	require.Equal(t, integrity.CheckLevelNone, cfg.Integrity.IntegrityCheckLevel)
+
+	// changefeed error stuck duration is less than 30 minutes
+	cfg = GetDefaultReplicaConfig()
+	duration := minChangeFeedErrorStuckDuration - time.Second*1
+	cfg.ChangefeedErrorStuckDuration = &duration
+	err = cfg.ValidateAndAdjust(sinkURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "The ChangefeedErrorStuckDuration")
+	duration = minChangeFeedErrorStuckDuration
+	cfg.ChangefeedErrorStuckDuration = &duration
+	require.NoError(t, cfg.ValidateAndAdjust(sinkURL))
 }
 
 func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
@@ -316,74 +358,59 @@ func TestIsSinkCompatibleWithSpanReplication(t *testing.T) {
 	}
 }
 
-func TestAdjustEnableOldValueAndVerifyForceReplicate(t *testing.T) {
-	t.Parallel()
+func TestValidateAndAdjustLargeMessageHandle(t *testing.T) {
+	cfg := GetDefaultReplicaConfig()
+	cfg.Sink.KafkaConfig = &KafkaConfig{
+		LargeMessageHandle: NewDefaultLargeMessageHandleConfig(),
+	}
+	cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption = ""
+	cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleCompression = ""
 
-	config := GetDefaultReplicaConfig()
-	config.EnableOldValue = false
-
-	// mysql sink, do not adjust enable-old-value
-	sinkURI, err := url.Parse("mysql://")
-	require.NoError(t, err)
-	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-	require.NoError(t, err)
-	require.False(t, config.EnableOldValue)
-
-	// mysql sink, `enable-old-value` false, `force-replicate` true, should return error
-	config.ForceReplicate = true
-	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-	require.Error(t, cerror.ErrOldValueNotEnabled, err)
-
-	// canal, `enable-old-value` false, `force-replicate` false, no error, `enable-old-value` adjust to true
-	config.ForceReplicate = false
-	config.EnableOldValue = false
-	// canal require old value enabled
-	sinkURI, err = url.Parse("kafka://127.0.0.1:9092/test?protocol=canal")
+	rawURL := "kafka://127.0.0.1:9092/canal-json-test?protocol=canal-json&enable-tidb-extension=true"
+	sinkURL, err := url.Parse(rawURL)
 	require.NoError(t, err)
 
-	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-	require.NoError(t, err)
-	require.True(t, config.EnableOldValue)
-
-	// canal, `force-replicate` true, `enable-old-value` true, no error
-	config.ForceReplicate = true
-	config.EnableOldValue = true
-	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-	require.NoError(t, err)
-	require.True(t, config.ForceReplicate)
-	require.True(t, config.EnableOldValue)
-
-	// avro, `enable-old-value` false, `force-replicate` false, no error
-	config.ForceReplicate = false
-	config.EnableOldValue = false
-	sinkURI, err = url.Parse("kafka://127.0.0.1:9092/test?protocol=avro")
+	err = cfg.ValidateAndAdjust(sinkURL)
 	require.NoError(t, err)
 
-	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-	require.NoError(t, err)
-	require.False(t, config.EnableOldValue)
+	require.Equal(t, LargeMessageHandleOptionNone, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleOption)
+	require.Equal(t, compression.None, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleCompression)
+}
 
-	// avro, `enable-old-value` true, no error, set to false. no matter `force-replicate`
-	config.EnableOldValue = true
-	config.ForceReplicate = true
-	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-	require.NoError(t, err)
-	require.False(t, config.EnableOldValue)
-
-	// csv, `enable-old-value` false, `force-replicate` false, no error
-	config.EnableOldValue = false
-	config.ForceReplicate = false
-	sinkURI, err = url.Parse("s3://xxx/yyy?protocol=csv")
-	require.NoError(t, err)
-
-	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-	require.NoError(t, err)
-	require.False(t, config.EnableOldValue)
-
-	// csv, `enable-old-value` true, no error, set to false. no matter `force-replicate`
-	config.EnableOldValue = true
-	config.ForceReplicate = true
-	err = config.adjustEnableOldValueAndVerifyForceReplicate(sinkURI)
-	require.NoError(t, err)
-	require.False(t, config.EnableOldValue)
+func TestMaskSensitiveData(t *testing.T) {
+	config := ReplicaConfig{
+		Sink:       nil,
+		Consistent: nil,
+	}
+	config.MaskSensitiveData()
+	require.Nil(t, config.Sink)
+	require.Nil(t, config.Consistent)
+	config.Sink = &SinkConfig{}
+	config.Sink.KafkaConfig = &KafkaConfig{
+		SASLOAuthTokenURL:     aws.String("http://abc.com?password=bacd"),
+		SASLOAuthClientSecret: aws.String("bacd"),
+		SASLPassword:          aws.String("bacd"),
+		SASLGssAPIPassword:    aws.String("bacd"),
+		Key:                   aws.String("bacd"),
+		GlueSchemaRegistryConfig: &GlueSchemaRegistryConfig{
+			AccessKey:       "abc",
+			SecretAccessKey: "def",
+			Token:           "aaa",
+		},
+	}
+	config.Sink.SchemaRegistry = aws.String("http://abc.com?password=bacd")
+	config.Consistent = &ConsistentConfig{
+		Storage: "http://abc.com?password=bacd",
+	}
+	config.MaskSensitiveData()
+	require.Equal(t, "http://abc.com?password=xxxxx", *config.Sink.SchemaRegistry)
+	require.Equal(t, "http://abc.com?password=xxxxx", config.Consistent.Storage)
+	require.Equal(t, "http://abc.com?password=xxxxx", *config.Sink.KafkaConfig.SASLOAuthTokenURL)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLOAuthClientSecret)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.Key)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLPassword)
+	require.Equal(t, "******", *config.Sink.KafkaConfig.SASLGssAPIPassword)
+	require.Equal(t, "******", config.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey)
+	require.Equal(t, "******", config.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token)
+	require.Equal(t, "******", config.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey)
 }

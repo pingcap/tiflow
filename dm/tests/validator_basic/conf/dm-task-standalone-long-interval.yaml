@@ -1,0 +1,37 @@
+---
+name: test
+task-mode: all
+heartbeat-update-interval: 1
+heartbeat-report-interval: 1
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    block-allow-list:  "instance"
+    syncer-config-name: "global"
+    validator-config-name: global
+
+block-allow-list:
+  instance:
+    do-dbs: ["validator_basic"]
+
+syncers:
+  global:
+    worker-count: 16
+    batch: 100
+
+validators:
+  global:
+    mode: full
+    worker-count: 4
+    validate-interval: 1500s # increase validate-interval and meta-flush-interval to make sure the validator won't trigger validation automatically
+    check-interval: 1s
+    row-error-delay: 1s
+    meta-flush-interval: 1500s
+    max-pending-row-size: 500m
+    max-pending-row-count: 1000

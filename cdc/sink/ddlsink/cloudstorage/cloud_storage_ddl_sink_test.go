@@ -19,12 +19,16 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"sync/atomic"
 	"testing"
+	"time"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,10 +36,13 @@ func TestWriteDDLEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	parentDir := t.TempDir()
-	uri := fmt.Sprintf("file:///%s", parentDir)
+	uri := fmt.Sprintf("file:///%s?protocol=csv", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, nil)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	err = replicaConfig.ValidateAndAdjust(sinkURI)
+	require.Nil(t, err)
+	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
 	require.Nil(t, err)
 
 	ddlEvent := &model.DDLEvent{
@@ -96,10 +103,13 @@ func TestWriteCheckpointTs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	parentDir := t.TempDir()
-	uri := fmt.Sprintf("file:///%s", parentDir)
+	uri := fmt.Sprintf("file:///%s?protocol=csv", parentDir)
 	sinkURI, err := url.Parse(uri)
 	require.Nil(t, err)
-	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, nil)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	err = replicaConfig.ValidateAndAdjust(sinkURI)
+	require.Nil(t, err)
+	sink, err := NewDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig)
 	require.Nil(t, err)
 	tables := []*model.TableInfo{
 		{
@@ -124,9 +134,41 @@ func TestWriteCheckpointTs(t *testing.T) {
 		},
 	}
 
+	time.Sleep(3 * time.Second)
 	err = sink.WriteCheckpointTs(ctx, 100, tables)
 	require.Nil(t, err)
 	metadata, err := os.ReadFile(path.Join(parentDir, "metadata"))
 	require.Nil(t, err)
 	require.JSONEq(t, `{"checkpoint-ts":100}`, string(metadata))
+}
+
+func TestCleanupExpiredFiles(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	parentDir := t.TempDir()
+	uri := fmt.Sprintf("file:///%s?protocol=csv", parentDir)
+	sinkURI, err := url.Parse(uri)
+	require.Nil(t, err)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.CloudStorageConfig = &config.CloudStorageConfig{
+		FileExpirationDays:  util.AddressOf(1),
+		FileCleanupCronSpec: util.AddressOf("* * * * * *"),
+	}
+	err = replicaConfig.ValidateAndAdjust(sinkURI)
+	require.Nil(t, err)
+
+	cnt := atomic.Int64{}
+	cleanupJobs := []func(){
+		func() {
+			cnt.Add(1)
+		},
+	}
+	sink, err := newDDLSink(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicaConfig, cleanupJobs)
+	require.Nil(t, err)
+
+	_ = sink
+	time.Sleep(3 * time.Second)
+	require.LessOrEqual(t, int64(1), cnt.Load())
 }

@@ -25,9 +25,9 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/util/filter"
-	regexprrouter "github.com/pingcap/tidb/util/regexpr-router"
-	router "github.com/pingcap/tidb/util/table-router"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
+	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -164,12 +164,12 @@ func TestValidatorFillResult(t *testing.T) {
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop() // in case assert failed before Stop
-	validator.fillResult(errors.New("test error"), false)
+	validator.fillResult(errors.New("test error"))
 	require.Len(t, validator.result.Errors, 1)
-	validator.fillResult(errors.New("test error"), true)
+	validator.fillResult(errors.New("test error"))
 	require.Len(t, validator.result.Errors, 2)
 	validator.Stop()
-	validator.fillResult(validator.ctx.Err(), true)
+	validator.fillResult(validator.ctx.Err())
 	require.Len(t, validator.result.Errors, 2)
 }
 
@@ -798,4 +798,45 @@ func TestValidatorMarkReachedSyncerRoutine(t *testing.T) {
 	go validator.markErrorStartedRoutine()
 	validator.wg.Wait()
 	require.True(t, validator.markErrorStarted.Load())
+}
+
+func TestValidatorErrorProcessRoutineDeadlock(t *testing.T) {
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	validator.errChan = make(chan error)
+	validator.setStage(pb.Stage_Running)
+	validator.streamerController = binlogstream.NewStreamerController4Test(nil, nil)
+	validator.fromDB = &conn.BaseDB{}
+	validator.toDB = &conn.BaseDB{}
+	require.Equal(t, pb.Stage_Running, validator.Stage())
+
+	finishedCh := make(chan struct{})
+	// simulate a worker
+	validator.wg.Add(1)
+	go func() {
+		defer validator.wg.Done()
+		validator.sendError(errors.New("test error 1"))
+		validator.sendError(errors.New("test error 2"))
+		validator.sendError(errors.New("test error 3"))
+	}()
+
+	validator.errProcessWg.Add(1)
+	go func() {
+		defer func() {
+			finishedCh <- struct{}{}
+		}()
+		validator.errorProcessRoutine()
+	}()
+
+	select {
+	case <-finishedCh:
+		validator.errProcessWg.Wait()
+		require.Equal(t, pb.Stage_Stopped, validator.Stage())
+		// all error gathered
+		require.Len(t, validator.getResult().Errors, 3)
+	case <-time.After(time.Second * 5):
+		t.Fatal("deadlock")
+	}
 }

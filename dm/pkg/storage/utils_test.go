@@ -26,11 +26,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/golang/mock/gomock"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	"github.com/pingcap/tidb/br/pkg/mock"
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 func TestIsS3OrLocalDisk(t *testing.T) {

@@ -1,0 +1,56 @@
+---
+name: test
+task-mode: all
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+  password: ""
+
+mysql-instances:
+  - source-id: "mysql-replica-01"
+    black-white-list: "instance"
+    filter-rules: ["filter-01"]
+
+black-white-list: # compatible with deprecated config
+  instance:
+    do-dbs: ["incompatible_ddl_changes"]
+
+filters:
+  filter-01:
+    schema-pattern: "*"
+    table-pattern: "*"
+    events:
+      [
+        "drop database",
+        "drop table",
+        "drop index",
+        "rename table",
+        "truncate table",
+        "drop table partition",
+        "truncate table partition",
+        "value range decrease",
+        "precision decrease",
+        "modify column",
+        "rename column",
+        "rename index",
+        "drop column",
+        "truncate table partition",
+        "drop primary key",
+        "drop unique key",
+        "modify default value",
+        "modify constaints",
+        "modify columns order",
+        "modify charset",
+        "modify collation",
+        "remove auto increment",
+        "modify storage engine",
+        "reorganize table partition",
+        "coalesce table partition",
+        "split table partition",
+        "exchange table partition",
+        "rebuild table partition",
+      ]
+    sql-pattern: []
+    action: Error

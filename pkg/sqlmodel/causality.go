@@ -18,9 +18,10 @@ import (
 	"strconv"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx"
-	"github.com/pingcap/tidb/tablecodec"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
@@ -39,6 +40,19 @@ func (r *RowChange) CausalityKeys() []string {
 		ret = append(ret, r.getCausalityString(r.postValues)...)
 	}
 	return ret
+}
+
+func columnNeeds2LowerCase(col *timodel.ColumnInfo) bool {
+	switch col.GetType() {
+	case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
+		mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
+		return collationNeeds2LowerCase(col.GetCollate())
+	}
+	return false
+}
+
+func collationNeeds2LowerCase(collation string) bool {
+	return strings.HasSuffix(collation, "_ci")
 }
 
 func columnValue2String(value interface{}) string {
@@ -99,7 +113,12 @@ func genKeyString(
 			continue // ignore `null` value.
 		}
 		// one column key looks like:`column_val.column_name.`
-		buf.WriteString(columnValue2String(data))
+
+		val := columnValue2String(data)
+		if columnNeeds2LowerCase(columns[i]) {
+			val = strings.ToLower(val)
+		}
+		buf.WriteString(val)
 		buf.WriteString(".")
 		buf.WriteString(columns[i].Name.L)
 		buf.WriteString(".")

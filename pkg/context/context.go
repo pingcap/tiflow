@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/engine/factory"
+	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/factory"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/p2p"

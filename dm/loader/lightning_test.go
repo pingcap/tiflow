@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,4 +73,49 @@ func TestGetLightiningConfig(t *testing.T) {
 	lightningDefaultQuota := lcfg.NewConfig().TikvImporter.DiskQuota
 	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
+
+	conf, err = GetLightningConfig(&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			Name: "job123",
+			LoaderConfig: config.LoaderConfig{
+				RangeConcurrency: 32,
+				CompressKVPairs:  "gzip",
+				Analyze:          "required",
+				Dir:              "/tmp",
+			},
+		})
+	require.NoError(t, err)
+	require.Equal(t, lcfg.CheckpointDriverFile, conf.Checkpoint.Driver)
+
+	conf, err = GetLightningConfig(&lcfg.GlobalConfig{},
+		&config.SubTaskConfig{
+			Name: "job123",
+			LoaderConfig: config.LoaderConfig{
+				RangeConcurrency: 32,
+				CompressKVPairs:  "gzip",
+				Analyze:          "required",
+				Dir:              "gcs://bucket/path",
+			},
+		})
+	require.NoError(t, err)
+	require.Equal(t, lcfg.CheckpointDriverMySQL, conf.Checkpoint.Driver)
+}
+
+func TestMetricProxies(t *testing.T) {
+	l := &LightningLoader{cfg: &config.SubTaskConfig{}}
+	l.initMetricProxies()
+	require.Equal(t, defaultMetricProxies, l.metricProxies)
+
+	registry := prometheus.NewRegistry()
+	l = &LightningLoader{cfg: &config.SubTaskConfig{MetricsFactory: promauto.With(registry)}}
+	l.initMetricProxies()
+	require.NotEqual(t, defaultMetricProxies, l.metricProxies)
+	l.metricProxies.loaderExitWithErrorCounter.WithLabelValues("test", "source", "false").Inc()
+	metricFamilies, err := registry.Gather()
+	require.NoError(t, err)
+	require.Len(t, metricFamilies, 1)
+	l.removeLabelValuesWithTaskInMetrics("test", "source")
+	metricFamilies, err = registry.Gather()
+	require.NoError(t, err)
+	require.Len(t, metricFamilies, 0)
 }

@@ -16,7 +16,7 @@ package syncer
 import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
@@ -119,7 +119,13 @@ func skipByFilter(binlogFilter *bf.BinlogEvent, table *filter.Table, et bf.Event
 	if err != nil {
 		return false, terror.Annotatef(terror.ErrSyncerUnitBinlogEventFilter.New(err.Error()), "skip event %s on %v", et, table)
 	}
-	return action == bf.Ignore, nil
+	switch action {
+	case bf.Ignore:
+		return true, nil
+	case bf.Error:
+		return false, terror.ErrSyncerUnitBinlogEventFilter.Generatef("event %s on %v", et, table)
+	}
+	return false, nil
 }
 
 func (s *Syncer) skipByTable(table *filter.Table) bool {

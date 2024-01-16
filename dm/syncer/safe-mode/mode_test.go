@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	. "github.com/pingcap/check"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 )
 

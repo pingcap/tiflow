@@ -19,7 +19,7 @@ import (
 	"sort"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
@@ -129,7 +129,6 @@ func rowChangeToMsg(
 		if config.OnlyOutputUpdatedColumns {
 			value.dropNotUpdatedColumns()
 		}
-
 	} else {
 		value.Update = rowChangeColumns2CodecColumns(e.Columns, largeMessageOnlyHandleKeyColumns)
 		if largeMessageOnlyHandleKeyColumns && len(value.Update) == 0 {

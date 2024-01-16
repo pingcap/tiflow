@@ -24,7 +24,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/tidb/util/engine"
+	"github.com/pingcap/tidb/pkg/util/engine"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -266,6 +266,10 @@ func TestCompareVersion(t *testing.T) {
 	dirtyVersion := semver.New(SanitizeVersion("v6.3.0-dirty"))
 	require.Equal(t, 1, dirtyVersion.Compare(*MinTiCDCVersion))
 	require.Equal(t, 0, dirtyVersion.Compare(*semver.New("6.3.0")))
+
+	dirtyVersionWithFIPS := semver.New(SanitizeVersion("v6.3.0-dirty-fips"))
+	require.Equal(t, 1, dirtyVersionWithFIPS.Compare(*MinTiCDCVersion))
+	require.Equal(t, 0, dirtyVersionWithFIPS.Compare(*semver.New("6.3.0")))
 }
 
 func TestReleaseSemver(t *testing.T) {
@@ -357,46 +361,46 @@ func TestTiCDCClusterVersionFeaturesCompatible(t *testing.T) {
 	t.Parallel()
 	ver := TiCDCClusterVersion{semver.New("4.0.10")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), false)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
+	require.Equal(t, ver.LessThan500RC(), false)
 
 	ver = TiCDCClusterVersion{semver.New("4.0.12")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), false)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
+	require.Equal(t, ver.LessThan500RC(), false)
 
 	ver = TiCDCClusterVersion{semver.New("4.0.13")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
+	require.Equal(t, ver.LessThan500RC(), false)
 
 	ver = TiCDCClusterVersion{semver.New("4.0.13-hotfix")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
+	require.Equal(t, ver.LessThan500RC(), false)
 
 	ver = TiCDCClusterVersion{semver.New("4.0.14")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), false)
+	require.Equal(t, ver.LessThan500RC(), false)
 
 	ver = TiCDCClusterVersion{semver.New("5.0.0-rc")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), false)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
+	require.Equal(t, ver.LessThan500RC(), true)
 
 	ver = TiCDCClusterVersion{semver.New("5.0.0")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
+	require.Equal(t, ver.LessThan500RC(), true)
 
 	ver = TiCDCClusterVersion{semver.New("5.1.0")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
+	require.Equal(t, ver.LessThan500RC(), true)
 
 	ver = TiCDCClusterVersion{semver.New("5.2.0-alpha")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
+	require.Equal(t, ver.LessThan500RC(), true)
 
 	ver = TiCDCClusterVersion{semver.New("5.2.0-master")}
 	require.Equal(t, ver.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, ver.ShouldEnableOldValueByDefault(), true)
+	require.Equal(t, ver.LessThan500RC(), true)
 
 	require.Equal(t, ticdcClusterVersionUnknown.ShouldEnableUnifiedSorterByDefault(), true)
-	require.Equal(t, ticdcClusterVersionUnknown.ShouldEnableOldValueByDefault(), true)
+	require.Equal(t, ticdcClusterVersionUnknown.LessThan500RC(), true)
 }
 
 func TestCheckPDVersionError(t *testing.T) {

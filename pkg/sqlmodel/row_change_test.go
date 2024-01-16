@@ -16,11 +16,12 @@ package sqlmodel
 import (
 	"testing"
 
-	"github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	timodel "github.com/pingcap/tidb/parser/model"
-	timock "github.com/pingcap/tidb/util/mock"
+	"github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	timock "github.com/pingcap/tidb/pkg/util/mock"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -33,7 +34,8 @@ func mockTableInfo(t *testing.T, sql string) *timodel.TableInfo {
 	se := timock.NewContext()
 	node, err := p.ParseOneStmt(sql, "", "")
 	require.NoError(t, err)
-	ti, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
+	dbChs, dbColl := charset.GetDefaultCharsetAndCollate()
+	ti, err := ddl.BuildTableInfoWithStmt(se, node.(*ast.CreateTableStmt), dbChs, dbColl, nil)
 	require.NoError(t, err)
 	return ti
 }

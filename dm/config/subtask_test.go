@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/encrypt"

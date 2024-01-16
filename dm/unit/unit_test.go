@@ -15,12 +15,14 @@ package unit
 
 import (
 	"context"
+	"database/sql/driver"
 	"testing"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/br/pkg/lightning/common"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
@@ -91,6 +93,33 @@ func TestIsResumableError(t *testing.T) {
 	for _, tc := range testCases {
 		err := NewProcessError(tc.err)
 		require.Equal(t, tc.resumable, IsResumableError(err))
+	}
+}
+
+func TestIsResumableDBError(t *testing.T) {
+	testCases := []struct {
+		err       error
+		resumable bool
+	}{
+		// only DM new error is checked
+		{&tmysql.SQLError{Code: 1105, Message: "unsupported modify column length 20 is less than origin 40", State: tmysql.DefaultMySQLState}, false},
+		{&tmysql.SQLError{Code: 1105, Message: "unsupported drop integer primary key", State: tmysql.DefaultMySQLState}, false},
+		{terror.ErrDBExecuteFailed.Generate("file test.t3.sql: execute statement failed: USE `test_abc`;: context canceled"), true},
+		{terror.ErrDBExecuteFailed.Delegate(&tmysql.SQLError{Code: 1105, Message: "unsupported modify column length 20 is less than origin 40", State: tmysql.DefaultMySQLState}, "alter table t modify col varchar(20)"), false},
+		{terror.ErrDBExecuteFailed.Delegate(&tmysql.SQLError{Code: 1105, Message: "unsupported drop integer primary key", State: tmysql.DefaultMySQLState}, "alter table t drop column id"), false},
+		{terror.ErrDBExecuteFailed.Delegate(&tmysql.SQLError{Code: 1067, Message: "Invalid default value for 'ct'", State: tmysql.DefaultMySQLState}, "CREATE TABLE `tbl` (`c1` int(11) NOT NULL,`ct` datetime NOT NULL DEFAULT '0000-00-00 00:00:00' COMMENT '创建时间',PRIMARY KEY (`c1`)) ENGINE=InnoDB DEFAULT CHARSET=latin1"), false},
+		{terror.ErrDBExecuteFailed.Delegate(errors.New("Error 1062 (23000): Duplicate entry '5' for key 'PRIMARY'")), false},
+		{terror.ErrDBExecuteFailed.Delegate(errors.New("INSERT INTO `db`.`tbl` (`c1`,`c2`) VALUES (?,?);: Error 1406: Data too long for column 'c2' at row 1")), false},
+		// others
+		{nil, true},
+		{errors.New("unknown error"), true},
+		{driver.ErrBadConn, true},
+		{mysql.ErrInvalidConn, true},
+		{context.Canceled, false},
+	}
+
+	for i, tc := range testCases {
+		require.Equal(t, tc.resumable, IsResumableDBError(tc.err), "case %d", i)
 	}
 }
 

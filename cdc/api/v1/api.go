@@ -308,13 +308,6 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-
-	infoStr, err := info.Marshal()
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
 	upstreamInfo := &model.UpstreamInfo{
 		ID:            up.ID,
 		PDEndpoints:   strings.Join(up.PdEndpoints, ","),
@@ -323,15 +316,17 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 		CAPath:        up.SecurityConfig.CAPath,
 		CertAllowedCN: up.SecurityConfig.CertAllowedCN,
 	}
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(
+	err = ctrl.CreateChangefeed(
 		ctx, upstreamInfo,
-		info, model.DefaultChangeFeedID(changefeedConfig.ID))
+		info)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
-	log.Info("Create changefeed successfully!", zap.String("id", changefeedConfig.ID), zap.String("changefeed", infoStr))
+	log.Info("Create changefeed successfully!",
+		zap.String("id", changefeedConfig.ID),
+		zap.String("changefeed", info.String()))
 	c.Status(http.StatusAccepted)
 }
 
@@ -430,6 +425,13 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 			changefeedID.ID))
 		return
 	}
+
+	owner, err := h.capture.GetOwner()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	info, err := h.statusProvider().GetChangeFeedInfo(ctx, changefeedID)
 	if err != nil {
 		_ = c.Error(err)
@@ -464,7 +466,7 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.GetEtcdClient().SaveChangeFeedInfo(ctx, newInfo, changefeedID)
+	err = owner.UpdateChangefeed(ctx, newInfo)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -743,7 +745,8 @@ func (h *OpenAPI) ListProcessor(c *gin.Context) {
 	for i, info := range infos {
 		resp := &model.ProcessorCommonInfo{
 			Namespace: info.CfID.Namespace,
-			CfID:      info.CfID.ID, CaptureID: info.CaptureID,
+			CfID:      info.CfID.ID,
+			CaptureID: info.CaptureID,
 		}
 		resps[i] = resp
 	}

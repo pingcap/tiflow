@@ -1424,8 +1424,19 @@ var doc = `{
         "config.DispatchRule": {
             "type": "object",
             "properties": {
+                "columns": {
+                    "description": "Columns are set when using columns dispatcher.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "dispatcher": {
                     "description": "Deprecated, please use PartitionRule.",
+                    "type": "string"
+                },
+                "index": {
+                    "description": "IndexName is set when using index-value dispatcher with specified index.",
                     "type": "string"
                 },
                 "matcher": {
@@ -1439,6 +1450,30 @@ var doc = `{
                     "type": "string"
                 },
                 "topic": {
+                    "type": "string"
+                }
+            }
+        },
+        "config.GlueSchemaRegistryConfig": {
+            "type": "object",
+            "properties": {
+                "access-key": {
+                    "description": "AccessKey of the schema registry",
+                    "type": "string"
+                },
+                "region": {
+                    "description": "Region of the schema registry",
+                    "type": "string"
+                },
+                "registry-name": {
+                    "description": "Name of the schema registry",
+                    "type": "string"
+                },
+                "secret-access-key": {
+                    "description": "SecretAccessKey of the schema registry",
+                    "type": "string"
+                },
+                "token": {
                     "type": "string"
                 }
             }
@@ -1466,6 +1501,9 @@ var doc = `{
                 },
                 "enable-tls": {
                     "type": "boolean"
+                },
+                "glue-schema-registry-config": {
+                    "$ref": "#/definitions/config.GlueSchemaRegistryConfig"
                 },
                 "insecure-skip-verify": {
                     "type": "boolean"
@@ -1559,10 +1597,10 @@ var doc = `{
         "config.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
-                "claim-check-compression": {
+                "claim-check-storage-uri": {
                     "type": "string"
                 },
-                "claim-check-storage-uri": {
+                "large-message-handle-compression": {
                     "type": "string"
                 },
                 "large-message-handle-option": {
@@ -1620,9 +1658,112 @@ var doc = `{
                 }
             }
         },
+        "config.OAuth2": {
+            "type": "object",
+            "properties": {
+                "oauth2-audience": {
+                    "description": "OAuth2Audience  the URL of the resource server.",
+                    "type": "string"
+                },
+                "oauth2-client-id": {
+                    "description": "OAuth2ClientID  the client ID of the application.",
+                    "type": "string"
+                },
+                "oauth2-issuer-url": {
+                    "description": "OAuth2IssuerURL  the URL of the authorization server.",
+                    "type": "string"
+                },
+                "oauth2-private-key": {
+                    "description": "OAuth2PrivateKey the private key used to sign the server.",
+                    "type": "string"
+                },
+                "oauth2-scope": {
+                    "description": "OAuth2Scope scope",
+                    "type": "string"
+                }
+            }
+        },
+        "config.PulsarConfig": {
+            "type": "object",
+            "properties": {
+                "auth-tls-certificate-path": {
+                    "description": "AuthTLSCertificatePath  create new pulsar authentication provider with specified TLS certificate and private key",
+                    "type": "string"
+                },
+                "auth-tls-private-key-path": {
+                    "description": "AuthTLSPrivateKeyPath private key",
+                    "type": "string"
+                },
+                "authentication-token": {
+                    "description": "AuthenticationToken the token for the Pulsar server",
+                    "type": "string"
+                },
+                "basic-password": {
+                    "description": "BasicPassword with account",
+                    "type": "string"
+                },
+                "basic-user-name": {
+                    "description": "BasicUserName Account name for pulsar basic authentication (the second priority authentication method)",
+                    "type": "string"
+                },
+                "batching-max-messages": {
+                    "description": "BatchingMaxMessages specifies the maximum number of messages permitted in a batch. (default: 1000)",
+                    "type": "integer"
+                },
+                "batching-max-publish-delay": {
+                    "description": "BatchingMaxPublishDelay specifies the time period within which the messages sent will be batched (default: 10ms)\nif batch messages are enabled. If set to a non zero value, messages will be queued until this time\ninterval or until",
+                    "type": "integer"
+                },
+                "compression-type": {
+                    "description": "pulsar client compression",
+                    "type": "string"
+                },
+                "connection-timeout": {
+                    "description": "ConnectionTimeout Timeout for the establishment of a TCP connection (default: 5 seconds)",
+                    "type": "integer"
+                },
+                "oauth2": {
+                    "description": "Oauth2 include  oauth2-issuer-url oauth2-audience oauth2-private-key oauth2-client-id\nand 'type' always use 'client_credentials'",
+                    "$ref": "#/definitions/config.OAuth2"
+                },
+                "operation-timeout": {
+                    "description": "Set the operation timeout (default: 30 seconds)\nProducer-create, subscribe and unsubscribe operations will be retried until this interval, after which the\noperation will be marked as failed",
+                    "type": "integer"
+                },
+                "pulsar-producer-cache-size": {
+                    "description": "PulsarProducerCacheSize is the size of the cache of pulsar producers",
+                    "type": "integer"
+                },
+                "pulsar-version": {
+                    "description": "PulsarVersion print the version of pulsar",
+                    "type": "string"
+                },
+                "send-timeout": {
+                    "description": "SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.\nSend and SendAsync returns an error after timeout.\ndefault: 30s",
+                    "type": "integer"
+                },
+                "tls-certificate-path": {
+                    "type": "string"
+                },
+                "tls-private-key-path": {
+                    "type": "string"
+                },
+                "tls-trust-certs-file-path": {
+                    "type": "string"
+                },
+                "token-from-file": {
+                    "description": "TokenFromFile Authentication from the file token,\nthe path name of the file (the third priority authentication method)",
+                    "type": "string"
+                }
+            }
+        },
         "config.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance-timeout-in-sec": {
+                    "description": "AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been\nadvanced for this given duration, the sink will be canceled and re-established.",
+                    "type": "integer"
+                },
                 "cloud-storage-config": {
                     "$ref": "#/definitions/config.CloudStorageConfig"
                 },
@@ -1681,6 +1822,9 @@ var doc = `{
                 "protocol": {
                     "description": "Protocol is NOT available when the downstream is DB.",
                     "type": "string"
+                },
+                "pulsar-config": {
+                    "$ref": "#/definitions/config.PulsarConfig"
                 },
                 "safe-mode": {
                     "description": "SafeMode is only available when the downstream is DB.",
@@ -2244,6 +2388,15 @@ var doc = `{
         "v2.DispatchRule": {
             "type": "object",
             "properties": {
+                "columns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "index": {
+                    "type": "string"
+                },
                 "matcher": {
                     "type": "array",
                     "items": {
@@ -2349,6 +2502,30 @@ var doc = `{
                 }
             }
         },
+        "v2.GlueSchemaRegistryConfig": {
+            "type": "object",
+            "properties": {
+                "access_key": {
+                    "description": "AccessKey of the schema registry",
+                    "type": "string"
+                },
+                "region": {
+                    "description": "Region of the schema registry",
+                    "type": "string"
+                },
+                "registry_name": {
+                    "description": "Name of the schema registry",
+                    "type": "string"
+                },
+                "secret_access_key": {
+                    "description": "SecretAccessKey of the schema registry",
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.IntegrityConfig": {
             "type": "object",
             "properties": {
@@ -2383,6 +2560,9 @@ var doc = `{
                 },
                 "enable_tls": {
                     "type": "boolean"
+                },
+                "glue_schema_registry_config": {
+                    "$ref": "#/definitions/v2.GlueSchemaRegistryConfig"
                 },
                 "insecure_skip_verify": {
                     "type": "boolean"
@@ -2476,10 +2656,10 @@ var doc = `{
         "v2.LargeMessageHandleConfig": {
             "type": "object",
             "properties": {
-                "claim_check_compression": {
+                "claim_check_storage_uri": {
                     "type": "string"
                 },
-                "claim_check_storage_uri": {
+                "large_message_handle_compression": {
                     "type": "string"
                 },
                 "large_message_handle_option": {
@@ -2579,6 +2759,85 @@ var doc = `{
                 }
             }
         },
+        "v2.PulsarConfig": {
+            "type": "object",
+            "properties": {
+                "auth-tls-certificate-path": {
+                    "type": "string"
+                },
+                "auth-tls-private-key-path": {
+                    "type": "string"
+                },
+                "authentication-token": {
+                    "type": "string"
+                },
+                "basic-password": {
+                    "type": "string"
+                },
+                "basic-user-name": {
+                    "type": "string"
+                },
+                "batching-max-messages": {
+                    "type": "integer"
+                },
+                "batching-max-publish-delay": {
+                    "type": "integer"
+                },
+                "compression-type": {
+                    "type": "string"
+                },
+                "connection-timeout": {
+                    "type": "integer"
+                },
+                "oauth2": {
+                    "$ref": "#/definitions/v2.PulsarOAuth2"
+                },
+                "operation-timeout": {
+                    "type": "integer"
+                },
+                "pulsar-producer-cache-size": {
+                    "type": "integer"
+                },
+                "pulsar-version": {
+                    "type": "string"
+                },
+                "send-timeout": {
+                    "type": "integer"
+                },
+                "tls-certificate-path": {
+                    "type": "string"
+                },
+                "tls-private-key-path": {
+                    "type": "string"
+                },
+                "tls-trust-certs-file-path": {
+                    "type": "string"
+                },
+                "token-from-file": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.PulsarOAuth2": {
+            "type": "object",
+            "properties": {
+                "oauth2-audience": {
+                    "type": "string"
+                },
+                "oauth2-client-id": {
+                    "type": "string"
+                },
+                "oauth2-issuer-url": {
+                    "type": "string"
+                },
+                "oauth2-private-key": {
+                    "type": "string"
+                },
+                "oauth2-scope": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.ReplicaConfig": {
             "type": "object",
             "properties": {
@@ -2593,9 +2852,6 @@ var doc = `{
                 },
                 "consistent": {
                     "$ref": "#/definitions/v2.ConsistentConfig"
-                },
-                "enable_old_value": {
-                    "type": "boolean"
                 },
                 "enable_sync_point": {
                     "type": "boolean"
@@ -2707,6 +2963,9 @@ var doc = `{
         "v2.SinkConfig": {
             "type": "object",
             "properties": {
+                "advance_timeout": {
+                    "type": "integer"
+                },
                 "cloud_storage_config": {
                     "$ref": "#/definitions/v2.CloudStorageConfig"
                 },
@@ -2754,6 +3013,9 @@ var doc = `{
                 },
                 "protocol": {
                     "type": "string"
+                },
+                "pulsar_config": {
+                    "$ref": "#/definitions/v2.PulsarConfig"
                 },
                 "safe_mode": {
                     "type": "boolean"

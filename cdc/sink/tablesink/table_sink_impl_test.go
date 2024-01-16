@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,10 @@ func (m *mockEventSink) Close() {
 
 func (m *mockEventSink) Dead() <-chan struct{} {
 	return m.dead
+}
+
+func (m *mockEventSink) Scheme() string {
+	return sink.BlackHoleScheme
 }
 
 // acknowledge the txn events by call the callback function.
@@ -242,6 +247,7 @@ func TestGetCheckpointTs(t *testing.T) {
 
 	tb.AppendRowChangedEvents(getTestRows()...)
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(0), "lastSyncedTs should be not updated")
 
 	// One event will be flushed.
 	err := tb.UpdateResolvedTs(model.NewResolvedTs(101))
@@ -249,11 +255,13 @@ func TestGetCheckpointTs(t *testing.T) {
 	require.Equal(t, model.NewResolvedTs(0), tb.GetCheckpointTs(), "checkpointTs should be 0")
 	sink.acknowledge(101)
 	require.Equal(t, model.NewResolvedTs(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(101), "lastSyncedTs should be the same as the flushed event")
 
 	// Flush all events.
 	err = tb.UpdateResolvedTs(model.NewResolvedTs(105))
 	require.Nil(t, err)
 	require.Equal(t, model.NewResolvedTs(101), tb.GetCheckpointTs(), "checkpointTs should be 101")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(101), "lastSyncedTs should be not updated")
 
 	// Only acknowledge some events.
 	sink.acknowledge(102)
@@ -263,10 +271,12 @@ func TestGetCheckpointTs(t *testing.T) {
 		tb.GetCheckpointTs(),
 		"checkpointTs should still be 101",
 	)
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(102), "lastSyncedTs should be updated")
 
 	// Ack all events.
 	sink.acknowledge(105)
 	require.Equal(t, model.NewResolvedTs(105), tb.GetCheckpointTs(), "checkpointTs should be 105")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(105), "lastSyncedTs should be updated")
 }
 
 func TestClose(t *testing.T) {
@@ -389,26 +399,15 @@ func TestCheckpointTsFrozenWhenStopping(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 
-	go func() {
-		time.Sleep(time.Millisecond * 10)
-		sink.Close()
-	}()
+	// Table sink close should return even if callbacks are not called,
+	// because the backend sink is closed.
+	sink.Close()
+	tb.Close()
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		tb.Close()
-	}()
-	require.Eventually(t, func() bool {
-		return state.TableSinkStopping == tb.state.Load()
-	}, time.Second, time.Microsecond, "table should be stopping")
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		currentTs := tb.GetCheckpointTs()
-		sink.acknowledge(105)
-		require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
-	}()
-	wg.Wait()
+	require.Equal(t, state.TableSinkStopped, tb.state.Load())
+
+	currentTs := tb.GetCheckpointTs()
+	sink.acknowledge(105)
+	require.Equal(t, currentTs, tb.GetCheckpointTs(), "checkpointTs should not be updated")
+	require.Equal(t, tb.lastSyncedTs.getLastSyncedTs(), uint64(105), "lastSyncedTs should not change")
 }
