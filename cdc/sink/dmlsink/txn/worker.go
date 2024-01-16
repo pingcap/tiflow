@@ -106,9 +106,7 @@ func (w *worker) run() error {
 		zap.String("changefeedID", w.changefeed),
 		zap.Int("workerID", w.ID))
 
-	needFlush := false
 	start := time.Now()
-
 	for {
 		select {
 		case <-w.ctx.Done():
@@ -121,7 +119,7 @@ func (w *worker) run() error {
 			// If no more data in txnCh.out, and also not reach the state that can be flushed,
 			// we will wait for 10ms and then do flush to avoid too much flush with small amount of txns.
 			if txn.txnEvent != nil {
-				needFlush = w.onEvent(txn)
+				needFlush := w.onEvent(txn)
 				if !needFlush {
 					delay := time.NewTimer(w.flushInterval)
 					for !needFlush {
@@ -132,7 +130,7 @@ func (w *worker) run() error {
 							needFlush = true
 						}
 					}
-					//Release resources promptly
+					// Release resources promptly
 					if !delay.Stop() {
 						select {
 						case <-delay.C:
@@ -148,7 +146,6 @@ func (w *worker) run() error {
 						zap.Error(err))
 					return err
 				}
-				needFlush = false
 				// we record total time to calcuate the worker busy ratio.
 				// so we record the total time after flushing, to unified statistics on
 				// flush time and total time
