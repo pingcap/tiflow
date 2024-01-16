@@ -107,7 +107,7 @@ func (w *worker) run() error {
 		zap.Int("workerID", w.ID))
 
 	needFlush := false
-	startToBatching := time.Now()
+	start := time.Now()
 
 	for {
 		select {
@@ -123,32 +123,32 @@ func (w *worker) run() error {
 			if txn.txnEvent != nil {
 				needFlush = w.onEvent(txn)
 				if !needFlush {
-					delay := time.After(w.flushInterval)
+					delayTicker := time.NewTicker(w.flushInterval)
 					for !needFlush {
 						select {
 						case txn := <-w.txnCh.Out():
 							needFlush = w.onEvent(txn)
-						case <-delay:
+						case <-delayTicker.C:
 							needFlush = true
 						}
 					}
+					delayTicker.Stop()
 				}
+				// needFlush must be true here, so we can do flush.
+				if err := w.doFlush(); err != nil {
+					log.Error("Transaction dmlSink worker exits unexpectly",
+						zap.String("changefeedID", w.changefeed),
+						zap.Int("workerID", w.ID),
+						zap.Error(err))
+					return err
+				}
+				needFlush = false
+				// we record total time to calcuate the worker busy ratio.
+				// so we record the total time after flushing, to unified statistics on
+				// flush time and total time
+				w.metricTxnWorkerTotalDuration.Observe(time.Since(start).Seconds())
+				start = time.Now()
 			}
-		}
-		if needFlush {
-			if err := w.doFlush(); err != nil {
-				log.Error("Transaction dmlSink worker exits unexpectly",
-					zap.String("changefeedID", w.changefeed),
-					zap.Int("workerID", w.ID),
-					zap.Error(err))
-				return err
-			}
-			needFlush = false
-			// we record total time to calcuate the worker busy ratio.
-			// so we record the total time after flushing, to unified statistics on
-			// flush time and total time
-			w.metricTxnWorkerTotalDuration.Observe(time.Since(startToBatching).Seconds())
-			startToBatching = time.Now()
 		}
 	}
 }
