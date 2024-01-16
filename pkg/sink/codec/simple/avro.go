@@ -111,12 +111,12 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 	}
 
 	result := map[string]interface{}{
-		"schema":  tableInfo.TableName.Schema,
-		"table":   tableInfo.TableName.Table,
-		"tableID": tableInfo.ID,
-		"version": int64(tableInfo.UpdateTS),
-		"columns": columnsSchema,
-		"indexes": indexesSchema,
+		"database": tableInfo.TableName.Schema,
+		"table":    tableInfo.TableName.Table,
+		"tableID":  tableInfo.ID,
+		"version":  int64(tableInfo.UpdateTS),
+		"columns":  columnsSchema,
+		"indexes":  indexesSchema,
 	}
 
 	return result
@@ -184,7 +184,7 @@ func newDMLMessageMap(
 ) (map[string]interface{}, error) {
 	m := map[string]interface{}{
 		"version":            defaultVersion,
-		"schema":             event.Table.Schema,
+		"database":           event.Table.Schema,
 		"table":              event.Table.Table,
 		"tableID":            event.TableInfo.ID,
 		"commitTs":           int64(event.CommitTs),
@@ -363,7 +363,7 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 		indexes = append(indexes, index)
 	}
 	return &TableSchema{
-		Schema:  native["schema"].(string),
+		Schema:  native["database"].(string),
 		Table:   native["table"].(string),
 		TableID: native["tableID"].(int64),
 		Version: uint64(native["version"].(int64)),
@@ -428,7 +428,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	m.Version = int(rawValues["version"].(int32))
 	m.CommitTs = uint64(rawValues["commitTs"].(int64))
 	m.BuildTs = rawValues["buildTs"].(int64)
-	m.Schema = rawValues["schema"].(string)
+	m.Schema = rawValues["database"].(string)
 	m.Table = rawValues["table"].(string)
 	m.TableID = rawValues["tableID"].(int64)
 	m.SchemaVersion = uint64(rawValues["schemaVersion"].(int64))
