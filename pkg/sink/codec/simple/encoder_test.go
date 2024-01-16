@@ -211,6 +211,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
+			require.Equal(t, createTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			require.Equal(t, createTableDDLEvent.CommitTs, event.CommitTs)
 			// because we don't we don't set startTs in the encoded message,
 			// so the startTs is equal to commitTs
@@ -260,6 +261,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
+			require.Equal(t, renameTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			require.Equal(t, renameTableDDLEvent.CommitTs, event.CommitTs)
 			// because we don't we don't set startTs in the encoded message,
 			// so the startTs is equal to commitTs
@@ -505,6 +507,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 
 			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
+			require.Equal(t, ddlEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			// Bootstrap event doesn't have query
 			require.Equal(t, "", event.Query)
 			require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
@@ -614,6 +617,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 				require.Equal(t, decodedRow.Table.Schema, event.Table.Schema)
 				require.Equal(t, decodedRow.Table.Table, event.Table.Table)
+				require.Equal(t, decodedRow.Table.TableID, event.Table.TableID)
 
 				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 				for _, column := range decodedRow.Columns {
