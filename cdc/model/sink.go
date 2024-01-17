@@ -530,16 +530,23 @@ type RedoColumn struct {
 }
 
 // BuildTiDBTableInfo builds a TiDB TableInfo from given information.
-func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInfo {
+// Note the result TableInfo may not be same as the original TableInfo in tidb.
+// The only guarantee is that you can restore the `Name`, `Type`, `Charset`, `Collation`
+// and `Flag` field of `Column` using the result TableInfo.
+func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]int) *model.TableInfo {
 	ret := &model.TableInfo{}
-	// nowhere will use this field, so we set a debug message
-	ret.Name = model.NewCIStr("BuildTiDBTableInfo")
+	ret.Name = model.NewCIStr(tableName)
 
+	hasPrimaryKeyColumn := false
+	// Add a mock id to identify columns inside cdc
+	nextMockColID := int64(100) // 100 is an arbitrary number
 	for i, col := range columns {
 		columnInfo := &model.ColumnInfo{
+			ID:     nextMockColID,
 			Offset: i,
 			State:  model.StatePublic,
 		}
+		nextMockColID += 1
 		if col == nil {
 			// by referring to datum2Column, nil is happened when
 			// - !IsColCDCVisible, which means the column is a virtual generated
@@ -555,9 +562,18 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		}
 		columnInfo.Name = model.NewCIStr(col.Name)
 		columnInfo.SetType(col.Type)
-		// TiKV always use utf8mb4 to store, and collation is not recorded by CDC
-		columnInfo.SetCharset(mysql.UTF8MB4Charset)
-		columnInfo.SetCollate(mysql.UTF8MB4DefaultCollation)
+		if col.Charset != "" {
+			columnInfo.SetCharset(col.Charset)
+		} else {
+			// charset is not stored, give it a default value
+			columnInfo.SetCharset(mysql.UTF8MB4Charset)
+		}
+		if col.Collation != "" {
+			columnInfo.SetCollate(col.Collation)
+		} else {
+			// collation is not stored, give it a default value
+			columnInfo.SetCollate(mysql.UTF8MB4DefaultCollation)
+		}
 
 		// inverse initColumnsFlag
 		flag := col.Flag
@@ -569,11 +585,15 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 			columnInfo.GeneratedExprString = "pass_generated_check"
 			columnInfo.GeneratedStored = true
 		}
-		if flag.IsHandleKey() {
+		if flag.IsPrimaryKey() {
 			columnInfo.AddFlag(mysql.PriKeyFlag)
+			hasPrimaryKeyColumn = true
+			if !flag.IsHandleKey() {
+				log.Panic("Primary key must be handle key")
+			}
+			// just set it for test compatibility,
+			// actually we cannot deduce the value of IsCommonHandle from the provided args.
 			ret.IsCommonHandle = true
-		} else if flag.IsPrimaryKey() {
-			columnInfo.AddFlag(mysql.PriKeyFlag)
 		}
 		if flag.IsUniqueKey() {
 			columnInfo.AddFlag(mysql.UniqueKeyFlag)
@@ -590,6 +610,13 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		ret.Columns = append(ret.Columns, columnInfo)
 	}
 
+	hasPrimaryKeyIndex := false
+	hasHandleIndex := false
+	// When there is no primary key, cdc will select the not null unique index with least columns.
+	// And when the columns num is the same, it will choose the one with smallest index id.
+	// So we assign the smallest index id to the index which is selected as handle to mock this behavior.
+	minIndexID := int64(1)
+	nextMockIndexID := minIndexID + 1
 	for i, colOffsets := range indexColumns {
 		indexInfo := &model.IndexInfo{
 			Name:  model.NewCIStr(fmt.Sprintf("idx_%d", i)),
@@ -610,11 +637,16 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 		}
 
 		isPrimary := true
+		isHandle := true
 		for _, offset := range colOffsets {
 			col := columns[offset]
 			// When only all columns in the index are primary key, then the index is primary key.
 			if col == nil || !col.Flag.IsPrimaryKey() {
 				isPrimary = false
+			}
+			// When only all columns in the index are handle, then the index is selected as handle.
+			if col == nil || !col.Flag.IsHandleKey() {
+				isHandle = false
 			}
 
 			tiCol := ret.Columns[offset]
@@ -624,11 +656,31 @@ func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInf
 			indexInfo.Columns = append(indexInfo.Columns, indexCol)
 			indexInfo.Primary = isPrimary
 		}
+		hasPrimaryKeyIndex = hasPrimaryKeyIndex || isPrimary
+		if isHandle {
+			indexInfo.ID = minIndexID
+			if hasHandleIndex {
+				log.Panic("Invalid state: multiple handle index found",
+					zap.Int("index", i),
+					zap.Any("colOffsets", colOffsets),
+					zap.String("index name", indexInfo.Name.O))
+			}
+			hasHandleIndex = true
+		} else {
+			indexInfo.ID = nextMockIndexID
+			nextMockIndexID += 1
+		}
 
 		// TODO: revert the "all column set index related flag" to "only the
 		// first column set index related flag" if needed
 
 		ret.Indices = append(ret.Indices, indexInfo)
+	}
+	if hasPrimaryKeyColumn != hasPrimaryKeyIndex || !hasHandleIndex {
+		log.Panic("Invalid arguments",
+			zap.Bool("hasPrimaryKeyColumn", hasPrimaryKeyColumn),
+			zap.Bool("hasPrimaryKeyIndex", hasPrimaryKeyIndex),
+			zap.Bool("hasHandleIndex", hasHandleIndex))
 	}
 	return ret
 }

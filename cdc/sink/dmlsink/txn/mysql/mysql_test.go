@@ -1869,7 +1869,7 @@ func TestGroupRowsByType(t *testing.T) {
 			if len(colums) == 0 {
 				colums = tc.input[0].PreColumns
 			}
-			tableInfo := model.BuildTiDBTableInfo(colums, tc.input[0].IndexColumns)
+			tableInfo := model.BuildTiDBTableInfo("t", colums, tc.input[0].IndexColumns)
 			ms.cfg.MaxTxnRow = tc.maxTxnRow
 			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
 			for _, rows := range inserts {
