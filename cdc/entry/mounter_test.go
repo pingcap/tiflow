@@ -1522,85 +1522,85 @@ func TestBuildTableInfo(t *testing.T) {
 		recovered           string
 		recoveredWithNilCol string
 	}{
-		// {
-		// 	"CREATE TABLE t1 (c INT PRIMARY KEY)",
-		// 	"CREATE TABLE `t1` (\n" +
-		// 		"  `c` int(0) NOT NULL,\n" +
-		// 		"  PRIMARY KEY (`c`(0)) /*T![clustered_index] CLUSTERED */\n" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// 	"CREATE TABLE `t1` (\n" +
-		// 		"  `c` int(0) NOT NULL,\n" +
-		// 		"  PRIMARY KEY (`c`(0)) /*T![clustered_index] CLUSTERED */\n" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// },
-		// {
-		// 	"CREATE TABLE t1 (" +
-		// 		" c INT UNSIGNED," +
-		// 		" c2 VARCHAR(10) NOT NULL," +
-		// 		" c3 BIT(10) NOT NULL," +
-		// 		" UNIQUE KEY (c2, c3)" +
-		// 		")",
-		// 	// CDC discards field length.
-		// 	"CREATE TABLE `t1` (\n" +
-		// 		"  `c` int(0) unsigned DEFAULT NULL,\n" +
-		// 		"  `c2` varchar(0) NOT NULL,\n" +
-		// 		"  `c3` bit(0) NOT NULL,\n" +
-		// 		"  UNIQUE KEY `idx_0` (`c2`(0),`c3`(0))\n" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// 	"CREATE TABLE `t1` (\n" +
-		// 		"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
-		// 		"  `c2` varchar(0) NOT NULL,\n" +
-		// 		"  `c3` bit(0) NOT NULL,\n" +
-		// 		"  UNIQUE KEY `idx_0` (`c2`(0),`c3`(0))\n" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// },
-		// {
-		// 	"CREATE TABLE t1 (" +
-		// 		" c INT UNSIGNED," +
-		// 		" gen INT AS (c+1) VIRTUAL," +
-		// 		" c2 VARCHAR(10) NOT NULL," +
-		// 		" gen2 INT AS (c+2) STORED," +
-		// 		" c3 BIT(10) NOT NULL," +
-		// 		" PRIMARY KEY (c, c2)" +
-		// 		")",
-		// 	// CDC discards virtual generated column, and generating expression of stored generated column.
-		// 	"CREATE TABLE `t1` (\n" +
-		// 		"  `c` int(0) unsigned NOT NULL,\n" +
-		// 		"  `c2` varchar(0) NOT NULL,\n" +
-		// 		"  `gen2` int(0) GENERATED ALWAYS AS (pass_generated_check) STORED,\n" +
-		// 		"  `c3` bit(0) NOT NULL,\n" +
-		// 		"  PRIMARY KEY (`c`(0),`c2`(0)) /*T![clustered_index] CLUSTERED */\n" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// 	"CREATE TABLE `t1` (\n" +
-		// 		"  `c` int(0) unsigned NOT NULL,\n" +
-		// 		"  `c2` varchar(0) NOT NULL,\n" +
-		// 		"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
-		// 		"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
-		// 		"  PRIMARY KEY (`c`(0),`c2`(0)) /*T![clustered_index] CLUSTERED */\n" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// },
-		// {
-		// 	"CREATE TABLE `t1` (" +
-		// 		"  `a` int(11) NOT NULL," +
-		// 		"  `b` int(11) DEFAULT NULL," +
-		// 		"  `c` int(11) DEFAULT NULL," +
-		// 		"  PRIMARY KEY (`a`) /*T![clustered_index] CLUSTERED */," +
-		// 		"  UNIQUE KEY `b` (`b`)" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// 	"CREATE TABLE `t1` (\n" +
-		// 		"  `a` int(0) NOT NULL,\n" +
-		// 		"  `b` int(0) DEFAULT NULL,\n" +
-		// 		"  `c` int(0) DEFAULT NULL,\n" +
-		// 		"  PRIMARY KEY (`a`(0)) /*T![clustered_index] CLUSTERED */,\n" +
-		// 		"  UNIQUE KEY `idx_1` (`b`(0))\n" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// 	"CREATE TABLE `t1` (\n" +
-		// 		"  `a` int(0) NOT NULL,\n" +
-		// 		"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
-		// 		"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
-		// 		"  PRIMARY KEY (`a`(0)) /*T![clustered_index] CLUSTERED */\n" +
-		// 		") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
-		// },
+		{
+			"CREATE TABLE t1 (c INT PRIMARY KEY)",
+			"CREATE TABLE `t1` (\n" +
+				"  `c` int(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `t1` (\n" +
+				"  `c` int(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+		{
+			"CREATE TABLE t1 (" +
+				" c INT UNSIGNED," +
+				" c2 VARCHAR(10) NOT NULL," +
+				" c3 BIT(10) NOT NULL," +
+				" UNIQUE KEY (c2, c3)" +
+				")",
+			// CDC discards field length.
+			"CREATE TABLE `t1` (\n" +
+				"  `c` int(0) unsigned DEFAULT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `c3` bit(0) NOT NULL,\n" +
+				"  UNIQUE KEY `idx_0` (`c2`(0),`c3`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `t1` (\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `c3` bit(0) NOT NULL,\n" +
+				"  UNIQUE KEY `idx_0` (`c2`(0),`c3`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+		{
+			"CREATE TABLE t1 (" +
+				" c INT UNSIGNED," +
+				" gen INT AS (c+1) VIRTUAL," +
+				" c2 VARCHAR(10) NOT NULL," +
+				" gen2 INT AS (c+2) STORED," +
+				" c3 BIT(10) NOT NULL," +
+				" PRIMARY KEY (c, c2)" +
+				")",
+			// CDC discards virtual generated column, and generating expression of stored generated column.
+			"CREATE TABLE `t1` (\n" +
+				"  `c` int(0) unsigned NOT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `gen2` int(0) GENERATED ALWAYS AS (pass_generated_check) STORED,\n" +
+				"  `c3` bit(0) NOT NULL,\n" +
+				"  PRIMARY KEY (`c`(0),`c2`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `t1` (\n" +
+				"  `c` int(0) unsigned NOT NULL,\n" +
+				"  `c2` varchar(0) NOT NULL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  PRIMARY KEY (`c`(0),`c2`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
+		{
+			"CREATE TABLE `t1` (" +
+				"  `a` int(11) NOT NULL," +
+				"  `b` int(11) DEFAULT NULL," +
+				"  `c` int(11) DEFAULT NULL," +
+				"  PRIMARY KEY (`a`) /*T![clustered_index] CLUSTERED */," +
+				"  UNIQUE KEY `b` (`b`)" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `t1` (\n" +
+				"  `a` int(0) NOT NULL,\n" +
+				"  `b` int(0) DEFAULT NULL,\n" +
+				"  `c` int(0) DEFAULT NULL,\n" +
+				"  PRIMARY KEY (`a`(0)) /*T![clustered_index] CLUSTERED */,\n" +
+				"  UNIQUE KEY `idx_1` (`b`(0))\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+			"CREATE TABLE `t1` (\n" +
+				"  `a` int(0) NOT NULL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  `omitted` unspecified GENERATED ALWAYS AS (pass_generated_check) VIRTUAL,\n" +
+				"  PRIMARY KEY (`a`(0)) /*T![clustered_index] CLUSTERED */\n" +
+				") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin",
+		},
 		{ // This case is to check the primary key is correctly identified by BuildTiDBTableInfo
 			"CREATE TABLE your_table (" +
 				" id INT NOT NULL," +
