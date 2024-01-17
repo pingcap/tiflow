@@ -237,6 +237,7 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 									zap.Stringer("resolvedSpan", &resolvedSpan.Span),
 									zap.Stringer("slowestRange", lastSlowestRange),
 									zap.Uint64("resolvedTs", lastResolvedTs),
+									zap.Uint64("regionID", resolvedSpan.Region),
 									zap.String("tsTracker", p.tsTracker.SpanString(*lastSlowestRange)),
 								)
 								lastCheckSlowestRangeTime = time.Now()
