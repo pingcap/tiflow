@@ -15,6 +15,7 @@ package frontier
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"strings"
@@ -79,7 +80,7 @@ func (s *spanFrontier) Frontier() uint64 {
 func (s *spanFrontier) Forward(regionID uint64, span tablepb.Span, ts uint64) {
 	// it's the fast part to detect if the region is split or merged,
 	// if not we can update the minTsHeap with use new ts directly
-	if n, ok := s.cachedRegions[regionID]; ok && n.regionID != fakeRegionID && n.end != nil {
+	if n, ok := s.cachedRegions[regionID]; ok && n.regionID == regionID && n.end != nil {
 		if bytes.Equal(n.Key(), span.StartKey) && bytes.Equal(n.End(), span.EndKey) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
 			return
@@ -102,7 +103,7 @@ func (s *spanFrontier) insert(regionID uint64, span tablepb.Span, ts uint64) {
 		if bytes.Equal(seekRes.Node().Key(), span.StartKey) &&
 			bytes.Equal(next.Key(), span.EndKey) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
-
+			delete(s.cachedRegions, seekRes.Node().regionID)
 			if regionID != fakeRegionID {
 				s.cachedRegions[regionID] = seekRes.Node()
 				s.cachedRegions[regionID].regionID = regionID
@@ -173,9 +174,9 @@ func (s *spanFrontier) stringWtihRegionID() string {
 	var buf strings.Builder
 	s.spanList.Entries(func(n *skipListNode) bool {
 		if n.Value().key == math.MaxUint64 {
-			buf.WriteString(fmt.Sprintf("[%d:%s @ Max] ", n.regionID, n.Key()))
+			buf.WriteString(fmt.Sprintf("[%d:%s @ Max] ", n.regionID, hex.EncodeToString(n.Key())))
 		} else { // the next span
-			buf.WriteString(fmt.Sprintf("[%d:%s @ %d] ", n.regionID, n.Key(), n.Value().key))
+			buf.WriteString(fmt.Sprintf("[%d:%s @ %d] ", n.regionID, hex.EncodeToString(n.Key()), n.Value().key))
 		}
 		return true
 	})
@@ -193,12 +194,13 @@ func (s *spanFrontier) SpanString(span tablepb.Span) string {
 			nextKey = n.Next().Key()
 		}
 		if n.Value().key == math.MaxUint64 {
-			buf.WriteString(fmt.Sprintf("[%d:%s @ Max] ", n.regionID, n.Key()))
+			buf.WriteString(fmt.Sprintf("[%d:%s @ Max] ", n.regionID, hex.EncodeToString(n.Key())))
 		} else if idx == 0 || // head
 			bytes.Equal(key, span.StartKey) || // start key sapn
 			bytes.Equal(nextKey, span.StartKey) || // the previous sapn of start key
 			bytes.Equal(key, span.EndKey) { // the end key span
-			buf.WriteString(fmt.Sprintf("[%d:%s @ %d] ", n.regionID, n.Key(), n.Value().key))
+			buf.WriteString(fmt.Sprintf("[%d:%s @ %d] ", n.regionID,
+				hex.EncodeToString(n.Key()), n.Value().key))
 		}
 		idx++
 		return true
