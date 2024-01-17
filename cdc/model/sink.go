@@ -663,7 +663,7 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 				log.Panic("Invalid state: multiple handle index found",
 					zap.Int("index", i),
 					zap.Any("colOffsets", colOffsets),
-					zap.String("index name", indexInfo.Name.O))
+					zap.String("indexName", indexInfo.Name.O))
 			}
 			hasHandleIndex = true
 		} else {
