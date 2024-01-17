@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
@@ -145,10 +146,35 @@ func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 	}
 }
 
+func getDDLType(t timodel.ActionType) string {
+	switch t {
+	case timodel.ActionCreateTable:
+		return "CREATE"
+	case timodel.ActionRenameTable, timodel.ActionRenameTables:
+		return "RENAME"
+	case timodel.ActionAddIndex, timodel.ActionAddForeignKey, timodel.ActionAddPrimaryKey:
+		return "CINDEX"
+	case timodel.ActionDropIndex, timodel.ActionDropForeignKey, timodel.ActionDropPrimaryKey:
+		return "DINDEX"
+	case timodel.ActionDropTable:
+		return "ERASE"
+	case timodel.ActionTruncateTable:
+		return "TRUNCATE"
+	case timodel.ActionAddColumn, timodel.ActionDropColumn, timodel.ActionModifyColumn, timodel.ActionRebaseAutoID,
+		timodel.ActionSetDefaultValue, timodel.ActionModifyTableComment, timodel.ActionRenameIndex, timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition, timodel.ActionModifyTableCharsetAndCollate, timodel.ActionTruncateTablePartition,
+		timodel.ActionAlterIndexVisibility, timodel.ActionMultiSchemaChange, timodel.ActionReorganizePartition,
+		timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
+		return "ALTER"
+	default:
+		return "QUERY"
+	}
+}
+
 func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 	result := map[string]interface{}{
 		"version":  defaultVersion,
-		"type":     string(DDLType),
+		"type":     getDDLType(ddl.Type),
 		"sql":      ddl.Query,
 		"commitTs": int64(ddl.CommitTs),
 		"buildTs":  time.Now().UnixMilli(),
@@ -402,7 +428,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
-		m.Type = DDLType
+		m.Type = EventType(rawValues["type"].(string))
 		m.SQL = rawValues["sql"].(string)
 		m.CommitTs = uint64(rawValues["commitTs"].(int64))
 		m.BuildTs = rawValues["buildTs"].(int64)

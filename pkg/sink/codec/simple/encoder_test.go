@@ -87,7 +87,8 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 		createTableDDL.TableInfo.Columns[i], createTableDDL.TableInfo.Columns[j] = createTableDDL.TableInfo.Columns[j], createTableDDL.TableInfo.Columns[i]
 	})
 
-	ctx := context.Background()
+	ctx
+	:= context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
 	codecConfig.EnableRowChecksum = true
 	for _, format := range []common.EncodingFormatType{

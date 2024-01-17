@@ -48,8 +48,6 @@ type EventType string
 const (
 	// WatermarkType is the type of the watermark event.
 	WatermarkType EventType = "WATERMARK"
-	// DDLType is the type of the DDL event.
-	DDLType EventType = "DDL"
 	// BootstrapType is the type of the bootstrap event.
 	BootstrapType EventType = "BOOTSTRAP"
 	// InsertType is the type of the insert event.
@@ -539,7 +537,7 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	}
 	msg := &message{
 		Version:        defaultVersion,
-		Type:           DDLType,
+		Type:           EventType(getDDLType(ddl.Type)),
 		CommitTs:       ddl.CommitTs,
 		BuildTs:        time.Now().UnixMilli(),
 		SQL:            ddl.Query,

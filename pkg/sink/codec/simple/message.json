@@ -224,7 +224,20 @@
       },
       {
         "name": "type",
-        "type": "string"
+        "type": {
+          "type": "enum",
+          "name": "DDLType",
+          "symbols": [
+            "CREATE",
+            "ALTER",
+            "ERASE",
+            "RENAME",
+            "TRUNCATE",
+            "CINDEX",
+            "DINDEX",
+            "QUERY"
+          ]
+        }
       },
       {
         "name": "sql",
