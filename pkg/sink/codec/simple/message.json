@@ -23,23 +23,32 @@
       },
       {
         "name": "decimal",
-        "type": "int",
-        "default": 0
+        "type": [
+          "null",
+          "int"
+        ],
+        "default": null
       },
       {
         "name": "elements",
-        "type": {
-          "type": "array",
-          "items": "string"
-        }
+        "type": [
+          "null",
+          {
+            "type": "array",
+            "items": "string"
+          }
+        ],
+        "default": null
       },
       {
         "name": "unsigned",
-        "type": "boolean"
+        "type": ["null", "boolean"],
+        "default": null
       },
       {
         "name": "zerofill",
-        "type": "boolean"
+        "type": ["null", "boolean"],
+        "default": null
       }
     ]
   },
@@ -63,12 +72,13 @@
       },
       {
         "name": "default",
-        "type": ["null", "string"]
-
+        "type": [
+          "null",
+          "string"
+        ]
       }
     ]
   },
-
   {
     "namespace": "com.pingcap.simple.avro",
     "name": "IndexSchema",
@@ -100,7 +110,6 @@
       }
     ]
   },
-
   {
     "namespace": "com.pingcap.simple.avro",
     "name": "TableSchema",
@@ -139,7 +148,6 @@
       }
     ]
   },
-
   {
     "namespace": "com.pingcap.simple.avro",
     "name": "Checksum",
@@ -253,12 +261,18 @@
       },
       {
         "name": "tableSchema",
-        "type": ["null", "com.pingcap.simple.avro.TableSchema"],
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.TableSchema"
+        ],
         "default": null
       },
       {
         "name": "preTableSchema",
-        "type": ["null", "com.pingcap.simple.avro.TableSchema"],
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.TableSchema"
+        ],
         "default": null
       }
     ]
@@ -321,25 +335,52 @@
       },
       {
         "name": "checksum",
-        "type": ["null", "com.pingcap.simple.avro.Checksum"],
+        "type": [
+          "null",
+          "com.pingcap.simple.avro.Checksum"
+        ],
         "default": null
       },
       {
         "name": "data",
-        "type": ["null", {
-          "type": "map",
-          "values": ["null", "int", "long", "float", "double", "string", "boolean", "bytes"],
-          "default": null
-        }],
+        "type": [
+          "null",
+          {
+            "type": "map",
+            "values": [
+              "null",
+              "int",
+              "long",
+              "float",
+              "double",
+              "string",
+              "boolean",
+              "bytes"
+            ],
+            "default": null
+          }
+        ],
         "default": null
       },
       {
         "name": "old",
-        "type": ["null", {
-          "type": "map",
-          "values": ["null", "int", "long", "float", "double", "string", "boolean", "bytes"],
-          "default": null
-        }],
+        "type": [
+          "null",
+          {
+            "type": "map",
+            "values": [
+              "null",
+              "int",
+              "long",
+              "float",
+              "double",
+              "string",
+              "boolean",
+              "bytes"
+            ],
+            "default": null
+          }
+        ],
         "default": null
       }
     ]
