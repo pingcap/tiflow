@@ -360,20 +360,12 @@ func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *mo
 	for {
 		entry, ok := m.memo[key]
 		if ok {
-			log.Info("table info read",
-				zap.String("schema", schema),
-				zap.String("table", table),
-				zap.Uint64("version", version))
 			return entry
 		}
 		select {
 		case <-ticker.C:
-			entry, ok := m.memo[key]
+			entry, ok = m.memo[key]
 			if ok {
-				log.Info("table info read",
-					zap.String("schema", schema),
-					zap.String("table", table),
-					zap.Uint64("version", version))
 				return entry
 			}
 		case <-ctx.Done():
