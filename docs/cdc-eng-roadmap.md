@@ -14,11 +14,12 @@ This is a roadmap of TiCDC project from engineering and architecture aspects. It
 
 ### Projects
 
+- Improve stability of TiCDC https://github.com/pingcap/tiflow/issues/10343
 - TiDB big transaction doesn't block TiCDC replication
-- Adding index desn't block sink to MySQL replication
+- Adding index desn't block sink to MySQL replication https://github.com/pingcap/tiflow/issues/10267
 - Better observability for resolve TS blocked issue
 - Simplify the timezone handling to reduce maintenance burden
-- Optimize memory usage to reduce OOM risk
+- Optimize memory usage to reduce OOM risk https://github.com/pingcap/tiflow/issues/10386
 - Isolate new created changefeed impact on other changefeeds at initilizing stage
 
 ## High Availability
