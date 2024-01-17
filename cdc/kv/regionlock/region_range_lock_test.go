@@ -15,11 +15,14 @@ package regionlock
 
 import (
 	"context"
+	"encoding/binary"
+	"fmt"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -174,6 +177,37 @@ func TestRegionRangeLockCanBeCancelled(t *testing.T) {
 	require.Equal(t, LockRangeStatusCancel, lockResult.Status)
 }
 
+func TestRangeTsMapSetUnset(t *testing.T) {
+	t.Parallel()
+
+	m := newRangeTsMap([]byte("a"), []byte("z"), 100)
+    require.Equal(t, 1, m.m.Len())
+    require.Equal(t, uint64(100), m.GetMin([]byte("a"), []byte("z")))
+
+    // Double set, should panic.
+    require.Panics(t, func() {  m.Set([]byte("a"), []byte("m"), 101)})
+
+    // Unset and then get other ranges.
+    m.Unset([]byte("m"), []byte("x"))
+    require.Equal(t, 3, m.m.Len())
+    require.Equal(t, uint64(100), m.GetMin([]byte("a"), []byte("m")))
+    require.Equal(t, uint64(100), m.GetMin([]byte("x"), []byte("z")))
+
+    // Unset and then get, should panic.
+    require.Panics(t, func() { m.GetMin([]byte("m"), []byte("x")) })
+    require.Panics(t, func() { m.GetMin([]byte("n"), []byte("w")) })
+    require.Panics(t, func() { m.GetMin([]byte("a"), []byte("z")) })
+
+    // Unset all ranges.
+    m.Unset([]byte("a"), []byte("m"))
+    m.Unset([]byte("x"), []byte("z"))
+    m.m.Ascend(func(i rangeTsEntry) bool {
+        fmt.Printf("key: %s, isUnset: %t\n", i.startKey, i.isUnset)
+        return true
+    })
+    // require.Equal(t, 1, m.m.Len())
+}
+
 func TestRangeTsMap(t *testing.T) {
 	t.Parallel()
 
@@ -249,4 +283,46 @@ func TestRegionRangeLockCollect(t *testing.T) {
 	l.UnlockRange([]byte("m"), []byte("z"), 2, 1)
 	attrs = l.CollectLockedRangeAttrs(nil)
 	require.Equal(t, 1, len(attrs.Holes))
+}
+
+func TestGetMinCheckpointTs(t *testing.T) {
+	// ctx := context.Background()
+	startKey, endKey := spanz.GetTableRange(1)
+	l := NewRegionRangeLock(1, startKey, endKey, 100, "")
+	fmt.Printf("min ts: %d\n", l.GetMinCheckpointTs())
+}
+
+func BenchmarkOneMillionRegions(b *testing.B) {
+	ctx := context.Background()
+	startKey, endKey := spanz.GetTableRange(1)
+	l := NewRegionRangeLock(1, startKey, endKey, 100, "")
+
+	for i := 1; i <= 1000*1000; i++ {
+		var rangeStart, rangeEnd []byte
+
+		rangeStart = make([]byte, len(startKey)+8)
+		copy(rangeStart, startKey)
+		binary.BigEndian.PutUint64(rangeStart[len(startKey):], uint64(i))
+
+		if i < 1000*1000 {
+			rangeEnd = make([]byte, len(startKey)+8)
+			copy(rangeEnd, startKey)
+			binary.BigEndian.PutUint64(rangeEnd[len(startKey):], uint64(i+1))
+		} else {
+			rangeEnd = make([]byte, len(endKey))
+			copy(rangeEnd, endKey)
+		}
+		lockRes := l.LockRange(ctx, rangeStart, rangeEnd, uint64(i), 1)
+		if lockRes.Status != LockRangeStatusSuccess {
+			panic(fmt.Sprintf("bad lock range, i: %d\n", i))
+		}
+		lockRes.LockedRange.CheckpointTs.Store(uint64(100 + i))
+	}
+
+	b.ResetTimer()
+	var minTs uint64
+	for i := 0; i < b.N; i++ {
+		minTs = l.GetMinCheckpointTs()
+	}
+	fmt.Printf("minTs is: %d\n", minTs)
 }
