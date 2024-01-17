@@ -569,10 +569,6 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 			Version:   checksumVersion,
 		}
 	}
-	log.Info("decode table info",
-		zap.String("table info ", tableInfo.String()),
-		zap.String("columns", fmt.Sprintf("%v", cols)),
-		zap.String("pre columns", fmt.Sprintf("%v", preCols)))
 
 	return &model.RowChangedEvent{
 		StartTs:  row.StartTs,
