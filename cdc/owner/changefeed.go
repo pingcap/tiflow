@@ -687,8 +687,8 @@ LOOP2:
 	c.initMetrics()
 
 	c.initialized = true
-	c.metricsChangefeedCreateTimeGuage.Set(float64(c.latestInfo.CreateTime.Second()))
-	c.metricsChangefeedRestartTimeGauge.SetToCurrentTime()
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.latestInfo.CreateTime)))
+	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
