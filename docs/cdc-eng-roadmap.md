@@ -43,4 +43,4 @@ This is a roadmap of TiCDC project from engineering and architecture aspects. It
 
 - Remove upstream PD denpendency, store changefeed metadata to meta store
 - Throuput threshold for different upstream TiDB Cluster
-- TiCDC fetch data change logs from the Unified Log Service to eliminate incremental scan
+- TiCDC fetch data change logs from the Unified Log Service to eliminate incremental scan issue and simplify network complexity on cloud enviornment
