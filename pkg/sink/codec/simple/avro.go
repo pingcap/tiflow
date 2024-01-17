@@ -42,16 +42,26 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 			"charset":   col.GetCharset(),
 			"collate":   col.GetCollate(),
 			"length":    col.GetFlen(),
-			"elements":  col.GetElems(),
-			"unsigned":  mysql.HasUnsignedFlag(col.GetFlag()),
-			"zerofill":  mysql.HasZerofillFlag(col.GetFlag()),
 		}
 
 		switch col.GetType() {
-		// Float and Double decimal is always -1, do not encode it into the schema.
-		case mysql.TypeFloat, mysql.TypeDouble:
+		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong,
+			mysql.TypeFloat, mysql.TypeDouble, mysql.TypeBit, mysql.TypeYear:
+			mysqlType["unsigned"] = map[string]interface{}{
+				"boolean": mysql.HasUnsignedFlag(col.GetFlag()),
+			}
+			mysqlType["zerofill"] = map[string]interface{}{
+				"boolean": mysql.HasZerofillFlag(col.GetFlag()),
+			}
+		case mysql.TypeEnum, mysql.TypeSet:
+			mysqlType["elements"] = map[string]interface{}{
+				"array": col.GetElems(),
+			}
+		case mysql.TypeNewDecimal:
+			mysqlType["decimal"] = map[string]interface{}{
+				"int": col.GetDecimal(),
+			}
 		default:
-			mysqlType["decimal"] = col.GetDecimal()
 		}
 
 		column := map[string]interface{}{
@@ -337,20 +347,39 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 	for _, raw := range rawColumns {
 		raw := raw.(map[string]interface{})
 		rawDataType := raw["dataType"].(map[string]interface{})
-		rawElements := rawDataType["elements"].([]interface{})
-		elements := make([]string, 0, len(rawElements))
-		for _, rawElement := range rawElements {
-			elements = append(elements, rawElement.(string))
+
+		var (
+			decimal  int
+			elements []string
+			unsigned bool
+			zerofill bool
+		)
+
+		if rawDataType["elements"] != nil {
+			rawElements := rawDataType["elements"].(map[string]interface{})["array"].([]interface{})
+			for _, rawElement := range rawElements {
+				elements = append(elements, rawElement.(string))
+			}
 		}
+		if rawDataType["decimal"] != nil {
+			decimal = int(rawDataType["decimal"].(map[string]interface{})["int"].(int32))
+		}
+		if rawDataType["unsigned"] != nil {
+			unsigned = rawDataType["unsigned"].(map[string]interface{})["boolean"].(bool)
+		}
+		if rawDataType["zerofill"] != nil {
+			zerofill = rawDataType["zerofill"].(map[string]interface{})["boolean"].(bool)
+		}
+
 		dt := dataType{
 			MySQLType: rawDataType["mysqlType"].(string),
 			Charset:   rawDataType["charset"].(string),
 			Collate:   rawDataType["collate"].(string),
 			Length:    int(rawDataType["length"].(int64)),
-			Decimal:   int(rawDataType["decimal"].(int32)),
+			Decimal:   decimal,
 			Elements:  elements,
-			Unsigned:  rawDataType["unsigned"].(bool),
-			Zerofill:  rawDataType["zerofill"].(bool),
+			Unsigned:  unsigned,
+			Zerofill:  zerofill,
 		}
 
 		var defaultValue interface{}
