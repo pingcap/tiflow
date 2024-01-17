@@ -15,10 +15,12 @@ package frontier
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"strings"
 
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -84,7 +86,7 @@ func (s *spanFrontier) Frontier() uint64 {
 func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
 	// it's the fast part to detect if the region is split or merged,
 	// if not we can update the minTsHeap with use new ts directly
-	if n, ok := s.cachedRegions[regionID]; ok && n.regionID != fakeRegionID && n.end != nil {
+	if n, ok := s.cachedRegions[regionID]; ok && n.regionID == regionID && n.end != nil {
 		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
 			return
@@ -106,6 +108,7 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 	if next != nil {
 		if bytes.Equal(seekRes.Node().Key(), span.Start) && bytes.Equal(next.Key(), span.End) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
+			delete(s.cachedRegions, seekRes.Node().regionID)
 			if regionID != fakeRegionID {
 				s.cachedRegions[regionID] = seekRes.Node()
 				s.cachedRegions[regionID].regionID = regionID
@@ -164,6 +167,44 @@ func (s *spanFrontier) String() string {
 		} else {
 			buf.WriteString(fmt.Sprintf("[%s @ %d] ", key, ts))
 		}
+	})
+	return buf.String()
+}
+
+func (s *spanFrontier) stringWtihRegionID() string {
+	var buf strings.Builder
+	s.spanList.Entries(func(n *skipListNode) bool {
+		if n.Value().key == math.MaxUint64 {
+			buf.WriteString(fmt.Sprintf("[%d:%s @ Max] ", n.regionID, hex.EncodeToString(n.Key())))
+		} else { // the next span
+			buf.WriteString(fmt.Sprintf("[%d:%s @ %d] ", n.regionID, hex.EncodeToString(n.Key()), n.Value().key))
+		}
+		return true
+	})
+	return buf.String()
+}
+
+// SpanString returns the string of the span's frontier.
+func (s *spanFrontier) SpanString(span tablepb.Span) string {
+	var buf strings.Builder
+	idx := 0
+	s.spanList.Entries(func(n *skipListNode) bool {
+		key := n.Key()
+		nextKey := []byte{}
+		if n.Next() != nil {
+			nextKey = n.Next().Key()
+		}
+		if n.Value().key == math.MaxUint64 {
+			buf.WriteString(fmt.Sprintf("[%d:%s @ Max] ", n.regionID, hex.EncodeToString(n.Key())))
+		} else if idx == 0 || // head
+			bytes.Equal(key, span.StartKey) || // start key sapn
+			bytes.Equal(nextKey, span.StartKey) || // the previous sapn of start key
+			bytes.Equal(key, span.EndKey) { // the end key span
+			buf.WriteString(fmt.Sprintf("[%d:%s @ %d] ", n.regionID,
+				hex.EncodeToString(n.Key()), n.Value().key))
+		}
+		idx++
+		return true
 	})
 	return buf.String()
 }

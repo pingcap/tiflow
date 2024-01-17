@@ -20,6 +20,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -198,6 +199,39 @@ func TestSpanFrontierFallback(t *testing.T) {
 	// Bump, here we meet resolved ts fall back, where 10 is less than f.Frontier()
 	// But there is no data loss actually.
 	// f.Forward(spAC, 10)
+}
+
+func TestSpanString(t *testing.T) {
+	t.Parallel()
+
+	spAB := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}
+	spBC := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}
+	spCD := tablepb.Span{StartKey: []byte("c"), EndKey: []byte("d")}
+	spDE := tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}
+	spEF := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
+	spFG := tablepb.Span{StartKey: []byte("f"), EndKey: []byte("g")}
+	spGH := tablepb.Span{StartKey: []byte("g"), EndKey: []byte("h")}
+
+	spAH := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("h")}
+	f := NewFrontier(1, spAH).(*spanFrontier)
+	require.Equal(t, `[0:61 @ 1] [0:68 @ Max] `, f.SpanString(spAH))
+
+	f.Forward(1, spAB, 2)
+	f.Forward(2, spBC, 5)
+	f.Forward(3, spCD, 10)
+	f.Forward(4, spDE, 20)
+	f.Forward(5, spEF, 30)
+	f.Forward(6, spFG, 25)
+	f.Forward(7, spGH, 35)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[1:61 @ 2] [2:62 @ 5] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [6:66 @ 25] [7:67 @ 35] [0:68 @ Max] `, f.stringWtihRegionID())
+	// Print 5 span: start, before, target span, next, end
+	require.Equal(t, `[1:61 @ 2] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [0:68 @ Max] `, f.SpanString(spDE))
+
+	spBH := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("h")}
+	f.Forward(8, spBH, 18)
+	require.Equal(t, uint64(2), f.Frontier())
+	require.Equal(t, `[1:61 @ 2] [8:62 @ 18] [0:68 @ Max] `, f.stringWtihRegionID())
 }
 
 func TestMinMax(t *testing.T) {
