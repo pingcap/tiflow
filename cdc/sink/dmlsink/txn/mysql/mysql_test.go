@@ -345,6 +345,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 					Value: "test",
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 		{
 			StartTs:  5,
@@ -364,6 +365,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 					Value: "test",
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -398,6 +400,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 					Value: 1,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -409,6 +412,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 					Value: 2,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -469,6 +473,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 					Value: 1,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -480,6 +485,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 					Value: 2,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -540,6 +546,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 					Value: 1,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 		{
 			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
@@ -551,6 +558,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 					Value: 2,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -618,6 +626,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 					Value: 1,
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -848,6 +857,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 					Value: "test",
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 		{
 			StartTs:  2,
@@ -867,6 +877,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 					Value: "test",
 				},
 			},
+			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -1202,9 +1213,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
 						Name:    "a3",
@@ -1222,9 +1234,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name:    "a3",
@@ -1254,16 +1267,18 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
 						Name:    "a3",
 						Type:    mysql.TypeVarchar,
 						Charset: charset.CharsetGBK,
-						Flag:    model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
-						Value:   "你好",
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: "你好",
 					}},
 					IndexColumns:        [][]int{{1, 1}},
 					ApproximateDataSize: 10,
@@ -1273,9 +1288,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.HandleKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name:    "a3",
@@ -1306,9 +1322,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
 						Name:    "a3",
@@ -1319,9 +1336,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Value: []byte("开发"),
 					}},
 					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name:    "a3",
@@ -1339,9 +1357,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 3,
 					}, {
 						Name:    "a3",
@@ -1352,9 +1371,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Value: []byte("纽约"),
 					}},
 					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 4,
 					}, {
 						Name:    "a3",
@@ -1391,9 +1411,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name:    "a3",
@@ -1411,9 +1432,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
 						Name:    "a3",
@@ -1431,9 +1453,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813515,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name:    "a3",
@@ -1451,9 +1474,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
 						Name:    "a3",
@@ -1464,9 +1488,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Value: []byte("开发"),
 					}},
 					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name:    "a3",
@@ -1484,9 +1509,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					PreColumns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 3,
 					}, {
 						Name:    "a3",
@@ -1497,9 +1523,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						Value: []byte("纽约"),
 					}},
 					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag | model.UniqueKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 4,
 					}, {
 						Name:    "a3",
@@ -1546,10 +1573,8 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
-						Flag: model.BinaryFlag |
-							model.MultipleKeyFlag |
-							model.HandleKeyFlag |
-							model.UniqueKeyFlag,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
 						Name:    "a3",
@@ -1601,8 +1626,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
-						Flag: model.BinaryFlag |
-							model.MultipleKeyFlag |
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 4,
 					}, {
@@ -1747,17 +1771,19 @@ func TestGroupRowsByType(t *testing.T) {
 					CommitTs: 418658114257813517,
 					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
 					Columns: []*model.Column{nil, {
-						Name:  "a1",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}, {
-						Name:  "a3",
-						Type:  mysql.TypeLong,
-						Flag:  model.BinaryFlag | model.MultipleKeyFlag | model.HandleKeyFlag,
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}},
-					IndexColumns: [][]int{{1, 1}},
+					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813516,
@@ -1767,16 +1793,16 @@ func TestGroupRowsByType(t *testing.T) {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name: "a3",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{2, 2}},
+					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813516,
@@ -1786,16 +1812,16 @@ func TestGroupRowsByType(t *testing.T) {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name: "a3",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{2, 2}},
+					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813516,
@@ -1805,16 +1831,16 @@ func TestGroupRowsByType(t *testing.T) {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name: "a3",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{2, 2}},
+					IndexColumns: [][]int{{1, 2}},
 				},
 
 				{
@@ -1825,16 +1851,16 @@ func TestGroupRowsByType(t *testing.T) {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name: "a3",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{2, 2}},
+					IndexColumns: [][]int{{1, 2}},
 				},
 
 				{
@@ -1845,16 +1871,16 @@ func TestGroupRowsByType(t *testing.T) {
 						Name: "a1",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}, {
 						Name: "a3",
 						Type: mysql.TypeLong,
 						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.HandleKeyFlag,
+							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{2, 2}},
+					IndexColumns: [][]int{{1, 2}},
 				},
 			},
 			maxTxnRow: 4,

@@ -533,12 +533,17 @@ type RedoColumn struct {
 // Note the result TableInfo may not be same as the original TableInfo in tidb.
 // The only guarantee is that you can restore the `Name`, `Type`, `Charset`, `Collation`
 // and `Flag` field of `Column` using the result TableInfo.
+// The precondition required for calling this function:
+//  1. There must be at least one handle key in `columns`;
+//  2. The handle key must either be a primary key or a non null unique key;
+//  3. The index that is selected as the handle must be provided in `indexColumns`;
 func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]int) *model.TableInfo {
 	ret := &model.TableInfo{}
 	ret.Name = model.NewCIStr(tableName)
 
 	hasPrimaryKeyColumn := false
-	// Add a mock id to identify columns inside cdc
+	hasHandleKeyColumn := false
+	// add a mock id to identify columns inside cdc
 	nextMockColID := int64(100) // 100 is an arbitrary number
 	for i, col := range columns {
 		columnInfo := &model.ColumnInfo{
@@ -589,7 +594,10 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 			columnInfo.AddFlag(mysql.PriKeyFlag)
 			hasPrimaryKeyColumn = true
 			if !flag.IsHandleKey() {
-				log.Panic("Primary key must be handle key")
+				log.Panic("Primary key must be handle key",
+					zap.String("table", tableName),
+					zap.Any("columns", columns),
+					zap.Any("indexColumns", indexColumns))
 			}
 			// just set it for test compatibility,
 			// actually we cannot deduce the value of IsCommonHandle from the provided args.
@@ -597,6 +605,15 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 		}
 		if flag.IsUniqueKey() {
 			columnInfo.AddFlag(mysql.UniqueKeyFlag)
+		}
+		if flag.IsHandleKey() {
+			hasHandleKeyColumn = true
+			if !flag.IsPrimaryKey() && !flag.IsUniqueKey() {
+				log.Panic("Handle key must either be primary key or unique key",
+					zap.String("table", tableName),
+					zap.Any("columns", columns),
+					zap.Any("indexColumns", indexColumns))
+			}
 		}
 		if !flag.IsNullable() {
 			columnInfo.AddFlag(mysql.NotNullFlag)
@@ -608,6 +625,12 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 			columnInfo.AddFlag(mysql.UnsignedFlag)
 		}
 		ret.Columns = append(ret.Columns, columnInfo)
+	}
+	if !hasHandleKeyColumn {
+		log.Panic("Handle key not found",
+			zap.String("table", tableName),
+			zap.Any("columns", columns),
+			zap.Any("indexColumns", indexColumns))
 	}
 
 	hasPrimaryKeyIndex := false
@@ -637,16 +660,15 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 		}
 
 		isPrimary := true
-		isHandle := true
+		isAllColumnsHandle := true
 		for _, offset := range colOffsets {
 			col := columns[offset]
 			// When only all columns in the index are primary key, then the index is primary key.
 			if col == nil || !col.Flag.IsPrimaryKey() {
 				isPrimary = false
 			}
-			// When only all columns in the index are handle, then the index is selected as handle.
 			if col == nil || !col.Flag.IsHandleKey() {
-				isHandle = false
+				isAllColumnsHandle = false
 			}
 
 			tiCol := ret.Columns[offset]
@@ -657,15 +679,24 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 			indexInfo.Primary = isPrimary
 		}
 		hasPrimaryKeyIndex = hasPrimaryKeyIndex || isPrimary
-		if isHandle {
-			indexInfo.ID = minIndexID
-			if hasHandleIndex {
-				log.Panic("Invalid state: multiple handle index found",
-					zap.Int("index", i),
+		if isAllColumnsHandle {
+			// If there is no primary index, only one index will contain columns which are all handles.
+			// If there is a primary index, the primary index must be the handle.
+			// And there may be another index which is a subset of the primary index. So we skip this check.
+			if hasHandleIndex && !hasPrimaryKeyColumn {
+				log.Panic("Multiple handle index found",
+					zap.String("table", tableName),
 					zap.Any("colOffsets", colOffsets),
-					zap.String("indexName", indexInfo.Name.O))
+					zap.String("indexName", indexInfo.Name.O),
+					zap.Any("columns", columns),
+					zap.Any("indexColumns", indexColumns))
 			}
 			hasHandleIndex = true
+		}
+		// If there is no primary column, we need allocate the min index id to the one selected as handle.
+		// In other cases, we don't care the concrete value of index id.
+		if isAllColumnsHandle && !hasPrimaryKeyColumn {
+			indexInfo.ID = minIndexID
 		} else {
 			indexInfo.ID = nextMockIndexID
 			nextMockIndexID += 1
@@ -676,11 +707,19 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 
 		ret.Indices = append(ret.Indices, indexInfo)
 	}
-	if hasPrimaryKeyColumn != hasPrimaryKeyIndex || !hasHandleIndex {
-		log.Panic("Invalid arguments",
+	if hasPrimaryKeyColumn != hasPrimaryKeyIndex {
+		log.Panic("Primary key column and primary key index is not consistent",
+			zap.String("table", tableName),
+			zap.Any("columns", columns),
+			zap.Any("indexColumns", indexColumns),
 			zap.Bool("hasPrimaryKeyColumn", hasPrimaryKeyColumn),
-			zap.Bool("hasPrimaryKeyIndex", hasPrimaryKeyIndex),
-			zap.Bool("hasHandleIndex", hasHandleIndex))
+			zap.Bool("hasPrimaryKeyIndex", hasPrimaryKeyIndex))
+	}
+	if !hasHandleIndex {
+		log.Panic("Handle index not found",
+			zap.String("table", tableName),
+			zap.Any("columns", columns),
+			zap.Any("indexColumns", indexColumns))
 	}
 	return ret
 }

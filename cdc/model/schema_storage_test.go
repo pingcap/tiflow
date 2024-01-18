@@ -409,18 +409,18 @@ func TestBuildTiDBTableInfoWithCommonPrimaryKey(t *testing.T) {
 	}, {
 		Name: "a4",
 		Type: mysql.TypeVarchar,
-		Flag: PrimaryKeyFlag | HandleKeyFlag | MultipleKeyFlag,
+		Flag: PrimaryKeyFlag | UniqueKeyFlag | HandleKeyFlag | MultipleKeyFlag,
 	}, {
 		Name: "a9",
 		Type: mysql.TypeLong,
 		Flag: NullableFlag | UnsignedFlag,
 	}}
-	tidbTableInfo := BuildTiDBTableInfo("t", columns, [][]int{{0, 2}, {0, 1}})
+	tidbTableInfo := BuildTiDBTableInfo("t", columns, [][]int{{0, 2}, {0, 1}, {2}})
 	tableInfo := WrapTableInfo(100, "test", 1000, tidbTableInfo)
 	require.Equal(t, "test", tableInfo.TableName.Schema)
 	require.Equal(t, "t", tableInfo.TableName.Table)
 	require.Equal(t, 4, len(tableInfo.columnsOffset))
-	require.Equal(t, 2, len(tableInfo.indicesOffset))
+	require.Equal(t, 3, len(tableInfo.indicesOffset))
 	require.Equal(t, 4, len(tableInfo.Columns))
 
 	require.Equal(t, tableInfo.Columns[0].ID, tableInfo.ForceGetColumnIDByName("a1"))
