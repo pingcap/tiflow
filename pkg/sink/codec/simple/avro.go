@@ -170,7 +170,7 @@ func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"union": payload,
+		"com.pingcap.simple.avro.Message": payload,
 	}
 }
 
