@@ -260,9 +260,8 @@ type RegionRangeLock struct {
 	rangeCheckpointTs *rangeTsMap
 	rangeLock         *btree.BTreeG[*rangeLockEntry]
 	regionIDLock      map[uint64]*rangeLockEntry
-	// unlocked  *btree.BTreeG[rangeUnlockedEntry]
-	stopped  bool
-	refCount uint64
+	stopped           bool
+	refCount          uint64
 }
 
 // NewRegionRangeLock creates a new RegionRangeLock.
