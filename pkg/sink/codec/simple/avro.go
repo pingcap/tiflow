@@ -134,13 +134,17 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 }
 
 func newResolvedMessageMap(ts uint64) map[string]interface{} {
-	return map[string]interface{}{
+	payload := map[string]interface{}{
 		"com.pingcap.simple.avro.Watermark": map[string]interface{}{
 			"version":  defaultVersion,
 			"type":     string(WatermarkType),
 			"commitTs": int64(ts),
 			"buildTs":  time.Now().UnixMilli(),
 		},
+	}
+
+	return map[string]interface{}{
+		"com.pingcap.simple.avro.Message": payload,
 	}
 }
 
@@ -276,9 +280,15 @@ func newDMLMessageMap(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	return map[string]interface{}{
+	payload := map[string]interface{}{
 		"com.pingcap.simple.avro.DML": m,
-	}, nil
+	}
+
+	result := map[string]interface{}{
+		"com.pingcap.simple.avro.Message": payload,
+	}
+
+	return result, nil
 }
 
 func recycleMap(m map[string]interface{}) {

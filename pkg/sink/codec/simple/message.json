@@ -384,5 +384,21 @@
         "default": null
       }
     ]
+  },
+  {
+    "namespace": "com.pingcap.simple.avro",
+    "name": "Message",
+    "docs": "the union for all kind of messages",
+    "fields": [
+      {
+        "name":  "payload",
+        "type": [
+          "com.pingcap.simple.avro.Watermark",
+          "com.pingcap.simple.avro.Bootstrap",
+          "com.pingcap.simple.avro.DDL",
+          "com.pingcap.simple.avro.DML"
+        ]
+      }
+    ]
   }
 ]
