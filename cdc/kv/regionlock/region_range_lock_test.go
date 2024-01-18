@@ -181,31 +181,28 @@ func TestRangeTsMapSetUnset(t *testing.T) {
 	t.Parallel()
 
 	m := newRangeTsMap([]byte("a"), []byte("z"), 100)
-    require.Equal(t, 1, m.m.Len())
-    require.Equal(t, uint64(100), m.GetMin([]byte("a"), []byte("z")))
+	require.Equal(t, 1, m.m.Len())
+	require.Equal(t, uint64(100), m.getMinTsInRange([]byte("a"), []byte("z")))
 
-    // Double set, should panic.
-    require.Panics(t, func() {  m.Set([]byte("a"), []byte("m"), 101)})
+	// Double set, should panic.
+	require.Panics(t, func() { m.clone().set([]byte("a"), []byte("m"), 101) })
 
-    // Unset and then get other ranges.
-    m.Unset([]byte("m"), []byte("x"))
-    require.Equal(t, 3, m.m.Len())
-    require.Equal(t, uint64(100), m.GetMin([]byte("a"), []byte("m")))
-    require.Equal(t, uint64(100), m.GetMin([]byte("x"), []byte("z")))
+	// Unset and then get other ranges.
+	m.unset([]byte("m"), []byte("x"))
+	require.Equal(t, 3, m.m.Len())
+	require.Equal(t, uint64(100), m.getMinTsInRange([]byte("a"), []byte("m")))
+	require.Equal(t, uint64(100), m.getMinTsInRange([]byte("x"), []byte("z")))
 
-    // Unset and then get, should panic.
-    require.Panics(t, func() { m.GetMin([]byte("m"), []byte("x")) })
-    require.Panics(t, func() { m.GetMin([]byte("n"), []byte("w")) })
-    require.Panics(t, func() { m.GetMin([]byte("a"), []byte("z")) })
+	// Unset and then get, should panic.
+	require.Panics(t, func() { m.clone().getMinTsInRange([]byte("m"), []byte("x")) })
+	require.Panics(t, func() { m.clone().getMinTsInRange([]byte("n"), []byte("w")) })
+	require.Panics(t, func() { m.clone().getMinTsInRange([]byte("a"), []byte("z")) })
 
-    // Unset all ranges.
-    m.Unset([]byte("a"), []byte("m"))
-    m.Unset([]byte("x"), []byte("z"))
-    m.m.Ascend(func(i rangeTsEntry) bool {
-        fmt.Printf("key: %s, isUnset: %t\n", i.startKey, i.isUnset)
-        return true
-    })
-    // require.Equal(t, 1, m.m.Len())
+	// Unset all ranges.
+	m.unset([]byte("a"), []byte("m"))
+	m.unset([]byte("x"), []byte("z"))
+	require.Equal(t, 1, m.m.Len())
+	require.Panics(t, func() { m.clone().getMinTsInRange([]byte("a"), []byte("z")) })
 }
 
 func TestRangeTsMap(t *testing.T) {
@@ -214,14 +211,18 @@ func TestRangeTsMap(t *testing.T) {
 	m := newRangeTsMap([]byte("a"), []byte("z"), math.MaxUint64)
 
 	mustGetMin := func(startKey, endKey string, expectedTs uint64) {
-		ts := m.GetMin([]byte(startKey), []byte(endKey))
+		ts := m.getMinTsInRange([]byte(startKey), []byte(endKey))
 		require.Equal(t, expectedTs, ts)
 	}
 	set := func(startKey, endKey string, ts uint64) {
-		m.Set([]byte(startKey), []byte(endKey), ts)
+		m.set([]byte(startKey), []byte(endKey), ts)
+	}
+	unset := func(startKey, endKey string) {
+		m.unset([]byte(startKey), []byte(endKey))
 	}
 
 	mustGetMin("a", "z", math.MaxUint64)
+	unset("b", "e")
 	set("b", "e", 100)
 	mustGetMin("a", "z", 100)
 	mustGetMin("b", "e", 100)
@@ -231,12 +232,14 @@ func TestRangeTsMap(t *testing.T) {
 	mustGetMin("e", "f", math.MaxUint64)
 	mustGetMin("a", "b\x00", 100)
 
+	unset("d", "g")
 	set("d", "g", 80)
 	mustGetMin("d", "g", 80)
 	mustGetMin("a", "z", 80)
 	mustGetMin("d", "e", 80)
 	mustGetMin("a", "d", 100)
 
+	unset("c", "f")
 	set("c", "f", 120)
 	mustGetMin("c", "f", 120)
 	mustGetMin("c", "d", 120)
@@ -245,6 +248,7 @@ func TestRangeTsMap(t *testing.T) {
 	mustGetMin("b", "e", 100)
 	mustGetMin("a", "z", 80)
 
+	unset("c", "f")
 	set("c", "f", 130)
 	mustGetMin("c", "f", 130)
 	mustGetMin("c", "d", 130)
@@ -286,10 +290,20 @@ func TestRegionRangeLockCollect(t *testing.T) {
 }
 
 func TestGetMinCheckpointTs(t *testing.T) {
-	// ctx := context.Background()
-	startKey, endKey := spanz.GetTableRange(1)
-	l := NewRegionRangeLock(1, startKey, endKey, 100, "")
-	fmt.Printf("min ts: %d\n", l.GetMinCheckpointTs())
+	l := NewRegionRangeLock(1, []byte("a"), []byte("z"), 100, "")
+
+	res := l.LockRange(context.Background(), []byte("m"), []byte("x"), 1, 1)
+	res.LockedRange.CheckpointTs.Store(101)
+	require.Equal(t, LockRangeStatusSuccess, res.Status)
+	require.Equal(t, uint64(100), l.GetMinCheckpointTs())
+
+	res = l.LockRange(context.Background(), []byte("a"), []byte("m"), 2, 1)
+	require.Equal(t, LockRangeStatusSuccess, res.Status)
+	res.LockedRange.CheckpointTs.Store(102)
+	res = l.LockRange(context.Background(), []byte("x"), []byte("z"), 3, 1)
+	require.Equal(t, LockRangeStatusSuccess, res.Status)
+	res.LockedRange.CheckpointTs.Store(103)
+	require.Equal(t, uint64(101), l.GetMinCheckpointTs())
 }
 
 func BenchmarkOneMillionRegions(b *testing.B) {

@@ -16,8 +16,6 @@ package kv
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -740,15 +738,11 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.Any("slowRegion", attr.SlowestRegion))
 			}
 			if len(attr.Holes) > 0 {
-				holes := make([]string, 0, len(attr.Holes))
-				for _, hole := range attr.Holes {
-					holes = append(holes, fmt.Sprintf("[%s,%s)", hole.StartKey, hole.EndKey))
-				}
 				log.Info("event feed holes exist",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
-					zap.String("holes", strings.Join(holes, ", ")))
+					zap.Any("holes", attr.Holes))
 			}
 		}
 		s.totalSpans.RUnlock()

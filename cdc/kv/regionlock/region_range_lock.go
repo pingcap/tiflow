@@ -32,10 +32,10 @@ import (
 
 type rangeTsEntry struct {
 	// Only startKey is necessary. End key can be inferred by the next item,
-    // since the map always keeps a continuous range.
+	// since the map always keeps a continuous range.
 	startKey []byte
 	ts       uint64
-    isUnset bool
+	isUnset  bool
 }
 
 func rangeTsEntryWithKey(key []byte) rangeTsEntry {
@@ -49,152 +49,171 @@ func rangeTsEntryLess(a, b rangeTsEntry) bool {
 // rangeTsMap represents a map from key range to a timestamp. It supports
 // range set and calculating min value among a specified range.
 type rangeTsMap struct {
-	m *btree.BTreeG[rangeTsEntry]
-    start []byte
-    end []byte
+	m     *btree.BTreeG[rangeTsEntry]
+	start []byte
+	end   []byte
 }
 
 // newRangeTsMap creates a RangeTsMap.
 func newRangeTsMap(startKey, endKey []byte, startTs uint64) *rangeTsMap {
 	m := &rangeTsMap{
-        m: btree.NewG(16, rangeTsEntryLess),
-        start: startKey,
-        end: endKey,
-    }
-	m.Set(startKey, endKey, startTs)
+		m:     btree.NewG(16, rangeTsEntryLess),
+		start: startKey,
+		end:   endKey,
+	}
+	m.set(startKey, endKey, startTs)
 	return m
 }
 
-// Set sets the corresponding ts of the given range to the specified value.
-func (m *rangeTsMap) Set(startKey, endKey []byte, ts uint64) {
-    // The upperbound can be partial overlapped by an exist range.
-    if !bytes.Equal(m.end, endKey) && !m.m.Has(rangeTsEntryWithKey(endKey)) {
-        var found bool
-        var endKeyOverlapped rangeTsEntry
+func (m *rangeTsMap) clone() (target *rangeTsMap) {
+	target = &rangeTsMap{
+		m:     btree.NewG(16, rangeTsEntryLess),
+		start: m.start,
+		end:   m.end,
+	}
+	m.m.Ascend(func(i rangeTsEntry) bool {
+		target.m.ReplaceOrInsert(i)
+		return true
+	})
+	return
+}
+
+func (m *rangeTsMap) set(startKey, endKey []byte, ts uint64) {
+	if !bytes.Equal(m.end, endKey) && !m.m.Has(rangeTsEntryWithKey(endKey)) {
+		var found bool
+		var endKeyOverlapped rangeTsEntry
 		m.m.DescendLessOrEqual(rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
-            found = true
-            endKeyOverlapped.ts = i.ts
-            endKeyOverlapped.isUnset = i.isUnset
+			found = true
+			endKeyOverlapped.ts = i.ts
+			endKeyOverlapped.isUnset = i.isUnset
 			return false
 		})
-        if found {
-            if !endKeyOverlapped.isUnset {
-                log.Panic("rangeTsMap double set")
-            }
-            endKeyOverlapped.startKey = endKey
-            m.m.ReplaceOrInsert(endKeyOverlapped)
-        }
+		if found {
+			if !endKeyOverlapped.isUnset {
+				log.Panic("rangeTsMap double set")
+			}
+			endKeyOverlapped.startKey = endKey
+			m.m.ReplaceOrInsert(endKeyOverlapped)
+		}
 	}
 
-    // The lowerbound can be partial overlapped by an exist range.
-    if !m.m.Has(rangeTsEntryWithKey(startKey)) {
-        var found bool
-        var startKeyOverlapped rangeTsEntry
-        m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i rangeTsEntry) bool {
-            found = true
-            startKeyOverlapped.isUnset = i.isUnset
-            return false
-        })
-        if found && !startKeyOverlapped.isUnset {
-            log.Panic("rangeTsMap double set")
-        }
-    }
+	if !m.m.Has(rangeTsEntryWithKey(startKey)) {
+		var found bool
+		var startKeyOverlapped rangeTsEntry
+		m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i rangeTsEntry) bool {
+			found = true
+			startKeyOverlapped.isUnset = i.isUnset
+			return false
+		})
+		if found && !startKeyOverlapped.isUnset {
+			log.Panic("rangeTsMap double set")
+		}
+	}
 
-    // Delete all ranges which are completely covered.
 	entriesToDelete := make([]rangeTsEntry, 0)
-    m.m.AscendRange(rangeTsEntryWithKey(startKey), rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
-        if !i.isUnset {
-            log.Panic("rangeTsMap double set")
-        }
-        entriesToDelete = append(entriesToDelete, i)
-        return true
-    })
+	m.m.AscendRange(rangeTsEntryWithKey(startKey), rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
+		if !i.isUnset {
+			log.Panic("rangeTsMap double set")
+		}
+		entriesToDelete = append(entriesToDelete, i)
+		return true
+	})
 	for _, e := range entriesToDelete {
 		m.m.Delete(e)
 	}
 
-    m.m.ReplaceOrInsert(rangeTsEntry{startKey: startKey, ts: ts})
+	m.m.ReplaceOrInsert(rangeTsEntry{startKey: startKey, ts: ts})
 }
 
-// Unset unsets the given range.
-func (m *rangeTsMap) Unset(startKey, endKey []byte) {
-    if !bytes.Equal(m.end, endKey) {
-        neighbor, exist := m.m.Get(rangeTsEntryWithKey(endKey))
-        if !exist {
-            var found bool
-            var endKeyOverlapped rangeTsEntry
-            m.m.DescendLessOrEqual(rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
-                found = true
-                endKeyOverlapped.ts = i.ts
-                endKeyOverlapped.isUnset = i.isUnset
-                return false
-            })
-            if found {
-                if endKeyOverlapped.isUnset {
-                    log.Panic("rangeTsMap double unset")
-                }
-                endKeyOverlapped.startKey = endKey
-                m.m.ReplaceOrInsert(endKeyOverlapped)
-            }
-        } else {
-            if neighbor.isUnset {
-                m.m.Delete(neighbor)
-            }   
-        }
-    }
+func (m *rangeTsMap) unset(startKey, endKey []byte) {
+	var neighbor rangeTsEntry
+	var exist bool
 
-    var neighbor rangeTsEntry
-    var exist bool
-    m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i rangeTsEntry) bool {
-        if bytes.Compare(i.startKey, startKey) < 0 {
-            neighbor = i
-            exist = true
-            return false
-        }
-        return true
-    })
-    shouldInsert := exist && neighbor.isUnset
+	if !bytes.Equal(m.end, endKey) {
+		if neighbor, exist = m.m.Get(rangeTsEntryWithKey(endKey)); !exist {
+			var found bool
+			var endKeyOverlapped rangeTsEntry
+			m.m.DescendLessOrEqual(rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
+				found = true
+				endKeyOverlapped.ts = i.ts
+				endKeyOverlapped.isUnset = i.isUnset
+				return false
+			})
+			if found {
+				if endKeyOverlapped.isUnset {
+					log.Panic("rangeTsMap double unset")
+				}
+				endKeyOverlapped.startKey = endKey
+				m.m.ReplaceOrInsert(endKeyOverlapped)
+			}
+		} else if neighbor.isUnset {
+			m.m.Delete(neighbor)
+		}
+	}
+
+	exist = false
+	m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i rangeTsEntry) bool {
+		if bytes.Compare(i.startKey, startKey) < 0 {
+			neighbor = i
+			exist = true
+			return false
+		}
+		return true
+	})
+	shouldInsert := !exist || !neighbor.isUnset
 
 	entriesToDelete := make([]rangeTsEntry, 0)
-    m.m.AscendRange(rangeTsEntryWithKey(startKey), rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
-        if i.isUnset {
-            log.Panic("rangeTsMap double unset")
-        }
-        entriesToDelete = append(entriesToDelete, i)
-        return true
-    })
+	m.m.AscendRange(rangeTsEntryWithKey(startKey), rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
+		if i.isUnset {
+			log.Panic("rangeTsMap double unset")
+		}
+		entriesToDelete = append(entriesToDelete, i)
+		return true
+	})
 	for _, e := range entriesToDelete {
 		m.m.Delete(e)
 	}
 
-    if shouldInsert {
-        m.m.ReplaceOrInsert(rangeTsEntry{startKey: startKey, isUnset: true})
-    }
+	if shouldInsert {
+		m.m.ReplaceOrInsert(rangeTsEntry{startKey: startKey, isUnset: true})
+	}
 }
 
-// GetMin gets the min ts value among the given range. endKey must be greater than startKey.
-func (m *rangeTsMap) GetMin(startKey, endKey []byte) uint64 {
+func (m *rangeTsMap) getMinTsInRange(startKey, endKey []byte) uint64 {
 	var ts uint64 = math.MaxUint64
 
-    if _, ok := m.m.Get(rangeTsEntryWithKey(startKey)); !ok {
-        m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i rangeTsEntry) bool {
-            if i.isUnset {
-                log.Panic("rangeTsMap get after unset")
-            }
-            ts = i.ts
-            return false
-        })
-    }
+	if _, ok := m.m.Get(rangeTsEntryWithKey(startKey)); !ok {
+		m.m.DescendLessOrEqual(rangeTsEntryWithKey(startKey), func(i rangeTsEntry) bool {
+			if i.isUnset {
+				log.Panic("rangeTsMap get after unset")
+			}
+			ts = i.ts
+			return false
+		})
+	}
 
-    m.m.AscendRange(rangeTsEntryWithKey(startKey), rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
-        if i.isUnset {
-            log.Panic("rangeTsMap get after unset")
-        }
-        if ts > i.ts {
-            ts = i.ts
-        }
-        return true
-    })
+	m.m.AscendRange(rangeTsEntryWithKey(startKey), rangeTsEntryWithKey(endKey), func(i rangeTsEntry) bool {
+		if i.isUnset {
+			log.Panic("rangeTsMap get after unset")
+		}
+		if ts > i.ts {
+			ts = i.ts
+		}
+		return true
+	})
+
+	return ts
+}
+
+func (m *rangeTsMap) getMinTs() uint64 {
+	var ts uint64 = math.MaxUint64
+
+	m.m.Ascend(func(i rangeTsEntry) bool {
+		if !i.isUnset && ts > i.ts {
+			ts = i.ts
+		}
+		return true
+	})
 
 	return ts
 }
@@ -306,7 +325,7 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 	overlappingEntries := l.getOverlappedEntries(startKey, endKey, regionID)
 
 	if len(overlappingEntries) == 0 {
-		checkpointTs := l.rangeCheckpointTs.GetMin(startKey, endKey)
+		checkpointTs := l.rangeCheckpointTs.getMinTsInRange(startKey, endKey)
 		newEntry := &rangeLockEntry{
 			startKey: startKey,
 			endKey:   endKey,
@@ -318,10 +337,11 @@ func (l *RegionRangeLock) tryLockRange(startKey, endKey []byte, regionID, versio
 		l.rangeLock.ReplaceOrInsert(newEntry)
 		l.regionIDLock[regionID] = newEntry
 
+		l.rangeCheckpointTs.unset(startKey, endKey)
 		log.Debug("range locked",
 			zap.String("changefeed", l.changefeedLogInfo),
 			zap.Uint64("lockID", l.id),
-            zap.Uint64("regionID", regionID),
+			zap.Uint64("regionID", regionID),
 			zap.Uint64("version", version),
 			zap.Uint64("checkpointTs", checkpointTs),
 			zap.String("startKey", hex.EncodeToString(startKey)),
@@ -499,7 +519,7 @@ func (l *RegionRangeLock) UnlockRange(
 		newCheckpointTs = entry.state.CheckpointTs.Load()
 	}
 
-	l.rangeCheckpointTs.Set(startKey, endKey, newCheckpointTs)
+	l.rangeCheckpointTs.set(startKey, endKey, newCheckpointTs)
 	log.Debug("unlocked range",
 		zap.String("changefeed", l.changefeedLogInfo),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
@@ -586,7 +606,9 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 			action(item.regionID, item.version, &item.state, span)
 		}
 		if spanz.EndCompare(lastEnd, item.startKey) < 0 {
-			r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: item.startKey})
+			span := tablepb.Span{StartKey: lastEnd, EndKey: item.startKey}
+			ts := l.rangeCheckpointTs.getMinTsInRange(lastEnd, item.startKey)
+			r.Holes = append(r.Holes, HoleAttrs{Span: span, CheckpointTs: ts})
 		}
 		ckpt := item.state.CheckpointTs.Load()
 		if ckpt > r.FastestRegion.CheckpointTs {
@@ -605,7 +627,9 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 		return true
 	})
 	if spanz.EndCompare(lastEnd, l.totalSpan.EndKey) < 0 {
-		r.Holes = append(r.Holes, tablepb.Span{StartKey: lastEnd, EndKey: l.totalSpan.EndKey})
+		span := tablepb.Span{StartKey: lastEnd, EndKey: l.totalSpan.EndKey}
+		ts := l.rangeCheckpointTs.getMinTsInRange(lastEnd, l.totalSpan.EndKey)
+		r.Holes = append(r.Holes, HoleAttrs{Span: span, CheckpointTs: ts})
 	}
 	return
 }
@@ -613,7 +637,7 @@ func (l *RegionRangeLock) CollectLockedRangeAttrs(
 // CollectedLockedRangeAttrs returns by `RegionRangeLock.CollectedLockedRangeAttrs`.
 type CollectedLockedRangeAttrs struct {
 	LockedRegionCount int
-	Holes             []tablepb.Span
+	Holes             []HoleAttrs
 	FastestRegion     LockedRangeAttrs
 	SlowestRegion     LockedRangeAttrs
 }
@@ -626,12 +650,18 @@ type LockedRangeAttrs struct {
 	Created      time.Time
 }
 
+// HoleAttrs is used for `CollectedLockedRangeAttrs`.
+type HoleAttrs struct {
+	Span         tablepb.Span
+	CheckpointTs uint64
+}
+
 // GetMinCheckpointTs gets the minimum checkpoint timestamp from range lock.
-func (l *RegionRangeLock) GetMinCheckpointTs() (minTs uint64) {
+func (l *RegionRangeLock) GetMinCheckpointTs() uint64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	minTs = math.MaxUint64
-	// return l.rangeCheckpointTs.GetMin(l.totalSpan.StartKey, l.totalSpan.EndKey)
+
+	var minTs uint64 = math.MaxUint64
 	l.rangeLock.Ascend(func(item *rangeLockEntry) bool {
 		ts := item.state.CheckpointTs.Load()
 		if ts < minTs {
@@ -639,5 +669,11 @@ func (l *RegionRangeLock) GetMinCheckpointTs() (minTs uint64) {
 		}
 		return true
 	})
-	return
+
+	unlockedMinTs := l.rangeCheckpointTs.getMinTs()
+	if unlockedMinTs < minTs {
+		minTs = unlockedMinTs
+	}
+
+	return minTs
 }
