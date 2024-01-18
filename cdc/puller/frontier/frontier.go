@@ -20,6 +20,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -85,13 +86,8 @@ func (s *spanFrontier) Frontier() uint64 {
 func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
 	// it's the fast part to detect if the region is split or merged,
 	// if not we can update the minTsHeap with use new ts directly
-<<<<<<< HEAD
-	if n, ok := s.cachedRegions[regionID]; ok && n.regionID != fakeRegionID && n.end != nil {
-		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
-=======
 	if n, ok := s.cachedRegions[regionID]; ok && n.regionID == regionID && n.end != nil {
-		if bytes.Equal(n.Key(), span.StartKey) && bytes.Equal(n.End(), span.EndKey) {
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))
+		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
 			return
 		}
@@ -112,10 +108,7 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 	if next != nil {
 		if bytes.Equal(seekRes.Node().Key(), span.Start) && bytes.Equal(next.Key(), span.End) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
-<<<<<<< HEAD
-=======
 			delete(s.cachedRegions, seekRes.Node().regionID)
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))
 			if regionID != fakeRegionID {
 				s.cachedRegions[regionID] = seekRes.Node()
 				s.cachedRegions[regionID].regionID = regionID
@@ -177,8 +170,6 @@ func (s *spanFrontier) String() string {
 	})
 	return buf.String()
 }
-<<<<<<< HEAD
-=======
 
 func (s *spanFrontier) stringWtihRegionID() string {
 	var buf strings.Builder
@@ -217,4 +208,3 @@ func (s *spanFrontier) SpanString(span tablepb.Span) string {
 	})
 	return buf.String()
 }
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))
