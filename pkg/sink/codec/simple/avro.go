@@ -134,29 +134,36 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 }
 
 func newResolvedMessageMap(ts uint64) map[string]interface{} {
+	watermark := map[string]interface{}{
+		"version":  defaultVersion,
+		"type":     string(WatermarkType),
+		"commitTs": int64(ts),
+		"buildTs":  time.Now().UnixMilli(),
+	}
+
 	payload := map[string]interface{}{
-		"com.pingcap.simple.avro.Watermark": map[string]interface{}{
-			"version":  defaultVersion,
-			"type":     string(WatermarkType),
-			"commitTs": int64(ts),
-			"buildTs":  time.Now().UnixMilli(),
-		},
+		"com.pingcap.simple.avro.Watermark": watermark,
 	}
 
 	return map[string]interface{}{
-		"com.pingcap.simple.avro.Message": payload,
+		"union": payload,
 	}
 }
 
 func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
-	result := map[string]interface{}{
+	m := map[string]interface{}{
 		"version":     defaultVersion,
 		"type":        string(BootstrapType),
 		"tableSchema": newTableSchemaMap(tableInfo),
 		"buildTs":     time.Now().UnixMilli(),
 	}
+
+	payload := map[string]interface{}{
+		"com.pingcap.simple.avro.Bootstrap": m,
+	}
+
 	return map[string]interface{}{
-		"com.pingcap.simple.avro.Bootstrap": result,
+		"union": payload,
 	}
 }
 
@@ -206,8 +213,12 @@ func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 			"com.pingcap.simple.avro.TableSchema": tableSchema,
 		}
 	}
-	return map[string]interface{}{
+	payload := map[string]interface{}{
 		"com.pingcap.simple.avro.DDL": result,
+	}
+
+	return map[string]interface{}{
+		"union": payload,
 	}
 }
 
@@ -284,21 +295,19 @@ func newDMLMessageMap(
 		"com.pingcap.simple.avro.DML": m,
 	}
 
-	result := map[string]interface{}{
-		"com.pingcap.simple.avro.Message": payload,
-	}
-
-	return result, nil
+	return map[string]interface{}{
+		"union": payload,
+	}, nil
 }
 
 func recycleMap(m map[string]interface{}) {
-	eventMap := m["com.pingcap.simple.avro.DML"].(map[string]interface{})
+	eventMap := m["union"].(map[string]interface{})["com.pingcap.simple.avro.DML"].(map[string]interface{})
 
 	checksumMap := eventMap["com.pingcap.simple.avro.Checksum"]
 	if checksumMap != nil {
-		checksumMap := checksumMap.(map[string]interface{})
-		clear(checksumMap)
-		genericMapPool.Put(checksumMap)
+		holder := checksumMap.(map[string]interface{})
+		clear(holder)
+		genericMapPool.Put(holder)
 	}
 
 	dataMap := eventMap["data"]
@@ -438,7 +447,7 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 }
 
 func newMessageFromAvroNative(native interface{}, m *message) error {
-	rawValues, ok := native.(map[string]interface{})
+	rawValues, ok := native.(map[string]interface{})["union"].(map[string]interface{})
 	if !ok {
 		return cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro message to map")
 	}
