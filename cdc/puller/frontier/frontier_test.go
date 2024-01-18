@@ -15,11 +15,7 @@ package frontier
 
 import (
 	"bytes"
-<<<<<<< HEAD
-=======
-	"context"
 	"fmt"
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))
 	"math"
 	"math/rand"
 	"sort"
@@ -205,8 +201,6 @@ func TestSpanFrontierFallback(t *testing.T) {
 	// f.Forward(spAC, 10)
 }
 
-<<<<<<< HEAD
-=======
 func TestSpanString(t *testing.T) {
 	t.Parallel()
 
@@ -230,7 +224,8 @@ func TestSpanString(t *testing.T) {
 	f.Forward(6, spFG, 25)
 	f.Forward(7, spGH, 35)
 	require.Equal(t, uint64(2), f.Frontier())
-	require.Equal(t, `[1:61 @ 2] [2:62 @ 5] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [6:66 @ 25] [7:67 @ 35] [0:68 @ Max] `, f.stringWtihRegionID())
+	require.Equal(t, `[1:61 @ 2] [2:62 @ 5] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [6:66 @ 25] [7:67 @ 35] [0:68 @ Max] `,
+		f.stringWtihRegionID())
 	// Print 5 span: start, before, target span, next, end
 	require.Equal(t, `[1:61 @ 2] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [0:68 @ Max] `, f.SpanString(spDE))
 
@@ -240,7 +235,6 @@ func TestSpanString(t *testing.T) {
 	require.Equal(t, `[1:61 @ 2] [8:62 @ 18] [0:68 @ Max] `, f.stringWtihRegionID())
 }
 
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))
 func TestMinMax(t *testing.T) {
 	t.Parallel()
 	var keyMin []byte
@@ -476,8 +470,6 @@ func TestFrontierEntries(t *testing.T) {
 	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
 	require.Equal(t, []byte("b"), []byte(slowestRange.EndKey))
 }
-<<<<<<< HEAD
-=======
 
 func TestMergeSpitWithDifferentRegionID(t *testing.T) {
 	frontier := NewFrontier(100, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")})
@@ -496,134 +488,3 @@ func TestMergeSpitWithDifferentRegionID(t *testing.T) {
 	})
 	require.Equal(t, uint64(107), frontier.Frontier())
 }
-
-func TestRandomMergeAndSplit(t *testing.T) {
-	t.Parallel()
-
-	start, end := spanz.GetTableRange(8616)
-	rangelock := regionlock.NewRegionRangeLock(1, start, end, 100, "")
-	frontier := NewFrontier(100, tablepb.Span{StartKey: start, EndKey: end})
-	ctx := context.Background()
-
-	var nextRegionID uint64 = 1
-	var nextVersion uint64 = 1
-	var nextTs uint64 = 100
-	rangelock.LockRange(ctx, start, end, nextRegionID, nextVersion)
-
-	nextTs += 1
-	frontier.Forward(1, tablepb.Span{StartKey: start, EndKey: end}, nextTs)
-	require.Equal(t, nextTs, frontier.Frontier())
-
-	for i := 0; i < 100000; i++ {
-		totalLockedRanges := rangelock.LockedRanges()
-		unchangedRegions := make([]lockedRegion, 0, totalLockedRanges)
-
-		mergeOrSplit := "split"
-		if totalLockedRanges > 1 && rand.Intn(2) > 0 {
-			mergeOrSplit = "merge"
-		}
-
-		nextTs += 1
-		if mergeOrSplit == "split" {
-			var r1, r2 lockedRegion
-			selected := rand.Intn(totalLockedRanges)
-			count := 0
-			rangelock.CollectLockedRangeAttrs(func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span) {
-				ts := state.CheckpointTs.Load()
-				startKey := span.StartKey
-				endKey := span.EndKey
-				if count == selected {
-					r1 = lockedRegion{regionID, version, startKey, endKey, ts}
-				} else {
-					r := lockedRegion{regionID, version, startKey, endKey, ts}
-					unchangedRegions = append(unchangedRegions, r)
-				}
-				count += 1
-			})
-
-			rangelock.UnlockRange(r1.startKey, r1.endKey, r1.regionID, r1.version)
-
-			r2 = r1.split(&nextRegionID, &nextVersion)
-			rangelock.LockRange(ctx, r1.startKey, r1.endKey, r1.regionID, nextVersion)
-			rangelock.LockRange(ctx, r2.startKey, r2.endKey, r2.regionID, nextVersion)
-
-			frontier.Forward(r1.regionID, tablepb.Span{StartKey: r1.startKey, EndKey: r1.endKey}, nextTs)
-			frontier.Forward(r2.regionID, tablepb.Span{StartKey: r2.startKey, EndKey: r2.endKey}, nextTs)
-		} else {
-			var r1, r2 lockedRegion
-			selected := rand.Intn(totalLockedRanges - 1)
-			count := 0
-			rangelock.CollectLockedRangeAttrs(func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span) {
-				ts := state.CheckpointTs.Load()
-				startKey := span.StartKey
-				endKey := span.EndKey
-				if count == selected {
-					r1 = lockedRegion{regionID, version, startKey, endKey, ts}
-				} else if count == selected+1 {
-					r2 = lockedRegion{regionID, version, startKey, endKey, ts}
-				} else {
-					r := lockedRegion{regionID, version, startKey, endKey, ts}
-					unchangedRegions = append(unchangedRegions, r)
-				}
-				count += 1
-			})
-
-			rangelock.UnlockRange(r1.startKey, r1.endKey, r1.regionID, r1.version)
-			rangelock.UnlockRange(r2.startKey, r2.endKey, r2.regionID, r2.version)
-
-			r2.merge(r1, &nextVersion)
-			rangelock.LockRange(ctx, r2.startKey, r2.endKey, r2.regionID, nextVersion)
-
-			frontier.Forward(r2.regionID, tablepb.Span{StartKey: r2.startKey, EndKey: r2.endKey}, nextTs)
-		}
-		for _, r := range unchangedRegions {
-			frontier.Forward(r.regionID, tablepb.Span{StartKey: r.startKey, EndKey: r.endKey}, nextTs)
-		}
-		require.Equal(t, nextTs, frontier.Frontier())
-	}
-}
-
-type lockedRegion struct {
-	regionID uint64
-	version  uint64
-	startKey []byte
-	endKey   []byte
-	ts       uint64
-}
-
-func (r *lockedRegion) split(regionIDGen *uint64, versionGen *uint64) (s lockedRegion) {
-	*regionIDGen += 1
-	*versionGen += 1
-
-	s.regionID = *regionIDGen
-	s.version = *versionGen
-	s.ts = r.ts
-	s.startKey = r.startKey
-
-	s.endKey = make([]byte, len(r.startKey)+1)
-	copy(s.endKey, r.startKey)
-	for {
-		s.endKey[len(s.endKey)-1] = '1'
-		if bytes.Compare(s.endKey, r.endKey) < 0 {
-			break
-		}
-		s.endKey[len(s.endKey)-1] = '0'
-		s.endKey = append(s.endKey, '0')
-	}
-
-	r.version = *versionGen
-	r.startKey = make([]byte, len(s.endKey))
-	copy(r.startKey, s.endKey)
-	return
-}
-
-func (r *lockedRegion) merge(s lockedRegion, versionGen *uint64) {
-	if !bytes.Equal(r.startKey, s.endKey) {
-		panic("bad merge")
-	}
-
-	*versionGen += 1
-	r.startKey = s.startKey
-	r.version = *versionGen
-}
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))

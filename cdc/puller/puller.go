@@ -219,30 +219,6 @@ func (p *pullerImpl) Run(ctx context.Context) error {
 							zap.Any("spans", p.spans),
 						)
 					}
-<<<<<<< HEAD
-=======
-					if lastSlowestRange != nil {
-						intersectSpan, err := spanz.Intersect(resolvedSpan.Span, *lastSlowestRange)
-						isEmptySpan := len(intersectSpan.StartKey) == 0 && len(intersectSpan.EndKey) == 0
-						if err == nil && !isEmptySpan {
-							if time.Since(lastCheckSlowestRangeTime) > 30*time.Second {
-								log.Info("resolved span is not in the slowest range",
-									zap.String("namespace", p.changefeed.Namespace),
-									zap.String("changefeed", p.changefeed.ID),
-									zap.Int64("tableID", p.tableID),
-									zap.String("tableName", p.tableName),
-									zap.Uint64("resolvedTs", e.Resolved.ResolvedTs),
-									zap.Stringer("resolvedSpan", &resolvedSpan.Span),
-									zap.Stringer("slowestRange", lastSlowestRange),
-									zap.Uint64("resolvedTs", lastResolvedTs),
-									zap.Uint64("regionID", resolvedSpan.Region),
-									zap.String("tsTracker", p.tsTracker.SpanString(*lastSlowestRange)),
-								)
-								lastCheckSlowestRangeTime = time.Now()
-							}
-						}
-					}
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))
 					// Forward is called in a single thread
 					p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.Resolved.ResolvedTs)
 				}
