@@ -101,10 +101,7 @@ func (s *spanFrontier) insert(regionID uint64, span tablepb.Span, ts uint64) {
 		if bytes.Equal(seekRes.Node().Key(), span.StartKey) &&
 			bytes.Equal(next.Key(), span.EndKey) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
-<<<<<<< HEAD
-=======
 			delete(s.cachedRegions, seekRes.Node().regionID)
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))
 			if regionID != fakeRegionID {
 				s.cachedRegions[regionID] = seekRes.Node()
 				s.cachedRegions[regionID].regionID = regionID
@@ -166,8 +163,6 @@ func (s *spanFrontier) String() string {
 	})
 	return buf.String()
 }
-<<<<<<< HEAD
-=======
 
 func (s *spanFrontier) stringWtihRegionID() string {
 	var buf strings.Builder
@@ -206,4 +201,3 @@ func (s *spanFrontier) SpanString(span tablepb.Span) string {
 	})
 	return buf.String()
 }
->>>>>>> 0221742973 (puller(ticdc):  fix resolvedTs get stuck when region split and merge (#10488))
