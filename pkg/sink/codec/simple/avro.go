@@ -140,13 +140,16 @@ func newResolvedMessageMap(ts uint64) map[string]interface{} {
 		"commitTs": int64(ts),
 		"buildTs":  time.Now().UnixMilli(),
 	}
-
-	payload := map[string]interface{}{
+	watermark = map[string]interface{}{
 		"com.pingcap.simple.avro.Watermark": watermark,
 	}
 
+	payload := map[string]interface{}{
+		"payload": watermark,
+	}
+
 	return map[string]interface{}{
-		"union": payload,
+		"com.pingcap.simple.avro.Message": payload,
 	}
 }
 
@@ -158,8 +161,12 @@ func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
 		"buildTs":     time.Now().UnixMilli(),
 	}
 
-	payload := map[string]interface{}{
+	m = map[string]interface{}{
 		"com.pingcap.simple.avro.Bootstrap": m,
+	}
+
+	payload := map[string]interface{}{
+		"payload": m,
 	}
 
 	return map[string]interface{}{
@@ -213,12 +220,15 @@ func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 			"com.pingcap.simple.avro.TableSchema": tableSchema,
 		}
 	}
-	payload := map[string]interface{}{
+
+	result = map[string]interface{}{
 		"com.pingcap.simple.avro.DDL": result,
 	}
-
+	payload := map[string]interface{}{
+		"payload": result,
+	}
 	return map[string]interface{}{
-		"union": payload,
+		"com.pingcap.simple.avro.Message": payload,
 	}
 }
 
@@ -291,17 +301,21 @@ func newDMLMessageMap(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	payload := map[string]interface{}{
+	m = map[string]interface{}{
 		"com.pingcap.simple.avro.DML": m,
 	}
-
+	payload := map[string]interface{}{
+		"payload": m,
+	}
 	return map[string]interface{}{
-		"union": payload,
+		"com.pingcap.simple.avro.Message": payload,
 	}, nil
 }
 
 func recycleMap(m map[string]interface{}) {
-	eventMap := m["union"].(map[string]interface{})["com.pingcap.simple.avro.DML"].(map[string]interface{})
+	holder := m["com.pingcap.simple.avro.Message"].(map[string]interface{})
+	payload := holder["payload"].(map[string]interface{})
+	eventMap := payload["com.pingcap.simple.avro.DML"].(map[string]interface{})
 
 	checksumMap := eventMap["com.pingcap.simple.avro.Checksum"]
 	if checksumMap != nil {
@@ -447,12 +461,17 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 }
 
 func newMessageFromAvroNative(native interface{}, m *message) error {
-	rawValues, ok := native.(map[string]interface{})["union"].(map[string]interface{})
+	rawValues, ok := native.(map[string]interface{})["com.pingcap.simple.avro.Message"].(map[string]interface{})
 	if !ok {
 		return cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro message to map")
 	}
 
-	rawMessage := rawValues["com.pingcap.simple.avro.Watermark"]
+	rawPayload, ok := rawValues["payload"].(map[string]interface{})
+	if !ok {
+		return cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro payload to map")
+	}
+
+	rawMessage := rawPayload["com.pingcap.simple.avro.Watermark"]
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
@@ -462,7 +481,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 		return nil
 	}
 
-	rawMessage = rawValues["com.pingcap.simple.avro.Bootstrap"]
+	rawMessage = rawPayload["com.pingcap.simple.avro.Bootstrap"]
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
@@ -472,7 +491,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 		return nil
 	}
 
-	rawMessage = rawValues["com.pingcap.simple.avro.DDL"]
+	rawMessage = rawPayload["com.pingcap.simple.avro.DDL"]
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
@@ -497,7 +516,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 		return nil
 	}
 
-	rawValues = rawValues["com.pingcap.simple.avro.DML"].(map[string]interface{})
+	rawValues = rawPayload["com.pingcap.simple.avro.DML"].(map[string]interface{})
 	m.Type = EventType(rawValues["type"].(string))
 	m.Version = int(rawValues["version"].(int32))
 	m.CommitTs = uint64(rawValues["commitTs"].(int64))

@@ -388,12 +388,18 @@
   {
     "namespace": "com.pingcap.simple.avro",
     "name": "Message",
-    "docs": "the union for all kind of messages",
-    "type": [
-      "com.pingcap.simple.avro.Watermark",
-      "com.pingcap.simple.avro.Bootstrap",
-      "com.pingcap.simple.avro.DDL",
-      "com.pingcap.simple.avro.DML"
+    "docs": "the wrapper for all kind of messages",
+    "type": "record",
+    "fields": [
+      {
+        "name": "payload",
+        "type": [
+          "com.pingcap.simple.avro.Watermark",
+          "com.pingcap.simple.avro.Bootstrap",
+          "com.pingcap.simple.avro.DDL",
+          "com.pingcap.simple.avro.DML"
+        ]
+      }
     ]
   }
 ]
