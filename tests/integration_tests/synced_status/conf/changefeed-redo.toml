@@ -1,5 +1,5 @@
 [synced-status]
-synced-check-interval = 120 
+synced-check-interval = 60
 checkpoint-interval = 20
 
 [consistent]
