@@ -325,13 +325,13 @@
       },
       {
         "name": "claimCheckLocation",
-        "type": "string",
-        "default": ""
+        "type": ["null", "string"],
+        "default": null
       },
       {
         "name": "handleKeyOnly",
-        "type": "boolean",
-        "default": false
+        "type": ["null", "boolean"],
+        "default": null
       },
       {
         "name": "checksum",

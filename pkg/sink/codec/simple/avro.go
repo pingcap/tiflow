@@ -254,15 +254,25 @@ func newDMLMessageMap(
 	claimCheckFileName string,
 ) (map[string]interface{}, error) {
 	m := map[string]interface{}{
-		"version":            defaultVersion,
-		"database":           event.Table.Schema,
-		"table":              event.Table.Table,
-		"tableID":            event.TableInfo.ID,
-		"commitTs":           int64(event.CommitTs),
-		"buildTs":            time.Now().UnixMilli(),
-		"schemaVersion":      int64(event.TableInfo.UpdateTS),
-		"handleKeyOnly":      onlyHandleKey,
-		"claimCheckLocation": claimCheckFileName,
+		"version":       defaultVersion,
+		"database":      event.Table.Schema,
+		"table":         event.Table.Table,
+		"tableID":       event.TableInfo.ID,
+		"commitTs":      int64(event.CommitTs),
+		"buildTs":       time.Now().UnixMilli(),
+		"schemaVersion": int64(event.TableInfo.UpdateTS),
+	}
+
+	if !config.LargeMessageHandle.Disabled() && onlyHandleKey {
+		m["handleKeyOnly"] = map[string]interface{}{
+			"boolean": true,
+		}
+	}
+
+	if config.LargeMessageHandle.EnableClaimCheck() && claimCheckFileName != "" {
+		m["claimCheckLocation"] = map[string]interface{}{
+			"string": claimCheckFileName,
+		}
 	}
 
 	if config.EnableRowChecksum && event.Checksum != nil {
@@ -541,8 +551,14 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 	m.Table = rawValues["table"].(string)
 	m.TableID = rawValues["tableID"].(int64)
 	m.SchemaVersion = uint64(rawValues["schemaVersion"].(int64))
-	m.HandleKeyOnly = rawValues["handleKeyOnly"].(bool)
-	m.ClaimCheckLocation = rawValues["claimCheckLocation"].(string)
+
+	if rawValues["handleKeyOnly"] != nil {
+		m.HandleKeyOnly = rawValues["handleKeyOnly"].(map[string]interface{})["boolean"].(bool)
+	}
+	if rawValues["claimCheckLocation"] != nil {
+		m.ClaimCheckLocation = rawValues["claimCheckLocation"].(map[string]interface{})["string"].(string)
+	}
+
 	m.Checksum = newChecksum(rawValues)
 	m.Data = newDataMap(rawValues["data"])
 	m.Old = newDataMap(rawValues["old"])
