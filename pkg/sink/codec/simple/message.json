@@ -42,12 +42,18 @@
       },
       {
         "name": "unsigned",
-        "type": ["null", "boolean"],
+        "type": [
+          "null",
+          "boolean"
+        ],
         "default": null
       },
       {
         "name": "zerofill",
-        "type": ["null", "boolean"],
+        "type": [
+          "null",
+          "boolean"
+        ],
         "default": null
       }
     ]
@@ -325,12 +331,18 @@
       },
       {
         "name": "claimCheckLocation",
-        "type": ["null", "string"],
+        "type": [
+          "null",
+          "string"
+        ],
         "default": null
       },
       {
         "name": "handleKeyOnly",
-        "type": ["null", "boolean"],
+        "type": [
+          "null",
+          "boolean"
+        ],
         "default": null
       },
       {
