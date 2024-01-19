@@ -303,13 +303,13 @@ func TestShouldDiscardDDL(t *testing.T) {
 }
 
 func TestIsAllowedDDL(t *testing.T) {
-	require.Len(t, ddlWhiteListMap, 37)
+	require.Len(t, ddlWhiteListMap, 36)
 	type testCase struct {
 		timodel.ActionType
 		allowed bool
 	}
 	testCases := make([]testCase, 0, len(ddlWhiteListMap))
-	for ddlType, _ := range ddlWhiteListMap {
+	for ddlType := range ddlWhiteListMap {
 		testCases = append(testCases, testCase{ddlType, true})
 	}
 	testCases = append(testCases, testCase{timodel.ActionAddForeignKey, false})

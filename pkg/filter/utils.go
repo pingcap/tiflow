@@ -61,8 +61,44 @@ func ddlToEventType(jobType timodel.ActionType) bf.EventType {
 	}
 }
 
+// isAlterTable returns true if the given job type is alter table's subtype.
+func isAlterTable(jobType timodel.ActionType) bool {
+	alterTableSubType := []timodel.ActionType{
+		timodel.ActionAddColumn,
+		timodel.ActionDropColumn,
+		timodel.ActionModifyColumn,
+		timodel.ActionSetDefaultValue,
+	}
+
+	for _, t := range alterTableSubType {
+		if t == jobType {
+			return true
+		}
+	}
+
+	return false
+}
+
 // SupportedEventTypes returns the supported event types.
 func SupportedEventTypes() []bf.EventType {
+	var supportedEventTypes = []bf.EventType{
+		bf.AllDML,
+		bf.AllDDL,
+
+		// dml events
+		bf.InsertEvent,
+		bf.UpdateEvent,
+		bf.DeleteEvent,
+
+		// ddl events
+		bf.AlterTable,
+		bf.CreateSchema,
+		bf.DropSchema,
+	}
+
+	for _, ddlType := range ddlWhiteListMap {
+		supportedEventTypes = append(supportedEventTypes, ddlType)
+	}
 	return supportedEventTypes
 }
 

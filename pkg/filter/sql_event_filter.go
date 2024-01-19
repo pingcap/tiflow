@@ -80,8 +80,8 @@ func newSQLEventFilterRule(cfg *config.EventFilterRule) (*sqlEventRule, error) {
 }
 
 func verifyIgnoreEvents(types []bf.EventType) error {
-	typesMap := make(map[bf.EventType]struct{}, len(supportedEventTypes))
-	for _, et := range supportedEventTypes {
+	typesMap := make(map[bf.EventType]struct{}, len(SupportedEventTypes()))
+	for _, et := range SupportedEventTypes() {
 		typesMap[et] = struct{}{}
 	}
 	for _, et := range types {
@@ -164,6 +164,21 @@ func (f *sqlEventFilter) shouldSkipDDL(
 		if action == bf.Ignore {
 			return true, nil
 		}
+
+		// If the ddl is alter table's subtype,
+		// we need try to filter it by bf.AlterTable.
+		if isAlterTable(ddlType) {
+			action, err = rule.bf.Filter(
+				binlogFilterSchemaPlaceholder,
+				binlogFilterTablePlaceholder,
+				bf.AlterTable, query)
+			if err != nil {
+				return false, errors.Trace(err)
+			}
+			if action == bf.Ignore {
+				return true, nil
+			}
+		}
 	}
 	return false, nil
 }
@@ -198,30 +213,4 @@ func (f *sqlEventFilter) shouldSkipDML(event *model.RowChangedEvent) (bool, erro
 		}
 	}
 	return false, nil
-}
-
-var supportedEventTypes = []bf.EventType{
-	bf.AllDML,
-	bf.AllDDL,
-
-	// dml events
-	bf.InsertEvent,
-	bf.UpdateEvent,
-	bf.DeleteEvent,
-
-	// ddl events
-	bf.CreateSchema,
-	bf.CreateDatabase,
-	bf.DropSchema,
-	bf.DropDatabase,
-	bf.CreateTable,
-	bf.DropTable,
-	bf.RenameTable,
-	bf.TruncateTable,
-	bf.AlterTable,
-	bf.CreateView,
-	bf.DropView,
-	bf.AddTablePartition,
-	bf.DropTablePartition,
-	bf.TruncateTablePartition,
 }

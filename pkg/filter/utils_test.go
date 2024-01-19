@@ -41,11 +41,6 @@ func TestIsSchema(t *testing.T) {
 	}
 }
 
-func TestSupportedEventTypeString(t *testing.T) {
-	t.Parallel()
-	require.Equal(t, supportedEventTypes, SupportedEventTypes())
-}
-
 func TestVerifyTableRules(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

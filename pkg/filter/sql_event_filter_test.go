@@ -328,8 +328,8 @@ func TestVerifyIgnoreEvents(t *testing.T) {
 		err         error
 	}
 
-	cases := make([]testCase, len(supportedEventTypes))
-	for i, eventType := range supportedEventTypes {
+	cases := make([]testCase, len(SupportedEventTypes()))
+	for i, eventType := range SupportedEventTypes() {
 		cases[i] = testCase{
 			ignoreEvent: []bf.EventType{eventType},
 			err:         nil,

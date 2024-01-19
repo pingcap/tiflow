@@ -47,7 +47,7 @@ var ddlWhiteListMap = map[timodel.ActionType]bf.EventType{
 	timodel.ActionAddTablePartition:      bf.AddTablePartition,
 	timodel.ActionDropTablePartition:     bf.DropTablePartition,
 	timodel.ActionTruncateTablePartition: bf.TruncateTablePartition,
-	timodel.ActionExchangeTablePartition: bf.ExchangeTablePartition,
+	timodel.ActionExchangeTablePartition: bf.ExchangePartition,
 	timodel.ActionReorganizePartition:    bf.ReorganizePartition,
 	timodel.ActionAlterTablePartitioning: bf.AlterTablePartitioning,
 	timodel.ActionRemovePartitioning:     bf.RemovePartitioning,
