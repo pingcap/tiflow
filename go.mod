@@ -63,7 +63,7 @@ require (
 	github.com/pingcap/kvproto v0.0.0-20230928035022-1bdcc25ed63c
 	github.com/pingcap/log v1.1.1-0.20221116035753-734d527bc87c
 	github.com/pingcap/tidb v1.1.0-beta.0.20231124055343-a06279f27e4c
-	github.com/pingcap/tidb-tools v7.0.1-0.20230410100500-0bbe5f0cd5c9+incompatible
+	github.com/pingcap/tidb-tools v7.0.1-0.20231228094724-d6c7fc83380a+incompatible
 	github.com/pingcap/tidb/parser v0.0.0-20231124055343-a06279f27e4c
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/client_model v0.2.0
@@ -320,3 +320,9 @@ replace github.com/benbjohnson/clock v1.3.0 => github.com/benbjohnson/clock v1.1
 
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
+
+// TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
+// Please remove these dependencies.
+replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
+
+replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67

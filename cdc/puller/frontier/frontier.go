@@ -84,7 +84,7 @@ func (s *spanFrontier) Frontier() uint64 {
 func (s *spanFrontier) Forward(regionID uint64, span regionspan.ComparableSpan, ts uint64) {
 	// it's the fast part to detect if the region is split or merged,
 	// if not we can update the minTsHeap with use new ts directly
-	if n, ok := s.cachedRegions[regionID]; ok && n.regionID != fakeRegionID && n.end != nil {
+	if n, ok := s.cachedRegions[regionID]; ok && n.regionID == regionID && n.end != nil {
 		if bytes.Equal(n.Key(), span.Start) && bytes.Equal(n.End(), span.End) {
 			s.minTsHeap.UpdateKey(n.Value(), ts)
 			return
@@ -106,6 +106,7 @@ func (s *spanFrontier) insert(regionID uint64, span regionspan.ComparableSpan, t
 	if next != nil {
 		if bytes.Equal(seekRes.Node().Key(), span.Start) && bytes.Equal(next.Key(), span.End) {
 			s.minTsHeap.UpdateKey(seekRes.Node().Value(), ts)
+			delete(s.cachedRegions, seekRes.Node().regionID)
 			if regionID != fakeRegionID {
 				s.cachedRegions[regionID] = seekRes.Node()
 				s.cachedRegions[regionID].regionID = regionID
