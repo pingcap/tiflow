@@ -79,6 +79,11 @@ type mysqlBackend struct {
 	// Indicate if the CachePrepStmts should be enabled or not
 	cachePrepStmts   bool
 	maxAllowedPacket int64
+
+	// tableInfoCache is used to cache the tableInfo build from the event.
+	// The tableInfo is used to generate the SQL statement.
+	// This cache is used to reduce the cpu usage of building tableInfo.
+	tableInfoCache map[model.TableID]*timodel.TableInfo
 }
 
 // NewMySQLBackends creates a new MySQL sink using schema storage
@@ -570,8 +575,26 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			}
 			// only use batch dml when the table has a handle key
 			if hasHandleKey(tableColumns) {
-				// TODO(dongmen): find a better way to get table info.
-				tableInfo := model.BuildTiDBTableInfo(tableColumns, firstRow.IndexColumns)
+				// Try to get table info from cache.
+				tableInfo, ok := s.tableInfoCache[firstRow.Table.TableID]
+				if ok {
+					// If the table info is not match the event,
+					// we should delete it from cache.
+					if tableInfo.UpdateTS != firstRow.TableInfo.UpdateTS {
+						delete(s.tableInfoCache, firstRow.Table.TableID)
+						ok = false
+					}
+				}
+
+				if !ok {
+					// TODO(dongmen): find a better way to get table info.
+					tableInfo = model.BuildTiDBTableInfo(
+						firstRow.TableInfo.UpdateTS,
+						tableColumns,
+						firstRow.IndexColumns)
+					s.tableInfoCache[firstRow.Table.TableID] = tableInfo
+				}
+
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)

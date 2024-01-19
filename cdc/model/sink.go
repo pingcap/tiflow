@@ -530,8 +530,10 @@ type RedoColumn struct {
 }
 
 // BuildTiDBTableInfo builds a TiDB TableInfo from given information.
-func BuildTiDBTableInfo(columns []*Column, indexColumns [][]int) *model.TableInfo {
-	ret := &model.TableInfo{}
+func BuildTiDBTableInfo(version uint64, columns []*Column, indexColumns [][]int) *model.TableInfo {
+	ret := &model.TableInfo{
+		UpdateTS: version,
+	}
 	// nowhere will use this field, so we set a debug message
 	ret.Name = model.NewCIStr("BuildTiDBTableInfo")
 
