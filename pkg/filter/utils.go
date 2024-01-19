@@ -17,7 +17,6 @@ import (
 	"fmt"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb/pkg/parser"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	tifilter "github.com/pingcap/tidb/pkg/util/filter"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
@@ -53,33 +52,13 @@ func VerifyTableRules(cfg *config.FilterConfig) (tfilter.Filter, error) {
 }
 
 // ddlToEventType get event type from ddl query.
-func ddlToEventType(p *parser.Parser, query string, jobType timodel.ActionType) (bf.EventType, error) {
-	// Since `Parser` will return a AlterTable type `ast.StmtNode` for table partition related DDL,
-	// we need to check the ActionType of a ddl at first.
-	switch jobType {
-	case timodel.ActionAddTablePartition:
-		return bf.AddTablePartition, nil
-	case timodel.ActionDropTablePartition:
-		return bf.DropTablePartition, nil
-	case timodel.ActionTruncateTablePartition:
-		return bf.TruncateTablePartition, nil
+func ddlToEventType(jobType timodel.ActionType) bf.EventType {
+	evenType, ok := ddlWhiteListMap[jobType]
+	if ok {
+		return evenType
+	} else {
+		return bf.NullEvent
 	}
-	stmt, err := p.ParseOneStmt(query, "", "")
-	if err != nil {
-		return bf.NullEvent, cerror.WrapError(cerror.ErrConvertDDLToEventTypeFailed, err, query)
-	}
-	et := bf.AstToDDLEvent(stmt)
-	// `Parser` will return a `AlterTable` type `ast.StmtNode` for a query like:
-	// `alter table t1 add index (xxx)` and will return a `CreateIndex` type
-	// `ast.StmtNode` for a query like: `create index i on t1 (xxx)`.
-	// So we cast index related DDL to `AlterTable` event type for the sake of simplicity.
-	switch et {
-	case bf.DropIndex:
-		return bf.AlterTable, nil
-	case bf.CreateIndex:
-		return bf.AlterTable, nil
-	}
-	return et, nil
 }
 
 // SupportedEventTypes returns the supported event types.
