@@ -289,12 +289,9 @@ func newDMLMessageMap(
 			"previous":  int64(event.Checksum.Previous),
 		}
 
-		genericMap, ok := genericMapPool.Get().(map[string]interface{})
-		if !ok {
-			genericMap = make(map[string]interface{})
-		}
-		genericMap["com.pingcap.simple.avro.Checksum"] = cc
-		m["checksum"] = genericMap
+		holder := genericMapPool.Get().(map[string]interface{})
+		holder["com.pingcap.simple.avro.Checksum"] = cc
+		m["checksum"] = holder
 	}
 
 	if event.IsInsert() {
@@ -332,15 +329,9 @@ func newDMLMessageMap(
 	}
 
 	holder := payloadHolderPool.Get().(map[string]interface{})
-	if holder == nil {
-		holder = make(map[string]interface{})
-	}
 	holder["payload"] = m
 
 	messageHolder := messageHolderPool.Get().(map[string]interface{})
-	if messageHolder == nil {
-		messageHolder = make(map[string]interface{})
-	}
 	messageHolder["com.pingcap.simple.avro.Message"] = holder
 
 	return messageHolder, nil
@@ -399,12 +390,9 @@ func collectColumns(
 			return nil, err
 		}
 
-		genericMap, ok := genericMapPool.Get().(map[string]interface{})
-		if !ok {
-			genericMap = make(map[string]interface{})
-		}
-		genericMap[avroType] = value
-		result[col.Name] = genericMap
+		holder := genericMapPool.Get().(map[string]interface{})
+		holder[avroType] = value
+		result[col.Name] = holder
 	}
 
 	return map[string]interface{}{
