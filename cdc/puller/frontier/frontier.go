@@ -20,7 +20,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -185,7 +184,7 @@ func (s *spanFrontier) stringWtihRegionID() string {
 }
 
 // SpanString returns the string of the span's frontier.
-func (s *spanFrontier) SpanString(span tablepb.Span) string {
+func (s *spanFrontier) SpanString(span regionspan.ComparableSpan) string {
 	var buf strings.Builder
 	idx := 0
 	s.spanList.Entries(func(n *skipListNode) bool {
@@ -197,9 +196,9 @@ func (s *spanFrontier) SpanString(span tablepb.Span) string {
 		if n.Value().key == math.MaxUint64 {
 			buf.WriteString(fmt.Sprintf("[%d:%s @ Max] ", n.regionID, hex.EncodeToString(n.Key())))
 		} else if idx == 0 || // head
-			bytes.Equal(key, span.StartKey) || // start key sapn
-			bytes.Equal(nextKey, span.StartKey) || // the previous sapn of start key
-			bytes.Equal(key, span.EndKey) { // the end key span
+			bytes.Equal(key, span.Start) || // start key sapn
+			bytes.Equal(nextKey, span.Start) || // the previous sapn of start key
+			bytes.Equal(key, span.End) { // the end key span
 			buf.WriteString(fmt.Sprintf("[%d:%s @ %d] ", n.regionID,
 				hex.EncodeToString(n.Key()), n.Value().key))
 		}

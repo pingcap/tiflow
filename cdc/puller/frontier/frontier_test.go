@@ -15,12 +15,12 @@ package frontier
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
 	"testing"
 
-	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/regionspan"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -204,16 +204,16 @@ func TestSpanFrontierFallback(t *testing.T) {
 func TestSpanString(t *testing.T) {
 	t.Parallel()
 
-	spAB := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}
-	spBC := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}
-	spCD := tablepb.Span{StartKey: []byte("c"), EndKey: []byte("d")}
-	spDE := tablepb.Span{StartKey: []byte("d"), EndKey: []byte("e")}
-	spEF := tablepb.Span{StartKey: []byte("e"), EndKey: []byte("f")}
-	spFG := tablepb.Span{StartKey: []byte("f"), EndKey: []byte("g")}
-	spGH := tablepb.Span{StartKey: []byte("g"), EndKey: []byte("h")}
+	spAB := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}
+	spBC := regionspan.ComparableSpan{Start: []byte("b"), End: []byte("c")}
+	spCD := regionspan.ComparableSpan{Start: []byte("c"), End: []byte("d")}
+	spDE := regionspan.ComparableSpan{Start: []byte("d"), End: []byte("e")}
+	spEF := regionspan.ComparableSpan{Start: []byte("e"), End: []byte("f")}
+	spFG := regionspan.ComparableSpan{Start: []byte("f"), End: []byte("g")}
+	spGH := regionspan.ComparableSpan{Start: []byte("g"), End: []byte("h")}
 
-	spAH := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("h")}
-	f := NewFrontier(1, spAH).(*spanFrontier)
+	spAH := regionspan.ComparableSpan{Start: []byte("a"), End: []byte("h")}
+	f := NewFrontier(1, c, spAH).(*spanFrontier)
 	require.Equal(t, `[0:61 @ 1] [0:68 @ Max] `, f.SpanString(spAH))
 
 	f.Forward(1, spAB, 2)
@@ -228,7 +228,7 @@ func TestSpanString(t *testing.T) {
 	// Print 5 span: start, before, target span, next, end
 	require.Equal(t, `[1:61 @ 2] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [0:68 @ Max] `, f.SpanString(spDE))
 
-	spBH := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("h")}
+	spBH := regionspan.ComparableSpan{Start: []byte("b"), End: []byte("h")}
 	f.Forward(8, spBH, 18)
 	require.Equal(t, uint64(2), f.Frontier())
 	require.Equal(t, `[1:61 @ 2] [8:62 @ 18] [0:68 @ Max] `, f.stringWtihRegionID())
@@ -470,4 +470,22 @@ func TestFrontierEntries(t *testing.T) {
 	require.Equal(t, uint64(100), slowestTs)
 	require.Equal(t, []byte("a"), slowestRange.Start)
 	require.Equal(t, []byte("b"), slowestRange.End)
+}
+
+func TestMergeSpitWithDifferentRegionID(t *testing.T) {
+	frontier := NewFrontier(100, c, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")})
+	frontier.Forward(1, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1222)
+	frontier.Forward(2, regionspan.ComparableSpan{Start: []byte("b"), End: []byte("c")}, 102)
+	frontier.Forward(4, regionspan.ComparableSpan{Start: []byte("b"), End: []byte("c")}, 103)
+	frontier.Forward(1, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("c")}, 104)
+	frontier.Forward(1, regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")}, 1223)
+	frontier.Forward(3, regionspan.ComparableSpan{Start: []byte("b"), End: []byte("c")}, 105)
+	frontier.Forward(2, regionspan.ComparableSpan{Start: []byte("b"), End: []byte("c")}, 107)
+	frontier.(*spanFrontier).spanList.Entries(func(node *skipListNode) bool {
+		fmt.Printf("%d:[%s: %s) %d\n", node.regionID,
+			string(node.Key()),
+			string(node.End()), node.value.key)
+		return true
+	})
+	require.Equal(t, uint64(107), frontier.Frontier())
 }
