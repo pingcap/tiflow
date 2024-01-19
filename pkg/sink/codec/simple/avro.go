@@ -246,6 +246,12 @@ var (
 			return make(map[string]interface{})
 		},
 	}
+
+	messageHolderPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
 )
 
 func newDMLMessageMap(
@@ -331,9 +337,13 @@ func newDMLMessageMap(
 	}
 	holder["payload"] = m
 
-	return map[string]interface{}{
-		"com.pingcap.simple.avro.Message": holder,
-	}, nil
+	messageHolder := messageHolderPool.Get().(map[string]interface{})
+	if messageHolder == nil {
+		messageHolder = make(map[string]interface{})
+	}
+	messageHolder["com.pingcap.simple.avro.Message"] = holder
+
+	return messageHolder, nil
 }
 
 func recycleMap(m map[string]interface{}) {
@@ -369,6 +379,8 @@ func recycleMap(m map[string]interface{}) {
 	}
 	holder["payload"] = nil
 	payloadHolderPool.Put(holder)
+	m["com.pingcap.simple.avro.Message"] = nil
+	messageHolderPool.Put(m)
 }
 
 func collectColumns(
