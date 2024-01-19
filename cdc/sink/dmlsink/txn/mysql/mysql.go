@@ -197,6 +197,7 @@ func NewMySQLBackends(
 			stmtCache:                       stmtCache,
 			cachePrepStmts:                  cachePrepStmts,
 			maxAllowedPacket:                maxAllowedPacket,
+			tableInfoCache:                  make(map[model.TableID]*timodel.TableInfo),
 		})
 	}
 
