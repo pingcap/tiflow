@@ -232,11 +232,21 @@ func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 	}
 }
 
-var genericMapPool = sync.Pool{
-	New: func() any {
-		return make(map[string]interface{})
-	},
-}
+var (
+	// genericMapPool return holder for each column and checksum
+	genericMapPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+
+	// payloadHolderPool return holder for the payload
+	payloadHolderPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+)
 
 func newDMLMessageMap(
 	event *model.RowChangedEvent, config *common.Config,
@@ -304,11 +314,15 @@ func newDMLMessageMap(
 	m = map[string]interface{}{
 		"com.pingcap.simple.avro.DML": m,
 	}
-	payload := map[string]interface{}{
-		"payload": m,
+
+	holder := payloadHolderPool.Get().(map[string]interface{})
+	if holder == nil {
+		holder = make(map[string]interface{})
 	}
+	holder["payload"] = m
+
 	return map[string]interface{}{
-		"com.pingcap.simple.avro.Message": payload,
+		"com.pingcap.simple.avro.Message": holder,
 	}, nil
 }
 
@@ -343,6 +357,8 @@ func recycleMap(m map[string]interface{}) {
 			genericMapPool.Put(col)
 		}
 	}
+	holder["payload"] = nil
+	payloadHolderPool.Put(holder)
 }
 
 func collectColumns(
