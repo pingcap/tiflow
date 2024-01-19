@@ -638,7 +638,6 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 	// TiCDC handles columns according to the following rules:
 	// 1. If a primary key (PK) exists, it is chosen.
 	// 2. If there is no PK, TiCDC looks for a not null unique key (UK) with the least number of columns and the smallest index ID.
-	// And when the columns num is the same, it will choose the one with smallest index id.
 	// So we assign the smallest index id to the index which is selected as handle to mock this behavior.
 	minIndexID := int64(1)
 	nextMockIndexID := minIndexID + 1
