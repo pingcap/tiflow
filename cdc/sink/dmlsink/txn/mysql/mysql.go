@@ -57,6 +57,12 @@ const (
 
 	// To limit memory usage for prepared statements.
 	prepStmtCacheSize int = 16 * 1024
+
+	// To limit memory usage for table info cache.
+	// It is large enough to cache 32k tables, 32k is base on experience.
+	// To keep code simple, we just use a fixed size cache.
+	// If the cache is full, we should clear it.
+	tableInfoCacheSize = 32 * 1000
 )
 
 type mysqlBackend struct {
@@ -593,6 +599,13 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 						firstRow.TableInfo.UpdateTS,
 						tableColumns,
 						firstRow.IndexColumns)
+
+					if len(s.tableInfoCache) >= tableInfoCacheSize {
+						// If the cache is full, we should clear it.
+						for k := range s.tableInfoCache {
+							delete(s.tableInfoCache, k)
+						}
+					}
 					s.tableInfoCache[firstRow.Table.TableID] = tableInfo
 				}
 
