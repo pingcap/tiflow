@@ -597,13 +597,13 @@ LOOP2:
 	}
 	c.barriers.Update(finishBarrier, c.latestInfo.GetTargetTs())
 
-	f, err := filter.NewFilter(c.latestInfo.Config, "")
+	filter, err := filter.NewFilter(c.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
 	c.schema, err = entry.NewSchemaStorage(
 		c.upstream.KVStorage, ddlStartTs,
-		c.latestInfo.Config.ForceReplicate, c.id, util.RoleOwner, f)
+		c.latestInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -630,7 +630,7 @@ LOOP2:
 	})
 	c.ddlSink.run(cancelCtx)
 
-	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, f)
+	c.ddlPuller = c.newDDLPuller(cancelCtx, c.upstream, ddlStartTs, c.id, c.schema, filter)
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
@@ -669,6 +669,7 @@ LOOP2:
 		ddlStartTs,
 		c.latestStatus.CheckpointTs,
 		c.ddlSink,
+		filter,
 		c.ddlPuller,
 		c.schema,
 		c.redoDDLMgr,

@@ -66,10 +66,14 @@ var allowDDLList = []timodel.ActionType{
 type Filter interface {
 	// ShouldIgnoreDMLEvent returns true and nil if the DML event should be ignored.
 	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
+	// ShouldIgnoreDDLEvent returns true if the DDL event should be ignored.
+	// If a ddl is ignored, it will be applied to cdc's schema storage,
+	// but will not be sent to downstream.
+	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
 	// ShouldDiscardDDL returns true if this DDL should be discarded.
 	// If a ddl is discarded, it will neither be applied to cdc's schema storage
 	// nor sent to downstream.
-	ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, schema, table, query string) (bool, error)
+	ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, schema, table string) bool
 	// ShouldIgnoreTable returns true if the table should be ignored.
 	ShouldIgnoreTable(schema, table string) bool
 	// ShouldIgnoreSchema returns true if the schema should be ignored.
@@ -149,28 +153,22 @@ func (f *filter) ShouldIgnoreDMLEvent(
 // ShouldDiscardDDL returns true if this DDL should be discarded.
 // If a ddl is discarded, it will not be applied to cdc's schema storage
 // and sent to downstream.
-func (f *filter) ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, schema, table, query string) (discard bool, err error) {
-	discard = !isAllowedDDL(ddlType)
-	if discard {
-		return
-	}
-
-	discard = f.shouldIgnoreStartTs(startTs)
-	if discard {
-		return
+func (f *filter) ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, schema, table string) bool {
+	if !isAllowedDDL(ddlType) || f.shouldIgnoreStartTs(startTs) {
+		return true
 	}
 
 	if IsSchemaDDL(ddlType) {
-		discard = !f.tableFilter.MatchSchema(schema)
-	} else {
-		discard = f.ShouldIgnoreTable(schema, table)
+		return f.ShouldIgnoreSchema(schema)
 	}
+	return f.ShouldIgnoreTable(schema, table)
+}
 
-	if discard {
-		return
-	}
-
-	return f.sqlEventFilter.shouldSkipDDL(ddlType, schema, table, query)
+// ShouldIgnoreDDLEvent returns true if the DDL event should be ignored.
+// If a ddl is ignored, it will be applied to cdc's schema storage,
+// but will not be sent to downstream.
+func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (discard bool, err error) {
+	return f.sqlEventFilter.shouldSkipDDL(ddl)
 }
 
 // ShouldIgnoreTable returns true if the specified table should be ignored by this changefeed.

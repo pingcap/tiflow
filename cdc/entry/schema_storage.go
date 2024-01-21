@@ -518,13 +518,9 @@ func (s *schemaStorage) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.D
 			table = event.PreTableInfo.TableName.Table
 		}
 
-		ignored, err := s.filter.ShouldDiscardDDL(event.StartTs, event.Type, schemaName, table, event.Query)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		if ignored {
+		if s.filter.ShouldDiscardDDL(event.StartTs, event.Type, schemaName, table) {
 			log.Error(
-				"ignored DDL event should not be sent to owner"+
+				"discarded DDL event should not be sent to owner"+
 					"please report a bug to TiCDC if you see this log"+
 					"but it is no harm to your replication",
 				zap.String("namespace", s.id.Namespace),

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -81,17 +82,31 @@ func runFilter(cmd *cobra.Command, args []string) {
 	case "ddl":
 		startTs := uint64(0)
 		ddlType := timodel.ActionCreateTable
-		discard, err := ft.ShouldDiscardDDL(startTs,
+		discard := ft.ShouldDiscardDDL(startTs,
 			ddlType,
 			tableAndSchema[0],
-			tableAndSchema[1],
-			ddl)
+			tableAndSchema[1])
+		if discard {
+			fmt.Printf("DDL: %s, should be discard by event filter rule\n", ddl)
+			return
+		}
+		ignored, err := ft.ShouldIgnoreDDLEvent(&model.DDLEvent{
+			StartTs: startTs,
+			Query:   ddl,
+			Type:    ddlType,
+			TableInfo: &model.TableInfo{
+				TableName: model.TableName{
+					Schema: tableAndSchema[0],
+					Table:  tableAndSchema[1],
+				},
+			},
+		})
 		if err != nil {
 			fmt.Printf("filter ddl error: %s, error: %v\n", ddl, err)
 			return
 		}
-		if discard {
-			fmt.Printf("DDL: %s, should be discard by event filter rule\n", ddl)
+		if ignored {
+			fmt.Printf("DDL: %s, should be ignored by event filter rule\n", ddl)
 			return
 		}
 		fmt.Printf("DDL: %s, should not be discard by event filter rule\n", ddl)
