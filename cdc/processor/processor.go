@@ -435,6 +435,7 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 			Checkpoint: tablepb.Checkpoint{
 				CheckpointTs: sinkStats.CheckpointTs,
 				ResolvedTs:   sinkStats.ResolvedTs,
+				LastSyncedTs: sinkStats.LastSyncedTs,
 			},
 			State: state,
 			Stats: stats,
@@ -456,6 +457,7 @@ func (p *processor) GetTableStatus(tableID model.TableID, collectStat bool) tabl
 		Checkpoint: tablepb.Checkpoint{
 			CheckpointTs: table.CheckpointTs(),
 			ResolvedTs:   table.ResolvedTs(),
+			LastSyncedTs: 0, // we don't support non pullBasedSinking mode to get LastSyncedTs
 		},
 		State: table.State(),
 		Stats: stats,

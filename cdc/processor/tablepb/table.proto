@@ -56,6 +56,7 @@ enum TableState {
 message Checkpoint {
     uint64 checkpoint_ts = 1 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
     uint64 resolved_ts = 2 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
+    uint64 last_synced_ts = 3 [(gogoproto.casttype) = "github.com/pingcap/tiflow/cdc/model.Ts"];
 }
 
 // Stats holds a statistic for a table.

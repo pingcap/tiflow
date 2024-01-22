@@ -100,6 +100,15 @@ type ChangefeedCommonInfo struct {
 	RunningError   *model.RunningError `json:"error"`
 }
 
+// SyncedStatusConfig represents synced check interval config for a changefeed
+type SyncedStatusConfig struct {
+	// The minimum interval between the latest synced ts and now required to reach synced state
+	SyncedCheckInterval int64 `json:"synced_check_interval"`
+	// The maximum interval between latest checkpoint ts and now or
+	// between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
+	CheckpointInterval int64 `json:"checkpoint_interval"`
+}
+
 // MarshalJSON marshal changefeed common info to json
 // we need to set feed state to normal if it is uninitialized and pending to warning
 // to hide the detail of uninitialized and pending state from user
@@ -190,8 +199,9 @@ type ReplicaConfig struct {
 	Sink       *SinkConfig       `json:"sink"`
 	Consistent *ConsistentConfig `json:"consistent"`
 
-	ChangefeedErrorStuckDuration *JSONDuration `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
-	SQLMode                      string        `json:"sql_mode,omitempty"`
+	ChangefeedErrorStuckDuration *JSONDuration       `json:"changefeed_error_stuck_duration,omitempty" swaggertype:"string"`
+	SQLMode                      string              `json:"sql_mode,omitempty"`
+	SyncedStatus                 *SyncedStatusConfig `json:"synced_status,omitempty"`
 }
 
 // ToInternalReplicaConfig coverts *v2.ReplicaConfig into *config.ReplicaConfig
@@ -362,6 +372,12 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			WorkerNum: c.Mounter.WorkerNum,
 		}
 	}
+	if c.SyncedStatus != nil {
+		res.SyncedStatus = &config.SyncedStatusConfig{
+			SyncedCheckInterval: c.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  c.SyncedStatus.CheckpointInterval,
+		}
+	}
 	return res
 }
 
@@ -522,6 +538,12 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	if cloned.Mounter != nil {
 		res.Mounter = &MounterConfig{
 			WorkerNum: cloned.Mounter.WorkerNum,
+		}
+	}
+	if cloned.SyncedStatus != nil {
+		res.SyncedStatus = &SyncedStatusConfig{
+			SyncedCheckInterval: cloned.SyncedStatus.SyncedCheckInterval,
+			CheckpointInterval:  cloned.SyncedStatus.CheckpointInterval,
 		}
 	}
 	return res
@@ -763,6 +785,16 @@ type ChangeFeedInfo struct {
 	CheckpointTs   uint64                    `json:"checkpoint_ts"`
 	CheckpointTime model.JSONTime            `json:"checkpoint_time"`
 	TaskStatus     []model.CaptureTaskStatus `json:"task_status,omitempty"`
+}
+
+// SyncedStatus describes the detail of a changefeed's synced status
+type SyncedStatus struct {
+	Synced           bool           `json:"synced"`
+	SinkCheckpointTs model.JSONTime `json:"sink_checkpoint_ts"`
+	PullerResolvedTs model.JSONTime `json:"puller_resolved_ts"`
+	LastSyncedTs     model.JSONTime `json:"last_synced_ts"`
+	NowTs            model.JSONTime `json:"now_ts"`
+	Info             string         `json:"info"`
 }
 
 // RunningError represents some running error from cdc components,

@@ -329,6 +329,9 @@ func (info *ChangeFeedInfo) VerifyAndComplete() {
 	if info.Config.SQLMode == "" {
 		info.Config.SQLMode = defaultConfig.SQLMode
 	}
+	if info.Config.SyncedStatus == nil {
+		info.Config.SyncedStatus = defaultConfig.SyncedStatus
+	}
 }
 
 // FixIncompatible fixes incompatible changefeed meta info.
@@ -581,4 +584,13 @@ type ChangeFeedStatusForAPI struct {
 	// used to check whether there is a pending DDL job at the checkpointTs when
 	// initializing the changefeed.
 	MinTableBarrierTs uint64 `json:"min-table-barrier-ts"`
+}
+
+// ChangeFeedSyncedStatusForAPI uses to transfer the synced status of changefeed for API.
+type ChangeFeedSyncedStatusForAPI struct {
+	CheckpointTs        uint64 `json:"checkpoint-ts"`
+	LastSyncedTs        uint64 `json:"last-sync-time"`
+	PullerResolvedTs    uint64 `json:"puller-resolved-ts"`
+	SyncedCheckInterval int64  `json:"synced-check-interval"`
+	CheckpointInterval  int64  `json:"checkpoint-interval"`
 }

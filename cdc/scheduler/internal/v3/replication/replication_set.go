@@ -1015,6 +1015,10 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 			zap.Any("resolvedTs", r.Checkpoint.ResolvedTs))
 	}
 
+	if r.Checkpoint.LastSyncedTs < checkpoint.LastSyncedTs {
+		r.Checkpoint.LastSyncedTs = checkpoint.LastSyncedTs
+	}
+
 	// we only update stats when stats is not empty, because we only collect stats every 10s.
 	if stats.Size() > 0 {
 		r.Stats = stats

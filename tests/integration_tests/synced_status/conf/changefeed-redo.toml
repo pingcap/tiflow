@@ -1,0 +1,7 @@
+[synced-status]
+synced-check-interval = 120
+checkpoint-interval = 20
+
+[consistent]
+level="eventual"
+storage = "file:///tmp/tidb_cdc_test/synced_status/redo"

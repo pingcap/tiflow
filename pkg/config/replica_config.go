@@ -89,6 +89,7 @@ var defaultReplicaConfig = &ReplicaConfig{
 	},
 	ChangefeedErrorStuckDuration: time.Minute * 30,
 	SQLMode:                      defaultSQLMode,
+	SyncedStatus:                 &SyncedStatusConfig{SyncedCheckInterval: 5 * 60, CheckpointInterval: 15},
 }
 
 // GetDefaultReplicaConfig returns the default replica config.
@@ -121,15 +122,16 @@ type replicaConfig struct {
 	// BDR(Bidirectional Replication) is a feature that allows users to
 	// replicate data of same tables from TiDB-1 to TiDB-2 and vice versa.
 	// This feature is only available for TiDB.
-	BDRMode                      bool              `toml:"bdr-mode" json:"bdr-mode"`
-	SyncPointInterval            time.Duration     `toml:"sync-point-interval" json:"sync-point-interval"`
-	SyncPointRetention           time.Duration     `toml:"sync-point-retention" json:"sync-point-retention"`
-	Filter                       *FilterConfig     `toml:"filter" json:"filter"`
-	Mounter                      *MounterConfig    `toml:"mounter" json:"mounter"`
-	Sink                         *SinkConfig       `toml:"sink" json:"sink"`
-	Consistent                   *ConsistentConfig `toml:"consistent" json:"consistent"`
-	ChangefeedErrorStuckDuration time.Duration     `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
-	SQLMode                      string            `toml:"sql-mode" json:"sql-mode,omitempty"`
+	BDRMode                      bool                `toml:"bdr-mode" json:"bdr-mode"`
+	SyncPointInterval            time.Duration       `toml:"sync-point-interval" json:"sync-point-interval"`
+	SyncPointRetention           time.Duration       `toml:"sync-point-retention" json:"sync-point-retention"`
+	Filter                       *FilterConfig       `toml:"filter" json:"filter"`
+	Mounter                      *MounterConfig      `toml:"mounter" json:"mounter"`
+	Sink                         *SinkConfig         `toml:"sink" json:"sink"`
+	Consistent                   *ConsistentConfig   `toml:"consistent" json:"consistent"`
+	ChangefeedErrorStuckDuration time.Duration       `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
+	SQLMode                      string              `toml:"sql-mode" json:"sql-mode,omitempty"`
+	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
 }
 
 // Marshal returns the json marshal format of a ReplicationConfig
