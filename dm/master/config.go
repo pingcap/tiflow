@@ -89,7 +89,7 @@ func NewConfig() *Config {
 	fs.Var(&cfg.CertAllowedCN, "cert-allowed-cn", "the trusted common name that allowed to visit")
 
 	fs.StringVar(&cfg.V1SourcesPath, "v1-sources-path", "", "directory path used to store source config files when upgrading from v1.0.x")
-	fs.StringVar(&cfg.SecretKeyPath, "secret-key-path", "", "path of file that contains secret key for encrypting and decrypting password, the secret key should be a hex string of length 64")
+	fs.StringVar(&cfg.SecretKeyPath, "secret-key-path", "", "path of file that contains secret key for encrypting and decrypting password, the secret key should be a hex AES-256 key of length 64")
 
 	return cfg
 }
