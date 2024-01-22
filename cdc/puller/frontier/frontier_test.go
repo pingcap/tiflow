@@ -16,6 +16,7 @@ package frontier
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -215,7 +216,7 @@ func TestSpanString(t *testing.T) {
 
 	spAH := tablepb.Span{StartKey: []byte("a"), EndKey: []byte("h")}
 	f := NewFrontier(1, spAH).(*spanFrontier)
-	require.Equal(t, `[0:a @ 1] [0:h @ Max] `, f.SpanString(spAH))
+	require.Equal(t, `[0:61 @ 1] [0:68 @ Max] `, f.SpanString(spAH))
 
 	f.Forward(1, spAB, 2)
 	f.Forward(2, spBC, 5)
@@ -225,14 +226,14 @@ func TestSpanString(t *testing.T) {
 	f.Forward(6, spFG, 25)
 	f.Forward(7, spGH, 35)
 	require.Equal(t, uint64(2), f.Frontier())
-	require.Equal(t, `[1:a @ 2] [2:b @ 5] [3:c @ 10] [4:d @ 20] [5:e @ 30] [6:f @ 25] [7:g @ 35] [0:h @ Max] `, f.stringWtihRegionID())
+	require.Equal(t, `[1:61 @ 2] [2:62 @ 5] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [6:66 @ 25] [7:67 @ 35] [0:68 @ Max] `, f.stringWtihRegionID())
 	// Print 5 span: start, before, target span, next, end
-	require.Equal(t, `[1:a @ 2] [3:c @ 10] [4:d @ 20] [5:e @ 30] [0:h @ Max] `, f.SpanString(spDE))
+	require.Equal(t, `[1:61 @ 2] [3:63 @ 10] [4:64 @ 20] [5:65 @ 30] [0:68 @ Max] `, f.SpanString(spDE))
 
 	spBH := tablepb.Span{StartKey: []byte("b"), EndKey: []byte("h")}
 	f.Forward(8, spBH, 18)
 	require.Equal(t, uint64(2), f.Frontier())
-	require.Equal(t, `[1:a @ 2] [8:b @ 18] [0:h @ Max] `, f.stringWtihRegionID())
+	require.Equal(t, `[1:61 @ 2] [8:62 @ 18] [0:68 @ Max] `, f.stringWtihRegionID())
 }
 
 func TestMinMax(t *testing.T) {
@@ -469,6 +470,24 @@ func TestFrontierEntries(t *testing.T) {
 	require.Equal(t, uint64(100), slowestTs)
 	require.Equal(t, []byte("a"), []byte(slowestRange.StartKey))
 	require.Equal(t, []byte("b"), []byte(slowestRange.EndKey))
+}
+
+func TestMergeSpitWithDifferentRegionID(t *testing.T) {
+	frontier := NewFrontier(100, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")})
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}, 1222)
+	frontier.Forward(2, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 102)
+	frontier.Forward(4, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 103)
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("c")}, 104)
+	frontier.Forward(1, tablepb.Span{StartKey: []byte("a"), EndKey: []byte("b")}, 1223)
+	frontier.Forward(3, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 105)
+	frontier.Forward(2, tablepb.Span{StartKey: []byte("b"), EndKey: []byte("c")}, 107)
+	frontier.(*spanFrontier).spanList.Entries(func(node *skipListNode) bool {
+		fmt.Printf("%d:[%s: %s) %d\n", node.regionID,
+			string(node.Key()),
+			string(node.End()), node.value.key)
+		return true
+	})
+	require.Equal(t, uint64(107), frontier.Frontier())
 }
 
 func TestRandomMergeAndSplit(t *testing.T) {
