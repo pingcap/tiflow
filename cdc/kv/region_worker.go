@@ -220,7 +220,7 @@ func (w *regionWorker) checkShouldExit() error {
 func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState) error {
 	regionID := state.getRegionID()
 	isStale := state.isStale()
-	log.Info("single region event feed disconnected",
+	w.session.client.logRegionDetails("single region event feed disconnected",
 		zap.String("namespace", w.session.client.changefeed.Namespace),
 		zap.String("changefeed", w.session.client.changefeed.ID),
 		zap.Int64("tableID", w.session.tableID),
@@ -396,7 +396,7 @@ func (w *regionWorker) processEvent(ctx context.Context, event *regionStatefulEv
 				err = w.handleSingleRegionError(err, event.state)
 			}
 		case *cdcpb.Event_Admin_:
-			log.Info("receive admin event",
+			w.session.client.logRegionDetails("receive admin event",
 				zap.String("namespace", w.session.client.changefeed.Namespace),
 				zap.String("changefeed", w.session.client.changefeed.ID),
 				zap.Int64("tableID", w.session.tableID),
@@ -449,7 +449,7 @@ func (w *regionWorker) onHandleExit(err error) {
 
 func (w *regionWorker) eventHandler(ctx context.Context, enableTableMonitor bool) error {
 	exitFn := func() error {
-		log.Info("region worker closed by error",
+		w.session.client.logRegionDetails("region worker closed by error",
 			zap.String("namespace", w.session.client.changefeed.Namespace),
 			zap.String("changefeed", w.session.client.changefeed.ID),
 			zap.Int64("tableID", w.session.tableID),
@@ -662,7 +662,7 @@ func (w *regionWorker) handleEventEntry(
 			return false
 		}
 	}
-	return handleEventEntry(x, w.session.startTs, state, w.metrics, emit, w.session.changefeed, w.session.tableID)
+	return handleEventEntry(x, w.session.startTs, state, w.metrics, emit, w.session.changefeed, w.session.tableID, w.session.client.logRegionDetails)
 }
 
 func handleEventEntry(
@@ -673,6 +673,7 @@ func handleEventEntry(
 	emit func(assembled model.RegionFeedEvent) bool,
 	changefeed model.ChangeFeedID,
 	tableID model.TableID,
+	logRegionDetails func(msg string, fields ...zap.Field),
 ) error {
 	regionID, regionSpan, _ := state.getRegionMeta()
 	for _, entry := range x.Entries.GetEntries() {
@@ -688,7 +689,7 @@ func handleEventEntry(
 		case cdcpb.Event_INITIALIZED:
 			metrics.metricPullEventInitializedCounter.Inc()
 			state.setInitialized()
-			log.Info("region is initialized",
+			logRegionDetails("region is initialized",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
 				zap.Int64("tableID", tableID),
