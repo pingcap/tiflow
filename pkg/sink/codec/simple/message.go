@@ -48,8 +48,6 @@ type EventType string
 const (
 	// WatermarkType is the type of the watermark event.
 	WatermarkType EventType = "WATERMARK"
-	// DDLType is the type of the DDL event.
-	DDLType EventType = "DDL"
 	// BootstrapType is the type of the bootstrap event.
 	BootstrapType EventType = "BOOTSTRAP"
 	// InsertType is the type of the insert event.
@@ -59,6 +57,31 @@ const (
 	// DeleteType is the type of the delete event.
 	DeleteType EventType = "DELETE"
 )
+
+func getDDLType(t timodel.ActionType) EventType {
+	switch t {
+	case timodel.ActionCreateTable:
+		return "CREATE"
+	case timodel.ActionRenameTable, timodel.ActionRenameTables:
+		return "RENAME"
+	case timodel.ActionAddIndex, timodel.ActionAddForeignKey, timodel.ActionAddPrimaryKey:
+		return "CINDEX"
+	case timodel.ActionDropIndex, timodel.ActionDropForeignKey, timodel.ActionDropPrimaryKey:
+		return "DINDEX"
+	case timodel.ActionDropTable:
+		return "ERASE"
+	case timodel.ActionTruncateTable:
+		return "TRUNCATE"
+	case timodel.ActionAddColumn, timodel.ActionDropColumn, timodel.ActionModifyColumn, timodel.ActionRebaseAutoID,
+		timodel.ActionSetDefaultValue, timodel.ActionModifyTableComment, timodel.ActionRenameIndex, timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition, timodel.ActionModifyTableCharsetAndCollate, timodel.ActionTruncateTablePartition,
+		timodel.ActionAlterIndexVisibility, timodel.ActionMultiSchemaChange, timodel.ActionReorganizePartition,
+		timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
+		return "ALTER"
+	default:
+		return "QUERY"
+	}
+}
 
 // columnSchema is the schema of the column.
 type columnSchema struct {
@@ -539,7 +562,7 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	}
 	msg := &message{
 		Version:        defaultVersion,
-		Type:           DDLType,
+		Type:           getDDLType(ddl.Type),
 		CommitTs:       ddl.CommitTs,
 		BuildTs:        time.Now().UnixMilli(),
 		SQL:            ddl.Query,

@@ -25,9 +25,9 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	mcloudstorage "github.com/pingcap/tiflow/cdc/sink/metrics/cloudstorage"
-	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/prometheus/client_golang/prometheus"
@@ -109,7 +109,7 @@ func newDMLWorker(
 	config *cloudstorage.Config,
 	extension string,
 	inputCh *chann.DrainableChann[eventFragment],
-	clock clock.Clock,
+	pdClock pdutil.Clock,
 	statistics *metrics.Statistics,
 ) *dmlWorker {
 	d := &dmlWorker{
@@ -120,7 +120,7 @@ func newDMLWorker(
 		inputCh:           inputCh,
 		toBeFlushedCh:     make(chan batchedTask, 64),
 		statistics:        statistics,
-		filePathGenerator: cloudstorage.NewFilePathGenerator(config, storage, extension, clock),
+		filePathGenerator: cloudstorage.NewFilePathGenerator(changefeedID, config, storage, extension, pdClock),
 		metricWriteBytes: mcloudstorage.CloudStorageWriteBytesGauge.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricFileCount: mcloudstorage.CloudStorageFileCountGauge.
