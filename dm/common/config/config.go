@@ -44,7 +44,7 @@ func (c *Common) Adjust() error {
 		return terror.ErrConfigSecretKeyPath.Generate(err)
 	}
 	if len(decodeContent) != 32 {
-		return terror.ErrConfigSecretKeyPath.Generate("the secret key must be a hex string of length 64")
+		return terror.ErrConfigSecretKeyPath.Generate("the secret key must be a hex AES-256 key of length 64")
 	}
 	c.SecretKey = decodeContent
 	return nil
