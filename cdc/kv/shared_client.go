@@ -120,6 +120,8 @@ type requestedTable struct {
 	rangeLock *regionlock.RegionRangeLock
 	eventCh   chan<- MultiplexingEvent
 
+	lastAdvanceTime atomic.Int64
+
 	// To handle table removing.
 	stopped atomic.Bool
 

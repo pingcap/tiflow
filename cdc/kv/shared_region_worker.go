@@ -39,6 +39,7 @@ type eventItem struct {
 	state *regionFeedState
 }
 
+// NOTE: all regions must come from the same requestedTable, and regions will never be empty.
 type resolvedTsBatch struct {
 	ts      uint64
 	regions []*regionFeedState
@@ -174,23 +175,9 @@ func (w *sharedRegionWorker) handleEventEntry(ctx context.Context, x *cdcpb.Even
 }
 
 func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolvedTsBatch) {
-	resolvedSpans := make(map[SubscriptionID]*struct {
-		spans          []model.RegionComparableSpan
-		requestedTable *requestedTable
-	})
-
 	for _, state := range batch.regions {
 		if state.isStale() || !state.isInitialized() {
 			continue
-		}
-
-		spansAndChan := resolvedSpans[state.sri.requestedTable.subscriptionID]
-		if spansAndChan == nil {
-			spansAndChan = &struct {
-				spans          []model.RegionComparableSpan
-				requestedTable *requestedTable
-			}{requestedTable: state.sri.requestedTable}
-			resolvedSpans[state.sri.requestedTable.subscriptionID] = spansAndChan
 		}
 
 		regionID := state.getRegionID()
@@ -205,29 +192,24 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolve
 			continue
 		}
 		state.updateResolvedTs(batch.ts)
-
-		span := model.RegionComparableSpan{Span: state.sri.span, Region: regionID}
-		span.Span.TableID = state.sri.requestedTable.span.TableID
-		spansAndChan.spans = append(spansAndChan.spans, span)
 	}
 
-	for subscriptionID, spansAndChan := range resolvedSpans {
-		log.Debug("region worker get a ResolvedTs",
-			zap.String("namespace", w.changefeed.Namespace),
-			zap.String("changefeed", w.changefeed.ID),
-			zap.Any("subscriptionID", subscriptionID),
-			zap.Uint64("ResolvedTs", batch.ts),
-			zap.Int("spanCount", len(spansAndChan.spans)))
-		if len(spansAndChan.spans) > 0 {
-			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{
-				Spans: spansAndChan.spans, ResolvedTs: batch.ts,
-			}}
-			x := spansAndChan.requestedTable.associateSubscriptionID(revent)
-			select {
-			case spansAndChan.requestedTable.eventCh <- x:
-				w.metrics.metricSendEventResolvedCounter.Add(float64(len(resolvedSpans)))
-			case <-ctx.Done():
-			}
+	rt := batch.regions[0].sri.requestedTable
+	now := time.Now().UnixMilli()
+	lastAdvance := rt.lastAdvanceTime.Load()
+	if now-lastAdvance > 300 && rt.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {
+		ts := rt.rangeLock.GetMinCheckpointTs()
+		revent := model.RegionFeedEvent{
+			Resolved: &model.ResolvedSpans{
+				Spans:      []model.RegionComparableSpan{{Span: rt.span, Region: 0}},
+				ResolvedTs: ts,
+			},
+		}
+		x := rt.associateSubscriptionID(revent)
+		select {
+		case rt.eventCh <- x:
+			w.metrics.metricSendEventResolvedCounter.Add(float64(len(batch.regions)))
+		case <-ctx.Done():
 		}
 	}
 }
