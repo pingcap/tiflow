@@ -33,9 +33,12 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// testEventSize is the size of a test event(The return value of RowChangedEvent.ApproximateBytes).
+// testEventSize is the size of a test event.
 // It is used to calculate the memory quota.
-const testEventSize = 144
+var (
+	emptyEvent    = model.RowChangedEvent{}
+	testEventSize = emptyEvent.ApproximateBytes()
+)
 
 //nolint:unparam
 func genPolymorphicEventWithNilRow(startTs,
@@ -109,10 +112,10 @@ func TestTableSinkWorkerSuite(t *testing.T) {
 }
 
 func (suite *tableSinkWorkerSuite) SetupSuite() {
-	requestMemSize = testEventSize
+	requestMemSize = uint64(testEventSize)
 	// For one batch size.
 	// Advance table sink per 2 events.
-	maxUpdateIntervalSize = testEventSize * 2
+	maxUpdateIntervalSize = uint64(testEventSize * 2)
 	suite.testChangefeedID = model.DefaultChangeFeedID("1")
 	suite.testSpan = spanz.TableIDToComparableSpan(1)
 }
@@ -139,7 +142,7 @@ func (suite *tableSinkWorkerSuite) createWorker(
 	// To avoid refund or release panics.
 	quota := memquota.NewMemQuota(suite.testChangefeedID, memQuota, "sink")
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
-	quota.ForceAcquire(testEventSize)
+	quota.ForceAcquire(uint64(testEventSize))
 	quota.AddTable(suite.testSpan)
 
 	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil, splitTxn), sortEngine

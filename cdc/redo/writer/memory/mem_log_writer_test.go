@@ -36,23 +36,17 @@ func TestWriteDDL(t *testing.T) {
 		&model.RowChangedEvent{
 			PhysicalTableID: 11,
 			CommitTs:        11,
-			TableInfo: &model.TableInfo{
-				TableName: model.TableName{Schema: "test", Table: "t"},
-			},
+			TableInfo:       &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t1"}},
 		},
 		&model.RowChangedEvent{
 			PhysicalTableID: 12,
 			CommitTs:        15,
-			TableInfo: &model.TableInfo{
-				TableName: model.TableName{Schema: "test", Table: "t"},
-			},
+			TableInfo:       &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t2"}},
 		},
 		&model.RowChangedEvent{
 			PhysicalTableID: 12,
 			CommitTs:        8,
-			TableInfo: &model.TableInfo{
-				TableName: model.TableName{Schema: "test", Table: "t"},
-			},
+			TableInfo:       &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "t2"}},
 		},
 	}
 	testWriteEvents(t, rows)

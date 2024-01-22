@@ -262,9 +262,8 @@ func (l *LogReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, er
 				PreColumns: rowInRedoLog.PreColumns,
 			}
 			return row, nil
-		} else {
-			return nil, nil
 		}
+		return nil, nil
 	}
 }
 

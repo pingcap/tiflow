@@ -571,7 +571,10 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			// only use batch dml when the table has a handle key
 			if hasHandleKey(tableColumns) {
 				// TODO: will use firstRow.TableInfo.TableInfo directly after we build a more complete TableInfo in later pr
-				tableInfo := model.BuildTiDBTableInfo(*firstRow.TableInfo.GetTableName(), tableColumns, firstRow.TableInfo.IndexColumnsOffset)
+				tableInfo := model.BuildTiDBTableInfo(
+					*firstRow.TableInfo.GetTableName(),
+					tableColumns,
+					firstRow.TableInfo.IndexColumnsOffset)
 				sql, value := s.batchSingleTxnDmls(event, tableInfo, translateToInsert)
 				sqls = append(sqls, sql...)
 				values = append(values, value...)

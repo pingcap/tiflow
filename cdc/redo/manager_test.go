@@ -140,6 +140,9 @@ func TestLogManagerInProcessor(t *testing.T) {
 		for _, span := range spans {
 			dmlMgr.AddTable(span, startTs)
 		}
+		tableInfo := &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: "t"},
+		}
 		testCases := []struct {
 			span tablepb.Span
 			rows []*model.RowChangedEvent
@@ -147,30 +150,30 @@ func TestLogManagerInProcessor(t *testing.T) {
 			{
 				span: spanz.TableIDToComparableSpan(53),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 120, PhysicalTableID: 53},
-					{CommitTs: 125, PhysicalTableID: 53},
-					{CommitTs: 130, PhysicalTableID: 53},
+					{CommitTs: 120, PhysicalTableID: 53, TableInfo: tableInfo},
+					{CommitTs: 125, PhysicalTableID: 53, TableInfo: tableInfo},
+					{CommitTs: 130, PhysicalTableID: 53, TableInfo: tableInfo},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(55),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 130, PhysicalTableID: 55},
-					{CommitTs: 135, PhysicalTableID: 55},
+					{CommitTs: 130, PhysicalTableID: 55, TableInfo: tableInfo},
+					{CommitTs: 135, PhysicalTableID: 55, TableInfo: tableInfo},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(57),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 130, PhysicalTableID: 57},
+					{CommitTs: 130, PhysicalTableID: 57, TableInfo: tableInfo},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(59),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 128, PhysicalTableID: 59},
-					{CommitTs: 130, PhysicalTableID: 59},
-					{CommitTs: 133, PhysicalTableID: 59},
+					{CommitTs: 128, PhysicalTableID: 59, TableInfo: tableInfo},
+					{CommitTs: 130, PhysicalTableID: 59, TableInfo: tableInfo},
+					{CommitTs: 133, PhysicalTableID: 59, TableInfo: tableInfo},
 				},
 			},
 		}
@@ -286,6 +289,9 @@ func TestLogManagerError(t *testing.T) {
 		return logMgr.Run(ctx)
 	})
 
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{Schema: "test", Table: "t"},
+	}
 	testCases := []struct {
 		span tablepb.Span
 		rows []writer.RedoEvent
@@ -293,9 +299,9 @@ func TestLogManagerError(t *testing.T) {
 		{
 			span: spanz.TableIDToComparableSpan(53),
 			rows: []writer.RedoEvent{
-				&model.RowChangedEvent{CommitTs: 120, PhysicalTableID: 53},
-				&model.RowChangedEvent{CommitTs: 125, PhysicalTableID: 53},
-				&model.RowChangedEvent{CommitTs: 130, PhysicalTableID: 53},
+				&model.RowChangedEvent{CommitTs: 120, PhysicalTableID: 53, TableInfo: tableInfo},
+				&model.RowChangedEvent{CommitTs: 125, PhysicalTableID: 53, TableInfo: tableInfo},
+				&model.RowChangedEvent{CommitTs: 130, PhysicalTableID: 53, TableInfo: tableInfo},
 			},
 		},
 	}
@@ -361,6 +367,9 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 	b.ResetTimer()
 	for _, tableID := range tables {
 		wg.Add(1)
+		tableInfo := &model.TableInfo{
+			TableName: model.TableName{Schema: "test", Table: fmt.Sprintf("t_%d", tableID)},
+		}
 		go func(span tablepb.Span) {
 			defer wg.Done()
 			maxCommitTs := maxTsMap.GetV(span)
@@ -371,9 +380,9 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 					b.StopTimer()
 					*maxCommitTs += rand.Uint64() % 10
 					rows = []*model.RowChangedEvent{
-						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID},
-						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID},
-						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID, TableInfo: tableInfo},
 					}
 
 					b.StartTimer()

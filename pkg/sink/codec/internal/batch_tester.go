@@ -25,14 +25,15 @@ import (
 )
 
 var (
+	tableInfo = &model.TableInfo{
+		TableName: model.TableName{
+			Schema: "a", Table: "b",
+		},
+	}
 	// CodecRowCases defines test cases for RowChangedEvent.
 	CodecRowCases = [][]*model.RowChangedEvent{{{
-		CommitTs: 424316552636792833,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
+		CommitTs:  424316552636792833,
+		TableInfo: tableInfo,
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -54,12 +55,8 @@ var (
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
 	}}, {{
-		CommitTs: 424316553934667777,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
+		CommitTs:  424316553934667777,
+		TableInfo: tableInfo,
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -81,12 +78,8 @@ var (
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
 	}, {
-		CommitTs: 424316554327097345,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
+		CommitTs:  424316554327097345,
+		TableInfo: tableInfo,
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -108,12 +101,8 @@ var (
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
 	}, {
-		CommitTs: 424316554746789889,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
+		CommitTs:  424316554746789889,
+		TableInfo: tableInfo,
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -135,12 +124,8 @@ var (
 			{Name: "null", Type: mysql.TypeNull, Value: nil},
 		},
 	}, {
-		CommitTs: 424316555073945601,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
+		CommitTs:  424316555073945601,
+		TableInfo: tableInfo,
 		PreColumns: []*model.Column{
 			{Name: "varchar", Type: mysql.TypeVarchar, Value: []byte("varchar0")},
 			{Name: "string", Type: mysql.TypeString, Value: []byte("string0")},
@@ -165,41 +150,25 @@ var (
 
 	// CodecDDLCases defines test cases for DDLEvent.
 	CodecDDLCases = [][]*model.DDLEvent{{{
-		CommitTs: 424316555979653121,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
-		Query: "create table a",
-		Type:  1,
+		CommitTs:  424316555979653121,
+		TableInfo: tableInfo,
+		Query:     "create table a",
+		Type:      1,
 	}}, {{
-		CommitTs: 424316583965360129,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
-		Query: "create table a",
-		Type:  1,
+		CommitTs:  424316583965360129,
+		TableInfo: tableInfo,
+		Query:     "create table a",
+		Type:      1,
 	}, {
-		CommitTs: 424316586087940097,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
-		Query: "create table b",
-		Type:  2,
+		CommitTs:  424316586087940097,
+		TableInfo: tableInfo,
+		Query:     "create table b",
+		Type:      2,
 	}, {
-		CommitTs: 424316588736118785,
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "a", Table: "b",
-			},
-		},
-		Query: "create table c",
-		Type:  3,
+		CommitTs:  424316588736118785,
+		TableInfo: tableInfo,
+		Query:     "create table c",
+		Type:      3,
 	}}, {}}
 
 	// CodecResolvedTSCases defines test cases for resolved ts events.
