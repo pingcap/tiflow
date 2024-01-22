@@ -26,11 +26,11 @@ func TestColumnsDispatcher(t *testing.T) {
 	t.Parallel()
 
 	event := &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t1",
-		},
 		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 			TableInfo: &timodel.TableInfo{
 				Columns: []*timodel.ColumnInfo{
 					{

@@ -685,12 +685,12 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 				var partitionID int64
-				if row.Table.IsPartition {
-					partitionID = row.Table.TableID
+				if row.TableInfo.TableName.IsPartition {
+					partitionID = row.PhysicalTableID
 				}
 				tableID := c.fakeTableIDGenerator.
-					generateFakeTableID(row.Table.Schema, row.Table.Table, partitionID)
-				row.Table.TableID = tableID
+					generateFakeTableID(*row.TableInfo.GetSchemaName(), *row.TableInfo.GetTableName(), partitionID)
+				row.TableInfo.TableName.TableID = tableID
 
 				group, ok := eventGroups[tableID]
 				if !ok {

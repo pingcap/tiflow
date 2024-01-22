@@ -26,22 +26,22 @@ import (
 
 func getMockTableStatus() (model.TopicPartitionKey, *model.RowChangedEvent, *tableStatistic) {
 	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema:  "test",
+			Table:   "t1",
+			TableID: 1,
+		},
 		TableInfo: &timodel.TableInfo{
 			UpdateTS: 1,
 		},
-	}
-	table := &model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 1,
 	}
 	key := model.TopicPartitionKey{
 		Topic:     "test.t1",
 		Partition: 1,
 	}
 	row := &model.RowChangedEvent{
-		TableInfo: tableInfo,
-		Table:     table,
+		PhysicalTableID: 1,
+		TableInfo:       tableInfo,
 	}
 	// case 1: A new added table should send bootstrap message immediately
 	tb1 := newTableStatus(key, row)

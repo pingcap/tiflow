@@ -1593,7 +1593,7 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "CommitTs")
 				return
 			}
-		case "tbl-id":
+		case "physical-tbl-id":
 			z.PhysicalTableID, err = dc.ReadInt64()
 			if err != nil {
 				err = msgp.WrapError(err, "PhysicalTableID")
@@ -1661,38 +1661,6 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					}
 				}
 			}
-		case "index-columns":
-			var zb0004 uint32
-			zb0004, err = dc.ReadArrayHeader()
-			if err != nil {
-				err = msgp.WrapError(err, "IndexColumns")
-				return
-			}
-			if cap(z.IndexColumns) >= int(zb0004) {
-				z.IndexColumns = (z.IndexColumns)[:zb0004]
-			} else {
-				z.IndexColumns = make([][]int, zb0004)
-			}
-			for za0003 := range z.IndexColumns {
-				var zb0005 uint32
-				zb0005, err = dc.ReadArrayHeader()
-				if err != nil {
-					err = msgp.WrapError(err, "IndexColumns", za0003)
-					return
-				}
-				if cap(z.IndexColumns[za0003]) >= int(zb0005) {
-					z.IndexColumns[za0003] = (z.IndexColumns[za0003])[:zb0005]
-				} else {
-					z.IndexColumns[za0003] = make([]int, zb0005)
-				}
-				for za0004 := range z.IndexColumns[za0003] {
-					z.IndexColumns[za0003][za0004], err = dc.ReadInt()
-					if err != nil {
-						err = msgp.WrapError(err, "IndexColumns", za0003, za0004)
-						return
-					}
-				}
-			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -1706,9 +1674,9 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 6
+	// map header, size 5
 	// write "start-ts"
-	err = en.Append(0x86, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	err = en.Append(0x85, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	if err != nil {
 		return
 	}
@@ -1727,8 +1695,8 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "CommitTs")
 		return
 	}
-	// write "tbl-id"
-	err = en.Append(0xa6, 0x74, 0x62, 0x6c, 0x2d, 0x69, 0x64)
+	// write "physical-tbl-id"
+	err = en.Append(0xaf, 0x70, 0x68, 0x79, 0x73, 0x69, 0x63, 0x61, 0x6c, 0x2d, 0x74, 0x62, 0x6c, 0x2d, 0x69, 0x64)
 	if err != nil {
 		return
 	}
@@ -1785,45 +1753,21 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			}
 		}
 	}
-	// write "index-columns"
-	err = en.Append(0xad, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
-	if err != nil {
-		return
-	}
-	err = en.WriteArrayHeader(uint32(len(z.IndexColumns)))
-	if err != nil {
-		err = msgp.WrapError(err, "IndexColumns")
-		return
-	}
-	for za0003 := range z.IndexColumns {
-		err = en.WriteArrayHeader(uint32(len(z.IndexColumns[za0003])))
-		if err != nil {
-			err = msgp.WrapError(err, "IndexColumns", za0003)
-			return
-		}
-		for za0004 := range z.IndexColumns[za0003] {
-			err = en.WriteInt(z.IndexColumns[za0003][za0004])
-			if err != nil {
-				err = msgp.WrapError(err, "IndexColumns", za0003, za0004)
-				return
-			}
-		}
-	}
 	return
 }
 
 // MarshalMsg implements msgp.Marshaler
 func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 6
+	// map header, size 5
 	// string "start-ts"
-	o = append(o, 0x86, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	o = append(o, 0x85, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.StartTs)
 	// string "commit-ts"
 	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.CommitTs)
-	// string "tbl-id"
-	o = append(o, 0xa6, 0x74, 0x62, 0x6c, 0x2d, 0x69, 0x64)
+	// string "physical-tbl-id"
+	o = append(o, 0xaf, 0x70, 0x68, 0x79, 0x73, 0x69, 0x63, 0x61, 0x6c, 0x2d, 0x74, 0x62, 0x6c, 0x2d, 0x69, 0x64)
 	o = msgp.AppendInt64(o, z.PhysicalTableID)
 	// string "columns"
 	o = append(o, 0xa7, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
@@ -1851,15 +1795,6 @@ func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "PreColumns", za0002)
 				return
 			}
-		}
-	}
-	// string "index-columns"
-	o = append(o, 0xad, 0x69, 0x6e, 0x64, 0x65, 0x78, 0x2d, 0x63, 0x6f, 0x6c, 0x75, 0x6d, 0x6e, 0x73)
-	o = msgp.AppendArrayHeader(o, uint32(len(z.IndexColumns)))
-	for za0003 := range z.IndexColumns {
-		o = msgp.AppendArrayHeader(o, uint32(len(z.IndexColumns[za0003])))
-		for za0004 := range z.IndexColumns[za0003] {
-			o = msgp.AppendInt(o, z.IndexColumns[za0003][za0004])
 		}
 	}
 	return
@@ -1895,7 +1830,7 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "CommitTs")
 				return
 			}
-		case "tbl-id":
+		case "physical-tbl-id":
 			z.PhysicalTableID, bts, err = msgp.ReadInt64Bytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "PhysicalTableID")
@@ -1961,38 +1896,6 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					}
 				}
 			}
-		case "index-columns":
-			var zb0004 uint32
-			zb0004, bts, err = msgp.ReadArrayHeaderBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "IndexColumns")
-				return
-			}
-			if cap(z.IndexColumns) >= int(zb0004) {
-				z.IndexColumns = (z.IndexColumns)[:zb0004]
-			} else {
-				z.IndexColumns = make([][]int, zb0004)
-			}
-			for za0003 := range z.IndexColumns {
-				var zb0005 uint32
-				zb0005, bts, err = msgp.ReadArrayHeaderBytes(bts)
-				if err != nil {
-					err = msgp.WrapError(err, "IndexColumns", za0003)
-					return
-				}
-				if cap(z.IndexColumns[za0003]) >= int(zb0005) {
-					z.IndexColumns[za0003] = (z.IndexColumns[za0003])[:zb0005]
-				} else {
-					z.IndexColumns[za0003] = make([]int, zb0005)
-				}
-				for za0004 := range z.IndexColumns[za0003] {
-					z.IndexColumns[za0003][za0004], bts, err = msgp.ReadIntBytes(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "IndexColumns", za0003, za0004)
-						return
-					}
-				}
-			}
 		default:
 			bts, err = msgp.Skip(bts)
 			if err != nil {
@@ -2007,7 +1910,7 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *RowChangedEvent) Msgsize() (s int) {
-	s = 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 7 + msgp.Int64Size + 8 + msgp.ArrayHeaderSize
+	s = 1 + 9 + msgp.Uint64Size + 10 + msgp.Uint64Size + 16 + msgp.Int64Size + 8 + msgp.ArrayHeaderSize
 	for za0001 := range z.Columns {
 		if z.Columns[za0001] == nil {
 			s += msgp.NilSize
@@ -2022,10 +1925,6 @@ func (z *RowChangedEvent) Msgsize() (s int) {
 		} else {
 			s += z.PreColumns[za0002].Msgsize()
 		}
-	}
-	s += 14 + msgp.ArrayHeaderSize
-	for za0003 := range z.IndexColumns {
-		s += msgp.ArrayHeaderSize + (len(z.IndexColumns[za0003]) * (msgp.IntSize))
 	}
 	return
 }

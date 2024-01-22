@@ -369,7 +369,7 @@ func (c *consumer) emitDMLEvents(
 				)
 				continue
 			}
-			row.Table.TableID = tableID
+			row.PhysicalTableID = tableID
 			c.tableSinkMap[tableID].AppendRowChangedEvents(row)
 			filteredCnt++
 		}

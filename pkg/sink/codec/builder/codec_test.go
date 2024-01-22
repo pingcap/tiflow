@@ -104,8 +104,8 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
 	key := &benchmark.Key{
 		Ts:        event.CommitTs,
-		Schema:    event.Table.Schema,
-		Table:     event.Table.Table,
+		Schema:    *event.TableInfo.GetSchemaName(),
+		Table:     *event.TableInfo.GetTableName(),
 		RowId:     event.RowID,
 		Partition: 0,
 	}
@@ -169,8 +169,8 @@ func codecEncodeKeysPB2(events []*model.RowChangedEvent) []byte {
 
 	for _, event := range events {
 		converted.Ts = append(converted.Ts, event.CommitTs)
-		converted.Schema = append(converted.Schema, event.Table.Schema)
-		converted.Table = append(converted.Table, event.Table.Table)
+		converted.Schema = append(converted.Schema, *event.TableInfo.GetSchemaName())
+		converted.Table = append(converted.Table, *event.TableInfo.GetTableName())
 		converted.RowId = append(converted.RowId, event.RowID)
 		converted.Partition = append(converted.Partition, 0)
 	}
@@ -368,13 +368,15 @@ func benchmarkProtobuf1Decoding() []*model.RowChangedEvent {
 		ev.PreColumns = codecDecodeRowChangedPB1(value.OldValue)
 		ev.Columns = codecDecodeRowChangedPB1(value.NewValue)
 		ev.CommitTs = key.Ts
-		ev.Table = &model.TableName{
-			Schema: key.Schema,
-			Table:  key.Table,
+		ev.TableInfo = &model.TableInfo{
+			TableName: model.TableName{
+				Schema: key.Schema,
+				Table:  key.Table,
+			},
 		}
 		if key.Partition >= 0 {
-			ev.Table.TableID = key.Partition
-			ev.Table.IsPartition = true
+			ev.PhysicalTableID = key.Partition
+			ev.TableInfo.TableName.IsPartition = true
 		}
 		result = append(result, ev)
 	}
@@ -425,13 +427,15 @@ func benchmarkProtobuf2Decoding() []*model.RowChangedEvent {
 				ev.Columns = codecDecodeRowChangedPB2(values.NewValue[i])
 			}
 			ev.CommitTs = ts
-			ev.Table = &model.TableName{
-				Schema: keys.Schema[i],
-				Table:  keys.Table[i],
+			ev.TableInfo = &model.TableInfo{
+				TableName: model.TableName{
+					Schema: keys.Schema[i],
+					Table:  keys.Table[i],
+				},
 			}
 			if keys.Partition[i] >= 0 {
-				ev.Table.TableID = keys.Partition[i]
-				ev.Table.IsPartition = true
+				ev.PhysicalTableID = keys.Partition[i]
+				ev.TableInfo.TableName.IsPartition = true
 			}
 			result = append(result, ev)
 		}

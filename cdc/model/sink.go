@@ -300,8 +300,8 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 			TableID:     r.PhysicalTableID,
 			IsPartition: r.TableInfo.IsPartitionTable(),
 		},
-		Columns:      ColumnDatas2Columns(r.Columns, r.TableInfo),
-		PreColumns:   ColumnDatas2Columns(r.PreColumns, r.TableInfo),
+		Columns:      r.Columns,
+		PreColumns:   r.PreColumns,
 		IndexColumns: r.TableInfo.IndexColumnsOffset,
 	}
 	return &RedoLog{
@@ -893,17 +893,9 @@ func (t *SingleTableTxn) GetCommitTs() uint64 {
 	return t.CommitTs
 }
 
+// GetPhysicalTableID returns the physical table id of the table in the transaction
 func (t *SingleTableTxn) GetPhysicalTableID() int64 {
 	return t.PhysicalTableID
-}
-
-// FIXME: may remove the following two methods
-func (t *SingleTableTxn) GetSchemaName() string {
-	return *t.TableInfo.GetSchemaName()
-}
-
-func (t *SingleTableTxn) GetTableName() string {
-	return *t.TableInfo.GetTableName()
 }
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated

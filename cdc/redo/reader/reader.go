@@ -244,16 +244,27 @@ func (l *LogReader) ReadNextRow(ctx context.Context) (*model.RowChangedEvent, er
 	case <-ctx.Done():
 		return nil, errors.Trace(ctx.Err())
 	case rowInRedoLog := <-l.rowCh:
-		tableInfo := model.BuildTableInfo(rowInRedoLog.Table.Schema, rowInRedoLog.Table.Table, rowInRedoLog.Columns, rowInRedoLog.IndexColumns)
-		row := &model.RowChangedEvent{
-			StartTs:         rowInRedoLog.StartTs,
-			CommitTs:        rowInRedoLog.CommitTs,
-			PhysicalTableID: rowInRedoLog.Table.TableID,
-			TableInfo:       tableInfo,
-			Columns:         model.Columns2ColumnDatas(rowInRedoLog.Columns, tableInfo),
-			PreColumns:      model.Columns2ColumnDatas(rowInRedoLog.PreColumns, tableInfo),
+		if rowInRedoLog != nil {
+			row := &model.RowChangedEvent{
+				StartTs:         rowInRedoLog.StartTs,
+				CommitTs:        rowInRedoLog.CommitTs,
+				PhysicalTableID: rowInRedoLog.Table.TableID,
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema:      rowInRedoLog.Table.Schema,
+						Table:       rowInRedoLog.Table.Table,
+						TableID:     rowInRedoLog.Table.TableID,
+						IsPartition: rowInRedoLog.Table.IsPartition,
+					},
+					IndexColumnsOffset: rowInRedoLog.IndexColumns,
+				},
+				Columns:    rowInRedoLog.Columns,
+				PreColumns: rowInRedoLog.PreColumns,
+			}
+			return row, nil
+		} else {
+			return nil, nil
 		}
-		return row, nil
 	}
 }
 

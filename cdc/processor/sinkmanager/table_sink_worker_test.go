@@ -33,9 +33,9 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-// testEventSize is the size of a test event.
+// testEventSize is the size of a test event(The return value of RowChangedEvent.ApproximateBytes).
 // It is used to calculate the memory quota.
-const testEventSize = 226
+const testEventSize = 144
 
 //nolint:unparam
 func genPolymorphicEventWithNilRow(startTs,
@@ -78,13 +78,16 @@ func genPolymorphicEvent(startTs, commitTs uint64, span tablepb.Span) *model.Pol
 
 func genRowChangedEvent(startTs, commitTs uint64, span tablepb.Span) *model.RowChangedEvent {
 	return &model.RowChangedEvent{
-		StartTs:  startTs,
-		CommitTs: commitTs,
-		Table: &model.TableName{
-			Schema:      "table",
-			Table:       "table",
-			TableID:     span.TableID,
-			IsPartition: false,
+		StartTs:         startTs,
+		CommitTs:        commitTs,
+		PhysicalTableID: span.TableID,
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema:      "table",
+				Table:       "table",
+				TableID:     span.TableID,
+				IsPartition: false,
+			},
 		},
 		Columns: []*model.Column{
 			{Name: "a", Value: 2},

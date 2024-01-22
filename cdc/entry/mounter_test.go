@@ -331,8 +331,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 				return
 			}
 			rows++
-			require.Equal(t, row.Table.Table, tc.tableName)
-			require.Equal(t, row.Table.Schema, "test")
+			require.Equal(t, *row.TableInfo.GetTableName(), tc.tableName)
+			require.Equal(t, *row.TableInfo.GetSchemaName(), "test")
 			// [TODO] check size and reopen this check
 			// require.Equal(t, rowBytes[rows-1], row.ApproximateBytes(), row)
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
@@ -1491,10 +1491,10 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 			}
 			row := pEvent.Row
 			rows++
-			require.Equal(t, row.Table.Schema, "test")
+			require.Equal(t, *row.TableInfo.GetSchemaName(), "test")
 			// Now we only allow filter dml event by table, so we only check row's table.
-			require.NotContains(t, ignoredTables, row.Table.Table)
-			require.Contains(t, tables, row.Table.Table)
+			require.NotContains(t, ignoredTables, *row.TableInfo.GetTableName())
+			require.Contains(t, tables, *row.TableInfo.GetTableName())
 		})
 		return rows
 	}

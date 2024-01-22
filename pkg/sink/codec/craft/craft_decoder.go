@@ -76,15 +76,18 @@ func (b *batchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		}
 	}
 	ev.CommitTs = b.headers.GetTs(b.index)
-	// FIXME: set partition
 	ev.TableInfo = &model.TableInfo{
 		TableName: model.TableName{
-			Schema: b.headers.GetSchema(b.index),
-			Table:  b.headers.GetTable(b.index),
+			Schema:      b.headers.GetSchema(b.index),
+			Table:       b.headers.GetTable(b.index),
+			IsPartition: false,
 		},
 	}
 	partition := b.headers.GetPartition(b.index)
-	ev.PhysicalTableID = partition
+	if partition >= 0 {
+		ev.PhysicalTableID = partition
+		ev.TableInfo.TableName.IsPartition = true
+	}
 	b.index++
 	return ev, nil
 }

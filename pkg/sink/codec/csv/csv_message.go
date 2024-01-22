@@ -407,11 +407,12 @@ func csvMsg2RowChangedEvent(csvConfig *common.Config, csvMsg *csvMessage, ticols
 
 	e := new(model.RowChangedEvent)
 	e.CommitTs = csvMsg.commitTs
-	// FIXME: fix e.TableInfo
-	// e.Table = &model.TableName{
-	// 	Schema: csvMsg.schemaName,
-	// 	Table:  csvMsg.tableName,
-	// }
+	e.TableInfo = &model.TableInfo{
+		TableName: model.TableName{
+			Schema: csvMsg.schemaName,
+			Table:  csvMsg.tableName,
+		},
+	}
 	if csvMsg.opType == operationDelete {
 		e.PreColumns, err = csvColumns2RowChangeColumns(csvConfig, csvMsg.columns, ticols)
 	} else {

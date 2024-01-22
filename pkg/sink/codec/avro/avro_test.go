@@ -639,10 +639,6 @@ func newLargeEvent() *model.RowChangedEvent {
 
 	return &model.RowChangedEvent{
 		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "testdb",
-			Table:  "avroencode",
-		},
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
 				Schema: "testdb",
@@ -676,7 +672,7 @@ func TestRowToAvroSchemaEnableChecksum(t *testing.T) {
 
 	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
-	schema, err := encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
+	schema, err := encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtensionEnableChecksum, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -697,7 +693,7 @@ func TestRowToAvroSchema(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolAvro)
 	encoder := NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
-	schema, err := encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
+	schema, err := encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithoutExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -706,7 +702,7 @@ func TestRowToAvroSchema(t *testing.T) {
 	codecConfig.EnableTiDBExtension = true
 	encoder = NewAvroEncoder(model.DefaultNamespace, nil, codecConfig)
 
-	schema, err = encoder.(*BatchEncoder).value2AvroSchema(event.Table, input)
+	schema, err = encoder.(*BatchEncoder).value2AvroSchema(&event.TableInfo.TableName, input)
 	require.NoError(t, err)
 	require.Equal(t, expectedSchemaWithExtension, indentJSON(schema))
 	_, err = goavro.NewCodec(schema)
@@ -945,7 +941,6 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 
 	row := &model.RowChangedEvent{
 		CommitTs:  1,
-		Table:     &model.TableName{Schema: "a", Table: "b"},
 		TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "a", Table: "b"}},
 		Columns: []*model.Column{{
 			Name:  "col1",

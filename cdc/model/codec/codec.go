@@ -179,11 +179,12 @@ func redoLogFromV1(rv1 *codecv1.RedoLog) (r *model.RedoLog) {
 	r = &model.RedoLog{Type: (model.RedoLogType)(rv1.Type)}
 	if rv1.RedoRow != nil && rv1.RedoRow.Row != nil {
 		r.RedoRow.Row = &model.RowChangedEventInRedoLog{
-			StartTs:    rv1.RedoRow.Row.StartTs,
-			CommitTs:   rv1.RedoRow.Row.CommitTs,
-			Table:      tableNameFromV1(rv1.RedoRow.Row.Table),
-			Columns:    make([]*model.Column, 0, len(rv1.RedoRow.Row.Columns)),
-			PreColumns: make([]*model.Column, 0, len(rv1.RedoRow.Row.PreColumns)),
+			StartTs:      rv1.RedoRow.Row.StartTs,
+			CommitTs:     rv1.RedoRow.Row.CommitTs,
+			Table:        tableNameFromV1(rv1.RedoRow.Row.Table),
+			Columns:      make([]*model.Column, 0, len(rv1.RedoRow.Row.Columns)),
+			PreColumns:   make([]*model.Column, 0, len(rv1.RedoRow.Row.PreColumns)),
+			IndexColumns: rv1.RedoRow.Row.IndexColumns,
 		}
 		for _, c := range rv1.RedoRow.Row.Columns {
 			r.RedoRow.Row.Columns = append(r.RedoRow.Row.Columns, columnFromV1(c))

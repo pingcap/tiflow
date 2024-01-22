@@ -99,10 +99,13 @@ func TestEncodeEvents(t *testing.T) {
 				},
 				Rows: []*model.RowChangedEvent{
 					{
-						Table: &model.TableName{
-							Schema:  "test",
-							Table:   "table1",
-							TableID: 100,
+						PhysicalTableID: 100,
+						TableInfo: &model.TableInfo{
+							TableName: model.TableName{
+								Schema:  "test",
+								Table:   "table1",
+								TableID: 100,
+							},
 						},
 						Columns: []*model.Column{
 							{Name: "c1", Value: 100},
@@ -111,10 +114,13 @@ func TestEncodeEvents(t *testing.T) {
 						ColInfos: colInfos,
 					},
 					{
-						Table: &model.TableName{
-							Schema:  "test",
-							Table:   "table1",
-							TableID: 100,
+						PhysicalTableID: 100,
+						TableInfo: &model.TableInfo{
+							TableName: model.TableName{
+								Schema:  "test",
+								Table:   "table1",
+								TableID: 100,
+							},
 						},
 						Columns: []*model.Column{
 							{Name: "c1", Value: 200},
@@ -158,10 +164,13 @@ func TestEncodingWorkerRun(t *testing.T) {
 		},
 		Rows: []*model.RowChangedEvent{
 			{
-				Table: &model.TableName{
-					Schema:  "test",
-					Table:   "table1",
-					TableID: 100,
+				PhysicalTableID: 100,
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema:  "test",
+						Table:   "table1",
+						TableID: 100,
+					},
 				},
 				Columns: []*model.Column{
 					{Name: "c1", Value: 100},

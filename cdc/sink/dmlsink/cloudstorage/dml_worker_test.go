@@ -96,10 +96,13 @@ func TestDMLWorkerRun(t *testing.T) {
 					TableInfo: tableInfo,
 					Rows: []*model.RowChangedEvent{
 						{
-							Table: &model.TableName{
-								Schema:  "test",
-								Table:   "table1",
-								TableID: 100,
+							PhysicalTableID: 100,
+							TableInfo: &model.TableInfo{
+								TableName: model.TableName{
+									Schema:  "test",
+									Table:   "table1",
+									TableID: 100,
+								},
 							},
 							Columns: []*model.Column{
 								{Name: "c1", Value: 100},

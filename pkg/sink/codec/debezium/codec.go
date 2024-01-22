@@ -595,7 +595,7 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 			jWriter.WriteObjectField("schema", func() {
 				jWriter.WriteStringField("type", "struct")
 				jWriter.WriteBoolField("optional", false)
-				jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Envelope", c.clusterID, e.Table.Schema, e.Table.Table))
+				jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Envelope", c.clusterID, *e.TableInfo.GetSchemaName(), *e.TableInfo.GetTableName()))
 				jWriter.WriteIntField("version", 1)
 				jWriter.WriteArrayField("fields", func() {
 					// schema is the same for `before` and `after`. So we build a new buffer to
@@ -621,7 +621,7 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("type", "struct")
 						jWriter.WriteBoolField("optional", true)
-						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value", c.clusterID, e.Table.Schema, e.Table.Table))
+						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value", c.clusterID, *e.TableInfo.GetSchemaName(), *e.TableInfo.GetTableName()))
 						jWriter.WriteStringField("field", "before")
 						jWriter.WriteArrayField("fields", func() {
 							jWriter.WriteRaw(fieldsJSON)
@@ -630,7 +630,7 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 					jWriter.WriteObjectElement(func() {
 						jWriter.WriteStringField("type", "struct")
 						jWriter.WriteBoolField("optional", true)
-						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value", c.clusterID, e.Table.Schema, e.Table.Table))
+						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value", c.clusterID, *e.TableInfo.GetSchemaName(), *e.TableInfo.GetTableName()))
 						jWriter.WriteStringField("field", "after")
 						jWriter.WriteArrayField("fields", func() {
 							jWriter.WriteRaw(fieldsJSON)

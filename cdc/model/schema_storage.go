@@ -315,20 +315,19 @@ func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
 	return colID
 }
 
+// GetSchemaName returns the schema name of the table
 func (ti *TableInfo) GetSchemaName() *string {
 	return &ti.TableName.Schema
 }
 
+// GetTableName returns the table name of the table
 func (ti *TableInfo) GetTableName() *string {
 	return &ti.TableName.Table
 }
 
-func (ti *TableInfo) GetSchemaAndTableString() string {
-	return fmt.Sprintf("%s.%s", *ti.GetSchemaName(), *ti.GetTableName())
-}
-
+// IsPartitionTable returns whether the table is partition table
 func (ti *TableInfo) IsPartitionTable() bool {
-	return ti.GetPartitionInfo() != nil
+	return ti.TableName.IsPartition
 }
 
 func (ti *TableInfo) String() string {

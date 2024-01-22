@@ -89,9 +89,11 @@ func TestTableNameFuncs(t *testing.T) {
 func TestRowChangedEventFuncs(t *testing.T) {
 	t.Parallel()
 	deleteRow := &RowChangedEvent{
-		Table: &TableName{
-			Schema: "test",
-			Table:  "t1",
+		TableInfo: &TableInfo{
+			TableName: TableName{
+				Schema: "test",
+				Table:  "t1",
+			},
 		},
 		PreColumns: []*Column{
 			{

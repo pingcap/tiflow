@@ -572,6 +572,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		StartTs:         row.StartTs,
 		CommitTs:        row.CRTs,
 		RowID:           intRowID,
+		ColInfos:        extendColumnInfos,
 		TableInfo:       tableInfo,
 		Columns:         cols,
 		PreColumns:      preCols,

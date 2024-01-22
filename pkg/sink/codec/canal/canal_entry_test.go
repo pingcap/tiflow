@@ -45,11 +45,7 @@ func TestInsert(t *testing.T) {
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
 	event := &model.RowChangedEvent{
-		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "cdc",
-			Table:  "person",
-		},
+		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
 		Columns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
@@ -69,8 +65,8 @@ func TestInsert(t *testing.T) {
 	header := entry.GetHeader()
 	require.Equal(t, int64(1591943372224), header.GetExecuteTime())
 	require.Equal(t, canal.Type_MYSQL, header.GetSourceType())
-	require.Equal(t, event.Table.Schema, header.GetSchemaName())
-	require.Equal(t, event.Table.Table, header.GetTableName())
+	require.Equal(t, *event.TableInfo.GetSchemaName(), header.GetSchemaName())
+	require.Equal(t, *event.TableInfo.GetTableName(), header.GetTableName())
 	require.Equal(t, canal.EventType_INSERT, header.GetEventType())
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)
@@ -133,11 +129,7 @@ func TestUpdate(t *testing.T) {
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
 	event := &model.RowChangedEvent{
-		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t",
-		},
+		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
 		Columns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
@@ -158,8 +150,8 @@ func TestUpdate(t *testing.T) {
 	header := entry.GetHeader()
 	require.Equal(t, int64(1591943372224), header.GetExecuteTime())
 	require.Equal(t, canal.Type_MYSQL, header.GetSourceType())
-	require.Equal(t, event.Table.Schema, header.GetSchemaName())
-	require.Equal(t, event.Table.Table, header.GetTableName())
+	require.Equal(t, *event.TableInfo.GetSchemaName(), header.GetSchemaName())
+	require.Equal(t, *event.TableInfo.GetTableName(), header.GetTableName())
 	require.Equal(t, canal.EventType_UPDATE, header.GetEventType())
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)
@@ -222,11 +214,7 @@ func TestDelete(t *testing.T) {
 	_, _, colInfos := tableInfo.GetRowColInfos()
 
 	event := &model.RowChangedEvent{
-		CommitTs: 417318403368288260,
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "t",
-		},
+		CommitTs:  417318403368288260,
 		TableInfo: tableInfo,
 		PreColumns: []*model.Column{
 			{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag, Value: 1},
@@ -239,8 +227,8 @@ func TestDelete(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, canal.EntryType_ROWDATA, entry.GetEntryType())
 	header := entry.GetHeader()
-	require.Equal(t, event.Table.Schema, header.GetSchemaName())
-	require.Equal(t, event.Table.Table, header.GetTableName())
+	require.Equal(t, *event.TableInfo.GetSchemaName(), header.GetSchemaName())
+	require.Equal(t, *event.TableInfo.GetTableName(), header.GetTableName())
 	require.Equal(t, canal.EventType_DELETE, header.GetEventType())
 	store := entry.GetStoreValue()
 	require.NotNil(t, store)

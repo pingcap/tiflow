@@ -147,30 +147,30 @@ func TestLogManagerInProcessor(t *testing.T) {
 			{
 				span: spanz.TableIDToComparableSpan(53),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 120, Table: &model.TableName{TableID: 53}},
-					{CommitTs: 125, Table: &model.TableName{TableID: 53}},
-					{CommitTs: 130, Table: &model.TableName{TableID: 53}},
+					{CommitTs: 120, PhysicalTableID: 53},
+					{CommitTs: 125, PhysicalTableID: 53},
+					{CommitTs: 130, PhysicalTableID: 53},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(55),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 130, Table: &model.TableName{TableID: 55}},
-					{CommitTs: 135, Table: &model.TableName{TableID: 55}},
+					{CommitTs: 130, PhysicalTableID: 55},
+					{CommitTs: 135, PhysicalTableID: 55},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(57),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 130, Table: &model.TableName{TableID: 57}},
+					{CommitTs: 130, PhysicalTableID: 57},
 				},
 			},
 			{
 				span: spanz.TableIDToComparableSpan(59),
 				rows: []*model.RowChangedEvent{
-					{CommitTs: 128, Table: &model.TableName{TableID: 59}},
-					{CommitTs: 130, Table: &model.TableName{TableID: 59}},
-					{CommitTs: 133, Table: &model.TableName{TableID: 59}},
+					{CommitTs: 128, PhysicalTableID: 59},
+					{CommitTs: 130, PhysicalTableID: 59},
+					{CommitTs: 133, PhysicalTableID: 59},
 				},
 			},
 		}
@@ -293,9 +293,9 @@ func TestLogManagerError(t *testing.T) {
 		{
 			span: spanz.TableIDToComparableSpan(53),
 			rows: []writer.RedoEvent{
-				&model.RowChangedEvent{CommitTs: 120, Table: &model.TableName{TableID: 53}},
-				&model.RowChangedEvent{CommitTs: 125, Table: &model.TableName{TableID: 53}},
-				&model.RowChangedEvent{CommitTs: 130, Table: &model.TableName{TableID: 53}},
+				&model.RowChangedEvent{CommitTs: 120, PhysicalTableID: 53},
+				&model.RowChangedEvent{CommitTs: 125, PhysicalTableID: 53},
+				&model.RowChangedEvent{CommitTs: 130, PhysicalTableID: 53},
 			},
 		},
 	}
@@ -371,9 +371,9 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 					b.StopTimer()
 					*maxCommitTs += rand.Uint64() % 10
 					rows = []*model.RowChangedEvent{
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
-						{CommitTs: *maxCommitTs, Table: &model.TableName{TableID: span.TableID}},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID},
+						{CommitTs: *maxCommitTs, PhysicalTableID: span.TableID},
 					}
 
 					b.StartTimer()
