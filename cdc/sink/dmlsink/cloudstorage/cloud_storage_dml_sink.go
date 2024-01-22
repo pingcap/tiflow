@@ -28,10 +28,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/cdc/sink/util"
-	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/builder"
@@ -103,6 +103,7 @@ type DMLSink struct {
 // NewDMLSink creates a cloud storage sink.
 func NewDMLSink(ctx context.Context,
 	changefeedID model.ChangeFeedID,
+	pdClock pdutil.Clock,
 	sinkURI *url.URL,
 	replicaConfig *config.ReplicaConfig,
 	errCh chan error,
@@ -163,11 +164,10 @@ func NewDMLSink(ctx context.Context,
 	}
 
 	// create a group of dml workers.
-	clock := clock.New()
 	for i := 0; i < cfg.WorkerCount; i++ {
 		inputCh := chann.NewAutoDrainChann[eventFragment]()
 		s.workers[i] = newDMLWorker(i, s.changefeedID, storage, cfg, ext,
-			inputCh, clock, s.statistics)
+			inputCh, pdClock, s.statistics)
 		workerChannels[i] = inputCh
 	}
 

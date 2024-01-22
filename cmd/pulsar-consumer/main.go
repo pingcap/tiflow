@@ -328,7 +328,7 @@ func NewConsumer(ctx context.Context, o *ConsumerOption) (*Consumer, error) {
 	}
 
 	changefeedID := model.DefaultChangeFeedID("pulsar-consumer")
-	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan)
+	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan, nil)
 	if err != nil {
 		cancel()
 		return nil, errors.Trace(err)
