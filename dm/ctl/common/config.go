@@ -68,7 +68,7 @@ func DefineConfigFlagSet(fs *pflag.FlagSet) {
 	fs.String("ssl-ca", "", "Path of file that contains list of trusted SSL CAs for connection.")
 	fs.String("ssl-cert", "", "Path of file that contains X509 certificate in PEM format for connection.")
 	fs.String("ssl-key", "", "Path of file that contains X509 key in PEM format for connection.")
-	fs.String("secret-key-path", "", "Path of file that contains secret key for encrypting and decrypting password, the secret key should be a hex string of length 64.")
+	fs.String("secret-key-path", "", "Path of file that contains secret key for encrypting and decrypting password, the secret key should be a hex AES-256 key of length 64.")
 }
 
 // AdjustArgumentsForPflags adjust flag format args to pflags format.
