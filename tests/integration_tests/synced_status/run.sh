@@ -211,7 +211,7 @@ function run_case_with_unavailable_tidb() {
 	run_sql "USE TEST;Create table t1(a int primary key, b int);insert into t1 values(1,2);insert into t1 values(2,3);"
 	check_table_exists "test.t1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-	sleep 5 # make data inserted into downstream
+	sleep 5 # make data insert into downstream
 	kill_tidb
 
 	# test the case when pdNow - lastSyncedTs < threshold
