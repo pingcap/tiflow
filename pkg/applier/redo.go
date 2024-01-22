@@ -124,7 +124,7 @@ func (ra *RedoApplier) catchError(ctx context.Context) error {
 
 func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
 	replicaConfig := config.GetDefaultReplicaConfig()
-	ra.sinkFactory, err = dmlfactory.New(ctx, ra.changefeedID, ra.cfg.SinkURI, replicaConfig, ra.errCh)
+	ra.sinkFactory, err = dmlfactory.New(ctx, ra.changefeedID, ra.cfg.SinkURI, replicaConfig, ra.errCh, nil)
 	if err != nil {
 		return err
 	}

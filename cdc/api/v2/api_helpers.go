@@ -235,7 +235,8 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	// verify sink
 	if err := validator.Validate(ctx,
 		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
-		cfg.SinkURI, replicaCfg); err != nil {
+		cfg.SinkURI, replicaCfg, nil,
+	); err != nil {
 		return nil, err
 	}
 
@@ -361,7 +362,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 
 		if err := validator.Validate(ctx,
 			model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
-			newInfo.SinkURI, newInfo.Config); err != nil {
+			newInfo.SinkURI, newInfo.Config, nil); err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
