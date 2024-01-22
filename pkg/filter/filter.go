@@ -64,9 +64,9 @@ var allowDDLList = []timodel.ActionType{
 // Filter are safe for concurrent use.
 // TODO: find a better way to abstract this interface.
 type Filter interface {
-	// ShouldIgnoreDMLEvent returns true and nil if the DML event should be ignored.
+	// ShouldIgnoreDMLEvent returns true if the DML event match the event-filter.
 	ShouldIgnoreDMLEvent(dml *model.RowChangedEvent, rawRow model.RowChangedDatums, tableInfo *model.TableInfo) (bool, error)
-	// ShouldIgnoreDDLEvent returns true if the DDL event should be ignored.
+	// ShouldIgnoreDDLEvent returns true if the DDL event match the event-filter.
 	// If a ddl is ignored, it will be applied to cdc's schema storage,
 	// but will not be sent to downstream.
 	ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error)
