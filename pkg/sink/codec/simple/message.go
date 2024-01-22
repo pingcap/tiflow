@@ -48,8 +48,6 @@ type EventType string
 const (
 	// WatermarkType is the type of the watermark event.
 	WatermarkType EventType = "WATERMARK"
-	// DDLType is the type of the DDL event.
-	DDLType EventType = "DDL"
 	// BootstrapType is the type of the bootstrap event.
 	BootstrapType EventType = "BOOTSTRAP"
 	// InsertType is the type of the insert event.
@@ -59,6 +57,31 @@ const (
 	// DeleteType is the type of the delete event.
 	DeleteType EventType = "DELETE"
 )
+
+func getDDLType(t timodel.ActionType) EventType {
+	switch t {
+	case timodel.ActionCreateTable:
+		return "CREATE"
+	case timodel.ActionRenameTable, timodel.ActionRenameTables:
+		return "RENAME"
+	case timodel.ActionAddIndex, timodel.ActionAddForeignKey, timodel.ActionAddPrimaryKey:
+		return "CINDEX"
+	case timodel.ActionDropIndex, timodel.ActionDropForeignKey, timodel.ActionDropPrimaryKey:
+		return "DINDEX"
+	case timodel.ActionDropTable:
+		return "ERASE"
+	case timodel.ActionTruncateTable:
+		return "TRUNCATE"
+	case timodel.ActionAddColumn, timodel.ActionDropColumn, timodel.ActionModifyColumn, timodel.ActionRebaseAutoID,
+		timodel.ActionSetDefaultValue, timodel.ActionModifyTableComment, timodel.ActionRenameIndex, timodel.ActionAddTablePartition,
+		timodel.ActionDropTablePartition, timodel.ActionModifyTableCharsetAndCollate, timodel.ActionTruncateTablePartition,
+		timodel.ActionAlterIndexVisibility, timodel.ActionMultiSchemaChange, timodel.ActionReorganizePartition,
+		timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
+		return "ALTER"
+	default:
+		return "QUERY"
+	}
+}
 
 // columnSchema is the schema of the column.
 type columnSchema struct {
@@ -228,6 +251,7 @@ func newTiIndexInfo(indexSchema *IndexSchema) *timodel.IndexInfo {
 type TableSchema struct {
 	Schema  string          `json:"schema"`
 	Table   string          `json:"table"`
+	TableID int64           `json:"tableID"`
 	Version uint64          `json:"version"`
 	Columns []*columnSchema `json:"columns"`
 	Indexes []*IndexSchema  `json:"indexes"`
@@ -275,6 +299,7 @@ func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 	return &TableSchema{
 		Schema:  tableInfo.TableName.Schema,
 		Table:   tableInfo.TableName.Table,
+		TableID: tableInfo.ID,
 		Version: tableInfo.UpdateTS,
 		Columns: columns,
 		Indexes: indexes,
@@ -286,17 +311,20 @@ func newTableInfo(m *TableSchema) (*model.TableInfo, error) {
 	var (
 		database      string
 		table         string
+		tableID       int64
 		schemaVersion uint64
 	)
 	if m != nil {
 		database = m.Schema
 		table = m.Table
+		tableID = m.TableID
 		schemaVersion = m.Version
 	}
 	info := &model.TableInfo{
 		TableName: model.TableName{
-			Schema: database,
-			Table:  table,
+			Schema:  database,
+			Table:   table,
+			TableID: tableID,
 		},
 		TableInfo: &timodel.TableInfo{
 			Name:     timodel.NewCIStr(table),
@@ -358,8 +386,9 @@ func buildRowChangedEvent(
 	result := &model.RowChangedEvent{
 		CommitTs: msg.CommitTs,
 		Table: &model.TableName{
-			Schema: msg.Schema,
-			Table:  msg.Table,
+			Schema:  msg.Schema,
+			Table:   msg.Table,
+			TableID: msg.TableID,
 		},
 		TableInfo: tableInfo,
 	}
@@ -459,9 +488,10 @@ type checksum struct {
 type message struct {
 	Version int `json:"version"`
 	// Schema and Table is empty for the resolved ts event.
-	Schema string    `json:"schema,omitempty"`
-	Table  string    `json:"table,omitempty"`
-	Type   EventType `json:"type"`
+	Schema  string    `json:"database,omitempty"`
+	Table   string    `json:"table,omitempty"`
+	TableID int64     `json:"tableID,omitempty"`
+	Type    EventType `json:"type"`
 	// SQL is only for the DDL event.
 	SQL      string `json:"sql,omitempty"`
 	CommitTs uint64 `json:"commitTs"`
@@ -532,7 +562,7 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	}
 	msg := &message{
 		Version:        defaultVersion,
-		Type:           DDLType,
+		Type:           getDDLType(ddl.Type),
 		CommitTs:       ddl.CommitTs,
 		BuildTs:        time.Now().UnixMilli(),
 		SQL:            ddl.Query,
@@ -543,16 +573,19 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 }
 
 func newDMLMessage(
-	event *model.RowChangedEvent, config *common.Config, onlyHandleKey bool,
+	event *model.RowChangedEvent, config *common.Config,
+	onlyHandleKey bool, claimCheckFileName string,
 ) (*message, error) {
 	m := &message{
-		Version:       defaultVersion,
-		Schema:        event.Table.Schema,
-		Table:         event.Table.Table,
-		CommitTs:      event.CommitTs,
-		BuildTs:       time.Now().UnixMilli(),
-		SchemaVersion: event.TableInfo.UpdateTS,
-		HandleKeyOnly: onlyHandleKey,
+		Version:            defaultVersion,
+		Schema:             event.Table.Schema,
+		Table:              event.Table.Table,
+		TableID:            event.TableInfo.ID,
+		CommitTs:           event.CommitTs,
+		BuildTs:            time.Now().UnixMilli(),
+		SchemaVersion:      event.TableInfo.UpdateTS,
+		HandleKeyOnly:      onlyHandleKey,
+		ClaimCheckLocation: claimCheckFileName,
 	}
 	var err error
 	if event.IsInsert() {

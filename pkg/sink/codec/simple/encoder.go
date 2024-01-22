@@ -180,7 +180,7 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 		}
 	}
 
-	marshaller, err := newMarshaller(config.EncodingFormat)
+	m, err := newMarshaller(config.EncodingFormat)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -188,7 +188,7 @@ func NewBuilder(ctx context.Context, config *common.Config) (*builder, error) {
 	return &builder{
 		config:     config,
 		claimCheck: claimCheck,
-		marshaller: marshaller,
+		marshaller: m,
 	}, nil
 }
 

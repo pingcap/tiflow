@@ -140,6 +140,9 @@ type changefeed struct {
 	metricsChangefeedBarrierTsGauge prometheus.Gauge
 	metricsChangefeedTickDuration   prometheus.Observer
 
+	metricsChangefeedCreateTimeGuage  prometheus.Gauge
+	metricsChangefeedRestartTimeGauge prometheus.Gauge
+
 	downstreamObserver observer.Observer
 	observerLastTick   *atomic.Time
 
@@ -684,6 +687,8 @@ LOOP2:
 	c.initMetrics()
 
 	c.initialized = true
+	c.metricsChangefeedCreateTimeGuage.Set(float64(oracle.GetPhysical(c.latestInfo.CreateTime)))
+	c.metricsChangefeedRestartTimeGauge.Set(float64(oracle.GetPhysical(time.Now())))
 	log.Info("changefeed initialized",
 		zap.String("namespace", c.id.Namespace),
 		zap.String("changefeed", c.id.ID),
@@ -715,10 +720,16 @@ func (c *changefeed) initMetrics() {
 		WithLabelValues(c.id.Namespace, c.id.ID)
 	c.metricsChangefeedTickDuration = changefeedTickDuration.
 		WithLabelValues(c.id.Namespace, c.id.ID)
+
+	c.metricsChangefeedCreateTimeGuage = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "create")
+	c.metricsChangefeedRestartTimeGauge = changefeedStartTimeGauge.
+		WithLabelValues(c.id.Namespace, c.id.ID, "restart")
 }
 
 // releaseResources is idempotent.
 func (c *changefeed) releaseResources(ctx cdcContext.Context) {
+	c.cleanupMetrics()
 	if c.isReleased {
 		return
 	}
@@ -756,7 +767,6 @@ func (c *changefeed) releaseResources(ctx cdcContext.Context) {
 		_ = c.downstreamObserver.Close()
 	}
 
-	c.cleanupMetrics()
 	c.schema = nil
 	c.barriers = nil
 	c.resolvedTs = 0
@@ -794,6 +804,8 @@ func (c *changefeed) cleanupMetrics() {
 
 	if c.isRemoved {
 		changefeedStatusGauge.DeleteLabelValues(c.id.Namespace, c.id.ID)
+		changefeedCheckpointTsGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "create")
+		changefeedCheckpointTsLagGauge.DeleteLabelValues(c.id.Namespace, c.id.ID, "restart")
 	}
 }
 

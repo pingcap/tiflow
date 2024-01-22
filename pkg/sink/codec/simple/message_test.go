@@ -37,6 +37,7 @@ func TestNewTableSchema(t *testing.T) {
 	want := &TableSchema{
 		Schema:  tableInfo.TableName.Schema,
 		Table:   tableInfo.TableName.Table,
+		TableID: tableInfo.TableName.TableID,
 		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
@@ -122,6 +123,7 @@ func TestNewTableSchema(t *testing.T) {
 	want = &TableSchema{
 		Schema:  tableInfo.TableName.Schema,
 		Table:   tableInfo.TableName.Table,
+		TableID: tableInfo.TableName.TableID,
 		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{
@@ -237,6 +239,7 @@ func TestNewTableSchema(t *testing.T) {
 	want = &TableSchema{
 		Schema:  tableInfo.TableName.Schema,
 		Table:   tableInfo.TableName.Table,
+		TableID: tableInfo.TableName.TableID,
 		Version: tableInfo.UpdateTS,
 		Columns: []*columnSchema{
 			{

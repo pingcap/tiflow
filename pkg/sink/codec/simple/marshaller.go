@@ -100,14 +100,12 @@ func (m *jsonMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) 
 // MarshalRowChangedEvent implement the marshaller interface
 func (m *jsonMarshaller) MarshalRowChangedEvent(
 	event *model.RowChangedEvent, config *common.Config,
-	handleKeyOnly bool,
-	claimCheckFileName string,
+	handleKeyOnly bool, claimCheckFileName string,
 ) ([]byte, error) {
-	msg, err := newDMLMessage(event, config, handleKeyOnly)
+	msg, err := newDMLMessage(event, config, handleKeyOnly, claimCheckFileName)
 	if err != nil {
 		return nil, err
 	}
-	msg.ClaimCheckLocation = claimCheckFileName
 
 	value, err := json.Marshal(msg)
 	if err != nil {

@@ -72,8 +72,9 @@ type SourceManager struct {
 	// Used to indicate whether the changefeed is in BDR mode.
 	bdrMode bool
 
-	// if `config.GetGlobalServerConfig().KVClient.EnableMultiplexing` is true `tablePullers`
-	// will be used. Otherwise `multiplexingPuller` will be used instead.
+	// if `multiplexing` is true (the default value) then `multiplexingPuller` will be used.
+	//  * tables in one changefeed will share grpc streams and region workers
+	//  * tables in one changefeed will share goroutines
 	multiplexing       bool
 	enableTableMonitor bool
 	tablePullers       tablePullers

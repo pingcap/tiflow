@@ -211,6 +211,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
+			require.Equal(t, createTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			require.Equal(t, createTableDDLEvent.CommitTs, event.CommitTs)
 			// because we don't we don't set startTs in the encoded message,
 			// so the startTs is equal to commitTs
@@ -260,6 +261,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
+			require.Equal(t, renameTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			require.Equal(t, renameTableDDLEvent.CommitTs, event.CommitTs)
 			// because we don't we don't set startTs in the encoded message,
 			// so the startTs is equal to commitTs
@@ -299,25 +301,41 @@ func TestEncodeDDLEvent(t *testing.T) {
 }
 
 func TestEncodeIntegerTypes(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
 
-	sql := `create table test.tp_unsigned_int (
-		id          int auto_increment,
-		c_unsigned_tinyint   tinyint   unsigned null,
-		c_unsigned_smallint  smallint  unsigned null,
-		c_unsigned_mediumint mediumint unsigned null,
-		c_unsigned_int       int       unsigned null,
-		c_unsigned_bigint    bigint    unsigned null,
-		constraint pk primary key (id))`
-	ddlEvent := helper.DDL2Event(sql)
+	createTableDDL := `create table test.t(
+		id int primary key auto_increment,
+		a tinyint, b tinyint unsigned,
+		c smallint, d smallint unsigned,
+		e mediumint, f mediumint unsigned,
+		g int, h int unsigned,
+		i bigint, j bigint unsigned)`
+	ddlEvent := helper.DDL2Event(createTableDDL)
 
-	sql = `insert into test.tp_unsigned_int(c_unsigned_tinyint, c_unsigned_smallint, c_unsigned_mediumint,
-		c_unsigned_int, c_unsigned_bigint) values (255, 65535, 16777215, 4294967295, 18446744073709551615)`
-	dmlEvent := helper.DML2Event(sql, "test", "tp_unsigned_int")
+	sql := `insert into test.t values(
+		1,
+		-128, 0,
+		-32768, 0,
+		-8388608, 0,
+		-2147483648, 0,
+		-9223372036854775808, 0)`
+	minValues := helper.DML2Event(sql, "test", "t")
+
+	sql = `insert into test.t values (
+		2,
+		127, 255,
+		32767, 65535,
+		8388607, 16777215,
+		2147483647, 4294967295,
+		9223372036854775807, 18446744073709551615)`
+	maxValues := helper.DML2Event(sql, "test", "t")
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
+	codecConfig.EnableRowChecksum = true
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
 		common.EncodingFormatJSON,
@@ -344,33 +362,36 @@ func TestEncodeIntegerTypes(t *testing.T) {
 		_, err = dec.NextDDLEvent()
 		require.NoError(t, err)
 
-		err = enc.AppendRowChangedEvent(ctx, "", dmlEvent, func() {})
-		require.NoError(t, err)
+		events := []*model.RowChangedEvent{minValues, maxValues}
+		for _, event := range events {
+			err = enc.AppendRowChangedEvent(ctx, "", event, func() {})
+			require.NoError(t, err)
 
-		messages := enc.Build()
-		err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
-		require.NoError(t, err)
+			messages := enc.Build()
+			err = dec.AddKeyValue(messages[0].Key, messages[0].Value)
+			require.NoError(t, err)
 
-		messageType, hasNext, err = dec.HasNext()
-		require.NoError(t, err)
-		require.True(t, hasNext)
-		require.Equal(t, model.MessageTypeRow, messageType)
+			messageType, hasNext, err = dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeRow, messageType)
 
-		decodedRow, err := dec.NextRowChangedEvent()
-		require.NoError(t, err)
-		require.Equal(t, decodedRow.CommitTs, dmlEvent.CommitTs)
+			decodedRow, err := dec.NextRowChangedEvent()
+			require.NoError(t, err)
+			require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 
-		decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
-		for _, column := range decodedRow.Columns {
-			decodedColumns[column.Name] = column
-		}
+			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
+			for _, column := range decodedRow.Columns {
+				decodedColumns[column.Name] = column
+			}
 
-		for _, expected := range dmlEvent.Columns {
-			decoded, ok := decodedColumns[expected.Name]
-			require.True(t, ok)
-			require.EqualValues(t, expected.Value, decoded.Value)
-			require.Equal(t, expected.Charset, decoded.Charset)
-			require.Equal(t, expected.Collation, decoded.Collation)
+			for _, expected := range event.Columns {
+				decoded, ok := decodedColumns[expected.Name]
+				require.True(t, ok)
+				require.EqualValues(t, expected.Value, decoded.Value)
+				require.Equal(t, expected.Charset, decoded.Charset)
+				require.Equal(t, expected.Collation, decoded.Collation)
+			}
 		}
 	}
 }
@@ -505,6 +526,7 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 
 			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
+			require.Equal(t, ddlEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			// Bootstrap event doesn't have query
 			require.Equal(t, "", event.Query)
 			require.Equal(t, len(ddlEvent.TableInfo.Columns), len(event.TableInfo.Columns))
@@ -614,6 +636,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
 				require.Equal(t, decodedRow.Table.Schema, event.Table.Schema)
 				require.Equal(t, decodedRow.Table.Table, event.Table.Table)
+				require.Equal(t, decodedRow.Table.TableID, event.Table.TableID)
 
 				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 				for _, column := range decodedRow.Columns {

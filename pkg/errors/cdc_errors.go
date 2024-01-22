@@ -933,6 +933,10 @@ var (
 		"invalid replica config, %s",
 		errors.RFCCodeText("CDC:ErrInvalidReplicaConfig"),
 	)
+	ErrInternalCheckFailed = errors.Normalize(
+		"internal check failed, %s",
+		errors.RFCCodeText("CDC:ErrInternalCheckFailed"),
+	)
 
 	ErrHandleDDLFailed = errors.Normalize(
 		"handle ddl failed, query: %s, startTs: %d. "+
