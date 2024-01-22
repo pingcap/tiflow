@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/cloudstorage"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -51,8 +52,9 @@ func testDMLWorker(ctx context.Context, t *testing.T, dir string) *dmlWorker {
 	require.Nil(t, err)
 
 	statistics := metrics.NewStatistics(ctx, sink.TxnSink)
+	pdlock := pdutil.NewMonotonicClock(clock.New())
 	d := newDMLWorker(1, model.DefaultChangeFeedID("dml-worker-test"), storage,
-		cfg, ".json", chann.NewAutoDrainChann[eventFragment](), clock.New(), statistics)
+		cfg, ".json", chann.NewAutoDrainChann[eventFragment](), pdlock, statistics)
 	return d
 }
 

@@ -455,6 +455,7 @@ func NewConsumer(ctx context.Context) (*Consumer, error) {
 		downstreamURIStr,
 		config.GetDefaultReplicaConfig(),
 		errChan,
+		nil,
 	)
 	if err != nil {
 		cancel()
