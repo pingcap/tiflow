@@ -110,7 +110,7 @@ function run_normal_case_and_unavailable_pd() {
 		exit 1
 	fi
 
-	sleep 65 # wait enough time for pass synced-check-interval
+	sleep 130 # wait enough time for pass synced-check-interval
 	synced_status=$(curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced)
 	status=$(echo $synced_status | jq '.synced')
 	if [ $status != true ]; then
@@ -167,7 +167,7 @@ function run_case_with_unavailable_tikv() {
 		exit 1
 	fi
 
-	sleep 65 # wait enough time for pass synced-check-interval
+	sleep 130 # wait enough time for pass synced-check-interval
 	# test the case when pdNow - lastSyncedTs > threshold
 	synced_status=$(curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced)
 	status=$(echo $synced_status | jq '.synced')
@@ -229,7 +229,7 @@ function run_case_with_unavailable_tidb() {
 		exit 1
 	fi
 
-	sleep 65 # wait enough time for pass synced-check-interval
+	sleep 130 # wait enough time for pass synced-check-interval
 	# test the case when pdNow - lastSyncedTs > threshold
 	synced_status=$(curl -X GET http://127.0.0.1:8300/api/v2/changefeeds/test-1/synced)
 	status=$(echo $synced_status | jq '.synced')
