@@ -362,7 +362,7 @@ func (m *SinkManager) initSinkFactory() (chan error, uint64) {
 		return m.sinkFactory.errors, m.sinkFactory.version
 	}
 
-	m.sinkFactory.f, err = factory.New(m.managerCtx, uri, cfg, m.sinkFactory.errors)
+	m.sinkFactory.f, err = factory.New(m.managerCtx, uri, cfg, m.sinkFactory.errors, m.up.PDClock)
 	if err != nil {
 		emitError(err)
 		return m.sinkFactory.errors, m.sinkFactory.version

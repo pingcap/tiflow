@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sinkv2/eventsink/factory"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -30,7 +31,7 @@ import (
 // Validate sink if given valid parameters.
 // TODO: For now, we create a real sink instance and validate it.
 // Maybe we should support the dry-run mode to validate sink.
-func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) error {
+func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig, pdClock pdutil.Clock) error {
 	var err error
 	var uri *url.URL
 	if uri, err = preCheckSinkURI(sinkURI); err != nil {
@@ -60,7 +61,7 @@ func Validate(ctx context.Context, sinkURI string, cfg *config.ReplicaConfig) er
 		err = s.Close(ctx)
 	} else {
 		var s *factory.SinkFactory
-		s, err = factory.New(ctx, sinkURI, cfg, errCh)
+		s, err = factory.New(ctx, sinkURI, cfg, errCh, pdClock)
 		if err != nil {
 			cancel()
 			return err
