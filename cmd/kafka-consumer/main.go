@@ -860,7 +860,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		// handle DDL
 		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && todoDDL.CommitTs <= minPartitionResolvedTs {
+		if todoDDL != nil {
+			if todoDDL.CommitTs > minPartitionResolvedTs {
+				log.Info("cannot execute DDL, since the it's CommitTs > minPartitionResolvedTs",
+					zap.Uint64("commitTs", todoDDL.CommitTs),
+					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
+					zap.Any("DDL", todoDDL))
+				continue
+			}
 			// flush DMLs
 			if err := c.forEachSink(func(sink *partitionSinks) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
