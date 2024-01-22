@@ -106,18 +106,15 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 	d.msg = m
 	d.value = nil
 
-	switch d.msg.Type {
-	case WatermarkType:
-		return model.MessageTypeResolved, true, nil
-	case DDLType, BootstrapType:
-		return model.MessageTypeDDL, true, nil
-	default:
-	}
-
 	if d.msg.Data != nil || d.msg.Old != nil {
 		return model.MessageTypeRow, true, nil
 	}
-	return model.MessageTypeUnknown, false, nil
+
+	if m.Type == WatermarkType {
+		return model.MessageTypeResolved, true, nil
+	}
+
+	return model.MessageTypeDDL, true, nil
 }
 
 // NextResolvedEvent returns the next resolved event if exists
@@ -286,11 +283,6 @@ func (d *decoder) buildData(
 
 // NextDDLEvent returns the next DDL event if exists
 func (d *decoder) NextDDLEvent() (*model.DDLEvent, error) {
-	if d.msg.Type != DDLType && d.msg.Type != BootstrapType {
-		return nil, cerror.ErrCodecDecode.GenWithStack(
-			"not found ddl event message")
-	}
-
 	ddl, err := newDDLEvent(d.msg)
 	if err != nil {
 		return nil, err
@@ -368,20 +360,12 @@ func (m *memoryTableInfoProvider) Read(schema, table string, version uint64) *mo
 	for {
 		entry, ok := m.memo[key]
 		if ok {
-			log.Info("table info read",
-				zap.String("schema", schema),
-				zap.String("table", table),
-				zap.Uint64("version", version))
 			return entry
 		}
 		select {
 		case <-ticker.C:
-			entry, ok := m.memo[key]
+			entry, ok = m.memo[key]
 			if ok {
-				log.Info("table info read",
-					zap.String("schema", schema),
-					zap.String("table", table),
-					zap.Uint64("version", version))
 				return entry
 			}
 		case <-ctx.Done():

@@ -22,12 +22,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
 func newMultiplexingPullerForTest(outputCh chan<- *model.RawKVEntry) *MultiplexingPuller {
-	client := kv.NewSharedClient(model.ChangeFeedID{}, nil, false, nil, nil, nil, nil, nil)
+	cfg := &config.ServerConfig{Debug: &config.DebugConfig{Puller: &config.PullerConfig{LogRegionDetails: false}}}
+	client := kv.NewSharedClient(model.ChangeFeedID{}, cfg, false, nil, nil, nil, nil, nil)
 	consume := func(ctx context.Context, e *model.RawKVEntry, _ []tablepb.Span) error {
 		select {
 		case <-ctx.Done():
