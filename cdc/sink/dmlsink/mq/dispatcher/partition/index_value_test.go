@@ -174,29 +174,30 @@ func TestIndexValueDispatcher(t *testing.T) {
 func TestIndexValueDispatcherWithIndexName(t *testing.T) {
 	t.Parallel()
 
-	event := &model.RowChangedEvent{
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "test",
-				Table:  "t1",
-			},
-			TableInfo: &timodel.TableInfo{
-				Indices: []*timodel.IndexInfo{
-					{
-						Name: timodel.CIStr{
-							O: "index1",
-						},
-						Columns: []*timodel.IndexColumn{
-							{
-								Name: timodel.CIStr{
-									O: "a",
-								},
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema: "test",
+			Table:  "t1",
+		},
+		TableInfo: &timodel.TableInfo{
+			Indices: []*timodel.IndexInfo{
+				{
+					Name: timodel.CIStr{
+						O: "index1",
+					},
+					Columns: []*timodel.IndexColumn{
+						{
+							Name: timodel.CIStr{
+								O: "a",
 							},
 						},
 					},
 				},
 			},
 		},
+	}
+	event := &model.RowChangedEvent{
+		TableInfo: tableInfo,
 		Columns: []*model.Column{
 			{
 				Name:  "a",

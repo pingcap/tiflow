@@ -23,14 +23,15 @@ import (
 func TestDefaultDispatcher(t *testing.T) {
 	t.Parallel()
 
-	row := &model.RowChangedEvent{
-		TableInfo: &model.TableInfo{
-			TableName: model.TableName{
-				Schema: "test",
-				Table:  "t1",
-			},
-			IndexColumnsOffset: [][]int{{0}},
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema: "test",
+			Table:  "t1",
 		},
+		IndexColumnsOffset: [][]int{{0}},
+	}
+	row := &model.RowChangedEvent{
+		TableInfo: tableInfo,
 		Columns: []*model.Column{
 			{
 				Name:  "id",
