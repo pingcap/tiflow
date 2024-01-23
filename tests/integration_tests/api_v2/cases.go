@@ -38,12 +38,6 @@ var customReplicaConfig = &ReplicaConfig{
 	SyncPointInterval:     util.AddressOf(JSONDuration{duration: 10 * time.Minute}),
 	SyncPointRetention:    util.AddressOf(JSONDuration{duration: 24 * time.Hour}),
 	Filter: &FilterConfig{
-		MySQLReplicationRules: &MySQLReplicationRules{
-			DoTables:     []*Table{{"a", "b"}, {"c", "d"}},
-			DoDBs:        []string{"a", "c"},
-			IgnoreTables: []*Table{{"d", "e"}, {"f", "g"}},
-			IgnoreDBs:    []string{"d", "x"},
-		},
 		IgnoreTxnStartTs: []uint64{1, 2, 3},
 		EventFilters: []EventFilterRule{{
 			Matcher:                  []string{"test.worker"},

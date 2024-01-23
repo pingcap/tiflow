@@ -20,7 +20,6 @@ import (
 	"time"
 
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/redo"
@@ -137,21 +136,7 @@ func TestToAPIReplicaConfig(t *testing.T) {
 		Storage:           "s3",
 	}
 	cfg.Filter = &config.FilterConfig{
-		Rules: []string{"a", "b", "c"},
-		MySQLReplicationRules: &filter.MySQLReplicationRules{
-			DoTables: []*filter.Table{{
-				Schema: "testdo",
-				Name:   "testgotable",
-			}},
-			DoDBs: []string{"ad", "bdo"},
-			IgnoreTables: []*filter.Table{
-				{
-					Schema: "testignore",
-					Name:   "testaaaingore",
-				},
-			},
-			IgnoreDBs: []string{"aa", "b2"},
-		},
+		Rules:            []string{"a", "b", "c"},
 		IgnoreTxnStartTs: []uint64{1, 2, 3},
 		EventFilters: []*config.EventFilterRule{{
 			Matcher:                  []string{"test.t1", "test.t2"},
