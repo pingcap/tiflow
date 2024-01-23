@@ -63,7 +63,7 @@ In order to prevent the read request and other lock resolving mechanisms disturb
 From "How large transactions block the advancing of Resolve TS" section we can see the root cause of large transactions block resolve ts is:
 
 - Current Resolve TS(water mark) calculation depends on the start ts of all ongoing transactions, and the start ts of a large transaction is relevant "old" and not advanced when the large transaction is running.
-  More reasonable choice is using min-commit-ts of large transactions to calculate the water mark, and same as the TTL, the large transaction periodically update its primary key's min-commit-tsinformation to let the water mark mechanism can advance the water mark smoothly. The following diagram demostrates the basic idea of this new proposal:
+  More reasonable choice is using min-commit-ts of large transactions to calculate the water mark, and same as the TTL, the large transaction periodically update its primary key's min-commit-ts information to let the water mark mechanism can advance the water mark smoothly. The following diagram demostrates the basic idea of this new proposal:
 
 ![image](../media/large-txn-no-block-wm-3.png)
 
