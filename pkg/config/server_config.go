@@ -138,6 +138,7 @@ var defaultServerConfig = &ServerConfig{
 		Puller: &PullerConfig{
 			EnableResolvedTsStuckDetection: false,
 			ResolvedTsStuckInterval:        TomlDuration(5 * time.Minute),
+			LogRegionDetails:               false,
 		},
 	},
 	ClusterID:              "default",

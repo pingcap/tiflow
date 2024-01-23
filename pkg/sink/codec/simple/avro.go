@@ -41,16 +41,26 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 			"charset":   col.GetCharset(),
 			"collate":   col.GetCollate(),
 			"length":    col.GetFlen(),
-			"elements":  col.GetElems(),
-			"unsigned":  mysql.HasUnsignedFlag(col.GetFlag()),
-			"zerofill":  mysql.HasZerofillFlag(col.GetFlag()),
 		}
 
 		switch col.GetType() {
-		// Float and Double decimal is always -1, do not encode it into the schema.
-		case mysql.TypeFloat, mysql.TypeDouble:
+		case mysql.TypeTiny, mysql.TypeShort, mysql.TypeInt24, mysql.TypeLong, mysql.TypeLonglong,
+			mysql.TypeFloat, mysql.TypeDouble, mysql.TypeBit, mysql.TypeYear:
+			mysqlType["unsigned"] = map[string]interface{}{
+				"boolean": mysql.HasUnsignedFlag(col.GetFlag()),
+			}
+			mysqlType["zerofill"] = map[string]interface{}{
+				"boolean": mysql.HasZerofillFlag(col.GetFlag()),
+			}
+		case mysql.TypeEnum, mysql.TypeSet:
+			mysqlType["elements"] = map[string]interface{}{
+				"array": col.GetElems(),
+			}
+		case mysql.TypeNewDecimal:
+			mysqlType["decimal"] = map[string]interface{}{
+				"int": col.GetDecimal(),
+			}
 		default:
-			mysqlType["decimal"] = col.GetDecimal()
 		}
 
 		column := map[string]interface{}{
@@ -111,43 +121,62 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 	}
 
 	result := map[string]interface{}{
-		"schema":  tableInfo.TableName.Schema,
-		"table":   tableInfo.TableName.Table,
-		"version": int64(tableInfo.UpdateTS),
-		"columns": columnsSchema,
-		"indexes": indexesSchema,
+		"database": tableInfo.TableName.Schema,
+		"table":    tableInfo.TableName.Table,
+		"tableID":  tableInfo.ID,
+		"version":  int64(tableInfo.UpdateTS),
+		"columns":  columnsSchema,
+		"indexes":  indexesSchema,
 	}
 
 	return result
 }
 
 func newResolvedMessageMap(ts uint64) map[string]interface{} {
+	watermark := map[string]interface{}{
+		"version":  defaultVersion,
+		"type":     string(WatermarkType),
+		"commitTs": int64(ts),
+		"buildTs":  time.Now().UnixMilli(),
+	}
+	watermark = map[string]interface{}{
+		"com.pingcap.simple.avro.Watermark": watermark,
+	}
+
+	payload := map[string]interface{}{
+		"payload": watermark,
+	}
+
 	return map[string]interface{}{
-		"com.pingcap.simple.avro.Watermark": map[string]interface{}{
-			"version":  defaultVersion,
-			"type":     string(WatermarkType),
-			"commitTs": int64(ts),
-			"buildTs":  time.Now().UnixMilli(),
-		},
+		"com.pingcap.simple.avro.Message": payload,
 	}
 }
 
 func newBootstrapMessageMap(tableInfo *model.TableInfo) map[string]interface{} {
-	result := map[string]interface{}{
+	m := map[string]interface{}{
 		"version":     defaultVersion,
 		"type":        string(BootstrapType),
 		"tableSchema": newTableSchemaMap(tableInfo),
 		"buildTs":     time.Now().UnixMilli(),
 	}
+
+	m = map[string]interface{}{
+		"com.pingcap.simple.avro.Bootstrap": m,
+	}
+
+	payload := map[string]interface{}{
+		"payload": m,
+	}
+
 	return map[string]interface{}{
-		"com.pingcap.simple.avro.Bootstrap": result,
+		"com.pingcap.simple.avro.Message": payload,
 	}
 }
 
 func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 	result := map[string]interface{}{
 		"version":  defaultVersion,
-		"type":     string(DDLType),
+		"type":     string(getDDLType(ddl.Type)),
 		"sql":      ddl.Query,
 		"commitTs": int64(ddl.CommitTs),
 		"buildTs":  time.Now().UnixMilli(),
@@ -165,16 +194,39 @@ func newDDLMessageMap(ddl *model.DDLEvent) map[string]interface{} {
 			"com.pingcap.simple.avro.TableSchema": tableSchema,
 		}
 	}
-	return map[string]interface{}{
+
+	result = map[string]interface{}{
 		"com.pingcap.simple.avro.DDL": result,
+	}
+	payload := map[string]interface{}{
+		"payload": result,
+	}
+	return map[string]interface{}{
+		"com.pingcap.simple.avro.Message": payload,
 	}
 }
 
-var genericMapPool = sync.Pool{
-	New: func() any {
-		return make(map[string]interface{})
-	},
-}
+var (
+	// genericMapPool return holder for each column and checksum
+	genericMapPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+
+	// payloadHolderPool return holder for the payload
+	payloadHolderPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+
+	messageHolderPool = sync.Pool{
+		New: func() any {
+			return make(map[string]interface{})
+		},
+	}
+)
 
 func newDMLMessageMap(
 	event *model.RowChangedEvent, config *common.Config,
@@ -182,14 +234,25 @@ func newDMLMessageMap(
 	claimCheckFileName string,
 ) (map[string]interface{}, error) {
 	m := map[string]interface{}{
-		"version":            defaultVersion,
-		"schema":             event.Table.Schema,
-		"table":              event.Table.Table,
-		"commitTs":           int64(event.CommitTs),
-		"buildTs":            time.Now().UnixMilli(),
-		"schemaVersion":      int64(event.TableInfo.UpdateTS),
-		"handleKeyOnly":      onlyHandleKey,
-		"claimCheckLocation": claimCheckFileName,
+		"version":       defaultVersion,
+		"database":      event.Table.Schema,
+		"table":         event.Table.Table,
+		"tableID":       event.TableInfo.ID,
+		"commitTs":      int64(event.CommitTs),
+		"buildTs":       time.Now().UnixMilli(),
+		"schemaVersion": int64(event.TableInfo.UpdateTS),
+	}
+
+	if !config.LargeMessageHandle.Disabled() && onlyHandleKey {
+		m["handleKeyOnly"] = map[string]interface{}{
+			"boolean": true,
+		}
+	}
+
+	if config.LargeMessageHandle.EnableClaimCheck() && claimCheckFileName != "" {
+		m["claimCheckLocation"] = map[string]interface{}{
+			"string": claimCheckFileName,
+		}
 	}
 
 	if config.EnableRowChecksum && event.Checksum != nil {
@@ -200,12 +263,9 @@ func newDMLMessageMap(
 			"previous":  int64(event.Checksum.Previous),
 		}
 
-		genericMap, ok := genericMapPool.Get().(map[string]interface{})
-		if !ok {
-			genericMap = make(map[string]interface{})
-		}
-		genericMap["com.pingcap.simple.avro.Checksum"] = cc
-		m["checksum"] = genericMap
+		holder := genericMapPool.Get().(map[string]interface{})
+		holder["com.pingcap.simple.avro.Checksum"] = cc
+		m["checksum"] = holder
 	}
 
 	if event.IsInsert() {
@@ -238,19 +298,29 @@ func newDMLMessageMap(
 		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
 	}
 
-	return map[string]interface{}{
+	m = map[string]interface{}{
 		"com.pingcap.simple.avro.DML": m,
-	}, nil
+	}
+
+	holder := payloadHolderPool.Get().(map[string]interface{})
+	holder["payload"] = m
+
+	messageHolder := messageHolderPool.Get().(map[string]interface{})
+	messageHolder["com.pingcap.simple.avro.Message"] = holder
+
+	return messageHolder, nil
 }
 
 func recycleMap(m map[string]interface{}) {
-	eventMap := m["com.pingcap.simple.avro.DML"].(map[string]interface{})
+	holder := m["com.pingcap.simple.avro.Message"].(map[string]interface{})
+	payload := holder["payload"].(map[string]interface{})
+	eventMap := payload["com.pingcap.simple.avro.DML"].(map[string]interface{})
 
 	checksumMap := eventMap["com.pingcap.simple.avro.Checksum"]
 	if checksumMap != nil {
-		checksumMap := checksumMap.(map[string]interface{})
-		clear(checksumMap)
-		genericMapPool.Put(checksumMap)
+		holder := checksumMap.(map[string]interface{})
+		clear(holder)
+		genericMapPool.Put(holder)
 	}
 
 	dataMap := eventMap["data"]
@@ -272,6 +342,10 @@ func recycleMap(m map[string]interface{}) {
 			genericMapPool.Put(col)
 		}
 	}
+	holder["payload"] = nil
+	payloadHolderPool.Put(holder)
+	m["com.pingcap.simple.avro.Message"] = nil
+	messageHolderPool.Put(m)
 }
 
 func collectColumns(
@@ -290,12 +364,9 @@ func collectColumns(
 			return nil, err
 		}
 
-		genericMap, ok := genericMapPool.Get().(map[string]interface{})
-		if !ok {
-			genericMap = make(map[string]interface{})
-		}
-		genericMap[avroType] = value
-		result[col.Name] = genericMap
+		holder := genericMapPool.Get().(map[string]interface{})
+		holder[avroType] = value
+		result[col.Name] = holder
 	}
 
 	return map[string]interface{}{
@@ -309,20 +380,39 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 	for _, raw := range rawColumns {
 		raw := raw.(map[string]interface{})
 		rawDataType := raw["dataType"].(map[string]interface{})
-		rawElements := rawDataType["elements"].([]interface{})
-		elements := make([]string, 0, len(rawElements))
-		for _, rawElement := range rawElements {
-			elements = append(elements, rawElement.(string))
+
+		var (
+			decimal  int
+			elements []string
+			unsigned bool
+			zerofill bool
+		)
+
+		if rawDataType["elements"] != nil {
+			rawElements := rawDataType["elements"].(map[string]interface{})["array"].([]interface{})
+			for _, rawElement := range rawElements {
+				elements = append(elements, rawElement.(string))
+			}
 		}
+		if rawDataType["decimal"] != nil {
+			decimal = int(rawDataType["decimal"].(map[string]interface{})["int"].(int32))
+		}
+		if rawDataType["unsigned"] != nil {
+			unsigned = rawDataType["unsigned"].(map[string]interface{})["boolean"].(bool)
+		}
+		if rawDataType["zerofill"] != nil {
+			zerofill = rawDataType["zerofill"].(map[string]interface{})["boolean"].(bool)
+		}
+
 		dt := dataType{
 			MySQLType: rawDataType["mysqlType"].(string),
 			Charset:   rawDataType["charset"].(string),
 			Collate:   rawDataType["collate"].(string),
 			Length:    int(rawDataType["length"].(int64)),
-			Decimal:   int(rawDataType["decimal"].(int32)),
+			Decimal:   decimal,
 			Elements:  elements,
-			Unsigned:  rawDataType["unsigned"].(bool),
-			Zerofill:  rawDataType["zerofill"].(bool),
+			Unsigned:  unsigned,
+			Zerofill:  zerofill,
 		}
 
 		var defaultValue interface{}
@@ -361,8 +451,9 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 		indexes = append(indexes, index)
 	}
 	return &TableSchema{
-		Schema:  native["schema"].(string),
+		Schema:  native["database"].(string),
 		Table:   native["table"].(string),
+		TableID: native["tableID"].(int64),
 		Version: uint64(native["version"].(int64)),
 		Columns: columns,
 		Indexes: indexes,
@@ -370,12 +461,17 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 }
 
 func newMessageFromAvroNative(native interface{}, m *message) error {
-	rawValues, ok := native.(map[string]interface{})
+	rawValues, ok := native.(map[string]interface{})["com.pingcap.simple.avro.Message"].(map[string]interface{})
 	if !ok {
 		return cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro message to map")
 	}
 
-	rawMessage := rawValues["com.pingcap.simple.avro.Watermark"]
+	rawPayload, ok := rawValues["payload"].(map[string]interface{})
+	if !ok {
+		return cerror.ErrDecodeFailed.GenWithStack("cannot convert the avro payload to map")
+	}
+
+	rawMessage := rawPayload["com.pingcap.simple.avro.Watermark"]
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
@@ -385,7 +481,7 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 		return nil
 	}
 
-	rawMessage = rawValues["com.pingcap.simple.avro.Bootstrap"]
+	rawMessage = rawPayload["com.pingcap.simple.avro.Bootstrap"]
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
@@ -395,11 +491,11 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 		return nil
 	}
 
-	rawMessage = rawValues["com.pingcap.simple.avro.DDL"]
+	rawMessage = rawPayload["com.pingcap.simple.avro.DDL"]
 	if rawMessage != nil {
 		rawValues = rawMessage.(map[string]interface{})
 		m.Version = int(rawValues["version"].(int32))
-		m.Type = DDLType
+		m.Type = EventType(rawValues["type"].(string))
 		m.SQL = rawValues["sql"].(string)
 		m.CommitTs = uint64(rawValues["commitTs"].(int64))
 		m.BuildTs = rawValues["buildTs"].(int64)
@@ -420,16 +516,23 @@ func newMessageFromAvroNative(native interface{}, m *message) error {
 		return nil
 	}
 
-	rawValues = rawValues["com.pingcap.simple.avro.DML"].(map[string]interface{})
+	rawValues = rawPayload["com.pingcap.simple.avro.DML"].(map[string]interface{})
 	m.Type = EventType(rawValues["type"].(string))
 	m.Version = int(rawValues["version"].(int32))
 	m.CommitTs = uint64(rawValues["commitTs"].(int64))
 	m.BuildTs = rawValues["buildTs"].(int64)
-	m.Schema = rawValues["schema"].(string)
+	m.Schema = rawValues["database"].(string)
 	m.Table = rawValues["table"].(string)
+	m.TableID = rawValues["tableID"].(int64)
 	m.SchemaVersion = uint64(rawValues["schemaVersion"].(int64))
-	m.HandleKeyOnly = rawValues["handleKeyOnly"].(bool)
-	m.ClaimCheckLocation = rawValues["claimCheckLocation"].(string)
+
+	if rawValues["handleKeyOnly"] != nil {
+		m.HandleKeyOnly = rawValues["handleKeyOnly"].(map[string]interface{})["boolean"].(bool)
+	}
+	if rawValues["claimCheckLocation"] != nil {
+		m.ClaimCheckLocation = rawValues["claimCheckLocation"].(map[string]interface{})["string"].(string)
+	}
+
 	m.Checksum = newChecksum(rawValues)
 	m.Data = newDataMap(rawValues["data"])
 	m.Old = newDataMap(rawValues["old"])

@@ -173,7 +173,8 @@ func verifyCreateChangefeedConfig(
 	}
 	if err := validator.Validate(ctx,
 		model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
-		info.SinkURI, info.Config); err != nil {
+		info.SinkURI, info.Config, up.PDClock,
+	); err != nil {
 		return nil, err
 	}
 
@@ -233,7 +234,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 
 		if err := validator.Validate(ctx,
 			model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
-			newInfo.SinkURI, newInfo.Config); err != nil {
+			newInfo.SinkURI, newInfo.Config, nil); err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}

@@ -45,7 +45,7 @@ type worker struct {
 	metricConflictDetectDuration prometheus.Observer
 	metricQueueDuration          prometheus.Observer
 	metricTxnWorkerFlushDuration prometheus.Observer
-	metricTxnWorkerBusyRatio     prometheus.Counter
+	metricTxnWorkerTotalDuration prometheus.Observer
 	metricTxnWorkerHandledRows   prometheus.Counter
 
 	// Fields only used in the background loop.
@@ -69,8 +69,8 @@ func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
 
 		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricQueueDuration:          txn.QueueDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerBusyRatio:     txn.WorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
+		metricTxnWorkerTotalDuration: txn.WorkerTotalDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 		metricTxnWorkerHandledRows:   txn.WorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 
 		flushInterval:            backend.MaxFlushInterval(),
@@ -92,8 +92,8 @@ func (w *worker) close() {
 	w.txnCh.CloseAndDrain()
 }
 
-// Run a loop.
-func (w *worker) runLoop() error {
+// Continuously get events from txnCh and call backend flush based on conditions.
+func (w *worker) run() error {
 	defer func() {
 		if err := w.backend.Close(); err != nil {
 			log.Info("Transaction dmlSink backend close fail",
@@ -106,14 +106,7 @@ func (w *worker) runLoop() error {
 		zap.String("changefeedID", w.changefeed),
 		zap.Int("workerID", w.ID))
 
-	ticker := time.NewTicker(w.flushInterval)
-	defer ticker.Stop()
-
-	needFlush := false
-	var flushTimeSlice, totalTimeSlice time.Duration
-	overseerTicker := time.NewTicker(time.Second)
-	defer overseerTicker.Stop()
-	startToWork := time.Now()
+	start := time.Now()
 	for {
 		select {
 		case <-w.ctx.Done():
@@ -122,33 +115,49 @@ func (w *worker) runLoop() error {
 				zap.Int("workerID", w.ID))
 			return nil
 		case txn := <-w.txnCh.Out():
+			// we get the data from txnCh.out until no more data here or reach the state that can be flushed.
+			// If no more data in txnCh.out, and also not reach the state that can be flushed,
+			// we will wait for 10ms and then do flush to avoid too much flush with small amount of txns.
 			if txn.txnEvent != nil {
-				needFlush = w.onEvent(txn)
+				needFlush := w.onEvent(txn)
+				if !needFlush {
+					delay := time.NewTimer(w.flushInterval)
+					for !needFlush {
+						select {
+						case txn := <-w.txnCh.Out():
+							needFlush = w.onEvent(txn)
+						case <-delay.C:
+							needFlush = true
+						}
+					}
+					// Release resources promptly
+					if !delay.Stop() {
+						select {
+						case <-delay.C:
+						default:
+						}
+					}
+				}
+				// needFlush must be true here, so we can do flush.
+				if err := w.doFlush(); err != nil {
+					log.Error("Transaction dmlSink worker exits unexpectly",
+						zap.String("changefeedID", w.changefeed),
+						zap.Int("workerID", w.ID),
+						zap.Error(err))
+					return err
+				}
+				// we record total time to calcuate the worker busy ratio.
+				// so we record the total time after flushing, to unified statistics on
+				// flush time and total time
+				w.metricTxnWorkerTotalDuration.Observe(time.Since(start).Seconds())
+				start = time.Now()
 			}
-		case <-ticker.C:
-			needFlush = true
-		case now := <-overseerTicker.C:
-			totalTimeSlice = now.Sub(startToWork)
-			busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
-			w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
-			startToWork = now
-			flushTimeSlice = 0
-		}
-		if needFlush {
-			if err := w.doFlush(&flushTimeSlice); err != nil {
-				log.Error("Transaction dmlSink worker exits unexpectly",
-					zap.String("changefeedID", w.changefeed),
-					zap.Int("workerID", w.ID),
-					zap.Error(err))
-				return err
-			}
-			needFlush = false
 		}
 	}
 }
 
 // onEvent is called when a new event is received.
-// It returns true if the event is sent to backend.
+// It returns true if it needs flush immediately.
 func (w *worker) onEvent(txn txnWithNotifier) bool {
 	w.hasPending = true
 
@@ -169,16 +178,12 @@ func (w *worker) onEvent(txn txnWithNotifier) bool {
 }
 
 // doFlush flushes the backend.
-// It returns true only if it can no longer be flushed.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
+func (w *worker) doFlush() error {
 	if w.hasPending {
 		start := time.Now()
 		defer func() {
-			elapsed := time.Since(start)
-			*flushTimeSlice += elapsed
-			w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
+			w.metricTxnWorkerFlushDuration.Observe(time.Since(start).Seconds())
 		}()
-
 		if err := w.backend.Flush(w.ctx); err != nil {
 			log.Warn("Transaction dmlSink backend flush fail",
 				zap.String("changefeedID", w.changefeed),
