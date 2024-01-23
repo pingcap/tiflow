@@ -123,7 +123,7 @@ The above diagram demonstrates a large transaction with start-ts = 100 write mul
 #### Performance Assessment (range-level request VS store-level request)
 
 You may have noticed that, letting each data range's WatermarkAdvancer proactively query the primary key of this large transaction may introduce a performance issue. For example, if the large transaction involves 100,000 or more data ranges, each WatermarkAdvancer queries the primary key once per second (in order to fetch fresh enough min-commit-ts), the primary key data range needs to serve 100,000 queries.
-In order to decline the query QPS by many magnititude, we use store level requests instead of data range level requests. We can reuse TiKV's 'store level check leader request' to achieve this goal. There are at most N requests per second for the primary key in the above example, where N is the number of TiKV nodes, let's say 200, which represents a relatively large cluster.
+In order to decline the query QPS by many magnitude, we use store level requests instead of data range level requests. We can reuse TiKV's 'store level check leader request' to achieve this goal. There are at most N requests per second for the primary key in the above example, where N is the number of TiKV nodes, let's say 200, which represents a relatively large cluster.
 
 ![image](../media/large-txn-no-block-wm-6.png)
 
