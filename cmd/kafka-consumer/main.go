@@ -890,12 +890,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		globalWatermark := c.getGlobalWatermark()
-		if err := c.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
-		}); err != nil {
-			return cerror.Trace(err)
-		}
-
 		// handle DDL
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil {
@@ -912,6 +906,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 				return cerror.Trace(err)
 			}
 			c.popDDL()
+		}
+
+		if err := c.forEachSink(func(sink *partitionSinks) error {
+			return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
+		}); err != nil {
+			return cerror.Trace(err)
 		}
 	}
 }
