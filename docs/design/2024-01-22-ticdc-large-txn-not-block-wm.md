@@ -96,7 +96,7 @@ struct WatermarkAdvancer {
 }
 ```
 
-We separate normal transactions and large transactions in the TS Resolver module. Because each lock contains the transaction-size (or we expliciltely add large-transaction flag in the lock) information, when the Lock Observer receives a lock operation, we can dispatch the lock to related region's Resolver and according to the large transaction flag. We just store a little information like start-ts, primary-key, update-to-date min-commit-ts in the Resolver for a large transaction even though there are 1M rows changed in a region. This can significantly reduce the total memory usage of Resolver for a large transaction which can reduce the OOM issue of TiKV (we previously met some OOM issue because the Resolver occupies a lot of memory for large transactions).
+We separate normal transactions and large transactions in the TS Resolver module. Because each lock contains the transaction-size (or we explicitly add large-transaction flag in the lock) information, when the Lock Observer receives a lock operation, we can dispatch the lock to related region's Resolver and according to the large transaction flag. We just store a little information like start-ts, primary-key, update-to-date min-commit-ts in the Resolver for a large transaction even though there are 1M rows changed in a region. This can significantly reduce the total memory usage of Resolver for a large transaction which can reduce the OOM issue of TiKV (we previously met some OOM issue because the Resolver occupies a lot of memory for large transactions).
 
 ![image](../media/large-txn-no-block-wm-4.png)
 
