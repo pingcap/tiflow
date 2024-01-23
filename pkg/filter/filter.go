@@ -164,9 +164,18 @@ func (f *filter) ShouldDiscardDDL(startTs uint64, ddlType timodel.ActionType, sc
 	return f.ShouldIgnoreTable(schema, table)
 }
 
-// ShouldIgnoreDDLEvent returns true if the DDL event should be ignored.
+// ShouldIgnoreDDLEvent returns true if the DDL event match the event-filter.
 // If a ddl is ignored, it will be applied to cdc's schema storage,
 // but will not be sent to downstream.
+//
+// Note that a ignored ddl is different from a discarded ddl. For example, suppose
+// we have a changefeed-test with the following config:
+//   - table filter: rules = ['test.*']
+//   - event-filters: matcher = ["test.worker"] ignore-event = ["create table"]
+//
+// Then, for the following DDLs:
+//  1. `CREATE TABLE test.worker` will be ignored, but the table will be replicated by changefeed-test.
+//  2. `CREATE TABLE other.worker` will be discarded, and the table will not be replicated by changefeed-test.
 func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (discard bool, err error) {
 	return f.sqlEventFilter.shouldSkipDDL(ddl)
 }
