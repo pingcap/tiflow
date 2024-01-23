@@ -91,6 +91,8 @@ type SharedClient struct {
 		sync.RWMutex
 		v map[SubscriptionID]*requestedTable
 	}
+
+	logRegionDetails func(msg string, fields ...zap.Field)
 }
 
 type resolveLockTask struct {
@@ -162,6 +164,12 @@ func NewSharedClient(
 		requestedStores: make(map[string]*requestedStore),
 	}
 	s.totalSpans.v = make(map[SubscriptionID]*requestedTable)
+	if cfg.Debug.Puller.LogRegionDetails {
+		s.logRegionDetails = log.Info
+	} else {
+		s.logRegionDetails = log.Debug
+	}
+
 	s.initMetrics()
 	return s
 }
@@ -410,7 +418,7 @@ func (s *SharedClient) createRegionRequest(sri singleRegionInfo) *cdcpb.ChangeDa
 
 func (s *SharedClient) appendRequest(r *requestedStore, sri singleRegionInfo) {
 	offset := r.nextStream.Add(1) % uint32(len(r.streams))
-	log.Info("event feed will request a region",
+	s.logRegionDetails("event feed will request a region",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("streamID", r.streams[offset].streamID),
@@ -578,7 +586,7 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 	switch eerr := err.(type) {
 	case *eventError:
 		innerErr := eerr.err
-		log.Info("cdc region error",
+		s.logRegionDetails("cdc region error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", errInfo.requestedTable.subscriptionID),

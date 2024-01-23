@@ -184,6 +184,8 @@ type CDCClient struct {
 	// filterLoop is used in BDR mode, when it is true, tikv cdc component
 	// will filter data that are written by another TiCDC.
 	filterLoop bool
+
+	logRegionDetails func(msg string, fields ...zap.Field)
 }
 
 type tableStoreStat struct {
@@ -221,6 +223,11 @@ func NewCDCClient(
 		filterLoop: filterLoop,
 	}
 	c.tableStoreStats.v = make(map[string]*tableStoreStat)
+	if cfg.Debug.Puller.LogRegionDetails {
+		c.logRegionDetails = log.Info
+	} else {
+		c.logRegionDetails = log.Debug
+	}
 	return c
 }
 
@@ -250,7 +257,7 @@ func (c *CDCClient) newStream(ctx context.Context, addr string, storeID uint64) 
 			client: streamClient,
 			conn:   conn,
 		}
-		log.Debug("created stream to store",
+		log.Info("created stream to store",
 			zap.String("namespace", c.changefeed.Namespace),
 			zap.String("changefeed", c.changefeed.ID),
 			zap.Int64("tableID", c.tableID),
@@ -520,7 +527,7 @@ func (s *eventFeedSession) scheduleRegionRequest(ctx context.Context, sri single
 			case <-ctx.Done():
 			}
 		case regionlock.LockRangeStatusStale:
-			log.Info("request expired",
+			s.client.logRegionDetails("request expired",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
@@ -708,7 +715,7 @@ func (s *eventFeedSession) requestRegionToStore(
 		state := newRegionFeedState(sri, requestID)
 		pendingRegions.setByRequestID(requestID, state)
 
-		log.Info("start new request",
+		s.client.logRegionDetails("start new request",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Int64("tableID", s.tableID),
@@ -760,7 +767,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				continue
 			}
 
-			log.Info("region send to store failed",
+			s.client.logRegionDetails("region send to store failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
@@ -824,7 +831,7 @@ func (s *eventFeedSession) dispatchRequest(ctx context.Context) error {
 		}
 		if rpcCtx == nil {
 			// The region info is invalid. Retry the span.
-			log.Info("get rpc context for region is nil, retry it",
+			s.client.logRegionDetails("get rpc context for region is nil, retry it",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
@@ -918,7 +925,7 @@ func (s *eventFeedSession) handleError(ctx context.Context, errInfo regionErrorI
 	switch eerr := errors.Cause(err).(type) {
 	case *eventError:
 		innerErr := eerr.err
-		log.Info("cdc region error",
+		s.client.logRegionDetails("cdc region error",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Int64("tableID", s.tableID),
@@ -1046,7 +1053,7 @@ func (s *eventFeedSession) receiveFromStream(
 
 		remainingRegions := pendingRegions.takeAll()
 		for _, state := range remainingRegions {
-			log.Info("region canceled",
+			s.client.logRegionDetails("region canceled",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
@@ -1256,12 +1263,6 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 		// is receiving messages with different requestID, only the messages with the larges requestID is valid.
 		if valid {
 			if state.requestID < event.RequestId {
-				log.Debug("region state entry will be replaced because received message of newer requestID",
-					zap.String("namespace", s.changefeed.Namespace),
-					zap.String("changefeed", s.changefeed.ID),
-					zap.Uint64("regionID", event.RegionId),
-					zap.Uint64("oldRequestID", state.requestID),
-					zap.Uint64("requestID", event.RequestId))
 				valid = false
 			} else if state.requestID > event.RequestId {
 				log.Warn("drop event due to event belongs to a stale request",
@@ -1294,7 +1295,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 			}
 			state.start()
 			worker.setRegionState(event.RegionId, state)
-			log.Info("event feeds puts state into region worker",
+			s.client.logRegionDetails("event feeds puts state into region worker",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
@@ -1315,7 +1316,7 @@ func (s *eventFeedSession) sendRegionChangeEvents(
 
 		switch x := event.Event.(type) {
 		case *cdcpb.Event_Error:
-			log.Info("event feed receives a region error",
+			s.client.logRegionDetails("event feed receives a region error",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),

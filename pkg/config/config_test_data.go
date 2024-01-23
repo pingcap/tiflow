@@ -188,7 +188,8 @@ const (
     },
     "puller": {
       "enable-resolved-ts-stuck-detection": false,
-      "resolved-ts-stuck-interval": 300000000000
+      "resolved-ts-stuck-interval": 300000000000,
+      "log-region-details": false
     }
   },
   "cluster-id": "default",
