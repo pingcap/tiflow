@@ -473,8 +473,7 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 			return errors.Trace(err)
 		}
 	case timodel.ActionAddTablePartition,
-		timodel.ActionDropTablePartition,
-		timodel.ActionReorganizePartition:
+		timodel.ActionDropTablePartition:
 		err := s.inner.updatePartition(getWrapTableInfo(job), false, job.BinlogInfo.FinishedTS)
 		if err != nil {
 			return errors.Trace(err)
