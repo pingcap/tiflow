@@ -887,7 +887,7 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, isTruncate bool, cur
 	for _, partition := range oldPi.Definitions {
 		s.partitions.ReplaceOrInsert(newVersionedID(partition.ID, tag))
 	}
-	newPartitionIDMap := make(map[int64]struct{}, len(newPi.NewPartitionIDs))
+	newPartitionIDMap := make(map[int64]struct{}, len(newPi.Definitions))
 	for _, partition := range newPi.Definitions {
 		vid := newVersionedID(partition.ID, tag)
 		vid.target = tbInfo
