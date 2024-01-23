@@ -147,7 +147,9 @@ func TestEncodeDMLEnableChecksum(t *testing.T) {
 }
 
 func TestEncodeDDLEvent(t *testing.T) {
-	helper := entry.NewSchemaTestHelper(t)
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	helper := entry.NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
 	defer helper.Close()
 
 	sql := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
@@ -169,6 +171,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
+	codecConfig.EnableRowChecksum = true
 	for _, format := range []common.EncodingFormatType{
 		common.EncodingFormatAvro,
 		common.EncodingFormatJSON,
