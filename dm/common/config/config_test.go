@@ -50,7 +50,7 @@ func TestConfigSecretKeyPath(t *testing.T) {
 	cfg.SecretKeyPath = filepath.Join(dir, "secret-2")
 	err = cfg.Adjust()
 	require.True(t, terror.ErrConfigSecretKeyPath.Equal(err))
-	require.ErrorContains(t, err, "hex string of length 64")
+	require.ErrorContains(t, err, "hex AES-256 key of length 64")
 	require.Nil(t, cfg.SecretKey)
 
 	// works
