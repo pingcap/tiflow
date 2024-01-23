@@ -90,7 +90,7 @@ require (
 	github.com/thanhpk/randstr v1.0.6
 	github.com/tikv/client-go/v2 v2.0.8-0.20231227070846-61c486af13a5
 	github.com/tikv/pd v1.1.0-beta.0.20231212061647-ab97b9a267f3
-	github.com/tikv/pd/client v0.0.0-20240103101103-a4d2f1ca365a
+	github.com/tikv/pd/client v0.0.0-20240108040922-c94810e110ce
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
