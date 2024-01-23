@@ -36,4 +36,3 @@ readonly = 1
 [profiles.default]
 max_memory_usage = 10000000000
 load_balancing = "random"
-
