@@ -82,8 +82,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {
@@ -341,8 +340,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {
@@ -507,8 +505,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {

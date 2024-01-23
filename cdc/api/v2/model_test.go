@@ -74,7 +74,6 @@ var defaultAPIConfig = &ReplicaConfig{
 		UseFileBackend:        false,
 		MemoryUsage: &ConsistentMemoryUsage{
 			MemoryQuotaPercentage: 50,
-			EventCachePercentage:  0,
 		},
 	},
 	Scheduler: &ChangefeedSchedulerConfig{
