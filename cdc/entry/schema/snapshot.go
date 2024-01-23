@@ -472,16 +472,10 @@ func (s *Snapshot) DoHandleDDL(job *timodel.Job) error {
 		if err != nil {
 			return errors.Trace(err)
 		}
-	case
-		timodel.ActionAddTablePartition,
-<<<<<<< HEAD
-		timodel.ActionDropTablePartition:
-		err := s.inner.updatePartition(getWrapTableInfo(job), job.BinlogInfo.FinishedTS)
-=======
+	case timodel.ActionAddTablePartition,
 		timodel.ActionDropTablePartition,
 		timodel.ActionReorganizePartition:
 		err := s.inner.updatePartition(getWrapTableInfo(job), false, job.BinlogInfo.FinishedTS)
->>>>>>> ea976f47a3 (mounter(ticdc): fix truncate table partition cause mounter failed issue (#10528))
 		if err != nil {
 			return errors.Trace(err)
 		}
