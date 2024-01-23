@@ -518,7 +518,7 @@ func (s *schemaStorage) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.D
 			table = event.PreTableInfo.TableName.Table
 		}
 
-		if s.filter.ShouldDiscardDDL(event.StartTs, event.Type, schemaName, table) {
+		if s.filter.ShouldDiscardDDL(event.Type, schemaName, table) {
 			log.Error(
 				"discarded DDL event should not be sent to owner"+
 					"please report a bug to TiCDC if you see this log"+

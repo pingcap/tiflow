@@ -80,18 +80,14 @@ func runFilter(cmd *cobra.Command, args []string) {
 		}
 		fmt.Printf("Table: %s, Not matched filter rule\n", table)
 	case "ddl":
-		startTs := uint64(0)
 		ddlType := timodel.ActionCreateTable
-		discard := ft.ShouldDiscardDDL(startTs,
-			ddlType,
-			tableAndSchema[0],
-			tableAndSchema[1])
+		discard := ft.ShouldDiscardDDL(ddlType, tableAndSchema[0], tableAndSchema[1])
 		if discard {
 			fmt.Printf("DDL: %s, should be discard by event filter rule\n", ddl)
 			return
 		}
 		ignored, err := ft.ShouldIgnoreDDLEvent(&model.DDLEvent{
-			StartTs: startTs,
+			StartTs: uint64(0),
 			Query:   ddl,
 			Type:    ddlType,
 			TableInfo: &model.TableInfo{
