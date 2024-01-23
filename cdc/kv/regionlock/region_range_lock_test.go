@@ -334,9 +334,7 @@ func BenchmarkOneMillionRegions(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	var minTs uint64
 	for i := 0; i < b.N; i++ {
-		minTs = l.CalculateMinCheckpointTs()
+		l.CalculateMinCheckpointTs()
 	}
-	fmt.Printf("minTs is: %d\n", minTs)
 }

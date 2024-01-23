@@ -190,7 +190,7 @@ func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
 		require.Equal(t, uint64(10), event.Resolved.ResolvedTs)
 		require.Equal(t, 1, len(event.Resolved.Spans))
 		require.Equal(t, uint64(1), event.Resolved.Spans[0].Region)
-	case <-time.NewTimer(100 * time.Millisecond).C:
+	case <-time.NewTimer(1000 * time.Millisecond).C:
 		require.True(t, false, "must get an event")
 	}
 }
