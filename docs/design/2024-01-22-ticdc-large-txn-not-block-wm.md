@@ -40,19 +40,22 @@ struct Resolver {
 }
 ```
 Because the total write data is massive in the prewrite stage for a large transaction, these prewritten key locks will stay in the `lock_ts_heap` for a long time and block the advancing of Resovle TS for related regions until the large transaction finished prewrites all data and execute the commit stage. The following diagram shows how the Resolve TS blocked by a large transaction until T3.
-[image](../media/large-txn-no-block-wm-1.png)
+
+![image](../media/large-txn-no-block-wm-1.png)
 
 ## Mechanism of updating primary key TTL periodically for large transaction
 In TiDB's 2PC transaction protocol, TiDB prewrites all kv pairs concurrently at the prewrite stage, and then commit the primary key first and then asynchrously commit all secondary keys. If a read request encountered a prewritten but uncommitted data, it will try to check its primary key's status(committed or rollbacked, or still ongoing) to determine wait the data to be committed or rollback it. The read request uses the TTL information enveloped in the primary key to determine if this is an aborted transaction caused by crashed TiDB instances or if this is an ongoing transaction if the TTL is still alive.
 For a normal transaction, the default TTL is 3s ahead of the transaction's start-ts. It means if a read request encounters a lock whose primary key's status is undertimed, the read request will check the TTL of this primary key. If the TTL is less than the read request's current ts, the read request can rollback this undertermined lock to make this read request unblocked.
 In order to prevent the read request and other lock resolving mechanisms disturbing or aborting a long running large transaction, the large transaction will periodically update and advance the TTL of its primary key. The following diagram demostrate how large transaction update TTL of its primary key:
-[image](../media/large-txn-no-block-wm-2.png)
+
+![image](../media/large-txn-no-block-wm-2.png)
 
 ## Solution: large transactions periodically update its min-commit-ts
 From "How large transactions block the advancing of Resolve TS" section we can see the root cause of large transactions block resolve ts is:
 - Current Resolve TS(water mark) calculation depends on the start ts of all ongoing transactions, and the start ts of a large transaction is relevant "old" and not advanced when the large transaction is running.
-More reasonable choice is using min-commit-ts of large transactions to calculate the water mark, and same as the TTL, the large transaction periodically update its primary key's min-commit-tsinformation to let the water mark mechanism can advance the water mark smoothly. The following diagram demostrates the basic idea of this new proposal: 
-[image](../media/large-txn-no-block-wm-3.png)
+More reasonable choice is using min-commit-ts of large transactions to calculate the water mark, and same as the TTL, the large transaction periodically update its primary key's min-commit-tsinformation to let the water mark mechanism can advance the water mark smoothly. The following diagram demostrates the basic idea of this new proposal:
+
+![image](../media/large-txn-no-block-wm-3.png)
 
 ## Detailed Design
 ### Large Transaction Write
@@ -79,7 +82,8 @@ struct WatermarkAdvancer {
 }
 ```
 We separate normal transactions and large transactions in the TS Resolver module. Because each lock contains the transaction-size (or we expliciltely add large-transaction flag in the lock) information, when the Lock Observer receives a lock operation, we can dispatch the lock to related region's Resolver and according to the large transaction flag. We just store a little information like start-ts, primary-key, update-to-date min-commit-ts  in the Resolver for a large transaction even though there are 1M rows changed in a region. This can significantly reduce the total memory usage of Resolver for a large transaction which can reduce the OOM issue of TiKV (we previously met some OOM issue because the Resolver occupies a lot of memory for large transactions). 
-[image](../media/large-txn-no-block-wm-4.png)
+
+![image](../media/large-txn-no-block-wm-4.png)
 
 ### WatermarkAdvancer handles locks
 When there is a new added lock for a large transaction, this must be a prewrite request,  
@@ -93,13 +97,16 @@ When there is a new delete lock for a large transaction:
 
 ### WatermarkAdvancer update min-commit-ts for large transactions
 If the large_txn_map is not empty, it means there must be at least one large transaction is ongoing in this data range(region), we need to periodically query the min-commit-ts for these ongoing large transactions to advance the watermark of this data range.
-[image](../media/large-txn-no-block-wm-5.png)
+
+![image](../media/large-txn-no-block-wm-5.png)
+
 The above diagram demonstrates a large transaction with start-ts = 100 write multiple data ranges. Each data range's WatermarkAdvancer will periodically query the min-commit-ts in its primary key for this large transaction.
 
 #### Performance Assessment (range-level request VS store-level request)
 You may have noticed that, letting each data range's WatermarkAdvancer proactively query the primary key of this large transaction may introduce a performance issue. For example, if the large transaction involves 100,000 or more data ranges, each WatermarkAdvancer queries the primary key once per second (in order to fetch fresh enough min-commit-ts), the primary key data range needs to serve 100,000 queries.
 In order to decline the query QPS by many magnititude, we use store level requests instead of data range level requests. We can reuse TiKV's 'store level check leader request' to achieve this goal. There are at most N requests per second for the primary key in the above example, where N is the number of TiKV nodes, let's say 200, which represents a relatively large cluster.
-[image](../media/large-txn-no-block-wm-6.png)
+
+![image](../media/large-txn-no-block-wm-6.png)
 
 ## Compatibility
 
@@ -108,7 +115,9 @@ CDC set a hook in TiKV's raft log applying module. CDC uses this hook to observe
 Inside CDC, there is an uncommitted data buffer named Matcher for each data range, the matcher caches all prewrite kvs until these kvs receive corresponding commit message and then move them to Sorter one by one.
 The Matcher is a kv-level map, when there is a transaction modified multiple rows, these rows will be moved from the Matcher to the Sorter one by one. Because each row will stay in the Matcher until it received its own commit message. The following diagram left part demostrates a transaction involves key0 and key1, when the Machter receive key1's commit message, it will only move key1 the Sorter (bold part). But at that point of time, the state of this transaction is determined and the commit ts of other keys of this transaction must be 101. key0 will be moved to the Sorter after it received "key0 commit, commit-ts = 101" message.
 After we use large transaction's min-commit-ts to calculate the watermark, the watermark of a data range might be advanced after it reiceived the 1st kv commit message for this transaction. This means CDC should move the whole transaction to the Sorter after CDC receives 1st kv commit message for this specific data range. The right part of following diagram demostrates this case:
-[image](../media/large-txn-no-block-wm-7.png)
+
+![image](../media/large-txn-no-block-wm-7.png)
+
 CDC should use transaction level map instead of kv level map in the Matcher buffer to achieve the above goal: when the Machter receive the first commit message for a transaction in the data range, CDC can move the whole transaction in this data range from the Matcher to the Sorter.
 ```
 // Before
@@ -134,7 +143,9 @@ Large transactions don't block watermarks, and the replication lag will not incr
 ### Stale Read
 Basically, stale read can use a stale timestamp (few seconds ago) to read data in TiKV data range(region)'s follower/learner replicas without checking any locks (skip lockcf). Data ranges'(regions') leaders send their resolve ts and corresponding applied-index (follower replicas compare their own applied-index with this applied-index to check if their local data is ready for stale read requests whose ts less than safe-ts) to follower replicas periodically. The frequency of sending this type of message is controlled by TiKV's advance-ts-interval whose default value is 20s.
 Stale read requests can read determined and consistent data on the follower reaplicas is because of the safe-ts sent by leader replica. If the timestamp of stale read is larger than the safe-ts, DataIsNotReady will be returned.
-[image](../media/large-txn-no-block-wm-8.png)
+
+![image](../media/large-txn-no-block-wm-8.png)
+
 After we use the min-commit-ts of a large transaction to calculate the watermark, there is a case that the  WatermarkAdvancer will advance the watermark when it received some keys' commit messages but not all keys' commit messages for a large transaction. The above diagram demonstrates such a case: there is a large transaction involving key0 and key1. At the point of raflog-idx 901, the WatermarkAdvancer can advance the watermark to 106 because of the state of the large transaction which involves key0 and key1 is determined.
 So, with the new watermark mechanism, Stale Read requests should read the lock cf for the above large transaction cases. If the stale read encounters locks whose start-ts less than the safe-ts, the stale read should verify if this lock is committed or rollbacked. In this case, the stale read request can check the status of this lock's primary key(must be committed or rollbacked), but this involve a remote RPC to the leader of its primary key. When the WatermarkAdvancer (on the leader replica) publishes the safe-ts(wm) messages to follower replicas, it also can publish its large transaction's min-commit-ts or commit-ts to elimiate above remote RPC queries.
 #### Benefits
