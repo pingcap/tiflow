@@ -216,7 +216,8 @@ func TestShouldIgnoreDDL(t *testing.T) {
 				},
 			},
 			ignoredTs: []uint64{},
-		}, { // cases ignore by ddl query
+		},
+		{ // cases ignore by ddl query
 			cases: []struct {
 				startTs uint64
 				schema  string
@@ -325,7 +326,8 @@ func TestShouldDiscardDDL(t *testing.T) {
 				{"test", "", "create database test", timodel.ActionCreateSchema, true},
 			},
 			rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
-		}, {
+		},
+		{
 			// Discard by schema name cases.
 			cases: []struct {
 				schema  string
