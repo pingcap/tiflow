@@ -89,3 +89,4 @@ CREATE TABLE t_alter
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8
   COLLATE = utf8_bin;
+  
