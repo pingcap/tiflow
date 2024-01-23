@@ -106,7 +106,7 @@ When there is a new added lock for a large transaction, this must be a prewrite 
 
 - Write lock
   - if the start-ts of the new added lock is already in current large_txn_map we can skip it directly since we already tracked this large transaction.
-  - If the start-ts of the new added lock is not in current large_txn_map , this must be the first prewrite key in this region(data range), we add it to the large_txn_map
+  - If the start-ts of the new added lock is not in current large_txn_map , this must be the first prewrite key in this region(data range), we add it to the large_txn_map.
     When there is a new delete lock for a large transaction:
 - Delete lock, this means the transaction's final status is determined, either commited or rollbacked:
   - If its start-ts is still in large_txn_map, this must be the first received committed/rollbacked key for this transaction in this data range(region), we can remove it from the large_txn_map
