@@ -655,8 +655,8 @@ type HoleAttrs struct {
 	CheckpointTs uint64
 }
 
-// GetMinCheckpointTs gets the minimum checkpoint timestamp from range lock.
-func (l *RegionRangeLock) GetMinCheckpointTs() uint64 {
+// CalculateMinCheckpointTs gets the minimum checkpoint timestamp from range lock.
+func (l *RegionRangeLock) CalculateMinCheckpointTs() uint64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 

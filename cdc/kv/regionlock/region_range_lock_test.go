@@ -289,13 +289,13 @@ func TestRegionRangeLockCollect(t *testing.T) {
 	require.Equal(t, 1, len(attrs.Holes))
 }
 
-func TestGetMinCheckpointTs(t *testing.T) {
+func TestCalculateMinCheckpointTs(t *testing.T) {
 	l := NewRegionRangeLock(1, []byte("a"), []byte("z"), 100, "")
 
 	res := l.LockRange(context.Background(), []byte("m"), []byte("x"), 1, 1)
 	res.LockedRange.CheckpointTs.Store(101)
 	require.Equal(t, LockRangeStatusSuccess, res.Status)
-	require.Equal(t, uint64(100), l.GetMinCheckpointTs())
+	require.Equal(t, uint64(100), l.CalculateMinCheckpointTs())
 
 	res = l.LockRange(context.Background(), []byte("a"), []byte("m"), 2, 1)
 	require.Equal(t, LockRangeStatusSuccess, res.Status)
@@ -303,7 +303,7 @@ func TestGetMinCheckpointTs(t *testing.T) {
 	res = l.LockRange(context.Background(), []byte("x"), []byte("z"), 3, 1)
 	require.Equal(t, LockRangeStatusSuccess, res.Status)
 	res.LockedRange.CheckpointTs.Store(103)
-	require.Equal(t, uint64(101), l.GetMinCheckpointTs())
+	require.Equal(t, uint64(101), l.CalculateMinCheckpointTs())
 }
 
 func BenchmarkOneMillionRegions(b *testing.B) {
@@ -336,7 +336,7 @@ func BenchmarkOneMillionRegions(b *testing.B) {
 	b.ResetTimer()
 	var minTs uint64
 	for i := 0; i < b.N; i++ {
-		minTs = l.GetMinCheckpointTs()
+		minTs = l.CalculateMinCheckpointTs()
 	}
 	fmt.Printf("minTs is: %d\n", minTs)
 }

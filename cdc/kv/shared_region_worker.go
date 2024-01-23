@@ -198,18 +198,20 @@ func (w *sharedRegionWorker) handleResolvedTs(ctx context.Context, batch resolve
 	now := time.Now().UnixMilli()
 	lastAdvance := rt.lastAdvanceTime.Load()
 	if now-lastAdvance > 300 && rt.lastAdvanceTime.CompareAndSwap(lastAdvance, now) {
-		ts := rt.rangeLock.GetMinCheckpointTs()
-		revent := model.RegionFeedEvent{
-			Resolved: &model.ResolvedSpans{
-				Spans:      []model.RegionComparableSpan{{Span: rt.span, Region: 0}},
-				ResolvedTs: ts,
-			},
-		}
-		x := rt.associateSubscriptionID(revent)
-		select {
-		case rt.eventCh <- x:
-			w.metrics.metricSendEventResolvedCounter.Add(float64(len(batch.regions)))
-		case <-ctx.Done():
+		ts := rt.rangeLock.CalculateMinCheckpointTs()
+		if ts > rt.startTs {
+			revent := model.RegionFeedEvent{
+				Resolved: &model.ResolvedSpans{
+					Spans:      []model.RegionComparableSpan{{Span: rt.span, Region: 0}},
+					ResolvedTs: ts,
+				},
+			}
+			x := rt.associateSubscriptionID(revent)
+			select {
+			case rt.eventCh <- x:
+				w.metrics.metricSendEventResolvedCounter.Add(float64(len(batch.regions)))
+			case <-ctx.Done():
+			}
 		}
 	}
 }
