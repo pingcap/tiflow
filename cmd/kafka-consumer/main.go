@@ -412,8 +412,8 @@ func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
 type partitionSinks struct {
 	tablesCommitTsMap sync.Map
 	tableSinksMap     sync.Map
-	// resolvedTs record the maximum timestamp of the received event
-	resolvedTs uint64
+	// watermark record the maximum timestamp of the received event
+	watermark uint64
 
 	flowController *flowController
 }
@@ -434,7 +434,7 @@ type Consumer struct {
 	sinksMu     sync.Mutex
 
 	// initialize to 0 by default
-	globalResolvedTs uint64
+	globalWatermark uint64
 
 	eventRouter *dispatcher.EventRouter
 
@@ -646,6 +646,14 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if partition == 0 {
 					c.appendDDL(ddl)
 				}
+
+				oldWatermark := atomic.LoadUint64(&sink.watermark)
+				if ddl.CommitTs < oldWatermark {
+					atomic.StoreUint64(&sink.watermark, ddl.CommitTs)
+					log.Info("update local watermark since new DDL is received",
+						zap.Uint64("oldWatarmark", oldWatermark),
+						zap.Uint64("watermark", sink.watermark))
+				}
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
@@ -671,13 +679,25 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					}
 				}
 
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if row.CommitTs <= globalResolvedTs || row.CommitTs <= partitionResolvedTs {
-					log.Warn("RowChangedEvent fallback row, ignore it",
+				globalWatermark := atomic.LoadUint64(&c.globalWatermark)
+				watermark := atomic.LoadUint64(&sink.watermark)
+				if row.CommitTs <= watermark {
+					log.Warn("row changed event fallback, commitTs <= watermark, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
+						zap.Uint64("watermark", watermark),
+						zap.Uint64("globalWatermark", globalWatermark),
+						zap.Int32("partition", partition),
+						zap.Any("row", row))
+					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+					session.MarkMessage(message, "")
+					continue
+				}
+
+				if row.CommitTs <= globalWatermark {
+					log.Warn("row changed event fallback row, commitTs <= globalWatermark, ignore it",
+						zap.Uint64("commitTs", row.CommitTs),
+						zap.Uint64("watermark", watermark),
+						zap.Uint64("globalWatermark", globalWatermark),
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
 					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
@@ -719,17 +739,32 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Error(err))
 				}
 
-				globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
-				partitionResolvedTs := atomic.LoadUint64(&sink.resolvedTs)
-				if ts < globalResolvedTs || ts < partitionResolvedTs {
-					log.Warn("partition resolved ts fallback, skip it",
+				globalWatermark := atomic.LoadUint64(&c.globalWatermark)
+				watermark := atomic.LoadUint64(&sink.watermark)
+				if ts < watermark {
+					log.Warn("partition watermark fallback, skip it",
 						zap.Uint64("ts", ts),
-						zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-						zap.Uint64("globalResolvedTs", globalResolvedTs),
+						zap.Uint64("watermark", watermark),
+						zap.Uint64("globalWatermark", globalWatermark),
 						zap.Int32("partition", partition))
 					session.MarkMessage(message, "")
 					continue
 				}
+				if ts < globalWatermark {
+					log.Warn("partition resolved ts fallback, less than globalWatermark, skip it",
+						zap.Uint64("ts", ts),
+						zap.Uint64("watermark", watermark),
+						zap.Uint64("globalWatermark", globalWatermark),
+						zap.Int32("partition", partition))
+					session.MarkMessage(message, "")
+					continue
+				}
+
+				log.Debug("update partition resolved ts",
+					zap.Uint64("ts", ts), zap.Int32("partition", partition))
+				atomic.StoreUint64(&sink.watermark, ts)
+				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
+				session.MarkMessage(message, "")
 
 				for tableID, group := range eventGroups {
 					events := group.Resolve(ts)
@@ -752,14 +787,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
-				log.Debug("update partition resolved ts",
-					zap.Uint64("ts", ts), zap.Int32("partition", partition))
-				atomic.StoreUint64(&sink.resolvedTs, ts)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-				session.MarkMessage(message, "")
-
 			}
-
 		}
 
 		if counter > c.option.maxBatchSize {
@@ -795,8 +823,8 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	}
 
 	c.ddlList = append(c.ddlList, ddl)
-	log.Info("DDL event received", zap.Any("DDL", ddl))
 	c.ddlWithMaxCommitTs = ddl
+	log.Info("DDL event received", zap.Any("DDL", ddl))
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -830,16 +858,24 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 	return nil
 }
 
-func (c *Consumer) getMinPartitionResolvedTs() (result uint64, err error) {
-	result = uint64(math.MaxUint64)
-	err = c.forEachSink(func(sink *partitionSinks) error {
-		a := atomic.LoadUint64(&sink.resolvedTs)
+func (c *Consumer) getGlobalWatermark() uint64 {
+	result := uint64(math.MaxUint64)
+	_ = c.forEachSink(func(sink *partitionSinks) error {
+		a := atomic.LoadUint64(&sink.watermark)
 		if a < result {
 			result = a
 		}
 		return nil
 	})
-	return result, err
+
+	oldGlobalWatermark := atomic.LoadUint64(&c.globalWatermark)
+	if result < oldGlobalWatermark {
+		log.Panic("global watermark fallback",
+			zap.Uint64("globalWatermark", result),
+			zap.Uint64("oldGlobalWatermark", oldGlobalWatermark))
+	}
+	atomic.StoreUint64(&c.globalWatermark, result)
+	return result
 }
 
 // Run the Consumer
@@ -853,26 +889,22 @@ func (c *Consumer) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 
-		minPartitionResolvedTs, err := c.getMinPartitionResolvedTs()
-		if err != nil {
+		globalWatermark := c.getGlobalWatermark()
+		if err := c.forEachSink(func(sink *partitionSinks) error {
+			return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
+		}); err != nil {
 			return cerror.Trace(err)
 		}
 
 		// handle DDL
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil {
-			if todoDDL.CommitTs > minPartitionResolvedTs {
-				log.Info("cannot execute DDL, since the it's CommitTs > minPartitionResolvedTs",
+			if todoDDL.CommitTs > globalWatermark {
+				log.Info("cannot execute DDL, since the it's CommitTs > globalWatermark",
 					zap.Uint64("commitTs", todoDDL.CommitTs),
-					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
+					zap.Uint64("globalWatermark", globalWatermark),
 					zap.Any("DDL", todoDDL))
 				continue
-			}
-			// flush DMLs
-			if err := c.forEachSink(func(sink *partitionSinks) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-			}); err != nil {
-				return cerror.Trace(err)
 			}
 
 			// DDL can be executed, do it first.
@@ -880,30 +912,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 				return cerror.Trace(err)
 			}
 			c.popDDL()
-
-			if todoDDL.CommitTs < minPartitionResolvedTs {
-				log.Info("update minPartitionResolvedTs by DDL",
-					zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs),
-					zap.Any("DDL", todoDDL))
-			}
-			minPartitionResolvedTs = todoDDL.CommitTs
-		}
-
-		// update global resolved ts
-		if c.globalResolvedTs > minPartitionResolvedTs {
-			log.Panic("global ResolvedTs fallback",
-				zap.Uint64("globalResolvedTs", c.globalResolvedTs),
-				zap.Uint64("minPartitionResolvedTs", minPartitionResolvedTs))
-		}
-
-		if c.globalResolvedTs < minPartitionResolvedTs {
-			c.globalResolvedTs = minPartitionResolvedTs
-		}
-
-		if err := c.forEachSink(func(sink *partitionSinks) error {
-			return syncFlushRowChangedEvents(ctx, sink, c.globalResolvedTs)
-		}); err != nil {
-			return cerror.Trace(err)
 		}
 	}
 }
