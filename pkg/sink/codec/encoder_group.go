@@ -83,8 +83,9 @@ func NewEncoderGroup(
 			changefeedID,
 			outCh,
 			builder.Build(),
-			*cfg.SendBootstrapIntervalInSec,
-			*cfg.SendBootstrapInMsgCount,
+			util.GetOrZero(cfg.SendBootstrapIntervalInSec),
+			util.GetOrZero(cfg.SendBootstrapInMsgCount),
+			util.GetOrZero(cfg.SendBootstrapToAllPartition),
 			defaultMaxInactiveDuration,
 		)
 	}

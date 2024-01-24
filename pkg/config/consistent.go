@@ -43,9 +43,6 @@ type ConsistentConfig struct {
 type ConsistentMemoryUsage struct {
 	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 will be used for redo events.
 	MemoryQuotaPercentage uint64 `toml:"memory-quota-percentage" json:"memory-quota-percentage"`
-	// ReplicaConfig.MemoryQuota * MemoryQuotaPercentage / 100 * EventCachePercentage / 100
-	// will be used for redo cache.
-	EventCachePercentage uint64 `toml:"event-cache-percentage" json:"event-cache-percentage"`
 }
 
 // ValidateAndAdjust validates the consistency config and adjusts it if necessary.

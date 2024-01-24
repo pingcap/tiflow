@@ -69,6 +69,7 @@ const (
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "debezium-disable-schema": false
   },
   "consistent": {
@@ -82,8 +83,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {
@@ -328,6 +328,7 @@ const (
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "debezium-disable-schema": false
   },
   "consistent": {
@@ -341,8 +342,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {
@@ -494,6 +494,7 @@ const (
     "advance-timeout-in-sec": 150,
     "send-bootstrap-interval-in-sec": 120,
     "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
     "debezium-disable-schema": false
   },
   "consistent": {
@@ -507,8 +508,7 @@ const (
     "storage": "",
     "use-file-backend": false,
     "memory-usage": {
-        "memory-quota-percentage": 50,
-        "event-cache-percentage": 0
+        "memory-quota-percentage": 50
     }
   },
   "scheduler": {

@@ -72,10 +72,9 @@ func (suite *redoLogWorkerSuite) createWorker(
 	quota.ForceAcquire(uint64(testEventSize))
 	quota.AddTable(suite.testSpan)
 	redoDMLManager := newMockRedoDMLManager()
-	eventCache := newRedoEventCache(suite.testChangefeedID, 1024)
 
 	return newRedoWorker(suite.testChangefeedID, sm, quota,
-		redoDMLManager, eventCache), sortEngine, redoDMLManager
+		redoDMLManager), sortEngine, redoDMLManager
 }
 
 func (suite *redoLogWorkerSuite) addEventsToSortEngine(
@@ -137,7 +136,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskGotSomeFilteredEvents() {
 	}
 	wg.Wait()
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 3)
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 }
 
 func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished() {
@@ -187,7 +185,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished()
 	}
 	wg.Wait()
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 3)
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 }
 
 func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
@@ -235,7 +232,6 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 	w.memQuota.Close()
 	cancel()
 	wg.Wait()
-	require.Len(suite.T(), w.eventCache.getAppender(suite.testSpan).getEvents(), 3)
 	require.Len(suite.T(), m.getEvents(suite.testSpan), 2, "Only two events should be sent to sink")
 }
 

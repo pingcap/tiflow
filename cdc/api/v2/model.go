@@ -19,7 +19,6 @@ import (
 
 	"github.com/pingcap/errors"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -234,30 +233,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 	res.BDRMode = c.BDRMode
 
 	if c.Filter != nil {
-		var mySQLReplicationRules *filter.MySQLReplicationRules
-		if c.Filter.MySQLReplicationRules != nil {
-			mySQLReplicationRules = &filter.MySQLReplicationRules{}
-			mySQLReplicationRules.DoDBs = c.Filter.DoDBs
-			mySQLReplicationRules.IgnoreDBs = c.Filter.IgnoreDBs
-			if c.Filter.MySQLReplicationRules.DoTables != nil {
-				for _, tbl := range c.Filter.MySQLReplicationRules.DoTables {
-					mySQLReplicationRules.DoTables = append(mySQLReplicationRules.DoTables,
-						&filter.Table{
-							Schema: tbl.Schema,
-							Name:   tbl.Name,
-						})
-				}
-			}
-			if c.Filter.MySQLReplicationRules.IgnoreTables != nil {
-				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
-					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
-						&filter.Table{
-							Schema: tbl.Schema,
-							Name:   tbl.Name,
-						})
-				}
-			}
-		}
 		var efs []*config.EventFilterRule
 		if len(c.Filter.EventFilters) != 0 {
 			efs = make([]*config.EventFilterRule, len(c.Filter.EventFilters))
@@ -266,10 +241,9 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			}
 		}
 		res.Filter = &config.FilterConfig{
-			Rules:                 c.Filter.Rules,
-			MySQLReplicationRules: mySQLReplicationRules,
-			IgnoreTxnStartTs:      c.Filter.IgnoreTxnStartTs,
-			EventFilters:          efs,
+			Rules:            c.Filter.Rules,
+			IgnoreTxnStartTs: c.Filter.IgnoreTxnStartTs,
+			EventFilters:     efs,
 		}
 	}
 	if c.Consistent != nil {
@@ -288,7 +262,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		if c.Consistent.MemoryUsage != nil {
 			res.Consistent.MemoryUsage = &config.ConsistentMemoryUsage{
 				MemoryQuotaPercentage: c.Consistent.MemoryUsage.MemoryQuotaPercentage,
-				EventCachePercentage:  c.Consistent.MemoryUsage.EventCachePercentage,
 			}
 		}
 	}
@@ -500,6 +473,10 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		if c.Sink.SendBootstrapInMsgCount != nil {
 			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*c.Sink.SendBootstrapInMsgCount)
 		}
+
+		if c.Sink.SendBootstrapToAllPartition != nil {
+			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*c.Sink.SendBootstrapToAllPartition)
+		}
 	}
 	if c.Mounter != nil {
 		res.Mounter = &config.MounterConfig{
@@ -556,31 +533,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 	}
 
 	if cloned.Filter != nil {
-		var mySQLReplicationRules *MySQLReplicationRules
-		if c.Filter.MySQLReplicationRules != nil {
-			mySQLReplicationRules = &MySQLReplicationRules{}
-			mySQLReplicationRules.DoDBs = c.Filter.DoDBs
-			mySQLReplicationRules.IgnoreDBs = c.Filter.IgnoreDBs
-			if c.Filter.MySQLReplicationRules.DoTables != nil {
-				for _, tbl := range c.Filter.MySQLReplicationRules.DoTables {
-					mySQLReplicationRules.DoTables = append(mySQLReplicationRules.DoTables,
-						&Table{
-							Schema: tbl.Schema,
-							Name:   tbl.Name,
-						})
-				}
-			}
-			if c.Filter.MySQLReplicationRules.IgnoreTables != nil {
-				for _, tbl := range c.Filter.MySQLReplicationRules.IgnoreTables {
-					mySQLReplicationRules.IgnoreTables = append(mySQLReplicationRules.IgnoreTables,
-						&Table{
-							Schema: tbl.Schema,
-							Name:   tbl.Name,
-						})
-				}
-			}
-		}
-
 		var efs []EventFilterRule
 		if len(c.Filter.EventFilters) != 0 {
 			efs = make([]EventFilterRule, len(c.Filter.EventFilters))
@@ -590,10 +542,9 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 
 		res.Filter = &FilterConfig{
-			MySQLReplicationRules: mySQLReplicationRules,
-			Rules:                 cloned.Filter.Rules,
-			IgnoreTxnStartTs:      cloned.Filter.IgnoreTxnStartTs,
-			EventFilters:          efs,
+			Rules:            cloned.Filter.Rules,
+			IgnoreTxnStartTs: cloned.Filter.IgnoreTxnStartTs,
+			EventFilters:     efs,
 		}
 	}
 	if cloned.Sink != nil {
@@ -800,6 +751,10 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			res.Sink.SendBootstrapInMsgCount = util.AddressOf(*cloned.Sink.SendBootstrapInMsgCount)
 		}
 
+		if cloned.Sink.SendBootstrapToAllPartition != nil {
+			res.Sink.SendBootstrapToAllPartition = util.AddressOf(*cloned.Sink.SendBootstrapToAllPartition)
+		}
+
 		if cloned.Sink.DebeziumDisableSchema != nil {
 			res.Sink.DebeziumDisableSchema = util.AddressOf(*cloned.Sink.DebeziumDisableSchema)
 		}
@@ -820,7 +775,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		if cloned.Consistent.MemoryUsage != nil {
 			res.Consistent.MemoryUsage = &ConsistentMemoryUsage{
 				MemoryQuotaPercentage: cloned.Consistent.MemoryUsage.MemoryQuotaPercentage,
-				EventCachePercentage:  cloned.Consistent.MemoryUsage.EventCachePercentage,
 			}
 		}
 	}
@@ -864,7 +818,6 @@ func GetDefaultReplicaConfig() *ReplicaConfig {
 // FilterConfig represents filter config for a changefeed
 // This is a duplicate of config.FilterConfig
 type FilterConfig struct {
-	*MySQLReplicationRules
 	Rules            []string          `json:"rules,omitempty"`
 	IgnoreTxnStartTs []uint64          `json:"ignore_txn_start_ts,omitempty"`
 	EventFilters     []EventFilterRule `json:"event_filters,omitempty"`
@@ -932,19 +885,6 @@ func ToAPIEventFilterRule(er *config.EventFilterRule) EventFilterRule {
 	return res
 }
 
-// MySQLReplicationRules is a set of rules based on MySQL's replication tableFilter.
-type MySQLReplicationRules struct {
-	// DoTables is an allowlist of tables.
-	DoTables []*Table `json:"do_tables,omitempty"`
-	// DoDBs is an allowlist of schemas.
-	DoDBs []string `json:"do_dbs,omitempty"`
-
-	// IgnoreTables is a blocklist of tables.
-	IgnoreTables []*Table `json:"ignore_tables,omitempty"`
-	// IgnoreDBs is a blocklist of schemas.
-	IgnoreDBs []string `json:"ignore_dbs,omitempty"`
-}
-
 // Table represents a qualified table name.
 type Table struct {
 	// Schema is the name of the schema (database) containing this table.
@@ -979,6 +919,7 @@ type SinkConfig struct {
 	AdvanceTimeoutInSec              *uint               `json:"advance_timeout,omitempty"`
 	SendBootstrapIntervalInSec       *int64              `json:"send_bootstrap_interval_in_sec,omitempty"`
 	SendBootstrapInMsgCount          *int32              `json:"send_bootstrap_in_msg_count,omitempty"`
+	SendBootstrapToAllPartition      *bool               `json:"send_bootstrap_to_all_partition,omitempty"`
 	DebeziumDisableSchema            *bool               `json:"debezium_disable_schema,omitempty"`
 }
 
@@ -1038,7 +979,6 @@ type ConsistentConfig struct {
 // ConsistentMemoryUsage represents memory usage of Consistent module.
 type ConsistentMemoryUsage struct {
 	MemoryQuotaPercentage uint64 `json:"memory_quota_percentage"`
-	EventCachePercentage  uint64 `json:"event_cache_percentage"`
 }
 
 // ChangefeedSchedulerConfig is per changefeed scheduler settings.
