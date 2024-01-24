@@ -871,13 +871,6 @@ func (c *Consumer) getGlobalWatermark() uint64 {
 		return nil
 	})
 
-	oldGlobalWatermark := atomic.LoadUint64(&c.globalWatermark)
-	if result < oldGlobalWatermark {
-		log.Panic("global watermark fallback",
-			zap.Uint64("globalWatermark", result),
-			zap.Uint64("oldGlobalWatermark", oldGlobalWatermark))
-	}
-	atomic.StoreUint64(&c.globalWatermark, result)
 	return result
 }
 
@@ -915,6 +908,18 @@ func (c *Consumer) Run(ctx context.Context) error {
 				return cerror.Trace(err)
 			}
 			c.popDDL()
+
+			globalWatermark = todoDDL.CommitTs
+		}
+
+		if c.globalWatermark > globalWatermark {
+			log.Panic("global watermark fallback",
+				zap.Uint64("globalWatermark", globalWatermark),
+				zap.Uint64("oldGlobalWatermark", c.globalWatermark))
+		}
+
+		if c.globalWatermark < globalWatermark {
+			c.globalWatermark = globalWatermark
 		}
 
 		if err := c.forEachSink(func(sink *partitionSinks) error {
