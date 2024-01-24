@@ -26,7 +26,9 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/kvproto/pkg/diagnosticspb"
 	"github.com/pingcap/log"
+	"github.com/pingcap/sysutil"
 	"github.com/pingcap/tidb/util/gctuner"
 	"github.com/pingcap/tiflow/cdc"
 	"github.com/pingcap/tiflow/cdc/capture"
@@ -79,15 +81,16 @@ type Server interface {
 // TODO: we need to make server more unit testable and add more test cases.
 // Especially we need to decouple the HTTPServer out of server.
 type server struct {
-	capture          capture.Capture
-	tcpServer        tcpserver.TCPServer
-	grpcService      *p2p.ServerWrapper
-	statusServer     *http.Server
-	etcdClient       etcd.CDCEtcdClient
-	pdEndpoints      []string
-	pdClient         pd.Client
-	pdAPIClient      *pdutil.PDAPIClient
-	tableActorSystem *system.System
+	capture            capture.Capture
+	tcpServer          tcpserver.TCPServer
+	grpcService        *p2p.ServerWrapper
+	diagnosticsService *sysutil.DiagnosticsServer
+	statusServer       *http.Server
+	etcdClient         etcd.CDCEtcdClient
+	pdEndpoints        []string
+	pdClient           pd.Client
+	pdAPIClient        *pdutil.PDAPIClient
+	tableActorSystem   *system.System
 
 	// If it's true sortEngineManager will be used, otherwise sorterSystem will be used.
 	useEventSortEngine bool
@@ -122,9 +125,10 @@ func New(pdEndpoints []string) (*server, error) {
 	useEventSortEngine := debugConfig.EnablePullBasedSink && debugConfig.EnableDBSorter
 
 	s := &server{
-		pdEndpoints: pdEndpoints,
-		grpcService: p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
-		tcpServer:   tcpServer,
+		pdEndpoints:        pdEndpoints,
+		grpcService:        p2p.NewServerWrapper(debugConfig.Messages.ToMessageServerConfig()),
+		diagnosticsService: sysutil.NewDiagnosticsServer(conf.LogFile),
+		tcpServer:          tcpServer,
 
 		useEventSortEngine: useEventSortEngine,
 	}
@@ -410,19 +414,21 @@ func (s *server) run(ctx context.Context) (err error) {
 		})
 	}
 
-	if conf.Debug.EnableNewScheduler {
-		grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
-		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
+	grpcServer := grpc.NewServer(s.grpcService.ServerOptions()...)
+	diagnosticspb.RegisterDiagnosticsServer(grpcServer, s.diagnosticsService)
 
-		wg.Go(func() error {
-			return grpcServer.Serve(s.tcpServer.GrpcListener())
-		})
-		wg.Go(func() error {
-			<-cctx.Done()
-			grpcServer.Stop()
-			return nil
-		})
+	if conf.Debug.EnableNewScheduler {
+		p2pProto.RegisterCDCPeerToPeerServer(grpcServer, s.grpcService)
 	}
+
+	wg.Go(func() error {
+		return grpcServer.Serve(s.tcpServer.GrpcListener())
+	})
+	wg.Go(func() error {
+		<-cctx.Done()
+		grpcServer.Stop()
+		return nil
+	})
 
 	return wg.Wait()
 }
