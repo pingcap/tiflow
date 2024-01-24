@@ -44,6 +44,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		startTs,
 		checkpointTs,
 		ddlSink,
+		f,
 		ddlPuller,
 		schema,
 		redo.NewDisabledDDLManager(),
