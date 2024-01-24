@@ -651,8 +651,9 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if ddl.CommitTs > oldWatermark {
 					atomic.StoreUint64(&sink.watermark, ddl.CommitTs)
 					log.Info("update local watermark since new DDL is received",
+						zap.Uint64("watermark", ddl.CommitTs),
 						zap.Uint64("oldWatermark", oldWatermark),
-						zap.Uint64("watermark", ddl.CommitTs))
+						zap.String("query", ddl.Query))
 				}
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
@@ -904,7 +905,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 
 			if err := c.forEachSink(func(sink *partitionSinks) error {
-				return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
+				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
 				return cerror.Trace(err)
 			}
