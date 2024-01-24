@@ -142,7 +142,12 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			dml := &model.RowChangedEvent{
-				Table:   &model.TableName{Table: tc.table, Schema: tc.schema},
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{
+						Schema: tc.schema,
+						Table:  tc.table,
+					},
+				},
 				StartTs: tc.ts,
 			}
 			ignoreDML, err := filter.ShouldIgnoreDMLEvent(dml, model.RowChangedDatums{}, nil)

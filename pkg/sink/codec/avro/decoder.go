@@ -244,9 +244,11 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 
 	event := new(model.RowChangedEvent)
 	event.CommitTs = uint64(commitTs)
-	event.Table = &model.TableName{
-		Schema: schemaName,
-		Table:  tableName,
+	event.TableInfo = &model.TableInfo{
+		TableName: model.TableName{
+			Schema: schemaName,
+			Table:  tableName,
+		},
 	}
 
 	if isDelete {

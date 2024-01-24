@@ -955,9 +955,11 @@ func TestRowChangeEventConversion(t *testing.T) {
 			colInfos = append(colInfos, c.colInfo)
 		}
 		row.ColInfos = colInfos
-		row.Table = &model.TableName{
-			Table:  fmt.Sprintf("table%d", idx),
-			Schema: "test",
+		row.TableInfo = &model.TableInfo{
+			TableName: model.TableName{
+				Table:  fmt.Sprintf("table%d", idx),
+				Schema: "test",
+			},
 		}
 
 		if idx%3 == 0 { // delete operation

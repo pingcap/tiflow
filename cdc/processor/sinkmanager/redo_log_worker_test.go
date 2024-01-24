@@ -39,10 +39,10 @@ type redoLogWorkerSuite struct {
 }
 
 func (suite *redoLogWorkerSuite) SetupSuite() {
-	requestMemSize = testEventSize
+	requestMemSize = uint64(testEventSize)
 	// For one batch size.
 	// Advance table sink per 2 events.
-	maxUpdateIntervalSize = testEventSize * 2
+	maxUpdateIntervalSize = uint64(testEventSize * 2)
 	suite.testChangefeedID = model.DefaultChangeFeedID("1")
 	suite.testSpan = spanz.TableIDToComparableSpan(1)
 }
@@ -69,7 +69,7 @@ func (suite *redoLogWorkerSuite) createWorker(
 	// To avoid refund or release panics.
 	quota := memquota.NewMemQuota(suite.testChangefeedID, memQuota, "sink")
 	// NOTICE: Do not forget the initial memory quota in the worker first time running.
-	quota.ForceAcquire(testEventSize)
+	quota.ForceAcquire(uint64(testEventSize))
 	quota.AddTable(suite.testSpan)
 	redoDMLManager := newMockRedoDMLManager()
 

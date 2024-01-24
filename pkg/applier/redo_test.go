@@ -129,7 +129,10 @@ func TestApply(t *testing.T) {
 		{
 			StartTs:  1100,
 			CommitTs: 1200,
-			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "test", Table: "t1"},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -141,12 +144,14 @@ func TestApply(t *testing.T) {
 					Flag:  0,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 		{
 			StartTs:  1200,
 			CommitTs: resolvedTs,
-			Table:    &model.TableName{Schema: "test", Table: "t1"},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "test", Table: "t1"},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			PreColumns: []*model.Column{
 				{
 					Name:  "a",
@@ -169,7 +174,6 @@ func TestApply(t *testing.T) {
 					Flag:  0,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 	}
 	for _, dml := range dmls {

@@ -92,7 +92,6 @@ func TestWriteEvents(t *testing.T) {
 	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
 		CommitTs:  1,
-		Table:     &model.TableName{Schema: "test", Table: "t"},
 		TableInfo: tableInfo,
 		Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
 		ColInfos:  colInfo,

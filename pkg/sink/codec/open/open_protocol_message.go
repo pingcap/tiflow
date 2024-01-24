@@ -101,13 +101,13 @@ func rowChangeToMsg(
 	config *common.Config,
 	largeMessageOnlyHandleKeyColumns bool) (*internal.MessageKey, *messageRow, error) {
 	var partition *int64
-	if e.Table.IsPartition {
-		partition = &e.Table.TableID
+	if e.TableInfo.IsPartitionTable() {
+		partition = &e.PhysicalTableID
 	}
 	key := &internal.MessageKey{
 		Ts:            e.CommitTs,
-		Schema:        e.Table.Schema,
-		Table:         e.Table.Table,
+		Schema:        e.TableInfo.GetSchemaName(),
+		Table:         e.TableInfo.GetTableName(),
 		RowID:         e.RowID,
 		Partition:     partition,
 		Type:          model.MessageTypeRow,
@@ -144,14 +144,16 @@ func msgToRowChange(key *internal.MessageKey, value *messageRow) *model.RowChang
 	// TODO: we lost the startTs from kafka message
 	// startTs-based txn filter is out of work
 	e.CommitTs = key.Ts
-	e.Table = &model.TableName{
-		Schema: key.Schema,
-		Table:  key.Table,
+	e.TableInfo = &model.TableInfo{
+		TableName: model.TableName{
+			Schema: key.Schema,
+			Table:  key.Table,
+		},
 	}
 	// TODO: we lost the tableID from kafka message
 	if key.Partition != nil {
-		e.Table.TableID = *key.Partition
-		e.Table.IsPartition = true
+		e.PhysicalTableID = *key.Partition
+		e.TableInfo.TableName.IsPartition = true
 	}
 
 	if len(value.Delete) != 0 {

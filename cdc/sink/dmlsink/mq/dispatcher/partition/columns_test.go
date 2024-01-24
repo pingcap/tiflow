@@ -25,35 +25,36 @@ import (
 func TestColumnsDispatcher(t *testing.T) {
 	t.Parallel()
 
-	event := &model.RowChangedEvent{
-		Table: &model.TableName{
+	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
 			Schema: "test",
 			Table:  "t1",
 		},
-		TableInfo: &model.TableInfo{
-			TableInfo: &timodel.TableInfo{
-				Columns: []*timodel.ColumnInfo{
-					{
-						Name: timodel.CIStr{
-							O: "col2",
-						},
-						Offset: 1,
+		TableInfo: &timodel.TableInfo{
+			Columns: []*timodel.ColumnInfo{
+				{
+					Name: timodel.CIStr{
+						O: "col2",
 					},
-					{
-						Name: timodel.CIStr{
-							O: "col1",
-						},
-						Offset: 0,
+					Offset: 1,
+				},
+				{
+					Name: timodel.CIStr{
+						O: "col1",
 					},
-					{
-						Name: timodel.CIStr{
-							O: "col3",
-						},
-						Offset: 2,
+					Offset: 0,
+				},
+				{
+					Name: timodel.CIStr{
+						O: "col3",
 					},
+					Offset: 2,
 				},
 			},
 		},
+	}
+	event := &model.RowChangedEvent{
+		TableInfo: tableInfo,
 		Columns: []*model.Column{
 			{
 				Name:  "col1",

@@ -315,6 +315,31 @@ func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
 	return colID
 }
 
+// GetSchemaName returns the schema name of the table
+func (ti *TableInfo) GetSchemaName() string {
+	return ti.TableName.Schema
+}
+
+// GetTableName returns the table name of the table
+func (ti *TableInfo) GetTableName() string {
+	return ti.TableName.Table
+}
+
+// GetSchemaNamePtr returns the pointer to the schema name of the table
+func (ti *TableInfo) GetSchemaNamePtr() *string {
+	return &ti.TableName.Schema
+}
+
+// GetTableNamePtr returns the pointer to the table name of the table
+func (ti *TableInfo) GetTableNamePtr() *string {
+	return &ti.TableName.Table
+}
+
+// IsPartitionTable returns whether the table is partition table
+func (ti *TableInfo) IsPartitionTable() bool {
+	return ti.TableName.IsPartition
+}
+
 func (ti *TableInfo) String() string {
 	return fmt.Sprintf("TableInfo, ID: %d, Name:%s, ColNum: %d, IdxNum: %d, PKIsHandle: %t", ti.ID, ti.TableName, len(ti.Columns), len(ti.Indices), ti.PKIsHandle)
 }

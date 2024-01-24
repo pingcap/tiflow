@@ -72,7 +72,6 @@ func generateTxnEvents(
 		txn := &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
 				CommitTs:         100,
-				Table:            &model.TableName{Schema: "test", Table: "table1"},
 				TableInfoVersion: 33,
 				TableInfo: &model.TableInfo{
 					TableName: model.TableName{
@@ -95,7 +94,6 @@ func generateTxnEvents(
 		for j := 0; j < batch; j++ {
 			row := &model.RowChangedEvent{
 				CommitTs:  100,
-				Table:     &model.TableName{Schema: "test", Table: "table1"},
 				TableInfo: &model.TableInfo{TableName: model.TableName{Schema: "test", Table: "table1"}, Version: 33},
 				Columns: []*model.Column{
 					{Name: "c1", Value: i*batch + j},

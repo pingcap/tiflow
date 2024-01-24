@@ -36,9 +36,11 @@ func TestNewColumnSelector(t *testing.T) {
 	require.Len(t, selectors.selectors, 0)
 
 	event := &model.RowChangedEvent{
-		Table: &model.TableName{
-			Schema: "test",
-			Table:  "table1",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "table1",
+			},
 		},
 		Columns: []*model.Column{
 			{
@@ -127,7 +129,6 @@ func TestVerifyTables(t *testing.T) {
 
 	event4Test := func() *model.RowChangedEvent {
 		return &model.RowChangedEvent{
-			Table:     &model.TableName{Schema: "test", Table: "t1"},
 			TableInfo: tableInfo,
 			Columns: []*model.Column{
 				{
