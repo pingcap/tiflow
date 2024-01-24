@@ -202,7 +202,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.Equal(t, model.MessageTypeDDL, messageType)
 			require.NotEqual(t, 0, dec.msg.BuildTs)
 
-			event, err := dec.NextDDLEvent()
+			_, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 
 			m, err = enc.EncodeDDLEvent(createDBEvent)
@@ -217,7 +217,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 			require.Equal(t, model.MessageTypeDDL, messageType)
 			require.NotEqual(t, 0, dec.msg.BuildTs)
 
-			event, err = dec.NextDDLEvent()
+			_, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 
 			m, err = enc.EncodeDDLEvent(createTableDDLEvent)
@@ -242,7 +242,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 				require.Equal(t, column.Name.O, columnSchemas[idx].Name)
 			}
 
-			event, err = dec.NextDDLEvent()
+			event, err := dec.NextDDLEvent()
 			require.NoError(t, err)
 			require.Equal(t, createTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			require.Equal(t, createTableDDLEvent.CommitTs, event.CommitTs)
