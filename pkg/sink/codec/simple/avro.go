@@ -235,8 +235,8 @@ func newDMLMessageMap(
 ) (map[string]interface{}, error) {
 	m := map[string]interface{}{
 		"version":       defaultVersion,
-		"database":      *event.TableInfo.GetSchemaName(),
-		"table":         *event.TableInfo.GetTableName(),
+		"database":      event.TableInfo.GetSchemaName(),
+		"table":         event.TableInfo.GetTableName(),
 		"tableID":       event.TableInfo.ID,
 		"commitTs":      int64(event.CommitTs),
 		"buildTs":       time.Now().UnixMilli(),

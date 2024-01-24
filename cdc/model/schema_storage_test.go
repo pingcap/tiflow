@@ -189,8 +189,8 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 
 	require.Equal(t, "TableInfo, ID: 1071, Name:test.t1, ColNum: 3, IdxNum: 1, PKIsHandle: false", info.String())
 
-	require.Equal(t, "test", *info.GetSchemaName())
-	require.Equal(t, "t1", *info.GetTableName())
+	require.Equal(t, "test", info.GetSchemaName())
+	require.Equal(t, "t1", info.GetTableName())
 	require.True(t, info.IsPartitionTable())
 
 	handleColIDs, fts, colInfos := info.GetRowColInfos()

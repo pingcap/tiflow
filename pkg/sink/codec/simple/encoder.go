@@ -53,8 +53,8 @@ func (e *encoder) AppendRowChangedEvent(
 	result := &common.Message{
 		Value:    value,
 		Ts:       event.CommitTs,
-		Schema:   event.TableInfo.GetSchemaName(),
-		Table:    event.TableInfo.GetTableName(),
+		Schema:   event.TableInfo.GetSchemaNamePtr(),
+		Table:    event.TableInfo.GetTableNamePtr(),
 		Type:     model.MessageTypeRow,
 		Protocol: config.ProtocolSimple,
 		Callback: callback,

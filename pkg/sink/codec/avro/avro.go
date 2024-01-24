@@ -230,8 +230,8 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 		value,
 		e.CommitTs,
 		model.MessageTypeRow,
-		e.TableInfo.GetSchemaName(),
-		e.TableInfo.GetTableName(),
+		e.TableInfo.GetSchemaNamePtr(),
+		e.TableInfo.GetTableNamePtr(),
 	)
 	message.Callback = callback
 	message.IncRowsCount()

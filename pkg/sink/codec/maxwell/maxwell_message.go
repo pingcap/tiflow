@@ -50,15 +50,15 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 	}
 	key := &internal.MessageKey{
 		Ts:        e.CommitTs,
-		Schema:    *e.TableInfo.GetSchemaName(),
-		Table:     *e.TableInfo.GetTableName(),
+		Schema:    e.TableInfo.GetSchemaName(),
+		Table:     e.TableInfo.GetTableName(),
 		Partition: partition,
 		Type:      model.MessageTypeRow,
 	}
 	value := &maxwellMessage{
 		Ts:       0,
-		Database: *e.TableInfo.GetSchemaName(),
-		Table:    *e.TableInfo.GetTableName(),
+		Database: e.TableInfo.GetSchemaName(),
+		Table:    e.TableInfo.GetTableName(),
 		Data:     make(map[string]interface{}),
 		Old:      make(map[string]interface{}),
 	}

@@ -48,14 +48,20 @@ func TestCreate(t *testing.T) {
 		CommitTs: 5678,
 	}
 
-	msg := NewMsg(config.ProtocolOpen, []byte("key1"), []byte("value1"), rowEvent.CommitTs, model.MessageTypeRow, rowEvent.TableInfo.GetSchemaName(), rowEvent.TableInfo.GetTableName())
+	msg := NewMsg(config.ProtocolOpen,
+		[]byte("key1"),
+		[]byte("value1"),
+		rowEvent.CommitTs,
+		model.MessageTypeRow,
+		&rowEvent.TableInfo.TableName.Schema,
+		&rowEvent.TableInfo.TableName.Table)
 
 	require.Equal(t, []byte("key1"), msg.Key)
 	require.Equal(t, []byte("value1"), msg.Value)
 	require.Equal(t, rowEvent.CommitTs, msg.Ts)
 	require.Equal(t, model.MessageTypeRow, msg.Type)
-	require.Equal(t, *rowEvent.TableInfo.GetSchemaName(), *msg.Schema)
-	require.Equal(t, *rowEvent.TableInfo.GetTableName(), *msg.Table)
+	require.Equal(t, rowEvent.TableInfo.GetSchemaName(), *msg.Schema)
+	require.Equal(t, rowEvent.TableInfo.GetTableName(), *msg.Table)
 	require.Equal(t, config.ProtocolOpen, msg.Protocol)
 
 	ft := types.NewFieldType(0)

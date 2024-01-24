@@ -538,8 +538,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				jWriter.WriteInt64Field("ts_ms", commitTime.UnixMilli())
 				// snapshot field is a string of true,last,false,incremental
 				jWriter.WriteStringField("snapshot", "false")
-				jWriter.WriteStringField("db", *e.TableInfo.GetSchemaName())
-				jWriter.WriteStringField("table", *e.TableInfo.GetTableName())
+				jWriter.WriteStringField("db", e.TableInfo.GetSchemaName())
+				jWriter.WriteStringField("table", e.TableInfo.GetTableName())
 				jWriter.WriteInt64Field("server_id", 0)
 				jWriter.WriteNullField("gtid")
 				jWriter.WriteStringField("file", "")
@@ -597,8 +597,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				jWriter.WriteBoolField("optional", false)
 				jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Envelope",
 					c.clusterID,
-					*e.TableInfo.GetSchemaName(),
-					*e.TableInfo.GetTableName()))
+					e.TableInfo.GetSchemaName(),
+					e.TableInfo.GetTableName()))
 				jWriter.WriteIntField("version", 1)
 				jWriter.WriteArrayField("fields", func() {
 					// schema is the same for `before` and `after`. So we build a new buffer to
@@ -626,8 +626,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 						jWriter.WriteBoolField("optional", true)
 						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value",
 							c.clusterID,
-							*e.TableInfo.GetSchemaName(),
-							*e.TableInfo.GetTableName()))
+							e.TableInfo.GetSchemaName(),
+							e.TableInfo.GetTableName()))
 						jWriter.WriteStringField("field", "before")
 						jWriter.WriteArrayField("fields", func() {
 							jWriter.WriteRaw(fieldsJSON)
@@ -638,8 +638,8 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 						jWriter.WriteBoolField("optional", true)
 						jWriter.WriteStringField("name", fmt.Sprintf("%s.%s.%s.Value",
 							c.clusterID,
-							*e.TableInfo.GetSchemaName(),
-							*e.TableInfo.GetTableName()))
+							e.TableInfo.GetSchemaName(),
+							e.TableInfo.GetTableName()))
 						jWriter.WriteStringField("field", "after")
 						jWriter.WriteArrayField("fields", func() {
 							jWriter.WriteRaw(fieldsJSON)

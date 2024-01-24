@@ -574,8 +574,8 @@ func newDMLMessage(
 ) (*message, error) {
 	m := &message{
 		Version:            defaultVersion,
-		Schema:             *event.TableInfo.GetSchemaName(),
-		Table:              *event.TableInfo.GetTableName(),
+		Schema:             event.TableInfo.GetSchemaName(),
+		Table:              event.TableInfo.GetTableName(),
 		TableID:            event.TableInfo.ID,
 		CommitTs:           event.CommitTs,
 		BuildTs:            time.Now().UnixMilli(),

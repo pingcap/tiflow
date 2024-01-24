@@ -48,7 +48,7 @@ func (r *ColumnsDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, 
 	defer r.lock.Unlock()
 	r.hasher.Reset()
 
-	r.hasher.Write([]byte(*row.TableInfo.GetSchemaName()), []byte(*row.TableInfo.GetTableName()))
+	r.hasher.Write([]byte(row.TableInfo.GetSchemaName()), []byte(row.TableInfo.GetTableName()))
 
 	dispatchCols := row.Columns
 	if len(dispatchCols) == 0 {

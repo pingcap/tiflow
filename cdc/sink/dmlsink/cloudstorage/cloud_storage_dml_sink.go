@@ -249,8 +249,8 @@ func (s *DMLSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 
 		tbl := cloudstorage.VersionedTableName{
 			TableNameWithPhysicTableID: model.TableName{
-				Schema:      *txn.Event.TableInfo.GetSchemaName(),
-				Table:       *txn.Event.TableInfo.GetTableName(),
+				Schema:      txn.Event.TableInfo.GetSchemaName(),
+				Table:       txn.Event.TableInfo.GetTableName(),
 				TableID:     txn.Event.GetPhysicalTableID(),
 				IsPartition: txn.Event.TableInfo.IsPartitionTable(),
 			},

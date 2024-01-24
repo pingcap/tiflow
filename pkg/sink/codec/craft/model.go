@@ -465,11 +465,11 @@ func (b *RowChangedEventBuffer) AppendRowChangedEvent(ev *model.RowChangedEvent,
 	}
 
 	var schema, table *string
-	if len(*ev.TableInfo.GetSchemaName()) > 0 {
-		schema = ev.TableInfo.GetSchemaName()
+	if len(ev.TableInfo.GetSchemaName()) > 0 {
+		schema = ev.TableInfo.GetSchemaNamePtr()
 	}
-	if len(*ev.TableInfo.GetTableName()) > 0 {
-		table = ev.TableInfo.GetTableName()
+	if len(ev.TableInfo.GetTableName()) > 0 {
+		table = ev.TableInfo.GetTableNamePtr()
 	}
 
 	b.estimatedSize += b.headers.appendHeader(

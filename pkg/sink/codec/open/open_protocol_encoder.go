@@ -168,8 +168,8 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 	message.Value = append(message.Value, valueLenByte[:]...)
 	message.Value = append(message.Value, value...)
 	message.Ts = e.CommitTs
-	message.Schema = e.TableInfo.GetSchemaName()
-	message.Table = e.TableInfo.GetTableName()
+	message.Schema = e.TableInfo.GetSchemaNamePtr()
+	message.Table = e.TableInfo.GetTableNamePtr()
 	message.IncRowsCount()
 
 	if callback != nil {

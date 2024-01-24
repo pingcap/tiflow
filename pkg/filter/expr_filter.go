@@ -423,7 +423,7 @@ func (f *dmlExprFilter) shouldSkipDML(
 	if ti == nil || row == nil || rawRow.IsEmpty() {
 		return false, nil
 	}
-	rules := f.getRules(*row.TableInfo.GetSchemaName(), *row.TableInfo.GetTableName())
+	rules := f.getRules(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName())
 	for _, rule := range rules {
 		ignore, err := rule.shouldSkipDML(row, rawRow, ti)
 		if err != nil {

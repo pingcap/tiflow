@@ -316,12 +316,22 @@ func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
 }
 
 // GetSchemaName returns the schema name of the table
-func (ti *TableInfo) GetSchemaName() *string {
-	return &ti.TableName.Schema
+func (ti *TableInfo) GetSchemaName() string {
+	return ti.TableName.Schema
 }
 
 // GetTableName returns the table name of the table
-func (ti *TableInfo) GetTableName() *string {
+func (ti *TableInfo) GetTableName() string {
+	return ti.TableName.Table
+}
+
+// GetSchemaNamePtr returns the pointer to the schema name of the table
+func (ti *TableInfo) GetSchemaNamePtr() *string {
+	return &ti.TableName.Schema
+}
+
+// GetTableNamePtr returns the pointer to the table name of the table
+func (ti *TableInfo) GetTableNamePtr() *string {
 	return &ti.TableName.Table
 }
 

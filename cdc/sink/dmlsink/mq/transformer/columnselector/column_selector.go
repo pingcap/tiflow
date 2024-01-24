@@ -58,7 +58,7 @@ func (s *selector) Match(schema, table string) bool {
 // the caller's should make sure the given event match the selector first before apply it.
 func (s *selector) Apply(event *model.RowChangedEvent) error {
 	// defensive check, this should not happen.
-	if !s.Match(*event.TableInfo.GetSchemaName(), *event.TableInfo.GetTableName()) {
+	if !s.Match(event.TableInfo.GetSchemaName(), event.TableInfo.GetTableName()) {
 		return errors.ErrColumnSelectorFailed.GenWithStack(
 			"the given event does not match the column selector, table: %v", event.TableInfo.TableName)
 	}
@@ -124,7 +124,7 @@ func New(cfg *config.ReplicaConfig) (*ColumnSelector, error) {
 // Apply the column selector to the given event.
 func (c *ColumnSelector) Apply(event *model.RowChangedEvent) error {
 	for _, s := range c.selectors {
-		if s.Match(*event.TableInfo.GetSchemaName(), *event.TableInfo.GetTableName()) {
+		if s.Match(event.TableInfo.GetSchemaName(), event.TableInfo.GetTableName()) {
 			return s.Apply(event)
 		}
 	}

@@ -243,8 +243,8 @@ func TestEncodeDDLEvent(t *testing.T) {
 			decodedRow, err := dec.NextRowChangedEvent()
 			require.NoError(t, err)
 			require.Equal(t, decodedRow.CommitTs, insertEvent.CommitTs)
-			require.Equal(t, *decodedRow.TableInfo.GetSchemaName(), *insertEvent.TableInfo.GetSchemaName())
-			require.Equal(t, *decodedRow.TableInfo.GetTableName(), *insertEvent.TableInfo.GetTableName())
+			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), insertEvent.TableInfo.GetSchemaName())
+			require.Equal(t, decodedRow.TableInfo.GetTableName(), insertEvent.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
 
 			m, err = enc.EncodeDDLEvent(renameTableDDLEvent)
@@ -293,8 +293,8 @@ func TestEncodeDDLEvent(t *testing.T) {
 			decodedRow, err = dec.NextRowChangedEvent()
 			require.NoError(t, err)
 			require.Equal(t, decodedRow.CommitTs, insertEvent2.CommitTs)
-			require.Equal(t, *decodedRow.TableInfo.GetSchemaName(), *insertEvent2.TableInfo.GetSchemaName())
-			require.Equal(t, *decodedRow.TableInfo.GetTableName(), *insertEvent2.TableInfo.GetTableName())
+			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), insertEvent2.TableInfo.GetSchemaName())
+			require.Equal(t, decodedRow.TableInfo.GetTableName(), insertEvent2.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
 		}
 	}
@@ -554,8 +554,8 @@ func TestEncodeBootstrapEvent(t *testing.T) {
 			decodedRow, err := dec.NextRowChangedEvent()
 			require.NoError(t, err)
 			require.Equal(t, decodedRow.CommitTs, row.CommitTs)
-			require.Equal(t, *decodedRow.TableInfo.GetSchemaName(), *row.TableInfo.GetSchemaName())
-			require.Equal(t, *decodedRow.TableInfo.GetTableName(), *row.TableInfo.GetTableName())
+			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), row.TableInfo.GetSchemaName())
+			require.Equal(t, decodedRow.TableInfo.GetTableName(), row.TableInfo.GetTableName())
 			require.Nil(t, decodedRow.PreColumns)
 		}
 	}
@@ -634,8 +634,8 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 				require.NoError(t, err)
 
 				require.Equal(t, decodedRow.CommitTs, event.CommitTs)
-				require.Equal(t, *decodedRow.TableInfo.GetSchemaName(), *event.TableInfo.GetSchemaName())
-				require.Equal(t, *decodedRow.TableInfo.GetTableName(), *event.TableInfo.GetTableName())
+				require.Equal(t, decodedRow.TableInfo.GetSchemaName(), event.TableInfo.GetSchemaName())
+				require.Equal(t, decodedRow.TableInfo.GetTableName(), event.TableInfo.GetTableName())
 				require.Equal(t, decodedRow.PhysicalTableID, event.PhysicalTableID)
 
 				decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
@@ -767,8 +767,8 @@ func TestLargerMessageHandleClaimCheck(t *testing.T) {
 			require.NoError(t, err)
 
 			require.Equal(t, decodedRow.CommitTs, updateEvent.CommitTs)
-			require.Equal(t, *decodedRow.TableInfo.GetSchemaName(), *updateEvent.TableInfo.GetSchemaName())
-			require.Equal(t, *decodedRow.TableInfo.GetTableName(), *updateEvent.TableInfo.GetTableName())
+			require.Equal(t, decodedRow.TableInfo.GetSchemaName(), updateEvent.TableInfo.GetSchemaName())
+			require.Equal(t, decodedRow.TableInfo.GetTableName(), updateEvent.TableInfo.GetTableName())
 
 			decodedColumns := make(map[string]*model.Column, len(decodedRow.Columns))
 			for _, column := range decodedRow.Columns {

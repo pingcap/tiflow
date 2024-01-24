@@ -331,8 +331,8 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 				return
 			}
 			rows++
-			require.Equal(t, *row.TableInfo.GetTableName(), tc.tableName)
-			require.Equal(t, *row.TableInfo.GetSchemaName(), "test")
+			require.Equal(t, row.TableInfo.GetTableName(), tc.tableName)
+			require.Equal(t, row.TableInfo.GetSchemaName(), "test")
 			// [TODO] check size and reopen this check
 			// require.Equal(t, rowBytes[rows-1], row.ApproximateBytes(), row)
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())

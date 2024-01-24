@@ -106,8 +106,8 @@ func rowChangeToMsg(
 	}
 	key := &internal.MessageKey{
 		Ts:            e.CommitTs,
-		Schema:        *e.TableInfo.GetSchemaName(),
-		Table:         *e.TableInfo.GetTableName(),
+		Schema:        e.TableInfo.GetSchemaName(),
+		Table:         e.TableInfo.GetTableName(),
 		RowID:         e.RowID,
 		Partition:     partition,
 		Type:          model.MessageTypeRow,

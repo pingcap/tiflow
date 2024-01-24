@@ -76,8 +76,8 @@ func TestDMLE2E(t *testing.T) {
 		if enableTiDBExtension {
 			require.Equal(t, insertEvent.CommitTs, decodedEvent.CommitTs)
 		}
-		require.Equal(t, *insertEvent.TableInfo.GetSchemaName(), *decodedEvent.TableInfo.GetSchemaName())
-		require.Equal(t, *insertEvent.TableInfo.GetTableName(), *decodedEvent.TableInfo.GetTableName())
+		require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
+		require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
 
 		decodedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
 		for _, column := range decodedEvent.Columns {
@@ -157,8 +157,8 @@ func TestCanalJSONCompressionE2E(t *testing.T) {
 	decodedEvent, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
 	require.Equal(t, decodedEvent.CommitTs, insertEvent.CommitTs)
-	require.Equal(t, *decodedEvent.TableInfo.GetSchemaName(), *insertEvent.TableInfo.GetSchemaName())
-	require.Equal(t, *decodedEvent.TableInfo.GetTableName(), *insertEvent.TableInfo.GetTableName())
+	require.Equal(t, decodedEvent.TableInfo.GetSchemaName(), insertEvent.TableInfo.GetSchemaName())
+	require.Equal(t, decodedEvent.TableInfo.GetTableName(), insertEvent.TableInfo.GetTableName())
 
 	// encode DDL event
 	helper := entry.NewSchemaTestHelper(t)
@@ -239,8 +239,8 @@ func TestCanalJSONClaimCheckE2E(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, insertEvent.CommitTs, decodedLargeEvent.CommitTs)
-	require.Equal(t, *insertEvent.TableInfo.GetSchemaName(), *decodedLargeEvent.TableInfo.GetSchemaName())
-	require.Equal(t, *insertEvent.TableInfo.GetTableName(), *decodedLargeEvent.TableInfo.GetTableName())
+	require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedLargeEvent.TableInfo.GetSchemaName())
+	require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedLargeEvent.TableInfo.GetTableName())
 	require.Nil(t, nil, decodedLargeEvent.PreColumns)
 
 	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
@@ -649,8 +649,8 @@ func TestCanalJSONContentCompatibleE2E(t *testing.T) {
 	decodedEvent, err := decoder.NextRowChangedEvent()
 	require.NoError(t, err)
 	require.Equal(t, decodedEvent.CommitTs, insertEvent.CommitTs)
-	require.Equal(t, *decodedEvent.TableInfo.GetSchemaName(), *insertEvent.TableInfo.GetSchemaName())
-	require.Equal(t, *decodedEvent.TableInfo.GetTableName(), *insertEvent.TableInfo.GetTableName())
+	require.Equal(t, decodedEvent.TableInfo.GetSchemaName(), insertEvent.TableInfo.GetSchemaName())
+	require.Equal(t, decodedEvent.TableInfo.GetTableName(), insertEvent.TableInfo.GetTableName())
 
 	obtainedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
 	for _, column := range decodedEvent.Columns {
@@ -704,8 +704,8 @@ func TestNewCanalJSONBatchDecoder4RowMessage(t *testing.T) {
 			if encodeEnable && decodeEnable {
 				require.Equal(t, insertEvent.CommitTs, decodedEvent.CommitTs)
 			}
-			require.Equal(t, *insertEvent.TableInfo.GetSchemaName(), *decodedEvent.TableInfo.GetSchemaName())
-			require.Equal(t, *insertEvent.TableInfo.GetTableName(), *decodedEvent.TableInfo.GetTableName())
+			require.Equal(t, insertEvent.TableInfo.GetSchemaName(), decodedEvent.TableInfo.GetSchemaName())
+			require.Equal(t, insertEvent.TableInfo.GetTableName(), decodedEvent.TableInfo.GetTableName())
 
 			decodedColumns := make(map[string]*model.Column, len(decodedEvent.Columns))
 			for _, column := range decodedEvent.Columns {

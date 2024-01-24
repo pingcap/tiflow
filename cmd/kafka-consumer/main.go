@@ -689,7 +689,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					partitionID = row.PhysicalTableID
 				}
 				tableID := c.fakeTableIDGenerator.
-					generateFakeTableID(*row.TableInfo.GetSchemaName(), *row.TableInfo.GetTableName(), partitionID)
+					generateFakeTableID(row.TableInfo.GetSchemaName(), row.TableInfo.GetTableName(), partitionID)
 				row.TableInfo.TableName.TableID = tableID
 
 				group, ok := eventGroups[tableID]

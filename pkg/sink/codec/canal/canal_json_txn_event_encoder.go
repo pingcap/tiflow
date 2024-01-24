@@ -69,8 +69,8 @@ func (j *JSONTxnEventEncoder) AppendTxnEvent(
 	}
 	j.callback = callback
 	j.txnCommitTs = txn.CommitTs
-	j.txnSchema = txn.TableInfo.GetSchemaName()
-	j.txnTable = txn.TableInfo.GetTableName()
+	j.txnSchema = txn.TableInfo.GetSchemaNamePtr()
+	j.txnTable = txn.TableInfo.GetTableNamePtr()
 	return nil
 }
 

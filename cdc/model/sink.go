@@ -295,8 +295,8 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 		StartTs:  r.StartTs,
 		CommitTs: r.CommitTs,
 		Table: &TableName{
-			Schema:      *r.TableInfo.GetSchemaName(),
-			Table:       *r.TableInfo.GetTableName(),
+			Schema:      r.TableInfo.GetSchemaName(),
+			Table:       r.TableInfo.GetTableName(),
 			TableID:     r.PhysicalTableID,
 			IsPartition: r.TableInfo.IsPartitionTable(),
 		},

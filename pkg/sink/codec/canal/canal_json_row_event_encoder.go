@@ -103,12 +103,12 @@ func newJSONMessageForDML(
 	{
 		const prefix string = ",\"database\":"
 		out.RawString(prefix)
-		out.String(*e.TableInfo.GetSchemaName())
+		out.String(e.TableInfo.GetSchemaName())
 	}
 	{
 		const prefix string = ",\"table\":"
 		out.RawString(prefix)
-		out.String(*e.TableInfo.GetTableName())
+		out.String(e.TableInfo.GetTableName())
 	}
 	{
 		const prefix string = ",\"pkNames\":"
@@ -399,8 +399,8 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 		Key:      nil,
 		Value:    value,
 		Ts:       e.CommitTs,
-		Schema:   e.TableInfo.GetSchemaName(),
-		Table:    e.TableInfo.GetTableName(),
+		Schema:   e.TableInfo.GetSchemaNamePtr(),
+		Table:    e.TableInfo.GetTableNamePtr(),
 		Type:     model.MessageTypeRow,
 		Protocol: config.ProtocolCanalJSON,
 		Callback: callback,

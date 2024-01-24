@@ -637,7 +637,7 @@ func TestToRedoLog(t *testing.T) {
 	require.Equal(t, event.StartTs, eventInRedoLog.RedoRow.Row.StartTs)
 	require.Equal(t, event.CommitTs, eventInRedoLog.RedoRow.Row.CommitTs)
 	require.Equal(t, event.PhysicalTableID, eventInRedoLog.RedoRow.Row.Table.TableID)
-	require.Equal(t, *event.TableInfo.GetSchemaName(), eventInRedoLog.RedoRow.Row.Table.Schema)
-	require.Equal(t, *event.TableInfo.GetTableName(), eventInRedoLog.RedoRow.Row.Table.Table)
+	require.Equal(t, event.TableInfo.GetSchemaName(), eventInRedoLog.RedoRow.Row.Table.Schema)
+	require.Equal(t, event.TableInfo.GetTableName(), eventInRedoLog.RedoRow.Row.Table.Table)
 	require.Equal(t, event.Columns, eventInRedoLog.RedoRow.Row.Columns)
 }
