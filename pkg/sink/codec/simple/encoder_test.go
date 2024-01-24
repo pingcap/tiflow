@@ -150,6 +150,9 @@ func TestEncodeDDLEvent(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
+	dropDBEvent := helper.DDL2Event("drop database if exists test")
+	createDBEvent := helper.DDL2Event("create database test")
+
 	sql := `create table test.t(id int primary key, name varchar(255) not null, gender enum('male', 'female'), email varchar(255) not null, key idx_name_email(name, email))`
 	createTableDDLEvent := helper.DDL2Event(sql)
 	rand.New(rand.NewSource(time.Now().Unix())).Shuffle(len(createTableDDLEvent.TableInfo.Columns), func(i, j int) {
@@ -187,13 +190,43 @@ func TestEncodeDDLEvent(t *testing.T) {
 			dec, err := NewDecoder(ctx, codecConfig, nil)
 			require.NoError(t, err)
 
-			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
+			m, err := enc.EncodeDDLEvent(dropDBEvent)
 			require.NoError(t, err)
 
 			err = dec.AddKeyValue(m.Key, m.Value)
 			require.NoError(t, err)
 
 			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+			require.NotEqual(t, 0, dec.msg.BuildTs)
+
+			event, err := dec.NextDDLEvent()
+			require.NoError(t, err)
+
+			m, err = enc.EncodeDDLEvent(createDBEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err = dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
+			require.NotEqual(t, 0, dec.msg.BuildTs)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+
+			m, err = enc.EncodeDDLEvent(createTableDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			messageType, hasNext, err = dec.HasNext()
 			require.NoError(t, err)
 			require.True(t, hasNext)
 			require.Equal(t, model.MessageTypeDDL, messageType)
@@ -209,7 +242,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 				require.Equal(t, column.Name.O, columnSchemas[idx].Name)
 			}
 
-			event, err := dec.NextDDLEvent()
+			event, err = dec.NextDDLEvent()
 			require.NoError(t, err)
 			require.Equal(t, createTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			require.Equal(t, createTableDDLEvent.CommitTs, event.CommitTs)

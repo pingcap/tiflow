@@ -326,10 +326,6 @@ func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
 
 	_, ok := m.memo[key]
 	if ok {
-		log.Warn("table info not stored, since it already exists",
-			zap.String("schema", info.TableName.Schema),
-			zap.String("table", info.TableName.Table),
-			zap.Uint64("version", info.UpdateTS))
 		return
 	}
 

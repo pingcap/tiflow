@@ -606,7 +606,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 	eventGroups := make(map[int64]*eventsGroup)
 	for message := range claim.Messages() {
-		if err := decoder.AddKeyValue(message.Key, message.Value); err != nil {
+		if err = decoder.AddKeyValue(message.Key, message.Value); err != nil {
 			log.Error("add key value to the decoder failed", zap.Error(err))
 			return cerror.Trace(err)
 		}
@@ -648,11 +648,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				oldWatermark := atomic.LoadUint64(&sink.watermark)
-				if ddl.CommitTs < oldWatermark {
+				if ddl.CommitTs > oldWatermark {
 					atomic.StoreUint64(&sink.watermark, ddl.CommitTs)
 					log.Info("update local watermark since new DDL is received",
-						zap.Uint64("oldWatarmark", oldWatermark),
-						zap.Uint64("watermark", sink.watermark))
+						zap.Uint64("oldWatermark", oldWatermark),
+						zap.Uint64("watermark", ddl.CommitTs))
 				}
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
@@ -787,6 +787,8 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						sink.tablesCommitTsMap.Store(tableID, commitTs)
 					}
 				}
+			default:
+				log.Panic("unknown type message found", zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 			}
 		}
 
