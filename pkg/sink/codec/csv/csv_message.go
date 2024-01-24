@@ -125,6 +125,15 @@ func (c *csvMessage) encodeMeta(opType string, b *strings.Builder) {
 	if c.config.IncludeCommitTs {
 		c.formatValue(c.commitTs, b)
 	}
+	if c.config.OutputOldValue {
+		// When c.config.OutputOldValue, we need an extra column "is-updated"
+		// to indicate whether the row is updated or just original insert/delete
+		if c.opType == operationUpdate {
+			c.formatValue(true, b)
+		} else {
+			c.formatValue(false, b)
+		}
+	}
 }
 
 func (c *csvMessage) encodeColumns(columns []any, b *strings.Builder) {

@@ -292,6 +292,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				NullString:           c.Sink.CSVConfig.NullString,
 				IncludeCommitTs:      c.Sink.CSVConfig.IncludeCommitTs,
 				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
+				OutputOldValue:       c.Sink.CSVConfig.OutputOldValue,
 			}
 		}
 		var pulsarConfig *config.PulsarConfig
@@ -573,6 +574,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				NullString:           cloned.Sink.CSVConfig.NullString,
 				IncludeCommitTs:      cloned.Sink.CSVConfig.IncludeCommitTs,
 				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
+				OutputOldValue:       cloned.Sink.CSVConfig.OutputOldValue,
 			}
 		}
 		var kafkaConfig *KafkaConfig
