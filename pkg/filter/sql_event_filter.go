@@ -21,7 +21,6 @@ import (
 	"github.com/pingcap/log"
 	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
 	"github.com/pingcap/tidb/pkg/parser"
-	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -155,22 +154,22 @@ func (f *sqlEventFilter) getRules(schema, table string) []*sqlEventRule {
 }
 
 // skipDDLEvent skips ddl event by its type and query.
-func (f *sqlEventFilter) shouldSkipDDL(
-	ddlType timodel.ActionType, schema, table, query string,
-) (bool, error) {
+func (f *sqlEventFilter) shouldSkipDDL(ddl *model.DDLEvent) (bool, error) {
+	schema := ddl.TableInfo.TableName.Schema
+	table := ddl.TableInfo.TableName.Table
 	log.Info("sql event filter handle ddl event",
-		zap.Any("ddlType", ddlType), zap.String("schema", schema),
-		zap.String("table", table), zap.String("query", query))
+		zap.Any("ddlType", ddl.Type), zap.String("schema", schema),
+		zap.String("table", table), zap.String("query", ddl.Query))
 	f.pLock.Lock()
-	evenType, err := ddlToEventType(f.ddlParser, query, ddlType)
+	evenType, err := ddlToEventType(f.ddlParser, ddl.Query, ddl.Type)
 	f.pLock.Unlock()
 	if err != nil {
 		return false, err
 	}
 	if evenType == bf.NullEvent {
 		log.Warn("sql event filter unsupported ddl type, do nothing",
-			zap.String("type", ddlType.String()),
-			zap.String("query", query))
+			zap.String("type", ddl.Type.String()),
+			zap.String("query", ddl.Query))
 		return false, nil
 	}
 
@@ -179,7 +178,7 @@ func (f *sqlEventFilter) shouldSkipDDL(
 		action, err := rule.bf.Filter(
 			binlogFilterSchemaPlaceholder,
 			binlogFilterTablePlaceholder,
-			evenType, query)
+			evenType, ddl.Query)
 		if err != nil {
 			return false, errors.Trace(err)
 		}
@@ -205,7 +204,7 @@ func (f *sqlEventFilter) shouldSkipDML(event *model.RowChangedEvent) (bool, erro
 		log.Warn("unknown row changed event type")
 		return false, nil
 	}
-	rules := f.getRules(event.Table.Schema, event.Table.Table)
+	rules := f.getRules(event.TableInfo.GetSchemaName(), event.TableInfo.GetTableName())
 	for _, rule := range rules {
 		action, err := rule.bf.Filter(binlogFilterSchemaPlaceholder, binlogFilterTablePlaceholder, et, dmlQuery)
 		if err != nil {

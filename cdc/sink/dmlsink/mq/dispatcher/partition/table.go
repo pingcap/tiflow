@@ -41,6 +41,6 @@ func (t *TableDispatcher) DispatchRowChangedEvent(row *model.RowChangedEvent, pa
 	defer t.lock.Unlock()
 	t.hasher.Reset()
 	// distribute partition by table
-	t.hasher.Write([]byte(row.Table.Schema), []byte(row.Table.Table))
-	return int32(t.hasher.Sum32() % uint32(partitionNum)), row.Table.String(), nil
+	t.hasher.Write([]byte(row.TableInfo.GetSchemaName()), []byte(row.TableInfo.GetTableName()))
+	return int32(t.hasher.Sum32() % uint32(partitionNum)), row.TableInfo.TableName.String(), nil
 }

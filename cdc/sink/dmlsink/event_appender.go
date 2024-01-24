@@ -113,10 +113,10 @@ func (t *TxnEventAppender) createSingleTableTxn(
 	row *model.RowChangedEvent,
 ) *model.SingleTableTxn {
 	txn := &model.SingleTableTxn{
-		StartTs:   row.StartTs,
-		CommitTs:  row.CommitTs,
-		Table:     row.Table,
-		TableInfo: row.TableInfo,
+		StartTs:         row.StartTs,
+		CommitTs:        row.CommitTs,
+		PhysicalTableID: row.PhysicalTableID,
+		TableInfo:       row.TableInfo,
 	}
 	if row.TableInfo != nil {
 		txn.TableInfoVersion = row.TableInfo.Version
