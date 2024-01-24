@@ -47,7 +47,7 @@ func getMockTableStatus(tableName string,
 		TotalPartition: totalPartition,
 	}
 	row := &model.RowChangedEvent{
-		PhysicalTableID: 1,
+		PhysicalTableID: tableID,
 		TableInfo:       tableInfo,
 	}
 	tb := newTableStatus(key, row)

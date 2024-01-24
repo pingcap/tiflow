@@ -104,8 +104,8 @@ func TestJsonVsCraftVsPB(t *testing.T) {
 func codecEncodeKeyPB(event *model.RowChangedEvent) []byte {
 	key := &benchmark.Key{
 		Ts:        event.CommitTs,
-		Schema:    *event.TableInfo.GetSchemaName(),
-		Table:     *event.TableInfo.GetTableName(),
+		Schema:    event.TableInfo.GetSchemaName(),
+		Table:     event.TableInfo.GetTableName(),
 		RowId:     event.RowID,
 		Partition: 0,
 	}
@@ -169,8 +169,8 @@ func codecEncodeKeysPB2(events []*model.RowChangedEvent) []byte {
 
 	for _, event := range events {
 		converted.Ts = append(converted.Ts, event.CommitTs)
-		converted.Schema = append(converted.Schema, *event.TableInfo.GetSchemaName())
-		converted.Table = append(converted.Table, *event.TableInfo.GetTableName())
+		converted.Schema = append(converted.Schema, event.TableInfo.GetSchemaName())
+		converted.Table = append(converted.Table, event.TableInfo.GetTableName())
 		converted.RowId = append(converted.RowId, event.RowID)
 		converted.Partition = append(converted.Partition, 0)
 	}

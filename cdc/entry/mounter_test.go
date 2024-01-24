@@ -1491,10 +1491,10 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 			}
 			row := pEvent.Row
 			rows++
-			require.Equal(t, *row.TableInfo.GetSchemaName(), "test")
+			require.Equal(t, row.TableInfo.GetSchemaName(), "test")
 			// Now we only allow filter dml event by table, so we only check row's table.
-			require.NotContains(t, ignoredTables, *row.TableInfo.GetTableName())
-			require.Contains(t, tables, *row.TableInfo.GetTableName())
+			require.NotContains(t, ignoredTables, row.TableInfo.GetTableName())
+			require.Contains(t, tables, row.TableInfo.GetTableName())
 		})
 		return rows
 	}

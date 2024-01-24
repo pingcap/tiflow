@@ -501,7 +501,7 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, largeTestEvent.CommitTs, decodedLargeEvent.CommitTs)
-	require.Equal(t, *largeTestEvent.TableInfo.GetTableName(), *decodedLargeEvent.TableInfo.GetTableName())
+	require.Equal(t, largeTestEvent.TableInfo.GetTableName(), decodedLargeEvent.TableInfo.GetTableName())
 
 	decodedColumns := make(map[string]*model.Column, len(decodedLargeEvent.Columns))
 	for _, column := range decodedLargeEvent.Columns {
