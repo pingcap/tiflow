@@ -15,6 +15,7 @@ package codec
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -24,28 +25,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getMockTableStatus() (model.TopicPartitionKey, *model.RowChangedEvent, *tableStatistic) {
+func getMockTableStatus(tableName string,
+	tableID int64,
+	totalPartition int32,
+) (model.TopicPartitionKey, *model.RowChangedEvent, *tableStatistic) {
 	tableInfo := &model.TableInfo{
 		TableInfo: &timodel.TableInfo{
+			ID:       tableID,
 			UpdateTS: 1,
 		},
 	}
+	schema := "test"
 	table := &model.TableName{
-		Schema:  "test",
-		Table:   "t1",
-		TableID: 1,
+		Schema:  schema,
+		Table:   tableName,
+		TableID: tableID,
 	}
 	key := model.TopicPartitionKey{
-		Topic:     "test.t1",
-		Partition: 1,
+		Topic:          fmt.Sprintf("%s.%s", schema, tableName),
+		Partition:      1,
+		TotalPartition: totalPartition,
 	}
 	row := &model.RowChangedEvent{
 		TableInfo: tableInfo,
 		Table:     table,
 	}
-	// case 1: A new added table should send bootstrap message immediately
-	tb1 := newTableStatus(key, row)
-	return key, row, tb1
+	tb := newTableStatus(key, row)
+	return key, row, tb
 }
 
 func TestShouldSendBootstrapMsg(t *testing.T) {
@@ -53,7 +59,7 @@ func TestShouldSendBootstrapMsg(t *testing.T) {
 	defaultSendBootstrapInterval := time.Duration(config.DefaultSendBootstrapIntervalInSec) * time.Second
 	defaultSendBootstrapInMsgCount := config.DefaultSendBootstrapInMsgCount
 
-	_, _, tb1 := getMockTableStatus()
+	_, _, tb1 := getMockTableStatus("t1", int64(1), int32(3))
 
 	// case 1: A new added table should send bootstrap message immediately
 	require.True(t, tb1.
@@ -76,7 +82,7 @@ func TestShouldSendBootstrapMsg(t *testing.T) {
 
 func TestIsActive(t *testing.T) {
 	t.Parallel()
-	_, row, tb1 := getMockTableStatus()
+	_, row, tb1 := getMockTableStatus("t1", int64(1), int32(3))
 	// case 1: A new added table should be active
 	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
 
@@ -87,7 +93,7 @@ func TestIsActive(t *testing.T) {
 	// case 3: A table which receive message recently should be active
 	// Note: A table's update method will be call any time it receive message
 	// So use update method to simulate the table receive message
-	tb1.update(row)
+	tb1.update(row, 1)
 	require.False(t, tb1.isInactive(defaultMaxInactiveDuration))
 }
 
@@ -103,6 +109,7 @@ func TestBootstrapWorker(t *testing.T) {
 		builder.Build(),
 		config.DefaultSendBootstrapIntervalInSec,
 		config.DefaultSendBootstrapInMsgCount,
+		false,
 		defaultMaxInactiveDuration)
 
 	// Start the worker in a separate goroutine
@@ -113,26 +120,59 @@ func TestBootstrapWorker(t *testing.T) {
 	}()
 
 	// case 1: A new added table should send bootstrap message immediately
-	// The messages number should be equal to the total partition number
+	// Configure `sendBootstrapToAllPartition` to false
+	// The bootstrap message number should be equal to 1
 	// Event if we send the same table twice, it should only send bootstrap message once
-	key, row, _ := getMockTableStatus()
-	err := worker.addEvent(ctx, key, row)
+	key1, row1, _ := getMockTableStatus("t1", int64(1), int32(3))
+	err := worker.addEvent(ctx, key1, row1)
 	require.NoError(t, err)
-	err = worker.addEvent(ctx, key, row)
+	err = worker.addEvent(ctx, key1, row1)
 	require.NoError(t, err)
 	var msgCount int32
-	sctx, sancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer sancel()
+	c1ctx, c1Cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer c1Cancel()
+l1:
 	for {
 		select {
 		case future := <-outCh:
 			require.NotNil(t, future)
-			require.Equal(t, key.Topic, future.Key.Topic)
+			require.Equal(t, key1.Topic, future.Key.Topic)
 			msgCount++
-		case <-sctx.Done():
-			// The bootstrap event is only sent to the
-			require.Equal(t, int32(1), msgCount)
-			return
+			if msgCount == 1 {
+				break l1
+			}
+		case <-c1ctx.Done():
+			break l1
 		}
 	}
+	// The bootstrap event is only sent to the first partition
+	require.Equal(t, int32(1), msgCount)
+
+	// case 2: Configure `sendBootstrapToAllPartition` to true
+	// The messages number should be equal to the total partition number
+	worker.sendBootstrapToAllPartition = true
+	key2, row2, _ := getMockTableStatus("t2", int64(2), int32(2))
+	err = worker.addEvent(ctx, key2, row2)
+	require.NoError(t, err)
+	err = worker.addEvent(ctx, key2, row2)
+	require.NoError(t, err)
+	msgCount = 0
+	c2ctx, c2Cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer c2Cancel()
+l2:
+	for {
+		select {
+		case future := <-outCh:
+			require.NotNil(t, future)
+			require.Equal(t, key2.Topic, future.Key.Topic)
+			msgCount++
+			if msgCount == key2.TotalPartition {
+				break l2
+			}
+		case <-c2ctx.Done():
+			break l2
+		}
+	}
+	// The bootstrap events are sent to all partition
+	require.Equal(t, key2.TotalPartition, msgCount)
 }

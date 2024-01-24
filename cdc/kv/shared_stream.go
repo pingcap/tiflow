@@ -43,6 +43,8 @@ type requestedStream struct {
 		m map[SubscriptionID]map[uint64]*regionFeedState
 	}
 
+	logRegionDetails func(msg string, fields ...zap.Field)
+
 	// multiplexing is for sharing one GRPC stream in many tables.
 	multiplexing *sharedconn.ConnAndClient
 
@@ -57,6 +59,7 @@ type tableExclusive struct {
 
 func newStream(ctx context.Context, c *SharedClient, g *errgroup.Group, r *requestedStore) *requestedStream {
 	stream := newRequestedStream(streamIDGen.Add(1))
+	stream.logRegionDetails = c.logRegionDetails
 	stream.requests = chann.NewAutoDrainChann[singleRegionInfo]()
 
 	waitForPreFetching := func() error {
@@ -221,7 +224,7 @@ func (s *requestedStream) receive(
 	for {
 		cevent, err := client.Recv()
 		if err != nil {
-			log.Info("event feed receive from grpc stream failed",
+			s.logRegionDetails("event feed receive from grpc stream failed",
 				zap.String("namespace", c.changefeed.Namespace),
 				zap.String("changefeed", c.changefeed.ID),
 				zap.Uint64("streamID", s.streamID),
@@ -478,7 +481,7 @@ func (s *requestedStream) sendRegionChangeEvents(
 		state := s.getState(subscriptionID, regionID)
 		switch x := event.Event.(type) {
 		case *cdcpb.Event_Error:
-			log.Info("event feed receives a region error",
+			s.logRegionDetails("event feed receives a region error",
 				zap.String("namespace", c.changefeed.Namespace),
 				zap.String("changefeed", c.changefeed.ID),
 				zap.Uint64("streamID", s.streamID),

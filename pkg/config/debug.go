@@ -60,4 +60,6 @@ type PullerConfig struct {
 	EnableResolvedTsStuckDetection bool `toml:"enable-resolved-ts-stuck-detection" json:"enable-resolved-ts-stuck-detection"`
 	// ResolvedTsStuckInterval is the interval of checking resolved ts stuck.
 	ResolvedTsStuckInterval TomlDuration `toml:"resolved-ts-stuck-interval" json:"resolved-ts-stuck-interval"`
+	// LogRegionDetails determines whether logs Region details or not in puller and kv-client.
+	LogRegionDetails bool `toml:"log-region-details" json:"log-region-details"`
 }
