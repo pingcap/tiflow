@@ -804,8 +804,27 @@ func TestCSVMessageEncode(t *testing.T) {
 				preColumns: []any{"a!b!c", "abc"},
 				columns:    []any{"a!b!c", "def"},
 			},
-			want: []byte(`D!table2!test!435661838416609281!a\!b\!c!abc` + "\n" +
-				`I!table2!test!435661838416609281!a\!b\!c!def` + "\n"),
+			want: []byte(`D!table2!test!435661838416609281!true!a\!b\!c!abc` + "\n" +
+				`I!table2!test!435661838416609281!true!a\!b\!c!def` + "\n"),
+		},
+		{
+			name: "csv encode values containing single-character delimter string, without quote mark, update with old value",
+			fields: fields{
+				config: &common.Config{
+					Delimiter:       "!",
+					Quote:           "",
+					Terminator:      "\n",
+					NullString:      "\\N",
+					IncludeCommitTs: true,
+					OutputOldValue:  true,
+				},
+				opType:     operationInsert,
+				tableName:  "table2",
+				schemaName: "test",
+				commitTs:   435661838416609281,
+				columns:    []any{"a!b!c", "def"},
+			},
+			want: []byte(`I!table2!test!435661838416609281!false!a\!b\!c!def` + "\n"),
 		},
 		{
 			name: "csv encode values containing single-character delimter string, with quote mark",
