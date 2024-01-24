@@ -34,6 +34,7 @@ import (
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
@@ -123,7 +124,7 @@ type changefeed struct {
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
-		filter filter.Filter,
+		filter pfilter.Filter,
 	) (puller.DDLPuller, error)
 
 	newSink func(
@@ -181,7 +182,7 @@ func newChangefeed4Test(
 		startTs uint64,
 		changefeed model.ChangeFeedID,
 		schemaStorage entry.SchemaStorage,
-		filter filter.Filter,
+		filter pfilter.Filter,
 	) (puller.DDLPuller, error),
 	newSink func(
 		changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
@@ -619,6 +620,7 @@ LOOP2:
 		ddlStartTs,
 		c.state.Status.CheckpointTs,
 		c.ddlSink,
+		filter,
 		c.ddlPuller,
 		c.schema,
 		c.redoDDLMgr,
