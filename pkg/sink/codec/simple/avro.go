@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/simple/avro"
 	"go.uber.org/zap"
 )
 
@@ -458,6 +459,20 @@ func newTableSchemaFromAvroNative(native map[string]interface{}) *TableSchema {
 		Columns: columns,
 		Indexes: indexes,
 	}
+}
+
+func newMessageFromAvroGoGenMessage(holder *avro.Message, result *message) error {
+	switch holder.Payload.UnionType {
+	case avro.UnionWatermarkBootstrapDDLDMLTypeEnumWatermark:
+		watermark := holder.Payload.Watermark
+		result.Version = int(watermark.Version)
+		result.Type = WatermarkType
+		result.CommitTs = uint64(watermark.CommitTs)
+		result.BuildTs = watermark.BuildTs
+	case avro.UnionWatermarkBootstrapDDLDMLTypeEnumDML:
+	default:
+	}
+	return nil
 }
 
 func newMessageFromAvroNative(native interface{}, m *message) error {

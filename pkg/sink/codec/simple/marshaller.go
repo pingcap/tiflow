@@ -14,13 +14,16 @@
 package simple
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
+	"time"
 
 	"github.com/linkedin/goavro/v2"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/sink/codec/simple/avro"
 )
 
 //go:embed message.json
@@ -44,20 +47,78 @@ type marshaller interface {
 func newMarshaller(format common.EncodingFormatType) (marshaller, error) {
 	var (
 		result marshaller
-		err    error
+		//err    error
 	)
 	switch format {
 	case common.EncodingFormatJSON:
 		result = newJSONMarshaller()
 	case common.EncodingFormatAvro:
-		result, err = newAvroMarshaller(string(avroSchemaBytes))
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
+		result = newAvroGoGenMarshaller()
+		//result, err = newAvroMarshaller(string(avroSchemaBytes))
+		//if err != nil {
+		//	return nil, errors.Trace(err)
+		//}
 	default:
 		return nil, errors.New("unknown encoding format")
 	}
 	return result, nil
+}
+
+type avroGoGenMarshaller struct{}
+
+func newAvroGoGenMarshaller() *avroGoGenMarshaller {
+	return &avroGoGenMarshaller{}
+}
+
+// MarshalCheckpoint implement the marshaller interface
+func (a *avroGoGenMarshaller) MarshalCheckpoint(ts uint64) ([]byte, error) {
+	watermark := avro.Watermark{
+		Version:  defaultVersion,
+		Type:     string(WatermarkType),
+		CommitTs: int64(ts),
+		BuildTs:  time.Now().UnixMilli(),
+	}
+
+	payload := avro.UnionWatermarkBootstrapDDLDML{
+		Watermark: watermark,
+		UnionType: avro.UnionWatermarkBootstrapDDLDMLTypeEnumWatermark,
+	}
+	m := avro.Message{Payload: payload}
+
+	var buf bytes.Buffer
+	err := m.Serialize(&buf)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return buf.Bytes(), nil
+}
+
+// MarshalDDLEvent implement the marshaller interface
+func (a *avroGoGenMarshaller) MarshalDDLEvent(event *model.DDLEvent) ([]byte, error) {
+	return nil, nil
+}
+
+// MarshalRowChangedEvent implement the marshaller interface
+func (a *avroGoGenMarshaller) MarshalRowChangedEvent(
+	event *model.RowChangedEvent, config *common.Config,
+	handleKeyOnly bool, claimCheckFileName string,
+) ([]byte, error) {
+	return nil, nil
+}
+
+// Unmarshal implement the marshaller interface
+func (a *avroGoGenMarshaller) Unmarshal(data []byte, v any) error {
+	reader := bytes.NewReader(data)
+	avroMessage, err := avro.DeserializeMessage(reader)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	err = newMessageFromAvroGoGenMessage(&avroMessage, v.(*message))
+	if err != nil {
+		return errors.Trace(err)
+	}
+	return nil
 }
 
 type jsonMarshaller struct{}
