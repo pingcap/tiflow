@@ -574,6 +574,7 @@ func (r *Manager) AdvanceCheckpoint(
 
 	r.slowestPuller = model.TableID(0)
 	r.slowestSink = model.TableID(0)
+	resolvedTsOfSlowestSink := model.Ts(math.MaxUint64)
 
 	watermark = schedulepb.Watermark{
 		CheckpointTs:     math.MaxUint64,
@@ -607,9 +608,12 @@ func (r *Manager) AdvanceCheckpoint(
 			}
 		}
 		// Find the minimum checkpoint ts and resolved ts.
-		if watermark.CheckpointTs > table.Checkpoint.CheckpointTs {
+		if watermark.CheckpointTs > table.Checkpoint.CheckpointTs ||
+			(watermark.CheckpointTs == table.Checkpoint.CheckpointTs &&
+				resolvedTsOfSlowestSink > table.Checkpoint.ResolvedTs) {
 			watermark.CheckpointTs = table.Checkpoint.CheckpointTs
 			r.slowestSink = tableID
+			resolvedTsOfSlowestSink = table.Checkpoint.ResolvedTs
 		}
 		if watermark.ResolvedTs > table.Checkpoint.ResolvedTs {
 			watermark.ResolvedTs = table.Checkpoint.ResolvedTs
@@ -800,7 +804,7 @@ func (r *Manager) CollectMetrics() {
 			Set(float64(counter))
 	}
 
-	if table, ok := r.tables[r.slowestSink]; ok {
+	if table, ok := r.tables[r.slowestPuller]; ok {
 		if pullerCkpt, ok := table.Stats.StageCheckpoints["puller-egress"]; ok {
 			phyCkptTs := oracle.ExtractPhysical(pullerCkpt.ResolvedTs)
 			slowestTablePullerResolvedTs.WithLabelValues(cf.Namespace, cf.ID).Set(float64(phyCkptTs))
