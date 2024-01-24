@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
@@ -139,7 +138,7 @@ func (suite *tableSinkWorkerSuite) createWorker(
 	quota.ForceAcquire(testEventSize)
 	quota.AddTable(suite.testSpan)
 
-	return newSinkWorker(suite.testChangefeedID, sm, quota, nil, nil, splitTxn), sortEngine
+	return newSinkWorker(suite.testChangefeedID, sm, quota, splitTxn), sortEngine
 }
 
 func (suite *tableSinkWorkerSuite) addEventsToSortEngine(
@@ -668,56 +667,6 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 		"because the first task has 3 events, the second task has 1 event")
 }
 
-func (suite *tableSinkWorkerSuite) TestFetchFromCacheWithFailure() {
-	ctx, cancel := context.WithCancel(context.Background())
-	events := []*model.PolymorphicEvent{
-		genPolymorphicEvent(1, 3, suite.testSpan),
-		genPolymorphicEvent(1, 3, suite.testSpan),
-		genPolymorphicEvent(1, 3, suite.testSpan),
-		genPolymorphicResolvedEvent(4),
-	}
-	// Only for three events.
-	eventSize := uint64(testEventSize * 3)
-	w, e := suite.createWorker(ctx, eventSize, true)
-	w.eventCache = newRedoEventCache(suite.testChangefeedID, 1024*1024)
-	defer w.sinkMemQuota.Close()
-	suite.addEventsToSortEngine(events, e)
-
-	_ = failpoint.Enable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/TableSinkWorkerFetchFromCache", "return")
-	defer func() {
-		_ = failpoint.Disable("github.com/pingcap/tiflow/cdc/processor/sinkmanager/TableSinkWorkerFetchFromCache")
-	}()
-
-	taskChan := make(chan *sinkTask)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
-		require.Equal(suite.T(), context.Canceled, err)
-	}()
-
-	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	defer sink.Close()
-
-	chShouldBeClosed := make(chan struct{}, 1)
-	callback := func(lastWritePos sorter.Position) {
-		close(chShouldBeClosed)
-	}
-	taskChan <- &sinkTask{
-		span:          suite.testSpan,
-		lowerBound:    genLowerBound(),
-		getUpperBound: genUpperBoundGetter(4),
-		tableSink:     wrapper,
-		callback:      callback,
-		isCanceled:    func() bool { return false },
-	}
-
-	<-chShouldBeClosed
-	cancel()
-	wg.Wait()
-}
-
 // When starts to handle a task, advancer.lastPos should be set to a correct position.
 // Otherwise if advancer.lastPos isn't updated during scanning, callback will get an
 // invalid `advancer.lastPos`.
@@ -751,54 +700,6 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 	taskChan <- &sinkTask{
 		span:          suite.testSpan,
 		lowerBound:    genLowerBound(),
-		getUpperBound: genUpperBoundGetter(4),
-		tableSink:     wrapper,
-		callback:      callback,
-		isCanceled:    func() bool { return true },
-	}
-
-	<-chShouldBeClosed
-	cancel()
-	wg.Wait()
-}
-
-func (suite *tableSinkWorkerSuite) TestHandleTaskWithCache() {
-	ctx, cancel := context.WithCancel(context.Background())
-	events := []*model.PolymorphicEvent{
-		genPolymorphicEvent(2, 4, suite.testSpan),
-		genPolymorphicEvent(2, 4, suite.testSpan),
-		genPolymorphicResolvedEvent(4),
-	}
-	w, e := suite.createWorker(ctx, 0, true)
-	w.eventCache = newRedoEventCache(suite.testChangefeedID, 1024*1024)
-	appender := w.eventCache.maybeCreateAppender(suite.testSpan, sorter.Position{StartTs: 1, CommitTs: 3})
-	appender.pushBatch(
-		[]*model.RowChangedEvent{events[0].Row, events[1].Row},
-		uint64(0), sorter.Position{StartTs: 2, CommitTs: 4},
-	)
-	defer w.sinkMemQuota.Close()
-	suite.addEventsToSortEngine(events, e)
-
-	taskChan := make(chan *sinkTask)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := w.handleTasks(ctx, taskChan)
-		require.Equal(suite.T(), context.Canceled, err)
-	}()
-
-	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
-	defer sink.Close()
-
-	chShouldBeClosed := make(chan struct{}, 1)
-	callback := func(lastWrittenPos sorter.Position) {
-		require.Equal(suite.T(), sorter.Position{StartTs: 2, CommitTs: 4}, lastWrittenPos)
-		close(chShouldBeClosed)
-	}
-	taskChan <- &sinkTask{
-		span:          suite.testSpan,
-		lowerBound:    sorter.Position{StartTs: 1, CommitTs: 3},
 		getUpperBound: genUpperBoundGetter(4),
 		tableSink:     wrapper,
 		callback:      callback,

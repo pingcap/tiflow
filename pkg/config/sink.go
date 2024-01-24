@@ -86,6 +86,9 @@ const (
 	DefaultSendBootstrapIntervalInSec = int64(120)
 	// DefaultSendBootstrapInMsgCount is the default number of messages to send bootstrap message.
 	DefaultSendBootstrapInMsgCount = int32(10000)
+	// DefaultSendBootstrapToAllPartition is the default value of
+	// whether to send bootstrap message to all partitions.
+	DefaultSendBootstrapToAllPartition = true
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -176,8 +179,12 @@ type SinkConfig struct {
 	// bootstrap sending function will be disabled.
 	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
 	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
-	// SendBootstrapInMsgCount is the number of messages to send bootstrap message.
+	// SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.
 	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
+	// SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+	// If set to false, bootstrap message will only be sent to the first partition of each topic.
+	// Default value is true.
+	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
 
 	// Debezium only. Whether schema should be excluded in the output.
 	DebeziumDisableSchema *bool `toml:"debezium-disable-schema" json:"debezium-disable-schema,omitempty"`
