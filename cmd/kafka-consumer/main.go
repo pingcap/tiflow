@@ -901,6 +901,12 @@ func (c *Consumer) Run(ctx context.Context) error {
 				continue
 			}
 
+			if err := c.forEachSink(func(sink *partitionSinks) error {
+				return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
+			}); err != nil {
+				return cerror.Trace(err)
+			}
+
 			// DDL can be executed, do it first.
 			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
 				return cerror.Trace(err)
