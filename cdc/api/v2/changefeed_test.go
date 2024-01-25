@@ -187,7 +187,7 @@ func TestCreateChangefeed(t *testing.T) {
 			}, nil
 		}).AnyTimes()
 	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrPDEtcdAPIError).Times(1)
 
 	cfConfig.SinkURI = mysqlSink
@@ -205,7 +205,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 6: success
 	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 	w = httptest.NewRecorder()
