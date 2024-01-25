@@ -319,6 +319,8 @@ func (s *schemaStorage) shouldIgnoreTable(t *model.TableInfo) bool {
 
 // IsIneligibleTable returns whether the table is ineligible.
 // It uses the snapshot of the given ts to check the table.
+// Ineligible means that the table does not have a primary key
+// or not null unique key.
 func (s *schemaStorage) IsIneligibleTable(
 	ctx context.Context, tableID model.TableID, ts model.Ts,
 ) (bool, error) {
@@ -451,7 +453,7 @@ func (s *schemaStorage) BuildDDLEvents(
 		event.FromJob(job, preTableInfo, tableInfo)
 		ddlEvents = append(ddlEvents, event)
 	}
-	return s.filterDDLEvents(ddlEvents)
+	return ddlEvents, nil
 }
 
 // TODO: find a better way to refactor this function.
@@ -505,38 +507,6 @@ func (s *schemaStorage) buildRenameEvents(
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
-}
-
-// TODO: delete this function after integration test passed.
-func (s *schemaStorage) filterDDLEvents(ddlEvents []*model.DDLEvent) ([]*model.DDLEvent, error) {
-	res := make([]*model.DDLEvent, 0, len(ddlEvents))
-	for _, event := range ddlEvents {
-		schemaName := event.TableInfo.TableName.Schema
-		table := event.TableInfo.TableName.Table
-		if event.Type == timodel.ActionRenameTable {
-			schemaName = event.PreTableInfo.TableName.Schema
-			table = event.PreTableInfo.TableName.Table
-		}
-
-		if s.filter.ShouldDiscardDDL(event.Type, schemaName, table) {
-			log.Error(
-				"discarded DDL event should not be sent to owner"+
-					"please report a bug to TiCDC if you see this log"+
-					"but it is no harm to your replication",
-				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID),
-				zap.String("query", event.Query),
-				zap.String("type", event.Type.String()),
-				zap.String("schema", event.TableInfo.TableName.Schema),
-				zap.String("table", event.TableInfo.TableName.Table),
-				zap.Uint64("startTs", event.StartTs),
-				zap.Uint64("commitTs", event.CommitTs),
-			)
-			continue
-		}
-		res = append(res, event)
-	}
-	return res, nil
 }
 
 // MockSchemaStorage is for tests.
