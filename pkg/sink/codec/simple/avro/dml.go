@@ -40,12 +40,12 @@ type DML struct {
 
 	Checksum *UnionNullChecksum `json:"checksum"`
 
-	Data *UnionNullMapUnionNullIntLongFloatDoubleStringBoolBytes `json:"data"`
+	Data *UnionNullMapUnionNullLongFloatDoubleStringBytes `json:"data"`
 
 	Old *UnionNullMapUnionNullLongFloatDoubleStringBytes `json:"old"`
 }
 
-const DMLAvroCRC64Fingerprint = ".ԏ\xf8\xa8\x9b\x90\x19"
+const DMLAvroCRC64Fingerprint = "mO\x06\x9f\x01\x8bKU"
 
 func NewDML() DML {
 	r := DML{}
@@ -126,7 +126,7 @@ func writeDML(r DML, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	err = writeUnionNullMapUnionNullIntLongFloatDoubleStringBoolBytes(r.Data, w)
+	err = writeUnionNullMapUnionNullLongFloatDoubleStringBytes(r.Data, w)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (r DML) Serialize(w io.Writer) error {
 }
 
 func (r DML) Schema() string {
-	return "{\"docs\":\"the message format of the DML event\",\"fields\":[{\"name\":\"version\",\"type\":\"int\"},{\"name\":\"database\",\"type\":\"string\"},{\"name\":\"table\",\"type\":\"string\"},{\"name\":\"tableID\",\"type\":\"long\"},{\"name\":\"type\",\"type\":{\"name\":\"DMLType\",\"symbols\":[\"INSERT\",\"UPDATE\",\"DELETE\"],\"type\":\"enum\"}},{\"name\":\"commitTs\",\"type\":\"long\"},{\"name\":\"buildTs\",\"type\":\"long\"},{\"name\":\"schemaVersion\",\"type\":\"long\"},{\"default\":null,\"name\":\"claimCheckLocation\",\"type\":[\"null\",\"string\"]},{\"default\":null,\"name\":\"handleKeyOnly\",\"type\":[\"null\",\"boolean\"]},{\"default\":null,\"name\":\"checksum\",\"type\":[\"null\",{\"docs\":\"event's e2e checksum information\",\"fields\":[{\"name\":\"version\",\"type\":\"int\"},{\"name\":\"corrupted\",\"type\":\"boolean\"},{\"name\":\"current\",\"type\":\"long\"},{\"name\":\"previous\",\"type\":\"long\"}],\"name\":\"Checksum\",\"namespace\":\"com.pingcap.simple.avro\",\"type\":\"record\"}]},{\"default\":null,\"name\":\"data\",\"type\":[\"null\",{\"default\":null,\"type\":\"map\",\"values\":[\"null\",\"int\",\"long\",\"float\",\"double\",\"string\",\"boolean\",\"bytes\"]}]},{\"default\":null,\"name\":\"old\",\"type\":[\"null\",{\"default\":null,\"type\":\"map\",\"values\":[\"null\",\"long\",\"float\",\"double\",\"string\",\"bytes\"]}]}],\"name\":\"com.pingcap.simple.avro.DML\",\"type\":\"record\"}"
+	return "{\"docs\":\"the message format of the DML event\",\"fields\":[{\"name\":\"version\",\"type\":\"int\"},{\"name\":\"database\",\"type\":\"string\"},{\"name\":\"table\",\"type\":\"string\"},{\"name\":\"tableID\",\"type\":\"long\"},{\"name\":\"type\",\"type\":{\"name\":\"DMLType\",\"symbols\":[\"INSERT\",\"UPDATE\",\"DELETE\"],\"type\":\"enum\"}},{\"name\":\"commitTs\",\"type\":\"long\"},{\"name\":\"buildTs\",\"type\":\"long\"},{\"name\":\"schemaVersion\",\"type\":\"long\"},{\"default\":null,\"name\":\"claimCheckLocation\",\"type\":[\"null\",\"string\"]},{\"default\":null,\"name\":\"handleKeyOnly\",\"type\":[\"null\",\"boolean\"]},{\"default\":null,\"name\":\"checksum\",\"type\":[\"null\",{\"docs\":\"event's e2e checksum information\",\"fields\":[{\"name\":\"version\",\"type\":\"int\"},{\"name\":\"corrupted\",\"type\":\"boolean\"},{\"name\":\"current\",\"type\":\"long\"},{\"name\":\"previous\",\"type\":\"long\"}],\"name\":\"Checksum\",\"namespace\":\"com.pingcap.simple.avro\",\"type\":\"record\"}]},{\"default\":null,\"name\":\"data\",\"type\":[\"null\",{\"default\":null,\"type\":\"map\",\"values\":[\"null\",\"long\",\"float\",\"double\",\"string\",\"bytes\"]}]},{\"default\":null,\"name\":\"old\",\"type\":[\"null\",{\"default\":null,\"type\":\"map\",\"values\":[\"null\",\"long\",\"float\",\"double\",\"string\",\"bytes\"]}]}],\"name\":\"com.pingcap.simple.avro.DML\",\"type\":\"record\"}"
 }
 
 func (r DML) SchemaName() string {
@@ -213,7 +213,7 @@ func (r *DML) Get(i int) types.Field {
 
 		return r.Checksum
 	case 11:
-		r.Data = NewUnionNullMapUnionNullIntLongFloatDoubleStringBoolBytes()
+		r.Data = NewUnionNullMapUnionNullLongFloatDoubleStringBytes()
 
 		return r.Data
 	case 12:
@@ -512,7 +512,7 @@ func (r *DML) UnmarshalJSON(data []byte) error {
 			return err
 		}
 	} else {
-		r.Data = NewUnionNullMapUnionNullIntLongFloatDoubleStringBoolBytes()
+		r.Data = NewUnionNullMapUnionNullLongFloatDoubleStringBytes()
 
 		r.Data = nil
 	}

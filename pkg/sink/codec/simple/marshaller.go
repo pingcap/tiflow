@@ -17,17 +17,24 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"math"
+	"reflect"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/linkedin/goavro/v2"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
+	tiTypes "github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/simple/avro"
+	"go.uber.org/zap"
 )
 
 //go:embed message.json
@@ -272,6 +279,192 @@ func (a *avroGoGenMarshaller) MarshalRowChangedEvent(
 	event *model.RowChangedEvent, config *common.Config,
 	handleKeyOnly bool, claimCheckFileName string,
 ) ([]byte, error) {
+	dml := avro.DML{
+		Version:       defaultVersion,
+		Database:      event.Table.Schema,
+		Table:         event.Table.Table,
+		TableID:       event.TableInfo.ID,
+		CommitTs:      int64(event.CommitTs),
+		BuildTs:       time.Now().UnixMilli(),
+		SchemaVersion: int64(event.TableInfo.UpdateTS),
+	}
+
+	if !config.LargeMessageHandle.Disabled() && handleKeyOnly {
+		dml.HandleKeyOnly = &avro.UnionNullBool{
+			Bool:      true,
+			UnionType: avro.UnionNullBoolTypeEnumBool,
+		}
+	}
+
+	if config.LargeMessageHandle.EnableClaimCheck() && claimCheckFileName != "" {
+		dml.ClaimCheckLocation = &avro.UnionNullString{
+			String:    claimCheckFileName,
+			UnionType: avro.UnionNullStringTypeEnumString,
+		}
+	}
+
+	if config.EnableRowChecksum && event.Checksum != nil {
+		dml.Checksum = &avro.UnionNullChecksum{
+			Checksum: avro.Checksum{
+				Version:   int32(event.Checksum.Version),
+				Corrupted: event.Checksum.Corrupted,
+				Current:   int64(event.Checksum.Current),
+				Previous:  int64(event.Checksum.Previous),
+			},
+			UnionType: avro.UnionNullChecksumTypeEnumChecksum,
+		}
+	}
+
+	if event.IsInsert() {
+		dml.Type = avro.DMLTypeINSERT
+		data, err := collectColumns4GoGenAvro(event.Columns, event.ColInfos, handleKeyOnly)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		dml.Data = data
+	} else if event.IsDelete() {
+		dml.Type = avro.DMLTypeDELETE
+		old, err := collectColumns4GoGenAvro(event.PreColumns, event.ColInfos, handleKeyOnly)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		dml.Old = old
+	} else if event.IsUpdate() {
+		dml.Type = avro.DMLTypeUPDATE
+		data, err := collectColumns4GoGenAvro(event.Columns, event.ColInfos, handleKeyOnly)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		dml.Data = data
+
+		old, err := collectColumns4GoGenAvro(event.PreColumns, event.ColInfos, handleKeyOnly)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		dml.Old = old
+	} else {
+		log.Panic("invalid event type, this should not hit", zap.Any("event", event))
+	}
+
+	payload := avro.UnionWatermarkBootstrapDDLDML{
+		DML:       dml,
+		UnionType: avro.UnionWatermarkBootstrapDDLDMLTypeEnumDML,
+	}
+	m := avro.Message{Payload: payload}
+
+	var buf bytes.Buffer
+	err := m.Serialize(&buf)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return buf.Bytes(), nil
+}
+
+func collectColumns4GoGenAvro(
+	columns []*model.Column, columnInfos []rowcodec.ColInfo, onlyHandleKey bool,
+) (*avro.UnionNullMapUnionNullLongFloatDoubleStringBytes, error) {
+	if len(columns) == 0 {
+		return nil, nil
+	}
+	result := make(map[string]*avro.UnionNullLongFloatDoubleStringBytes, len(columns))
+	for idx, col := range columns {
+		if col == nil {
+			continue
+		}
+		if onlyHandleKey && !col.Flag.IsHandleKey() {
+			continue
+		}
+		value, err := encodeValue4GoGenAvro(col.Value, columnInfos[idx].Ft)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		result[col.Name] = value
+	}
+	return &avro.UnionNullMapUnionNullLongFloatDoubleStringBytes{
+		MapUnionNullLongFloatDoubleStringBytes: result,
+		UnionType:                              avro.UnionNullMapUnionNullLongFloatDoubleStringBytesTypeEnumMapUnionNullLongFloatDoubleStringBytes,
+	}, nil
+}
+
+func encodeValue4GoGenAvro(
+	value interface{}, ft *types.FieldType,
+) (*avro.UnionNullLongFloatDoubleStringBytes, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	switch ft.GetType() {
+	case mysql.TypeEnum:
+		v, ok := value.(uint64)
+		if !ok {
+			return nil, errors.ErrEncodeFailed.
+				GenWithStack("unexpected type for the enum value: %+v, tp: %+v", value, reflect.TypeOf(value))
+		}
+
+		enumVar, err := tiTypes.ParseEnumValue(ft.GetElems(), v)
+		if err != nil {
+			return nil, errors.WrapError(errors.ErrEncodeFailed, err)
+		}
+		value = enumVar.Name
+	case mysql.TypeSet:
+		v, ok := value.(uint64)
+		if !ok {
+			return nil, errors.ErrEncodeFailed.
+				GenWithStack("unexpected type for the set value: %+v, tp: %+v", value, reflect.TypeOf(value))
+		}
+		setValue, err := tiTypes.ParseSetValue(ft.GetElems(), v)
+		if err != nil {
+			return nil, errors.WrapError(errors.ErrEncodeFailed, err)
+		}
+		value = setValue.Name
+	}
+
+	switch v := value.(type) {
+	case uint64:
+		if v > math.MaxInt64 {
+			return &avro.UnionNullLongFloatDoubleStringBytes{
+				String:    strconv.FormatUint(v, 10),
+				UnionType: avro.UnionNullLongFloatDoubleStringBytesTypeEnumString,
+			}, nil
+		}
+		return &avro.UnionNullLongFloatDoubleStringBytes{
+			Long:      int64(v),
+			UnionType: avro.UnionNullLongFloatDoubleStringBytesTypeEnumLong,
+		}, nil
+	case int64:
+		return &avro.UnionNullLongFloatDoubleStringBytes{
+			Long:      v,
+			UnionType: avro.UnionNullLongFloatDoubleStringBytesTypeEnumLong,
+		}, nil
+	case []byte:
+		if mysql.HasBinaryFlag(ft.GetFlag()) {
+			return &avro.UnionNullLongFloatDoubleStringBytes{
+				Bytes:     v,
+				UnionType: avro.UnionNullLongFloatDoubleStringBytesTypeEnumBytes,
+			}, nil
+		}
+		return &avro.UnionNullLongFloatDoubleStringBytes{
+			String:    string(v),
+			UnionType: avro.UnionNullLongFloatDoubleStringBytesTypeEnumString,
+		}, nil
+	case float32:
+		return &avro.UnionNullLongFloatDoubleStringBytes{
+			Float:     v,
+			UnionType: avro.UnionNullLongFloatDoubleStringBytesTypeEnumFloat,
+		}, nil
+	case float64:
+		return &avro.UnionNullLongFloatDoubleStringBytes{
+			Double:    v,
+			UnionType: avro.UnionNullLongFloatDoubleStringBytesTypeEnumDouble,
+		}, nil
+	case string:
+		return &avro.UnionNullLongFloatDoubleStringBytes{
+			String:    v,
+			UnionType: avro.UnionNullLongFloatDoubleStringBytesTypeEnumString,
+		}, nil
+	default:
+		log.Panic("unexpected type for avro value", zap.Any("value", value))
+	}
 	return nil, nil
 }
 
