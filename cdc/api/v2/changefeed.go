@@ -134,10 +134,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		return
 	}
 
-	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx,
-		upstreamInfo,
-		info,
-		model.DefaultChangeFeedID(info.ID))
+	err = h.capture.GetEtcdClient().CreateChangefeedInfo(ctx, upstreamInfo, info)
 	if err != nil {
 		needRemoveGCSafePoint = true
 		_ = c.Error(err)
@@ -387,7 +384,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		zap.Any("upstreamInfo", newUpInfo))
 
 	err = h.capture.GetEtcdClient().
-		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo, changefeedID)
+		UpdateChangefeedAndUpstream(ctx, newUpInfo, newCfInfo)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return

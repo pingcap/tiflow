@@ -187,7 +187,7 @@ func TestCreateChangefeed(t *testing.T) {
 			}, nil
 		}).AnyTimes()
 	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrPDEtcdAPIError).Times(1)
 
 	cfConfig.SinkURI = mysqlSink
@@ -205,7 +205,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 6: success
 	etcdClient.EXPECT().
-		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		CreateChangefeedInfo(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).
 		AnyTimes()
 	w = httptest.NewRecorder()
@@ -454,7 +454,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, nil).
 		Times(1)
 	etcdClient.EXPECT().
-		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(cerrors.ErrEtcdAPIError).Times(1)
 
 	w = httptest.NewRecorder()
@@ -474,7 +474,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Times(1)
 	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	etcdClient.EXPECT().
-		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 
 	w = httptest.NewRecorder()
@@ -491,7 +491,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		Times(1)
 	mockCapture.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil).AnyTimes()
 	etcdClient.EXPECT().
-		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		UpdateChangefeedAndUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).Times(1)
 
 	w = httptest.NewRecorder()
