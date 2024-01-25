@@ -202,7 +202,7 @@ func prepareBenchMultiStore(b *testing.B, storeNum, regionNum int) (
 	go func() {
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("b")},
-			100, lockResolver, eventCh)
+			100, lockResolver, eventCh, false)
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}
@@ -296,7 +296,7 @@ func prepareBench(b *testing.B, regionNum int) (
 	go func() {
 		err := cdcClient.EventFeed(ctx,
 			regionspan.ComparableSpan{Start: []byte("a"), End: []byte("z")},
-			100, lockResolver, eventCh)
+			100, lockResolver, eventCh, false)
 		if errors.Cause(err) != context.Canceled {
 			b.Error(err)
 		}

@@ -831,7 +831,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
-			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode)
+			sortEngine, p.errCh, p.changefeed.Info.Config.BDRMode, p.changefeed.Info.Config.EnableTableMonitor)
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
