@@ -470,9 +470,86 @@ func newMessageFromAvroGoGenMessage(holder *avro.Message, result *message) error
 		result.CommitTs = uint64(watermark.CommitTs)
 		result.BuildTs = watermark.BuildTs
 	case avro.UnionWatermarkBootstrapDDLDMLTypeEnumDML:
+	case avro.UnionWatermarkBootstrapDDLDMLTypeEnumBootstrap:
+		event := holder.Payload.Bootstrap
+		result.Version = int(event.Version)
+		result.Type = BootstrapType
+		result.BuildTs = event.BuildTs
+		result.TableSchema = newTableSchemaFromGoGenAvro(event.TableSchema)
+	case avro.UnionWatermarkBootstrapDDLDMLTypeEnumDDL:
+		event := holder.Payload.DDL
+		result.Version = int(event.Version)
+		result.Type = EventType(event.Type)
+		result.SQL = event.Sql
+		result.CommitTs = uint64(event.CommitTs)
+		result.BuildTs = event.BuildTs
+
+		if event.TableSchema != nil {
+			result.TableSchema = newTableSchemaFromGoGenAvro(event.TableSchema.TableSchema)
+		}
+		if event.PreTableSchema != nil {
+			result.PreTableSchema = newTableSchemaFromGoGenAvro(event.PreTableSchema.TableSchema)
+		}
 	default:
 	}
 	return nil
+}
+
+func newTableSchemaFromGoGenAvro(avroTableSchema avro.TableSchema) *TableSchema {
+	columns := make([]*columnSchema, 0, len(avroTableSchema.Columns))
+	for _, col := range avroTableSchema.Columns {
+		mysqlType := dataType{
+			MySQLType: col.DataType.MysqlType,
+			Charset:   col.DataType.Charset,
+			Collate:   col.DataType.Collate,
+			Length:    int(col.DataType.Length),
+		}
+		if col.DataType.Decimal != nil {
+			mysqlType.Decimal = int(col.DataType.Decimal.Int)
+		}
+		if col.DataType.Elements != nil {
+			mysqlType.Elements = col.DataType.Elements.ArrayString
+		}
+		if col.DataType.Unsigned != nil {
+			mysqlType.Unsigned = col.DataType.Unsigned.Bool
+		}
+		if col.DataType.Zerofill != nil {
+			mysqlType.Zerofill = col.DataType.Zerofill.Bool
+		}
+
+		var defaultValue interface{}
+		if col.Default != nil {
+			defaultValue = col.Default.String
+		}
+
+		column := &columnSchema{
+			Name:     col.Name,
+			Nullable: col.Nullable,
+			Default:  defaultValue,
+			DataType: mysqlType,
+		}
+		columns = append(columns, column)
+	}
+
+	indexes := make([]*IndexSchema, 0, len(avroTableSchema.Indexes))
+	for _, idx := range avroTableSchema.Indexes {
+		index := &IndexSchema{
+			Name:     idx.Name,
+			Unique:   idx.Unique,
+			Primary:  idx.Primary,
+			Nullable: idx.Nullable,
+			Columns:  idx.Columns,
+		}
+		indexes = append(indexes, index)
+	}
+	return &TableSchema{
+		Schema:  avroTableSchema.Database,
+		Table:   avroTableSchema.Table,
+		TableID: avroTableSchema.TableID,
+		Version: uint64(avroTableSchema.Version),
+		Columns: columns,
+		Indexes: indexes,
+	}
 }
 
 func newMessageFromAvroNative(native interface{}, m *message) error {

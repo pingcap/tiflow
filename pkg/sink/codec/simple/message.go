@@ -58,7 +58,7 @@ const (
 	DeleteType EventType = "DELETE"
 )
 
-func getDDLType(t timodel.ActionType) EventType {
+func getDDLType(t timodel.ActionType) string {
 	switch t {
 	case timodel.ActionCreateTable:
 		return "CREATE"
@@ -562,7 +562,7 @@ func newDDLMessage(ddl *model.DDLEvent) (*message, error) {
 	}
 	msg := &message{
 		Version:        defaultVersion,
-		Type:           getDDLType(ddl.Type),
+		Type:           EventType(getDDLType(ddl.Type)),
 		CommitTs:       ddl.CommitTs,
 		BuildTs:        time.Now().UnixMilli(),
 		SQL:            ddl.Query,
