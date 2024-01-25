@@ -150,6 +150,7 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, sto
 
 	return metrics
 }
+
 func newRegionWorker(
 	ctx context.Context, changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
 	pendingRegions *syncRegionFeedStateMap,
