@@ -739,6 +739,11 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
+	status, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
 
 	var pdClient pd.Client
 	// if PDAddrs is empty, use the default pdClient
@@ -766,6 +771,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		pdClient,
 		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 		changefeedID,
+		status.CheckpointTs,
 		cfg.OverwriteCheckpointTs); err != nil {
 		_ = c.Error(err)
 		return
