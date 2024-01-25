@@ -202,7 +202,7 @@ func (o *consumerOption) Adjust(upstreamURI *url.URL, configFile string) error {
 }
 
 func main() {
-	consumerOption := newConsumerOption()
+	o := newConsumerOption()
 
 	var (
 		upstreamURIStr string
@@ -212,24 +212,23 @@ func main() {
 	flag.StringVar(&configFile, "config", "", "config file for changefeed")
 
 	flag.StringVar(&upstreamURIStr, "upstream-uri", "", "Kafka uri")
-	flag.StringVar(&consumerOption.downstreamURI, "downstream-uri", "", "downstream sink uri")
-	flag.StringVar(&consumerOption.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
-	flag.StringVar(&consumerOption.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
+	flag.StringVar(&o.downstreamURI, "downstream-uri", "", "downstream sink uri")
+	flag.StringVar(&o.schemaRegistryURI, "schema-registry-uri", "", "schema registry uri")
+	flag.StringVar(&o.upstreamTiDBDSN, "upstream-tidb-dsn", "", "upstream TiDB DSN")
 
-	flag.StringVar(&consumerOption.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
-	flag.StringVar(&consumerOption.logLevel, "log-level", "info", "log file path")
-	flag.StringVar(&consumerOption.timezone, "tz", "System", "Specify time zone of Kafka consumer")
-	flag.StringVar(&consumerOption.ca, "ca", "", "CA certificate path for Kafka SSL connection")
-	flag.StringVar(&consumerOption.cert, "cert", "", "Certificate path for Kafka SSL connection")
-	flag.StringVar(&consumerOption.key, "key", "", "Private key path for Kafka SSL connection")
-	flag.BoolVar(&consumerOption.enableProfiling, "enable-profiling", false, "enable pprof profiling")
+	flag.StringVar(&o.logPath, "log-file", "cdc_kafka_consumer.log", "log file path")
+	flag.StringVar(&o.logLevel, "log-level", "info", "log file path")
+	flag.StringVar(&o.timezone, "tz", "System", "Specify time zone of Kafka consumer")
+	flag.StringVar(&o.ca, "ca", "", "CA certificate path for Kafka SSL connection")
+	flag.StringVar(&o.cert, "cert", "", "Certificate path for Kafka SSL connection")
+	flag.StringVar(&o.key, "key", "", "Private key path for Kafka SSL connection")
+	flag.BoolVar(&o.enableProfiling, "enable-profiling", false, "enable pprof profiling")
 	flag.Parse()
 
 	err := logutil.InitLogger(&logutil.Config{
-		Level: consumerOption.logLevel,
-		File:  consumerOption.logPath,
+		Level: o.logLevel,
+		File:  o.logPath,
 	},
-		logutil.WithInitGRPCLogger(),
 		logutil.WithInitSaramaLogger(),
 	)
 	if err != nil {
@@ -249,7 +248,7 @@ func main() {
 			zap.String("upstreamURI", upstreamURIStr))
 	}
 
-	err = consumerOption.Adjust(upstreamURI, configFile)
+	err = o.Adjust(upstreamURI, configFile)
 	if err != nil {
 		log.Panic("adjust consumer option failed", zap.Error(err))
 	}
@@ -258,32 +257,32 @@ func main() {
 	// * Construct a new Sarama configuration.
 	// * The Kafka cluster version has to be defined before the consumer/producer is initialized.
 	// */
-	config, err := newSaramaConfig(consumerOption)
+	saramaConfig, err := newSaramaConfig(o)
 	if err != nil {
 		log.Panic("Error creating sarama config", zap.Error(err))
 	}
-	err = waitTopicCreated(consumerOption.address, consumerOption.topic, config)
+	err = waitTopicCreated(o.address, o.topic, saramaConfig)
 	if err != nil {
 		log.Panic("wait topic created failed", zap.Error(err))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	consumer, err := NewConsumer(ctx, consumerOption)
-	if err != nil {
-		log.Panic("Error creating consumer", zap.Error(err))
-	}
-
-	client, err := sarama.NewConsumerGroup(consumerOption.address, consumerOption.groupID, config)
+	consumerGroup, err := sarama.NewConsumerGroup(o.address, o.groupID, saramaConfig)
 	if err != nil {
 		log.Panic("Error creating consumer group client", zap.Error(err))
 	}
 
+	consumer, err := NewConsumer(ctx, o)
+	if err != nil {
+		log.Panic("Error creating consumer", zap.Error(err))
+	}
+
 	var wg sync.WaitGroup
-	if consumerOption.enableProfiling {
+	if o.enableProfiling {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := http.ListenAndServe(":6060", nil); err != nil {
+			if err = http.ListenAndServe(":6060", nil); err != nil {
 				log.Panic("Error starting pprof", zap.Error(err))
 			}
 		}()
@@ -296,7 +295,7 @@ func main() {
 			// `consume` should be called inside an infinite loop, when a
 			// server-side rebalance happens, the consumer session will need to be
 			// recreated to get the new claims
-			if err := client.Consume(ctx, strings.Split(consumerOption.topic, ","), consumer); err != nil {
+			if err = consumerGroup.Consume(ctx, strings.Split(o.topic, ","), consumer); err != nil {
 				log.Panic("Error from consumer", zap.Error(err))
 			}
 			// check if context was cancelled, signaling that the consumer should stop
@@ -308,8 +307,8 @@ func main() {
 	}()
 
 	go func() {
-		if err := consumer.Run(ctx); err != nil {
-			if err != context.Canceled {
+		if err = consumer.Run(ctx); err != nil {
+			if !errors.Is(err, context.Canceled) {
 				log.Panic("Error running consumer", zap.Error(err))
 			}
 		}
@@ -328,7 +327,7 @@ func main() {
 	}
 	cancel()
 	wg.Wait()
-	if err = client.Close(); err != nil {
+	if err = consumerGroup.Close(); err != nil {
 		log.Panic("Error closing client", zap.Error(err))
 	}
 }
@@ -480,8 +479,6 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	c.eventRouter = eventRouter
 
 	c.sinks = make([]*partitionSinks, o.partitionNum)
-	ctx, cancel := context.WithCancel(ctx)
-	errChan := make(chan error, 1)
 
 	memoryQuotaPerPartition := defaultMemoryQuotaInBytes / int(o.partitionNum)
 	for i := 0; i < int(o.partitionNum); i++ {
@@ -493,7 +490,9 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 		zap.Int32("partitionNum", o.partitionNum),
 		zap.Int("quota", memoryQuotaPerPartition))
 
+	ctx, cancel := context.WithCancel(ctx)
 	changefeedID := model.DefaultChangeFeedID("kafka-consumer")
+	errChan := make(chan error, 1)
 	f, err := eventsinkfactory.New(ctx, changefeedID, o.downstreamURI, config.GetDefaultReplicaConfig(), errChan, nil)
 	if err != nil {
 		cancel()
@@ -502,7 +501,7 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	c.sinkFactory = f
 
 	go func() {
-		err := <-errChan
+		err = <-errChan
 		if !errors.Is(cerror.Cause(err), context.Canceled) {
 			log.Error("error on running consumer", zap.Error(err))
 		} else {
