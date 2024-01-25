@@ -39,7 +39,7 @@ func createWorker(
 ) (*sinkWorker, engine.SortEngine) {
 	sortEngine := memory.New(context.Background())
 	sm := sourcemanager.New(changefeedID, upstream.NewUpstream4Test(&mockPD{}),
-		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false)
+		&entry.MockMountGroup{}, sortEngine, make(chan error, 1), false, false)
 
 	// To avoid refund or release panics.
 	quota := memquota.NewMemQuota(changefeedID, memQuota+1024*1024*1024, "")
