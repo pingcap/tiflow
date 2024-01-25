@@ -170,7 +170,7 @@ func (o *ownerImpl) Tick(stdCtx context.Context, rawState orchestrator.ReactorSt
 	// admin job, which will cause all http api unavailable.
 	o.handleJobs(stdCtx)
 
-	// controller should update GC safepoint before initializing changefeed, so
+	// owner should update GC safepoint before initializing changefeed, so
 	// changefeed can remove its "ticdc-creating" service GC safepoint during
 	// initializing.
 	//
