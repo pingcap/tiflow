@@ -456,6 +456,11 @@ error = '''
 table not found with index ID %d in index kv
 '''
 
+["CDC:ErrInternalCheckFailed"]
+error = '''
+internal check failed, %s
+'''
+
 ["CDC:ErrInternalServerError"]
 error = '''
 internal server error
