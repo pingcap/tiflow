@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -27,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/version"
-	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 )
@@ -129,14 +127,6 @@ func (o *controllerImpl) Tick(stdCtx context.Context, rawState orchestrator.Reac
 	if !o.clusterVersionConsistent(state.Captures) {
 		return state, nil
 	}
-	// controller should update GC safepoint before initializing changefeed, so
-	// changefeed can remove its "ticdc-creating" service GC safepoint during
-	// initializing.
-	//
-	// See more gc doc.
-	if err = o.updateGCSafepoint(stdCtx, state); err != nil {
-		return nil, errors.Trace(err)
-	}
 
 	// Tick all changefeeds.
 	// ctx := stdCtx.(cdcContext.Context)
@@ -198,88 +188,6 @@ func (o *controllerImpl) clusterVersionConsistent(captures map[model.CaptureID]*
 		return false
 	}
 	return true
-}
-
-func (o *controllerImpl) updateGCSafepoint(
-	ctx context.Context, state *orchestrator.GlobalReactorState,
-) error {
-	minChekpoinTsMap, forceUpdateMap := o.calculateGCSafepoint(state)
-
-	for upstreamID, minCheckpointTs := range minChekpoinTsMap {
-		up, ok := o.upstreamManager.Get(upstreamID)
-		if !ok {
-			upstreamInfo := state.Upstreams[upstreamID]
-			up = o.upstreamManager.AddUpstream(upstreamInfo)
-		}
-		if !up.IsNormal() {
-			log.Warn("upstream is not ready, skip",
-				zap.Uint64("id", up.ID),
-				zap.Strings("pd", up.PdEndpoints))
-			continue
-		}
-
-		// When the changefeed starts up, CDC will do a snapshot read at
-		// (checkpointTs - 1) from TiKV, so (checkpointTs - 1) should be an upper
-		// bound for the GC safepoint.
-		gcSafepointUpperBound := minCheckpointTs - 1
-
-		var forceUpdate bool
-		if _, exist := forceUpdateMap[upstreamID]; exist {
-			forceUpdate = true
-		}
-
-		err := up.GCManager.TryUpdateGCSafePoint(ctx, gcSafepointUpperBound, forceUpdate)
-		if err != nil {
-			return errors.Trace(err)
-		}
-	}
-	return nil
-}
-
-// calculateGCSafepoint calculates GCSafepoint for different upstream.
-// Note: we need to maintain a TiCDC service GC safepoint for each upstream TiDB cluster
-// to prevent upstream TiDB GC from removing data that is still needed by TiCDC.
-// GcSafepoint is the minimum checkpointTs of all changefeeds that replicating a same upstream TiDB cluster.
-func (o *controllerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
-	map[uint64]uint64, map[uint64]interface{},
-) {
-	minCheckpointTsMap := make(map[uint64]uint64)
-	forceUpdateMap := make(map[uint64]interface{})
-
-	for changefeedID, changefeedState := range state.Changefeeds {
-		if changefeedState.Info == nil || !changefeedState.Info.NeedBlockGC() {
-			continue
-		}
-
-		checkpointTs := changefeedState.Info.GetCheckpointTs(changefeedState.Status)
-		upstreamID := changefeedState.Info.UpstreamID
-
-		if _, exist := minCheckpointTsMap[upstreamID]; !exist {
-			minCheckpointTsMap[upstreamID] = checkpointTs
-		}
-
-		minCpts := minCheckpointTsMap[upstreamID]
-
-		if minCpts > checkpointTs {
-			minCpts = checkpointTs
-			minCheckpointTsMap[upstreamID] = minCpts
-		}
-		// Force update when adding a new changefeed.
-		_, exist := o.changefeeds[changefeedID]
-		if !exist {
-			forceUpdateMap[upstreamID] = nil
-		}
-	}
-
-	// check if the upstream has a changefeed, if not we should update the gc safepoint
-	_ = o.upstreamManager.Visit(func(up *upstream.Upstream) error {
-		if _, exist := minCheckpointTsMap[up.ID]; !exist {
-			ts := up.PDClock.CurrentTime()
-			minCheckpointTsMap[up.ID] = oracle.GoTimeToTS(ts)
-		}
-		return nil
-	})
-	return minCheckpointTsMap, forceUpdateMap
 }
 
 // AsyncStop stops the server manager asynchronously
