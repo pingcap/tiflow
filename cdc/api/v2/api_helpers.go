@@ -404,12 +404,13 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	currentCheckpointTs uint64,
 	overrideCheckpointTs uint64,
 ) error {
-	minServiceGCTs, err := gc.SetServiceGCSafepoint(ctx, pdClient, "ticdc", 0, 0)
+	// use safePoint 0 and ttl 0 to get the minServiceGCSafePoint, this gc service will not be saved to pd
+	minServiceGCSafePoint, err := gc.SetServiceGCSafepoint(ctx, pdClient, "ticdc-check", 0, 0)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if currentCheckpointTs < minServiceGCTs+1 {
-		return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(currentCheckpointTs, minServiceGCTs)
+	if currentCheckpointTs < minServiceGCSafePoint {
+		return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(currentCheckpointTs, minServiceGCSafePoint)
 	}
 	if overrideCheckpointTs == 0 {
 		return nil
