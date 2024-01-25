@@ -407,14 +407,15 @@ func newSaramaConfig(o *consumerOption) (*sarama.Config, error) {
 	return config, err
 }
 
-// partitionSinks maintained for each partition, it may sync data for multiple tables.
-type partitionSinks struct {
+// partitionSink maintained for each partition, it may sync data for multiple tables.
+type partitionSink struct {
 	tablesCommitTsMap sync.Map
 	tableSinksMap     sync.Map
-	// watermark record the maximum timestamp of the received event
-	watermark uint64
 
 	flowController *flowController
+
+	// watermark record the maximum timestamp of the received event
+	watermark uint64
 }
 
 // Consumer represents a Sarama consumer group consumer
@@ -429,11 +430,8 @@ type Consumer struct {
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
-	sinks       []*partitionSinks
+	sinks       []*partitionSink
 	sinksMu     sync.Mutex
-
-	// initialize to 0 by default
-	globalWatermark uint64
 
 	eventRouter *dispatcher.EventRouter
 
@@ -478,11 +476,10 @@ func NewConsumer(ctx context.Context, o *consumerOption) (*Consumer, error) {
 	}
 	c.eventRouter = eventRouter
 
-	c.sinks = make([]*partitionSinks, o.partitionNum)
-
+	c.sinks = make([]*partitionSink, o.partitionNum)
 	memoryQuotaPerPartition := defaultMemoryQuotaInBytes / int(o.partitionNum)
 	for i := 0; i < int(o.partitionNum); i++ {
-		c.sinks[i] = &partitionSinks{
+		c.sinks[i] = &partitionSink{
 			flowController: newFlowController(uint64(memoryQuotaPerPartition)),
 		}
 	}
@@ -571,11 +568,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	}
 
 	ctx := context.Background()
+
 	var (
 		decoder codec.RowEventDecoder
 		err     error
 	)
-
 	switch c.option.protocol {
 	case config.ProtocolOpen, config.ProtocolDefault:
 		decoder, err = open.NewBatchDecoder(ctx, c.option.codecConfig, c.upstreamTiDB)
@@ -664,28 +661,24 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Error(err))
 				}
 
-				if c.eventRouter != nil {
-					target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
-					if err != nil {
-						return cerror.Trace(err)
-					}
-					if partition != target {
-						log.Panic("RowChangedEvent dispatched to wrong partition",
-							zap.Int32("obtained", partition),
-							zap.Int32("expected", target),
-							zap.Int32("partitionNum", c.option.partitionNum),
-							zap.Any("row", row),
-						)
-					}
+				target, _, err := c.eventRouter.GetPartitionForRowChange(row, c.option.partitionNum)
+				if err != nil {
+					return cerror.Trace(err)
+				}
+				if partition != target {
+					log.Panic("RowChangedEvent dispatched to wrong partition",
+						zap.Int32("obtained", partition),
+						zap.Int32("expected", target),
+						zap.Int32("partitionNum", c.option.partitionNum),
+						zap.Any("row", row),
+					)
 				}
 
-				globalWatermark := atomic.LoadUint64(&c.globalWatermark)
 				watermark := atomic.LoadUint64(&sink.watermark)
 				if row.CommitTs <= watermark {
 					log.Warn("row changed event fallback, commitTs <= watermark, ignore it",
 						zap.Uint64("commitTs", row.CommitTs),
 						zap.Uint64("watermark", watermark),
-						zap.Uint64("globalWatermark", globalWatermark),
 						zap.Int32("partition", partition),
 						zap.Any("row", row))
 					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
@@ -693,17 +686,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 
-				if row.CommitTs <= globalWatermark {
-					log.Warn("row changed event fallback row, commitTs <= globalWatermark, ignore it",
-						zap.Uint64("commitTs", row.CommitTs),
-						zap.Uint64("watermark", watermark),
-						zap.Uint64("globalWatermark", globalWatermark),
-						zap.Int32("partition", partition),
-						zap.Any("row", row))
-					// todo: mark the offset after the DDL is fully synced to the downstream mysql.
-					session.MarkMessage(message, "")
-					continue
-				}
 				var partitionID int64
 				if row.Table.IsPartition {
 					partitionID = row.Table.TableID
@@ -739,33 +721,22 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Error(err))
 				}
 
-				globalWatermark := atomic.LoadUint64(&c.globalWatermark)
 				watermark := atomic.LoadUint64(&sink.watermark)
 				if ts < watermark {
 					log.Warn("partition watermark fallback, skip it",
 						zap.Uint64("ts", ts),
 						zap.Uint64("watermark", watermark),
-						zap.Uint64("globalWatermark", globalWatermark),
 						zap.Int32("partition", partition))
 					session.MarkMessage(message, "")
 					continue
 				}
-				if ts < globalWatermark {
-					log.Warn("partition resolved ts fallback, less than globalWatermark, skip it",
-						zap.Uint64("ts", ts),
-						zap.Uint64("watermark", watermark),
-						zap.Uint64("globalWatermark", globalWatermark),
-						zap.Int32("partition", partition))
+				if watermark == ts {
 					session.MarkMessage(message, "")
 					continue
 				}
 
-				log.Debug("update partition resolved ts",
-					zap.Uint64("ts", ts), zap.Int32("partition", partition))
 				atomic.StoreUint64(&sink.watermark, ts)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
-
 				for tableID, group := range eventGroups {
 					events := group.Resolve(ts)
 					if len(events) == 0 {
@@ -849,7 +820,7 @@ func (c *Consumer) popDDL() *model.DDLEvent {
 	return nil
 }
 
-func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
+func (c *Consumer) forEachSink(fn func(sink *partitionSink) error) error {
 	c.sinksMu.Lock()
 	defer c.sinksMu.Unlock()
 	for _, sink := range c.sinks {
@@ -862,7 +833,7 @@ func (c *Consumer) forEachSink(fn func(sink *partitionSinks) error) error {
 
 func (c *Consumer) getGlobalWatermark() uint64 {
 	result := uint64(math.MaxUint64)
-	_ = c.forEachSink(func(sink *partitionSinks) error {
+	_ = c.forEachSink(func(sink *partitionSink) error {
 		a := atomic.LoadUint64(&sink.watermark)
 		if a < result {
 			result = a
@@ -896,8 +867,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 				continue
 			}
 
-			if err := c.forEachSink(func(sink *partitionSinks) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+			if err := c.forEachSink(func(sink *partitionSink) error {
+				return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
 			}); err != nil {
 				return cerror.Trace(err)
 			}
@@ -907,21 +878,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 				return cerror.Trace(err)
 			}
 			c.popDDL()
-
-			globalWatermark = todoDDL.CommitTs
 		}
 
-		if c.globalWatermark > globalWatermark {
-			log.Panic("global watermark fallback",
-				zap.Uint64("globalWatermark", globalWatermark),
-				zap.Uint64("oldGlobalWatermark", c.globalWatermark))
-		}
-
-		if c.globalWatermark < globalWatermark {
-			c.globalWatermark = globalWatermark
-		}
-
-		if err := c.forEachSink(func(sink *partitionSinks) error {
+		if err := c.forEachSink(func(sink *partitionSink) error {
 			return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
 		}); err != nil {
 			return cerror.Trace(err)
@@ -929,7 +888,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 	}
 }
 
-func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs uint64) error {
+func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolvedTs uint64) error {
 	for {
 		select {
 		case <-ctx.Done():
