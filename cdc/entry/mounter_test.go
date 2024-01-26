@@ -1192,6 +1192,27 @@ func TestE2ERowLevelChecksum(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestRowLevelChecksum(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Integrity.IntegrityCheckLevel = integrity.CheckLevelCorrectness
+	helper := NewSchemaTestHelperWithReplicaConfig(t, replicaConfig)
+	defer helper.Close()
+
+	helper.tk.MustExec("set global tidb_enable_row_level_checksum = 1")
+	helper.Tk().MustExec("use test")
+
+	_ = helper.DDL2Event(`CREATE TABLE TBL1 (id int PRIMARY KEY)`)
+	_ = helper.DML2Event(`INSERT INTO TBL1 (id) VALUES(1)`, "test", "TBL1")
+
+	_ = helper.DDL2Event(`ALTER TABLE TBL1 ADD COLUMN v1 INTEGER DEFAULT 0`)
+	_ = helper.DML2Event(`INSERT INTO TBL1 (id) VALUES(2)`, "test", "TBL1")
+
+	_ = helper.DML2Event(`UPDATE TBL1 SET id = 3, v1 = 10 WHERE id = 1`, "test", "TBL1")
+	_ = helper.DML2Event(`UPDATE TBL1 SET v1 = 11 WHERE id = 2`, "test", "TBL1")
+	_ = helper.DML2Event(`INSERT INTO TBL1 (id, v1) VALUES(1000, 1000)`, "test", "TBL1")
+	_ = helper.DML2Event(`UPDATE TBL1 SET v1 = 1001 WHERE id = 1000`, "test", "TBL1")
+}
+
 func TestDecodeRowEnableChecksum(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
