@@ -863,6 +863,10 @@ func (c *Consumer) Run(ctx context.Context) error {
 				return cerror.Trace(err)
 			}
 			c.popDDL()
+
+			if todoDDL.CommitTs < globalWatermark {
+				globalWatermark = todoDDL.CommitTs
+			}
 		}
 
 		if err := c.forEachSink(func(sink *partitionSink) error {
