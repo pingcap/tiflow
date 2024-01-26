@@ -400,7 +400,7 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 // verifyResumeChangefeedConfig verifies the changefeed config before resuming a changefeed
 // currentCheckpointTs is the checkpointTs of the changefeed before it is paused.
 // overrideCheckpointTs is the checkpointTs of the changefeed that specified by the user.
-// overrideCheckpointTs is 0 if the user does not specify it. otherwise it can be smaller or greater than currentCheckpointTs.
+// overrideCheckpointTs is 0 if the user does not specify it.  It can be smaller or greater than currentCheckpointTs.
 // we need to check weather the resuming changefeed is gc safe or not.
 func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	pdClient pd.Client,
