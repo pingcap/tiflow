@@ -169,16 +169,19 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(cfg.ID)
 	}
 
+	ts, logical, err := pdClient.GetTS(ctx)
+	if err != nil {
+		return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs(
+			"fail to get ts from pd client")
+	}
+	currentTSO := oracle.ComposeTS(ts, logical)
 	// verify start ts
 	if cfg.StartTs == 0 {
-		ts, logical, err := pdClient.GetTS(ctx)
-		if err != nil {
-			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs(
-				"fail to get ts from pd client")
-		}
-		cfg.StartTs = oracle.ComposeTS(ts, logical)
+		cfg.StartTs = currentTSO
+	} else if cfg.StartTs > currentTSO {
+		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid start-ts %v, larger than current tso %v", cfg.StartTs, currentTSO)
 	}
-
 	// Ensure the start ts is valid in the next 3600 seconds, aka 1 hour
 	const ensureTTL = 60 * 60
 	if err := gc.EnsureChangefeedStartTsSafety(
