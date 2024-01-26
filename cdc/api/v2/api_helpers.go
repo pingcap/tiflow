@@ -406,7 +406,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 ) error {
 	// If there is no overrideCheckpointTs, then check whether the currentCheckpointTs is smaller than gc safepoint or not.
 	if overrideCheckpointTs == 0 {
-		// use safePoint 0 and ttl 0 to get the minServiceGCSafePoint, this gc service will not be saved to pd
+		// Use safePoint 0 and ttl 0 to get the minServiceGCSafePoint. Note that this gc service safe point will not be saved to pd.
 		minServiceGCSafePoint, err := gc.SetServiceGCSafepoint(ctx, pdClient, "ticdc-check", 0, 0)
 		if err != nil {
 			return errors.Trace(err)
