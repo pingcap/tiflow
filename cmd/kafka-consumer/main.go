@@ -692,7 +692,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				group.Append(row)
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 
 				size := uint64(row.ApproximateBytes())
@@ -718,10 +717,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 						zap.Uint64("ts", ts),
 						zap.Uint64("watermark", watermark),
 						zap.Int32("partition", partition))
-					session.MarkMessage(message, "")
-					continue
-				}
-				if watermark == ts {
 					session.MarkMessage(message, "")
 					continue
 				}
@@ -847,24 +842,23 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		globalWatermark := c.getGlobalWatermark()
-		// handle DDL
 		todoDDL := c.getFrontDDL()
 		if todoDDL != nil {
 			if todoDDL.CommitTs > globalWatermark {
 				log.Info("cannot execute DDL, since the it's CommitTs > globalWatermark",
 					zap.Uint64("commitTs", todoDDL.CommitTs),
 					zap.Uint64("globalWatermark", globalWatermark),
-					zap.Any("DDL", todoDDL))
+					zap.String("DDL", todoDDL.Query))
 				continue
 			}
 
+			// flush all row changed events happened before the DDL first.
 			if err := c.forEachSink(func(sink *partitionSink) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
 				return cerror.Trace(err)
 			}
 
-			// DDL can be executed, do it first.
 			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
 				return cerror.Trace(err)
 			}
