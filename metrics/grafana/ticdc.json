@@ -6572,7 +6572,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 14
+            "y": 34
           },
           "hiddenSeries": false,
           "id": 619,
@@ -6605,9 +6605,9 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "sum(rate(ticdc_sink_txn_worker_busy_ratio{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])/10) by (namespace,changefeed,instance)",
+              "expr": "sum(rate(ticdc_sink_txn_worker_flush_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed,instance,id) /sum(rate(ticdc_sink_txn_worker_total_duration_sum{k8s_cluster=\"$k8s_cluster\",tidb_cluster=\"$tidb_cluster\",namespace=~\"$namespace\",changefeed=~\"$changefeed\",instance=~\"$ticdc_instance\"}[1m])) by (namespace,changefeed,instance,id) *100",
               "interval": "",
-              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}",
+              "legendFormat": "{{namespace}}-{{changefeed}}-{{instance}}-worker-{{id}}",
               "queryType": "randomWalk",
               "refId": "A"
             }
@@ -6670,7 +6670,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 14
+            "y": 34
           },
           "hiddenSeries": false,
           "id": 634,
@@ -6767,7 +6767,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 22
+            "y": 42
           },
           "hiddenSeries": false,
           "id": 635,
@@ -18989,7 +18989,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 1
+            "y": 16
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -19063,7 +19063,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 1
+            "y": 16
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -19137,7 +19137,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 9
+            "y": 24
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -19211,7 +19211,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 9
+            "y": 24
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -19278,7 +19278,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 32
           },
           "hiddenSeries": false,
           "id": 10031,
@@ -19388,7 +19388,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 32
           },
           "hiddenSeries": false,
           "id": 10033,
@@ -21765,5 +21765,5 @@
   "timezone": "browser",
   "title": "${DS_TEST-CLUSTER}-TiCDC",
   "uid": "YiGL8hBZ1",
-  "version": 58
+  "version": 57
 }
