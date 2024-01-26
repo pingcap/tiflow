@@ -904,11 +904,7 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 			if flushedResolvedTs {
 				log.Info("row changed events flushed",
 					zap.Int64("tableID", tableID), zap.Uint64("resolvedTs", resolvedTs.Ts), zap.Uint64("checkpoint", checkpoint.Ts))
-			} else {
-				log.Info("row changed events not flushed",
-					zap.Int64("tableID", tableID), zap.Uint64("resolvedTs", resolvedTs.Ts), zap.Uint64("checkpoint", checkpoint.Ts))
 			}
-
 			sink.flowController.release(checkpoint.Ts)
 			return true
 		})
