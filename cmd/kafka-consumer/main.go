@@ -642,16 +642,6 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if partition == 0 {
 					c.appendDDL(ddl)
 				}
-
-				oldWatermark := atomic.LoadUint64(&sink.watermark)
-				if ddl.CommitTs > oldWatermark {
-					atomic.StoreUint64(&sink.watermark, ddl.CommitTs)
-					log.Info("update local watermark since new DDL is received",
-						zap.Uint64("watermark", ddl.CommitTs),
-						zap.Uint64("oldWatermark", oldWatermark),
-						zap.String("query", ddl.Query))
-				}
-				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				session.MarkMessage(message, "")
 			case model.MessageTypeRow:
 				row, err := decoder.NextRowChangedEvent()
@@ -868,7 +858,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			}
 
 			if err := c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
+				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
 				return cerror.Trace(err)
 			}
@@ -911,6 +901,14 @@ func syncFlushRowChangedEvents(ctx context.Context, sink *partitionSink, resolve
 			if !checkpoint.EqualOrGreater(resolvedTs) {
 				flushedResolvedTs = false
 			}
+			if flushedResolvedTs {
+				log.Info("row changed events flushed",
+					zap.Int64("tableID", tableID), zap.Uint64("resolvedTs", resolvedTs.Ts), zap.Uint64("checkpoint", checkpoint.Ts))
+			} else {
+				log.Info("row changed events not flushed",
+					zap.Int64("tableID", tableID), zap.Uint64("resolvedTs", resolvedTs.Ts), zap.Uint64("checkpoint", checkpoint.Ts))
+			}
+
 			sink.flowController.release(checkpoint.Ts)
 			return true
 		})
