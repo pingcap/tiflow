@@ -119,7 +119,10 @@ func TestPrepareDML(t *testing.T) {
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{
 						nil,
 						{
@@ -135,7 +138,6 @@ func TestPrepareDML(t *testing.T) {
 							Value: 1,
 						},
 					},
-					IndexColumns: [][]int{{1, 2}},
 				},
 			},
 			expected: &preparedDMLs{
@@ -152,7 +154,10 @@ func TestPrepareDML(t *testing.T) {
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{
 						nil,
 						{
@@ -168,7 +173,6 @@ func TestPrepareDML(t *testing.T) {
 							Value: 2,
 						},
 					},
-					IndexColumns: [][]int{{1, 2}},
 				},
 			},
 			expected: &preparedDMLs{
@@ -328,9 +332,13 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 
 	rows := []*model.RowChangedEvent{
 		{
-			StartTs:  1,
-			CommitTs: 2,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:         1,
+			CommitTs:        2,
+			PhysicalTableID: 1,
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1"},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -345,12 +353,15 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 					Value: "test",
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 		{
-			StartTs:  5,
-			CommitTs: 6,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			StartTs:         5,
+			CommitTs:        6,
+			PhysicalTableID: 1,
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1"},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -365,7 +376,6 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 					Value: "test",
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -391,7 +401,11 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	rows := []*model.RowChangedEvent{
 		{
-			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			PhysicalTableID: 1,
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1"},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -400,10 +414,13 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 					Value: 1,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 		{
-			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			PhysicalTableID: 1,
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1"},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -412,7 +429,6 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 					Value: 2,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -464,7 +480,10 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	rows := []*model.RowChangedEvent{
 		{
-			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -473,10 +492,12 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 					Value: 1,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 		{
-			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -485,7 +506,6 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 					Value: 2,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -537,7 +557,10 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	rows := []*model.RowChangedEvent{
 		{
-			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -546,10 +569,12 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 					Value: 1,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 		{
-			Table: &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -558,7 +583,6 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 					Value: 2,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -617,7 +641,10 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 			StartTs:       2,
 			CommitTs:      3,
 			ReplicatingTs: 1,
-			Table:         &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -626,7 +653,6 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 					Value: 1,
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -842,7 +868,10 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		{
 			StartTs:  1,
 			CommitTs: 2,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -857,12 +886,14 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 					Value: "test",
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 		{
 			StartTs:  2,
 			CommitTs: 3,
-			Table:    &model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+			TableInfo: &model.TableInfo{
+				TableName:          model.TableName{Schema: "s1", Table: "t1", TableID: 1},
+				IndexColumnsOffset: [][]int{{0}},
+			},
 			Columns: []*model.Column{
 				{
 					Name:  "a",
@@ -877,7 +908,6 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 					Value: "test",
 				},
 			},
-			IndexColumns: [][]int{{0}},
 		},
 	}
 
@@ -912,7 +942,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813514,
 					CommitTs:      418658114257813515,
 					ReplicatingTs: 418658114257813513,
-					Table:         &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -942,7 +974,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813514,
 					CommitTs:      418658114257813515,
 					ReplicatingTs: 418658114257813513,
-					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "pk"},
+					},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -970,7 +1004,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
-					Table:         &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -1012,7 +1048,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
-					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "pk"},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -1052,7 +1090,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
-					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "pk"},
+					},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -1069,7 +1109,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813515,
-					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "pk"},
+					},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -1100,7 +1142,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813518,
-					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "pk"},
+					},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -1130,7 +1174,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813518,
-					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "pk"},
+					},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -1147,7 +1193,9 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					StartTs:       418658114257813516,
 					CommitTs:      418658114257813517,
 					ReplicatingTs: 418658114257813518,
-					Table:         &model.TableName{Schema: "common_1", Table: "pk"},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{Schema: "common_1", Table: "pk"},
+					},
 					Columns: []*model.Column{nil, {
 						Name:  "a1",
 						Type:  mysql.TypeLong,
@@ -1211,7 +1259,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1226,13 +1277,15 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("你好"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1247,7 +1300,6 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("世界"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 			},
@@ -1265,7 +1317,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1280,13 +1335,15 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: "你好",
 					}},
-					IndexColumns:        [][]int{{1, 1}},
 					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1301,7 +1358,6 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.HandleKeyFlag,
 						Value: "世界",
 					}},
-					IndexColumns:        [][]int{{2, 2}},
 					ApproximateDataSize: 10,
 				},
 			},
@@ -1320,7 +1376,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1349,13 +1408,15 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("测试"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 12,
 				},
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1384,7 +1445,6 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("北京"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 12,
 				},
 			},
@@ -1409,7 +1469,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1424,13 +1487,15 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("你好"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1445,13 +1510,15 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("世界"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1466,13 +1533,15 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: "你好",
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1501,13 +1570,15 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("测试"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1536,7 +1607,6 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("北京"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 			},
@@ -1569,7 +1639,10 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1600,13 +1673,15 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("测试"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1637,7 +1712,6 @@ func TestPrepareBatchDMLs(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: []byte("北京"),
 					}},
-					IndexColumns:        [][]int{{1, 2}},
 					ApproximateDataSize: 10,
 				},
 			},
@@ -1687,7 +1761,10 @@ func TestGroupRowsByType(t *testing.T) {
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1701,12 +1778,14 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}},
-					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1720,12 +1799,14 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1739,12 +1820,14 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813514,
 					CommitTs: 418658114257813515,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					PreColumns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1758,7 +1841,6 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{1, 2}},
 				},
 			},
 			maxTxnRow: 2,
@@ -1769,7 +1851,10 @@ func TestGroupRowsByType(t *testing.T) {
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1783,12 +1868,14 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 1,
 					}},
-					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1802,12 +1889,14 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1821,12 +1910,14 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{1, 2}},
 				},
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1840,33 +1931,15 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{1, 2}},
-				},
-
-				{
-					StartTs:  418658114257813516,
-					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
-					Columns: []*model.Column{nil, {
-						Name: "a1",
-						Type: mysql.TypeLong,
-						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 2,
-					}, {
-						Name: "a3",
-						Type: mysql.TypeLong,
-						Flag: model.BinaryFlag | model.MultipleKeyFlag |
-							model.HandleKeyFlag | model.UniqueKeyFlag,
-						Value: 2,
-					}},
-					IndexColumns: [][]int{{1, 2}},
 				},
 
 				{
 					StartTs:  418658114257813516,
 					CommitTs: 418658114257813517,
-					Table:    &model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
 					Columns: []*model.Column{nil, {
 						Name: "a1",
 						Type: mysql.TypeLong,
@@ -1880,7 +1953,28 @@ func TestGroupRowsByType(t *testing.T) {
 							model.HandleKeyFlag | model.UniqueKeyFlag,
 						Value: 2,
 					}},
-					IndexColumns: [][]int{{1, 2}},
+				},
+
+				{
+					StartTs:  418658114257813516,
+					CommitTs: 418658114257813517,
+					TableInfo: &model.TableInfo{
+						TableName:          model.TableName{Schema: "common_1", Table: "uk_without_pk"},
+						IndexColumnsOffset: [][]int{{1, 2}},
+					},
+					Columns: []*model.Column{nil, {
+						Name: "a1",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}, {
+						Name: "a3",
+						Type: mysql.TypeLong,
+						Flag: model.BinaryFlag | model.MultipleKeyFlag |
+							model.HandleKeyFlag | model.UniqueKeyFlag,
+						Value: 2,
+					}},
 				},
 			},
 			maxTxnRow: 4,
@@ -1895,7 +1989,7 @@ func TestGroupRowsByType(t *testing.T) {
 			if len(colums) == 0 {
 				colums = tc.input[0].PreColumns
 			}
-			tableInfo := model.BuildTiDBTableInfo("t", colums, tc.input[0].IndexColumns)
+			tableInfo := model.BuildTiDBTableInfo("t", colums, tc.input[0].TableInfo.IndexColumnsOffset)
 			ms.cfg.MaxTxnRow = tc.maxTxnRow
 			inserts, updates, deletes := ms.groupRowsByType(event, tableInfo, false)
 			for _, rows := range inserts {

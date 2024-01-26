@@ -31,7 +31,9 @@ var (
 	rowCases = [][]*model.RowChangedEvent{
 		{{
 			CommitTs: 1,
-			Table:    &model.TableName{Schema: "test", Table: "t"},
+			TableInfo: &model.TableInfo{
+				TableName: model.TableName{Schema: "test", Table: "t"},
+			},
 			Columns: []*model.Column{{
 				Name:  "col1",
 				Type:  mysql.TypeVarchar,
@@ -41,7 +43,9 @@ var (
 		{
 			{
 				CommitTs: 1,
-				Table:    &model.TableName{Schema: "test", Table: "t"},
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{Schema: "test", Table: "t"},
+				},
 				Columns: []*model.Column{{
 					Name:  "col1",
 					Type:  mysql.TypeVarchar,
@@ -50,8 +54,10 @@ var (
 			},
 			{
 				CommitTs: 2,
-				Table:    &model.TableName{Schema: "test", Table: "t"},
-				Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+				TableInfo: &model.TableInfo{
+					TableName: model.TableName{Schema: "test", Table: "t"},
+				},
+				Columns: []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 			},
 		},
 	}
@@ -161,7 +167,6 @@ func TestCanalAppendRowChangedEventWithCallback(t *testing.T) {
 	_, _, colInfo := tableInfo.GetRowColInfos()
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
 		Columns: []*model.Column{{
 			Name:  "col1",
 			Type:  mysql.TypeVarchar,

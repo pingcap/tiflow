@@ -29,17 +29,17 @@ func getMockTableStatus(tableName string,
 	tableID int64,
 	totalPartition int32,
 ) (model.TopicPartitionKey, *model.RowChangedEvent, *tableStatistic) {
+	schema := "test"
 	tableInfo := &model.TableInfo{
+		TableName: model.TableName{
+			Schema:  schema,
+			Table:   tableName,
+			TableID: tableID,
+		},
 		TableInfo: &timodel.TableInfo{
 			ID:       tableID,
 			UpdateTS: 1,
 		},
-	}
-	schema := "test"
-	table := &model.TableName{
-		Schema:  schema,
-		Table:   tableName,
-		TableID: tableID,
 	}
 	key := model.TopicPartitionKey{
 		Topic:          fmt.Sprintf("%s.%s", schema, tableName),
@@ -47,8 +47,8 @@ func getMockTableStatus(tableName string,
 		TotalPartition: totalPartition,
 	}
 	row := &model.RowChangedEvent{
-		TableInfo: tableInfo,
-		Table:     table,
+		PhysicalTableID: tableID,
+		TableInfo:       tableInfo,
 	}
 	tb := newTableStatus(key, row)
 	return key, row, tb

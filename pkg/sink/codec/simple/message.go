@@ -384,13 +384,9 @@ func buildRowChangedEvent(
 	msg *message, tableInfo *model.TableInfo, enableRowChecksum bool,
 ) (*model.RowChangedEvent, error) {
 	result := &model.RowChangedEvent{
-		CommitTs: msg.CommitTs,
-		Table: &model.TableName{
-			Schema:  msg.Schema,
-			Table:   msg.Table,
-			TableID: msg.TableID,
-		},
-		TableInfo: tableInfo,
+		CommitTs:        msg.CommitTs,
+		PhysicalTableID: msg.TableID,
+		TableInfo:       tableInfo,
 	}
 
 	columns, err := decodeColumns(msg.Data, tableInfo.Columns)
@@ -578,8 +574,8 @@ func newDMLMessage(
 ) (*message, error) {
 	m := &message{
 		Version:            defaultVersion,
-		Schema:             event.Table.Schema,
-		Table:              event.Table.Table,
+		Schema:             event.TableInfo.GetSchemaName(),
+		Table:              event.TableInfo.GetTableName(),
 		TableID:            event.TableInfo.ID,
 		CommitTs:           event.CommitTs,
 		BuildTs:            time.Now().UnixMilli(),

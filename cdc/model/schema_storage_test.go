@@ -16,6 +16,7 @@ package model
 import (
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/parser/model"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	parser_types "github.com/pingcap/tidb/pkg/parser/types"
@@ -174,6 +175,9 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 		},
 		IsCommonHandle: false,
 		PKIsHandle:     false,
+		Partition: &model.PartitionInfo{
+			Enable: true,
+		},
 	}
 	info := WrapTableInfo(1, "test", 0, &tbl)
 
@@ -184,6 +188,10 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 	require.False(t, exists)
 
 	require.Equal(t, "TableInfo, ID: 1071, Name:test.t1, ColNum: 3, IdxNum: 1, PKIsHandle: false", info.String())
+
+	require.Equal(t, "test", info.GetSchemaName())
+	require.Equal(t, "t1", info.GetTableName())
+	require.True(t, info.IsPartitionTable())
 
 	handleColIDs, fts, colInfos := info.GetRowColInfos()
 	require.Equal(t, []int64{-1}, handleColIDs)

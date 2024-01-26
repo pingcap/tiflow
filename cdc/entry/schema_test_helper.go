@@ -15,11 +15,13 @@ package entry
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pingcap/log"
 	ticonfig "github.com/pingcap/tidb/pkg/config"
 	tiddl "github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/domain"
@@ -37,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/zap"
 )
 
 // SchemaTestHelper is a test helper for schema which creates an internal tidb instance to generate DDL jobs with meta information
@@ -194,6 +197,7 @@ func (s *SchemaTestHelper) DML2Event(dml string, schema, table string) *model.Ro
 	polymorphicEvent := model.NewPolymorphicEvent(rawKV)
 	err := s.mounter.DecodeEvent(context.Background(), polymorphicEvent)
 	require.NoError(s.t, err)
+	log.Info("fizz dml event", zap.String("key", hex.EncodeToString(polymorphicEvent.RawKV.Key)))
 	return polymorphicEvent.Row
 }
 

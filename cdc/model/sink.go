@@ -277,9 +277,9 @@ func (r *RedoLog) TrySplitAndSortUpdateEvent(_ string) error {
 
 // RedoRowChangedEvent represents the DML event used in RedoLog
 type RedoRowChangedEvent struct {
-	Row        *RowChangedEvent `msg:"row"`
-	Columns    []RedoColumn     `msg:"columns"`
-	PreColumns []RedoColumn     `msg:"pre-columns"`
+	Row        *RowChangedEventInRedoLog `msg:"row"`
+	Columns    []RedoColumn              `msg:"columns"`
+	PreColumns []RedoColumn              `msg:"pre-columns"`
 }
 
 // RedoDDLEvent represents DDL event used in redo log persistent
@@ -291,8 +291,21 @@ type RedoDDLEvent struct {
 
 // ToRedoLog converts row changed event to redo log
 func (r *RowChangedEvent) ToRedoLog() *RedoLog {
+	rowInRedoLog := &RowChangedEventInRedoLog{
+		StartTs:  r.StartTs,
+		CommitTs: r.CommitTs,
+		Table: &TableName{
+			Schema:      r.TableInfo.GetSchemaName(),
+			Table:       r.TableInfo.GetTableName(),
+			TableID:     r.PhysicalTableID,
+			IsPartition: r.TableInfo.IsPartitionTable(),
+		},
+		Columns:      r.Columns,
+		PreColumns:   r.PreColumns,
+		IndexColumns: r.TableInfo.IndexColumnsOffset,
+	}
 	return &RedoLog{
-		RedoRow: RedoRowChangedEvent{Row: r},
+		RedoRow: RedoRowChangedEvent{Row: rowInRedoLog},
 		Type:    RedoLogTypeRow,
 	}
 }
@@ -312,10 +325,10 @@ type RowChangedEvent struct {
 
 	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	// Table contains the table name and table ID.
-	// NOTICE: We store the physical table ID here, not the logical table ID.
-	Table    *TableName         `json:"table" msg:"table"`
+	PhysicalTableID int64 `json:"physical-tbl-id" msg:"physical-tbl-id"`
+
 	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
+
 	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
 	// not the physical ID.
 	// For normal table, there is only one ID, which is the physical ID.
@@ -328,9 +341,8 @@ type RowChangedEvent struct {
 	// So be careful when using the TableInfo.
 	TableInfo *TableInfo `json:"-" msg:"-"`
 
-	Columns      []*Column `json:"columns" msg:"columns"`
-	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
-	IndexColumns [][]int   `json:"-" msg:"index-columns"`
+	Columns    []*Column `json:"columns" msg:"columns"`
+	PreColumns []*Column `json:"pre-columns" msg:"pre-columns"`
 
 	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
 	// and TiCDC set the integrity check level to the correctness.
@@ -344,6 +356,20 @@ type RowChangedEvent struct {
 	SplitTxn bool `json:"-" msg:"-"`
 	// ReplicatingTs is ts when a table starts replicating events to downstream.
 	ReplicatingTs Ts `json:"-" msg:"-"`
+}
+
+// RowChangedEventInRedoLog is used to store RowChangedEvent in redo log v2 format
+type RowChangedEventInRedoLog struct {
+	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
+	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
+
+	// Table contains the table name and table ID.
+	// NOTICE: We store the physical table ID here, not the logical table ID.
+	Table *TableName `json:"table" msg:"table"`
+
+	Columns      []*Column `json:"columns" msg:"columns"`
+	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
+	IndexColumns [][]int   `json:"-" msg:"index-columns"`
 }
 
 // txnRows represents a set of events that belong to the same transaction.
@@ -480,12 +506,8 @@ func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
 // ApproximateBytes returns approximate bytes in memory consumed by the event.
 func (r *RowChangedEvent) ApproximateBytes() int {
 	const sizeOfRowEvent = int(unsafe.Sizeof(*r))
-	const sizeOfTable = int(unsafe.Sizeof(*r.Table))
-	const sizeOfIndexes = int(unsafe.Sizeof(r.IndexColumns[0]))
-	const sizeOfInt = int(unsafe.Sizeof(int(0)))
 
-	// Size of table name
-	size := len(r.Table.Schema) + len(r.Table.Table) + sizeOfTable
+	size := 0
 	// Size of cols
 	for i := range r.Columns {
 		size += r.Columns[i].ApproximateBytes
@@ -495,11 +517,6 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 		if r.PreColumns[i] != nil {
 			size += r.PreColumns[i].ApproximateBytes
 		}
-	}
-	// Size of index columns
-	for i := range r.IndexColumns {
-		size += len(r.IndexColumns[i]) * sizeOfInt
-		size += sizeOfIndexes
 	}
 	// Size of an empty row event
 	size += sizeOfRowEvent
@@ -858,8 +875,8 @@ func NewBootstrapDDLEvent(tableInfo *TableInfo) *DDLEvent {
 //
 //msgp:ignore SingleTableTxn
 type SingleTableTxn struct {
-	Table     *TableName
-	TableInfo *TableInfo
+	PhysicalTableID int64
+	TableInfo       *TableInfo
 	// TableInfoVersion is the version of the table info, it is used to generate data path
 	// in storage sink. Generally, TableInfoVersion equals to `SingleTableTxn.TableInfo.Version`.
 	// Besides, if one table is just scheduled to a new processor, the TableInfoVersion should be
@@ -874,6 +891,11 @@ type SingleTableTxn struct {
 // GetCommitTs returns the commit timestamp of the transaction.
 func (t *SingleTableTxn) GetCommitTs() uint64 {
 	return t.CommitTs
+}
+
+// GetPhysicalTableID returns the physical table id of the table in the transaction
+func (t *SingleTableTxn) GetPhysicalTableID() int64 {
+	return t.PhysicalTableID
 }
 
 // TrySplitAndSortUpdateEvent split update events if unique key is updated
@@ -1000,11 +1022,11 @@ func splitUpdateEvent(
 
 // Append adds a row changed event into SingleTableTxn
 func (t *SingleTableTxn) Append(row *RowChangedEvent) {
-	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.Table.TableID != t.Table.TableID {
+	if row.StartTs != t.StartTs || row.CommitTs != t.CommitTs || row.PhysicalTableID != t.GetPhysicalTableID() {
 		log.Panic("unexpected row change event",
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),
-			zap.Any("table", t.Table),
+			zap.Any("table", t.GetPhysicalTableID()),
 			zap.Any("row", row))
 	}
 	t.Rows = append(t.Rows, row)

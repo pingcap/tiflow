@@ -87,7 +87,6 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	}
 	row := &model.RowChangedEvent{
 		CommitTs:  1,
-		Table:     &model.TableName{Schema: "test", Table: "t"},
 		TableInfo: tableInfo,
 		Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "aa"}},
 		ColInfos:  colInfo,
@@ -147,8 +146,13 @@ func TestBatchEncode_Batch(t *testing.T) {
 	tableStatus := state.TableSinkSinking
 	row := &model.RowChangedEvent{
 		CommitTs: 1,
-		Table:    &model.TableName{Schema: "a", Table: "b"},
-		Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "a",
+				Table:  "b",
+			},
+		},
+		Columns: []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 	}
 
 	for i := 0; i < 512; i++ {
@@ -196,8 +200,13 @@ func TestBatchEncode_Group(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 1,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "a",
+							Table:  "b",
+						},
+					},
+					Columns: []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -208,8 +217,13 @@ func TestBatchEncode_Group(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "a",
+							Table:  "b",
+						},
+					},
+					Columns: []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -220,8 +234,13 @@ func TestBatchEncode_Group(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 3,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "a",
+							Table:  "b",
+						},
+					},
+					Columns: []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -232,8 +251,13 @@ func TestBatchEncode_Group(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
-					Table:    &model.TableName{Schema: "aa", Table: "bb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "aa",
+							Table:  "bb",
+						},
+					},
+					Columns: []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -244,8 +268,13 @@ func TestBatchEncode_Group(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
-					Table:    &model.TableName{Schema: "aaa", Table: "bbb"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "aaa",
+							Table:  "bbb",
+						},
+					},
+					Columns: []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
 				Callback:  func() {},
 				SinkState: &tableStatus,
@@ -295,7 +324,6 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  1,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "col1", Type: 1, Value: "aa"}},
 					ColInfos:  colInfo,
@@ -309,8 +337,13 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 2,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "a",
+							Table:  "b",
+						},
+					},
+					Columns: []*model.Column{{Name: "col1", Type: 1, Value: "bb"}},
 				},
 				Callback:  func() {},
 				SinkState: &replicatingStatus,
@@ -321,8 +354,13 @@ func TestBatchEncode_GroupWhenTableStopping(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs: 3,
-					Table:    &model.TableName{Schema: "a", Table: "b"},
-					Columns:  []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
+					TableInfo: &model.TableInfo{
+						TableName: model.TableName{
+							Schema: "a",
+							Table:  "b",
+						},
+					},
+					Columns: []*model.Column{{Name: "col1", Type: 1, Value: "cc"}},
 				},
 				Callback:  func() {},
 				SinkState: &stoppedStatus,
@@ -375,7 +413,6 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  1,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "aa"}},
 					ColInfos:  colInfo,
@@ -389,7 +426,6 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  2,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos:  colInfo,
@@ -403,7 +439,6 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  3,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "cc"}},
 					ColInfos:  colInfo,
@@ -417,7 +452,6 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  2,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos:  colInfo,
@@ -431,7 +465,6 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  2,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos:  colInfo,
@@ -445,7 +478,6 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  3,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos:  colInfo,
@@ -534,7 +566,6 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  1,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "aa"}},
 					ColInfos:  colInfo,
@@ -548,7 +579,6 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  2,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "a", Type: mysql.TypeVarchar, Value: "bb"}},
 					ColInfos:  colInfo,
@@ -562,7 +592,6 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
 				Event: &model.RowChangedEvent{
 					CommitTs:  3,
-					Table:     &model.TableName{Schema: "test", Table: "t"},
 					TableInfo: tableInfo,
 					Columns:   []*model.Column{{Name: "col1", Type: mysql.TypeVarchar, Value: "cc"}},
 					ColInfos:  colInfo,

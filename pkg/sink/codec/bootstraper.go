@@ -107,7 +107,7 @@ func (b *bootstrapWorker) addEvent(
 	key model.TopicPartitionKey,
 	row *model.RowChangedEvent,
 ) error {
-	table, ok := b.activeTables.Load(row.Table.TableID)
+	table, ok := b.activeTables.Load(row.PhysicalTableID)
 	if !ok {
 		tb := newTableStatus(key, row)
 		b.activeTables.Store(tb.id, tb)
@@ -220,7 +220,7 @@ type tableStatistic struct {
 
 func newTableStatus(key model.TopicPartitionKey, row *model.RowChangedEvent) *tableStatistic {
 	res := &tableStatistic{
-		id:    row.Table.TableID,
+		id:    row.PhysicalTableID,
 		topic: key.Topic,
 	}
 	res.totalPartition.Store(key.TotalPartition)
