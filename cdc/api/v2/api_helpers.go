@@ -92,7 +92,7 @@ type APIV2Helpers interface {
 		pdClient pd.Client,
 		gcServiceID string,
 		changefeedID model.ChangeFeedID,
-		checkpointTs uint64,
+		overrideCheckpointTs uint64,
 	) error
 
 	// getPDClient returns a PDClient given the PD cluster addresses and a credential
@@ -398,11 +398,15 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	return newInfo, newUpInfo, nil
 }
 
+// verifyResumeChangefeedConfig verifies the changefeed config before resuming a changefeed
+// overrideCheckpointTs is the checkpointTs of the changefeed that specified by the user.
+// or it is the checkpointTs of the changefeed before it is paused.
+// we need to check weather the resuming changefeed is gc safe or not.
 func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	pdClient pd.Client,
 	gcServiceID string,
 	changefeedID model.ChangeFeedID,
-	checkpointTs uint64,
+	overrideCheckpointTs uint64,
 ) error {
 	if checkpointTs == 0 {
 		return nil
@@ -425,7 +429,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 		pdClient,
 		gcServiceID,
 		changefeedID,
-		gcTTL, checkpointTs)
+		gcTTL, overrideCheckpointTs)
 	if err != nil {
 		if !cerror.ErrStartTsBeforeGC.Equal(err) {
 			return cerror.ErrPDEtcdAPIError.Wrap(err)
