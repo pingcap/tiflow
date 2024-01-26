@@ -10,6 +10,7 @@ require (
 	github.com/IBM/sarama v1.41.2
 	github.com/KimMachineGun/automemlimit v0.2.4
 	github.com/VividCortex/mysqlerr v1.0.0
+	github.com/actgardner/gogen-avro/v10 v10.2.1
 	github.com/apache/pulsar-client-go v0.11.0
 	github.com/aws/aws-sdk-go v1.45.25
 	github.com/aws/aws-sdk-go-v2 v1.19.1
