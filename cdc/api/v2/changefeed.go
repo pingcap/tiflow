@@ -673,6 +673,11 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
+	status, err := h.capture.StatusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
 
 	var pdClient pd.Client
 	// if PDAddrs is empty, use the default pdClient
@@ -694,13 +699,17 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		}
 		defer pdClient.Close()
 	}
-
+	// If there is no overrideCheckpointTs, then check whether the currentCheckpointTs is smaller than gc safepoint or not.
+	newCheckpointTs := status.CheckpointTs
+	if cfg.OverwriteCheckpointTs != 0 {
+		newCheckpointTs = cfg.OverwriteCheckpointTs
+	}
 	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,
 		pdClient,
 		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 		changefeedID,
-		cfg.OverwriteCheckpointTs); err != nil {
+		newCheckpointTs); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -728,9 +737,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	}
 
 	if err := api.HandleOwnerJob(ctx, h.capture, job); err != nil {
-		if cfg.OverwriteCheckpointTs > 0 {
-			needRemoveGCSafePoint = true
-		}
+		needRemoveGCSafePoint = true
 		_ = c.Error(err)
 		return
 	}
