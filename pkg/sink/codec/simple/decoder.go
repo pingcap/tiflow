@@ -315,7 +315,7 @@ func newMemoryTableInfoProvider() *memoryTableInfoProvider {
 }
 
 func (m *memoryTableInfoProvider) Write(info *model.TableInfo) {
-	if info == nil {
+	if info == nil || (info.TableName.Schema == "" && info.TableName.Table == "") {
 		return
 	}
 	key := tableSchemaKey{
