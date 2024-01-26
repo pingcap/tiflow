@@ -361,12 +361,10 @@
             "type": "map",
             "values": [
               "null",
-              "int",
               "long",
               "float",
               "double",
               "string",
-              "boolean",
               "bytes"
             ],
             "default": null
