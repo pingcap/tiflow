@@ -690,7 +690,9 @@ func TestResumeChangefeed(t *testing.T) {
 	pdClient := &mockPDClient{}
 	etcdClient := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	mockUpManager := upstream.NewManager4Test(pdClient)
-	statusProvider := &mockStatusProvider{}
+	statusProvider := &mockStatusProvider{
+		changefeedStatus: &model.ChangeFeedStatusForAPI{},
+	}
 
 	etcdClient.EXPECT().
 		GetEnsureGCServiceID(gomock.Any()).
