@@ -767,7 +767,7 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 	}
 	// If there is no overrideCheckpointTs, then check whether the currentCheckpointTs is smaller than gc safepoint or not.
 	newCheckpointTs := status.CheckpointTs
-	if cfg.OverwriteCheckpointTs == 0 {
+	if cfg.OverwriteCheckpointTs != 0 {
 		newCheckpointTs = cfg.OverwriteCheckpointTs
 	}
 	if err := h.helpers.verifyResumeChangefeedConfig(
