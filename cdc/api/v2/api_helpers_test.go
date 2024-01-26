@@ -106,7 +106,7 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	require.Error(t, cerror.ErrOldValueNotEnabled, err)
 
 	// invalid start-ts, in the future
-	cfg.StartTs = 100000000000000000
+	cfg.StartTs = 1000000000000000000
 	ctrl.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, ctrl, "en", storage)
 	require.Error(t, cerror.ErrAPIInvalidParam, err)
