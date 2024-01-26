@@ -184,7 +184,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 	// Ensure the start ts is valid in the next 3600 seconds, aka 1 hour
 	const ensureTTL = 60 * 60
-	if err := gc.EnsureChangefeedStartTsSafety(
+	if err = gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,
 		ensureGCServiceID,
