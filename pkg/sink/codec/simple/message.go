@@ -41,45 +41,63 @@ const (
 	defaultVersion = 1
 )
 
-// EventType describes the type of the event.
-type EventType string
+type MessageType string
 
-// The list of event types.
 const (
-	// WatermarkType is the type of the watermark event.
-	WatermarkType EventType = "WATERMARK"
-	// BootstrapType is the type of the bootstrap event.
-	BootstrapType EventType = "BOOTSTRAP"
-	// InsertType is the type of the insert event.
-	InsertType EventType = "INSERT"
-	// UpdateType is the type of the update event.
-	UpdateType EventType = "UPDATE"
-	// DeleteType is the type of the delete event.
-	DeleteType EventType = "DELETE"
+	// MessageTypeWatermark is the type of the watermark event.
+	MessageTypeWatermark MessageType = "WATERMARK"
+	// MessageTypeBootstrap is the type of the bootstrap event.
+	MessageTypeBootstrap MessageType = "BOOTSTRAP"
+	// MessageTypeDDL is the type of the ddl event.
+	MessageTypeDDL MessageType = "DDL"
+	// MessageTypeDML is the type of the row event.
+	MessageTypeDML MessageType = "DML"
 )
 
-func getDDLType(t timodel.ActionType) EventType {
+// DML Message types
+const (
+	// DMLTypeInsert is the type of the insert event.
+	DMLTypeInsert MessageType = "INSERT"
+	// DMLTypeUpdate is the type of the update event.
+	DMLTypeUpdate MessageType = "UPDATE"
+	// DMLTypeDelete is the type of the delete event.
+	DMLTypeDelete MessageType = "DELETE"
+)
+
+// DDL message types
+const (
+	DDLTypeCreate   MessageType = "CREATE"
+	DDLTypeRename   MessageType = "RENAME"
+	DDLTypeCIndex   MessageType = "CINDEX"
+	DDLTypeDIndex   MessageType = "DINDEX"
+	DDLTypeErase    MessageType = "ERASE"
+	DDLTypeTruncate MessageType = "TRUNCATE"
+	DDLTypeAlter    MessageType = "ALTER"
+	DDLTypeQuery    MessageType = "QUERY"
+)
+
+func getDDLType(t timodel.ActionType) MessageType {
 	switch t {
 	case timodel.ActionCreateTable:
-		return "CREATE"
+		return DDLTypeCreate
 	case timodel.ActionRenameTable, timodel.ActionRenameTables:
-		return "RENAME"
+		return DDLTypeRename
 	case timodel.ActionAddIndex, timodel.ActionAddForeignKey, timodel.ActionAddPrimaryKey:
-		return "CINDEX"
+		return DDLTypeCIndex
 	case timodel.ActionDropIndex, timodel.ActionDropForeignKey, timodel.ActionDropPrimaryKey:
-		return "DINDEX"
+		return DDLTypeDIndex
 	case timodel.ActionDropTable:
-		return "ERASE"
+		return DDLTypeErase
 	case timodel.ActionTruncateTable:
-		return "TRUNCATE"
+		return DDLTypeTruncate
 	case timodel.ActionAddColumn, timodel.ActionDropColumn, timodel.ActionModifyColumn, timodel.ActionRebaseAutoID,
 		timodel.ActionSetDefaultValue, timodel.ActionModifyTableComment, timodel.ActionRenameIndex, timodel.ActionAddTablePartition,
 		timodel.ActionDropTablePartition, timodel.ActionModifyTableCharsetAndCollate, timodel.ActionTruncateTablePartition,
 		timodel.ActionAlterIndexVisibility, timodel.ActionMultiSchemaChange, timodel.ActionReorganizePartition,
 		timodel.ActionAlterTablePartitioning, timodel.ActionRemovePartitioning:
-		return "ALTER"
+		return DDLTypeAlter
 	default:
-		return "QUERY"
+		return DDLTypeQuery
 	}
 }
 
@@ -484,10 +502,10 @@ type checksum struct {
 type message struct {
 	Version int `json:"version"`
 	// Schema and Table is empty for the resolved ts event.
-	Schema  string    `json:"database,omitempty"`
-	Table   string    `json:"table,omitempty"`
-	TableID int64     `json:"tableID,omitempty"`
-	Type    EventType `json:"type"`
+	Schema  string      `json:"database,omitempty"`
+	Table   string      `json:"table,omitempty"`
+	TableID int64       `json:"tableID,omitempty"`
+	Type    MessageType `json:"type"`
 	// SQL is only for the DDL event.
 	SQL      string `json:"sql,omitempty"`
 	CommitTs uint64 `json:"commitTs"`
@@ -516,7 +534,7 @@ type message struct {
 func newResolvedMessage(ts uint64) *message {
 	return &message{
 		Version:  defaultVersion,
-		Type:     WatermarkType,
+		Type:     MessageTypeWatermark,
 		CommitTs: ts,
 		BuildTs:  time.Now().UnixMilli(),
 	}
@@ -529,7 +547,7 @@ func newBootstrapMessage(event *model.DDLEvent) (*message, error) {
 	}
 	msg := &message{
 		Version:     defaultVersion,
-		Type:        BootstrapType,
+		Type:        MessageTypeBootstrap,
 		BuildTs:     time.Now().UnixMilli(),
 		TableSchema: schema,
 	}
@@ -585,19 +603,19 @@ func newDMLMessage(
 	}
 	var err error
 	if event.IsInsert() {
-		m.Type = InsertType
+		m.Type = DMLTypeInsert
 		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsDelete() {
-		m.Type = DeleteType
+		m.Type = DMLTypeDelete
 		m.Old, err = formatColumns(event.PreColumns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
 		}
 	} else if event.IsUpdate() {
-		m.Type = UpdateType
+		m.Type = DMLTypeUpdate
 		m.Data, err = formatColumns(event.Columns, event.ColInfos, onlyHandleKey)
 		if err != nil {
 			return nil, err
