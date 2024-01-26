@@ -397,6 +397,11 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	return newInfo, newUpInfo, nil
 }
 
+// verifyResumeChangefeedConfig verifies the changefeed config before resuming a changefeed
+// currentCheckpointTs is the checkpointTs of the changefeed before it is paused.
+// overrideCheckpointTs is the checkpointTs of the changefeed that specified by the user.
+// overrideCheckpointTs is 0 if the user does not specify it. otherwise it can be smaller or greater than currentCheckpointTs.
+// we need to check weather the resuming changefeed is gc safe or not.
 func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	pdClient pd.Client,
 	gcServiceID string,
@@ -406,15 +411,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 ) error {
 	// If there is no overrideCheckpointTs, then check whether the currentCheckpointTs is smaller than gc safepoint or not.
 	if overrideCheckpointTs == 0 {
-		// Use safePoint 0 and ttl 0 to get the minServiceGCSafePoint. Note that this gc service safe point will not be saved to pd.
-		minServiceGCSafePoint, err := gc.SetServiceGCSafepoint(ctx, pdClient, "ticdc-check", 0, 0)
-		if err != nil {
-			return errors.Trace(err)
-		}
-		if currentCheckpointTs < minServiceGCSafePoint {
-			return cerror.ErrStartTsBeforeGC.GenWithStackByArgs(currentCheckpointTs, minServiceGCSafePoint)
-		}
-		return nil
+		overrideCheckpointTs = currentCheckpointTs
 	}
 
 	// 1h is enough for resuming a changefeed.
