@@ -92,7 +92,6 @@ type APIV2Helpers interface {
 		pdClient pd.Client,
 		gcServiceID string,
 		changefeedID model.ChangeFeedID,
-		currentCheckpointTs uint64,
 		overrideCheckpointTs uint64,
 	) error
 
@@ -398,22 +397,15 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 }
 
 // verifyResumeChangefeedConfig verifies the changefeed config before resuming a changefeed
-// currentCheckpointTs is the checkpointTs of the changefeed before it is paused.
 // overrideCheckpointTs is the checkpointTs of the changefeed that specified by the user.
-// overrideCheckpointTs is 0 if the user does not specify it. otherwise it can be smaller or greater than currentCheckpointTs.
+// or it is the checkpointTs of the changefeed before it is paused.
 // we need to check weather the resuming changefeed is gc safe or not.
 func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	pdClient pd.Client,
 	gcServiceID string,
 	changefeedID model.ChangeFeedID,
-	currentCheckpointTs uint64,
 	overrideCheckpointTs uint64,
 ) error {
-	// If there is no overrideCheckpointTs, then check whether the currentCheckpointTs is smaller than gc safepoint or not.
-	if overrideCheckpointTs == 0 {
-		overrideCheckpointTs = currentCheckpointTs
-	}
-
 	// 1h is enough for resuming a changefeed.
 	gcTTL := int64(60 * 60)
 	err := gc.EnsureChangefeedStartTsSafety(

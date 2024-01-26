@@ -765,14 +765,17 @@ func (h *OpenAPIV2) resumeChangefeed(c *gin.Context) {
 		}
 		defer pdClient.Close()
 	}
-
+	// If there is no overrideCheckpointTs, then check whether the currentCheckpointTs is smaller than gc safepoint or not.
+	newCheckpointTs := status.CheckpointTs
+	if cfg.OverwriteCheckpointTs == 0 {
+		newCheckpointTs = cfg.OverwriteCheckpointTs
+	}
 	if err := h.helpers.verifyResumeChangefeedConfig(
 		ctx,
 		pdClient,
 		h.capture.GetEtcdClient().GetEnsureGCServiceID(gc.EnsureGCServiceResuming),
 		changefeedID,
-		status.CheckpointTs,
-		cfg.OverwriteCheckpointTs); err != nil {
+		newCheckpointTs); err != nil {
 		_ = c.Error(err)
 		return
 	}

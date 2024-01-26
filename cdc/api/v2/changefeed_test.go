@@ -766,7 +766,7 @@ func TestResumeChangefeed(t *testing.T) {
 		Return(pdClient, nil).AnyTimes()
 	helpers.EXPECT().
 		verifyResumeChangefeedConfig(gomock.Any(), gomock.Any(),
-			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(cerrors.ErrStartTsBeforeGC).Times(1)
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(cerrors.ErrStartTsBeforeGC).Times(1)
 	resumeCfg := &ResumeChangefeedConfig{}
 	resumeCfg.OverwriteCheckpointTs = 100
 	body, err := json.Marshal(&resumeCfg)
@@ -786,7 +786,7 @@ func TestResumeChangefeed(t *testing.T) {
 	statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID}
 	helpers.EXPECT().
 		verifyResumeChangefeedConfig(gomock.Any(), gomock.Any(),
-			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	resumeCfg = &ResumeChangefeedConfig{}
 	body, err = json.Marshal(&resumeCfg)
 	require.Nil(t, err)
@@ -804,7 +804,7 @@ func TestResumeChangefeed(t *testing.T) {
 		Return(pdClient, nil).AnyTimes()
 	helpers.EXPECT().
 		verifyResumeChangefeedConfig(gomock.Any(), gomock.Any(),
-			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+			gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 	resumeCfg = &ResumeChangefeedConfig{}
 	resumeCfg.OverwriteCheckpointTs = 100
 	body, err = json.Marshal(&resumeCfg)
