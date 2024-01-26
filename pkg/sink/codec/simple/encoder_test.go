@@ -154,45 +154,76 @@ func TestEncodeDDLSequence(t *testing.T) {
 
 	createTableDDL := "CREATE TABLE `TBL1` (`id` INT PRIMARY KEY AUTO_INCREMENT,`value` VARCHAR(255),`payload` VARCHAR(2000),`a` INT)"
 	createTableDDLEvent := helper.DDL2Event(createTableDDL)
-	//addColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ADD COLUMN `nn` INT")
-	//dropColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` DROP COLUMN `nn`")
-	//changeColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` CHANGE COLUMN `value` `value2` VARCHAR(512)")
-	//modifyColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `value2` VARCHAR(512) FIRST")
+	changeColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` CHANGE COLUMN `value` `value2` VARCHAR(512)")
+	modifyColumnDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `value2` VARCHAR(512) FIRST")
 
 	ctx := context.Background()
 	codecConfig := common.NewConfig(config.ProtocolSimple)
-	b, err := NewBuilder(ctx, codecConfig)
-	require.NoError(t, err)
 
-	enc := b.Build()
-	dec, err := NewDecoder(ctx, codecConfig, nil)
-	require.NoError(t, err)
+	for _, format := range []common.EncodingFormatType{
+		common.EncodingFormatAvro,
+		common.EncodingFormatJSON,
+	} {
+		codecConfig.EncodingFormat = format
+		for _, compressionType := range []string{
+			compression.None,
+			compression.Snappy,
+			compression.LZ4,
+		} {
+			codecConfig.LargeMessageHandle.LargeMessageHandleCompression = compressionType
 
-	m, err := enc.EncodeDDLEvent(createTableDDLEvent)
-	require.NoError(t, err)
+			b, err := NewBuilder(ctx, codecConfig)
+			require.NoError(t, err)
 
-	err = dec.AddKeyValue(m.Key, m.Value)
-	require.NoError(t, err)
+			enc := b.Build()
+			dec, err := NewDecoder(ctx, codecConfig, nil)
+			require.NoError(t, err)
 
-	messageType, hasNext, err := dec.HasNext()
-	require.NoError(t, err)
-	require.True(t, hasNext)
-	require.Equal(t, model.MessageTypeDDL, messageType)
+			m, err := enc.EncodeDDLEvent(createTableDDLEvent)
+			require.NoError(t, err)
 
-	event, err := dec.NextDDLEvent()
-	require.NoError(t, err)
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
 
-	require.Len(t, event.TableInfo.Indices, 1)
-	require.Len(t, event.TableInfo.Columns, 4)
+			messageType, hasNext, err := dec.HasNext()
+			require.NoError(t, err)
+			require.True(t, hasNext)
+			require.Equal(t, model.MessageTypeDDL, messageType)
 
-	//setDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` SET DEFAULT _UTF8MB4'a'")
-	//dropDefaultDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` ALTER COLUMN `payload` DROP DEFAULT")
-	//
-	//autoIncrementDDLEvent := helper.DDL2Event("ALTER TABLE `TBL1` AUTO_INCREMENT = 5")
-	//
-	//modifyColumnDDLEvent2 := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NULL")
-	//modifyColumnDDLEvent3 := helper.DDL2Event("ALTER TABLE `TBL1` MODIFY COLUMN `a` INT NOT NULL")
+			event, err := dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 4)
 
+			m, err = enc.EncodeDDLEvent(changeColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 4)
+
+			m, err = enc.EncodeDDLEvent(modifyColumnDDLEvent)
+			require.NoError(t, err)
+
+			err = dec.AddKeyValue(m.Key, m.Value)
+			require.NoError(t, err)
+
+			_, _, err = dec.HasNext()
+			require.NoError(t, err)
+
+			event, err = dec.NextDDLEvent()
+			require.NoError(t, err)
+			require.Len(t, event.TableInfo.Indices, 1)
+			require.Len(t, event.TableInfo.Columns, 4)
+		}
+	}
 }
 
 func TestEncodeDDLEvent(t *testing.T) {

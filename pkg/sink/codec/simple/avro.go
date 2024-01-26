@@ -30,6 +30,46 @@ import (
 )
 
 func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
+	pkInIndexes := false
+	indexesSchema := make([]interface{}, 0, len(tableInfo.Indices))
+	for _, idx := range tableInfo.Indices {
+		index := map[string]interface{}{
+			"name":     idx.Name.O,
+			"unique":   idx.Unique,
+			"primary":  idx.Primary,
+			"nullable": false,
+		}
+		columns := make([]string, 0, len(idx.Columns))
+		for _, col := range idx.Columns {
+			columns = append(columns, col.Name.O)
+			colInfo := tableInfo.Columns[col.Offset]
+			// An index is not null when all columns of aer not null
+			if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
+				index["nullable"] = true
+			}
+		}
+		index["columns"] = columns
+		if idx.Primary {
+			pkInIndexes = true
+		}
+		indexesSchema = append(indexesSchema, index)
+	}
+
+	// sometimes the primary key is not in the index, we need to find it manually.
+	if !pkInIndexes {
+		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
+		if len(pkColumns) != 0 {
+			index := map[string]interface{}{
+				"name":     "primary",
+				"nullable": false,
+				"primary":  true,
+				"unique":   true,
+				"columns":  pkColumns,
+			}
+			indexesSchema = append(indexesSchema, index)
+		}
+	}
+
 	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
 		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
 	})
@@ -78,46 +118,6 @@ func newTableSchemaMap(tableInfo *model.TableInfo) interface{} {
 		}
 
 		columnsSchema = append(columnsSchema, column)
-	}
-
-	pkInIndexes := false
-	indexesSchema := make([]interface{}, 0, len(tableInfo.Indices))
-	for _, idx := range tableInfo.Indices {
-		index := map[string]interface{}{
-			"name":     idx.Name.O,
-			"unique":   idx.Unique,
-			"primary":  idx.Primary,
-			"nullable": false,
-		}
-		columns := make([]string, 0, len(idx.Columns))
-		for _, col := range idx.Columns {
-			columns = append(columns, col.Name.O)
-			colInfo := tableInfo.Columns[col.Offset]
-			// An index is not null when all columns of aer not null
-			if !mysql.HasNotNullFlag(colInfo.GetFlag()) {
-				index["nullable"] = true
-			}
-		}
-		index["columns"] = columns
-		if idx.Primary {
-			pkInIndexes = true
-		}
-		indexesSchema = append(indexesSchema, index)
-	}
-
-	// sometimes the primary key is not in the index, we need to find it manually.
-	if !pkInIndexes {
-		pkColumns := tableInfo.GetPrimaryKeyColumnNames()
-		if len(pkColumns) != 0 {
-			index := map[string]interface{}{
-				"name":     "primary",
-				"nullable": false,
-				"primary":  true,
-				"unique":   true,
-				"columns":  pkColumns,
-			}
-			indexesSchema = append(indexesSchema, index)
-		}
 	}
 
 	result := map[string]interface{}{

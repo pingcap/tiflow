@@ -276,19 +276,6 @@ type TableSchema struct {
 }
 
 func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
-	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
-		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
-	})
-
-	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
-	for _, col := range tableInfo.Columns {
-		colSchema, err := newColumnSchema(col)
-		if err != nil {
-			return nil, err
-		}
-		columns = append(columns, colSchema)
-	}
-
 	pkInIndexes := false
 	indexes := make([]*IndexSchema, 0, len(tableInfo.Indices))
 	for _, idx := range tableInfo.Indices {
@@ -312,6 +299,19 @@ func newTableSchema(tableInfo *model.TableInfo) (*TableSchema, error) {
 			}
 			indexes = append(indexes, index)
 		}
+	}
+
+	sort.SliceStable(tableInfo.Columns, func(i, j int) bool {
+		return tableInfo.Columns[i].ID < tableInfo.Columns[j].ID
+	})
+
+	columns := make([]*columnSchema, 0, len(tableInfo.Columns))
+	for _, col := range tableInfo.Columns {
+		colSchema, err := newColumnSchema(col)
+		if err != nil {
+			return nil, err
+		}
+		columns = append(columns, colSchema)
 	}
 
 	return &TableSchema{
