@@ -408,7 +408,7 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	overrideCheckpointTs uint64,
 ) error {
-	if checkpointTs == 0 {
+	if overrideCheckpointTs == 0 {
 		return nil
 	}
 
@@ -417,9 +417,9 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 		return cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
 	}
 	currentTSO := oracle.ComposeTS(ts, logical)
-	if checkpointTs > currentTSO {
+	if overrideCheckpointTs > currentTSO {
 		return cerror.ErrAPIInvalidParam.GenWithStack(
-			"invalid checkpoint-ts %v, larger than current tso %v", checkpointTs, currentTSO)
+			"invalid checkpoint-ts %v, larger than current tso %v", overrideCheckpointTs, currentTSO)
 	}
 
 	// 1h is enough for resuming a changefeed.
