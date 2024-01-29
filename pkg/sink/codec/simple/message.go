@@ -41,6 +41,7 @@ const (
 	defaultVersion = 1
 )
 
+// MessageType is the type of the message.
 type MessageType string
 
 const (
