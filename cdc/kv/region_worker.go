@@ -114,8 +114,8 @@ type regionWorker struct {
 
 	metrics *regionWorkerMetrics
 
-	storeAddr string
-
+	storeAddr    string
+	streamCancel func()
 	// how many pending input events
 	inputPending int32
 
@@ -157,23 +157,27 @@ func newRegionWorkerMetrics(changefeedID model.ChangeFeedID, tableID string, sto
 }
 
 func newRegionWorker(
-	ctx context.Context, changefeedID model.ChangeFeedID, s *eventFeedSession, addr string,
+	ctx context.Context,
+	streamCancel context.CancelFunc,
+	changefeedID model.ChangeFeedID,
+	s *eventFeedSession,
+	addr string,
 	pendingRegions *syncRegionFeedStateMap,
 ) *regionWorker {
 	return &regionWorker{
-		parentCtx:     ctx,
-		session:       s,
-		inputCh:       make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
-		outputCh:      s.eventCh,
-		errorCh:       make(chan error, 1),
-		statesManager: newRegionStateManager(-1),
-		rtsManager:    newRegionTsManager(),
-		rtsUpdateCh:   make(chan *rtsUpdateEvent, 1024),
-		storeAddr:     addr,
-		concurrency:   int(s.client.config.KVClient.WorkerConcurrent),
-		metrics:       newRegionWorkerMetrics(changefeedID, strconv.FormatInt(s.tableID, 10), addr),
-		inputPending:  0,
-
+		parentCtx:      ctx,
+		session:        s,
+		inputCh:        make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
+		outputCh:       s.eventCh,
+		errorCh:        make(chan error, 1),
+		statesManager:  newRegionStateManager(-1),
+		rtsManager:     newRegionTsManager(),
+		rtsUpdateCh:    make(chan *rtsUpdateEvent, 1024),
+		storeAddr:      addr,
+		streamCancel:   streamCancel,
+		concurrency:    int(s.client.config.KVClient.WorkerConcurrent),
+		metrics:        newRegionWorkerMetrics(changefeedID, strconv.FormatInt(s.tableID, 10), addr),
+		inputPending:   0,
 		pendingRegions: pendingRegions,
 	}
 }
@@ -595,21 +599,15 @@ func (w *regionWorker) checkErrorReconnect(err error) error {
 }
 
 func (w *regionWorker) cancelStream(delay time.Duration) {
-	cancel, ok := w.session.getStreamCancel(w.storeAddr)
-	if ok {
-		// cancel the stream to trigger strem.Recv with context cancel error
-		// Note use context cancel is the only way to terminate a gRPC stream
-		cancel()
-		// Failover in stream.Recv has 0-100ms delay, the onRegionFail
-		// should be called after stream has been deleted. Add a delay here
-		// to avoid too frequent region rebuilt.
-		time.Sleep(delay)
-	} else {
-		log.Warn("gRPC stream cancel func not found",
-			zap.String("addr", w.storeAddr),
-			zap.String("namespace", w.session.client.changefeed.Namespace),
-			zap.String("changefeed", w.session.client.changefeed.ID))
-	}
+	// cancel the stream to make strem.Recv returns a context cancel error
+	// This will make the receiveFromStream goroutine exit and the stream can
+	// be re-established by the caller.
+	// Note: use context cancel is the only way to terminate a gRPC stream.
+	w.streamCancel()
+	// Failover in stream.Recv has 0-100ms delay, the onRegionFail
+	// should be called after stream has been deleted. Add a delay here
+	// to avoid too frequent region rebuilt.
+	time.Sleep(delay)
 }
 
 func (w *regionWorker) run(enableTableMonitor bool) error {
