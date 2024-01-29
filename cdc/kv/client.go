@@ -671,9 +671,9 @@ func (s *eventFeedSession) requestRegionToStore(
 			// regions map, the old map will be used in old `receiveFromStream`
 			// and won't be deleted until that goroutine exits.
 			pendingRegions := newSyncRegionFeedStateMap()
-			storePendingRegions[stream.id] = pendingRegions
 			streamCtx, streamCancel := context.WithCancel(ctx)
 			stream, err = s.client.newStream(streamCtx, streamCancel, storeAddr, storeID)
+			storePendingRegions[stream.id] = pendingRegions
 			if err != nil {
 				// get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",
