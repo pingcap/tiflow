@@ -357,7 +357,9 @@ type RowChangedEvent struct {
 	SplitTxn bool `json:"-" msg:"-"`
 	// ReplicatingTs is ts when a table starts replicating events to downstream.
 	ReplicatingTs Ts `json:"-" msg:"-"`
-
+	// HandleKey is the handle key of each row changed event.
+	// It is used to identify the row changed event.
+	// It can be common_handle, int_handle or _tidb_rowid
 	HandleKey kv.Handle `json:"handle-key" msg:"handle-key"`
 }
 
