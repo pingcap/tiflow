@@ -858,37 +858,26 @@ func (c *Consumer) Run(ctx context.Context) error {
 				log.Info("finishmark received, but todoDDL.CommitTs > globalWatermark, skip",
 					zap.Uint64("commitTs", todoDDL.CommitTs),
 					zap.Uint64("globalWatermark", globalWatermark), zap.String("DDL", todoDDL.Query))
-				continue
 			} else {
 				log.Info("finishmark received, try to execute the DDL",
 					zap.Uint64("commitTs", todoDDL.CommitTs),
 					zap.Uint64("globalWatermark", globalWatermark), zap.String("DDL", todoDDL.Query))
-			}
-		}
 
-		if todoDDL != nil {
-			//if todoDDL.CommitTs > globalWatermark {
-			//	log.Info("cannot execute DDL, since the it's CommitTs > globalWatermark",
-			//		zap.Uint64("commitTs", todoDDL.CommitTs),
-			//		zap.Uint64("globalWatermark", globalWatermark),
-			//		zap.String("DDL", todoDDL.Query))
-			//	continue
-			//}
+				// flush all row changed events happened before the DDL first.
+				if err := c.forEachSink(func(sink *partitionSink) error {
+					return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+				}); err != nil {
+					return cerror.Trace(err)
+				}
 
-			// flush all row changed events happened before the DDL first.
-			if err := c.forEachSink(func(sink *partitionSink) error {
-				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-			}); err != nil {
-				return cerror.Trace(err)
-			}
+				if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
+					return cerror.Trace(err)
+				}
+				c.popDDL()
 
-			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-				return cerror.Trace(err)
-			}
-			c.popDDL()
-
-			if todoDDL.CommitTs < globalWatermark {
-				globalWatermark = todoDDL.CommitTs
+				if todoDDL.CommitTs < globalWatermark {
+					globalWatermark = todoDDL.CommitTs
+				}
 			}
 		}
 
