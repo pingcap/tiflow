@@ -169,19 +169,21 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		return nil, cerror.ErrChangeFeedAlreadyExists.GenWithStackByArgs(cfg.ID)
 	}
 
+	ts, logical, err := pdClient.GetTS(ctx)
+	if err != nil {
+		return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+	}
+	currentTSO := oracle.ComposeTS(ts, logical)
 	// verify start ts
 	if cfg.StartTs == 0 {
-		ts, logical, err := pdClient.GetTS(ctx)
-		if err != nil {
-			return nil, cerror.ErrPDEtcdAPIError.GenWithStackByArgs(
-				"fail to get ts from pd client")
-		}
-		cfg.StartTs = oracle.ComposeTS(ts, logical)
+		cfg.StartTs = currentTSO
+	} else if cfg.StartTs > currentTSO {
+		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid start-ts %v, larger than current tso %v", cfg.StartTs, currentTSO)
 	}
-
 	// Ensure the start ts is valid in the next 3600 seconds, aka 1 hour
 	const ensureTTL = 60 * 60
-	if err := gc.EnsureChangefeedStartTsSafety(
+	if err = gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,
 		ensureGCServiceID,
@@ -233,7 +235,7 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	}
 
 	// verify sink
-	if err := validator.Validate(ctx,
+	if err = validator.Validate(ctx,
 		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
 		cfg.SinkURI, replicaCfg, nil,
 	); err != nil {
@@ -406,9 +408,23 @@ func (APIV2HelpersImpl) verifyResumeChangefeedConfig(ctx context.Context,
 	changefeedID model.ChangeFeedID,
 	overrideCheckpointTs uint64,
 ) error {
+	if overrideCheckpointTs == 0 {
+		return nil
+	}
+
+	ts, logical, err := pdClient.GetTS(ctx)
+	if err != nil {
+		return cerror.ErrPDEtcdAPIError.GenWithStackByArgs("fail to get ts from pd client")
+	}
+	currentTSO := oracle.ComposeTS(ts, logical)
+	if overrideCheckpointTs > currentTSO {
+		return cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid checkpoint-ts %v, larger than current tso %v", overrideCheckpointTs, currentTSO)
+	}
+
 	// 1h is enough for resuming a changefeed.
 	gcTTL := int64(60 * 60)
-	err := gc.EnsureChangefeedStartTsSafety(
+	err = gc.EnsureChangefeedStartTsSafety(
 		ctx,
 		pdClient,
 		gcServiceID,
