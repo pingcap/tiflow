@@ -714,7 +714,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				watermark := atomic.LoadUint64(&sink.watermark)
-				if ts < watermark {
+				if ts <= watermark {
 					log.Warn("partition watermark fallback, skip it",
 						zap.Uint64("watermark", watermark),
 						zap.Uint64("newWatermark", ts), zap.Int32("partition", partition))
@@ -723,7 +723,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				}
 
 				if atomic.LoadInt32(&c.debugFinishmark) == 1 {
-					log.Info("watermark received", zap.Uint64("watermark", watermark),
+					log.Info("update partition watermark", zap.Uint64("watermark", watermark),
 						zap.Uint64("newWatermark", ts), zap.Int32("partition", partition))
 				}
 
