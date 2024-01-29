@@ -440,6 +440,8 @@ type Consumer struct {
 	option *consumerOption
 
 	upstreamTiDB *sql.DB
+
+	debugFinishmark int32
 }
 
 const (
@@ -784,6 +786,10 @@ func (c *Consumer) appendDDL(ddl *model.DDLEvent) {
 	c.ddlList = append(c.ddlList, ddl)
 	c.ddlWithMaxCommitTs = ddl
 	log.Info("DDL event received", zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
+
+	if strings.Contains(ddl.Query, "finishmark") {
+		atomic.StoreInt32(&c.debugFinishmark, 1)
+	}
 }
 
 func (c *Consumer) getFrontDDL() *model.DDLEvent {
@@ -843,14 +849,31 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		globalWatermark := c.getGlobalWatermark()
 		todoDDL := c.getFrontDDL()
-		if todoDDL != nil {
-			if todoDDL.CommitTs > globalWatermark {
-				log.Info("cannot execute DDL, since the it's CommitTs > globalWatermark",
+
+		if atomic.LoadInt32(&c.debugFinishmark) == 1 {
+			if todoDDL == nil {
+				log.Info("finishmark received, but todoDDL is nil, this should not happens",
+					zap.Uint64("globalWatermark", globalWatermark))
+			} else if todoDDL.CommitTs > globalWatermark {
+				log.Info("finishmark received, but todoDDL.CommitTs > globalWatermark, skip",
 					zap.Uint64("commitTs", todoDDL.CommitTs),
-					zap.Uint64("globalWatermark", globalWatermark),
-					zap.String("DDL", todoDDL.Query))
+					zap.Uint64("globalWatermark", globalWatermark), zap.String("DDL", todoDDL.Query))
 				continue
+			} else {
+				log.Info("finishmark received, try to execute the DDL",
+					zap.Uint64("commitTs", todoDDL.CommitTs),
+					zap.Uint64("globalWatermark", globalWatermark), zap.String("DDL", todoDDL.Query))
 			}
+		}
+
+		if todoDDL != nil {
+			//if todoDDL.CommitTs > globalWatermark {
+			//	log.Info("cannot execute DDL, since the it's CommitTs > globalWatermark",
+			//		zap.Uint64("commitTs", todoDDL.CommitTs),
+			//		zap.Uint64("globalWatermark", globalWatermark),
+			//		zap.String("DDL", todoDDL.Query))
+			//	continue
+			//}
 
 			// flush all row changed events happened before the DDL first.
 			if err := c.forEachSink(func(sink *partitionSink) error {
