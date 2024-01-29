@@ -868,8 +868,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 				log.Info("update minPartitionResolvedTs by DDL",
 					zap.Uint64("globalWatermark", globalWatermark),
 					zap.Any("DDL", todoDDL))
+				globalWatermark = todoDDL.CommitTs
 			}
-			globalWatermark = todoDDL.CommitTs
 		} else if todoDDL != nil && todoDDL.CommitTs > globalWatermark {
 			log.Info("cannot execute DDL, since the it's CommitTs > globalWatermark",
 				zap.Uint64("commitTs", todoDDL.CommitTs),
