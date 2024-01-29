@@ -716,11 +716,15 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				watermark := atomic.LoadUint64(&sink.watermark)
 				if ts < watermark {
 					log.Warn("partition watermark fallback, skip it",
-						zap.Uint64("ts", ts),
 						zap.Uint64("watermark", watermark),
-						zap.Int32("partition", partition))
+						zap.Uint64("newWatermark", ts), zap.Int32("partition", partition))
 					session.MarkMessage(message, "")
 					continue
+				}
+
+				if atomic.LoadInt32(&c.debugFinishmark) == 1 {
+					log.Info("watermark received", zap.Uint64("watermark", watermark),
+						zap.Uint64("newWatermark", ts), zap.Int32("partition", partition))
 				}
 
 				atomic.StoreUint64(&sink.watermark, ts)
@@ -849,9 +853,8 @@ func (c *Consumer) Run(ctx context.Context) error {
 
 		globalWatermark := c.getGlobalWatermark()
 		// handle DDL
-		todoDDL := c.getFrontDDL()
-		if todoDDL != nil && todoDDL.CommitTs <= globalWatermark {
-			// flush DMLs
+		for todoDDL := c.getFrontDDL(); todoDDL != nil && todoDDL.CommitTs <= globalWatermark; todoDDL = c.getFrontDDL() {
+			// flush DMLs before the DDL to downstream
 			if err := c.forEachSink(func(sink *partitionSink) error {
 				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
 			}); err != nil {
@@ -863,18 +866,6 @@ func (c *Consumer) Run(ctx context.Context) error {
 				return cerror.Trace(err)
 			}
 			c.popDDL()
-
-			if todoDDL.CommitTs < globalWatermark {
-				log.Info("update minPartitionResolvedTs by DDL",
-					zap.Uint64("globalWatermark", globalWatermark),
-					zap.Any("DDL", todoDDL))
-				globalWatermark = todoDDL.CommitTs
-			}
-		} else if todoDDL != nil && todoDDL.CommitTs > globalWatermark {
-			log.Info("cannot execute DDL, since the it's CommitTs > globalWatermark",
-				zap.Uint64("commitTs", todoDDL.CommitTs),
-				zap.Uint64("globalWatermark", globalWatermark),
-				zap.String("DDL", todoDDL.Query))
 		}
 
 		if err := c.forEachSink(func(sink *partitionSink) error {
