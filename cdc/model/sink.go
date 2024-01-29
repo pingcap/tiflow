@@ -22,6 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
@@ -356,6 +357,8 @@ type RowChangedEvent struct {
 	SplitTxn bool `json:"-" msg:"-"`
 	// ReplicatingTs is ts when a table starts replicating events to downstream.
 	ReplicatingTs Ts `json:"-" msg:"-"`
+
+	HandleKey kv.Handle `json:"handle-key" msg:"handle-key"`
 }
 
 // RowChangedEventInRedoLog is used to store RowChangedEvent in redo log v2 format

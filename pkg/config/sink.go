@@ -233,6 +233,8 @@ type CSVConfig struct {
 	BinaryEncodingMethod string `toml:"binary-encoding-method" json:"binary-encoding-method"`
 	// output old value
 	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
+	// output handle key
+	OutputHandleKey bool `toml:"output-handle-key" json:"output-handle-key"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {

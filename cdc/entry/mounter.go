@@ -231,6 +231,7 @@ func (m *mounter) unmarshalRowKVEntry(
 		return nil, errors.Trace(err)
 	}
 	base.RecordID = recordID
+	log.Info("hyy RecordID is ", zap.String("recordID", recordID.String()))
 
 	var (
 		row, preRow           map[int64]types.Datum
@@ -581,6 +582,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		StartTs:         row.StartTs,
 		CommitTs:        row.CRTs,
 		RowID:           intRowID,
+		HandleKey:       row.RecordID,
 		PhysicalTableID: row.PhysicalTableID,
 		ColInfos:        extendColumnInfos,
 		TableInfo:       tableInfo,
