@@ -848,37 +848,33 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		globalWatermark := c.getGlobalWatermark()
+		// handle DDL
 		todoDDL := c.getFrontDDL()
-
-		if atomic.LoadInt32(&c.debugFinishmark) == 1 {
-			if todoDDL == nil {
-				log.Info("finishmark received, but todoDDL is nil, this should not happens",
-					zap.Uint64("globalWatermark", globalWatermark))
-			} else if todoDDL.CommitTs > globalWatermark {
-				log.Info("finishmark received, but todoDDL.CommitTs > globalWatermark, skip",
-					zap.Uint64("commitTs", todoDDL.CommitTs),
-					zap.Uint64("globalWatermark", globalWatermark), zap.String("DDL", todoDDL.Query))
-			} else {
-				log.Info("finishmark received, try to execute the DDL",
-					zap.Uint64("commitTs", todoDDL.CommitTs),
-					zap.Uint64("globalWatermark", globalWatermark), zap.String("DDL", todoDDL.Query))
-
-				// flush all row changed events happened before the DDL first.
-				if err := c.forEachSink(func(sink *partitionSink) error {
-					return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
-				}); err != nil {
-					return cerror.Trace(err)
-				}
-
-				if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
-					return cerror.Trace(err)
-				}
-				c.popDDL()
-
-				if todoDDL.CommitTs < globalWatermark {
-					globalWatermark = todoDDL.CommitTs
-				}
+		if todoDDL != nil && todoDDL.CommitTs <= globalWatermark {
+			// flush DMLs
+			if err := c.forEachSink(func(sink *partitionSink) error {
+				return syncFlushRowChangedEvents(ctx, sink, todoDDL.CommitTs)
+			}); err != nil {
+				return cerror.Trace(err)
 			}
+
+			// DDL can be executed, do it first.
+			if err := c.ddlSink.WriteDDLEvent(ctx, todoDDL); err != nil {
+				return cerror.Trace(err)
+			}
+			c.popDDL()
+
+			if todoDDL.CommitTs < globalWatermark {
+				log.Info("update minPartitionResolvedTs by DDL",
+					zap.Uint64("globalWatermark", globalWatermark),
+					zap.Any("DDL", todoDDL))
+			}
+			globalWatermark = todoDDL.CommitTs
+		} else if todoDDL != nil && todoDDL.CommitTs > globalWatermark {
+			log.Info("cannot execute DDL, since the it's CommitTs > globalWatermark",
+				zap.Uint64("commitTs", todoDDL.CommitTs),
+				zap.Uint64("globalWatermark", globalWatermark),
+				zap.String("DDL", todoDDL.Query))
 		}
 
 		if err := c.forEachSink(func(sink *partitionSink) error {
