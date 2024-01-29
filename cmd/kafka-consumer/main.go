@@ -844,6 +844,8 @@ func (c *Consumer) getGlobalWatermark() uint64 {
 func (c *Consumer) Run(ctx context.Context) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
+
+	var globalCommitTs uint64
 	for {
 		select {
 		case <-ctx.Done():
@@ -868,11 +870,19 @@ func (c *Consumer) Run(ctx context.Context) error {
 			c.popDDL()
 		}
 
+		if globalWatermark <= globalCommitTs {
+			log.Info("skip flush row changed event because globalWatermark <= oldCommitTs",
+				zap.Uint64("globalWatermark", globalWatermark),
+				zap.Uint64("globalCommitTs", globalCommitTs))
+			continue
+		}
+
 		if err := c.forEachSink(func(sink *partitionSink) error {
 			return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
 		}); err != nil {
 			return cerror.Trace(err)
 		}
+		globalCommitTs = globalWatermark
 	}
 }
 
