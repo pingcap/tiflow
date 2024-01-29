@@ -673,7 +673,6 @@ func (s *eventFeedSession) requestRegionToStore(
 			pendingRegions := newSyncRegionFeedStateMap()
 			streamCtx, streamCancel := context.WithCancel(ctx)
 			stream, err = s.client.newStream(streamCtx, streamCancel, storeAddr, storeID)
-			storePendingRegions[stream.id] = pendingRegions
 			if err != nil {
 				// get stream failed, maybe the store is down permanently, we should try to relocate the active store
 				log.Warn("get grpc stream client failed",
@@ -698,6 +697,8 @@ func (s *eventFeedSession) requestRegionToStore(
 				s.onRegionFail(ctx, errInfo)
 				continue
 			}
+
+			storePendingRegions[stream.id] = pendingRegions
 			s.addStream(stream)
 			log.Info("creating new stream to store to send request",
 				zap.String("namespace", s.changefeed.Namespace),
