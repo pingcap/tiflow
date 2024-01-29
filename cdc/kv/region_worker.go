@@ -605,8 +605,6 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	// be re-established by the caller.
 	// Note: use context cancel is the only way to terminate a gRPC stream.
 
-	// TODO(dongmen): remove this line after testing.
-	time.Sleep(time.Second * 5)
 	w.streamCancel()
 	// Failover in stream.Recv has 0-100ms delay, the onRegionFail
 	// should be called after stream has been deleted. Add a delay here

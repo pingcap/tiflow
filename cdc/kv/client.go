@@ -769,8 +769,6 @@ func (s *eventFeedSession) requestRegionToStore(
 					zap.String("store", storeAddr),
 					zap.Error(err))
 			}
-			// TODO(dongmen): remove this line after testing.
-			time.Sleep(time.Second * 5)
 			// Delete the stream from the cache so that when next time the store is accessed,
 			// the stream can be re-established.
 			s.deleteStream(stream)
