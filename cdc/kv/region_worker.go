@@ -114,7 +114,8 @@ type regionWorker struct {
 
 	metrics *regionWorkerMetrics
 
-	storeAddr    string
+	storeAddr string
+	// streamCancel is used to cancel the gRPC stream of this region worker's stream.
 	streamCancel func()
 	// how many pending input events
 	inputPending int32
@@ -603,6 +604,9 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	// This will make the receiveFromStream goroutine exit and the stream can
 	// be re-established by the caller.
 	// Note: use context cancel is the only way to terminate a gRPC stream.
+
+	// TODO(dongmen): remove this line after testing.
+	time.Sleep(time.Second * 5)
 	w.streamCancel()
 	// Failover in stream.Recv has 0-100ms delay, the onRegionFail
 	// should be called after stream has been deleted. Add a delay here

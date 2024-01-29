@@ -768,7 +768,8 @@ func (s *eventFeedSession) requestRegionToStore(
 					zap.String("store", storeAddr),
 					zap.Error(err))
 			}
-
+			// TODO(dongmen): remove this line after testing.
+			time.Sleep(time.Second * 5)
 			// Delete the stream from the cache so that when next time the store is accessed,
 			// the stream can be re-established.
 			s.deleteStream(stream)
@@ -1420,7 +1421,7 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 
 	if streamInMap, ok := s.storeStreamsCache[streamToDelete.addr]; ok {
 		if streamInMap.id != streamToDelete.id {
-			log.Info("delete stream failed, stream id mismatch, ignore it",
+			log.Warn("delete stream failed, stream id mismatch, ignore it",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Int64("tableID", s.tableID),
