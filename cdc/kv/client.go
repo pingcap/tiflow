@@ -280,7 +280,9 @@ func (c *CDCClient) newStream(
 			zap.String("changefeed", c.changefeed.ID),
 			zap.Int64("tableID", c.tableID),
 			zap.String("tableName", c.tableName),
-			zap.String("store", addr))
+			zap.String("store", addr),
+			zap.Uint64("storeID", storeID),
+			zap.Uint64("streamID", stream.id))
 		return nil
 	}
 	if c.config.Debug.EnableKVConnectBackOff {
@@ -762,6 +764,7 @@ func (s *eventFeedSession) requestRegionToStore(
 				zap.String("tableName", s.tableName),
 				zap.Uint64("storeID", storeID),
 				zap.String("store", storeAddr),
+				zap.Uint64("streamID", stream.id),
 				zap.Uint64("regionID", regionID),
 				zap.Uint64("requestID", requestID),
 				zap.Error(err))
@@ -771,6 +774,7 @@ func (s *eventFeedSession) requestRegionToStore(
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Int64("tableID", s.tableID),
 					zap.String("tableName", s.tableName),
+					zap.Uint64("streamID", stream.id),
 					zap.Uint64("storeID", storeID),
 					zap.String("store", storeAddr),
 					zap.Error(err))
@@ -1098,10 +1102,8 @@ func (s *eventFeedSession) receiveFromStream(
 	// to call exactly once from outer code logic
 	worker := newRegionWorker(
 		parentCtx,
-		stream.cancel,
-		s.changefeed,
+		stream,
 		s,
-		stream.addr,
 		pendingRegions)
 	defer worker.evictAllRegions()
 
@@ -1179,6 +1181,7 @@ func (s *eventFeedSession) receiveFromStream(
 						zap.String("namespace", s.changefeed.Namespace),
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Int64("tableID", s.tableID),
+						zap.String("tableName", s.tableName),
 						zap.String("store", stream.addr),
 						zap.Uint64("storeID", stream.storeID),
 						zap.Uint64("streamID", stream.id))

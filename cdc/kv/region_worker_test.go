@@ -159,7 +159,11 @@ func TestRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 		&tikv.RPCContext{}), 0)
 	state.sri.lockedRange = &regionlock.LockedRange{}
 	state.start()
-	worker := newRegionWorker(ctx, cancel, model.ChangeFeedID{}, s, "", newSyncRegionFeedStateMap())
+	stream := &eventFeedStream{
+		storeID: 1,
+		id:      2,
+	}
+	worker := newRegionWorker(ctx, stream, s, newSyncRegionFeedStateMap())
 	require.Equal(t, 2, cap(worker.outputCh))
 
 	// Receive prewrite2 with empty value.
@@ -311,7 +315,7 @@ func TestRegionWorkerHandleResolvedTs(t *testing.T) {
 }
 
 func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx := context.Background()
 	s := createFakeEventFeedSession()
 	s.eventCh = make(chan model.RegionFeedEvent, 2)
 	s1 := newRegionFeedState(newSingleRegionInfo(
@@ -322,7 +326,11 @@ func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 	s1.sri.lockedRange = &regionlock.LockedRange{}
 	s1.sri.lockedRange.CheckpointTs.Store(9)
 	s1.start()
-	w := newRegionWorker(ctx, cancel, model.ChangeFeedID{}, s, "", newSyncRegionFeedStateMap())
+	stream := &eventFeedStream{
+		storeID: 1,
+		id:      2,
+	}
+	w := newRegionWorker(ctx, stream, s, newSyncRegionFeedStateMap())
 
 	err := w.handleResolvedTs(ctx, &resolvedTsEvent{
 		resolvedTs: 5,
