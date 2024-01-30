@@ -1438,6 +1438,7 @@ func (s *eventFeedSession) addStream(stream *eventFeedStream) {
 		}
 	}
 	s.storeStreamsCache.m[stream.addr] = stream
+	s.storeStreamsCache.lastAlterTime[stream.addr] = time.Now()
 }
 
 // deleteStream deletes a stream from the session.streams.
