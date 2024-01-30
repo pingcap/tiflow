@@ -273,16 +273,20 @@ func TestEncodeDDLEvent(t *testing.T) {
 			sort.Slice(sortedColumns, func(i, j int) bool {
 				return sortedColumns[i].ID < sortedColumns[j].ID
 			})
+
 			for idx, column := range sortedColumns {
 				require.Equal(t, column.Name.O, columnSchemas[idx].Name)
 			}
 
 			event, err := dec.NextDDLEvent()
+
 			require.NoError(t, err)
 			require.Equal(t, createTableDDLEvent.TableInfo.TableName.TableID, event.TableInfo.TableName.TableID)
 			require.Equal(t, createTableDDLEvent.CommitTs, event.CommitTs)
+
 			// because we don't we don't set startTs in the encoded message,
 			// so the startTs is equal to commitTs
+			
 			require.Equal(t, createTableDDLEvent.CommitTs, event.StartTs)
 			require.Equal(t, createTableDDLEvent.Query, event.Query)
 			require.Equal(t, len(createTableDDLEvent.TableInfo.Columns), len(event.TableInfo.Columns))
