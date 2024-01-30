@@ -204,10 +204,10 @@ func (b *ColumnFlagType) UnsetIsUnsigned() {
 
 // TableName represents name of a table, includes table name and schema name.
 type TableName struct {
-	Schema      string `toml:"db-name" json:"db-name" msg:"db-name"`
-	Table       string `toml:"tbl-name" json:"tbl-name" msg:"tbl-name"`
-	TableID     int64  `toml:"tbl-id" json:"tbl-id" msg:"tbl-id"`
-	IsPartition bool   `toml:"is-partition" json:"is-partition" msg:"is-partition"`
+	Schema      string `toml:"db-name" msg:"db-name"`
+	Table       string `toml:"tbl-name" msg:"tbl-name"`
+	TableID     int64  `toml:"tbl-id" msg:"tbl-id"`
+	IsPartition bool   `toml:"is-partition" msg:"is-partition"`
 }
 
 // String implements fmt.Stringer interface.
@@ -319,15 +319,17 @@ func (d *DDLEvent) ToRedoLog() *RedoLog {
 }
 
 // RowChangedEvent represents a row changed event
+//
+//msgp:ignore RowChangedEvent
 type RowChangedEvent struct {
-	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
-	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
+	StartTs  uint64
+	CommitTs uint64
 
-	RowID int64 `json:"row-id" msg:"-"` // Deprecated. It is empty when the RowID comes from clustered index table.
+	RowID int64 // Deprecated. It is empty when the RowID comes from clustered index table.
 
-	PhysicalTableID int64 `json:"physical-tbl-id" msg:"physical-tbl-id"`
+	PhysicalTableID int64
 
-	ColInfos []rowcodec.ColInfo `json:"column-infos" msg:"-"`
+	ColInfos []rowcodec.ColInfo
 
 	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
 	// not the physical ID.
@@ -339,37 +341,37 @@ type RowChangedEvent struct {
 	// In general, we always use the physical ID to represent a table, but we
 	// record the logical ID from the DDL event(job.BinlogInfo.TableInfo).
 	// So be careful when using the TableInfo.
-	TableInfo *TableInfo `json:"-" msg:"-"`
+	TableInfo *TableInfo
 
-	Columns    []*Column `json:"columns" msg:"columns"`
-	PreColumns []*Column `json:"pre-columns" msg:"pre-columns"`
+	Columns    []*Column
+	PreColumns []*Column
 
 	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
 	// and TiCDC set the integrity check level to the correctness.
-	Checksum *integrity.Checksum `json:"-" msg:"-"`
+	Checksum *integrity.Checksum
 
 	// ApproximateDataSize is the approximate size of protobuf binary
 	// representation of this event.
-	ApproximateDataSize int64 `json:"-" msg:"-"`
+	ApproximateDataSize int64
 
 	// SplitTxn marks this RowChangedEvent as the first line of a new txn.
-	SplitTxn bool `json:"-" msg:"-"`
+	SplitTxn bool
 	// ReplicatingTs is ts when a table starts replicating events to downstream.
-	ReplicatingTs Ts `json:"-" msg:"-"`
+	ReplicatingTs Ts
 }
 
 // RowChangedEventInRedoLog is used to store RowChangedEvent in redo log v2 format
 type RowChangedEventInRedoLog struct {
-	StartTs  uint64 `json:"start-ts" msg:"start-ts"`
-	CommitTs uint64 `json:"commit-ts" msg:"commit-ts"`
+	StartTs  uint64 `msg:"start-ts"`
+	CommitTs uint64 `msg:"commit-ts"`
 
 	// Table contains the table name and table ID.
 	// NOTICE: We store the physical table ID here, not the logical table ID.
-	Table *TableName `json:"table" msg:"table"`
+	Table *TableName `msg:"table"`
 
-	Columns      []*Column `json:"columns" msg:"columns"`
-	PreColumns   []*Column `json:"pre-columns" msg:"pre-columns"`
-	IndexColumns [][]int   `json:"-" msg:"index-columns"`
+	Columns      []*Column `msg:"columns"`
+	PreColumns   []*Column `msg:"pre-columns"`
+	IndexColumns [][]int   `msg:"index-columns"`
 }
 
 // txnRows represents a set of events that belong to the same transaction.
@@ -525,16 +527,16 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 
 // Column represents a column value in row changed event
 type Column struct {
-	Name      string         `json:"name" msg:"name"`
-	Type      byte           `json:"type" msg:"type"`
-	Charset   string         `json:"charset" msg:"charset"`
-	Collation string         `json:"collation" msg:"collation"`
-	Flag      ColumnFlagType `json:"flag" msg:"-"`
-	Value     interface{}    `json:"value" msg:"-"`
-	Default   interface{}    `json:"default" msg:"-"`
+	Name      string         `msg:"name"`
+	Type      byte           `msg:"type"`
+	Charset   string         `msg:"charset"`
+	Collation string         `msg:"collation"`
+	Flag      ColumnFlagType `msg:"-"`
+	Value     interface{}    `msg:"-"`
+	Default   interface{}    `msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
-	ApproximateBytes int `json:"-" msg:"-"`
+	ApproximateBytes int `msg:"-"`
 }
 
 // RedoColumn stores Column change
