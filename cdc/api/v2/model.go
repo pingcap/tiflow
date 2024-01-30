@@ -293,6 +293,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				IncludeCommitTs:      c.Sink.CSVConfig.IncludeCommitTs,
 				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
 				OutputOldValue:       c.Sink.CSVConfig.OutputOldValue,
+				OutputHandleKey:      c.Sink.CSVConfig.OutputHandleKey,
 			}
 		}
 		var pulsarConfig *config.PulsarConfig
@@ -575,6 +576,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				IncludeCommitTs:      cloned.Sink.CSVConfig.IncludeCommitTs,
 				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
 				OutputOldValue:       cloned.Sink.CSVConfig.OutputOldValue,
+				OutputHandleKey:      cloned.Sink.CSVConfig.OutputHandleKey,
 			}
 		}
 		var kafkaConfig *KafkaConfig
@@ -934,6 +936,7 @@ type CSVConfig struct {
 	IncludeCommitTs      bool   `json:"include_commit_ts"`
 	BinaryEncodingMethod string `json:"binary_encoding_method"`
 	OutputOldValue       bool   `json:"output_old_value"`
+	OutputHandleKey      bool   `json:"output_handle_key"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config

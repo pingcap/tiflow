@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -85,6 +86,7 @@ type csvMessage struct {
 	preColumns []any
 	// newRecord indicates whether we encounter a new record.
 	newRecord bool
+	HandleKey kv.Handle
 }
 
 func newCSVMessage(config *common.Config) *csvMessage {
@@ -133,6 +135,9 @@ func (c *csvMessage) encodeMeta(opType string, b *strings.Builder) {
 		} else {
 			c.formatValue(false, b)
 		}
+	}
+	if c.config.OutputHandleKey {
+		c.formatValue(c.HandleKey.String(), b)
 	}
 }
 
@@ -369,6 +374,11 @@ func rowChangedEvent2CSVMsg(csvConfig *common.Config, e *model.RowChangedEvent) 
 		commitTs:   e.CommitTs,
 		newRecord:  true,
 	}
+
+	if csvConfig.OutputHandleKey {
+		csvMsg.HandleKey = e.HandleKey
+	}
+
 	if e.IsDelete() {
 		csvMsg.opType = operationDelete
 		csvMsg.columns, err = rowChangeColumns2CSVColumns(csvConfig, e.PreColumns, e.ColInfos)

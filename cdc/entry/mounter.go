@@ -581,6 +581,7 @@ func (m *mounter) mountRowKVEntry(tableInfo *model.TableInfo, row *rowKVEntry, d
 		StartTs:         row.StartTs,
 		CommitTs:        row.CRTs,
 		RowID:           intRowID,
+		HandleKey:       row.RecordID,
 		PhysicalTableID: row.PhysicalTableID,
 		ColInfos:        extendColumnInfos,
 		TableInfo:       tableInfo,

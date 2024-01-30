@@ -238,7 +238,8 @@ const (
       "null": "\\N",
       "include-commit-ts": true,
       "binary-encoding-method":"base64",
-      "output-old-value": false
+      "output-old-value": false,
+      "output-handle-key": false
     },
     "date-separator": "month",
     "enable-partition-separator": true,
@@ -404,7 +405,9 @@ const (
       "quote": "\"",
       "null": "\\N",
       "include-commit-ts": true,
-      "binary-encoding-method":"base64"
+      "binary-encoding-method":"base64",
+      "output-old-value": false,
+      "output-handle-key": false
     },
     "terminator": "\r\n",
 	"transaction-atomicity": "",
