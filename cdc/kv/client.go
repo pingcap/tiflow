@@ -1444,15 +1444,17 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 				zap.Uint64("streamIDInMap", streamInMap.id))
 			return
 		}
+
 		if lastTime, ok := s.storeStreamsCache.lastDeleteTime[streamToDelete.addr]; ok {
 			if time.Since(lastTime) < streamDeleteInterval {
-				log.Warn("delete stream failed, delete too frequently, wait 1 second",
+				log.Warn(
+					"delete a stream of a same store too frequently, wait a while and try again",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Int64("tableID", s.tableID),
 					zap.String("tableName", s.tableName),
 					zap.Uint64("streamID", streamToDelete.id),
-					zap.Duration("duration", time.Since(lastTime)))
+					zap.Duration("sinceLastTime", time.Since(lastTime)))
 				time.Sleep(streamDeleteInterval - time.Since(lastTime))
 			}
 		}
@@ -1460,6 +1462,7 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 		delete(s.storeStreamsCache.m, streamToDelete.addr)
 		s.storeStreamsCache.lastDeleteTime[streamToDelete.addr] = time.Now()
 	}
+
 	streamToDelete.cancel()
 	log.Info("A stream to store has been removed",
 		zap.String("namespace", s.changefeed.Namespace),
