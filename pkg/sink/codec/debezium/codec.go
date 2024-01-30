@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/hack"
-	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
@@ -44,13 +43,17 @@ type dbzCodec struct {
 func (c *dbzCodec) writeDebeziumFieldValues(
 	writer *util.JSONWriter,
 	fieldName string,
-	cols []*model.Column,
-	colInfos []rowcodec.ColInfo,
+	cols []*model.ColumnData,
+	tableInfo *model.TableInfo,
 ) error {
 	var err error
+	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	writer.WriteObjectField(fieldName, func() {
 		for i, col := range cols {
-			err = c.writeDebeziumFieldValue(writer, col, colInfos[i].Ft)
+			err = c.writeDebeziumFieldValue(
+				writer,
+				model.ColumnData2Column(col, tableInfo),
+				colInfos[i].Ft)
 			if err != nil {
 				break
 			}
@@ -577,16 +580,16 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 				// after: An optional field that specifies the state of the row after the event occurred.
 				// Optional field that specifies the state of the row after the event occurred.
 				// In a delete event value, the after field is null, signifying that the row no longer exists.
-				err = c.writeDebeziumFieldValues(jWriter, "after", e.Columns, e.ColInfos)
+				err = c.writeDebeziumFieldValues(jWriter, "after", e.Columns, e.TableInfo)
 			} else if e.IsDelete() {
 				jWriter.WriteStringField("op", "d")
 				jWriter.WriteNullField("after")
-				err = c.writeDebeziumFieldValues(jWriter, "before", e.PreColumns, e.ColInfos)
+				err = c.writeDebeziumFieldValues(jWriter, "before", e.PreColumns, e.TableInfo)
 			} else if e.IsUpdate() {
 				jWriter.WriteStringField("op", "u")
-				err = c.writeDebeziumFieldValues(jWriter, "before", e.PreColumns, e.ColInfos)
+				err = c.writeDebeziumFieldValues(jWriter, "before", e.PreColumns, e.TableInfo)
 				if err == nil {
-					err = c.writeDebeziumFieldValues(jWriter, "after", e.Columns, e.ColInfos)
+					err = c.writeDebeziumFieldValues(jWriter, "after", e.Columns, e.TableInfo)
 				}
 			}
 		})
@@ -607,7 +610,7 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 					{
 						fieldsBuf := &bytes.Buffer{}
 						fieldsWriter := util.BorrowJSONWriter(fieldsBuf)
-						var validCols []*model.Column
+						var validCols []*model.ColumnData
 						if e.IsInsert() {
 							validCols = e.Columns
 						} else if e.IsDelete() {
@@ -615,8 +618,10 @@ func (c *dbzCodec) EncodeRowChangedEvent(
 						} else if e.IsUpdate() {
 							validCols = e.Columns
 						}
-						for i, col := range validCols {
-							c.writeDebeziumFieldSchema(fieldsWriter, col, e.ColInfos[i].Ft)
+						for _, colData := range validCols {
+							colInfo := e.TableInfo.ForceGetColumnInfo(colData.ColumnID)
+							col := model.ColumnData2Column(colData, e.TableInfo)
+							c.writeDebeziumFieldSchema(fieldsWriter, col, &colInfo.FieldType)
 						}
 						util.ReturnJSONWriter(fieldsWriter)
 						fieldsJSON = fieldsBuf.String()

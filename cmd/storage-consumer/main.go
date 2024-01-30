@@ -284,7 +284,9 @@ func (c *consumer) getNewFiles(
 		return tableDMLMap, err
 	}
 
+	log.Info("dml maps", zap.Any("origDMLIdxMap", origDMLIdxMap), zap.Any("tableDMLIdxMap", c.tableDMLIdxMap))
 	tableDMLMap = diffDMLMaps(c.tableDMLIdxMap, origDMLIdxMap)
+	log.Info("dml maps diff", zap.Any("tableDMLMap", tableDMLMap))
 	return tableDMLMap, err
 }
 
@@ -372,6 +374,10 @@ func (c *consumer) emitDMLEvents(
 			}
 			row.PhysicalTableID = tableID
 			c.tableSinkMap[tableID].AppendRowChangedEvents(row)
+			log.Info("append success",
+				zap.String("table", pathKey.Table),
+				zap.Bool("isDelete", row.IsDelete()),
+				zap.Any("row", row))
 			filteredCnt++
 		}
 	}
@@ -446,6 +452,7 @@ func (c *consumer) parseDMLFilePath(_ context.Context, path string) error {
 		putil.GetOrZero(c.replicationCfg.Sink.DateSeparator),
 		path,
 	)
+	log.Info("get dml key", zap.String("path", path), zap.Uint64("fileIdx", fileIdx))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -463,6 +470,7 @@ func (c *consumer) parseSchemaFilePath(ctx context.Context, path string) error {
 		return errors.Trace(err)
 	}
 	key := schemaKey.GetKey()
+	log.Info("get schema key", zap.String("path", path), zap.String("key", key))
 	if tableDefs, ok := c.tableDefMap[key]; ok {
 		if _, ok := tableDefs[schemaKey.TableVersion]; ok {
 			// Skip if tableDef already exists.
@@ -475,6 +483,7 @@ func (c *consumer) parseSchemaFilePath(ctx context.Context, path string) error {
 	// Read tableDef from schema file and check checksum.
 	var tableDef cloudstorage.TableDefinition
 	schemaContent, err := c.externalStorage.ReadFile(ctx, path)
+	log.Info("get schema content", zap.Any("schemaContent", schemaContent), zap.Any("error", err))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -570,6 +579,7 @@ func (c *consumer) handleNewFiles(
 
 	for _, key := range keys {
 		tableDef := c.mustGetTableDef(key.SchemaPathKey)
+		log.Info("handleNewFiles", zap.Any("key", key), zap.Any("tableDef", tableDef))
 		// if the key is a fake dml path key which is mainly used for
 		// sorting schema.json file before the dml files, then execute the ddl query.
 		if key.PartitionNum == fakePartitionNumForSchemaFile &&

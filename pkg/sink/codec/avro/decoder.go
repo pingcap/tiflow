@@ -108,6 +108,7 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	// for the delete event, only have key part, it holds primary key or the unique key columns.
 	// for the insert / update, extract the value part, it holds all columns.
 	isDelete := len(d.value) == 0
+	log.Info("avro NextRowChangedEvent", zap.Bool("isDelete", isDelete), zap.Any("keyMap", keyMap), zap.Any("keySchema", keySchema))
 	if isDelete {
 		// delete event only have key part, treat it as the value part also.
 		valueMap = keyMap
@@ -135,10 +136,11 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 
+	columns := model.ColumnDatas2Columns(event.Columns, event.TableInfo)
 	if isCorrupted(valueMap) {
 		log.Warn("row data is corrupted",
 			zap.String("topic", d.topic), zap.Uint64("checksum", expectedChecksum))
-		for _, col := range event.Columns {
+		for _, col := range columns {
 			log.Info("data corrupted, print each column for debugging",
 				zap.String("name", col.Name),
 				zap.Any("type", col.Type),
@@ -147,11 +149,10 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 				zap.Any("value", col.Value),
 				zap.Any("default", col.Default))
 		}
-
 	}
 
 	if found {
-		if err := common.VerifyChecksum(event.Columns, uint32(expectedChecksum)); err != nil {
+		if err := common.VerifyChecksum(columns, uint32(expectedChecksum)); err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
@@ -168,6 +169,7 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 	if !ok {
 		return nil, errors.New("schema fields should be a map")
 	}
+	log.Info("assembleEvent")
 
 	columns := make([]*model.Column, 0, len(valueMap))
 	// fields is ordered by the column id, so iterate over it to build columns
@@ -208,6 +210,7 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 		flag := flagFromTiDBType(tidbType)
 		if _, ok := keyMap[colName]; ok {
 			flag.SetIsHandleKey()
+			flag.SetIsPrimaryKey()
 		}
 
 		value, ok := valueMap[colName]
@@ -244,17 +247,17 @@ func assembleEvent(keyMap, valueMap, schema map[string]interface{}, isDelete boo
 
 	event := new(model.RowChangedEvent)
 	event.CommitTs = uint64(commitTs)
-	event.TableInfo = &model.TableInfo{
-		TableName: model.TableName{
-			Schema: schemaName,
-			Table:  tableName,
-		},
+	pkNameSet := make(map[string]struct{}, len(keyMap))
+	for name := range keyMap {
+		log.Info("avro pk name", zap.String("name", name))
+		pkNameSet[name] = struct{}{}
 	}
+	event.TableInfo = model.BuildTableInfoWithPKNames4Test(schemaName, tableName, columns, pkNameSet)
 
 	if isDelete {
-		event.PreColumns = columns
+		event.PreColumns = model.Columns2ColumnDatas(columns, event.TableInfo)
 	} else {
-		event.Columns = columns
+		event.Columns = model.Columns2ColumnDatas(columns, event.TableInfo)
 	}
 
 	return event, nil

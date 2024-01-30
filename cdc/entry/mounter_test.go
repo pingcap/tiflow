@@ -338,12 +338,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			t.Log("ApproximateBytes", tc.tableName, rows-1, row.ApproximateBytes())
 			// TODO: test column flag, column type and index columns
 			if len(row.Columns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.Columns)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, model.ColumnDatas2Columns(row.Columns, tableInfo))
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
-				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.PreColumns)
+				checkSQL, params := prepareCheckSQL(t, tc.tableName, model.ColumnDatas2Columns(row.PreColumns, tableInfo))
 				result := tk.MustQuery(checkSQL, params...)
 				result.Check([][]interface{}{{"1"}})
 			}
@@ -1014,7 +1014,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	for _, tc := range testCases {
 		_, val, _, _, _ := getDefaultOrZeroValue(&tc.ColInfo)
 		require.Equal(t, tc.Res, val, tc.Name)
-		val = GetColumnDefaultValue(&tc.ColInfo)
+		val = model.GetColumnDefaultValue(&tc.ColInfo)
 		require.Equal(t, tc.Default, val, tc.Name)
 	}
 }
@@ -1641,7 +1641,8 @@ func TestBuildTableInfo(t *testing.T) {
 		originTI, err := ddl.BuildTableInfoFromAST(stmt.(*ast.CreateTableStmt))
 		require.NoError(t, err)
 		cdcTableInfo := model.WrapTableInfo(0, "test", 0, originTI)
-		cols, _, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
+		colDatas, _, _, err := datum2Column(cdcTableInfo, map[int64]types.Datum{})
+		cols := model.ColumnDatas2Columns(colDatas, cdcTableInfo)
 		require.NoError(t, err)
 		recoveredTI := model.BuildTiDBTableInfo(cdcTableInfo.TableName.Table, cols, cdcTableInfo.IndexColumnsOffset)
 		handle := sqlmodel.GetWhereHandle(recoveredTI, recoveredTI)

@@ -75,13 +75,15 @@ type avroEncodeResult struct {
 }
 
 func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
-	cols, colInfos := e.HandleKeyColInfos()
+	colDatas, colInfos := e.HandleKeyColInfos()
 	// result may be nil if the event has no handle key columns, this may happen in the force replicate mode.
 	// todo: disallow force replicate mode if using the avro.
-	if len(cols) == 0 {
+	if len(colDatas) == 0 {
 		return nil, nil
 	}
+	log.Info("encodeKey", zap.Any("colDatas", colDatas), zap.Any("colInfos", colInfos))
 
+	cols := model.ColumnDatas2Columns(colDatas, e.TableInfo)
 	keyColumns := &avroEncodeInput{
 		columns:  cols,
 		colInfos: colInfos,
@@ -90,12 +92,14 @@ func (a *BatchEncoder) encodeKey(ctx context.Context, topic string, e *model.Row
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Info("encodeKey after get schema codec")
 
 	native, err := a.columns2AvroData(keyColumns)
 	if err != nil {
 		log.Error("avro: key converting to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
+	log.Info("encodeKey after convert to avro data")
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
 	if err != nil {
@@ -163,9 +167,13 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 		return nil, nil
 	}
 
+	columns := model.ColumnDatas2Columns(e.Columns, e.TableInfo)
+	colInfos := e.TableInfo.GetColInfosForRowChangedEvent()
+	log.Info("encodeValue", zap.Any("colDatas", columns), zap.Any("colInfos", colInfos))
+
 	input := &avroEncodeInput{
-		columns:  e.Columns,
-		colInfos: e.ColInfos,
+		columns:  columns,
+		colInfos: colInfos,
 	}
 	if len(input.columns) == 0 {
 		return nil, nil
@@ -217,6 +225,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 		log.Error("avro encoding key failed", zap.Error(err))
 		return errors.Trace(err)
 	}
+	log.Info("before encodeValue")
 
 	value, err := a.encodeValue(ctx, topic, e)
 	if err != nil {

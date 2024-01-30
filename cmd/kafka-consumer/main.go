@@ -611,9 +611,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			return cerror.Trace(err)
 		}
 
+		log.Info("AddKeyValue", zap.ByteString("key", message.Key), zap.ByteString("value", message.Value))
 		counter := 0
 		for {
 			tp, hasNext, err := decoder.HasNext()
+			log.Info("decoder hasNext", zap.Bool("hasNext", hasNext), zap.Any("tp", tp))
 			if err != nil {
 				log.Panic("decode message key failed", zap.Error(err))
 			}
@@ -685,7 +687,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 				var partitionID int64
-				if row.TableInfo.TableName.IsPartition {
+				if row.TableInfo.IsPartitionTable() {
 					partitionID = row.PhysicalTableID
 				}
 				tableID := c.fakeTableIDGenerator.

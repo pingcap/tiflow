@@ -16,9 +16,11 @@ package mysql
 import (
 	"strings"
 
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/quotes"
+	"go.uber.org/zap"
 )
 
 // prepareUpdate builds a parametrics UPDATE statement as following
@@ -128,7 +130,7 @@ func appendQueryArgs(args []interface{}, col *model.Column) []interface{} {
 func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool) (string, []interface{}) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
-
+	log.Info("begin prepareDelete", zap.Any("cols", cols))
 	colNames, wargs := whereSlice(cols, forceReplicate)
 	if len(wargs) == 0 {
 		return "", nil
@@ -147,6 +149,7 @@ func prepareDelete(quoteTable string, cols []*model.Column, forceReplicate bool)
 	}
 	builder.WriteString(" LIMIT 1")
 	sql := builder.String()
+	log.Info("prepareDelete", zap.String("sql", sql))
 	return sql, args
 }
 

@@ -16,6 +16,7 @@ package sqlmodel
 import (
 	"testing"
 
+	"github.com/pingcap/tiflow/cdc/model"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 )
@@ -127,9 +128,11 @@ func testGenUpdateMultiRowsWithVirtualGeneratedColumn(t *testing.T, genUpdate ge
 	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (c INT, c1 int as (c+100) virtual not null, c2 INT, c3 INT, PRIMARY KEY (c))")
 	targetTI := mockTableInfo(t, "CREATE TABLE tb (c INT, c1 int as (c+100) virtual not null, c2 INT, c3 INT, PRIMARY KEY (c))")
 
-	change1 := NewRowChange(source, target, []interface{}{1, 101, 2, 3}, []interface{}{10, 110, 20, 30}, sourceTI, targetTI, nil)
-	change2 := NewRowChange(source, target, []interface{}{4, 104, 5, 6}, []interface{}{40, 140, 50, 60}, sourceTI, targetTI, nil)
-	change3 := NewRowChange(source, target, []interface{}{7, 107, 8, 9}, []interface{}{70, 170, 80, 90}, sourceTI, targetTI, nil)
+	sourceTI = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI)
+
+	change1 := NewRowChange(source, target, []interface{}{1, 2, 3}, []interface{}{10, 20, 30}, sourceTI, targetTI, nil)
+	change2 := NewRowChange(source, target, []interface{}{4, 5, 6}, []interface{}{40, 50, 60}, sourceTI, targetTI, nil)
+	change3 := NewRowChange(source, target, []interface{}{7, 8, 9}, []interface{}{70, 80, 90}, sourceTI, targetTI, nil)
 	sql, args := genUpdate(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
@@ -158,9 +161,11 @@ func testGenUpdateMultiRowsWithVirtualGeneratedColumns(t *testing.T, genUpdate g
 	targetTI := mockTableInfo(t, `CREATE TABLE tb (c0 int as (c4*c4) virtual not null,
 	c1 int as (c+100) virtual not null, c2 INT, c3 INT, c4 INT, PRIMARY KEY (c4))`)
 
-	change1 := NewRowChange(source, target, []interface{}{1, 101, 2, 3, 1}, []interface{}{100, 110, 20, 30, 10}, sourceTI, targetTI, nil)
-	change2 := NewRowChange(source, target, []interface{}{16, 104, 5, 6, 4}, []interface{}{1600, 140, 50, 60, 40}, sourceTI, targetTI, nil)
-	change3 := NewRowChange(source, target, []interface{}{49, 107, 8, 9, 7}, []interface{}{4900, 170, 80, 90, 70}, sourceTI, targetTI, nil)
+	sourceTI = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI)
+
+	change1 := NewRowChange(source, target, []interface{}{2, 3, 1}, []interface{}{20, 30, 10}, sourceTI, targetTI, nil)
+	change2 := NewRowChange(source, target, []interface{}{5, 6, 4}, []interface{}{50, 60, 40}, sourceTI, targetTI, nil)
+	change3 := NewRowChange(source, target, []interface{}{8, 9, 7}, []interface{}{80, 90, 70}, sourceTI, targetTI, nil)
 	sql, args := genUpdate(change1, change2, change3)
 
 	expectedSQL := "UPDATE `db`.`tb` SET " +
@@ -218,8 +223,11 @@ func TestGenInsertMultiRows(t *testing.T) {
 	sourceTI2 := mockTableInfo(t, "CREATE TABLE tb2 (gen INT AS (c+1), c INT PRIMARY KEY, c2 INT)")
 	targetTI := mockTableInfo(t, "CREATE TABLE tb (gen INT AS (c+1), c INT PRIMARY KEY, c2 INT)")
 
-	change1 := NewRowChange(source1, target, nil, []interface{}{2, 1, 2}, sourceTI1, targetTI, nil)
-	change2 := NewRowChange(source2, target, nil, []interface{}{4, 3, 4}, sourceTI2, targetTI, nil)
+	sourceTI1 = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI1)
+	sourceTI2 = model.BuildTiDBTableInfoWithoutVirtualColumns(sourceTI2)
+
+	change1 := NewRowChange(source1, target, nil, []interface{}{1, 2}, sourceTI1, targetTI, nil)
+	change2 := NewRowChange(source2, target, nil, []interface{}{3, 4}, sourceTI2, targetTI, nil)
 
 	sql, args := GenInsertSQL(DMLInsert, change1, change2)
 	require.Equal(t, "INSERT INTO `db`.`tb` (`c`,`c2`) VALUES (?,?),(?,?)", sql)

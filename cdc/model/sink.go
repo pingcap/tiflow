@@ -301,8 +301,8 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 			TableID:     r.PhysicalTableID,
 			IsPartition: r.TableInfo.IsPartitionTable(),
 		},
-		Columns:      r.Columns,
-		PreColumns:   r.PreColumns,
+		Columns:      ColumnDatas2Columns(r.Columns, r.TableInfo),
+		PreColumns:   ColumnDatas2Columns(r.PreColumns, r.TableInfo),
 		IndexColumns: r.TableInfo.IndexColumnsOffset,
 	}
 	return &RedoLog{
@@ -330,8 +330,6 @@ type RowChangedEvent struct {
 
 	PhysicalTableID int64
 
-	ColInfos []rowcodec.ColInfo
-
 	// NOTICE: We probably store the logical ID inside TableInfo's TableName,
 	// not the physical ID.
 	// For normal table, there is only one ID, which is the physical ID.
@@ -344,8 +342,8 @@ type RowChangedEvent struct {
 	// So be careful when using the TableInfo.
 	TableInfo *TableInfo
 
-	Columns    []*Column
-	PreColumns []*Column
+	Columns    []*ColumnData
+	PreColumns []*ColumnData
 
 	// Checksum for the event, only not nil if the upstream TiDB enable the row level checksum
 	// and TiCDC set the integrity check level to the correctness.
@@ -440,7 +438,7 @@ func (r *RowChangedEvent) IsUpdate() bool {
 func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 	var result []string
 
-	var cols []*Column
+	var cols []*ColumnData
 	if r.IsDelete() {
 		cols = r.PreColumns
 	} else {
@@ -448,9 +446,10 @@ func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 	}
 
 	result = make([]string, 0)
+	tableInfo := r.TableInfo
 	for _, col := range cols {
-		if col != nil && col.Flag.IsPrimaryKey() {
-			result = append(result, col.Name)
+		if col != nil && tableInfo.ForceGetColumnFlagType(col.ColumnID).IsPrimaryKey() {
+			result = append(result, tableInfo.ForceGetColumnName(col.ColumnID))
 		}
 	}
 	return result
@@ -460,7 +459,7 @@ func (r *RowChangedEvent) PrimaryKeyColumnNames() []string {
 func (r *RowChangedEvent) GetHandleKeyColumnValues() []string {
 	var result []string
 
-	var cols []*Column
+	var cols []*ColumnData
 	if r.IsDelete() {
 		cols = r.PreColumns
 	} else {
@@ -468,8 +467,9 @@ func (r *RowChangedEvent) GetHandleKeyColumnValues() []string {
 	}
 
 	result = make([]string, 0)
+	tableInfo := r.TableInfo
 	for _, col := range cols {
-		if col != nil && col.Flag.IsHandleKey() {
+		if col != nil && tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
 			result = append(result, ColumnValueString(col.Value))
 		}
 	}
@@ -477,42 +477,28 @@ func (r *RowChangedEvent) GetHandleKeyColumnValues() []string {
 }
 
 // HandleKeyColInfos returns the column(s) and colInfo(s) corresponding to the handle key(s)
-func (r *RowChangedEvent) HandleKeyColInfos() ([]*Column, []rowcodec.ColInfo) {
-	pkeyCols := make([]*Column, 0)
+func (r *RowChangedEvent) HandleKeyColInfos() ([]*ColumnData, []rowcodec.ColInfo) {
+	pkeyCols := make([]*ColumnData, 0)
 	pkeyColInfos := make([]rowcodec.ColInfo, 0)
 
-	var cols []*Column
+	var cols []*ColumnData
 	if r.IsDelete() {
 		cols = r.PreColumns
 	} else {
 		cols = r.Columns
 	}
 
+	tableInfo := r.TableInfo
+	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, col := range cols {
-		if col != nil && col.Flag.IsHandleKey() {
+		if col != nil && tableInfo.ForceGetColumnFlagType(col.ColumnID).IsHandleKey() {
 			pkeyCols = append(pkeyCols, col)
-			pkeyColInfos = append(pkeyColInfos, r.ColInfos[i])
+			pkeyColInfos = append(pkeyColInfos, colInfos[i])
 		}
 	}
 
 	// It is okay not to have handle keys, so the empty array is an acceptable result
 	return pkeyCols, pkeyColInfos
-}
-
-// WithHandlePrimaryFlag set `HandleKeyFlag` and `PrimaryKeyFlag`
-func (r *RowChangedEvent) WithHandlePrimaryFlag(colNames map[string]struct{}) {
-	for _, col := range r.Columns {
-		if _, ok := colNames[col.Name]; ok {
-			col.Flag.SetIsHandleKey()
-			col.Flag.SetIsPrimaryKey()
-		}
-	}
-	for _, col := range r.PreColumns {
-		if _, ok := colNames[col.Name]; ok {
-			col.Flag.SetIsHandleKey()
-			col.Flag.SetIsPrimaryKey()
-		}
-	}
 }
 
 // ApproximateBytes returns approximate bytes in memory consumed by the event.
@@ -535,7 +521,26 @@ func (r *RowChangedEvent) ApproximateBytes() int {
 	return size
 }
 
-// Column represents a column value in row changed event
+// Columns2ColumnDatas convert `Column`s to `ColumnData`s
+func Columns2ColumnDatas(cols []*Column, tableInfo *TableInfo) []*ColumnData {
+	if cols == nil {
+		return nil
+	}
+	columns := make([]*ColumnData, len(cols))
+	for i, col := range cols {
+		if col == nil {
+			continue
+		}
+		colID := tableInfo.ForceGetColumnIDByName(col.Name)
+		columns[i] = &ColumnData{
+			ColumnID: colID,
+			Value:    col.Value,
+		}
+	}
+	return columns
+}
+
+// Column represents a column value and its schema info
 type Column struct {
 	Name      string         `msg:"name"`
 	Type      byte           `msg:"type"`
@@ -549,6 +554,49 @@ type Column struct {
 	ApproximateBytes int `msg:"-"`
 }
 
+// ColumnData represents a column value in row changed event
+type ColumnData struct {
+	// ColumnID may be just a mock id, because we don't store it in redo log.
+	// So after restore from redo log, we need to give every a column a mock id.
+	// The only guarantee is that the column id is unique in a RowChangedEvent
+	ColumnID int64       `json:"column_id" msg:"column_id"`
+	Value    interface{} `json:"value" msg:"-"`
+
+	// ApproximateBytes is approximate bytes consumed by the column.
+	ApproximateBytes int `json:"-" msg:"-"`
+}
+
+// ColumnData2Column convert `ColumnData` to `Column`
+func ColumnData2Column(col *ColumnData, tableInfo *TableInfo) *Column {
+	colID := col.ColumnID
+	offset, ok := tableInfo.columnsOffset[colID]
+	if !ok {
+		log.Panic("invalid column id", zap.Int64("columnID", colID))
+	}
+	colInfo := tableInfo.Columns[offset]
+	return &Column{
+		Name:      colInfo.Name.O,
+		Type:      colInfo.GetType(),
+		Charset:   colInfo.GetCharset(),
+		Collation: colInfo.GetCollate(),
+		Flag:      tableInfo.ColumnsFlag[colID],
+		Value:     col.Value,
+		Default:   GetColumnDefaultValue(colInfo),
+	}
+}
+
+// ColumnDatas2Columns convert `ColumnData`s to `Column`s
+func ColumnDatas2Columns(cols []*ColumnData, tableInfo *TableInfo) []*Column {
+	columns := make([]*Column, len(cols))
+	for i, colData := range cols {
+		if colData == nil {
+			continue
+		}
+		columns[i] = ColumnData2Column(colData, tableInfo)
+	}
+	return columns
+}
+
 // RedoColumn stores Column change
 type RedoColumn struct {
 	// Fields from Column and can't be marshaled directly in Column.
@@ -558,7 +606,144 @@ type RedoColumn struct {
 	Flag              uint64 `msg:"flag"`
 }
 
-// BuildTiDBTableInfo builds a TiDB TableInfo from given information.
+// ColumnIDAllocator represents the interface to allocate column id for tableInfo
+type ColumnIDAllocator interface {
+	// GetColumnID return the column id according to the column name
+	GetColumnID(name string) int64
+}
+
+// IncrementalColumnIDAllocator allocates column id in an incremental way.
+// At most of the time, it is the default implementation when you don't care the column id's concrete value.
+//
+//msgp:ignore IncrementalColumnIDAllocator
+type IncrementalColumnIDAllocator struct {
+	nextColID int64
+}
+
+// NewIncrementalColumnIDAllocator creates a new IncrementalColumnIDAllocator
+func NewIncrementalColumnIDAllocator() *IncrementalColumnIDAllocator {
+	return &IncrementalColumnIDAllocator{
+		nextColID: 100, // 100 is an arbitrary number
+	}
+}
+
+// GetColumnID return the next mock column id
+func (d *IncrementalColumnIDAllocator) GetColumnID(name string) int64 {
+	result := d.nextColID
+	d.nextColID += 1
+	return result
+}
+
+// NameBasedColumnIDAllocator allocates column id using an prefined map from column name to id
+//
+//msgp:ignore NameBasedColumnIDAllocator
+type NameBasedColumnIDAllocator struct {
+	nameToIDMap map[string]int64
+}
+
+// NewNameBasedColumnIDAllocator creates a new NameBasedColumnIDAllocator
+func NewNameBasedColumnIDAllocator(nameToIDMap map[string]int64) *NameBasedColumnIDAllocator {
+	return &NameBasedColumnIDAllocator{
+		nameToIDMap: nameToIDMap,
+	}
+}
+
+// GetColumnID return the column id of the name
+func (n *NameBasedColumnIDAllocator) GetColumnID(name string) int64 {
+	colID, ok := n.nameToIDMap[name]
+	if !ok {
+		log.Panic("column not found",
+			zap.String("name", name),
+			zap.Any("nameToIDMap", n.nameToIDMap))
+	}
+	return colID
+}
+
+// BuildTableInfo builds a table info from given information.
+// Note that some fields of the result TableInfo may just be mocked.
+// The only guarantee is that we can use the result to reconstrut the information in `Column`.
+// The main use cases of this function it to build TableInfo from redo log and in tests.
+func BuildTableInfo(schemaName, tableName string, columns []*Column, indexColumns [][]int) *TableInfo {
+	tidbTableInfo := BuildTiDBTableInfo(tableName, columns, indexColumns)
+	return WrapTableInfo(100 /* not used */, schemaName, 1000 /* not used */, tidbTableInfo)
+}
+
+// BuildTableInfoWithPKNames4Test builds a table info from given information.
+func BuildTableInfoWithPKNames4Test(schemaName, tableName string, columns []*Column, pkNames map[string]struct{}) *TableInfo {
+	if len(pkNames) == 0 {
+		return BuildTableInfo(schemaName, tableName, columns, nil)
+	}
+	indexColumns := make([][]int, 1)
+	indexColumns[0] = make([]int, 0)
+	for i, col := range columns {
+		if _, ok := pkNames[col.Name]; ok {
+			indexColumns[0] = append(indexColumns[0], i)
+			col.Flag.SetIsHandleKey()
+			col.Flag.SetIsPrimaryKey()
+		}
+	}
+	if len(indexColumns[0]) != len(pkNames) {
+		log.Panic("cannot find all pks",
+			zap.Any("indexColumns", indexColumns),
+			zap.Any("pkNames", pkNames))
+	}
+	return BuildTableInfo(schemaName, tableName, columns, indexColumns)
+}
+
+// AddExtraColumnInfo is used to add some extra column info to the table info.
+func AddExtraColumnInfo(tableInfo *model.TableInfo, extraColInfos []rowcodec.ColInfo) {
+	for i, colInfo := range extraColInfos {
+		tableInfo.Columns[i].SetElems(colInfo.Ft.GetElems())
+		tableInfo.Columns[i].SetFlen(colInfo.Ft.GetFlen())
+	}
+}
+
+// GetHandleIndexOffsets4Test is used to get the offset of handle column in test
+func GetHandleIndexOffsets4Test(cols []*Column) [][]int {
+	handleColumns := make([]int, 0)
+	for i, col := range cols {
+		if col.Flag.IsHandleKey() {
+			handleColumns = append(handleColumns, i)
+		}
+	}
+	if len(handleColumns) == 0 {
+		return nil
+	}
+	return [][]int{handleColumns}
+}
+
+// BuildTiDBTableInfoWithoutVirtualColumns build a TableInfo without virual columns from the source table info
+func BuildTiDBTableInfoWithoutVirtualColumns(source *model.TableInfo) *model.TableInfo {
+	ret := source.Clone()
+	ret.Columns = make([]*model.ColumnInfo, 0, len(source.Columns))
+	rowColumnsCurrentOffset := 0
+	columnsOffset := make(map[string]int, len(source.Columns))
+	for _, srcCol := range source.Columns {
+		if !IsColCDCVisible(srcCol) {
+			continue
+		}
+		colInfo := srcCol.Clone()
+		colInfo.Offset = rowColumnsCurrentOffset
+		ret.Columns = append(ret.Columns, colInfo)
+		columnsOffset[colInfo.Name.O] = rowColumnsCurrentOffset
+		rowColumnsCurrentOffset += 1
+	}
+	// TODO: does Indices contain virtual columns?
+	for _, indexInfo := range ret.Indices {
+		for _, col := range indexInfo.Columns {
+			col.Offset = columnsOffset[col.Name.O]
+		}
+	}
+
+	return ret
+}
+
+// BuildTiDBTableInfo is a simple wrapper over BuildTiDBTableInfoImpl which create a default ColumnIDAllocator.
+func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]int) *model.TableInfo {
+	return BuildTiDBTableInfoImpl(tableName, columns, indexColumns, NewIncrementalColumnIDAllocator())
+}
+
+// BuildTiDBTableInfoImpl builds a TiDB TableInfo from given information.
 // Note the result TableInfo may not be same as the original TableInfo in tidb.
 // The only guarantee is that you can restore the `Name`, `Type`, `Charset`, `Collation`
 // and `Flag` field of `Column` using the result TableInfo.
@@ -566,34 +751,32 @@ type RedoColumn struct {
 //  1. There must be at least one handle key in `columns`;
 //  2. The handle key must either be a primary key or a non null unique key;
 //  3. The index that is selected as the handle must be provided in `indexColumns`;
-func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]int) *model.TableInfo {
+func BuildTiDBTableInfoImpl(
+	tableName string,
+	columns []*Column,
+	indexColumns [][]int,
+	columnIDAllocator ColumnIDAllocator,
+) *model.TableInfo {
 	ret := &model.TableInfo{}
 	ret.Name = model.NewCIStr(tableName)
 
 	hasPrimaryKeyColumn := false
-	hasHandleKeyColumn := false
-	// add a mock id to identify columns inside cdc
-	nextMockColID := int64(100) // 100 is an arbitrary number
 	for i, col := range columns {
 		columnInfo := &model.ColumnInfo{
-			ID:     nextMockColID,
 			Offset: i,
 			State:  model.StatePublic,
 		}
-		nextMockColID += 1
 		if col == nil {
-			// by referring to datum2Column, nil is happened when
-			// - !IsColCDCVisible, which means the column is a virtual generated
-			//   column
-			// - !exist && !fillWithDefaultValue, which means upstream does not
-			//   send the column value
-			// just mock for the first case
+			// actually, col should never be nil according to `datum2Column` and `WrapTableInfo`
+			// TODO: may we can panic here to forbid pass nil column to this function
 			columnInfo.Name = model.NewCIStr("omitted")
 			columnInfo.GeneratedExprString = "pass_generated_check"
 			columnInfo.GeneratedStored = false
 			ret.Columns = append(ret.Columns, columnInfo)
 			continue
 		}
+		// add a mock id to identify columns inside cdc
+		columnInfo.ID = columnIDAllocator.GetColumnID(col.Name)
 		columnInfo.Name = model.NewCIStr(col.Name)
 		columnInfo.SetType(col.Type)
 		if col.Charset != "" {
@@ -636,7 +819,6 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 			columnInfo.AddFlag(mysql.UniqueKeyFlag)
 		}
 		if flag.IsHandleKey() {
-			hasHandleKeyColumn = true
 			if !flag.IsPrimaryKey() && !flag.IsUniqueKey() {
 				log.Panic("Handle key must either be primary key or unique key",
 					zap.String("table", tableName),
@@ -654,12 +836,6 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 			columnInfo.AddFlag(mysql.UnsignedFlag)
 		}
 		ret.Columns = append(ret.Columns, columnInfo)
-	}
-	if !hasHandleKeyColumn {
-		log.Panic("Handle key not found",
-			zap.String("table", tableName),
-			zap.Any("columns", columns),
-			zap.Any("indexColumns", indexColumns))
 	}
 
 	hasPrimaryKeyIndex := false
@@ -744,12 +920,6 @@ func BuildTiDBTableInfo(tableName string, columns []*Column, indexColumns [][]in
 			zap.Any("indexColumns", indexColumns),
 			zap.Bool("hasPrimaryKeyColumn", hasPrimaryKeyColumn),
 			zap.Bool("hasPrimaryKeyIndex", hasPrimaryKeyIndex))
-	}
-	if !hasHandleIndex {
-		log.Panic("Handle index not found",
-			zap.String("table", tableName),
-			zap.Any("columns", columns),
-			zap.Any("indexColumns", indexColumns))
 	}
 	return ret
 }
@@ -984,6 +1154,14 @@ func trySplitAndSortUpdateEvent(
 	return rowChangedEvents, nil
 }
 
+func isNonEmptyUniqueOrHandleCol(col *ColumnData, tableInfo *TableInfo) bool {
+	if col != nil {
+		colFlag := tableInfo.ForceGetColumnFlagType(col.ColumnID)
+		return colFlag.IsUniqueKey() || colFlag.IsHandleKey()
+	}
+	return false
+}
+
 // shouldSplitUpdateEvent determines if the split event is needed to align the old format based on
 // whether the handle key column or unique key has been modified.
 // If  is modified, we need to use splitUpdateEvent to split the update event into a delete and an insert event.
@@ -993,11 +1171,11 @@ func shouldSplitUpdateEvent(updateEvent *RowChangedEvent) bool {
 		return false
 	}
 
+	tableInfo := updateEvent.TableInfo
 	for i := range updateEvent.Columns {
 		col := updateEvent.Columns[i]
 		preCol := updateEvent.PreColumns[i]
-		if col != nil && (col.Flag.IsUniqueKey() || col.Flag.IsHandleKey()) &&
-			preCol != nil && (preCol.Flag.IsUniqueKey() || preCol.Flag.IsHandleKey()) {
+		if isNonEmptyUniqueOrHandleCol(col, tableInfo) && isNonEmptyUniqueOrHandleCol(preCol, tableInfo) {
 			colValueString := ColumnValueString(col.Value)
 			preColValueString := ColumnValueString(preCol.Value)
 			// If one unique key columns is updated, we need to split the event row.

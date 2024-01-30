@@ -16,7 +16,6 @@ package model
 import (
 	"testing"
 
-	"github.com/pingcap/tidb/pkg/parser/model"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	parser_types "github.com/pingcap/tidb/pkg/parser/types"
@@ -175,7 +174,7 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 		},
 		IsCommonHandle: false,
 		PKIsHandle:     false,
-		Partition: &model.PartitionInfo{
+		Partition: &timodel.PartitionInfo{
 			Enable: true,
 		},
 	}

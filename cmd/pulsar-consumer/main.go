@@ -463,7 +463,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				continue
 			}
 			var partitionID int64
-			if row.TableInfo.TableName.IsPartition {
+			if row.TableInfo.IsPartitionTable() {
 				partitionID = row.PhysicalTableID
 			}
 			// use schema, table and tableID to identify a table
