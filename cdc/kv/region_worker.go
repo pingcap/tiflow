@@ -216,6 +216,13 @@ func (w *regionWorker) checkShouldExit() error {
 	// If there is no region maintained by this region worker, exit it and
 	// cancel the gRPC stream.
 	if empty && w.pendingRegions.len() == 0 {
+		log.Info("A single region error happens before, "+
+			"and there is no region maintained by this region worker, "+
+			"exit it and cancel the gRPC stream",
+			zap.String("namespace", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.String("storeAddr", w.storeAddr))
+
 		w.cancelStream(time.Duration(0))
 		return cerror.ErrRegionWorkerExit.GenWithStackByArgs()
 	}
@@ -259,6 +266,15 @@ func (w *regionWorker) handleSingleRegionError(err error, state *regionFeedState
 	// `ErrPrewriteNotMatch` would cause duplicated request to the same region,
 	// so cancel the original gRPC stream before restarts a new stream.
 	if cerror.ErrPrewriteNotMatch.Equal(err) {
+		log.Info("meet ErrPrewriteNotMatch error, cancel the gRPC stream",
+			zap.String("namespace", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.String("storeAddr", w.storeAddr),
+			zap.Uint64("regionID", regionID),
+			zap.Uint64("requestID", state.requestID),
+			zap.Stringer("span", &state.sri.span),
+			zap.Uint64("resolvedTs", state.sri.resolvedTs()),
+			zap.Error(err))
 		w.cancelStream(time.Second)
 	}
 
@@ -592,6 +608,10 @@ func (w *regionWorker) collectWorkpoolError(ctx context.Context) error {
 
 func (w *regionWorker) checkErrorReconnect(err error) error {
 	if errors.Cause(err) == errReconnect {
+		log.Info("kv client reconnect triggered, cancel the gRPC stream",
+			zap.String("namespace", w.session.client.changefeed.Namespace),
+			zap.String("changefeed", w.session.client.changefeed.ID),
+			zap.String("addr", w.storeAddr))
 		w.cancelStream(time.Second)
 		// if stream is already deleted, just ignore errReconnect
 		return nil
@@ -604,7 +624,6 @@ func (w *regionWorker) cancelStream(delay time.Duration) {
 	// This will make the receiveFromStream goroutine exit and the stream can
 	// be re-established by the caller.
 	// Note: use context cancel is the only way to terminate a gRPC stream.
-
 	w.streamCancel()
 	// Failover in stream.Recv has 0-100ms delay, the onRegionFail
 	// should be called after stream has been deleted. Add a delay here

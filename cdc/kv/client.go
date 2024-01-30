@@ -272,7 +272,7 @@ func (c *CDCClient) newStream(
 			conn:    conn,
 			addr:    addr,
 			storeID: storeID,
-			id:      allocID(),
+			id:      allocateStreamID(),
 			cancel:  cancel,
 		}
 		log.Info("created stream to store",
@@ -347,15 +347,21 @@ func (c *CDCClient) CommitTs() model.Ts {
 	return ingressCommitTs
 }
 
-var currentID uint64 = 0
+var currentRequestID uint64 = 0
 
-func allocID() uint64 {
-	return atomic.AddUint64(&currentID, 1)
+func allocateRequestID() uint64 {
+	return atomic.AddUint64(&currentRequestID, 1)
 }
 
 // used in test only
-func currentRequestID() uint64 {
-	return atomic.LoadUint64(&currentID)
+func getCurrentRequestID() uint64 {
+	return atomic.LoadUint64(&currentRequestID)
+}
+
+var currentStreamID uint64 = 0
+
+func allocateStreamID() uint64 {
+	return atomic.AddUint64(&currentStreamID, 1)
 }
 
 type eventFeedSession struct {
@@ -389,10 +395,10 @@ type eventFeedSession struct {
 	rangeChSizeGauge   prometheus.Gauge
 
 	// storeStreamsCache is used to cache the established gRPC streams to TiKV stores.
-	storeStreamsCache map[string]*eventFeedStream
-	// storeStreamsCacheLock is used to protect storeStreamsCache, since the cache
-	// is shared by multiple goroutines.
-	storeStreamsCacheLock sync.RWMutex
+	storeStreamsCache struct {
+		sync.RWMutex
+		m map[string]*eventFeedStream
+	}
 
 	// use sync.Pool to store resolved ts event only, because resolved ts event
 	// has the same size and generate cycle.
@@ -411,11 +417,11 @@ func newEventFeedSession(
 	eventCh chan<- model.RegionFeedEvent,
 	enableTableMonitor bool,
 ) *eventFeedSession {
-	id := allocID()
+	id := allocateRequestID()
 	rangeLock := regionlock.NewRegionRangeLock(
 		id, totalSpan.StartKey, totalSpan.EndKey, startTs,
 		client.changefeed.Namespace+"."+client.changefeed.ID)
-	return &eventFeedSession{
+	res := &eventFeedSession{
 		client:     client,
 		startTs:    startTs,
 		changefeed: client.changefeed,
@@ -433,7 +439,6 @@ func newEventFeedSession(
 			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "err"),
 		rangeChSizeGauge: clientChannelSize.WithLabelValues(client.changefeed.Namespace,
 			client.changefeed.ID, strconv.FormatInt(client.tableID, 10), "range"),
-		storeStreamsCache: make(map[string]*eventFeedStream),
 		resolvedTsPool: sync.Pool{
 			New: func() any {
 				return &regionStatefulEvent{
@@ -442,6 +447,8 @@ func newEventFeedSession(
 			},
 		},
 	}
+	res.storeStreamsCache.m = make(map[string]*eventFeedStream)
+	return res
 }
 
 func (s *eventFeedSession) eventFeed(ctx context.Context) error {
@@ -639,7 +646,7 @@ func (s *eventFeedSession) requestRegionToStore(
 			return errors.Trace(ctx.Err())
 		case sri = <-s.regionRouter.Out():
 		}
-		requestID := allocID()
+		requestID := allocateRequestID()
 
 		rpcCtx := sri.rpcCtx
 		regionID := rpcCtx.Meta.GetId()
@@ -733,7 +740,6 @@ func (s *eventFeedSession) requestRegionToStore(
 
 		state := newRegionFeedState(sri, requestID)
 		pendingRegions.setByRequestID(requestID, state)
-
 		s.client.logRegionDetails("start new request",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
@@ -784,7 +790,6 @@ func (s *eventFeedSession) requestRegionToStore(
 			if !ok {
 				continue
 			}
-
 			s.client.logRegionDetails("region send to store failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -1407,18 +1412,18 @@ func (s *eventFeedSession) sendResolvedTs(
 }
 
 func (s *eventFeedSession) addStream(stream *eventFeedStream) {
-	s.storeStreamsCacheLock.Lock()
-	defer s.storeStreamsCacheLock.Unlock()
-	s.storeStreamsCache[stream.addr] = stream
+	s.storeStreamsCache.Lock()
+	defer s.storeStreamsCache.Unlock()
+	s.storeStreamsCache.m[stream.addr] = stream
 }
 
 // deleteStream deletes a stream from the session.streams.
 // If the stream is not found, it will be ignored.
 func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
-	s.storeStreamsCacheLock.Lock()
-	defer s.storeStreamsCacheLock.Unlock()
+	s.storeStreamsCache.Lock()
+	defer s.storeStreamsCache.Unlock()
 
-	if streamInMap, ok := s.storeStreamsCache[streamToDelete.addr]; ok {
+	if streamInMap, ok := s.storeStreamsCache.m[streamToDelete.addr]; ok {
 		if streamInMap.id != streamToDelete.id {
 			log.Warn("delete stream failed, stream id mismatch, ignore it",
 				zap.String("namespace", s.changefeed.Namespace),
@@ -1430,7 +1435,7 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 			return
 		}
 		s.client.grpcPool.ReleaseConn(streamToDelete.conn, streamToDelete.addr)
-		delete(s.storeStreamsCache, streamToDelete.addr)
+		delete(s.storeStreamsCache.m, streamToDelete.addr)
 	}
 	streamToDelete.cancel()
 	log.Info("A stream to store has been removed",
@@ -1444,9 +1449,9 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 }
 
 func (s *eventFeedSession) getStream(storeAddr string) (stream *eventFeedStream, ok bool) {
-	s.storeStreamsCacheLock.RLock()
-	defer s.storeStreamsCacheLock.RUnlock()
-	stream, ok = s.storeStreamsCache[storeAddr]
+	s.storeStreamsCache.RLock()
+	defer s.storeStreamsCache.RUnlock()
+	stream, ok = s.storeStreamsCache.m[storeAddr]
 	return
 }
 
