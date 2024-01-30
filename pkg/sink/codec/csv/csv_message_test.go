@@ -798,6 +798,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: true,
 					OutputOldValue:  true,
+					OutputHandleKey: true,
 				},
 				opType:     operationUpdate,
 				tableName:  "table2",
@@ -807,8 +808,8 @@ func TestCSVMessageEncode(t *testing.T) {
 				columns:    []any{"a!b!c", "def"},
 				HandleKey:  kv.IntHandle(1),
 			},
-			want: []byte(`D!table2!test!435661838416609281!true!"1"!a\!b\!c!abc` + "\n" +
-				`I!table2!test!435661838416609281!true!"1"!a\!b\!c!def` + "\n"),
+			want: []byte(`D!table2!test!435661838416609281!true!1!a\!b\!c!abc` + "\n" +
+				`I!table2!test!435661838416609281!true!1!a\!b\!c!def` + "\n"),
 		},
 		{
 			name: "csv encode values containing single-character delimter string, without quote mark, update with old value",
@@ -949,6 +950,7 @@ func TestCSVMessageEncode(t *testing.T) {
 				columns:    tc.fields.columns,
 				preColumns: tc.fields.preColumns,
 				newRecord:  true,
+				HandleKey:  tc.fields.HandleKey,
 			}
 
 			require.Equal(t, tc.want, c.encode())
