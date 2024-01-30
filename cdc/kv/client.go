@@ -77,6 +77,8 @@ const (
 	scanRegionsConcurrency = 1024
 
 	tableMonitorInterval = 2 * time.Second
+
+	streamDeleteInterval = 2 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -400,6 +402,10 @@ type eventFeedSession struct {
 	storeStreamsCache struct {
 		sync.RWMutex
 		m map[string]*eventFeedStream
+		// lastDeleteTime is used to record last time a stream is deleted from the cache.
+		// It is used to avoid creation/deleting streams too frequently, which may cause
+		// huge overhead of incremental region scanning in TiKV.
+		lastDeleteTime map[string]time.Time
 	}
 
 	// use sync.Pool to store resolved ts event only, because resolved ts event
@@ -450,6 +456,7 @@ func newEventFeedSession(
 		},
 	}
 	res.storeStreamsCache.m = make(map[string]*eventFeedStream)
+	res.storeStreamsCache.lastDeleteTime = make(map[string]time.Time)
 	return res
 }
 
@@ -1437,8 +1444,21 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 				zap.Uint64("streamIDInMap", streamInMap.id))
 			return
 		}
+		if lastTime, ok := s.storeStreamsCache.lastDeleteTime[streamToDelete.addr]; ok {
+			if time.Since(lastTime) < streamDeleteInterval {
+				log.Warn("delete stream failed, delete too frequently, wait 1 second",
+					zap.String("namespace", s.changefeed.Namespace),
+					zap.String("changefeed", s.changefeed.ID),
+					zap.Int64("tableID", s.tableID),
+					zap.String("tableName", s.tableName),
+					zap.Uint64("streamID", streamToDelete.id),
+					zap.Duration("duration", time.Since(lastTime)))
+				time.Sleep(streamDeleteInterval - time.Since(lastTime))
+			}
+		}
 		s.client.grpcPool.ReleaseConn(streamToDelete.conn, streamToDelete.addr)
 		delete(s.storeStreamsCache.m, streamToDelete.addr)
+		s.storeStreamsCache.lastDeleteTime[streamToDelete.addr] = time.Now()
 	}
 	streamToDelete.cancel()
 	log.Info("A stream to store has been removed",
