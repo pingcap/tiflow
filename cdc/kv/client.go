@@ -78,7 +78,7 @@ const (
 
 	tableMonitorInterval = 2 * time.Second
 
-	streamDeleteInterval = 2 * time.Second
+	streamAlterInterval = 2 * time.Second
 )
 
 // time interval to force kv client to terminate gRPC stream and reconnect
@@ -402,10 +402,10 @@ type eventFeedSession struct {
 	storeStreamsCache struct {
 		sync.RWMutex
 		m map[string]*eventFeedStream
-		// lastDeleteTime is used to record last time a stream is deleted from the cache.
+		// lastAlterTime is used to record last time a stream is created/deleted to/from the cache.
 		// It is used to avoid creation/deleting streams too frequently, which may cause
 		// huge overhead of incremental region scanning in TiKV.
-		lastDeleteTime map[string]time.Time
+		lastAlterTime map[string]time.Time
 	}
 
 	// use sync.Pool to store resolved ts event only, because resolved ts event
@@ -456,7 +456,7 @@ func newEventFeedSession(
 		},
 	}
 	res.storeStreamsCache.m = make(map[string]*eventFeedStream)
-	res.storeStreamsCache.lastDeleteTime = make(map[string]time.Time)
+	res.storeStreamsCache.lastAlterTime = make(map[string]time.Time)
 	return res
 }
 
@@ -1424,6 +1424,19 @@ func (s *eventFeedSession) sendResolvedTs(
 func (s *eventFeedSession) addStream(stream *eventFeedStream) {
 	s.storeStreamsCache.Lock()
 	defer s.storeStreamsCache.Unlock()
+	if lastTime, ok := s.storeStreamsCache.lastAlterTime[stream.addr]; ok {
+		if time.Since(lastTime) < streamAlterInterval {
+			log.Warn(
+				"add a stream of a same store too frequently, wait a while and try again",
+				zap.String("namespace", s.changefeed.Namespace),
+				zap.String("changefeed", s.changefeed.ID),
+				zap.Int64("tableID", s.tableID),
+				zap.String("tableName", s.tableName),
+				zap.Uint64("storeID", stream.storeID),
+				zap.Duration("sinceLastTime", time.Since(lastTime)))
+			time.Sleep(streamAlterInterval - time.Since(lastTime))
+		}
+	}
 	s.storeStreamsCache.m[stream.addr] = stream
 }
 
@@ -1445,8 +1458,8 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 			return
 		}
 
-		if lastTime, ok := s.storeStreamsCache.lastDeleteTime[streamToDelete.addr]; ok {
-			if time.Since(lastTime) < streamDeleteInterval {
+		if lastTime, ok := s.storeStreamsCache.lastAlterTime[streamToDelete.addr]; ok {
+			if time.Since(lastTime) < streamAlterInterval {
 				log.Warn(
 					"delete a stream of a same store too frequently, wait a while and try again",
 					zap.String("namespace", s.changefeed.Namespace),
@@ -1455,12 +1468,12 @@ func (s *eventFeedSession) deleteStream(streamToDelete *eventFeedStream) {
 					zap.String("tableName", s.tableName),
 					zap.Uint64("streamID", streamToDelete.id),
 					zap.Duration("sinceLastTime", time.Since(lastTime)))
-				time.Sleep(streamDeleteInterval - time.Since(lastTime))
+				time.Sleep(streamAlterInterval - time.Since(lastTime))
 			}
 		}
 		s.client.grpcPool.ReleaseConn(streamToDelete.conn, streamToDelete.addr)
 		delete(s.storeStreamsCache.m, streamToDelete.addr)
-		s.storeStreamsCache.lastDeleteTime[streamToDelete.addr] = time.Now()
+		s.storeStreamsCache.lastAlterTime[streamToDelete.addr] = time.Now()
 	}
 
 	streamToDelete.cancel()
