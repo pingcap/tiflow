@@ -306,7 +306,9 @@ func main() {
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		if err = consumer.Run(ctx); err != nil {
 			if !errors.Is(err, context.Canceled) {
 				log.Panic("Error running consumer", zap.Error(err))
@@ -854,6 +856,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		globalWatermark := c.getGlobalWatermark()
+
+		ddl := c.getFrontDDL()
+		if ddl != nil && strings.Contains(ddl.Query, "finishmark") {
+			log.Info("try to execute the finishmark ddl",
+				zap.Bool("shouldExecute", ddl.CommitTs <= globalCommitTs),
+				zap.Uint64("commitTs", ddl.CommitTs), zap.Uint64("globalWatermark", globalWatermark), zap.Uint64("globalCommitTs", globalCommitTs))
+		}
+
 		// handle DDL
 		for todoDDL := c.getFrontDDL(); todoDDL != nil && todoDDL.CommitTs <= globalWatermark; todoDDL = c.getFrontDDL() {
 			// flush DMLs before the DDL to downstream
@@ -871,18 +881,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 		}
 
 		if globalWatermark <= globalCommitTs {
-			log.Info("skip flush row changed event because globalWatermark <= oldCommitTs",
-				zap.Uint64("globalWatermark", globalWatermark),
-				zap.Uint64("globalCommitTs", globalCommitTs))
 			continue
 		}
-
+		globalCommitTs = globalWatermark
 		if err := c.forEachSink(func(sink *partitionSink) error {
-			return syncFlushRowChangedEvents(ctx, sink, globalWatermark)
+			return syncFlushRowChangedEvents(ctx, sink, globalCommitTs)
 		}); err != nil {
 			return cerror.Trace(err)
 		}
-		globalCommitTs = globalWatermark
 	}
 }
 
