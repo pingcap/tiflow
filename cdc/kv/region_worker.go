@@ -165,6 +165,7 @@ func newRegionWorker(
 		session:        s,
 		inputCh:        make(chan []*regionStatefulEvent, regionWorkerInputChanSize),
 		outputCh:       s.eventCh,
+		stream:         stream,
 		errorCh:        make(chan error, 1),
 		statesManager:  newRegionStateManager(-1),
 		rtsManager:     newRegionTsManager(),
