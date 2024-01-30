@@ -189,10 +189,6 @@
         "type": "int"
       },
       {
-        "name": "type",
-        "type": "string"
-      },
-      {
         "name": "commitTs",
         "type": "long"
       },
@@ -211,10 +207,6 @@
       {
         "name": "version",
         "type": "int"
-      },
-      {
-        "name": "type",
-        "type": "string"
       },
       {
         "name": "buildTs",
@@ -361,12 +353,10 @@
             "type": "map",
             "values": [
               "null",
-              "int",
               "long",
               "float",
               "double",
               "string",
-              "boolean",
               "bytes"
             ],
             "default": null
@@ -401,6 +391,19 @@
     "docs": "the wrapper for all kind of messages",
     "type": "record",
     "fields": [
+      {
+        "name": "type",
+        "type": {
+          "type": "enum",
+          "name": "MessageType",
+          "symbols": [
+            "WATERMARK",
+            "BOOTSTRAP",
+            "DDL",
+            "DML"
+          ]
+        }
+      },
       {
         "name": "payload",
         "type": [
