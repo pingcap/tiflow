@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -744,6 +745,7 @@ func TestCSVMessageEncode(t *testing.T) {
 		commitTs   uint64
 		preColumns []any
 		columns    []any
+		HandleKey  kv.Handle
 	}
 	testCases := []struct {
 		name   string
@@ -796,6 +798,7 @@ func TestCSVMessageEncode(t *testing.T) {
 					NullString:      "\\N",
 					IncludeCommitTs: true,
 					OutputOldValue:  true,
+					OutputHandleKey: true,
 				},
 				opType:     operationUpdate,
 				tableName:  "table2",
@@ -803,9 +806,10 @@ func TestCSVMessageEncode(t *testing.T) {
 				commitTs:   435661838416609281,
 				preColumns: []any{"a!b!c", "abc"},
 				columns:    []any{"a!b!c", "def"},
+				HandleKey:  kv.IntHandle(1),
 			},
-			want: []byte(`D!table2!test!435661838416609281!true!a\!b\!c!abc` + "\n" +
-				`I!table2!test!435661838416609281!true!a\!b\!c!def` + "\n"),
+			want: []byte(`D!table2!test!435661838416609281!true!1!a\!b\!c!abc` + "\n" +
+				`I!table2!test!435661838416609281!true!1!a\!b\!c!def` + "\n"),
 		},
 		{
 			name: "csv encode values containing single-character delimter string, without quote mark, update with old value",
@@ -946,6 +950,7 @@ func TestCSVMessageEncode(t *testing.T) {
 				columns:    tc.fields.columns,
 				preColumns: tc.fields.preColumns,
 				newRecord:  true,
+				HandleKey:  tc.fields.HandleKey,
 			}
 
 			require.Equal(t, tc.want, c.encode())

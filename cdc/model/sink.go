@@ -22,6 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
@@ -356,6 +357,15 @@ type RowChangedEvent struct {
 	SplitTxn bool `json:"-" msg:"-"`
 	// ReplicatingTs is ts when a table starts replicating events to downstream.
 	ReplicatingTs Ts `json:"-" msg:"-"`
+	// HandleKey is the key of the row changed event.
+	// It can be used to identify the row changed event.
+	// It can be one of three : common_handle, int_handle or _tidb_rowid based on the table definitions
+	// 1. primary key is the clustered index, and key is not int type, then we use `CommonHandle`
+	// 2. primary key is int type(including different types of int, such as bigint, TINYINT), then we use IntHandle
+	// 3. when the table doesn't have the primary key and clustered index,
+	//    tidb will make a hidden column called "_tidb_rowid" as the handle.
+	//    due to the type of "_tidb_rowid" is int, so we also use IntHandle to represent.
+	HandleKey kv.Handle `json:"handle-key" msg:"-"`
 }
 
 // RowChangedEventInRedoLog is used to store RowChangedEvent in redo log v2 format
