@@ -286,7 +286,7 @@ func TestEncodeDDLEvent(t *testing.T) {
 
 			// because we don't we don't set startTs in the encoded message,
 			// so the startTs is equal to commitTs
-			
+
 			require.Equal(t, createTableDDLEvent.CommitTs, event.StartTs)
 			require.Equal(t, createTableDDLEvent.Query, event.Query)
 			require.Equal(t, len(createTableDDLEvent.TableInfo.Columns), len(event.TableInfo.Columns))
