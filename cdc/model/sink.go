@@ -365,7 +365,7 @@ type RowChangedEvent struct {
 	// 3. when the table doesn't have the primary key and clustered index,
 	//    tidb will make a hidden column called "_tidb_rowid" as the handle.
 	//    due to the type of "_tidb_rowid" is int, so we also use IntHandle to represent.
-	HandleKey kv.Handle `json:"handle-key" msg:"handle-key"`
+	HandleKey kv.Handle `json:"handle-key" msg:"-"`
 }
 
 // RowChangedEventInRedoLog is used to store RowChangedEvent in redo log v2 format

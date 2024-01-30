@@ -1661,12 +1661,6 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 					}
 				}
 			}
-		case "handle-key":
-			err = z.HandleKey.DecodeMsg(dc)
-			if err != nil {
-				err = msgp.WrapError(err, "HandleKey")
-				return
-			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -1680,9 +1674,9 @@ func (z *RowChangedEvent) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 6
+	// map header, size 5
 	// write "start-ts"
-	err = en.Append(0x86, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	err = en.Append(0x85, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	if err != nil {
 		return
 	}
@@ -1759,25 +1753,15 @@ func (z *RowChangedEvent) EncodeMsg(en *msgp.Writer) (err error) {
 			}
 		}
 	}
-	// write "handle-key"
-	err = en.Append(0xaa, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x2d, 0x6b, 0x65, 0x79)
-	if err != nil {
-		return
-	}
-	err = z.HandleKey.EncodeMsg(en)
-	if err != nil {
-		err = msgp.WrapError(err, "HandleKey")
-		return
-	}
 	return
 }
 
 // MarshalMsg implements msgp.Marshaler
 func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 6
+	// map header, size 5
 	// string "start-ts"
-	o = append(o, 0x86, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
+	o = append(o, 0x85, 0xa8, 0x73, 0x74, 0x61, 0x72, 0x74, 0x2d, 0x74, 0x73)
 	o = msgp.AppendUint64(o, z.StartTs)
 	// string "commit-ts"
 	o = append(o, 0xa9, 0x63, 0x6f, 0x6d, 0x6d, 0x69, 0x74, 0x2d, 0x74, 0x73)
@@ -1812,13 +1796,6 @@ func (z *RowChangedEvent) MarshalMsg(b []byte) (o []byte, err error) {
 				return
 			}
 		}
-	}
-	// string "handle-key"
-	o = append(o, 0xaa, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x2d, 0x6b, 0x65, 0x79)
-	o, err = z.HandleKey.MarshalMsg(o)
-	if err != nil {
-		err = msgp.WrapError(err, "HandleKey")
-		return
 	}
 	return
 }
@@ -1919,12 +1896,6 @@ func (z *RowChangedEvent) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					}
 				}
 			}
-		case "handle-key":
-			bts, err = z.HandleKey.UnmarshalMsg(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "HandleKey")
-				return
-			}
 		default:
 			bts, err = msgp.Skip(bts)
 			if err != nil {
@@ -1955,7 +1926,6 @@ func (z *RowChangedEvent) Msgsize() (s int) {
 			s += z.PreColumns[za0002].Msgsize()
 		}
 	}
-	s += 11 + z.HandleKey.Msgsize()
 	return
 }
 
